@@ -136,12 +136,12 @@
   --it-heading-primary: #0C121D;
   --it-gray-1: #F0F4F5;
   --it-gray-2: #D9D9D9;
-  --it-gray-3: #F5F7F9;
+  --it-gray-3: #F8FAFC;
   --it-gray-4: #FFF8F4;
-  --it-text-body: #6C757D;
-  --it-theme-1: #03594E;
-  --it-theme-2: #F8C62F;
-  --it-theme-3: #1AB69D;
+  --it-text-body: #334155;
+  --it-theme-1: #002147;
+  --it-theme-2: #FFB81C;
+  --it-theme-3: #D21034;
   --it-theme-4: #618269;
   --it-theme-5: #FE8235;
   --it-theme-6: #CD935A;
@@ -14399,7 +14399,7 @@ input[type=radio] {
 }
 .it-categories-item.item-style-2 {
   border-color: #2F57EF;
-  background-color: #F8C62F;
+  background-color: #FFB81C;
 }
 .it-categories-item.item-style-2 span svg {
   color: #2F57EF;
