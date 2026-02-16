@@ -1,0 +1,525 @@
+@use '../utils' as *;
+
+/*----------------------------------------*/
+/*  12. Checkout css start
+/*----------------------------------------*/
+
+.coupon-accordion h3 {
+	background-color: #f7f7f7;
+	border-top: 3px solid var(--it-theme-1);
+	font-size: 14px;
+	font-weight: 400;
+	margin: 0 0 25px;
+	padding: 1em 2em 1em 3.5em;
+	position: relative;
+	width: auto;
+}
+
+.coupon-accordion h3::before {
+  content: "\f07b";
+  left: 15px;
+  top: 13px;
+  position: absolute;
+  color: var(--it-theme-1);
+  font-family: "Font Awesome 5 Pro";
+  font-weight: 700;
+}
+
+.coupon-accordion > span {
+  cursor: pointer;
+  transition: .3s;
+  font-weight: 500;
+}
+
+.coupon-accordion > span:hover, p.lost-password a:hover {
+  color: var(--it-common-black);
+}
+
+.coupon-content {
+  border: 1px solid rgba(121, 121, 121, 0.2);
+  display: none;
+  margin-bottom: 20px;
+  padding: 30px;
+}
+
+.coupon-info p.coupon-text {
+  margin-bottom: 15px;
+}
+
+.coupon-info p {
+  margin-bottom: 0;
+}
+
+.coupon-info p.form-row-first label, .coupon-info p.form-row-last label {
+  font-weight: 500;
+  font-size: 16px;
+  color: var(--it-common-black);
+  margin-bottom: 6px;
+}
+
+.coupon-info p.form-row-first label span.required, .coupon-info p.form-row-last label span.required {
+  color: var(--it-theme-1);
+  font-weight: 700;
+}
+
+.coupon-info p.form-row-first input, .coupon-info p.form-row-last input {
+  border-radius: 5px;
+  height: 50px;
+  line-height: 50px;
+  margin: 0 0 14px;
+  max-width: 100%;
+  padding: 0 20px;
+  width: 100%;
+  outline: none;
+  box-shadow: none;
+  background-color: transparent;
+  border: 1px solid rgba(121, 121, 121, 0.2);
+  &:focus{
+      border-color: var(--it-theme-1);
+  }
+}
+
+.coupon-info p.form-row input[type="submit"]:hover, p.checkout-coupon input[type="submit"]:hover {
+  background: #3e976c none repeat scroll 0 0;
+}
+
+.coupon-info p.form-row input[type="checkbox"] {
+  position: relative;
+  top: 1px;
+}
+
+.form-row > label {
+  margin-top: 15px;
+  margin-left: 15px;
+  @media #{$md,$xs}{
+    margin-left: 0;
+  }
+  @media #{$sm}{
+    margin-left: 15px;
+  }
+}
+
+.buttons-cart input, .coupon input[type="submit"], .buttons-cart a, .coupon-info p.form-row input[type="submit"] {
+  background: #252525 none repeat scroll 0 0;
+  border: medium none;
+  color: #fff;
+  display: inline-block;
+  float: left;
+  font-size: 12px;
+  font-weight: 700;
+  height: 40px;
+  line-height: 40px;
+  margin-right: 15px;
+  padding: 0 15px;
+  text-transform: uppercase;
+  transition: all 0.3s ease 0s;
+}
+
+p.lost-password {
+  margin-top: 15px;
+}
+
+p.lost-password a {
+  color: #6f6f6f;
+}
+
+p.checkout-coupon input[type="text"] {
+  width: 100%;
+  background-color: transparent;
+  border: 1px solid rgba(121, 121, 121, 0.2);
+  padding: 0 20px;
+  height: 50px;
+  width: 100%;
+  margin-bottom: 15px;
+  outline: none;
+  box-shadow: none;
+  &:focus{
+      border-color: var(--it-theme-1);
+  }
+}
+
+.coupon-checkout-content {
+  display: none;
+}
+
+.checkbox-form h3 {
+  border-bottom: 1px solid rgba($color: #000000, $alpha: .1);
+  font-size: 26px;
+  margin: 0 0 20px;
+  padding-bottom: 10px;
+  width: 100%;
+}
+.checkout-area {
+  & .nice-select::after {
+    margin-top: 0;
+    top: 63%;
+  }
+}
+
+.country-select {
+  margin-bottom: 30px;
+  position: relative;
+}
+.country-select select{
+  width: 100%;
+  background-color: transparent;
+  border: 1px solid rgba(121, 121, 121, 0.2);
+  padding: 0 20px;
+  height: 50px;
+}
+
+.country-select label, .checkout-form-list label {
+  font-weight: 500;
+  font-size: 16px;
+  display: block;
+  margin: 0 0 5px;
+  color: var(--it-common-black);
+}
+
+.country-select label span.required, .checkout-form-list label span.required {
+  color: var(--it-theme-1);
+}
+
+.country-select .nice-select {
+  border: 1px solid rgba(121, 121, 121, 0.2);
+  background-color: transparent;
+  height: 50px;
+  padding:0 20px;
+  line-height: 50px;
+  width: 100%;
+  margin-bottom: 20px;
+  &.open {
+    border-color: var(--it-theme-1);
+  }
+}
+
+
+.country-select .nice-select .list{
+ width: 100%;
+}
+
+
+.checkout-form-list {
+  margin-bottom: 30px;
+}
+
+.checkout-form-list label {
+  font-weight: 500;
+  font-size: 16px;
+  color: var(--it-common-black);
+}
+
+.checkout-form-list input[type="text"], .checkout-form-list input[type="password"], .checkout-form-list input[type="email"] {
+  height: 50px;
+  line-height: 50px;
+  line-height: 50px;
+  padding: 0 20px;
+  width: 100%;
+  outline: none;
+  box-shadow: none;
+  border: 1px solid rgba(121, 121, 121, 0.2);
+  background-color: transparent;
+  &:focus{
+      border-color: var(--it-theme-1);
+  }
+}
+
+.checkout-form-list input[type="text"]::-moz-placeholder,
+.checkout-form-list input[type="password"]::-moz-placeholder,
+.checkout-form-list input[type="email"]::-moz-placeholder {
+  opacity: 1;
+}
+
+.checkout-form-list input[type="text"]::placeholder,
+.checkout-form-list input[type="password"]::placeholder,
+.checkout-form-list input[type="email"]::placeholder {
+  opacity: 1;
+}
+
+input[type="checkbox"] {
+    display: inline-block;
+    margin-right: 10px;
+    position: relative;
+    top: -1px;
+    height: 15px;
+    width: 15px;
+}
+input[type="radio"] {
+    display: inline-block;
+    margin-right: 10px;
+    position: relative;
+    top: -1px;
+    height: 15px;
+    width: 15px;
+}
+
+.create-acc label {
+  display: inline-block;
+}
+
+.create-account {
+  display: none;
+}
+
+.ship-different-title h3 label {
+  display: inline-block;
+  margin-right: 20px;
+  color: var(--it-common-black);
+}
+
+.order-notes textarea {
+  height: 120px;
+  padding: 15px;
+  width: 100%;
+  outline: 0;
+  resize: none;
+  border-radius: 5px;
+  background-color: var(--it-gray-3);
+  border: 1px solid var(--it-gray-3);
+}
+
+.order-notes textarea:focus {
+  border-color: var(--it-theme-1);
+}
+
+
+#ship-box-info {
+  display: none;
+}
+
+.panel-group .panel {
+  border-radius: 0;
+}
+
+.panel-default > .panel-heading {
+  border-radius: 0;
+}
+
+.your-order {
+	padding: 30px 40px 45px;
+	border: 3px solid #f7f7f7;
+}
+
+@media (max-width: 767px) {
+  .your-order {
+    padding: 15px;
+  }
+}
+
+.your-order h3 {
+  border-bottom: 1px solid rgba(121, 121, 121, 0.2);
+  font-size: 30px;
+  margin: 0 0 20px;
+  padding-bottom: 10px;
+  width: 100%;
+}
+
+.your-order-table table {
+  background: none;
+  border: 0;
+  width: 100%;
+}
+
+.your-order-table table th, .your-order-table table td {
+  border-bottom: 1px solid rgba(121, 121, 121, 0.2);
+  border-right: medium none;
+  border-left: medium none;
+  font-size: 14px;
+  padding: 15px 0;
+  text-align: left;
+  @media #{$xs}{
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 767px) {
+  .your-order-table table th, .your-order-table table td {
+    padding-right: 10px;
+  }
+}
+
+.your-order-table table th {
+  border-top: medium none;
+  font-weight: normal;
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+  width: 250px;
+}
+
+.panel-body > p {
+  color: #222;
+}
+
+.your-order-table table .shipping ul li {
+  list-style: none;
+}
+
+.your-order-table table .shipping ul li input {
+  position: relative;
+  top: 2px;
+}
+
+.your-order-table table .shipping ul li label {
+}
+
+.your-order-table table .shipping th {
+  vertical-align: top;
+}
+
+.your-order-table table .order-total th {
+  border-bottom: 0;
+  font-size: 14px;
+}
+
+.your-order-table table .order-total td {
+  border-bottom: medium none;
+}
+
+.your-order-table table tr.cart_item:hover {
+  background: #F2F8F5;
+}
+
+.your-order-table table tr.order-total td span {
+  color: var(--it-common-black);
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.payment-method {
+  margin-top: 40px;
+
+    & .accordion-item:last-of-type {
+        border-bottom-right-radius: 0;
+        border-bottom-left-radius: 0;
+    }
+    & .accordion-item {
+        background-color: #fff;
+        border: 0;
+        border-bottom: 1px solid #e7e7e7;
+    }
+    & .accordion-button{
+        font-size: 16px;
+        font-weight: 500;
+        color: var(--it-common-black);
+        padding: 23px 0;
+        border: none;
+        &:focus{
+          box-shadow: none;
+        }
+        &::after{
+            position: absolute;
+            content: '\f067';
+            right: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 16px;
+            font-weight: 400;
+            margin-left: 0;
+            background-image: none;
+            color: var(--it-common-black);
+            font-family: 'Font awesome 5 pro';
+        }
+    }
+    & .accordion-button:not(.collapsed) {
+        color: var(--it-common-black);
+        background-color: var(--it-common-white);
+        box-shadow: none;
+        &::after{
+            content: '\f068';
+            font-family: 'Font awesome 5 pro';
+        }
+    }
+    & .accordion-body{
+        padding: 8px 0;
+        padding-bottom: 40px;
+    }
+    & .accordion-collapse{
+        border: none;
+    }
+}
+
+.panel-title > a {
+  display: block;
+}
+
+.order-button-payment input {
+  background: #232323 none repeat scroll 0 0;
+  border: medium none;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  height: 40px;
+  margin: 0px 0 0;
+  padding: 0;
+  text-transform: uppercase;
+  transition: all 0.3s ease 0s;
+  width: 100%;
+}
+
+.order-button-payment input:hover {
+  background: #3e976c none repeat scroll 0 0;
+}
+
+.payment-method .btn-link {
+  -moz-user-select: none;
+  background: no-repeat;
+  border: medium none;
+  border-radius: 0;
+  color: #444;
+  cursor: pointer;
+  display: inline-block;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 1px;
+  line-height: 1;
+  margin-bottom: 0;
+  padding: 3px 10px;
+  text-align: center;
+  text-transform: uppercase;
+  transition: all 0.3s ease 0s;
+  vertical-align: middle;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.payment-method .card {
+  background-color: #ffffff;
+  border: 1px solid rgba(121, 121, 121, 0.2);
+  border-radius: 0;
+  margin-bottom: 10px;
+}
+
+.payment-method .accordion .card:first-of-type {
+  border: 1px solid rgba(121, 121, 121, 0.2);
+}
+
+.card-header:first-child {
+  border-radius: 0;
+}
+
+.payment-method .card-header {
+  background-color: #ffffff;
+  border-bottom: 1px solid rgba(121, 121, 121, 0.2);
+}
+
+.order-button-payment button {
+  width: 100%;
+}
+.checkout-form-list{
+  & p {
+    @media #{$lg,$md,$xs}{
+      font-size: 16px;
+    }
+  }
+}
+.coupon-area  {
+  & p {
+    @media #{$lg,$md,$xs}{
+      font-size: 16px;
+    }
+  }
+  & button.it-btn-orange {
+    line-height: 1.4;
+  }
+}

@@ -1,0 +1,18 @@
+
+@use '../utils' as *;
+
+/*----------------------------------------*/
+/*  29. policy css start
+/*----------------------------------------*/
+
+.it-policy {
+    &-area {
+        & .postbox-dsc p {
+            @media #{$lg,$md,$xs}{
+                & br {
+                    display: none;
+                }
+            }
+        }
+    }
+}

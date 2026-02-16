@@ -1,0 +1,244 @@
+@use '../utils' as *;
+
+/*--- preloader ---*/
+
+#it-loading{
+	background-color: #e4e3e3;
+	height: 100%;
+	width: 100%;
+	position: fixed;
+	z-index: 999999;
+	margin-top: 0px;
+	top: 0px;
+}
+#it-loading-center{
+	width: 100%;
+	height: 100%;
+	position: relative;
+	}
+#it-loading-absolute {
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: 30%;
+	transform: translate(-50%, -50%);
+
+}
+@media only screen and (min-width: 1200px) and (max-width: 1399px){
+	#it-loading-absolute{
+		width: 40%;
+	}
+}
+
+@media only screen and (min-width: 992px) and (max-width: 1199px){
+	#it-loading-absolute{
+		width: 40%;
+	}
+}
+
+@media only screen and (min-width: 768px) and (max-width: 991px){
+	#it-loading-absolute{
+		width: 45%;
+	}
+}
+@media only screen and (min-width: 576px) and (max-width: 767px){
+	#it-loading-absolute{
+		width: 50%;
+	}
+}
+@media (max-width: 575px){
+	#it-loading-absolute{
+		width: 60%;
+	}
+}
+.object{
+	width: 20px;
+	height: 20px;
+	background-color: #674DF0;
+	-moz-border-radius: 50% 50% 50% 50%;
+	-webkit-border-radius: 50% 50% 50% 50%;
+	border-radius: 50% 50% 50% 50%;
+	margin-right: 20px;
+	margin-bottom: 20px;
+	position: absolute;	
+}
+
+.it-loading-content{
+	text-align: center;
+	& span{
+		margin-top: 12px;
+		display: inline-block;
+		color: var(--it-common-black);
+		font-weight: 700;
+		font-size: 20px;
+		@media #{$lg,$md,$xs}{
+			font-size: 14px;
+		}
+	}
+}
+.it-loading-logo {
+	padding-bottom: 6px;
+	@media #{$lg,$md}{
+		font-size: 14px;
+		width: 220px;
+	}
+	@media #{$xs}{
+		font-size: 14px;
+		width: 140px;
+	}
+}
+.it-loading-stroke {                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              
+	position: relative;
+	width: 100%;
+	background: #0077C6;
+	height: 3px;
+  margin-top: 10px;
+	
+}
+.it-loading-stroke::before {
+	position: absolute;
+	content: '';
+	left: 0;
+	top: 0;
+	width: 100%;
+	height: 3px;
+	background-color: #e4e3e3;
+	animation: educom-anim 5s linear infinite;
+	animation-timing-function: cubic-bezier(.75, .04,0,.86);
+	
+}
+.it-loading-icon {
+	position: absolute;
+	top: -86px;
+	left: -10px;
+	width: 90px;
+	height: 90px;
+	animation: educom-anim  5s linear infinite;
+	animation-timing-function: cubic-bezier(.75, .04,0,.86);
+	@media #{$xs}{
+		width: 50px;
+	    height: 50px;
+		top: -50px;
+	}
+}
+
+.it-loading--text{
+padding-bottom: 10px;
+}
+
+
+
+
+@keyframes educom-loading-term {
+	0%{
+		transform: rotate(0deg);
+		
+	}
+	25%{
+		transform: rotate(-75deg);
+	}
+	50%{
+		transform: rotate(0deg);
+	}
+	75%{
+		transform: rotate(-75deg);
+	}
+	100%{
+		transform: rotate(0deg);
+	}
+}	
+
+
+
+@keyframes educom-anim {
+	0%{
+		left: 0;
+	}
+	50%{
+		left: 100%;
+	}
+	100%{
+		left: 0;
+	}
+}	
+
+@-webkit-keyframes educom-anim {
+	0%{
+		left: 0;
+	}
+	50%{
+		left: 100%;
+	}
+	100%{
+		left: 0;
+	}
+}	
+
+
+
+#object_one{
+	-webkit-animation: object 2s linear infinite;
+	 animation: object 2s linear infinite;
+	 }
+#object_two{ 
+	-webkit-animation: object 2s linear infinite -.4s;
+	animation: object 2s linear infinite -.4s;
+	 }
+#object_three{ 
+	-webkit-animation: object 2s linear infinite -.8s; 
+	animation: object 2s linear infinite -.8s; 
+	}
+#object_four{ 
+	-webkit-animation: object 2s linear infinite -1.2s;
+	animation: object 2s linear infinite -1.2s; 
+	} 
+#object_five{ 
+	-webkit-animation: object 2s linear infinite -1.6s; 
+	animation: object 2s linear infinite -1.6s; 
+	}
+	
+	
+@-webkit-keyframes object{
+  0% { left: 100px; top:0}
+  80% { left: 0; top:0;}
+  85% { left: 0; top: -20px; width: 20px; height: 20px;}
+  90% { width: 40px; height: 15px; }
+  95% { left: 100px; top: -20px; width: 20px; height: 20px;}
+  100% { left: 100px; top:0; }		
+	
+}		
+@keyframes object{
+  0% { left: 100px; top:0}
+  80% { left: 0; top:0;}
+  85% { left: 0; top: -20px; width: 20px; height: 20px;}
+  90% { width: 40px; height: 15px; }
+  95% { left: 100px; top: -20px; width: 20px; height: 20px;}
+  100% { left: 100px; top:0; }
+}	
+  
+
+  
+  
+  /*--- end of preloader ---*/
+
+
+.scroll-top {
+    width: 40px;
+    height: 40px;
+    line-height: 40px;
+    position: fixed;
+    bottom: -10%;
+    right: 50px;
+    font-size: 16px;
+    z-index: 9;
+    text-align: center;
+    border-radius: 50%;
+    color: var(--it-common-white);
+    cursor: pointer;
+    background: var(--it-theme-1);
+    transition: 1s ease;
+    border: none;
+}
+.scroll-top.open {
+    bottom: 80px;
+}

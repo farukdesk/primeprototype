@@ -1,0 +1,93 @@
+@use '../utils' as *;
+
+/*----------------------------------------*/
+/*  30. portfolio css start
+/*----------------------------------------*/
+
+.it-portfolio {
+    &-area {
+     background-color: rgb(47, 42, 37);
+    }
+    &-btn {
+        @media #{$xs}{
+            margin-top: 30px;
+        }
+        @media #{$sm}{
+            margin-top: 0;
+        }
+    }
+    &-section-title {
+        font-weight: 400;
+        font-size: 100px;
+        letter-spacing: 0.01em;
+        line-height: 1;
+        color: var(--it-common-white);
+        font-family: var(--it-ff-newyork);
+        @media #{$xxl}{
+            font-size: 70px;
+        }
+        @media #{$xl}{
+            font-size: 60px;
+        }
+        @media #{$lg}{
+            font-size: 58px;
+        }
+        @media #{$md}{
+            font-size: 50px;
+        }
+        @media #{$xs}{
+            font-size: 40px;
+        }
+    }
+    &-title {
+        font-size: 45px;
+        line-height: 1;
+        margin-bottom: 0;
+        letter-spacing: 0.01em;
+        color: var(--it-theme-6);
+        font-family: var(--it-ff-newyork);
+        @media #{$xxl,$xl}{
+            font-size: 40px;
+        }
+        @media #{$lg}{
+            font-size: 35px;
+        }
+        @media #{$md,$xs}{
+            font-size: 30px;
+        }    
+    }
+    &-big-thumb {
+        margin-bottom: 36px;      
+        & img {
+            @media #{$xl,$lg,$md,$xs}{
+                max-width: 100%;
+            }
+        }
+    }
+    &-small-thumb {
+        @media #{$xs}{
+            margin-top: 50px;
+        }
+    }
+    &-content {
+        & span {
+            display: block;
+            margin-bottom: 15px;
+            color: var(--it-theme-6);
+        }
+    }
+    &-right {
+        margin-left: 50px;
+        @media #{$lg,$md,$xs}{
+            margin-left: 0;
+        }
+    }
+    &-arrow-wrap {
+        display: flex;
+        gap: 10px;
+        justify-content: end;
+    }
+    &-active {
+        padding-bottom: 5px;
+    }
+}

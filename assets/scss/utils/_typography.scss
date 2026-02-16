@@ -1,0 +1,88 @@
+
+// font url
+
+$font-url: 'https://fonts.googleapis.com/css2?family=Jost:ital,wght@0,100..900;1,100..900&family=Open+Sans:ital,wght@0,300..800;1,300..800&family=Schoolbell&family=Cinzel+Decorative:wght@400;700;900&family=Oxanium:wght@200..800&display=swap';
+
+@font-face {
+    font-family: 'Spartan-Bold';
+    src: url('../fonts/Spartan-Bold.woff2') format('woff2'),
+        url('../fonts/Spartan-Bold.woff') format('woff');
+    font-weight: bold;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Spartan-SemiBold';
+    src: url('../fonts/Spartan-SemiBold.woff2') format('woff2'),
+        url('../fonts/Spartan-SemiBold.woff') format('woff');
+    font-weight: 600;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Spartan-Medium';
+    src: url('../fonts/Spartan-Medium.woff2') format('woff2'),
+        url('../fonts/Spartan-Medium.woff') format('woff');
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Spartan-Regular';
+    src: url('../fonts/Spartan-Regular.woff2') format('woff2'),
+        url('../fonts/Spartan-Regular.woff') format('woff');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Edensor-Regular';
+    src: url('../fonts/Edensor-Regular.woff2') format('woff2'),
+        url('../fonts/Edensor-Regular.woff') format('woff');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Edensor-Semibold';
+    src: url('../fonts/Edensor-Semibold.woff2') format('woff2'),
+        url('../fonts/Edensor-Semibold.woff') format('woff');
+    font-weight: 600;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'NewYork-Regular';
+    src: url('../fonts/NewYork.woff2') format('woff2'),
+        url('../fonts/NewYork.woff') format('woff');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+}
+
+
+
+// font family
+$font-family: (
+    'ff': (
+        'body': "'Open Sans', sans-serif",
+        'heading': "'Spartan-Bold', sans-serif",
+        'jost': "'Jost', sans-serif",
+        'newyork': "'NewYork-Regular', serif",
+        'schoolbell': "'Schoolbell', scursive",
+        'cinzel-decorative': "'Cinzel Decorative', scursive",
+        'oxanium': "'Oxanium', sans-serif",
+        'spartan-semibold': "'Spartan-SemiBold', sans-serif",
+        'spartan-medium': "'Spartan-Medium', sans-serif",
+        'spartan-regular': "'Spartan-Regular', sans-serif",
+        'edensor-regular': "'Edensor-Regular', sans-serif",
+        'edensor-semibold': "'Edensor-Semibold', sans-serif",
+        'fontawesome':"Font Awesome 6 Pro",
+    )
+);

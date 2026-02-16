@@ -1,0 +1,218 @@
+@use '../utils' as *;
+
+/*----------------------------------------*/
+/*  31. price css start
+/*----------------------------------------*/
+.it-price {
+    &-area {
+        @include background;
+    }
+    &-section-title-box {
+        @media #{$md,$xs}{
+            margin-bottom: 30px;
+        }
+    }
+    &-item {
+        padding: 60px 40px;
+        padding-top: 57px;
+        border-radius: 20px;
+        position: relative;
+        background-color: var(--it-common-white);
+        box-shadow: 0 20px 30px 0 rgba(1, 6, 20, 0.05);
+        @media #{$md,$xs}{
+            padding: 45px 25px;
+        }
+        & .price-amount {
+            font-weight: 700;
+            font-size: 45px;
+            line-height: 1;
+            color: var(--it-theme-5);
+            font-family: var(--it-ff-oxanium);
+            & span {
+                font-size: 16px;
+                font-weight: 400;
+                color: var(--it-text-body);
+            }
+        }
+        & .it-btn-yellow {
+            border-radius: 0;
+            background-color: var(--it-text-body);
+            & span,svg {
+                color: var(--it-common-white);
+            }
+        }
+        & .tag {
+            position: absolute;
+            top: 45px;
+            right: 25px;
+            display: flex;
+            align-items: center;
+            letter-spacing: 0.01em;
+            line-height: 1;
+            padding: 5px 22px;
+            border-radius: 1000px;
+            display: inline-block;
+            transform: rotate(14deg);
+            color: var(--it-common-white);
+            background-color: var(--it-theme-5);
+            @media #{$xl}{
+                right: 0;
+                transform: rotate(14deg) scale(.7);
+            }
+            @media #{$md,$xs}{
+                display: none;
+            }
+            & svg {
+                margin-top: -3px;
+            }
+        }
+        &.active {
+            background-color: var(--it-common-black);
+            & .it-price-title {
+                color: var(--it-common-white);
+            }
+            & .it-price-features {
+                & ul {
+                    & li {
+                        color: var(--it-common-white);
+                        & span {
+                            & svg {
+                                color: var(--it-common-white);
+                            }
+                        }
+                        &.inactive {
+                            color: var(--it-text-body);
+                            & span {
+                                & svg {
+                                    color: var(--it-text-body);
+                                }
+                            }
+                        }
+                    }
+                }
+                color: var(--it-common-white);
+            }
+            & .it-btn-yellow {
+                background-color: var(--it-theme-5);
+                & span,svg {
+                    color: var(--it-common-white);
+                }
+            }
+        }
+    }
+    &-head {
+        margin-bottom: 20px;
+    }
+    &-value {
+        padding-bottom: 31px;
+        margin-bottom: 35px;
+        border-bottom: 1px solid rgba($color: #6C757D, $alpha: .5);
+    }
+    &-title {
+        line-height: 1;
+        font-size: 24px;
+        font-weight: 600;
+        margin-bottom: 14px;
+        font-family: var(--it-ff-oxanium);
+    }
+    &-features {
+        margin-bottom: 45px;
+        & ul {
+            & li {
+                position: relative;
+                padding-left: 30px;
+                list-style-type: none;
+                &:not(:last-child){
+                    margin-bottom: 19px;
+                }
+                & span {
+                    position: absolute;
+                    top: -2px;
+                    left: 0;
+                    & svg {
+                        color: var(--it-common-black);
+                    }
+                }
+                &.inactive {
+                    & span {
+                        & svg {
+                            color: var(--it-text-body);
+                        }
+                    }
+                }
+            }
+        }
+    }   
+    &-tab-wrap {
+        border-radius: 30px;
+        padding: 5px;
+        display: inline-block;
+        background-color: var(--it-common-white);
+        border: 1px solid rgba(254, 130, 53, 0.1);
+        box-shadow: 0 20px 30px 0 rgba(1, 6, 20, 0.05);
+        & .it-price-tab{
+            & ul{
+                & li{
+                    display: inline-block;
+                    & button {
+                        transition: .4s;
+                        font-size: 14px;
+                        padding: 9px 25px;
+                        &.active{
+                            z-index: 1;
+                            position: relative;
+                            color: var(--it-common-white);
+                        }
+                    }
+                }
+            }
+            & #lineMarker{
+                position: absolute;
+                top: 0;
+                left: 5px;
+                right: 5px;
+                z-index: 0;
+                height: 100%;
+                transition: 0.4s;
+                border-radius: 1000px;
+                background: var(--it-theme-5);
+            }
+        }
+    }
+    &-shape {
+        &-1 {
+            position: absolute;
+            z-index: -1;
+            top: 12%;
+            right: 10%;
+            animation: flap 0.4s infinite alternate ease-in-out;
+        }
+    }
+    &-inner-style {
+        & .it-price-item {
+            background-color: rgba($color: #091F2E, $alpha: .1);
+            &.active {
+                background-color: var(--it-common-black);    
+                & .it-btn-yellow {
+                    border-radius: 10px;
+                    background-color: var(--it-theme-1);
+                }
+                & .price-amount {
+                    color: var(--it-common-white);
+                }
+                & .tag {
+                    background-color: rgba($color: #fff, $alpha: .2);
+                    border: 1px solid rgba($color: #fff, $alpha: .1);
+                }
+            }
+        }
+        & .it-btn-yellow {
+            border-radius: 10px;
+            background-color: var(--it-theme-1);
+        }
+        & .it-price-item .price-amount {
+            color: var(--it-theme-1);
+            font-family: var(--it-ff-heading);
+        }
+    }
+}

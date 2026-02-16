@@ -1,0 +1,527 @@
+@use '../utils' as *;
+
+/*----------------------------------------*/
+/*  18. event css start
+/*----------------------------------------*/
+.it-event {
+    &-shape-1 {
+        position: absolute;
+        top: -10%;
+        left: 54%;
+        z-index: -1;
+        animation: translateX 4s infinite alternate;
+    }
+    &-btn {
+        @media #{$md,$xs}{
+            margin-top: 40px;
+        }
+    }
+    &-thumb {
+        overflow: hidden;
+        & img {
+            transition: 1.3s all ease;
+        }
+    }
+    &-item {
+        padding: 30px;
+        transition: .3s;
+        padding-bottom: 35px;
+        border-radius: 20px;
+        background-color: rgba($color: #1AB69D, $alpha: .1);
+        border: 1px solid rgba(26, 182, 157, 0.1);;
+        @media #{$xl,$lg,$md,$xs}{
+            padding: 25px;
+            padding-bottom: 30px;
+        }
+        & .it-btn-yellow {
+            background-color: var(--it-text-body);
+            & span {
+                & span {
+                    color: var(--it-common-white);
+                }
+            }
+            & svg {
+                color: var(--it-common-white);
+            }
+        }
+        &:hover {            
+            border: 1px solid rgba(26, 182, 157, 0.5);
+            box-shadow: 0 20px 30px 0 rgba(1, 6, 20, 0.1);
+            & .it-btn-yellow {
+                background-color: var(--it-theme-1);
+            }
+            & .it-event-thumb {
+                & img {
+                    transform: scale(1.2);
+                }
+            }
+        }
+    }
+    &-title {
+        @media #{$xl,$lg,$md,$xs}{
+            font-size: 18px;
+        }
+    }
+    &-date {
+        position: absolute;
+        left: 20px;
+        bottom: 30px;
+        border-radius: 5px;
+        padding: 6.5px 20px;
+        padding-bottom: 8px;
+        color: var(--it-common-black);
+        background-color: var(--it-theme-2);
+        border: 1px solid rgba(26, 182, 157, 0.3);
+        @media #{$md,$xs}{
+            left: 20px;
+            bottom: 20px;
+            border-radius: 5px;
+            padding: 3.5px 15px;
+            font-size: 12px;
+        }
+    }
+    &-meta {
+        & span {
+            position: relative;
+            padding-left: 28px;
+            display: block;
+            @media #{$xl,$lg,$md,$xs}{
+                font-size: 14px;
+            }
+            & svg {
+                position: absolute;
+                top: 0;
+                left: 0;
+            }
+            &:not(:last-child){
+                margin-bottom: 17px;
+            }
+        }
+    }
+    &-inner-style {
+        & .it-event-item {
+            background-color: var(--it-gray-1);
+        }
+    }
+    &-inner-style-2 {
+        & .it-event-item {
+            display: flex;
+            padding: 20px;
+            background-color: var(--it-gray-1);
+            @media #{$md,$xs}{
+                display: block;
+            }
+            & .it-btn-yellow.theme-bg{
+                border-radius: 8px;
+                padding: 13px 48px;
+            }
+        }
+        & .it-event-thumb {
+            border-radius: 14px;
+            height: 100%;
+            & img {
+                height: 100%;
+                object-fit: cover;
+                border-radius: 14px;
+                max-width: inherit;
+                @media #{$md,$xs}{
+                    width: 100%;
+                }
+            }
+        }
+        & .it-event-meta {
+            display: flex;
+            align-items: center;
+            @media #{$lg,$xs}{
+                flex-wrap: wrap;
+            }
+            & span {
+                font-size: 14px;
+                margin-bottom: 0;
+                padding-left: 24px;
+                display: inline-block;
+                &:first-child{
+                    margin-right: 25px;
+                    @media #{$xl}{
+                        margin-right: 10px;
+                    }
+                    @media #{$lg,$md,$xs}{
+                        margin-bottom: 10px;
+                    }
+                }
+            }
+        }
+        & .it-event-btn {
+            @media #{$md,$xs}{
+                margin-top: 0;
+            }
+        }
+        & .it-event-content {
+            height: 100%;
+            display: flex;
+            margin-left: -10px;
+            flex-direction: column;
+            justify-content: center;
+            @media #{$md}{
+                margin-left: 0;
+            }
+            @media #{$xs}{
+                margin-left: 0;
+                margin-top: 15px;
+            }
+            @media #{$sm}{
+                margin-left: 0;
+                margin-top: 0;
+            }
+        }
+    }
+    &-inner-style-3 {
+        & .it-title-shape {
+            left: 0 !important;
+        }
+    }
+    &-area {
+        &.blog-inner-style {
+            & .it-event-item {
+                background-color: var(--it-gray-1);
+            }
+        }
+    }
+}
+.it-event-2 {
+    &-area {
+        & .it-section-title {
+            @media #{$md}{
+                font-size: 32px;
+            }
+        }
+    }
+    &-thumb {
+        transition: 1.3s all ease;
+    }
+    &-tag {
+        position: absolute;
+        left: 30px;
+        top: -18px;
+        border-radius: 100px;
+        padding: 8px 20px;
+        padding-bottom: 8px;
+        color: var(--it-common-black);
+        background-color: var(--it-theme-2);
+    }
+    &-content {
+        padding: 30px;
+        padding-top: 48px;
+        @media #{$xl,$lg,$md,$xs}{
+            padding: 30px 20px;
+            padding-top: 48px;
+        }
+    }
+    &-title{
+        font-size: 20px;
+        @media #{$xl,$lg,$md,$xs}{
+            font-size: 17px;
+        }
+        @media #{$sm}{
+            font-size: 20px;
+        }
+    }
+    &-meta {
+        & span {
+            @media #{$xl,$lg}{
+                font-size: 14px;
+            }
+            @media #{$md,$xs}{
+                font-size: 16px;
+                display: block;
+            }
+            @media #{$sm}{
+                display: inline-block;
+            }
+            &:first-child {
+                margin-right: 20px;
+                @media #{$md,$xs}{
+                    margin-bottom: 12px;
+                }         
+                @media #{$sm}{
+                    margin-bottom: 0;
+                }       
+            }
+            & svg {
+                margin-right: 3px;
+                margin-top: -2px;
+                display: inline-block;
+                @media #{$xl,$lg,$md,$xs}{
+                    height: 15px;
+                }
+            }
+        }
+    }
+    &-shape-1 {
+        position: absolute;
+        z-index: -1;
+        top: 12%;
+        right: 37%;
+        animation: itrotate2 3s ease-in-out 3s infinite alternate forwards;
+        @media #{$lg,$md,$xs}{
+            display: none;
+        }
+    }
+    &-item {
+        border-radius: 20px;
+        transition: .3s;
+        border: 1px solid rgba(3, 89, 78, 0.1);
+        & .it-btn-yellow {
+            padding: 0;
+            background-color: transparent;
+            & span,svg {
+                font-size: 16px;
+                letter-spacing: 0.01em;
+                color: var(--it-text-body);
+                font-family: var(--it-ff-spartan-semibold);
+                @media #{$xl,$lg,$md,$xs}{
+                    font-size: 14px;
+                }
+            }
+        }
+        &:hover {
+            box-shadow: 0 20px 30px 0 rgba(1, 6, 20, 0.1);
+            & .it-blog-thumb {
+                & img {
+                    transform: scale(1.2);
+                }
+            }
+            & .it-btn-yellow {
+                & span,svg {
+                    color: var(--it-theme-2);
+                }
+            }
+        }
+    }
+    &-top-btn {
+        @media #{$md,$xs}{   
+            margin-top: 40px;
+        }
+    }
+    &-style-2 {
+        & .it-event-2-content {
+            padding-top: 30px;
+        }
+        & .it-event-2-meta span svg {
+            color: var(--it-theme-1);
+        }
+        & .it-event-2-item {
+            &:hover {
+                & .it-btn-yellow  {
+                    & span,svg {
+                        color: var(--it-theme-1);
+                    }
+                }
+            }
+        }
+    }
+}
+
+// details css here //
+
+.it-event {
+    &-countdown-time {
+        & > div {
+            & > div {
+                font-size: 14px;
+                list-style-type: none;
+                display: inline-block;
+                margin: 0 20px;
+                border-radius: 5px;
+                width: 70px;
+                padding: 7px 0;
+                text-align: center;
+                border: 1px solid #6C757D;
+                @media #{$xs}{
+                    font-size: 12px;
+                    margin: 0 9px;
+                }
+                @media #{$sm}{
+                    font-size: 14px;
+                    margin: 0 9px;
+                }
+                & span {
+                    display: block;
+                    font-size: 20px;
+                    margin-bottom: 0;
+                    color: var(--it-common-black);
+                    font-family: var(--it-ff-spartan-semibold);
+                    &.countdown-heading {
+                        font-size: 14px;
+                        font-weight: 400;
+                        color: var(--it-text-body);
+                        font-family: var(--it-ff-body);
+                    }
+                }
+            }
+        }
+        & .count-box {
+            position: relative;
+            & i {
+                position: absolute;
+                right: 0;
+                top: 0;
+            }
+        }
+    }
+    &-details {
+        &-thumb {
+            margin-top: -285px;
+            margin-bottom: 60px;
+            border: 5px solid var(--it-common-white);
+            @media #{$md,$xs}{
+                margin-top: 100px;
+                margin-bottom: 0;
+            }
+        }
+        &-meetup {
+            position: relative;
+            &.style-1 {
+                padding-right: 20px;
+                @media #{$xs}{
+                    margin-bottom: 50px;
+                    padding-right: 0;
+                    margin-right: 0;
+                }
+                @media #{$sm}{
+                    margin-right: 20px;
+                    margin-bottom: 0;
+                }
+            }
+            &.style-2 {
+                padding-right: 50px;
+                &::after {
+                    background-color: #E3E3E3;
+                }
+            }
+            &::after {
+                content: '';
+                position: absolute;
+                bottom: 0;
+                left: 0;
+                width: 100%;
+                height: 3px;
+                background-color: var(--it-theme-1);
+            }
+            & .date {
+                font-size: 24px;
+                margin-bottom: 0;
+                font-family: var(--it-ff-spartan-semibold);
+            }
+            & span {
+                display: block;
+                margin-bottom: 9px;
+                @media #{$xs}{
+                    padding-bottom: 8px;
+                }
+            }
+        }
+        &-time-box {
+            @media #{$md,$xs}{
+                margin-bottom: 30px;
+            }
+            & .time {
+                border-radius: 8px;
+                padding: 0 30px;
+                margin-bottom: 25px;
+                display: inline-block;
+                color: var(--it-theme-1);
+                background: rgba(3, 89, 78, 0.1);
+                font-family: var(--it-ff-spartan-semibold);
+                height: 56px;
+                line-height: 60px; 
+                @media #{$md,$xs}{
+                    font-size: 14px;
+                    padding: 0 20px;
+                    height: 46px;
+                    line-height: 50px; 
+                }             
+            }
+            & span {
+                display: block;
+                font-size: 14px;
+                & svg {
+                    margin-right: 3px;
+                    display: inline-block;
+                }
+            }
+        }
+        &-content {
+            & img {
+                width: 60px;
+                height: 60px;
+                border-radius: 10px;
+            }
+        }
+        &-area {
+            &.it-course-details-style-3 {
+                & .course-details-border {
+                    margin-bottom: 60px;
+                }
+                & .it-course-sidebar .course-info ul li {
+                    @media #{$lg,$md,$xs}{
+                        font-size: 14px;
+                    }
+                }
+                & .it-course-sidebar .course-info {
+                    padding: 0 40px;
+                    @media #{$lg,$md,$xs}{
+                        padding: 0 20px;
+                    }
+                    &.btn-box {
+                        margin-top: 18px;
+                        padding: 40px;
+                        border-top: 1px solid rgba(3, 89, 78, 0.2);
+                    }
+                }
+                & .it-course-sidebar .social-section a {
+                    @media #{$lg,$xs}{
+                        height: 40px;
+                        width: 40px;
+                        line-height: 34px;
+                    }
+                    & svg {
+                        @media #{$lg,$xs}{
+                            height: 14px;
+                        }
+                    }
+                }
+                & .it-course-sidebar .contact-section .call-box {
+                    @media #{$lg,$xs}{
+                        padding: 16px 15px;
+                        font-size: 14px;
+                    }
+                    & svg {
+                        @media #{$lg,$xs}{
+                            height: 16px;
+                        }
+                    }
+                }
+            }
+            & .postbox-dsc {
+                @media #{$xl,$lg,$md,$xs}{
+                    margin-right: 0;
+                }
+                & p {
+                    margin-right: 45px;
+                    @media #{$xl,$lg,$md,$xs}{
+                        margin-right: 0;
+                    }
+                }
+            }
+            & .it-team-content {
+                padding: 20px 80px;
+                padding-top: 46px;
+                @media #{$xl,$lg,$md,$xs}{
+                    padding: 20px 25px;
+                    padding-top: 46px;
+                }
+            }
+        }
+    }
+}

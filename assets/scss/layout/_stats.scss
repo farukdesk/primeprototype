@@ -1,0 +1,87 @@
+@use '../utils' as *;
+
+/*----------------------------------------*/
+/*  36. stats css start
+/*----------------------------------------*/
+
+.it-stats {
+    &-wrap {
+        padding: 50px 60px;
+        border-radius: 20px;
+        background-color: var(--it-theme-1);
+        box-shadow: 0 20px 30px 0 rgba(1, 6, 20, 0.1); 
+        @media #{$md,$xs}{
+            padding: 40px 30px;
+        } 
+        & span {
+            font-size: 20px;
+            line-height: 1.5;
+            color: rgba(255, 255, 255, 0.7);
+            font-family: var(--it-ff-spartan-semibold);
+            @media #{$lg,$md,$xs}{
+                font-size: 14px;
+            } 
+        }
+        & .row {
+            [class*=col-]:nth-child(2){
+                & .it-stats-item  {
+                    position: relative;
+                    padding-left: 25px;
+                    @media #{$md,$xs}{
+                        padding-left: 0;
+                    } 
+                    &::before{
+                        content: '';
+                        position: absolute;
+                        top: 50%;
+                        left: -19%;
+                        height: 120%;
+                        width: 2px;
+                        transform: translateY(-50%);
+                        background-color: rgba($color: #FFFFFF, $alpha: .15);
+                        @media #{$lg}{
+                            left: -24%;
+                        } 
+                        @media #{$md,$xs}{
+                           display: none;
+                        } 
+                    }
+                    &::after{
+                        content: '';
+                        position: absolute;
+                        top: 50%;
+                        right: -27%;
+                        height: 120%;
+                        width: 2px;
+                        transform: translateY(-50%);
+                        background-color: rgba($color: #FFFFFF, $alpha: .15);
+                        @media #{$md,$xs}{
+                           display: none;
+                        } 
+                    }
+                }
+            }
+            [class*=col-]:not(:last-child){
+                & .it-stats-item  {
+                    @media #{$xs}{
+                        margin-bottom: 40px;
+                    }
+                }
+            }
+        }
+    }
+    &-item {
+        @media #{$xs}{
+            text-align: center;
+            justify-content: center !important;
+        }
+    }
+    &-title {
+        font-size: 60px;
+        margin-bottom: 0;
+        color: var(--it-common-white);
+        @media #{$lg,$md,$xs}{
+            font-size: 38px;
+        } 
+    }
+}

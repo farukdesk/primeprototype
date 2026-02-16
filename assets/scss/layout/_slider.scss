@@ -1,0 +1,225 @@
+
+@use '../utils' as *;
+
+/*----------------------------------------*/
+/*  34. slider css start
+/*----------------------------------------*/
+
+.it-slider {
+    &-bg {
+        position: absolute;
+        top: 0;
+        left: 0;
+        z-index: -2;
+        width: 100%;
+        height: 100%;
+        & img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            background-repeat: no-repeat;
+            background-size: cover;
+            background-position: center;
+            background-position:center;
+            -webkit-transform: scale(1.15);
+            transform: scale(1.15);
+            -webkit-transition: opacity 1500ms ease-in, -webkit-transform 7000ms ease;
+            transition: opacity 1500ms ease-in, -webkit-transform 7000ms ease;
+            transition: transform 9000ms ease, opacity 1500ms ease-in;
+            transition: transform 9000ms ease, opacity 1500ms ease-in, -webkit-transform 9000ms ease;
+
+        }
+    }
+    &-overlay{
+        &::after {
+            position: absolute;
+            content: '';
+            bottom: 0;
+            left: 0;
+            height: 100%;
+            width: 100%;
+            z-index: -2;
+            background: linear-gradient(90deg, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0.2) 100%);
+        }
+    }
+    &-content {
+        padding-top: 190px;
+        padding-bottom: 290px;
+        @media #{$xxl}{
+            padding-top: 140px;
+            padding-bottom: 240px;
+        }
+        @media #{$xl}{
+            padding-top: 140px;
+            padding-bottom: 240px;
+        }
+        @media #{$lg}{
+            padding-top: 130px;
+            padding-bottom: 220px;
+        }
+        @media #{$md}{
+            padding-top: 120px;
+            padding-bottom: 230px;
+        }
+        @media #{$xs}{
+            padding-top: 100px;
+            padding-bottom: 200px;
+        }
+        @media #{$sm}{
+            padding-top: 120px;
+            padding-bottom: 210px;
+        }
+        & p {
+            line-height: 1.75;
+            color: rgba(255, 255, 255, 0.8);
+            @media #{$xs}{
+                font-size: 14px;
+                line-height: 1.7;
+                & br {
+                    display: none;
+                }
+            }
+        }
+    }
+    &-title {
+        font-size: 72px;
+        line-height: 1.18;
+        letter-spacing: 0.01em;
+        margin-bottom: 23px;
+        color: var(--it-common-white);
+        @media #{$xl}{
+            font-size: 48px;
+        }
+        @media #{$lg}{
+            font-size: 42px;
+        }
+        @media #{$md}{
+            font-size: 45px;
+        }
+        @media #{$xs}{
+            font-size: 28px;
+            line-height: 1.25;
+        }
+        @media #{$sm}{
+            font-size: 46px;
+        }
+        & span {
+            & svg {
+                animation: title-animation 4s infinite;
+            }
+            & .it-title-shape {
+                position: absolute;
+                bottom: -1%;
+                left: -2%;
+                z-index: -1;
+                display: block;
+            }
+        }
+    }
+    &-shape {
+        &-1 {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: -1;
+            @media #{$xl}{
+                top: -15%;
+                left: -15%;
+            }
+            @media #{$lg,$md,$xs}{
+                display: none;
+            }
+        }
+        &-2 {
+            position: absolute;
+            bottom: 18%;
+            left: 38%;
+            z-index: -1;
+            @media #{$xl,$lg,$md,$xs}{
+                display: none;
+            }
+        }
+        &-3 {
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            z-index: -1;
+            @media #{$xl}{
+                bottom: -11%;
+                right: -3%;
+            }
+            @media #{$lg}{
+                bottom: -15%;
+                right: -10%;
+            }
+            @media #{$md,$xs}{
+                display: none;
+            }
+        }
+    }
+    &-active {
+        & .swiper-slide-active {
+            & .it-slider-content-text p,
+            & .it-slider-title,
+            & .it-slider-btn {
+                display: inline-block;
+                animation-fill-mode: both;
+                animation-name: fadeInUp;
+            }
+        }
+    }
+    &-wrap {
+        & .swiper-slide{
+            &.swiper-slide-active { 
+                & .it-slider-bg {
+                    & img {
+                        -webkit-transform: scale(1);
+                        transform: scale(1)
+                    }
+                }  
+                & .it-slider-title {
+                    animation: img-anim-bottom 1.5s forwards cubic-bezier(0.645, 0.045, 0.355, 1) 0.4s;
+                    animation-name: img-anim-bottom;
+                    animation-duration: 1.5s;
+                }  
+                & .it-slider-content-text p {
+                    animation: img-anim-bottom 1.7s forwards cubic-bezier(0.645, 0.045, 0.355, 1) 0.4s;
+                    animation-name: img-anim-bottom;
+                    animation-duration: 1.7s;
+                }  
+                & .it-slider-btn {
+                    animation: img-anim-bottom 1.9s forwards cubic-bezier(0.645, 0.045, 0.355, 1) 0.4s;
+                    animation-name: img-anim-bottom;
+                    animation-duration: 1.9s;
+                }  
+            }
+        }
+    }
+    &-arrow-wrap {
+        position: absolute;
+        top: 32%;
+        right: 9%;
+        z-index: 2;
+        @media #{$md,$xs}{
+            display: none;
+        }
+        & button {
+            width: 80px;
+            height: 60px;
+            padding: 0;
+            display: block;
+            border-radius: 30px;
+            border: 1px solid var(--it-common-white);
+            color: var(--it-common-white);
+            &.arrow-next {
+                margin-left: 50px;
+                margin-bottom: 8px;
+            }
+            &:hover {
+                color: var(--it-common-black);
+                border: 1px solid var(--it-theme-2);
+                background-color: var(--it-theme-2);
+            }
+        }
+    }
+}
