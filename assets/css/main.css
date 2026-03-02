@@ -26027,3 +26027,20 @@ input[type=radio] {
         font-size: 13px;
     }
 }
+
+/* About section video wrapper */
+.it-about-video-wrap {
+  overflow: hidden;
+  position: relative;
+  padding-bottom: 98.6%;
+  height: 0;
+}
+.it-about-video-wrap iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+  border-radius: 20px;
+}
