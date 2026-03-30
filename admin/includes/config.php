@@ -9,14 +9,14 @@
 // ── Database ────────────────────────────────────────────────────────────────
 define('DB_HOST',     'localhost');
 define('DB_PORT',     '3306');
-define('DB_NAME',     'prime_university');
-define('DB_USER',     'root');          // change to your DB user
-define('DB_PASS',     '');              // change to your DB password
+define('DB_NAME',     'admin_primepnew2026');
+define('DB_USER',     'primefaruk');          // change to your DB user
+define('DB_PASS',     '48l0cE5x?');              // change to your DB password
 define('DB_CHARSET',  'utf8mb4');
 
 // ── Application ──────────────────────────────────────────────────────────────
 define('APP_NAME',    'Prime University Admin');
-define('APP_URL',     'http://localhost/primeprototype/admin'); // no trailing slash
+define('APP_URL',     'https://prototype.primeuniversity.ac.bd/admin'); // no trailing slash
 define('APP_VERSION', '1.0.0');
 
 // ── Session ──────────────────────────────────────────────────────────────────
