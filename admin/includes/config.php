@@ -30,6 +30,10 @@ define('CSRF_TOKEN_NAME', '_csrf_token');
 // ── Timezone ─────────────────────────────────────────────────────────────────
 date_default_timezone_set('Asia/Dhaka');
 
+// ── Uploads ──────────────────────────────────────────────────────────────────
+define('UPLOAD_DIR', dirname(__DIR__) . '/uploads');   // admin/uploads (absolute path)
+define('UPLOAD_URL', APP_URL . '/uploads');            // https://…/admin/uploads
+
 // ── Error reporting (set to 0 in production) ─────────────────────────────────
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
