@@ -113,6 +113,17 @@ function require_access(string $slug, string $permission = 'can_view'): void {
     }
 }
 
+/**
+ * Gate – restrict a page to super admins only.
+ */
+function require_super_admin(): void {
+    auth_check();
+    if (!is_super_admin()) {
+        $_SESSION['flash_error'] = 'This section is restricted to Super Administrators.';
+        redirect(APP_URL . '/index.php');
+    }
+}
+
 // ── Flash messages ───────────────────────────────────────────────────────────
 function flash_set(string $type, string $message): void {
     $_SESSION['flash_' . $type] = $message;

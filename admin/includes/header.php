@@ -272,6 +272,30 @@ $user       = auth_user();
     </ul>
     <?php endif; ?>
 
+    <?php if (is_super_admin()): ?>
+    <p class="nav-label">CMS</p>
+    <ul class="nav flex-column">
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/cms/menus/index.php"
+               class="<?= strpos($_SERVER['PHP_SELF'], '/cms/menus/') !== false ? 'active' : '' ?>">
+                <i class="fas fa-bars"></i> Navigation Menus
+            </a>
+        </li>
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/cms/news/index.php"
+               class="<?= strpos($_SERVER['PHP_SELF'], '/cms/news/') !== false ? 'active' : '' ?>">
+                <i class="fas fa-newspaper"></i> Latest News
+            </a>
+        </li>
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/cms/sliders/index.php"
+               class="<?= strpos($_SERVER['PHP_SELF'], '/cms/sliders/') !== false ? 'active' : '' ?>">
+                <i class="fas fa-images"></i> Sliders
+            </a>
+        </li>
+    </ul>
+    <?php endif; ?>
+
     <div style="padding: 20px; margin-top: auto;">
         <a href="<?= APP_URL ?>/logout.php"
            style="display:flex;align-items:center;gap:8px;color:#e74c3c;font-size:.85rem;text-decoration:none;">

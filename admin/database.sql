@@ -129,7 +129,10 @@ INSERT INTO `modules` (`name`, `slug`, `description`, `icon`, `sort_order`) VALU
 ('User Groups',    'user-groups',   'Manage user groups and permissions',  'fas fa-layer-group',    3),
 ('Modules',        'modules',       'Manage system modules',               'fas fa-cubes',          4),
 ('Module Access',  'access',        'Assign module access to groups',      'fas fa-shield-alt',     5),
-('Email Templates','email-templates','Manage system email templates',      'fas fa-envelope-open-text', 6);
+('Email Templates','email-templates','Manage system email templates',      'fas fa-envelope-open-text', 6),
+('CMS – Menus',   'cms-menus',   'Manage website navigation menus',     'fas fa-bars',              10),
+('CMS – News',    'cms-news',    'Manage latest news articles',          'fas fa-newspaper',         11),
+('CMS – Sliders', 'cms-sliders', 'Manage homepage slider images',        'fas fa-images',            12);
 
 -- -------------------------------------------------------
 -- Seed: Default super admin user
@@ -206,3 +209,81 @@ INSERT INTO `email_templates` (`name`, `action`, `subject`, `body_html`, `variab
   '{{full_name}},{{reset_link}},{{app_name}},{{expire_minutes}}',
   1
 );
+
+-- -------------------------------------------------------
+-- CMS Tables
+-- -------------------------------------------------------
+
+-- Table: cms_menus
+-- Stores navigation menu items in a self-referencing hierarchy
+-- -------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `cms_menus` (
+    `id`          INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+    `parent_id`   INT UNSIGNED  DEFAULT NULL,
+    `label`       VARCHAR(150)  NOT NULL,
+    `url`         VARCHAR(500)  DEFAULT '#',
+    `target`      ENUM('_self','_blank') DEFAULT '_self',
+    `type`        ENUM('link','dropdown','megamenu') DEFAULT 'link',
+    `icon`        VARCHAR(100)  DEFAULT NULL,
+    `sort_order`  INT           DEFAULT 0,
+    `is_active`   TINYINT(1)    DEFAULT 1,
+    `created_at`  DATETIME      DEFAULT CURRENT_TIMESTAMP,
+    `updated_at`  DATETIME      DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_parent` (`parent_id`),
+    FOREIGN KEY (`parent_id`) REFERENCES `cms_menus`(`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- -------------------------------------------------------
+-- Table: cms_news
+-- Stores news articles with optional HTML or plain-text content
+-- -------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `cms_news` (
+    `id`              INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+    `title`           VARCHAR(500)  NOT NULL,
+    `slug`            VARCHAR(500)  NOT NULL,
+    `content`         LONGTEXT,
+    `content_type`    ENUM('html','text') DEFAULT 'html',
+    `featured_image`  VARCHAR(500)  DEFAULT NULL,
+    `is_published`    TINYINT(1)    DEFAULT 0,
+    `published_at`    DATETIME      DEFAULT NULL,
+    `created_at`      DATETIME      DEFAULT CURRENT_TIMESTAMP,
+    `updated_at`      DATETIME      DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_slug` (`slug`(191))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- -------------------------------------------------------
+-- Table: cms_news_attachments
+-- Stores files / images attached to a news article
+-- -------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `cms_news_attachments` (
+    `id`            INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+    `news_id`       INT UNSIGNED  NOT NULL,
+    `original_name` VARCHAR(255)  NOT NULL,
+    `stored_name`   VARCHAR(255)  NOT NULL,
+    `mime_type`     VARCHAR(100)  DEFAULT NULL,
+    `size`          INT UNSIGNED  DEFAULT 0,
+    `created_at`    DATETIME      DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_news` (`news_id`),
+    FOREIGN KEY (`news_id`) REFERENCES `cms_news`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- -------------------------------------------------------
+-- Table: cms_sliders
+-- Stores homepage/section slider images
+-- -------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `cms_sliders` (
+    `id`          INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+    `title`       VARCHAR(255)  DEFAULT NULL,
+    `subtitle`    VARCHAR(500)  DEFAULT NULL,
+    `image`       VARCHAR(500)  NOT NULL,
+    `link_url`    VARCHAR(500)  DEFAULT NULL,
+    `link_text`   VARCHAR(150)  DEFAULT NULL,
+    `sort_order`  INT           DEFAULT 0,
+    `is_active`   TINYINT(1)    DEFAULT 1,
+    `created_at`  DATETIME      DEFAULT CURRENT_TIMESTAMP,
+    `updated_at`  DATETIME      DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
