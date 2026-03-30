@@ -242,7 +242,7 @@ $user       = auth_user();
     </ul>
     <?php endif; ?>
 
-    <?php if (is_super_admin() || can_access('modules') || can_access('access')): ?>
+    <?php if (is_super_admin() || can_access('modules') || can_access('access') || can_access('email-templates')): ?>
     <p class="nav-label">System</p>
     <ul class="nav flex-column">
         <?php if (is_super_admin() || can_access('modules')): ?>
@@ -258,6 +258,14 @@ $user       = auth_user();
             <a href="<?= APP_URL ?>/access/index.php"
                class="<?= strpos($_SERVER['PHP_SELF'], '/access/') !== false ? 'active' : '' ?>">
                 <i class="fas fa-shield-alt"></i> Module Access
+            </a>
+        </li>
+        <?php endif; ?>
+        <?php if (is_super_admin() || can_access('email-templates')): ?>
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/email-templates/index.php"
+               class="<?= strpos($_SERVER['PHP_SELF'], '/email-templates/') !== false ? 'active' : '' ?>">
+                <i class="fas fa-envelope-open-text"></i> Email Templates
             </a>
         </li>
         <?php endif; ?>
