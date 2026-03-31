@@ -4,10 +4,10 @@ require_super_admin();
 
 $page_title = 'Departments';
 
-// Handle toggle via GET (quick status toggle)
-if (isset($_GET['toggle']) && isset($_GET['id'])) {
+// Handle toggle via POST (status toggle)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action']) && $_POST['_action'] === 'toggle') {
     csrf_check();
-    $tid = (int)$_GET['id'];
+    $tid = (int)($_POST['id'] ?? 0);
     db()->prepare('UPDATE dept_departments SET is_active = 1 - is_active WHERE id = ?')->execute([$tid]);
     flash_set('success', 'Department status updated.');
     redirect(APP_URL . '/departments/index.php');
@@ -62,11 +62,17 @@ require_once __DIR__ . '/../../includes/header.php';
                         <td><code><?= h($dept['code']) ?></code></td>
                         <td><?= h($dept['faculty_label']) ?></td>
                         <td>
-                            <a href="<?= APP_URL ?>/departments/index.php?toggle=1&id=<?= $dept['id'] ?>&<?= CSRF_TOKEN_NAME ?>=<?= csrf_token() ?>"
-                               class="badge text-decoration-none <?= $dept['is_active'] ? 'bg-success' : 'bg-secondary' ?>"
-                               onclick="return confirm('Toggle status?')">
-                               <?= $dept['is_active'] ? 'Active' : 'Inactive' ?>
-                            </a>
+                            <form method="POST" action="<?= APP_URL ?>/departments/index.php"
+                                  onsubmit="return confirm('Toggle status?');" style="display:inline;">
+                                <?= csrf_field() ?>
+                                <input type="hidden" name="_action" value="toggle">
+                                <input type="hidden" name="id" value="<?= $dept['id'] ?>">
+                                <button type="submit"
+                                   class="badge border-0 text-decoration-none <?= $dept['is_active'] ? 'bg-success' : 'bg-secondary' ?>"
+                                   style="cursor:pointer;">
+                                   <?= $dept['is_active'] ? 'Active' : 'Inactive' ?>
+                                </button>
+                            </form>
                         </td>
                         <td class="text-end pe-4">
                             <div class="d-flex gap-1 justify-content-end">
