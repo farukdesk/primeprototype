@@ -3,12 +3,17 @@ require_once __DIR__ . '/../includes/auth.php';
 auth_check();
 require_access('faculty-profile', 'can_edit');
 
-$user_id = auth_user()['id'];
+$user_id      = auth_user()['id'];
 $current_user = auth_user();
 
 $fp_stmt = db()->prepare('SELECT * FROM faculty_profiles WHERE user_id = ?');
 $fp_stmt->execute([$user_id]);
 $fp = $fp_stmt->fetch() ?: [];
+
+// Load active departments for the dropdown
+$departments = db()->query(
+    'SELECT id, name FROM dept_departments WHERE is_active = 1 ORDER BY name ASC'
+)->fetchAll();
 
 $page_title = 'My Faculty Profile';
 $errors = [];
@@ -30,6 +35,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     foreach ($fields as $f) {
         $data[$f] = trim($_POST[$f] ?? '') ?: null;
     }
+
+    $dept_id_val = (int)($_POST['dept_id'] ?? 0) ?: null;
 
     $photo = $fp['photo'] ?? null;
     if (!empty($_FILES['photo']['name'])) {
@@ -70,13 +77,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($errors)) {
         db()->prepare(
             'INSERT INTO faculty_profiles
-             (user_id, photo, designation, qualification, official_email, personal_email, phone, bio,
+             (user_id, dept_id, photo, designation, qualification, official_email, personal_email, phone, bio,
               research_interest, publications, experience, office_location, room_number, office_hours,
               courses_taught, google_scholar, orcid, research_profiles, cv_file, awards,
               professional_memberships, social_links, projects_grants, supervision, skills, languages)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
              ON DUPLICATE KEY UPDATE
-              photo=VALUES(photo), designation=VALUES(designation), qualification=VALUES(qualification),
+              dept_id=VALUES(dept_id), photo=VALUES(photo), designation=VALUES(designation),
+              qualification=VALUES(qualification),
               official_email=VALUES(official_email), personal_email=VALUES(personal_email), phone=VALUES(phone),
               bio=VALUES(bio), research_interest=VALUES(research_interest), publications=VALUES(publications),
               experience=VALUES(experience), office_location=VALUES(office_location), room_number=VALUES(room_number),
@@ -86,7 +94,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               social_links=VALUES(social_links), projects_grants=VALUES(projects_grants),
               supervision=VALUES(supervision), skills=VALUES(skills), languages=VALUES(languages)'
         )->execute([
-            $user_id, $photo,
+            $user_id, $dept_id_val, $photo,
             $data['designation'], $data['qualification'], $data['official_email'], $data['personal_email'],
             $data['phone'], $data['bio'], $data['research_interest'], $data['publications'],
             $data['experience'], $data['office_location'], $data['room_number'], $data['office_hours'],
@@ -95,12 +103,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $data['projects_grants'], $data['supervision'], $data['skills'], $data['languages'],
         ]);
 
+        // Auto-sync name, designation and email to any existing dept_faculty records for this user.
+        $sync_email = $data['official_email'] ?? $data['personal_email'] ?? null;
+        db()->prepare(
+            'UPDATE dept_faculty SET name=?, designation=?, email=? WHERE user_id=?'
+        )->execute([
+            $current_user['full_name'],
+            $data['designation'],
+            $sync_email,
+            $user_id,
+        ]);
+
+        // If a department was selected, ensure a dept_faculty record exists for that dept.
+        if ($dept_id_val) {
+            $existing = db()->prepare('SELECT id FROM dept_faculty WHERE user_id=? AND dept_id=?');
+            $existing->execute([$user_id, $dept_id_val]);
+            if (!$existing->fetch()) {
+                db()->prepare(
+                    'INSERT INTO dept_faculty (dept_id, user_id, name, designation, email, is_head, sort_order, is_active)
+                     VALUES (?,?,?,?,?,0,99,1)'
+                )->execute([
+                    $dept_id_val,
+                    $user_id,
+                    $current_user['full_name'],
+                    $data['designation'],
+                    $sync_email,
+                ]);
+            }
+        }
+
         $success = true;
         // Refresh fp from DB
         $fp_stmt->execute([$user_id]);
         $fp = $fp_stmt->fetch() ?: [];
     } else {
-        $fp = array_merge($fp, $data, ['photo' => $photo, 'cv_file' => $cv_file]);
+        $fp = array_merge($fp, $data, ['photo' => $photo, 'cv_file' => $cv_file, 'dept_id' => $dept_id_val]);
     }
 }
 
@@ -196,6 +233,19 @@ require_once __DIR__ . '/../includes/header.php';
                         <div class="col-12">
                             <label class="form-label fw-medium">Bio / About</label>
                             <textarea name="bio" class="form-control" style="border-radius:10px;" rows="5"><?= h($fp['bio'] ?? '') ?></textarea>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-medium">Department</label>
+                            <select name="dept_id" class="form-control" style="border-radius:10px;">
+                                <option value="0">— Select your department —</option>
+                                <?php foreach ($departments as $dept): ?>
+                                <option value="<?= (int)$dept['id'] ?>"
+                                    <?= (int)($fp['dept_id'] ?? 0) === (int)$dept['id'] ? 'selected' : '' ?>>
+                                    <?= h($dept['name']) ?>
+                                </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <small class="text-muted">Select your primary department. You will be added to its faculty list if not already present. Contact an administrator to be removed from a previous department.</small>
                         </div>
                     </div>
                 </div>

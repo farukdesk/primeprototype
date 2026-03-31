@@ -39,6 +39,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             db()->prepare('UPDATE users SET last_login = NOW() WHERE id = ?')
                ->execute([$user['id']]);
 
+            // Redirect non-dashboard users to their primary area
+            if (!$user['is_super'] && !can_access('dashboard')) {
+                if (can_access('faculty-profile')) {
+                    redirect(APP_URL . '/faculty-profiles/my-profile.php');
+                }
+            }
+
             redirect(APP_URL . '/index.php');
         } else {
             // Prevent username enumeration by using a generic message
