@@ -220,7 +220,7 @@ $cv_url = !empty($profile['cv_file']) ? ADMIN_UPLOAD_URL . '/faculty-profiles/' 
 
                      <?php if ($dept_name && $dept_slug): ?>
                      <div class="fp-info-row">
-                        <i class="fas fa-building-columns"></i>
+                        <i class="fas fa-university"></i>
                         <a href="<?= fh(SITE_URL) ?>/department-faculty.php?slug=<?= urlencode($dept_slug) ?>" style="color:#002147;"><?= fh($dept_name) ?></a>
                      </div>
                      <?php endif; ?>
