@@ -19,12 +19,49 @@ if (!$item) {
 clear_old();
 $page_title = 'Edit Menu Item';
 
-// Load parent candidates (exclude self and own children)
-$parents = db()->prepare(
-    "SELECT id, label FROM cms_menus WHERE id != ? AND parent_id IS NULL ORDER BY sort_order, label"
+// Load all menu items for parent selector, excluding self and own descendants.
+// This allows 3-level nesting: megamenu → column header → column link.
+$_all_for_parent = db()->prepare(
+    "SELECT id, parent_id, label FROM cms_menus WHERE id != ? ORDER BY COALESCE(parent_id, id), sort_order, id"
 );
-$parents->execute([$id]);
-$parents = $parents->fetchAll();
+$_all_for_parent->execute([$id]);
+$_all_for_parent = $_all_for_parent->fetchAll();
+
+// Build a flat list with indented labels, excluding descendants of $id.
+function _build_parent_options_edit(array $rows, int $excludeId): array {
+    $map = [];
+    foreach ($rows as $r) {
+        $map[$r['id']] = $r;
+    }
+    // Find all descendants of $excludeId to skip them.
+    $descendants = [];
+    $findDesc = function(int $pid) use (&$findDesc, $map, &$descendants) {
+        foreach ($map as $r) {
+            if ((int)($r['parent_id'] ?? 0) === $pid && !isset($descendants[$r['id']])) {
+                $descendants[$r['id']] = true;
+                $findDesc((int)$r['id']);
+            }
+        }
+    };
+    $findDesc($excludeId);
+
+    $result  = [];
+    $visited = [];
+    $walk = function(int $parentId, int $depth) use (&$walk, $map, &$result, &$visited, $descendants) {
+        foreach ($map as $r) {
+            if ((int)($r['parent_id'] ?? 0) !== $parentId) continue;
+            if (isset($visited[$r['id']])) continue;
+            if (isset($descendants[$r['id']])) continue;
+            $visited[$r['id']] = true;
+            $prefix = $depth > 0 ? str_repeat('— ', $depth) : '';
+            $result[] = ['id' => $r['id'], 'label' => $prefix . $r['label']];
+            $walk((int)$r['id'], $depth + 1);
+        }
+    };
+    $walk(0, 0);
+    return $result;
+}
+$parents = _build_parent_options_edit($_all_for_parent, $id);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();

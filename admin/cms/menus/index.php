@@ -4,11 +4,12 @@ require_super_admin();
 
 $page_title = 'Navigation Menus';
 
-// Fetch all menu items ordered so parents come before children
+// Fetch all menu items and build a lookup for ancestry labels
 $items = db()->query(
-    'SELECT m.*, p.label AS parent_label
+    'SELECT m.*, p.label AS parent_label, g.label AS grandparent_label
      FROM cms_menus m
      LEFT JOIN cms_menus p ON p.id = m.parent_id
+     LEFT JOIN cms_menus g ON g.id = p.parent_id
      ORDER BY COALESCE(m.parent_id, m.id), m.sort_order, m.id'
 )->fetchAll();
 
@@ -52,7 +53,9 @@ require_once __DIR__ . '/../../includes/header.php';
                     <tr>
                         <td class="px-4"><?= $idx + 1 ?></td>
                         <td>
-                            <?php if ($item['parent_id']): ?>
+                            <?php if ($item['parent_id'] && !empty($item['grandparent_label'])): ?>
+                                <span class="text-muted me-1" style="font-size:.75rem;">└──</span>
+                            <?php elseif ($item['parent_id']): ?>
                                 <span class="text-muted me-1" style="font-size:.75rem;">└</span>
                             <?php endif; ?>
                             <?php if ($item['icon']): ?>
@@ -74,8 +77,15 @@ require_once __DIR__ . '/../../includes/header.php';
                             ?>
                             <span class="badge <?= $cls ?>"><?= $lbl ?></span>
                         </td>
-                        <td><?= $item['parent_label'] ? h($item['parent_label']) : '<span class="text-muted">—</span>' ?></td>
-                        <td><code><?= h($item['target']) ?></code></td>
+                        <td>
+                            <?php if (!empty($item['grandparent_label'])): ?>
+                                <?= h($item['grandparent_label']) ?> › <?= h($item['parent_label']) ?>
+                            <?php elseif ($item['parent_label']): ?>
+                                <?= h($item['parent_label']) ?>
+                            <?php else: ?>
+                                <span class="text-muted">—</span>
+                            <?php endif; ?>
+                        </td>
                         <td><?= (int)$item['sort_order'] ?></td>
                         <td>
                             <?= $item['is_active']

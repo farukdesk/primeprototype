@@ -6,10 +6,38 @@ $page_title = 'Add Menu Item';
 $errors     = [];
 clear_old();
 
-// Load parent candidates (top-level items or dropdown/megamenu parents)
-$parents = db()->query(
-    "SELECT id, label FROM cms_menus WHERE parent_id IS NULL ORDER BY sort_order, label"
+// Load all existing menu items to build a hierarchical parent selector.
+// We include items at every depth so that 3rd-level (grandchild) links can be created
+// under megamenu column headers.
+$_all_menu_items = db()->query(
+    "SELECT id, parent_id, label FROM cms_menus ORDER BY COALESCE(parent_id, id), sort_order, id"
 )->fetchAll();
+
+// Build a flat list with indented labels showing parent path.
+function _build_parent_options(array $rows): array {
+    // index by id
+    $map = [];
+    foreach ($rows as $r) {
+        $map[$r['id']] = $r;
+    }
+    // produce flat list in tree order with depth-based prefix
+    $result = [];
+    $visited = [];
+    // recursive helper
+    $walk = function(int $parentId, int $depth) use (&$walk, $map, &$result, &$visited) {
+        foreach ($map as $r) {
+            if ((int)($r['parent_id'] ?? 0) !== $parentId) continue;
+            if (isset($visited[$r['id']])) continue;
+            $visited[$r['id']] = true;
+            $prefix = $depth > 0 ? str_repeat('— ', $depth) : '';
+            $result[] = ['id' => $r['id'], 'label' => $prefix . $r['label']];
+            $walk((int)$r['id'], $depth + 1);
+        }
+    };
+    $walk(0, 0);
+    return $result;
+}
+$parents = _build_parent_options($_all_menu_items);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
