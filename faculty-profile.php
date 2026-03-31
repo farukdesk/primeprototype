@@ -342,7 +342,8 @@ $cv_url = !empty($profile['cv_file']) ? ADMIN_UPLOAD_URL . '/faculty-profiles/' 
                      <?php if (!empty($profile['research_profiles'])): ?>
                      <?php foreach (array_filter(array_map('trim', explode("\n", $profile['research_profiles']))) as $rp): ?>
                      <a href="<?= fh($rp) ?>" target="_blank" rel="noopener" class="fp-online-link">
-                        <i class="fas fa-external-link-alt"></i> <?= fh(parse_url($rp, PHP_URL_HOST) ?? parse_url($rp, PHP_URL_PATH) ?? $rp) ?>
+                        <?php $rp_label = parse_url($rp, PHP_URL_HOST); if ($rp_label === false || $rp_label === null) { $rp_label = parse_url($rp, PHP_URL_PATH); } if ($rp_label === false || $rp_label === null) { $rp_label = $rp; } ?>
+                        <i class="fas fa-external-link-alt"></i> <?= fh($rp_label) ?>
                      </a>
                      <?php endforeach; ?>
                      <?php endif; ?>
@@ -356,7 +357,8 @@ $cv_url = !empty($profile['cv_file']) ? ADMIN_UPLOAD_URL . '/faculty-profiles/' 
                   <div>
                      <?php foreach (array_filter(array_map('trim', explode("\n", $profile['social_links']))) as $sl): ?>
                      <a href="<?= fh($sl) ?>" target="_blank" rel="noopener" class="fp-social-link">
-                        <i class="fas fa-link"></i> <?= fh(parse_url($sl, PHP_URL_HOST) ?? parse_url($sl, PHP_URL_PATH) ?? $sl) ?>
+                        <?php $sl_label = parse_url($sl, PHP_URL_HOST); if ($sl_label === false || $sl_label === null) { $sl_label = parse_url($sl, PHP_URL_PATH); } if ($sl_label === false || $sl_label === null) { $sl_label = $sl; } ?>
+                        <i class="fas fa-link"></i> <?= fh($sl_label) ?>
                      </a>
                      <?php endforeach; ?>
                   </div>

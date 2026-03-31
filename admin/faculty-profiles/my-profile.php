@@ -42,7 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = 'Invalid photo. Allowed: jpg, jpeg, png, gif, webp.';
         } else {
             if (!empty($fp['photo'])) {
-                $old = UPLOAD_DIR . '/faculty-profiles/' . $fp['photo'];
+                $old = UPLOAD_DIR . '/faculty-profiles/' . basename($fp['photo']);
                 if (file_exists($old)) @unlink($old);
             }
             $photo = $uploaded;
@@ -60,7 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = 'Invalid CV file. Only PDF is allowed.';
         } else {
             if (!empty($fp['cv_file'])) {
-                $old_cv = UPLOAD_DIR . '/faculty-profiles/' . $fp['cv_file'];
+                $old_cv = UPLOAD_DIR . '/faculty-profiles/' . basename($fp['cv_file']);
                 if (file_exists($old_cv)) @unlink($old_cv);
             }
             $cv_file = $uploaded_cv;
