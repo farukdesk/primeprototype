@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../../includes/auth.php';
+require_once __DIR__ . '/../includes/auth.php';
 auth_check();
 
 // Non-super-admin faculty users go straight to their own profile
@@ -20,7 +20,7 @@ $faculty = db()->query(
      ORDER BY u.full_name ASC"
 )->fetchAll();
 
-require_once __DIR__ . '/../../includes/header.php';
+require_once __DIR__ . '/../includes/header.php';
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -92,4 +92,4 @@ require_once __DIR__ . '/../../includes/header.php';
     </div>
 </div>
 
-<?php require_once __DIR__ . '/../../includes/footer.php'; ?>
+<?php require_once __DIR__ . '/../includes/footer.php'; ?>
