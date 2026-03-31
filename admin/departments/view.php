@@ -30,7 +30,7 @@ foreach ($sections as $key => $table) {
 }
 
 $page_title = 'Manage: ' . $dept['name'];
-require_once __DIR__ . '/../../includes/header.php';
+require_once __DIR__ . '/../includes/header.php';
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -104,4 +104,4 @@ $cards = [
 <?php endforeach; ?>
 </div>
 
-<?php require_once __DIR__ . '/../../includes/footer.php'; ?>
+<?php require_once __DIR__ . '/../includes/footer.php'; ?>
