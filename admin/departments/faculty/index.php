@@ -91,6 +91,12 @@ require_once __DIR__ . '/../../includes/header.php';
                         </td>
                         <td class="text-end pe-4">
                             <div class="d-flex gap-1 justify-content-end">
+                                <?php if (!empty($f['user_id'])): ?>
+                                <a href="<?= APP_URL ?>/faculty-profiles/edit.php?user_id=<?= (int)$f['user_id'] ?>"
+                                   class="btn btn-sm btn-outline-info" style="border-radius:7px;" title="Faculty Profile">
+                                    <i class="fas fa-id-card"></i>
+                                </a>
+                                <?php endif; ?>
                                 <a href="<?= APP_URL ?>/departments/faculty/edit.php?id=<?= $f['id'] ?>&dept_id=<?= $dept_id ?>"
                                    class="btn btn-sm btn-outline-primary" style="border-radius:7px;" title="Edit">
                                     <i class="fas fa-edit"></i>

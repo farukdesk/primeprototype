@@ -314,6 +314,30 @@ $user       = auth_user();
     </ul>
     <?php endif; ?>
 
+    <?php if (is_super_admin()): ?>
+    <p class="nav-label">Faculty</p>
+    <ul class="nav flex-column">
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/faculty-profiles/index.php"
+               class="<?= strpos($_SERVER['PHP_SELF'], '/faculty-profiles/') !== false ? 'active' : '' ?>">
+                <i class="fas fa-id-card"></i> Faculty Profiles
+            </a>
+        </li>
+    </ul>
+    <?php endif; ?>
+
+    <?php if (!is_super_admin() && can_access('faculty-profile')): ?>
+    <p class="nav-label">My Profile</p>
+    <ul class="nav flex-column">
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/faculty-profiles/my-profile.php"
+               class="<?= strpos($_SERVER['PHP_SELF'], '/faculty-profiles/') !== false ? 'active' : '' ?>">
+                <i class="fas fa-id-card"></i> My Faculty Profile
+            </a>
+        </li>
+    </ul>
+    <?php endif; ?>
+
     <div style="padding: 20px; margin-top: auto;">
         <a href="<?= APP_URL ?>/logout.php"
            style="display:flex;align-items:center;gap:8px;color:#e74c3c;font-size:.85rem;text-decoration:none;">

@@ -12,6 +12,13 @@ if (!$dept) { flash_set('error', 'Department not found.'); redirect(APP_URL . '/
 
 $page_title = 'Add Faculty – ' . $dept['name'];
 $errors = [];
+
+$faculty_users = db()->query(
+    "SELECT u.id, u.full_name, u.email FROM users u
+     JOIN user_groups ug ON ug.id = u.group_id
+     WHERE ug.name = 'Faculty' AND u.is_active = 1
+     ORDER BY u.full_name"
+)->fetchAll();
 clear_old();
 
 function dept_upload_file(array $file, string $subdir, array $allowed_exts, array $allowed_mimes): string|false {
@@ -38,6 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $is_head        = isset($_POST['is_head'])   ? 1 : 0;
     $sort_order     = (int)($_POST['sort_order'] ?? 0);
     $is_active      = isset($_POST['is_active'])    ? 1 : 0;
+    $user_id        = (int)($_POST['user_id']    ?? 0);
 
     if ($name === '') $errors[] = 'Name is required.';
 
@@ -58,16 +66,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($errors)) {
         db()->prepare(
             'INSERT INTO dept_faculty
-             (dept_id, name, designation, photo, specialization, email, is_head, sort_order, is_active)
-             VALUES (?,?,?,?,?,?,?,?,?)'
-        )->execute([$dept_id, $name, $designation ?: null, $photo, $specialization ?: null,
+             (dept_id, user_id, name, designation, photo, specialization, email, is_head, sort_order, is_active)
+             VALUES (?,?,?,?,?,?,?,?,?,?)'
+        )->execute([$dept_id, $user_id ?: null, $name, $designation ?: null, $photo, $specialization ?: null,
                     $email ?: null, $is_head, $sort_order, $is_active]);
 
         flash_set('success', "Faculty member <strong>" . h($name) . "</strong> added.");
         redirect(APP_URL . '/departments/faculty/index.php?dept_id=' . $dept_id);
     }
 
-    save_old(compact('name','designation','specialization','email','sort_order'));
+    save_old(compact('name','designation','specialization','email','sort_order','user_id'));
 }
 
 require_once __DIR__ . '/../../includes/header.php';
@@ -142,6 +150,17 @@ require_once __DIR__ . '/../../includes/header.php';
                         <input class="form-check-input" type="checkbox" id="is_active" name="is_active" value="1" checked>
                         <label class="form-check-label" for="is_active">Active</label>
                     </div>
+                </div>
+                <div class="col-12">
+                    <label class="form-label fw-medium">Link to User Account <small class="text-muted">(optional – links this entry to a faculty user profile)</small></label>
+                    <select name="user_id" class="form-control" style="border-radius:10px;">
+                        <option value="0">— Not linked —</option>
+                        <?php foreach ($faculty_users as $fu): ?>
+                        <option value="<?= $fu['id'] ?>" <?= (int)old('user_id', '0') === (int)$fu['id'] ? 'selected' : '' ?>>
+                            <?= h($fu['full_name']) ?> (<?= h($fu['email']) ?>)
+                        </option>
+                        <?php endforeach; ?>
+                    </select>
                 </div>
             </div>
 

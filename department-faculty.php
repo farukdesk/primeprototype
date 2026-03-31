@@ -163,7 +163,13 @@ $dept_name    = fh($dept['name'] ?? 'Department');
                   <i class="fas fa-user-tie" style="font-size:70px; color:#FFB81C;"></i>
                </div>
                <?php endif; ?>
-               <h5 class="mt-20 mb-5" style="color:#002147; font-weight:700;"><?= fh($hf['name'] ?? '') ?></h5>
+               <h5 class="mt-20 mb-5">
+               <?php if (!empty($hf['user_id'])): ?>
+               <a href="<?= fh(SITE_URL) ?>/faculty-profile.php?id=<?= (int)$hf['user_id'] ?>" style="color:#002147;text-decoration:none;font-weight:700;"><?= fh($hf['name'] ?? '') ?></a>
+               <?php else: ?>
+               <span style="color:#002147; font-weight:700;"><?= fh($hf['name'] ?? '') ?></span>
+               <?php endif; ?>
+               </h5>
                <p style="color:#D21034; font-size:14px; font-weight:600; margin-bottom:5px;"><?= fh($hf['designation'] ?? '') ?></p>
                <?php if (!empty($hf['email'])): ?>
                <p style="font-size:13px;"><a href="mailto:<?= fh($hf['email']) ?>" style="color:#334155;"><?= fh($hf['email']) ?></a></p>
@@ -204,6 +210,9 @@ $dept_name    = fh($dept['name'] ?? 'Department');
          <div class="row g-4">
             <?php foreach ($regular_faculty as $f): ?>
             <div class="col-xl-4 col-lg-4 col-md-6 wow itfadeUp" data-wow-duration=".9s">
+               <?php if (!empty($f['user_id'])): ?>
+               <a href="<?= fh(SITE_URL) ?>/faculty-profile.php?id=<?= (int)$f['user_id'] ?>" style="text-decoration:none; color:inherit;">
+               <?php endif; ?>
                <div class="card faculty-card h-100 border-0 shadow-sm text-center" style="border-top:3px solid #002147 !important;">
                   <div class="card-body p-30">
                      <?php if (!empty($f['photo'])): ?>
@@ -225,8 +234,12 @@ $dept_name    = fh($dept['name'] ?? 'Department');
                      <?php if (!empty($f['email'])): ?>
                      <p style="font-size:13px; margin-bottom:0;"><a href="mailto:<?= fh($f['email']) ?>" style="color:#002147;"><i class="fas fa-envelope me-1" style="color:#FFB81C;"></i><?= fh($f['email']) ?></a></p>
                      <?php endif; ?>
+                     <?php if (!empty($f['user_id'])): ?>
+                     <p class="mt-2 mb-0" style="font-size:12px; color:#D21034;"><i class="fas fa-external-link-alt me-1"></i>View Profile</p>
+                     <?php endif; ?>
                   </div>
                </div>
+               <?php if (!empty($f['user_id'])): ?></a><?php endif; ?>
             </div>
             <?php endforeach; ?>
          </div>
