@@ -273,6 +273,18 @@ $user       = auth_user();
     <?php endif; ?>
 
     <?php if (is_super_admin()): ?>
+    <p class="nav-label">Departments</p>
+    <ul class="nav flex-column">
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/departments/index.php"
+               class="<?= strpos($_SERVER['PHP_SELF'], '/departments/') !== false ? 'active' : '' ?>">
+                <i class="fas fa-building-columns"></i> Departments
+            </a>
+        </li>
+    </ul>
+    <?php endif; ?>
+
+    <?php if (is_super_admin()): ?>
     <p class="nav-label">CMS</p>
     <ul class="nav flex-column">
         <li class="nav-item">
