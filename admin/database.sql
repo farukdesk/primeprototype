@@ -287,3 +287,38 @@ CREATE TABLE IF NOT EXISTS `cms_sliders` (
     `updated_at`  DATETIME      DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- -------------------------------------------------------
+-- Table: cms_header_settings
+-- Key-value store for front-page header top bar settings
+-- (phone, email, portal links, social media URLs, etc.)
+-- -------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `cms_header_settings` (
+    `id`            INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+    `setting_key`   VARCHAR(100)  NOT NULL,
+    `setting_value` TEXT          DEFAULT NULL,
+    `updated_at`    DATETIME      DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_key` (`setting_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- -------------------------------------------------------
+-- Seed: Default header settings
+-- -------------------------------------------------------
+INSERT INTO `cms_header_settings` (`setting_key`, `setting_value`) VALUES
+('phone',               '01710996196'),
+('email',               'info@primeuniversity.edu.bd'),
+('student_portal_url',  '#'),
+('student_portal_text', 'Student Portal'),
+('find_result_url',     '#'),
+('find_result_text',    'Find Result'),
+('facebook_url',        '#'),
+('twitter_url',         '#'),
+('instagram_url',       '#'),
+('linkedin_url',        '#');
+
+-- -------------------------------------------------------
+-- Seed: Module for Header Settings
+-- -------------------------------------------------------
+INSERT INTO `modules` (`name`, `slug`, `description`, `icon`, `sort_order`) VALUES
+('CMS – Header', 'cms-header', 'Manage header top bar settings', 'fas fa-heading', 9);

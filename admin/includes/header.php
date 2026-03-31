@@ -276,6 +276,12 @@ $user       = auth_user();
     <p class="nav-label">CMS</p>
     <ul class="nav flex-column">
         <li class="nav-item">
+            <a href="<?= APP_URL ?>/cms/header/index.php"
+               class="<?= strpos($_SERVER['PHP_SELF'], '/cms/header/') !== false ? 'active' : '' ?>">
+                <i class="fas fa-heading"></i> Header Settings
+            </a>
+        </li>
+        <li class="nav-item">
             <a href="<?= APP_URL ?>/cms/menus/index.php"
                class="<?= strpos($_SERVER['PHP_SELF'], '/cms/menus/') !== false ? 'active' : '' ?>">
                 <i class="fas fa-bars"></i> Navigation Menus
