@@ -76,7 +76,7 @@ require_once __DIR__ . '/../../includes/header.php';
                             <span class="badge bg-warning text-dark">Incomplete</span>
                             <?php endif; ?>
                         </td>
-                        <td><?= $row['updated_at'] ? h(date('d M Y', strtotime($row['updated_at']))) : '<span class="text-muted">Never</span>' ?></td>
+                        <td><?php if ($row['updated_at']): ?><?= h(date('d M Y', strtotime($row['updated_at']))) ?><?php else: ?><span class="text-muted">Never</span><?php endif; ?></td>
                         <td class="text-end pe-4">
                             <a href="<?= APP_URL ?>/faculty-profiles/edit.php?user_id=<?= $row['id'] ?>"
                                class="btn btn-sm btn-outline-primary" style="border-radius:7px;" title="Edit Profile">

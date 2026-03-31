@@ -15,7 +15,7 @@ function fp_upload_file(array $file, array $allowed_exts, array $allowed_mimes):
     $mime  = $finfo->file($file['tmp_name']);
     if (!in_array($mime, $allowed_mimes, true)) return false;
     $dir = UPLOAD_DIR . '/faculty-profiles';
-    if (!is_dir($dir)) mkdir($dir, 0755, true);
+    if (!is_dir($dir) && !mkdir($dir, 0755, true)) return false;
     $name = bin2hex(random_bytes(12)) . '.' . $ext;
     if (!move_uploaded_file($file['tmp_name'], $dir . '/' . $name)) return false;
     return $name;
