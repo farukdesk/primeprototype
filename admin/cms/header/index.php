@@ -24,9 +24,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     ];
 
     $stmt = db()->prepare(
-        'INSERT INTO cms_header_settings (setting_key, setting_value) AS new_row
+        'INSERT INTO cms_header_settings (setting_key, setting_value)
          VALUES (?, ?)
-         ON DUPLICATE KEY UPDATE setting_value = new_row.setting_value'
+         ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)'
     );
 
     foreach ($fields as $key) {
