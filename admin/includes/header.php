@@ -458,6 +458,18 @@ $user       = auth_user();
     </ul>
     <?php endif; ?>
 
+    <?php if (is_super_admin() || can_access('contact')): ?>
+    <p class="nav-label">Contact</p>
+    <ul class="nav flex-column">
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/contact/index.php"
+               class="<?= strpos($_SERVER['PHP_SELF'], '/contact/') !== false ? 'active' : '' ?>">
+                <i class="fas fa-envelope-open-text"></i> Contact Messages
+            </a>
+        </li>
+    </ul>
+    <?php endif; ?>
+
     <?php if (is_super_admin() || can_access('library') || can_access('library-circulation') || can_access('library-digital')): ?>
     <p class="nav-label">Library</p>
     <ul class="nav flex-column">
