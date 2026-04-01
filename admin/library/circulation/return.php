@@ -95,24 +95,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $db->commit();
 
-            lib_audit('BOOK_RETURNED', 'circulation', $circ_id,
-                $circ['book_title'] . ' ← ' . $circ['member_name'],
-                'Copy #' . $circ['copy_number'] .
-                ($fine_amount > 0 ? '. Fine: ৳' . number_format($fine_amount, 2) : '')
-            );
-
-            $msg = 'Book "' . $circ['book_title'] . '" returned successfully.';
-            if ($fine_amount > 0) {
-                $msg .= ' Fine of ৳' . number_format($fine_amount, 2) . ' has been recorded.';
-            }
-            flash_set('success', $msg);
-            redirect(APP_URL . '/library/circulation/index.php');
-
         } catch (Exception $e) {
-            $db->rollBack();
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
             flash_set('error', 'Database error: ' . $e->getMessage());
             redirect(APP_URL . '/library/circulation/return.php?id=' . $circ_id);
         }
+
+        lib_audit('BOOK_RETURNED', 'circulation', $circ_id,
+            $circ['book_title'] . ' ← ' . $circ['member_name'],
+            'Copy #' . $circ['copy_number'] .
+            ($fine_amount > 0 ? '. Fine: ৳' . number_format($fine_amount, 2) : '')
+        );
+
+        $msg = 'Book "' . $circ['book_title'] . '" returned successfully.';
+        if ($fine_amount > 0) {
+            $msg .= ' Fine of ৳' . number_format($fine_amount, 2) . ' has been recorded.';
+        }
+        flash_set('success', $msg);
+        redirect(APP_URL . '/library/circulation/index.php');
 
     } elseif ($action === 'renew') {
         $max_renewals = (int)lib_setting('max_renewals', 2);
@@ -132,9 +134,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $new_due = date('Y-m-d H:i:s', strtotime($circ['due_date'] . ' +' . $borrow_days . ' days'));
 
-        $db->prepare(
-            "UPDATE library_circulation SET due_date=?, renewal_count=renewal_count+1 WHERE id=?"
-        )->execute([$new_due, $circ_id]);
+        try {
+            $db->prepare(
+                "UPDATE library_circulation SET due_date=?, renewal_count=renewal_count+1 WHERE id=?"
+            )->execute([$new_due, $circ_id]);
+        } catch (Exception $e) {
+            flash_set('error', 'Database error: ' . $e->getMessage());
+            redirect(APP_URL . '/library/circulation/return.php?id=' . $circ_id);
+        }
 
         lib_audit('BOOK_RENEWED', 'circulation', $circ_id,
             $circ['book_title'] . ' — ' . $circ['member_name'],
