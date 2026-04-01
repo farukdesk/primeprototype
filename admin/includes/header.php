@@ -388,6 +388,24 @@ $user       = auth_user();
     </ul>
     <?php endif; ?>
 
+    <?php if (is_super_admin() || can_access('jobs')): ?>
+    <p class="nav-label">Jobs</p>
+    <ul class="nav flex-column">
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/jobs/index.php"
+               class="<?= (strpos($_SERVER['PHP_SELF'], '/jobs/') !== false && strpos($_SERVER['PHP_SELF'], '/jobs/application') === false) ? 'active' : '' ?>">
+                <i class="fas fa-briefcase"></i> Job Postings
+            </a>
+        </li>
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/jobs/applications.php"
+               class="<?= strpos($_SERVER['PHP_SELF'], '/jobs/application') !== false ? 'active' : '' ?>">
+                <i class="fas fa-file-alt"></i> Applications
+            </a>
+        </li>
+    </ul>
+    <?php endif; ?>
+
     <div style="padding: 20px; margin-top: auto;">
         <a href="<?= APP_URL ?>/logout.php"
            style="display:flex;align-items:center;gap:8px;color:#e74c3c;font-size:.85rem;text-decoration:none;">
