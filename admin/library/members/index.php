@@ -182,9 +182,14 @@ require_once __DIR__ . '/../../includes/header.php';
     <?php endif; ?>
 </div>
 
-<?php $flash = flash_get(); if ($flash): ?>
-<div class="alert alert-<?= $flash['type'] === 'success' ? 'success' : 'danger' ?> alert-dismissible fade show">
-    <?= $flash['message'] ?>
+<?php if (($flash_msg = flash_get('success')) !== null): ?>
+<div class="alert alert-success alert-dismissible fade show">
+    <?= $flash_msg ?>
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+<?php elseif (($flash_msg = flash_get('error')) !== null): ?>
+<div class="alert alert-danger alert-dismissible fade show">
+    <?= $flash_msg ?>
     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
 </div>
 <?php endif; ?>

@@ -82,7 +82,7 @@ function lib_setting(string $key, mixed $default = ''): mixed
     static $cache = [];
     if (isset($cache[$key])) return $cache[$key];
 
-    $stmt = db()->prepare('SELECT setting_value FROM library_settings WHERE setting_key = ? LIMIT 1');
+    $stmt = db()->prepare('SELECT setting_val FROM library_settings WHERE setting_key = ? LIMIT 1');
     $stmt->execute([$key]);
     $val = $stmt->fetchColumn();
     $cache[$key] = ($val !== false) ? $val : $default;
@@ -94,8 +94,8 @@ function lib_setting(string $key, mixed $default = ''): mixed
  */
 function lib_settings_all(): array
 {
-    $rows = db()->query('SELECT setting_key, setting_value FROM library_settings')->fetchAll();
-    return array_column($rows, 'setting_value', 'setting_key');
+    $rows = db()->query('SELECT setting_key, setting_val FROM library_settings')->fetchAll();
+    return array_column($rows, 'setting_val', 'setting_key');
 }
 
 /**
@@ -104,9 +104,9 @@ function lib_settings_all(): array
 function lib_save_setting(string $key, string $value): void
 {
     $stmt = db()->prepare(
-        'INSERT INTO library_settings (setting_key, setting_value)
+        'INSERT INTO library_settings (setting_key, setting_val)
          VALUES (?, ?)
-         ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)'
+         ON DUPLICATE KEY UPDATE setting_val = VALUES(setting_val)'
     );
     $stmt->execute([$key, $value]);
 }
@@ -417,7 +417,7 @@ function lib_get_book(int $id): array
                 d.name AS dept_name
          FROM library_books b
          LEFT JOIN library_categories c ON c.id = b.category_id
-         LEFT JOIN dept_departments   d ON d.id = b.dept_id
+         LEFT JOIN dept_departments   d ON d.id = b.department_id
          WHERE b.id = ?'
     );
     $stmt->execute([$id]);
