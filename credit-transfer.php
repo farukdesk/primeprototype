@@ -89,10 +89,12 @@ $page_title = 'Credit Transfer – Prime University';
    .ct-hero h1 span {
       color: var(--ct-gold);
       position: relative;
+      display: inline-block;
    }
    .ct-hero h1 span::after {
       content: '';
       display: block;
+      width: 100%;
       height: 3px;
       background: var(--ct-gold);
       border-radius: 2px;
@@ -162,7 +164,7 @@ $page_title = 'Credit Transfer – Prime University';
       color: #fff;
       margin-bottom: 10px;
    }
-   .ct-hero-card p  { color: rgba(255,255,255,.78); font-size: .93rem; line-height: 1.7; margin: 0; }
+   .ct-hero-card p  { color: rgba(255,255,255,.92); font-size: .95rem; line-height: 1.75; margin: 0; }
 
    /* ── Section Shared ──────────────────────────── */
    .ct-section { padding: 90px 0; }
@@ -241,19 +243,21 @@ $page_title = 'Credit Transfer – Prime University';
       margin-bottom: 6px;
    }
    .ct-stat-card .num span { color: var(--ct-blue); }
+   .ct-stat-card .num.ct-stat-abbr { font-size: 1.9rem; letter-spacing: .04em; }
+   .ct-stat-card .num.ct-stat-abbr abbr { text-decoration: none; }
    .ct-stat-card .lbl {
       font-size: .9rem;
       color: var(--ct-muted);
       font-weight: 500;
    }
    .ct-stat-card .ico {
-      width: 52px; height: 52px;
-      border-radius: 12px;
+      width: 64px; height: 64px;
+      border-radius: 14px;
       background: var(--ct-light);
       display: flex; align-items: center; justify-content: center;
-      font-size: 1.4rem;
+      font-size: 1.75rem;
       color: var(--ct-blue);
-      margin: 0 auto 16px;
+      margin: 0 auto 18px;
    }
 
    /* ── Process Steps ────────────────────────────── */
@@ -512,8 +516,8 @@ $page_title = 'Credit Transfer – Prime University';
       margin-bottom: 10px;
    }
    .ct-authority-card p {
-      font-size: .9rem;
-      color: rgba(255,255,255,.75);
+      font-size: .93rem;
+      color: rgba(255,255,255,.9);
       line-height: 1.7;
       margin: 0;
    }
@@ -757,7 +761,7 @@ $page_title = 'Credit Transfer – Prime University';
                   <div class="ct-hero-card wow fadeInRight" data-wow-delay=".25s">
                      <div class="icon-wrap"><i class="fas fa-exchange-alt"></i></div>
                      <h3>Quick Eligibility Check</h3>
-                     <p>Your minimum grade must be <strong style="color:var(--ct-gold);">C+</strong> or above (≥ 50% marks) and no more than <strong style="color:var(--ct-gold);">50%</strong> of your programme's total courses may be transferred. The Equivalence Committee reviews every application individually.</p>
+                     <p>A minimum grade of <strong style="color:var(--ct-gold);">C+</strong> (&#x2265;&nbsp;50% marks) is required for each course, and the total transferred courses must not exceed programme limits. Every application is reviewed individually by the Equivalence Committee.</p>
                   </div>
                </div>
             </div>
@@ -769,16 +773,16 @@ $page_title = 'Credit Transfer – Prime University';
          <div class="row g-4">
             <div class="col-6 col-md-3">
                <div class="ct-stat-card wow fadeInUp" data-wow-delay=".1s">
-                  <div class="ico"><i class="fas fa-percentage"></i></div>
-                  <div class="num">50<span>%</span></div>
-                  <div class="lbl">Max Transferable Courses</div>
+                  <div class="ico"><i class="fas fa-list-ol"></i></div>
+                  <div class="num">6</div>
+                  <div class="lbl">Application Steps</div>
                </div>
             </div>
             <div class="col-6 col-md-3">
                <div class="ct-stat-card wow fadeInUp" data-wow-delay=".2s">
-                  <div class="ico"><i class="fas fa-star-half-alt"></i></div>
-                  <div class="num">C<span>+</span></div>
-                  <div class="lbl">Minimum Required Grade</div>
+                  <div class="ico"><i class="fas fa-award"></i></div>
+                  <div class="num ct-stat-abbr"><abbr title="University Grants Commission">UGC</abbr></div>
+                  <div class="lbl">Compliant Policy</div>
                </div>
             </div>
             <div class="col-6 col-md-3">
@@ -802,20 +806,15 @@ $page_title = 'Credit Transfer – Prime University';
       <section class="ct-section" id="policy">
          <div class="container">
             <div class="row">
-               <div class="col-lg-5 mb-4 mb-lg-0">
+               <div class="col-lg-4 mb-4 mb-lg-0">
                   <div class="ct-section-head">
                      <span class="badge-label">Policy Overview</span>
                      <div class="ct-divider"></div>
                      <h2>Key Rules for<br><span>Credit Transfer</span></h2>
                      <p>Prime University follows a well-defined, UGC-compliant framework to evaluate and accept credits earned at other accredited institutions.</p>
                   </div>
-                  <div class="ct-authority-card wow fadeInLeft" data-wow-delay=".2s">
-                     <span class="role-badge">Final Authority</span>
-                     <h4>Vice Chancellor's Approval</h4>
-                     <p>All recommendations from the Equivalence Committee are placed before the Vice Chancellor, whose decision is final and binding in every credit transfer case.</p>
-                  </div>
                </div>
-               <div class="col-lg-7">
+               <div class="col-lg-8">
                   <div class="row g-4">
                      <div class="col-md-6 wow fadeInUp" data-wow-delay=".1s">
                         <div class="ct-policy-card">
@@ -857,6 +856,13 @@ $page_title = 'Credit Transfer – Prime University';
                            <div class="ct-pc-icon icon-navy"><i class="fas fa-university"></i></div>
                            <h4>University-Level Review</h4>
                            <p>In addition to the departmental committee, the University Equivalence Committee may also review applications to ensure institutional standards.</p>
+                        </div>
+                     </div>
+                     <div class="col-12 wow fadeInUp" data-wow-delay=".7s">
+                        <div class="ct-authority-card">
+                           <span class="role-badge">Final Authority</span>
+                           <h4>Vice Chancellor's Approval</h4>
+                           <p>All recommendations from the Equivalence Committee are placed before the Vice Chancellor, whose decision is final and binding in every credit transfer case.</p>
                         </div>
                      </div>
                   </div>
