@@ -33,7 +33,8 @@ $fine_stmt = $db->prepare(
      FROM library_fines f
      JOIN library_members m ON m.id = f.member_id
      JOIN library_circulation c ON c.id = f.circulation_id
-     JOIN library_books b ON b.id = c.book_id
+     JOIN library_book_copies cp ON cp.id = c.copy_id
+     JOIN library_books b ON b.id = cp.book_id
      LEFT JOIN students s ON s.id = m.student_id
      LEFT JOIN users u ON u.id = m.user_id
      WHERE f.id = ?'

@@ -30,7 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 COALESCE(s.full_name, u.full_name) AS member_name
          FROM library_circulation c
          JOIN library_book_copies cp ON cp.id = c.copy_id
-         JOIN library_books b ON b.id = c.book_id
+         JOIN library_books b ON b.id = cp.book_id
          JOIN library_members m ON m.id = c.member_id
          LEFT JOIN students s ON s.id = m.student_id
          LEFT JOIN users u ON u.id = m.user_id
@@ -161,7 +161,7 @@ if ($direct_id) {
                 COALESCE(s2.full_name, u.full_name) AS member_name
          FROM library_circulation c
          JOIN library_book_copies cp ON cp.id = c.copy_id
-         JOIN library_books b ON b.id = c.book_id
+         JOIN library_books b ON b.id = cp.book_id
          JOIN library_members m ON m.id = c.member_id
          LEFT JOIN students s2 ON s2.id = m.student_id
          LEFT JOIN users u ON u.id = m.user_id
@@ -180,7 +180,7 @@ if ($direct_id) {
                 COALESCE(s2.full_name, u.full_name) AS member_name
          FROM library_circulation c
          JOIN library_book_copies cp ON cp.id = c.copy_id
-         JOIN library_books b ON b.id = c.book_id
+         JOIN library_books b ON b.id = cp.book_id
          JOIN library_members m ON m.id = c.member_id
          LEFT JOIN students s2 ON s2.id = m.student_id
          LEFT JOIN users u ON u.id = m.user_id
