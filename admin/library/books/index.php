@@ -34,7 +34,7 @@ if ($cat_id) {
     $params[] = $cat_id;
 }
 if ($dept_id) {
-    $where   .= ' AND b.dept_id = ?';
+    $where   .= ' AND b.department_id = ?';
     $params[] = $dept_id;
 }
 if ($lang_filter !== '') {
@@ -67,7 +67,7 @@ $sql = "SELECT b.*,
                d.name  AS dept_name
         FROM library_books b
         LEFT JOIN library_categories c ON c.id = b.category_id
-        LEFT JOIN dept_departments   d ON d.id = b.dept_id
+        LEFT JOIN dept_departments   d ON d.id = b.department_id
         WHERE $where
         ORDER BY b.id DESC
         LIMIT $per_page OFFSET $offset";

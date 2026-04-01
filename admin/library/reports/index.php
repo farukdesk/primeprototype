@@ -1,12 +1,12 @@
 <?php
 require_once __DIR__ . '/../../includes/auth.php';
 auth_check();
+require_once __DIR__ . '/../helpers.php';
 require_access('library');
 if (!lib_is_staff()) {
     flash_set('error', 'Access denied.');
     redirect(APP_URL . '/library/index.php');
 }
-require_once __DIR__ . '/../helpers.php';
 
 $from = $_GET['from'] ?? date('Y-m-01');
 $to   = $_GET['to']   ?? date('Y-m-d');
