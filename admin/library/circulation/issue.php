@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../../../includes/auth.php';
+require_once __DIR__ . '/../../includes/auth.php';
 auth_check();
 require_once __DIR__ . '/../helpers.php';
 
@@ -141,7 +141,7 @@ $available_books = $db->query(
 $page_errors = $page_errors ?? [];
 
 $page_title = 'Issue Book';
-require_once __DIR__ . '/../../../includes/header.php';
+require_once __DIR__ . '/../../includes/header.php';
 ?>
 
 <!-- Breadcrumb -->
@@ -359,4 +359,4 @@ function lookupBarcode() {
 }
 </script>
 
-<?php require_once __DIR__ . '/../../../includes/footer.php'; ?>
+<?php require_once __DIR__ . '/../../includes/footer.php'; ?>

@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../../../includes/auth.php';
+require_once __DIR__ . '/../../includes/auth.php';
 auth_check();
 require_once __DIR__ . '/../helpers.php';
 
@@ -182,7 +182,7 @@ $flash_success = flash_get('success');
 $flash_error   = flash_get('error');
 
 $page_title = 'Book Reservations';
-require_once __DIR__ . '/../../../includes/header.php';
+require_once __DIR__ . '/../../includes/header.php';
 ?>
 
 <!-- Breadcrumb -->
@@ -477,4 +477,4 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 <?php endif; ?>
 
-<?php require_once __DIR__ . '/../../../includes/footer.php'; ?>
+<?php require_once __DIR__ . '/../../includes/footer.php'; ?>
