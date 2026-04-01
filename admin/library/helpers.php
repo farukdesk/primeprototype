@@ -672,12 +672,11 @@ function lib_audit(string $action, string $module, int $record_id, string $recor
     $user = auth_user();
     $stmt = db()->prepare(
         'INSERT INTO library_audit_log
-             (user_id, user_name, action, module, record_id, record_label, details, ip_address, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())'
+             (user_id, action, module, record_id, record_label, details, ip_address, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, NOW())'
     );
     $stmt->execute([
         $user['id']        ?? 0,
-        $user['full_name'] ?? 'System',
         $action,
         $module,
         $record_id,
