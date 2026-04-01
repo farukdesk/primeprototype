@@ -86,13 +86,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $valid_statuses = ['Open','In Progress','Pending','Resolved','Closed','Reopened'];
         if (in_array($new_status, $valid_statuses, true)) {
             $old_status = $ticket['status'];
-            $extra_sql  = '';
-            if ($new_status === 'Resolved' && $old_status !== 'Resolved') $extra_sql = ', resolved_at = NOW()';
-            if ($new_status === 'Closed'   && $old_status !== 'Closed')   $extra_sql = ', closed_at = NOW()';
-            if ($new_status === 'Reopened') $extra_sql = ', resolved_at = NULL, closed_at = NULL';
 
-            db()->prepare("UPDATE support_tickets SET status = ? {$extra_sql} WHERE id = ?")
-               ->execute([$new_status, $id]);
+            if ($new_status === 'Resolved' && $old_status !== 'Resolved') {
+                db()->prepare(
+                    "UPDATE support_tickets SET status = ?, resolved_at = NOW() WHERE id = ?"
+                )->execute([$new_status, $id]);
+            } elseif ($new_status === 'Closed' && $old_status !== 'Closed') {
+                db()->prepare(
+                    "UPDATE support_tickets SET status = ?, closed_at = NOW() WHERE id = ?"
+                )->execute([$new_status, $id]);
+            } elseif ($new_status === 'Reopened') {
+                db()->prepare(
+                    "UPDATE support_tickets SET status = ?, resolved_at = NULL, closed_at = NULL WHERE id = ?"
+                )->execute([$new_status, $id]);
+            } else {
+                db()->prepare(
+                    "UPDATE support_tickets SET status = ? WHERE id = ?"
+                )->execute([$new_status, $id]);
+            }
 
             // Notify creator of status change
             $cr = db()->prepare('SELECT * FROM users WHERE id = ?');

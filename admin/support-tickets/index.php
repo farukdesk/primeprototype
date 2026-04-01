@@ -262,7 +262,7 @@ require_once __DIR__ . '/../includes/header.php';
                                     <i class="fas fa-edit"></i>
                                 </a>
                                 <form method="POST" action="<?= APP_URL ?>/support-tickets/delete.php" class="d-inline"
-                                      onsubmit="return confirm('Permanently delete ticket #<?= h(addslashes($ticket['ticket_number'])) ?>?');">
+                                      onsubmit="return confirm('Permanently delete ticket #<?= h($ticket['ticket_number']) ?>?');">
                                     <?= csrf_field() ?>
                                     <input type="hidden" name="id" value="<?= $ticket['id'] ?>">
                                     <button class="btn btn-sm btn-outline-danger" title="Delete" style="border-radius:7px;">
