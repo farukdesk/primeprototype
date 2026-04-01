@@ -195,7 +195,7 @@ $page_title = 'Credit Transfer – Prime University';
    .ct-section-head p {
       font-size: 1rem;
       color: var(--ct-muted);
-      max-width: 560px;
+      /* max-width: 560px; */
       line-height: 1.75;
    }
    /* dark variant */
@@ -218,7 +218,7 @@ $page_title = 'Credit Transfer – Prime University';
    /* ── Stats Row ────────────────────────────────── */
    .ct-stats-row {
       padding: 0;
-      margin: -46px 0 0;
+      margin-top: 20px;
       position: relative;
       z-index: 10;
    }
@@ -1238,10 +1238,10 @@ $page_title = 'Credit Transfer – Prime University';
                   Contact the Registrar's Office or the relevant Department to receive the application form and begin the credit transfer process.
                </p>
                <div class="ct-cta-btns wow fadeInUp" data-wow-delay=".25s">
-                  <a href="contact-us.html" class="ct-btn-primary">
+                  <a href="https://crm.primeuniversity.ac.bd/apply-now.php" class="ct-btn-primary">
                      <i class="fas fa-paper-plane"></i> Apply Now
                   </a>
-                  <a href="contact-us.html" class="ct-btn-outline">
+                  <a href="contact.php" class="ct-btn-outline">
                      <i class="fas fa-phone-alt"></i> Contact Us
                   </a>
                </div>
