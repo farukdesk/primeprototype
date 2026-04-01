@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../../../includes/auth.php';
+require_once __DIR__ . '/../../includes/auth.php';
 auth_check();
 require_access('library-circulation');
 require_once __DIR__ . '/../helpers.php';
@@ -93,7 +93,7 @@ $flash_success = flash_get('success');
 $flash_error   = flash_get('error');
 
 $page_title = 'Circulation Management';
-require_once __DIR__ . '/../../../includes/header.php';
+require_once __DIR__ . '/../../includes/header.php';
 ?>
 
 <!-- Breadcrumb & Actions -->
@@ -354,4 +354,4 @@ require_once __DIR__ . '/../../../includes/header.php';
     <?php endif; ?>
 </div>
 
-<?php require_once __DIR__ . '/../../../includes/footer.php'; ?>
+<?php require_once __DIR__ . '/../../includes/footer.php'; ?>

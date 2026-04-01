@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../../../includes/auth.php';
+require_once __DIR__ . '/../../includes/auth.php';
 auth_check();
 require_access('library');
 if (!lib_is_staff()) {
@@ -111,7 +111,7 @@ $breadcrumbs = [
     ['label' => 'Library',   'url' => APP_URL . '/admin/library/'],
     ['label' => 'Reports'],
 ];
-require_once __DIR__ . '/../../../includes/header.php';
+require_once __DIR__ . '/../../includes/header.php';
 ?>
 <style>
     @media print {
@@ -443,4 +443,4 @@ require_once __DIR__ . '/../../../includes/header.php';
     </div>
 
 </div><!-- /container-fluid -->
-<?php require_once __DIR__ . '/../../../includes/footer.php'; ?>
+<?php require_once __DIR__ . '/../../includes/footer.php'; ?>

@@ -3,7 +3,7 @@
  * AJAX endpoint: returns available copies for a book_id,
  * or finds a copy by barcode.
  */
-require_once __DIR__ . '/../../../includes/auth.php';
+require_once __DIR__ . '/../../includes/auth.php';
 auth_check();
 require_once __DIR__ . '/../helpers.php';
 

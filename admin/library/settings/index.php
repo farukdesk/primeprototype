@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../../../includes/auth.php';
+require_once __DIR__ . '/../../includes/auth.php';
 auth_check();
 require_super_admin();
 require_once __DIR__ . '/../helpers.php';
@@ -190,7 +190,7 @@ $breadcrumbs = [
     ['label' => 'Library',   'url' => APP_URL . '/admin/library/'],
     ['label' => 'Settings'],
 ];
-require_once __DIR__ . '/../../../includes/header.php';
+require_once __DIR__ . '/../../includes/header.php';
 
 $s = fn(string $k, mixed $d='') => $settings[$k] ?? $d;
 ?>
@@ -732,4 +732,4 @@ document.getElementById('editCategoryModal').addEventListener('show.bs.modal', f
 });
 </script>
 
-<?php require_once __DIR__ . '/../../../includes/footer.php'; ?>
+<?php require_once __DIR__ . '/../../includes/footer.php'; ?>

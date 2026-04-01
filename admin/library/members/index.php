@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../../../includes/auth.php';
+require_once __DIR__ . '/../../includes/auth.php';
 auth_check();
 require_access('library');
 require_once __DIR__ . '/../helpers.php';
@@ -163,7 +163,7 @@ $breadcrumbs = [
     ['label' => 'Library', 'url' => APP_URL . '/library/index.php'],
     ['label' => 'Members'],
 ];
-require_once __DIR__ . '/../../../includes/header.php';
+require_once __DIR__ . '/../../includes/header.php';
 ?>
 
 <!-- Header row -->
@@ -558,5 +558,5 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <?php
 clear_old();
-require_once __DIR__ . '/../../../includes/footer.php';
+require_once __DIR__ . '/../../includes/footer.php';
 ?>

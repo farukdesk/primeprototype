@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../../../includes/auth.php';
+require_once __DIR__ . '/../../includes/auth.php';
 auth_check();
 require_access('library-digital');
 require_once __DIR__ . '/../helpers.php';
@@ -95,7 +95,7 @@ $breadcrumbs = [
     ['label' => 'Library', 'url' => APP_URL . '/library/index.php'],
     ['label' => 'Digital Resources'],
 ];
-require_once __DIR__ . '/../../../includes/header.php';
+require_once __DIR__ . '/../../includes/header.php';
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
@@ -282,4 +282,4 @@ require_once __DIR__ . '/../../../includes/header.php';
     <?php endif; ?>
 </div>
 
-<?php require_once __DIR__ . '/../../../includes/footer.php'; ?>
+<?php require_once __DIR__ . '/../../includes/footer.php'; ?>

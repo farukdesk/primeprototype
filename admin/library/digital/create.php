@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../../../includes/auth.php';
+require_once __DIR__ . '/../../includes/auth.php';
 auth_check();
 require_access('library-digital');
 require_once __DIR__ . '/../helpers.php';
@@ -104,7 +104,7 @@ $breadcrumbs = [
     ['label' => 'Digital Resources', 'url' => APP_URL . '/library/digital/index.php'],
     ['label' => 'Upload'],
 ];
-require_once __DIR__ . '/../../../includes/header.php';
+require_once __DIR__ . '/../../includes/header.php';
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -270,5 +270,5 @@ document.getElementById('cover_input').addEventListener('change', function() {
 
 <?php
 clear_old();
-require_once __DIR__ . '/../../../includes/footer.php';
+require_once __DIR__ . '/../../includes/footer.php';
 ?>

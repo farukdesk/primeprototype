@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../../../includes/auth.php';
+require_once __DIR__ . '/../../includes/auth.php';
 auth_check();
 require_once __DIR__ . '/../helpers.php';
 
@@ -197,7 +197,7 @@ if ($direct_id) {
 }
 
 $page_title = 'Return / Renew Book';
-require_once __DIR__ . '/../../../includes/header.php';
+require_once __DIR__ . '/../../includes/header.php';
 ?>
 
 <!-- Breadcrumb -->
@@ -409,4 +409,4 @@ document.getElementById('confirmModalBtn').addEventListener('click', function ()
 });
 </script>
 
-<?php require_once __DIR__ . '/../../../includes/footer.php'; ?>
+<?php require_once __DIR__ . '/../../includes/footer.php'; ?>
