@@ -367,9 +367,9 @@ require_once __DIR__ . '/../includes/header.php';
             fromElement: false,
             height: '100%',
             storageManager: false,
-            plugins: ['gjs-preset-webpage'],
+            plugins: ['grapesjs-preset-webpage'],
             pluginsOpts: {
-                'gjs-preset-webpage': {
+                'grapesjs-preset-webpage': {
                     blocksBasicOpts: {
                         blocks: ['column1','column2','column3','column3-7','text','link','image','video','map'],
                         flexGrid: true,
