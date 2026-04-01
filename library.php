@@ -103,10 +103,14 @@ $resource_icons = [
    <link rel="stylesheet" href="assets/css/spacing.css">
    <link rel="stylesheet" href="assets/css/main.css">
    <style>
+      /* ── Hero ─────────────────────────────────────────────── */
       .lib-hero {
          background: linear-gradient(135deg, #1a1f36 0%, #2d3561 60%, #4f8ef7 100%);
          color: #fff;
          padding: 80px 0 60px;
+         position: relative;
+         z-index: 10;
+         overflow: visible;
       }
       .lib-hero h1 {
          font-size: 2.8rem; font-weight: 800; line-height: 1.2;
@@ -114,25 +118,42 @@ $resource_icons = [
          text-shadow: 0 2px 12px rgba(0,0,0,.45);
       }
       .lib-hero p  { font-size: 1.1rem; color: rgba(255,255,255,.95); }
-      .lib-hero .hero-meta span { color: #fff; }
-      .lib-search-box { background: rgba(255,255,255,.15); border-radius: 16px; padding: 28px 32px; border: 1px solid rgba(255,255,255,.2); }
+      .lib-hero .hero-meta span { color: #fff; font-size: .85rem; }
+
+      /* ── Search box ────────────────────────────────────────── */
+      .lib-search-box {
+         background: rgba(255,255,255,.15);
+         border-radius: 16px;
+         padding: 28px 32px;
+         border: 1px solid rgba(255,255,255,.2);
+         position: relative;
+         z-index: 100;
+      }
       .lib-search-box input,
       .lib-search-box select { border-radius: 8px !important; height: 48px; font-size: .95rem; }
       .lib-search-box .btn-search {
          height: 48px; padding: 0 28px; background: #f7a91e; border: none;
          border-radius: 8px; font-weight: 600; color: #fff; white-space: nowrap;
+         width: 100%;
       }
       .lib-search-box .btn-search:hover { background: #e09700; }
 
-      .stat-strip { background: #f7a91e; padding: 20px 0; }
-      .stat-strip .stat-item { text-align: center; color: #1a1f36; }
-      .stat-strip .stat-item .num { font-size: 2rem; font-weight: 700; }
-      .stat-strip .stat-item .lbl { font-size: .8rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+      /* Fix nice-select dropdown staying above the books section */
+      .lib-search-box .nice-select { height: 48px; line-height: 48px; border-radius: 8px !important; width: 100%; }
+      .lib-search-box .nice-select .list { z-index: 9999; max-height: 260px; overflow-y: auto; }
 
+      /* ── Stat strip ────────────────────────────────────────── */
+      .stat-strip { background: #f7a91e; padding: 20px 0; }
+      .stat-strip .stat-item { text-align: center; color: #1a1f36; padding: 8px 4px; }
+      .stat-strip .stat-item .num { font-size: 2rem; font-weight: 700; line-height: 1; }
+      .stat-strip .stat-item .lbl { font-size: .8rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; margin-top: 4px; }
+
+      /* ── Section headings ──────────────────────────────────── */
       .section-heading { margin-bottom: 40px; }
       .section-heading h2 { font-size: 2rem; font-weight: 700; color: #1a1f36; }
-      .section-heading p  { color: #6b7280; }
+      .section-heading p  { color: #6b7280; margin-bottom: 0; }
 
+      /* ── Book cards ────────────────────────────────────────── */
       .book-card {
          border: 1px solid #e8eaf0; border-radius: 14px; background: #fff;
          overflow: hidden; transition: box-shadow .2s, transform .2s; height: 100%;
@@ -152,6 +173,7 @@ $resource_icons = [
       .avail-yes { background: #d1fae5; color: #065f46; }
       .avail-no  { background: #fee2e2; color: #991b1b; }
 
+      /* ── Info cards ────────────────────────────────────────── */
       .info-card {
          background: #fff; border-radius: 14px; border: 1px solid #e8eaf0;
          padding: 28px; height: 100%;
@@ -162,6 +184,7 @@ $resource_icons = [
          font-size: 1.4rem; margin-bottom: 16px;
       }
 
+      /* ── Librarian cards ───────────────────────────────────── */
       .librarian-card {
          text-align: center; background: #fff; border: 1px solid #e8eaf0;
          border-radius: 14px; padding: 28px 20px; height: 100%;
@@ -182,10 +205,11 @@ $resource_icons = [
       .librarian-card .designation { font-size: .83rem; color: #4f8ef7; font-weight: 600; margin-bottom: 10px; }
       .librarian-card .meta { font-size: .8rem; color: #6b7280; margin-bottom: 4px; }
 
+      /* ── Digital resource cards ────────────────────────────── */
       .digital-card {
          background: #fff; border: 1px solid #e8eaf0; border-radius: 14px;
          padding: 22px; display: flex; gap: 16px; align-items: flex-start;
-         transition: box-shadow .2s;
+         transition: box-shadow .2s; height: 100%;
       }
       .digital-card:hover { box-shadow: 0 4px 18px rgba(0,0,0,.08); }
       .digital-card .dc-icon {
@@ -196,11 +220,41 @@ $resource_icons = [
       .digital-card h6 { font-size: .9rem; font-weight: 600; margin-bottom: 4px; color: #1a1f36; }
       .digital-card p  { font-size: .78rem; color: #6b7280; margin: 0; }
 
-      .rules-section { background: #f7f9fc; }
-
-      @media (max-width: 768px) {
-         .lib-hero h1 { font-size: 2rem; }
-         .lib-hero   { padding: 50px 0 40px; }
+      /* ── Responsive overrides ──────────────────────────────── */
+      @media (max-width: 991.98px) {
+         .lib-hero h1 { font-size: 2.2rem; }
+         .lib-search-box { margin-top: 32px; }
+      }
+      @media (max-width: 767.98px) {
+         .lib-hero { padding: 50px 0 40px; }
+         .lib-hero h1 { font-size: 1.85rem; }
+         .lib-hero p  { font-size: 1rem; }
+         .lib-search-box { padding: 20px; }
+         .section-heading h2 { font-size: 1.6rem; }
+         .stat-strip .stat-item .num { font-size: 1.5rem; }
+         .pt-100 { padding-top: 60px !important; }
+         .pt-80  { padding-top: 50px !important; }
+         .pb-80  { padding-bottom: 50px !important; }
+         .pb-100 { padding-bottom: 60px !important; }
+      }
+      @media (max-width: 575.98px) {
+         .lib-hero { padding: 40px 0 32px; }
+         .lib-hero h1 { font-size: 1.55rem; }
+         .lib-search-box { padding: 16px; border-radius: 12px; }
+         .lib-search-box input,
+         .lib-search-box select,
+         .lib-search-box .nice-select { height: 44px; line-height: 44px; }
+         .lib-search-box .btn-search { height: 44px; }
+         .stat-strip .stat-item .num { font-size: 1.3rem; }
+         .stat-strip .stat-item .lbl { font-size: .7rem; }
+         .section-heading { margin-bottom: 28px; }
+         .section-heading h2 { font-size: 1.45rem; }
+         .info-card { padding: 20px; }
+         .pt-100 { padding-top: 48px !important; }
+         .pt-80  { padding-top: 40px !important; }
+         .pb-80  { padding-bottom: 40px !important; }
+         .pb-100 { padding-bottom: 48px !important; }
+         .book-card .book-cover { height: 140px; font-size: 2.2rem; }
       }
    </style>
 </head>
@@ -298,7 +352,7 @@ $resource_icons = [
                            <input type="text" name="q" class="form-control" placeholder="Title, author, ISBN…"
                                   value="<?= fh($search_q) ?>">
                         </div>
-                        <div class="col-sm-8">
+                        <div class="col-12">
                            <select name="cat" class="form-select">
                               <option value="0">All Categories</option>
                               <?php foreach ($categories as $cat): ?>
@@ -308,9 +362,9 @@ $resource_icons = [
                               <?php endforeach; ?>
                            </select>
                         </div>
-                        <div class="col-sm-4">
-                           <button type="submit" class="btn-search w-100">
-                              <i class="fas fa-search me-2"></i>Search
+                        <div class="col-12">
+                           <button type="submit" class="btn-search">
+                              <i class="fas fa-search me-2"></i>Search the Catalogue
                            </button>
                         </div>
                      </div>
@@ -383,7 +437,7 @@ $resource_icons = [
                   : null;
                $avail = (int)$book['available_copies'] > 0;
             ?>
-            <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6">
+            <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6 col-6">
                <div class="book-card">
                   <div class="book-cover">
                      <?php if ($cover_url): ?>
