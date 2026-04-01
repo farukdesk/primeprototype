@@ -81,10 +81,10 @@ $lib_phone   = lib_setting('lib_phone',   '');
 
 // ── Active librarians ─────────────────────────────────────────────────────────
 $librarians = $db->query(
-    "SELECT id, full_name, designation, room, email, phone, photo
+    "SELECT id, name, designation, room_number, email, phone, photo
      FROM library_librarians
      WHERE is_active = 1
-     ORDER BY sort_order ASC, full_name ASC"
+     ORDER BY sort_order ASC, name ASC"
 )->fetchAll();
 
 require_once __DIR__ . '/../includes/header.php';
@@ -482,7 +482,7 @@ if ($success): ?>
                              style="background:#f8f9fa;border:1px solid #e9ecef;">
                             <?php if ($lib['photo']): ?>
                             <img src="<?= UPLOAD_URL ?>/library/librarians/<?= h($lib['photo']) ?>"
-                                 alt="<?= h($lib['full_name']) ?>"
+                                 alt="<?= h($lib['name']) ?>"
                                  style="width:48px;height:48px;border-radius:50%;object-fit:cover;flex-shrink:0;">
                             <?php else: ?>
                             <div style="width:48px;height:48px;border-radius:50%;
@@ -490,21 +490,21 @@ if ($success): ?>
                                         color:#fff;display:flex;align-items:center;
                                         justify-content:center;font-size:1.1rem;
                                         font-weight:600;flex-shrink:0;">
-                                <?= strtoupper(substr($lib['full_name'], 0, 1)) ?>
+                                <?= strtoupper(substr($lib['name'], 0, 1)) ?>
                             </div>
                             <?php endif; ?>
                             <div style="min-width:0;">
                                 <div class="fw-semibold text-truncate" style="font-size:.875rem;">
-                                    <?= h($lib['full_name']) ?>
+                                    <?= h($lib['name']) ?>
                                 </div>
                                 <?php if ($lib['designation']): ?>
                                 <div class="text-muted text-truncate" style="font-size:.775rem;">
                                     <?= h($lib['designation']) ?>
                                 </div>
                                 <?php endif; ?>
-                                <?php if ($lib['room']): ?>
+                                <?php if ($lib['room_number']): ?>
                                 <div class="text-muted" style="font-size:.775rem;">
-                                    <i class="fas fa-door-open fa-xs me-1"></i><?= h($lib['room']) ?>
+                                    <i class="fas fa-door-open fa-xs me-1"></i><?= h($lib['room_number']) ?>
                                 </div>
                                 <?php endif; ?>
                                 <?php if ($lib['email']): ?>
