@@ -189,7 +189,7 @@ require_once __DIR__ . '/../includes/header.php';
                                 <span class="text-muted">—</span>
                             <?php endif; ?>
                         </td>
-                        <td style="font-size:.83rem;"><?= $log['field_name'] ? h($log['field_name']) : '<span class="text-muted">—</span>' ?></td>
+                        <td style="font-size:.83rem;"><?php if ($log['field_name']): ?><code><?= h($log['field_name']) ?></code><?php else: ?>—<?php endif; ?></td>
                         <td style="font-size:.83rem;max-width:160px;">
                             <?php if ($log['old_value'] !== null): ?>
                             <span class="d-inline-block text-truncate" style="max-width:140px;" title="<?= h($log['old_value']) ?>">
@@ -208,7 +208,7 @@ require_once __DIR__ . '/../includes/header.php';
                             <span class="text-muted">—</span>
                             <?php endif; ?>
                         </td>
-                        <td style="font-size:.78rem;font-family:monospace;"><?= h($log['ip_address']) ?: '<span class="text-muted">—</span>' ?></td>
+                        <td style="font-size:.78rem;font-family:monospace;"><?= $log['ip_address'] ? h($log['ip_address']) : '—' ?></td>
                         <td style="font-size:.78rem;white-space:nowrap;">
                             <div><?= date('M d, Y', strtotime($log['created_at'])) ?></div>
                             <div class="text-muted"><?= date('H:i:s', strtotime($log['created_at'])) ?></div>

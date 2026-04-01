@@ -106,7 +106,11 @@ require_once __DIR__ . '/../includes/header.php';
                             <div class="fw-semibold mb-2" style="font-size:.78rem;text-transform:uppercase;letter-spacing:.05em;color:#dc2626;">
                                 <i class="fas fa-minus-circle me-1"></i> Previous Value
                             </div>
-                            <pre class="mb-0" style="white-space:pre-wrap;word-break:break-word;font-size:.83rem;color:#7f1d1d;background:none;border:none;padding:0;"><?= $log['old_value'] !== null ? h($log['old_value']) : '<span class="text-muted fst-italic">empty</span>' ?></pre>
+                            <?php if ($log['old_value'] !== null): ?>
+                            <pre class="mb-0" style="white-space:pre-wrap;word-break:break-word;font-size:.83rem;color:#7f1d1d;background:none;border:none;padding:0;"><?= h($log['old_value']) ?></pre>
+                            <?php else: ?>
+                            <em class="text-muted" style="font-size:.83rem;">empty</em>
+                            <?php endif; ?>
                         </div>
                     </div>
                     <div class="col-md-6">
@@ -114,7 +118,11 @@ require_once __DIR__ . '/../includes/header.php';
                             <div class="fw-semibold mb-2" style="font-size:.78rem;text-transform:uppercase;letter-spacing:.05em;color:#16a34a;">
                                 <i class="fas fa-plus-circle me-1"></i> New Value
                             </div>
-                            <pre class="mb-0" style="white-space:pre-wrap;word-break:break-word;font-size:.83rem;color:#14532d;background:none;border:none;padding:0;"><?= $log['new_value'] !== null ? h($log['new_value']) : '<span class="text-muted fst-italic">empty</span>' ?></pre>
+                            <?php if ($log['new_value'] !== null): ?>
+                            <pre class="mb-0" style="white-space:pre-wrap;word-break:break-word;font-size:.83rem;color:#14532d;background:none;border:none;padding:0;"><?= h($log['new_value']) ?></pre>
+                            <?php else: ?>
+                            <em class="text-muted" style="font-size:.83rem;">empty</em>
+                            <?php endif; ?>
                         </div>
                     </div>
                 </div>
