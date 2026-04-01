@@ -428,6 +428,18 @@ $user       = auth_user();
     </ul>
     <?php endif; ?>
 
+    <?php if (is_super_admin() || can_access('students')): ?>
+    <p class="nav-label">Students</p>
+    <ul class="nav flex-column">
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/students/index.php"
+               class="<?= strpos($_SERVER['PHP_SELF'], '/students/') !== false ? 'active' : '' ?>">
+                <i class="fas fa-user-graduate"></i> Student Management
+            </a>
+        </li>
+    </ul>
+    <?php endif; ?>
+
     <?php if (is_super_admin() || can_access('jobs')): ?>
     <p class="nav-label">Jobs</p>
     <ul class="nav flex-column">
