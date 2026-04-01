@@ -411,7 +411,7 @@ $type_badge = [
       background: #fff;
       outline: none;
    }
-   textarea.form-control { resize: vertical; min-height: 110px; }
+   textarea.form-control { resize: vertical; min-height: 110px; max-height: 280px; }
 
    /* Branded file upload */
    .jd-file-upload-wrap {
@@ -624,12 +624,6 @@ $type_badge = [
                         <?= fh($job['salary_range']) ?>
                      </span>
                      <?php endif; ?>
-                     <?php if ($job['department']): ?>
-                     <span class="jd-info-chip">
-                        <i class="fas fa-building"></i>
-                        <?= fh($job['department']) ?>
-                     </span>
-                     <?php endif; ?>
                   </div>
                   <?php else: ?>
                   <div style="margin-top:24px;"></div>
@@ -697,7 +691,7 @@ $type_badge = [
                         </div>
                         <?php endif; ?>
 
-                        <form method="POST" enctype="multipart/form-data" novalidate>
+                        <form method="POST" enctype="multipart/form-data">
                            <input type="hidden" name="_csrf" value="<?= fh($csrf_token) ?>">
 
                            <div class="jd-field">
@@ -764,7 +758,7 @@ $type_badge = [
 
    <script>
    function jdShowFilename(input) {
-      var display = document.getElementById('cvFilename');
+      const display = document.getElementById('cvFilename');
       if (input.files && input.files.length > 0) {
          display.textContent = '📎 ' + input.files[0].name;
          display.style.display = 'block';
