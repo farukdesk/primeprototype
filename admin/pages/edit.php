@@ -201,12 +201,17 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
 
             <!-- ── GENERAL: GrapesJS ── -->
-            <div id="panel_general" class="cat-panel card mb-4">
-                <div class="card-header py-3 px-4">
-                    <h6 class="mb-0 fw-semibold"><i class="fas fa-columns me-2 text-muted"></i>Page Builder (Drag &amp; Drop)</h6>
-                </div>
-                <div class="card-body p-0">
-                    <div id="gjs" style="height:600px;"></div>
+            <div id="panel_general" class="cat-panel mb-4">
+                <div class="card">
+                    <div class="card-header py-3 px-4 d-flex align-items-center gap-3">
+                        <h6 class="mb-0 fw-semibold flex-grow-1"><i class="fas fa-columns me-2 text-muted"></i>Page Builder (Drag &amp; Drop)</h6>
+                        <span class="badge bg-primary-subtle text-primary" style="font-size:.75rem;">GrapesJS</span>
+                    </div>
+                    <div class="card-body p-0" style="overflow:hidden;border-radius:0 0 .75rem .75rem;">
+                        <div id="gjs-wrapper" style="height:750px;position:relative;">
+                            <div id="gjs" style="height:100%;"></div>
+                        </div>
+                    </div>
                 </div>
                 <input type="hidden" name="gjs_html" id="gjs_html" value="<?= h($page['gjs_html'] ?? '') ?>">
                 <input type="hidden" name="gjs_css"  id="gjs_css"  value="<?= h($page['gjs_css']  ?? '') ?>">
@@ -321,9 +326,21 @@ require_once __DIR__ . '/../includes/header.php';
 </form>
 
 <!-- GrapesJS -->
-<link rel="stylesheet" href="https://unpkg.com/grapesjs/dist/css/grapes.min.css">
-<script src="https://unpkg.com/grapesjs"></script>
-<script src="https://unpkg.com/grapesjs-preset-webpage"></script>
+<link rel="stylesheet" href="https://unpkg.com/grapesjs@0.21.13/dist/css/grapes.min.css">
+<script src="https://unpkg.com/grapesjs@0.21.13/dist/grapes.min.js"></script>
+<script src="https://unpkg.com/grapesjs-preset-webpage@1.0.3/dist/index.js"></script>
+<style>
+/* ── GrapesJS admin panel integration ───────────────────────────────── */
+#gjs-wrapper .gjs-editor { border: none; }
+#gjs-wrapper .gjs-pn-panels { border-bottom: 1px solid #dee2e6; }
+#gjs-wrapper .gjs-pn-panel { padding: 4px; }
+#gjs-wrapper .gjs-pn-commands { flex: 1; }
+#gjs-wrapper .gjs-sm-sector-title { background: #f8f9fa; border-bottom: 1px solid #e9ecef; font-weight: 600; font-size: .8rem; letter-spacing: .05em; text-transform: uppercase; padding: 8px 14px; }
+#gjs-wrapper .gjs-sm-properties { padding: 8px 10px; }
+#gjs-wrapper .gjs-block { border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.08); transition: box-shadow .15s; }
+#gjs-wrapper .gjs-block:hover { box-shadow: 0 4px 12px rgba(0,0,0,.14); }
+#gjs-wrapper .gjs-cv-canvas { background: #f1f3f5; }
+</style>
 
 <!-- TinyMCE -->
 <script src="https://cdn.jsdelivr.net/npm/tinymce@5.10.9/tinymce.min.js" referrerpolicy="origin"></script>
@@ -385,12 +402,61 @@ require_once __DIR__ . '/../includes/header.php';
         gjsEditor = grapesjs.init({
             container: '#gjs',
             fromElement: false,
-            height: '600px',
+            height: '100%',
             storageManager: false,
             plugins: ['gjs-preset-webpage'],
-            pluginsOpts: { 'gjs-preset-webpage': {} },
+            pluginsOpts: {
+                'gjs-preset-webpage': {
+                    blocksBasicOpts: {
+                        blocks: ['column1','column2','column3','column3-7','text','link','image','video','map'],
+                        flexGrid: true,
+                    },
+                    navbar: false,
+                    countdownOpts: false,
+                    formsOpts: { blocks: ['form','input','textarea','select','button','label','checkbox','radio'] },
+                }
+            },
             components: gjsInitialHtml || '',
             style:      gjsInitialCss  || '',
+            styleManager: {
+                sectors: [
+                    {
+                        name: 'Layout',
+                        open: true,
+                        buildProps: ['display','position','float'],
+                    },
+                    {
+                        name: 'Dimensions',
+                        open: false,
+                        buildProps: ['width','height','max-width','min-height','margin','padding'],
+                    },
+                    {
+                        name: 'Typography',
+                        open: false,
+                        buildProps: ['font-family','font-size','font-weight','letter-spacing','color','line-height','text-align','text-decoration','text-shadow'],
+                    },
+                    {
+                        name: 'Decorations',
+                        open: false,
+                        buildProps: ['opacity','background-color','border-radius','border','box-shadow','background'],
+                    },
+                    {
+                        name: 'Extra',
+                        open: false,
+                        buildProps: ['transition','transform'],
+                    },
+                ],
+            },
+            deviceManager: {
+                devices: [
+                    { name: 'Desktop', width: '' },
+                    { name: 'Tablet', width: '768px', widthMedia: '992px' },
+                    { name: 'Mobile', width: '375px', widthMedia: '480px' },
+                ],
+            },
+            canvas: {
+                styles: ['https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css'],
+            },
         });
     }
     function destroyGjs() {

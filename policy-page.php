@@ -229,7 +229,7 @@ $eff_date = $eff_dt ? $eff_dt->format('F j, Y') : null;
                <div class="card" style="border:none;border-radius:14px;box-shadow:0 2px 16px rgba(0,33,71,.07);">
                   <?php if ($pg['featured_image']): ?>
                   <img src="<?= fh(ADMIN_UPLOAD_URL) ?>/pages/<?= fh($pg['featured_image']) ?>"
-                       style="width:100%;max-height:300px;object-fit:cover;border-radius:14px 14px 0 0;" alt="">
+                       style="width:100%;max-height:400px;object-fit:cover;border-radius:14px 14px 0 0;" alt="">
                   <?php endif; ?>
                   <div class="card-body p-4 p-lg-5">
                      <div class="policy-body">
