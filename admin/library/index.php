@@ -58,7 +58,7 @@ $recent_fines = $db->query(
             b.title AS book_title,
             COALESCE(s.full_name, u.full_name) AS member_name,
             m.member_code,
-            c.due_date
+            ci.due_date
      FROM library_fines f
      JOIN library_members     m  ON m.id  = f.member_id
      JOIN library_circulation ci ON ci.id = f.circulation_id
@@ -66,7 +66,6 @@ $recent_fines = $db->query(
      JOIN library_books       b  ON b.id  = cp.book_id
      LEFT JOIN students       s  ON s.id  = m.student_id
      LEFT JOIN users          u  ON u.id  = m.user_id
-     LEFT JOIN library_circulation c ON c.id = f.circulation_id
      WHERE f.status = 'Unpaid'
      ORDER BY f.id DESC
      LIMIT 5"
