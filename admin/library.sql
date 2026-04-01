@@ -4,7 +4,7 @@
 -- Description: Comprehensive schema for University Library Management System
 -- Engine: InnoDB | Charset: utf8mb4 | Collation: utf8mb4_unicode_ci
 -- =============================================================================
--- Depends on existing tables: modules, users, students, departments, change_log
+-- Depends on existing tables: modules, users, students, dept_departments, change_log
 -- =============================================================================
 
 SET NAMES utf8mb4;
@@ -102,7 +102,7 @@ CREATE TABLE IF NOT EXISTS `library_books` (
     CONSTRAINT `fk_book_category`   FOREIGN KEY (`category_id`)
         REFERENCES `library_categories` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
     CONSTRAINT `fk_book_department` FOREIGN KEY (`department_id`)
-        REFERENCES `departments` (`id`)          ON DELETE SET NULL ON UPDATE CASCADE,
+        REFERENCES `dept_departments` (`id`)     ON DELETE SET NULL ON UPDATE CASCADE,
     CONSTRAINT `fk_book_created_by` FOREIGN KEY (`created_by`)
         REFERENCES `users` (`id`)                ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
@@ -159,7 +159,7 @@ CREATE TABLE IF NOT EXISTS `library_members` (
     CONSTRAINT `fk_member_user`    FOREIGN KEY (`user_id`)
         REFERENCES `users` (`id`)        ON DELETE SET NULL ON UPDATE CASCADE,
     CONSTRAINT `fk_member_dept`    FOREIGN KEY (`dept_id`)
-        REFERENCES `departments` (`id`)  ON DELETE SET NULL ON UPDATE CASCADE
+        REFERENCES `dept_departments` (`id`)  ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   COMMENT='Library membership records (students, faculty, staff)';
 
@@ -301,7 +301,7 @@ CREATE TABLE IF NOT EXISTS `library_digital_resources` (
     CONSTRAINT `fk_digres_category`    FOREIGN KEY (`category_id`)
         REFERENCES `library_categories` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
     CONSTRAINT `fk_digres_department`  FOREIGN KEY (`department_id`)
-        REFERENCES `departments`        (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
+        REFERENCES `dept_departments`   (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
     CONSTRAINT `fk_digres_uploaded_by` FOREIGN KEY (`uploaded_by`)
         REFERENCES `users`              (`id`) ON DELETE RESTRICT ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
