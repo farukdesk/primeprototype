@@ -48,7 +48,7 @@ try {
 
         // Categories for filter
         $categories = $db->query(
-            'SELECT id, name FROM library_categories WHERE parent_id IS NULL ORDER BY name ASC'
+            'SELECT id, name FROM library_categories WHERE parent_id IS NULL OR parent_id = 0 ORDER BY name ASC'
         )->fetchAll();
 
         // Public digital resources
@@ -108,9 +108,14 @@ $resource_icons = [
          color: #fff;
          padding: 80px 0 60px;
       }
-      .lib-hero h1 { font-size: 2.6rem; font-weight: 700; line-height: 1.2; }
-      .lib-hero p  { font-size: 1.1rem; opacity: .85; }
-      .lib-search-box { background: rgba(255,255,255,.12); border-radius: 16px; padding: 28px 32px; }
+      .lib-hero h1 {
+         font-size: 2.8rem; font-weight: 800; line-height: 1.2;
+         color: #ffffff;
+         text-shadow: 0 2px 12px rgba(0,0,0,.45);
+      }
+      .lib-hero p  { font-size: 1.1rem; color: rgba(255,255,255,.95); }
+      .lib-hero .hero-meta span { color: #fff; }
+      .lib-search-box { background: rgba(255,255,255,.15); border-radius: 16px; padding: 28px 32px; border: 1px solid rgba(255,255,255,.2); }
       .lib-search-box input,
       .lib-search-box select { border-radius: 8px !important; height: 48px; font-size: .95rem; }
       .lib-search-box .btn-search {
@@ -194,7 +199,7 @@ $resource_icons = [
       .rules-section { background: #f7f9fc; }
 
       @media (max-width: 768px) {
-         .lib-hero h1 { font-size: 1.8rem; }
+         .lib-hero h1 { font-size: 2rem; }
          .lib-hero   { padding: 50px 0 40px; }
       }
    </style>
@@ -277,7 +282,7 @@ $resource_icons = [
                </div>
                <h1><?= fh($lib_name) ?></h1>
                <p class="mt-3 mb-4"><?= fh($lib_desc) ?></p>
-               <div class="d-flex flex-wrap gap-3" style="font-size:.85rem;">
+               <div class="d-flex flex-wrap gap-3 hero-meta" style="font-size:.85rem;">
                   <span><i class="fas fa-map-marker-alt me-2" style="color:#f7a91e;"></i><?= fh($lib_room) ?></span>
                   <span><i class="fas fa-clock me-2" style="color:#f7a91e;"></i>Open Today</span>
                </div>
