@@ -7,6 +7,11 @@ require_once __DIR__ . '/helpers.php';
 $id  = (int)($_GET['id'] ?? 0);
 $msg = contact_get_message($id);
 
+if (!$msg) {
+    flash_set('error', 'Message not found.');
+    redirect(APP_URL . '/contact/index.php');
+}
+
 // Mark as read if not already
 if (!$msg['is_read']) {
     db()->prepare('UPDATE contact_messages SET is_read = 1 WHERE id = ?')->execute([$id]);
@@ -50,7 +55,7 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="card-body p-4">
                 <h5 style="color:#1a2e5a;font-weight:700;margin-bottom:4px;"><?= h($msg['subject']) ?></h5>
                 <p style="font-size:.82rem;color:#9ca3af;margin-bottom:24px;">
-                    Received on <?= date('l, d F Y \a\t h:i A', strtotime($msg['created_at'])) ?>
+                    Received on <?= $msg['created_at'] ? date('l, d F Y \a\t h:i A', strtotime($msg['created_at'])) : 'Unknown date' ?>
                 </p>
                 <hr style="border-color:#f0f0f0;">
                 <div style="font-size:.95rem;color:#374151;line-height:1.8;white-space:pre-wrap;margin-top:20px;"><?= h($msg['message']) ?></div>
@@ -68,7 +73,7 @@ require_once __DIR__ . '/../includes/header.php';
 
                 <div class="d-flex align-items-center gap-3 mb-4">
                     <div style="width:48px;height:48px;border-radius:14px;background:#eef2ff;display:flex;align-items:center;justify-content:center;font-size:1.3rem;color:#2563eb;font-weight:700;flex-shrink:0;">
-                        <?= strtoupper(mb_substr($msg['name'], 0, 1)) ?>
+                        <?= strtoupper(mb_substr($msg['name'] ?? '?', 0, 1)) ?>
                     </div>
                     <div>
                         <div style="font-weight:700;color:#1a2e5a;"><?= h($msg['name']) ?></div>
@@ -93,7 +98,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <?php endif; ?>
                     <div class="d-flex gap-2">
                         <i class="fas fa-calendar-alt mt-1" style="color:#d97706;flex-shrink:0;"></i>
-                        <span><?= date('d M Y, h:i A', strtotime($msg['created_at'])) ?></span>
+                        <span><?= $msg['created_at'] ? date('d M Y, h:i A', strtotime($msg['created_at'])) : 'Unknown date' ?></span>
                     </div>
                 </div>
 
