@@ -80,7 +80,7 @@ $top_members = $pdo->query("
 // Department-wise Borrowing
 $dept_borrowing = $pdo->query("
     SELECT d.name as dept_name, COUNT(c.id) as borrow_count
-    FROM departments d
+    FROM dept_departments d
     JOIN library_members m ON m.dept_id = d.id
     JOIN library_circulation c ON c.member_id = m.id
     GROUP BY d.id ORDER BY borrow_count DESC
