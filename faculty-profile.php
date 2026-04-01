@@ -90,6 +90,26 @@ $cv_url = !empty($profile['cv_file']) ? ADMIN_UPLOAD_URL . '/faculty-profiles/' 
       .fp-tabs-wrap .nav-tabs .nav-link.active { color:#002147; border-bottom-color:#D21034; background:transparent; }
       .fp-tabs-wrap .tab-content { padding:0; }
       .fp-tabs-wrap .fp-section { border-radius:0; box-shadow:none; }
+      /* Responsive banner */
+      .fp-banner { background: linear-gradient(135deg, #002147 0%, #003366 100%); padding: 80px 0 60px; }
+      /* Responsive photo area inside sidebar */
+      .fp-photo-area { background: linear-gradient(135deg, #002147, #003366); padding: 32px; text-align: center; }
+      /* Responsive contact/info area inside sidebar */
+      .fp-contact-area { padding: 24px; }
+      @media (max-width: 991px) {
+         .fp-sidebar-card { margin-bottom: 24px; }
+         .fp-banner { padding: 60px 0 40px; }
+      }
+      @media (max-width: 767px) {
+         .fp-banner { padding: 40px 0 30px; }
+         .fp-photo-area { padding: 24px 16px; }
+         .fp-contact-area { padding: 16px; }
+         .fp-section { padding: 20px 16px; }
+         .fp-info-row { font-size: 13px; }
+         .fp-online-link { font-size: 12px; padding: 5px 10px; margin: 3px; }
+         a.fp-social-link { font-size: 12px; padding: 4px 10px; margin: 2px; }
+         .fp-tabs-wrap .nav-tabs .nav-link { font-size: 12px; padding: 12px 10px; }
+      }
    </style>
 </head>
 <body id="body" class="it-magic-cursor">
@@ -142,7 +162,7 @@ $cv_url = !empty($profile['cv_file']) ? ADMIN_UPLOAD_URL . '/faculty-profiles/' 
    <main>
 
    <!-- Banner -->
-   <div style="background: linear-gradient(135deg, #002147 0%, #003366 100%); padding: 80px 0 60px;">
+   <div class="fp-banner">
       <div class="container">
          <nav aria-label="breadcrumb" class="mb-20">
             <ol class="breadcrumb" style="background:transparent; padding:0; margin:0;">
@@ -174,7 +194,7 @@ $cv_url = !empty($profile['cv_file']) ? ADMIN_UPLOAD_URL . '/faculty-profiles/' 
             <div class="col-xl-3 col-lg-4">
                <div class="fp-sidebar-card">
                   <!-- Photo -->
-                  <div style="background:linear-gradient(135deg,#002147,#003366); padding:32px; text-align:center;">
+                  <div class="fp-photo-area">
                      <?php if ($photo_url): ?>
                      <img src="<?= fh($photo_url) ?>" alt="<?= fh($name) ?>"
                           style="width:150px;height:150px;border-radius:50%;object-fit:cover;border:4px solid #FFB81C;display:block;margin:0 auto 16px;">
@@ -193,7 +213,7 @@ $cv_url = !empty($profile['cv_file']) ? ADMIN_UPLOAD_URL . '/faculty-profiles/' 
                   </div>
 
                   <!-- Contact info sidebar -->
-                  <div style="padding:24px;">
+                  <div class="fp-contact-area">
                      <?php if (!empty($profile['official_email'])): ?>
                      <div class="fp-info-row">
                         <i class="fas fa-envelope"></i>

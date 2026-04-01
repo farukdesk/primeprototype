@@ -26,7 +26,13 @@ if (!$dept) {
 
 if ($db) {
     try {
-        $st = $db->prepare('SELECT * FROM dept_faculty WHERE dept_id = ? AND is_active = 1 ORDER BY sort_order ASC, id ASC');
+        $st = $db->prepare(
+            'SELECT df.*, fp.photo AS fp_photo
+             FROM dept_faculty df
+             LEFT JOIN faculty_profiles fp ON fp.user_id = df.user_id
+             WHERE df.dept_id = ? AND df.is_active = 1
+             ORDER BY df.sort_order ASC, df.id ASC'
+        );
         $st->execute([$dept['id']]);
         $faculty = $st->fetchAll();
     } catch (Throwable $e) {}
@@ -153,8 +159,16 @@ $dept_name    = fh($dept['name'] ?? 'Department');
          <?php foreach ($head_faculty as $hf): ?>
          <div class="row align-items-center g-5 mb-50">
             <div class="col-xl-3 col-lg-4 text-center">
-               <?php if (!empty($hf['photo'])): ?>
-               <img src="<?= fh(ADMIN_UPLOAD_URL . '/departments/' . $hf['photo']) ?>"
+               <?php
+               $hf_photo_url = null;
+               if (!empty($hf['fp_photo'])) {
+                   $hf_photo_url = ADMIN_UPLOAD_URL . '/faculty-profiles/' . $hf['fp_photo'];
+               } elseif (!empty($hf['photo'])) {
+                   $hf_photo_url = ADMIN_UPLOAD_URL . '/departments/' . $hf['photo'];
+               }
+               ?>
+               <?php if ($hf_photo_url): ?>
+               <img src="<?= fh($hf_photo_url) ?>"
                     alt="<?= fh($hf['name'] ?? '') ?>"
                     class="rounded-circle shadow"
                     style="width:180px; height:180px; object-fit:cover; border:4px solid #FFB81C;">
@@ -215,8 +229,16 @@ $dept_name    = fh($dept['name'] ?? 'Department');
                <?php endif; ?>
                <div class="card faculty-card h-100 border-0 shadow-sm text-center" style="border-top:3px solid #002147 !important;">
                   <div class="card-body p-30">
-                     <?php if (!empty($f['photo'])): ?>
-                     <img src="<?= fh(ADMIN_UPLOAD_URL . '/departments/' . $f['photo']) ?>"
+                     <?php
+                     $f_photo_url = null;
+                     if (!empty($f['fp_photo'])) {
+                         $f_photo_url = ADMIN_UPLOAD_URL . '/faculty-profiles/' . $f['fp_photo'];
+                     } elseif (!empty($f['photo'])) {
+                         $f_photo_url = ADMIN_UPLOAD_URL . '/departments/' . $f['photo'];
+                     }
+                     ?>
+                     <?php if ($f_photo_url): ?>
+                     <img src="<?= fh($f_photo_url) ?>"
                           alt="<?= fh($f['name'] ?? '') ?>"
                           class="rounded-circle mb-20"
                           style="width:110px; height:110px; object-fit:cover; border:3px solid #FFB81C;">
