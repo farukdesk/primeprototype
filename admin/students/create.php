@@ -262,7 +262,7 @@ require_once __DIR__ . '/../includes/header.php';
                            value="<?= old('student_id') ?>">
                     <div class="form-text">Format: YY + Semester(01/02/03) + DeptID(2) + ProgID(2) + Seq(4)</div>
                 </div>
-                <div id="sid_auto_note" style="display:none;" class="alert alert-info py-2 mb-0 mt-1" style="font-size:.85rem;">
+                <div id="sid_auto_note" class="alert alert-info py-2 mb-0 mt-1" style="display:none;font-size:.85rem;">
                     <i class="fas fa-magic me-1"></i>
                     ID will be auto-generated based on department, program and admitted semester.
                 </div>

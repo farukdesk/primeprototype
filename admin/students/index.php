@@ -257,7 +257,7 @@ require_once __DIR__ . '/../includes/header.php';
                                 <?php endif; ?>
                                 <?php if (sm_can_delete()): ?>
                                 <form method="POST" action="<?= APP_URL ?>/students/delete.php"
-                                      onsubmit="return confirm('Delete student &quot;<?= h(addslashes($s['full_name'])) ?>&quot;? This cannot be undone.');">
+                                      onsubmit="return confirm('Delete student &quot;<?= h($s['full_name']) ?>&quot;? This cannot be undone.');">
                                     <?= csrf_field() ?>
                                     <input type="hidden" name="id" value="<?= $s['id'] ?>">
                                     <button class="btn btn-sm btn-outline-danger" title="Delete" style="border-radius:7px;">

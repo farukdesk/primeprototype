@@ -211,6 +211,13 @@ function sm_format_size(int $bytes): string
 
 // ── Qual row HTML helper (used in edit.php) ───────────────────────────────────
 
+/**
+ * Render HTML fields for one academic qualification row.
+ *
+ * @param int   $idx Zero-based row index (used as array key in form field names).
+ * @param array $q   Existing qualification data; empty array for a blank row.
+ * @return string    HTML markup for the row's form fields.
+ */
 function sm_qual_row_html(int $idx, array $q): string {
     $v = function($key) use ($q) { return htmlspecialchars((string)($q[$key] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); };
     $n = function($k) use ($idx) { return 'qual[' . $idx . '][' . $k . ']'; };
