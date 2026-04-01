@@ -313,6 +313,30 @@ $user       = auth_user();
                 <i class="fas fa-images"></i> Sliders
             </a>
         </li>
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/cms/programs/index.php"
+               class="<?= strpos($_SERVER['PHP_SELF'], '/cms/programs/') !== false ? 'active' : '' ?>">
+                <i class="fas fa-graduation-cap"></i> Programs
+            </a>
+        </li>
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/cms/about/index.php"
+               class="<?= strpos($_SERVER['PHP_SELF'], '/cms/about/') !== false ? 'active' : '' ?>">
+                <i class="fas fa-info-circle"></i> About Section
+            </a>
+        </li>
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/cms/campus/index.php"
+               class="<?= strpos($_SERVER['PHP_SELF'], '/cms/campus/') !== false ? 'active' : '' ?>">
+                <i class="fas fa-university"></i> Campus Life
+            </a>
+        </li>
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/cms/alumni/index.php"
+               class="<?= strpos($_SERVER['PHP_SELF'], '/cms/alumni/') !== false ? 'active' : '' ?>">
+                <i class="fas fa-user-graduate"></i> Notable Alumni
+            </a>
+        </li>
     </ul>
     <?php endif; ?>
 
