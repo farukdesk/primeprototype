@@ -98,6 +98,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $data['projects_grants'], $data['supervision'], $data['skills'], $data['languages'],
         ]);
 
+        // Auto-sync name, designation and email to any existing dept_faculty records for this user.
+        $sync_email = $data['official_email'] ?? $data['personal_email'] ?? null;
+        db()->prepare(
+            'UPDATE dept_faculty SET name=?, designation=?, email=? WHERE user_id=?'
+        )->execute([
+            $user['full_name'],
+            $data['designation'],
+            $sync_email,
+            $user_id,
+        ]);
+
         flash_set('success', 'Profile for <strong>' . h($user['full_name']) . '</strong> updated successfully.');
         redirect(APP_URL . '/faculty-profiles/index.php');
     }

@@ -210,6 +210,7 @@ $user       = auth_user();
         <span>Prime University<br><small style="font-weight:400;font-size:.7rem;opacity:.7">Admin Panel</small></span>
     </a>
 
+    <?php if (is_super_admin() || can_access('dashboard')): ?>
     <p class="nav-label">Main</p>
     <ul class="nav flex-column">
         <li class="nav-item">
@@ -219,6 +220,7 @@ $user       = auth_user();
             </a>
         </li>
     </ul>
+    <?php endif; ?>
 
     <?php if (is_super_admin() || can_access('users')): ?>
     <p class="nav-label">User Management</p>

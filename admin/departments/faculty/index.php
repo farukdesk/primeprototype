@@ -11,7 +11,15 @@ $dept = $dept->fetch();
 if (!$dept) { flash_set('error', 'Department not found.'); redirect(APP_URL . '/departments/index.php'); }
 
 $faculty = db()->prepare(
-    'SELECT * FROM dept_faculty WHERE dept_id = ? ORDER BY sort_order ASC, id ASC'
+    'SELECT df.*,
+            COALESCE(u.full_name, df.name)              AS display_name,
+            COALESCE(fp.designation, df.designation)    AS display_designation,
+            fp.photo                                    AS fp_photo
+     FROM dept_faculty df
+     LEFT JOIN users u  ON u.id  = df.user_id
+     LEFT JOIN faculty_profiles fp ON fp.user_id = df.user_id
+     WHERE df.dept_id = ?
+     ORDER BY df.sort_order ASC, df.id ASC'
 );
 $faculty->execute([$dept_id]);
 $faculty = $faculty->fetchAll();
@@ -68,19 +76,28 @@ require_once __DIR__ . '/../../includes/header.php';
                         <td class="px-4"><?= $i + 1 ?></td>
                         <td>
                             <div class="d-flex align-items-center gap-2">
-                                <?php if ($f['photo']): ?>
-                                <img src="<?= UPLOAD_URL ?>/departments/<?= h($f['photo']) ?>"
+                                <?php
+                                if (!empty($f['fp_photo'])):
+                                    $photo_url = UPLOAD_URL . '/faculty-profiles/' . h($f['fp_photo']);
+                                elseif ($f['photo']):
+                                    $photo_url = UPLOAD_URL . '/departments/' . h($f['photo']);
+                                else:
+                                    $photo_url = null;
+                                endif;
+                                ?>
+                                <?php if ($photo_url): ?>
+                                <img src="<?= $photo_url ?>"
                                      alt="" style="width:34px;height:34px;border-radius:50%;object-fit:cover;flex-shrink:0;">
                                 <?php else: ?>
                                 <div style="width:34px;height:34px;border-radius:50%;background:#4f8ef7;color:#fff;
                                     display:flex;align-items:center;justify-content:center;font-size:.85rem;flex-shrink:0;">
-                                    <?= strtoupper(substr($f['name'], 0, 1)) ?>
+                                    <?= strtoupper(substr($f['display_name'], 0, 1)) ?>
                                 </div>
                                 <?php endif; ?>
-                                <?= h($f['name']) ?>
+                                <?= h($f['display_name']) ?>
                             </div>
                         </td>
-                        <td><?= h($f['designation'] ?? '—') ?></td>
+                        <td><?= h($f['display_designation'] ?? '—') ?></td>
                         <td><?= h($f['specialization'] ?? '—') ?></td>
                         <td><?= $f['is_head'] ? '<span class="badge bg-warning text-dark">Head</span>' : '—' ?></td>
                         <td><?= (int)$f['sort_order'] ?></td>
@@ -102,7 +119,7 @@ require_once __DIR__ . '/../../includes/header.php';
                                     <i class="fas fa-edit"></i>
                                 </a>
                                 <form method="POST" action="<?= APP_URL ?>/departments/faculty/delete.php"
-                                      onsubmit="return confirm('Delete faculty member &quot;<?= h(addslashes($f['name'])) ?>&quot;?');">
+                                      onsubmit="return confirm('Delete faculty member &quot;<?= h(addslashes($f['display_name'])) ?>&quot;?');">
                                     <?= csrf_field() ?>
                                     <input type="hidden" name="id" value="<?= $f['id'] ?>">
                                     <input type="hidden" name="dept_id" value="<?= $dept_id ?>">

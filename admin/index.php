@@ -2,6 +2,19 @@
 require_once __DIR__ . '/includes/auth.php';
 auth_check();
 
+// Redirect users who do not have dashboard access to their appropriate area.
+if (!is_super_admin() && !can_access('dashboard')) {
+    if (can_access('faculty-profile')) {
+        redirect(APP_URL . '/faculty-profiles/my-profile.php');
+    }
+    // Generic fallback: show a minimal "no access" page rather than looping.
+    $page_title = 'No Access';
+    require_once __DIR__ . '/includes/header.php';
+    echo '<div class="alert alert-warning"><i class="fas fa-lock me-2"></i>You do not have access to the dashboard. Please contact an administrator.</div>';
+    require_once __DIR__ . '/includes/footer.php';
+    exit;
+}
+
 $page_title = 'Dashboard';
 
 // Fetch stats
