@@ -388,6 +388,26 @@ $user       = auth_user();
     </ul>
     <?php endif; ?>
 
+    <?php if (is_super_admin() || can_access('support-tickets')): ?>
+    <p class="nav-label">IT Support</p>
+    <ul class="nav flex-column">
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/support-tickets/index.php"
+               class="<?= (strpos($_SERVER['PHP_SELF'], '/support-tickets/') !== false && strpos($_SERVER['PHP_SELF'], '/reports') === false) ? 'active' : '' ?>">
+                <i class="fas fa-ticket-alt"></i> My Tickets
+            </a>
+        </li>
+        <?php if (is_super_admin()): ?>
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/support-tickets/reports.php"
+               class="<?= strpos($_SERVER['PHP_SELF'], '/support-tickets/reports') !== false ? 'active' : '' ?>">
+                <i class="fas fa-chart-bar"></i> Reports
+            </a>
+        </li>
+        <?php endif; ?>
+    </ul>
+    <?php endif; ?>
+
     <?php if (is_super_admin() || can_access('jobs')): ?>
     <p class="nav-label">Jobs</p>
     <ul class="nav flex-column">
