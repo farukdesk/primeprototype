@@ -287,6 +287,11 @@ $type_badge = [
    <!-- job-detail-area-start -->
    <style>
    /* ── Job Detail Page Styles ──────────────────────────────────────── */
+   /* Breadcrumb overrides for job-detail page */
+   .it-breadcrumb-style-2 { padding-top: 15px !important; padding-bottom: 35px !important; }
+   .it-breadcrumb-list a,
+   .it-breadcrumb-list li > span { color: #fff !important; }
+
    .jd-main-card {
       background: #fff;
       border: 1px solid #e5e7eb;
@@ -366,11 +371,13 @@ $type_badge = [
       font-size: 1.05rem;
       font-weight: 700;
       letter-spacing: .02em;
+      color: #fff;
    }
    .jd-form-header p {
       margin: 4px 0 0;
       font-size: .8rem;
       opacity: .75;
+      color: #fff;
    }
    .jd-form-body {
       padding: 28px 28px 24px;
