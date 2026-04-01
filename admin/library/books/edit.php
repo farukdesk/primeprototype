@@ -91,7 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'edition'     => [$book['edition'],      $edition      ?: null],
             'pub_year'    => [$book['pub_year'],     $pub_year     ?: null],
             'category_id' => [$book['category_id'], $category_id  ?: null],
-            'dept_id'     => [$book['dept_id'],      $dept_id      ?: null],
+            'department_id' => [$book['department_id'], $dept_id      ?: null],
             'shelf_rack'  => [$book['shelf_rack'],   $shelf_rack   ?: null],
             'shelf_row'   => [$book['shelf_row'],    $shelf_row    ?: null],
             'description' => [$book['description'], $description  ?: null],
@@ -101,7 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $db->prepare(
             'UPDATE library_books SET
              isbn=?, title=?, subtitle=?, author=?, publisher=?, edition=?, pub_year=?,
-             category_id=?, language=?, description=?, dept_id=?, cover_image=?,
+             category_id=?, language=?, description=?, department_id=?, cover_image=?,
              shelf_rack=?, shelf_row=?, is_digital=?, updated_at=NOW()
              WHERE id=?'
         )->execute([

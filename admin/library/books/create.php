@@ -70,7 +70,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $db->prepare(
             'INSERT INTO library_books
              (isbn, title, subtitle, author, publisher, edition, pub_year,
-              category_id, language, description, dept_id, cover_image,
+              category_id, language, description, department_id, cover_image,
               shelf_rack, shelf_row, total_copies, available_copies,
               is_digital, created_by, created_at, updated_at)
              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW(),NOW())'
