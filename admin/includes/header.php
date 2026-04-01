@@ -271,6 +271,14 @@ $user       = auth_user();
             </a>
         </li>
         <?php endif; ?>
+        <?php if (is_super_admin()): ?>
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/change-log/index.php"
+               class="<?= strpos($_SERVER['PHP_SELF'], '/change-log/') !== false ? 'active' : '' ?>">
+                <i class="fas fa-history"></i> Change Log
+            </a>
+        </li>
+        <?php endif; ?>
     </ul>
     <?php endif; ?>
 
