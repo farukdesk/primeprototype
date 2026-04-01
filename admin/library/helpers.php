@@ -667,7 +667,7 @@ function lib_book_available_copies(int $book_id): int
  * @param string $record_label Human-readable label (e.g. book title, member code).
  * @param string $details     Additional freeform description.
  */
-function lib_audit(string $action, string $module, int $record_id, string $record_label, string $details = ''): void
+function lib_audit(string $action, string $module, ?int $record_id, string $record_label, string $details = ''): void
 {
     $user = auth_user();
     $stmt = db()->prepare(
