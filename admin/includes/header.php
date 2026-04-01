@@ -341,6 +341,30 @@ $user       = auth_user();
     <?php endif; ?>
 
     <?php if (is_super_admin()): ?>
+    <p class="nav-label">Pages</p>
+    <ul class="nav flex-column">
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/pages/index.php?category=general"
+               class="<?= (strpos($_SERVER['PHP_SELF'], '/pages/') !== false && ($_GET['category'] ?? '') === 'general') ? 'active' : '' ?>">
+                <i class="fas fa-columns"></i> General Pages
+            </a>
+        </li>
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/pages/index.php?category=profile"
+               class="<?= (strpos($_SERVER['PHP_SELF'], '/pages/') !== false && ($_GET['category'] ?? '') === 'profile') ? 'active' : '' ?>">
+                <i class="fas fa-id-card"></i> Profile Pages
+            </a>
+        </li>
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/pages/index.php?category=policy"
+               class="<?= (strpos($_SERVER['PHP_SELF'], '/pages/') !== false && ($_GET['category'] ?? '') === 'policy') ? 'active' : '' ?>">
+                <i class="fas fa-file-contract"></i> Policy Pages
+            </a>
+        </li>
+    </ul>
+    <?php endif; ?>
+
+    <?php if (is_super_admin()): ?>
     <p class="nav-label">Faculty</p>
     <ul class="nav flex-column">
         <li class="nav-item">
