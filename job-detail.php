@@ -285,15 +285,280 @@ $type_badge = [
    <!-- breadcrumb-area-end -->
 
    <!-- job-detail-area-start -->
-   <div class="postbox-area pt-120 pb-120">
+   <style>
+   /* ── Job Detail Page Styles ──────────────────────────────────────── */
+   .jd-main-card {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 16px;
+      padding: 40px 40px 36px;
+      box-shadow: 0 2px 16px rgba(0,0,0,.06);
+   }
+   @media (max-width: 575.98px) {
+      .jd-main-card { padding: 24px 18px 24px; }
+   }
+
+   /* Quick Info Bar */
+   .jd-info-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin: 24px 0 32px;
+   }
+   .jd-info-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #f8f9ff;
+      border: 1px solid #e5e7eb;
+      border-radius: 50px;
+      padding: 8px 18px;
+      font-size: .875rem;
+      font-weight: 500;
+      color: #1e293b;
+      white-space: nowrap;
+   }
+   .jd-info-chip i {
+      font-size: .85rem;
+      color: #f5a623;
+   }
+   .jd-info-chip.chip-deadline i { color: #ef4444; }
+   .jd-info-chip.chip-salary   i { color: #10b981; }
+
+   /* Content sections */
+   .jd-section-heading {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 16px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #f5a623;
+      display: inline-block;
+   }
+   .jd-content {
+      font-size: .96rem;
+      line-height: 1.8;
+      color: #374151;
+   }
+   .jd-content p,
+   .jd-content li {
+      color: #374151;
+   }
+   .jd-content ul, .jd-content ol {
+      padding-left: 1.4rem;
+   }
+
+   /* Application form card */
+   .jd-form-card {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 16px;
+      box-shadow: 0 2px 16px rgba(0,0,0,.06);
+      overflow: hidden;
+   }
+   .jd-form-header {
+      background: linear-gradient(135deg, #1e2d6e 0%, #253694 100%);
+      padding: 22px 28px;
+      color: #fff;
+   }
+   .jd-form-header h5 {
+      margin: 0;
+      font-size: 1.05rem;
+      font-weight: 700;
+      letter-spacing: .02em;
+   }
+   .jd-form-header p {
+      margin: 4px 0 0;
+      font-size: .8rem;
+      opacity: .75;
+   }
+   .jd-form-body {
+      padding: 28px 28px 24px;
+   }
+   @media (max-width: 575.98px) {
+      .jd-form-body { padding: 20px 16px 20px; }
+      .jd-form-header { padding: 18px 16px; }
+   }
+
+   /* Floating-label style inputs */
+   .jd-field {
+      position: relative;
+      margin-bottom: 20px;
+   }
+   .jd-field label {
+      display: block;
+      font-size: .82rem;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 6px;
+      letter-spacing: .02em;
+      text-transform: uppercase;
+   }
+   .jd-field label .req { color: #ef4444; margin-left: 2px; }
+   .jd-field label .opt { color: #9ca3af; font-weight: 400; text-transform: none; font-size: .78rem; }
+   .jd-field .form-control {
+      border: 1.5px solid #d1d5db;
+      border-radius: 10px;
+      padding: 11px 14px;
+      font-size: .93rem;
+      color: #1e293b;
+      background: #f9fafb;
+      transition: border-color .2s, box-shadow .2s;
+   }
+   .jd-field .form-control:focus {
+      border-color: #f5a623;
+      box-shadow: 0 0 0 3px rgba(245,166,35,.18);
+      background: #fff;
+      outline: none;
+   }
+   textarea.form-control { resize: vertical; min-height: 110px; }
+
+   /* Branded file upload */
+   .jd-file-upload-wrap {
+      border: 2px dashed #d1d5db;
+      border-radius: 10px;
+      padding: 18px 14px;
+      text-align: center;
+      background: #f9fafb;
+      cursor: pointer;
+      transition: border-color .2s, background .2s;
+      position: relative;
+   }
+   .jd-file-upload-wrap:hover,
+   .jd-file-upload-wrap:focus-within {
+      border-color: #f5a623;
+      background: #fffbf0;
+   }
+   .jd-file-upload-wrap input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+   }
+   .jd-file-upload-icon { font-size: 1.5rem; color: #f5a623; margin-bottom: 6px; }
+   .jd-file-upload-text { font-size: .85rem; color: #6b7280; }
+   .jd-file-name-display {
+      font-size: .82rem;
+      color: #374151;
+      margin-top: 6px;
+      font-weight: 500;
+      display: none;
+   }
+
+   /* Submit button */
+   .jd-submit-btn {
+      width: 100%;
+      background: #f5a623;
+      color: #1e293b;
+      border: none;
+      border-radius: 50px;
+      padding: 13px 24px;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background .2s, transform .15s, box-shadow .2s;
+      letter-spacing: .03em;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+   }
+   .jd-submit-btn:hover {
+      background: #e09510;
+      box-shadow: 0 4px 16px rgba(245,166,35,.4);
+      transform: translateY(-1px);
+   }
+   .jd-submit-btn:active { transform: translateY(0); }
+
+   /* Alerts */
+   .jd-alert-success {
+      background: #ecfdf5;
+      border: 1px solid #6ee7b7;
+      border-radius: 12px;
+      padding: 20px 22px;
+      color: #065f46;
+      font-size: .93rem;
+   }
+   .jd-alert-success .jd-alert-icon {
+      font-size: 2rem;
+      color: #10b981;
+      margin-bottom: 8px;
+   }
+   .jd-alert-error {
+      background: #fef2f2;
+      border: 1px solid #fca5a5;
+      border-radius: 12px;
+      padding: 16px 18px;
+      margin-bottom: 18px;
+      color: #991b1b;
+      font-size: .88rem;
+   }
+   .jd-alert-error ul { margin: 0; padding-left: 1.2rem; }
+
+   /* Sticky sidebar */
+   .jd-sidebar-sticky {
+      position: sticky;
+      top: 90px;
+   }
+   @media (max-width: 1199.98px) {
+      .jd-sidebar-sticky { position: static; }
+   }
+
+   /* Back link */
+   .jd-back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: .88rem;
+      font-weight: 600;
+      color: #6b7280;
+      text-decoration: none;
+      margin-bottom: 28px;
+      transition: color .2s;
+   }
+   .jd-back-link:hover { color: #f5a623; }
+
+   /* Divider */
+   .jd-divider {
+      border: none;
+      border-top: 1px solid #f0f0f0;
+      margin: 32px 0;
+   }
+
+   /* Badge strip */
+   .jd-badge-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 18px;
+   }
+   .jd-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 14px;
+      border-radius: 50px;
+      font-size: .8rem;
+      font-weight: 600;
+      letter-spacing: .03em;
+   }
+   .jd-badge-type   { background: #1e2d6e; color: #fff; }
+   .jd-badge-dept   { background: #e0e7ff; color: #3730a3; }
+   </style>
+
+   <div class="postbox-area pt-80 pb-100">
       <div class="container">
 
          <?php if (!$job): ?>
          <div class="row justify-content-center">
-            <div class="col-xl-8 text-center py-60">
-               <i class="fas fa-search fa-3x mb-30" style="color:#ccc;"></i>
-               <h4 class="mb-15">Job Not Found</h4>
-               <p class="mb-30 text-muted">This position is no longer available or the link is incorrect.</p>
+            <div class="col-xl-7 col-lg-9 text-center py-80">
+               <div style="width:80px;height:80px;background:#f0f4ff;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 24px;">
+                  <i class="fas fa-briefcase" style="font-size:2rem;color:#1e2d6e;"></i>
+               </div>
+               <h4 class="mb-15" style="color:#0f172a;">Job Not Found</h4>
+               <p class="mb-30" style="color:#6b7280;">This position is no longer available or the link may be incorrect.</p>
                <a href="<?= fh(SITE_URL) ?>/jobs.php" class="it-btn-yellow border-radius-100">
                   <span>
                      <span class="text-1">← View All Jobs</span>
@@ -305,144 +570,188 @@ $type_badge = [
 
          <?php else: ?>
 
-         <div class="row g-5">
+         <!-- Back link -->
+         <a href="<?= fh(SITE_URL) ?>/jobs.php" class="jd-back-link">
+            <i class="fas fa-arrow-left"></i> Back to All Jobs
+         </a>
 
-            <!-- Left: Job detail -->
+         <div class="row g-4 g-xl-5 align-items-start">
+
+            <!-- ── Left: Job detail ──────────────────────────────────── -->
             <div class="col-xl-8">
-               <div class="postbox-details-wrapper it-career-details-area">
+               <div class="jd-main-card">
 
-                  <div class="postbox-content-box">
-                     <div class="d-flex flex-wrap gap-2 align-items-center mb-20">
-                        <?php $badge_cls = $type_badge[$job['job_type']] ?? 'bg-secondary'; ?>
-                        <span class="badge <?= $badge_cls ?> fs-6"><?= fh(ucfirst($job['job_type'])) ?></span>
-                        <?php if ($job['department']): ?>
-                        <span class="badge bg-light text-dark border"><?= fh($job['department']) ?></span>
-                        <?php endif; ?>
-                     </div>
-
-                     <h4 class="it-section-title mb-25"><?= fh($job['title']) ?></h4>
-
-                     <!-- Job metadata -->
-                     <div class="d-flex flex-wrap gap-4 mb-35 pb-30" style="border-bottom:1px solid #e8e8e8;font-size:.9rem;color:#6b7280;">
-                        <?php if ($job['department']): ?>
-                        <div><i class="fas fa-building me-2"></i><strong>Department:</strong> <?= fh($job['department']) ?></div>
-                        <?php endif; ?>
-                        <?php if ($job['location']): ?>
-                        <div><i class="fas fa-map-marker-alt me-2"></i><strong>Location:</strong> <?= fh($job['location']) ?></div>
-                        <?php endif; ?>
-                        <?php if ($job['deadline']): ?>
-                        <div><i class="fas fa-calendar-alt me-2"></i><strong>Deadline:</strong> <?= fh(date('d M Y', strtotime($job['deadline']))) ?></div>
-                        <?php endif; ?>
-                        <?php if ($job['salary_range']): ?>
-                        <div><i class="fas fa-money-bill-wave me-2"></i><strong>Salary:</strong> <?= fh($job['salary_range']) ?></div>
-                        <?php endif; ?>
-                     </div>
-
-                     <!-- Description -->
-                     <h5 class="mb-20">Job Description</h5>
-                     <div class="postbox-dsc mb-40">
-                        <?= $job['description'] ?>
-                     </div>
-
-                     <!-- Requirements -->
-                     <?php if (!empty($job['requirements'])): ?>
-                     <h5 class="mb-20">Requirements</h5>
-                     <div class="postbox-dsc mb-40">
-                        <?= $job['requirements'] ?>
-                     </div>
+                  <!-- Badge strip -->
+                  <div class="jd-badge-strip">
+                     <?php $badge_cls = $type_badge[$job['job_type']] ?? 'bg-secondary'; ?>
+                     <span class="jd-badge jd-badge-type">
+                        <i class="fas fa-briefcase" style="font-size:.7rem;"></i>
+                        <?= fh(ucfirst(str_replace('-', ' ', $job['job_type']))) ?>
+                     </span>
+                     <?php if ($job['department']): ?>
+                     <span class="jd-badge jd-badge-dept">
+                        <i class="fas fa-building" style="font-size:.7rem;"></i>
+                        <?= fh($job['department']) ?>
+                     </span>
                      <?php endif; ?>
+                  </div>
 
-                     <div class="mt-20">
-                        <a href="<?= fh(SITE_URL) ?>/jobs.php" class="it-btn-yellow border-radius-100">
-                           <span>
-                              <span class="text-1">← View All Jobs</span>
-                              <span class="text-2">← View All Jobs</span>
-                           </span>
-                        </a>
-                     </div>
+                  <!-- Job title -->
+                  <h2 style="font-size:clamp(1.4rem,3.5vw,2rem);font-weight:800;color:#0f172a;line-height:1.25;margin-bottom:6px;">
+                     <?= fh($job['title']) ?>
+                  </h2>
+                  <p style="font-size:.9rem;color:#9ca3af;margin-bottom:0;">Posted at Prime University</p>
+
+                  <!-- ── Quick Info Bar ────────────────────────────── -->
+                  <?php $has_info = $job['location'] || $job['deadline'] || $job['salary_range'] || $job['department']; ?>
+                  <?php if ($has_info): ?>
+                  <div class="jd-info-bar">
+                     <?php if ($job['location']): ?>
+                     <span class="jd-info-chip">
+                        <i class="fas fa-map-marker-alt"></i>
+                        <?= fh($job['location']) ?>
+                     </span>
+                     <?php endif; ?>
+                     <?php if ($job['deadline']): ?>
+                     <span class="jd-info-chip chip-deadline">
+                        <i class="fas fa-calendar-times"></i>
+                        Apply by <?= fh(date('d M Y', strtotime($job['deadline']))) ?>
+                     </span>
+                     <?php endif; ?>
+                     <?php if ($job['salary_range']): ?>
+                     <span class="jd-info-chip chip-salary">
+                        <i class="fas fa-money-bill-wave"></i>
+                        <?= fh($job['salary_range']) ?>
+                     </span>
+                     <?php endif; ?>
+                     <?php if ($job['department']): ?>
+                     <span class="jd-info-chip">
+                        <i class="fas fa-building"></i>
+                        <?= fh($job['department']) ?>
+                     </span>
+                     <?php endif; ?>
+                  </div>
+                  <?php else: ?>
+                  <div style="margin-top:24px;"></div>
+                  <?php endif; ?>
+
+                  <hr class="jd-divider">
+
+                  <!-- Description -->
+                  <h3 class="jd-section-heading">Job Description</h3>
+                  <div class="jd-content mb-40">
+                     <?= $job['description'] ?>
+                  </div>
+
+                  <!-- Requirements -->
+                  <?php if (!empty($job['requirements'])): ?>
+                  <hr class="jd-divider">
+                  <h3 class="jd-section-heading">Requirements</h3>
+                  <div class="jd-content mb-40">
+                     <?= $job['requirements'] ?>
+                  </div>
+                  <?php endif; ?>
+
+                  <!-- Mobile: show apply form hint -->
+                  <div class="d-xl-none mt-20 p-3 text-center" style="background:#f8f9ff;border-radius:12px;border:1px dashed #c7d2fe;">
+                     <p class="mb-2" style="font-size:.88rem;color:#4b5563;">Ready to apply? Scroll down for the application form.</p>
+                     <a href="#apply-form" style="font-size:.88rem;font-weight:600;color:#f5a623;text-decoration:none;">
+                        <i class="fas fa-arrow-down me-1"></i>Go to Application Form
+                     </a>
                   </div>
 
                </div>
             </div><!-- .col -->
 
-            <!-- Right: Application form -->
-            <div class="col-xl-4">
-               <div class="p-4" style="border:1px solid #e8e8e8;border-radius:12px;background:#fff;position:sticky;top:100px;">
+            <!-- ── Right: Application form ───────────────────────────── -->
+            <div class="col-xl-4" id="apply-form">
+               <div class="jd-sidebar-sticky">
+                  <div class="jd-form-card">
 
-                  <h5 class="mb-25 fw-bold"><i class="fas fa-paper-plane me-2 text-muted"></i>Apply for this Position</h5>
-
-                  <?php if ($form_success): ?>
-                  <div class="alert alert-success border-0" style="border-radius:10px;">
-                     <i class="fas fa-check-circle me-2"></i>
-                     <strong>Application submitted!</strong><br>
-                     Thank you, we will be in touch shortly.
-                  </div>
-                  <?php else: ?>
-
-                  <?php if (!empty($form_errors)): ?>
-                  <div class="alert alert-danger border-0 mb-20" style="border-radius:10px;">
-                     <ul class="mb-0 ps-3">
-                        <?php foreach ($form_errors as $err): ?>
-                        <li><?= fh($err) ?></li>
-                        <?php endforeach; ?>
-                     </ul>
-                  </div>
-                  <?php endif; ?>
-
-                  <form method="POST" enctype="multipart/form-data" novalidate>
-                     <input type="hidden" name="_csrf" value="<?= fh($csrf_token) ?>">
-
-                     <div class="mb-3">
-                        <label class="form-label fw-medium">Full Name <span class="text-danger">*</span></label>
-                        <input type="text" name="full_name" class="form-control" required
-                               value="<?= fh($_POST['full_name'] ?? '') ?>"
-                               placeholder="Your full name" maxlength="200"
-                               style="border-radius:8px;">
+                     <div class="jd-form-header">
+                        <h5><i class="fas fa-paper-plane me-2" style="opacity:.8;"></i>Apply for this Position</h5>
+                        <p>Fill in the form below and we'll be in touch</p>
                      </div>
 
-                     <div class="mb-3">
-                        <label class="form-label fw-medium">Email Address <span class="text-danger">*</span></label>
-                        <input type="email" name="email" class="form-control" required
-                               value="<?= fh($_POST['email'] ?? '') ?>"
-                               placeholder="you@example.com" maxlength="200"
-                               style="border-radius:8px;">
-                     </div>
+                     <div class="jd-form-body">
 
-                     <div class="mb-3">
-                        <label class="form-label fw-medium">Phone <span class="text-muted fw-normal">(optional)</span></label>
-                        <input type="tel" name="phone" class="form-control"
-                               value="<?= fh($_POST['phone'] ?? '') ?>"
-                               placeholder="+880 1xxx xxxxxx" maxlength="30"
-                               style="border-radius:8px;">
-                     </div>
+                        <?php if ($form_success): ?>
+                        <div class="jd-alert-success text-center">
+                           <div class="jd-alert-icon"><i class="fas fa-check-circle"></i></div>
+                           <strong style="font-size:1rem;">Application Submitted!</strong>
+                           <p class="mt-8 mb-0" style="font-size:.88rem;">Thank you, <?= fh($_POST['full_name'] ?? 'candidate') ?>. We will be in touch shortly.</p>
+                        </div>
 
-                     <div class="mb-3">
-                        <label class="form-label fw-medium">Cover Letter <span class="text-muted fw-normal">(optional)</span></label>
-                        <textarea name="cover_letter" class="form-control" rows="5"
-                                  placeholder="Tell us why you are a great fit…"
-                                  style="border-radius:8px;"><?= fh($_POST['cover_letter'] ?? '') ?></textarea>
-                     </div>
+                        <?php else: ?>
 
-                     <div class="mb-4">
-                        <label class="form-label fw-medium">Upload CV <span class="text-muted fw-normal">(PDF/DOC/DOCX, max 5 MB)</span></label>
-                        <input type="file" name="cv" class="form-control" accept=".pdf,.doc,.docx"
-                               style="border-radius:8px;">
-                     </div>
+                        <?php if (!empty($form_errors)): ?>
+                        <div class="jd-alert-error">
+                           <div class="d-flex align-items-start gap-2">
+                              <i class="fas fa-exclamation-circle mt-1" style="flex-shrink:0;"></i>
+                              <ul>
+                                 <?php foreach ($form_errors as $err): ?>
+                                 <li><?= fh($err) ?></li>
+                                 <?php endforeach; ?>
+                              </ul>
+                           </div>
+                        </div>
+                        <?php endif; ?>
 
-                     <div class="d-grid">
-                        <button type="submit" class="it-btn-yellow border-radius-100"
-                                style="border:none;padding:12px 24px;font-size:1rem;cursor:pointer;width:100%;">
-                           <span>
-                              <span class="text-1">Submit Application</span>
-                              <span class="text-2">Submit Application</span>
-                           </span>
-                        </button>
-                     </div>
-                  </form>
+                        <form method="POST" enctype="multipart/form-data" novalidate>
+                           <input type="hidden" name="_csrf" value="<?= fh($csrf_token) ?>">
 
-                  <?php endif; ?>
+                           <div class="jd-field">
+                              <label>Full Name <span class="req">*</span></label>
+                              <input type="text" name="full_name" class="form-control" required
+                                     value="<?= fh($_POST['full_name'] ?? '') ?>"
+                                     placeholder="e.g. Md. Faruk Ahmed" maxlength="200">
+                           </div>
 
-               </div>
+                           <div class="jd-field">
+                              <label>Email Address <span class="req">*</span></label>
+                              <input type="email" name="email" class="form-control" required
+                                     value="<?= fh($_POST['email'] ?? '') ?>"
+                                     placeholder="you@example.com" maxlength="200">
+                           </div>
+
+                           <div class="jd-field">
+                              <label>Phone <span class="opt">(optional)</span></label>
+                              <input type="tel" name="phone" class="form-control"
+                                     value="<?= fh($_POST['phone'] ?? '') ?>"
+                                     placeholder="+880 1xxx xxxxxx" maxlength="30">
+                           </div>
+
+                           <div class="jd-field">
+                              <label>Cover Letter <span class="opt">(optional)</span></label>
+                              <textarea name="cover_letter" class="form-control"
+                                        placeholder="Tell us why you are a great fit for this role…"><?= fh($_POST['cover_letter'] ?? '') ?></textarea>
+                           </div>
+
+                           <div class="jd-field">
+                              <label>Upload CV <span class="opt">(PDF/DOC/DOCX · max 5 MB)</span></label>
+                              <div class="jd-file-upload-wrap" id="cvDropZone">
+                                 <input type="file" name="cv" accept=".pdf,.doc,.docx" id="cvInput"
+                                        onchange="jdShowFilename(this)">
+                                 <div class="jd-file-upload-icon"><i class="fas fa-cloud-upload-alt"></i></div>
+                                 <div class="jd-file-upload-text"><strong>Click to upload</strong> or drag &amp; drop</div>
+                                 <div class="jd-file-upload-text" style="margin-top:4px;">PDF, DOC or DOCX · up to 5 MB</div>
+                                 <div class="jd-file-name-display" id="cvFilename"></div>
+                              </div>
+                           </div>
+
+                           <div class="d-grid mt-4">
+                              <button type="submit" class="jd-submit-btn">
+                                 <i class="fas fa-paper-plane"></i>
+                                 Submit Application
+                              </button>
+                           </div>
+                        </form>
+
+                        <?php endif; ?>
+
+                     </div><!-- .jd-form-body -->
+                  </div><!-- .jd-form-card -->
+               </div><!-- .jd-sidebar-sticky -->
             </div><!-- .col -->
 
          </div><!-- .row -->
@@ -452,6 +761,18 @@ $type_badge = [
       </div><!-- .container -->
    </div>
    <!-- job-detail-area-end -->
+
+   <script>
+   function jdShowFilename(input) {
+      var display = document.getElementById('cvFilename');
+      if (input.files && input.files.length > 0) {
+         display.textContent = '📎 ' + input.files[0].name;
+         display.style.display = 'block';
+      } else {
+         display.style.display = 'none';
+      }
+   }
+   </script>
 
    </main>
 
