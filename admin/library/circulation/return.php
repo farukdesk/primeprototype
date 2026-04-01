@@ -374,7 +374,6 @@ require_once __DIR__ . '/../../includes/header.php';
 </div>
 
 <script>
-const confirmModal = new bootstrap.Modal(document.getElementById('confirmModal'));
 let pendingAction = null;
 
 function confirmReturn(circId, title, member, fine) {
@@ -393,7 +392,7 @@ function confirmReturn(circId, title, member, fine) {
         document.getElementById('returnCircId').value = circId;
         document.getElementById('returnForm').submit();
     };
-    confirmModal.show();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('confirmModal')).show();
 }
 
 function confirmRenew(circId, title, currentCount, maxCount) {
@@ -407,11 +406,11 @@ function confirmRenew(circId, title, currentCount, maxCount) {
         document.getElementById('renewCircId').value = circId;
         document.getElementById('renewForm').submit();
     };
-    confirmModal.show();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('confirmModal')).show();
 }
 
 document.getElementById('confirmModalBtn').addEventListener('click', function () {
-    confirmModal.hide();
+    bootstrap.Modal.getInstance(document.getElementById('confirmModal')).hide();
     if (pendingAction) pendingAction();
 });
 </script>
