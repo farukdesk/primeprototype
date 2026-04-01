@@ -458,6 +458,70 @@ $user       = auth_user();
     </ul>
     <?php endif; ?>
 
+    <?php if (is_super_admin() || can_access('library') || can_access('library-circulation') || can_access('library-digital')): ?>
+    <p class="nav-label">Library</p>
+    <ul class="nav flex-column">
+        <?php if (is_super_admin() || can_access('library')): ?>
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/library/index.php"
+               class="<?= (strpos($_SERVER['PHP_SELF'], '/library/') !== false && strpos($_SERVER['PHP_SELF'], '/library/circulation') === false && strpos($_SERVER['PHP_SELF'], '/library/digital') === false) ? 'active' : '' ?>">
+                <i class="fas fa-book-open"></i> Library Dashboard
+            </a>
+        </li>
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/library/books/index.php"
+               class="<?= strpos($_SERVER['PHP_SELF'], '/library/books/') !== false ? 'active' : '' ?>">
+                <i class="fas fa-books"></i> Books
+            </a>
+        </li>
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/library/members/index.php"
+               class="<?= strpos($_SERVER['PHP_SELF'], '/library/members/') !== false ? 'active' : '' ?>">
+                <i class="fas fa-users"></i> Members
+            </a>
+        </li>
+        <?php endif; ?>
+        <?php if (is_super_admin() || can_access('library-circulation')): ?>
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/library/circulation/index.php"
+               class="<?= strpos($_SERVER['PHP_SELF'], '/library/circulation/') !== false ? 'active' : '' ?>">
+                <i class="fas fa-exchange-alt"></i> Circulation
+            </a>
+        </li>
+        <?php endif; ?>
+        <?php if (is_super_admin() || can_access('library-digital')): ?>
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/library/digital/index.php"
+               class="<?= strpos($_SERVER['PHP_SELF'], '/library/digital/') !== false ? 'active' : '' ?>">
+                <i class="fas fa-file-pdf"></i> Digital Library
+            </a>
+        </li>
+        <?php endif; ?>
+        <?php if (is_super_admin() || can_access('library')): ?>
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/library/fines/index.php"
+               class="<?= strpos($_SERVER['PHP_SELF'], '/library/fines/') !== false ? 'active' : '' ?>">
+                <i class="fas fa-money-bill-wave"></i> Fines
+            </a>
+        </li>
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/library/reports/index.php"
+               class="<?= strpos($_SERVER['PHP_SELF'], '/library/reports/') !== false ? 'active' : '' ?>">
+                <i class="fas fa-chart-bar"></i> Reports
+            </a>
+        </li>
+        <?php endif; ?>
+        <?php if (is_super_admin()): ?>
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/library/settings/index.php"
+               class="<?= strpos($_SERVER['PHP_SELF'], '/library/settings/') !== false ? 'active' : '' ?>">
+                <i class="fas fa-cog"></i> Library Settings
+            </a>
+        </li>
+        <?php endif; ?>
+    </ul>
+    <?php endif; ?>
+
     <div style="padding: 20px; margin-top: auto;">
         <a href="<?= APP_URL ?>/logout.php"
            style="display:flex;align-items:center;gap:8px;color:#e74c3c;font-size:.85rem;text-decoration:none;">
