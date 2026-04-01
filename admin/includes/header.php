@@ -408,6 +408,18 @@ $user       = auth_user();
     </ul>
     <?php endif; ?>
 
+    <?php if (is_super_admin() || can_access('knowledge-base')): ?>
+    <p class="nav-label">Knowledge Base</p>
+    <ul class="nav flex-column">
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/knowledge-base/index.php"
+               class="<?= strpos($_SERVER['PHP_SELF'], '/knowledge-base/') !== false ? 'active' : '' ?>">
+                <i class="fas fa-book-open"></i> Knowledge Base
+            </a>
+        </li>
+    </ul>
+    <?php endif; ?>
+
     <?php if (is_super_admin() || can_access('jobs')): ?>
     <p class="nav-label">Jobs</p>
     <ul class="nav flex-column">
