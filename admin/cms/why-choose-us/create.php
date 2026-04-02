@@ -68,7 +68,7 @@ require_once __DIR__ . '/../../includes/header.php';
                 <label class="form-label fw-medium">Icon</label>
                 <div class="input-group">
                     <span class="input-group-text" id="iconPreview" style="min-width:42px;font-size:1.1rem;">
-                        <i id="iconPreviewEl" class="<?= h(old('icon', 'fas fa-star')) ?>"></i>
+                        <i id="iconPreviewEl" class="<?= h(old('icon', 'fas fa-graduation-cap')) ?>"></i>
                     </span>
                     <input type="text" name="icon" id="iconInput" class="form-control"
                            value="<?= h(old('icon', 'fas fa-graduation-cap')) ?>"
