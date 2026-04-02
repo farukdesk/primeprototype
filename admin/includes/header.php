@@ -351,6 +351,12 @@ $user       = auth_user();
                 <i class="fas fa-home"></i> Homepage (Stats &amp; Reviews)
             </a>
         </li>
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/cms/footer/index.php"
+               class="<?= strpos($_SERVER['PHP_SELF'], '/cms/footer/') !== false ? 'active' : '' ?>">
+                <i class="fas fa-shoe-prints"></i> Footer Settings
+            </a>
+        </li>
     </ul>
     <?php endif; ?>
 
