@@ -1143,76 +1143,7 @@ $lib_desc    = $lib_settings['lib_description']  ?? 'A modern academic library s
 
    </main>
 
-   <footer>
-   <section class="it-footer-wrap it-footer-style-2 fix">
-      <div class="it-footer-area z-index-1 pt-120 pb-80" data-background="assets/img/shape/footer-bg-3-1.jpg">
-         <img class="it-footer-shape-1 d-none d-xxl-block" src="assets/img/shape/footer-3-1.png" alt="">
-         <img class="it-footer-shape-2" data-parallax='{"y": -200, "smoothness": 30}' src="assets/img/shape/footer-3-2.png" alt="">
-         <div class="it-footer-border"><span></span></div>
-         <div class="container">
-            <div class="row">
-               <div class="col-xl-3 col-lg-3 col-md-6 col-sm-6 mb-50">
-                  <div class="it-footer-widget">
-                     <div class="it-footer-widget-logo mb-30">
-                        <a href="<?= fh(SITE_URL) ?>/index.php"><img src="assets/img/logo/logo-black.png" alt="Prime University"></a>
-                     </div>
-                     <div class="it-footer-widget-text">
-                        <p><?= fh($lib_name) ?> – serving students, faculty and researchers.</p>
-                     </div>
-                  </div>
-               </div>
-               <div class="col-xl-3 col-lg-3 col-md-6 col-sm-6 mb-50">
-                  <div class="it-footer-widget">
-                     <h4 class="it-footer-widget-title">Library</h4>
-                     <div class="it-footer-widget-menu">
-                        <ul>
-                           <li><a href="library.php">Home</a></li>
-                           <li><a href="library.php?q=">Book Catalogue</a></li>
-                        </ul>
-                     </div>
-                  </div>
-               </div>
-               <div class="col-xl-3 col-lg-3 col-md-6 col-sm-6 mb-50">
-                  <div class="it-footer-widget">
-                     <h4 class="it-footer-widget-title">Useful Links</h4>
-                     <div class="it-footer-widget-menu">
-                        <ul>
-                           <li><a href="<?= fh(SITE_URL) ?>/index.php">Home</a></li>
-                           <li><a href="contact-us.html">Contact Us</a></li>
-                        </ul>
-                     </div>
-                  </div>
-               </div>
-               <div class="col-xl-3 col-lg-3 col-md-6 col-sm-6 mb-50">
-                  <div class="it-footer-widget d-flex justify-content-lg-end">
-                     <div>
-                        <h4 class="it-footer-widget-title">Contact Library</h4>
-                        <div class="it-footer-widget-contact mb-25">
-                           <ul>
-                              <li><span>Phone:</span><a href="tel:<?= fh($lib_phone_tel) ?>"><?= fh($lib_phone) ?></a></li>
-                              <li><span>Cell:</span><a href="tel:<?= fh($lib_cell_tel) ?>"><?= fh($lib_cell) ?></a></li>
-                              <li><span>Room:</span><?= fh($lib_room) ?></li>
-                           </ul>
-                        </div>
-                     </div>
-                  </div>
-               </div>
-            </div>
-         </div>
-      </div>
-      <div class="it-copyright-area it-copyright-ptb it-copyright-bg z-index-1 theme-bg">
-         <div class="container">
-            <div class="row align-items-center">
-               <div class="col-12">
-                  <div class="it-copyright-left style-2 text-center">
-                     <p class="mb-0">Copyright &copy; <?= date('Y') ?> <a href="#">Prime University</a> All Rights Reserved</p>
-                  </div>
-               </div>
-            </div>
-         </div>
-      </div>
-   </section>
-   </footer>
+<?php include __DIR__ . '/includes/footer.php'; ?>
 
    <!-- JS Libraries -->
    <script src="assets/js/jquery.js"></script>

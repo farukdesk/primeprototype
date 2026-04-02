@@ -57,3 +57,22 @@ function get_header_settings(): array {
         return [];
     }
 }
+
+/**
+ * Load all cms_footer_settings into an associative array.
+ * Returns empty array on DB failure.
+ */
+function get_footer_settings(): array {
+    try {
+        $db = front_db();
+        if (!$db) return [];
+        $rows = $db->query('SELECT setting_key, setting_value FROM cms_footer_settings')->fetchAll();
+        $out = [];
+        foreach ($rows as $r) {
+            $out[$r['setting_key']] = $r['setting_value'];
+        }
+        return $out;
+    } catch (Throwable $e) {
+        return [];
+    }
+}
