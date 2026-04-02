@@ -202,7 +202,7 @@ $_gallery_imgs = [
             <div class="pu-about-img-wrap">
                <img class="pu-about-img-main" src="assets/img/about/about-1-1.jpg" alt="Prime University Campus">
                <div class="pu-about-img-badge">
-                  <span class="number">32<span style="font-size:.5em">+</span></span>
+                  <span class="number">32<span class="pu-text-half">+</span></span>
                   <span class="text">Years of<br>Excellence</span>
                </div>
             </div>

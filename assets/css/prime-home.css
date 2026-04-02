@@ -981,7 +981,8 @@
 .pu-wow-fade-left  { animation: puSlideLeft .8s ease both; }
 .pu-wow-fade-right { animation: puSlideRight .8s ease both; }
 
-/* ── Responsive ────────────────────────────────────────────────────────────── */
+/* ── Utility ────────────────────────────────────────────────────────────────── */
+.pu-text-half { font-size: .5em; }
 @media (max-width: 1199px) {
   .pu-about-content { padding-left: 20px; }
   .pu-gallery-grid {

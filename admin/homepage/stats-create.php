@@ -68,7 +68,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <input type="text" name="icon" class="form-control" style="border-radius:10px;"
                        placeholder="e.g. fas fa-user-graduate"
                        value="<?= h(old('icon', 'fas fa-star')) ?>">
-                <div class="form-text">Browse icons at <a href="https://fontawesome.com/icons" target="_blank" rel="noopener">fontawesome.com/icons</a></div>
+                <div class="form-text">Browse icons at <a href="https://fontawesome.com/icons" target="_blank" rel="noopener noreferrer">fontawesome.com/icons</a></div>
             </div>
 
             <div class="row g-3 mb-3">
