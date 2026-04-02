@@ -345,10 +345,16 @@ $user       = auth_user();
                 <i class="fas fa-user-graduate"></i> Notable Alumni
             </a>
         </li>
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/homepage/index.php"
+               class="<?= strpos($_SERVER['PHP_SELF'], '/homepage/') !== false ? 'active' : '' ?>">
+                <i class="fas fa-home"></i> Homepage (Stats &amp; Reviews)
+            </a>
+        </li>
     </ul>
     <?php endif; ?>
 
-    <?php if (is_super_admin()): ?>
+    <?php if (is_super_admin() || can_access('homepage')): ?>
     <p class="nav-label">Pages</p>
     <ul class="nav flex-column">
         <li class="nav-item">
