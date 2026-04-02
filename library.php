@@ -63,23 +63,17 @@ try {
 }
 
 $lib_name    = $lib_settings['lib_name']        ?? 'Prime University Central Library';
-$lib_address = $lib_settings['lib_address']     ?? '114, 116 Mazar Rd, Dhaka 1216';
-$lib_room    = $lib_settings['lib_room']         ?? 'Block C, Room 101–105';
-$lib_location= $lib_settings['lib_location']    ?? '1st Floor, Main Academic Building';
-$lib_phone   = $lib_settings['lib_phone']        ?? '+880-2-9671074';
+$lib_address = $lib_settings['lib_address']     ?? '114/116 Mazar Road, Mirpur-1, Dhaka 1216, Bangladesh';
+$lib_room    = $lib_settings['lib_room']         ?? 'Level-9';
+$lib_location= $lib_settings['lib_location']    ?? 'Prime University (Level-9), 114/116 Mazar Road, Mirpur-1, Dhaka 1216';
+$lib_phone   = $lib_settings['lib_phone']        ?? '48038147';
+$lib_cell    = $lib_settings['lib_cell']         ?? '01341933646';
+// Build E.164-like tel: hrefs (BD country code +880; local numbers starting with 0 drop the leading 0)
+$lib_phone_tel = '+880-2-' . ltrim($lib_phone, '0');
+$lib_cell_tel  = '+880-' . ltrim($lib_cell, '0');
 $lib_email   = $lib_settings['lib_email']        ?? 'library@primeuniversity.ac.bd';
 $lib_hours   = $lib_settings['lib_hours']        ?? 'Sun–Thu: 8 AM–9 PM';
-$lib_desc    = $lib_settings['lib_description']  ?? 'A modern academic library serving students, faculty and researchers.';
-$lib_website = $lib_settings['lib_website']      ?? '#';
-
-$resource_icons = [
-    'E-Book'          => 'fas fa-book',
-    'Journal'         => 'fas fa-newspaper',
-    'Research Paper'  => 'fas fa-scroll',
-    'Thesis'          => 'fas fa-graduation-cap',
-    'Dissertation'    => 'fas fa-file-alt',
-    'Other'           => 'fas fa-file',
-];
+$lib_desc    = $lib_settings['lib_description']  ?? 'A modern academic library serving students, faculty and researchers of Prime University.';
 ?>
 <!doctype html>
 <html class="no-js" lang="en">
@@ -103,158 +97,415 @@ $resource_icons = [
    <link rel="stylesheet" href="assets/css/spacing.css">
    <link rel="stylesheet" href="assets/css/main.css">
    <style>
-      /* ── Hero ─────────────────────────────────────────────── */
+      /* ══════════════════════════════════════════════════════
+         PRIME UNIVERSITY LIBRARY — Design System
+         Palette rationale:
+           Ink Navy    (#12213a) — authority, scholarship, depth
+           Crimson     (#b5182e) — Prime University brand energy
+           Warm Cream  (#faf6f0) — paper / book warmth
+           Teal Accent (#0d8a7a) — modernity, digital resources
+           Amber Gold  (#d4930a) — classic academic accent
+         ══════════════════════════════════════════════════ */
+      :root {
+         --ink:        #12213a;   /* deep navy — headings, text */
+         --ink2:       #1e3155;   /* mid navy — cards, hover bg */
+         --crimson:    #b5182e;   /* university red — key accents */
+         --crimson-lt: #f9e8eb;   /* tint for crimson bg */
+         --teal:       #0d8a7a;   /* teal — online/digital */
+         --teal-lt:    #e3f5f2;   /* teal tint */
+         --amber:      #d4930a;   /* amber gold — guide, arrivals */
+         --amber-lt:   #fef3dc;   /* amber tint */
+         --cream:      #faf6f0;   /* warm page bg */
+         --white:      #ffffff;
+         --border:     #e4e8ef;
+         --text:       #374151;
+         --muted:      #6b7280;
+         --radius-lg:  16px;
+         --radius-md:  10px;
+         --shadow-sm:  0 2px 8px rgba(18,33,58,.08);
+         --shadow-md:  0 6px 24px rgba(18,33,58,.12);
+         --shadow-lg:  0 12px 40px rgba(18,33,58,.18);
+      }
+
+      body { background: var(--cream); }
+
+      /* ── Section headings ───────────────────────────────── */
+      .lib-section-title {
+         font-size: 1.9rem; font-weight: 800; color: var(--ink);
+         letter-spacing: -.02em; display: inline-block; margin-bottom: 6px;
+      }
+      .lib-section-subtitle { color: var(--muted); font-size: .95rem; margin-bottom: 0; }
+      .lib-section-head { margin-bottom: 44px; }
+      .lib-section-head .title-bar {
+         width: 56px; height: 4px; border-radius: 2px;
+         background: linear-gradient(90deg, var(--crimson), var(--amber));
+         margin: 10px auto 0;
+      }
+      /* left-aligned variant */
+      .lib-section-head.left .title-bar { margin-left: 0; }
+
+      /* ── Breadcrumb ─────────────────────────────────────── */
+      .lib-breadcrumb {
+         background: var(--ink); border-bottom: 3px solid var(--crimson); padding: 10px 0;
+      }
+      .lib-breadcrumb ol { margin: 0; background: transparent; padding: 0; }
+      .lib-breadcrumb .breadcrumb-item a { color: #aec0d8; text-decoration: none; font-size: .85rem; }
+      .lib-breadcrumb .breadcrumb-item a:hover { color: #fff; }
+      .lib-breadcrumb .breadcrumb-item.active { color: rgba(255,255,255,.6); font-size: .85rem; }
+      .lib-breadcrumb .breadcrumb-item + .breadcrumb-item::before { color: rgba(255,255,255,.35); }
+
+      /* ── Hero ───────────────────────────────────────────── */
       .lib-hero {
-         background: linear-gradient(135deg, #1a1f36 0%, #2d3561 60%, #4f8ef7 100%);
-         color: #fff;
-         padding: 80px 0 60px;
-         position: relative;
-         z-index: 10;
-         overflow: visible;
+         background:
+            linear-gradient(135deg, var(--ink) 0%, var(--ink2) 50%, #1e4480 100%);
+         color: #fff; padding: 88px 0 68px; position: relative; overflow: hidden;
+      }
+      /* Subtle diagonal stripe overlay */
+      .lib-hero::before {
+         content: ''; position: absolute; inset: 0; pointer-events: none;
+         background: repeating-linear-gradient(
+            -55deg,
+            transparent,
+            transparent 40px,
+            rgba(255,255,255,.015) 40px,
+            rgba(255,255,255,.015) 80px
+         );
+      }
+      /* Crimson accent bar on the left edge */
+      .lib-hero::after {
+         content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+         width: 5px; background: linear-gradient(180deg, var(--crimson), var(--amber));
       }
       .lib-hero h1 {
-         font-size: 2.8rem; font-weight: 800; line-height: 1.2;
-         color: #ffffff;
-         text-shadow: 0 2px 12px rgba(0,0,0,.45);
+         font-size: 2.65rem; font-weight: 800; line-height: 1.18; color: #fff;
+         letter-spacing: -.02em; text-shadow: 0 2px 16px rgba(0,0,0,.35);
       }
-      .lib-hero p  { font-size: 1.1rem; color: rgba(255,255,255,.95); }
-      .lib-hero .hero-meta span { color: #fff; font-size: .85rem; }
+      .lib-hero p { font-size: 1rem; color: rgba(255,255,255,.88); line-height: 1.7; }
+      .lib-badge {
+         background: rgba(181,24,46,.3); color: #ffb3bd; border: 1px solid rgba(181,24,46,.4);
+         padding: 5px 14px; border-radius: 20px; font-size: .8rem; font-weight: 600;
+         display: inline-block; margin-bottom: 14px; letter-spacing: .03em;
+      }
+      .lib-hero-meta { font-size: .82rem; color: rgba(255,255,255,.75); }
+      .lib-hero-meta i { color: var(--amber); }
 
-      /* ── Search box ────────────────────────────────────────── */
+      /* ── Search box ─────────────────────────────────────── */
       .lib-search-box {
-         background: rgba(255,255,255,.15);
-         border-radius: 16px;
-         padding: 28px 32px;
-         border: 1px solid rgba(255,255,255,.2);
-         position: relative;
-         z-index: 100;
+         background: rgba(255,255,255,.1); backdrop-filter: blur(8px);
+         border-radius: var(--radius-lg); padding: 28px;
+         border: 1px solid rgba(255,255,255,.15);
       }
-      .lib-search-box input,
-      .lib-search-box select { border-radius: 8px !important; height: 48px; font-size: .95rem; }
+      .lib-search-box input, .lib-search-box select {
+         border-radius: var(--radius-md) !important; height: 48px; font-size: .93rem;
+         border: 1.5px solid #dde2ea;
+      }
+      .lib-search-box input:focus, .lib-search-box select:focus {
+         border-color: var(--teal); box-shadow: 0 0 0 3px rgba(13,138,122,.18);
+      }
       .lib-search-box .btn-search {
-         height: 48px; padding: 0 28px; background: #f7a91e; border: none;
-         border-radius: 8px; font-weight: 600; color: #fff; white-space: nowrap;
-         width: 100%;
+         height: 48px; width: 100%; border: none; border-radius: var(--radius-md);
+         background: linear-gradient(90deg, var(--crimson), #8c0f1f);
+         color: #fff; font-weight: 700; font-size: .93rem;
+         transition: filter .2s, transform .15s;
       }
-      .lib-search-box .btn-search:hover { background: #e09700; }
+      .lib-search-box .btn-search:hover { filter: brightness(1.12); transform: translateY(-1px); }
 
-      /* Fix nice-select dropdown staying above the books section */
-      .lib-search-box .nice-select { height: 48px; line-height: 48px; border-radius: 8px !important; width: 100%; }
-      .lib-search-box .nice-select .list { z-index: 9999; max-height: 260px; overflow-y: auto; }
-
-      /* ── Stat strip ────────────────────────────────────────── */
-      .stat-strip { background: #f7a91e; padding: 20px 0; }
-      .stat-strip .stat-item { text-align: center; color: #1a1f36; padding: 8px 4px; }
-      .stat-strip .stat-item .num { font-size: 2rem; font-weight: 700; line-height: 1; }
-      .stat-strip .stat-item .lbl { font-size: .8rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; margin-top: 4px; }
-
-      /* ── Section headings ──────────────────────────────────── */
-      .section-heading { margin-bottom: 40px; }
-      .section-heading h2 { font-size: 2rem; font-weight: 700; color: #1a1f36; }
-      .section-heading p  { color: #6b7280; margin-bottom: 0; }
-
-      /* ── Book cards ────────────────────────────────────────── */
-      .book-card {
-         border: 1px solid #e8eaf0; border-radius: 14px; background: #fff;
-         overflow: hidden; transition: box-shadow .2s, transform .2s; height: 100%;
+      /* ── Koha / OPAC banner ─────────────────────────────── */
+      .koha-banner {
+         background: var(--white);
+         border-left: 5px solid var(--teal); border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+         padding: 24px 32px; display: flex; flex-wrap: wrap;
+         align-items: center; gap: 20px;
+         box-shadow: var(--shadow-sm);
       }
-      .book-card:hover { box-shadow: 0 8px 28px rgba(0,0,0,.12); transform: translateY(-4px); }
-      .book-card .book-cover {
-         height: 180px; background: #f0f3fa;
+      .koha-banner .koha-icon {
+         width: 56px; height: 56px; border-radius: 14px; background: var(--teal-lt);
+         color: var(--teal); display: flex; align-items: center; justify-content: center;
+         font-size: 1.5rem; flex-shrink: 0;
+      }
+      .koha-banner .koha-badge {
+         background: var(--teal); color: #fff; font-size: .7rem; font-weight: 700;
+         padding: 3px 9px; border-radius: 10px; margin-bottom: 6px; display: inline-block;
+         letter-spacing: .07em; text-transform: uppercase;
+      }
+      .koha-banner h5 { font-weight: 700; color: var(--ink); margin-bottom: 4px; font-size: 1rem; }
+      .koha-banner p  { font-size: .85rem; color: var(--muted); margin-bottom: 0; }
+      .koha-banner .koha-btn {
+         background: var(--teal); color: #fff; border: none;
+         padding: 10px 22px; border-radius: 8px; font-weight: 700; font-size: .85rem;
+         white-space: nowrap; text-decoration: none; transition: background .2s;
+         margin-left: auto; flex-shrink: 0;
+      }
+      .koha-banner .koha-btn:hover { background: #076358; color: #fff; text-decoration: none; }
+
+      /* ── Collection stats strip ─────────────────────────── */
+      .coll-strip {
+         background: var(--ink);
+         background-image: linear-gradient(135deg, var(--ink) 0%, var(--ink2) 100%);
+         padding: 48px 0;
+      }
+      .coll-item { text-align: center; padding: 0 8px; }
+      .coll-icon-wrap {
+         width: 82px; height: 82px; border-radius: 50%;
          display: flex; align-items: center; justify-content: center;
-         color: #c5cbe8; font-size: 3rem;
+         margin: 0 auto 14px; font-size: 1.9rem;
+         border: 2px solid; transition: transform .25s, box-shadow .25s;
       }
-      .book-card .book-cover img { width: 100%; height: 100%; object-fit: cover; }
-      .book-card .book-body { padding: 16px; }
-      .book-card .book-title { font-size: .95rem; font-weight: 600; color: #1a1f36; margin-bottom: 4px;
-         display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-      .book-card .book-author { font-size: .8rem; color: #6b7280; margin-bottom: 8px; }
-      .availability-badge { font-size: .72rem; padding: 3px 8px; border-radius: 20px; }
-      .avail-yes { background: #d1fae5; color: #065f46; }
-      .avail-no  { background: #fee2e2; color: #991b1b; }
+      .coll-item:hover .coll-icon-wrap { transform: translateY(-6px); box-shadow: 0 8px 24px rgba(0,0,0,.35); }
+      /* Each icon gets its own accent colour */
+      .coll-books    .coll-icon-wrap { background: rgba(181,24,46,.18);  border-color: #b5182e; color: #ff8090; }
+      .coll-ebooks   .coll-icon-wrap { background: rgba(13,138,122,.2);  border-color: #0d8a7a; color: #3ffae7; }
+      .coll-ejournal .coll-icon-wrap { background: rgba(100,100,240,.2); border-color: #6464f0; color: #9e9eff; }
+      .coll-magazine .coll-icon-wrap { background: rgba(212,147,10,.2);  border-color: #d4930a; color: #ffd166; }
+      .coll-newspaper .coll-icon-wrap{ background: rgba(34,197,94,.15);  border-color: #22c55e; color: #6ee7a0; }
 
-      /* ── Info cards ────────────────────────────────────────── */
-      .info-card {
-         background: #fff; border-radius: 14px; border: 1px solid #e8eaf0;
-         padding: 28px; height: 100%;
-      }
-      .info-card .icon-box {
-         width: 52px; height: 52px; border-radius: 12px; background: #eef2ff;
-         color: #4f8ef7; display: flex; align-items: center; justify-content: center;
-         font-size: 1.4rem; margin-bottom: 16px;
+      .coll-item .coll-count { font-size: 1.8rem; font-weight: 800; color: #fff; line-height: 1; }
+      .coll-item .coll-label {
+         font-size: .8rem; font-weight: 600; color: rgba(255,255,255,.6);
+         text-transform: uppercase; letter-spacing: .07em; margin-top: 5px;
       }
 
-      /* ── Librarian cards ───────────────────────────────────── */
-      .librarian-card {
-         text-align: center; background: #fff; border: 1px solid #e8eaf0;
-         border-radius: 14px; padding: 28px 20px; height: 100%;
-         transition: box-shadow .2s;
+      /* ── Department grid ────────────────────────────────── */
+      .dept-card {
+         border-radius: var(--radius-lg); overflow: hidden; position: relative;
+         height: 155px; display: flex; align-items: flex-end; cursor: pointer;
+         transition: transform .28s, box-shadow .28s;
       }
-      .librarian-card:hover { box-shadow: 0 6px 24px rgba(0,0,0,.1); }
-      .lib-avatar {
-         width: 90px; height: 90px; border-radius: 50%; object-fit: cover;
-         margin: 0 auto 16px; display: block;
+      .dept-card:hover { transform: translateY(-7px); box-shadow: var(--shadow-lg); }
+      .dept-card .dept-label {
+         position: relative; z-index: 2; width: 100%;
+         background: linear-gradient(0deg, rgba(0,0,0,.78) 0%, transparent 100%);
+         padding: 16px 14px 13px; color: #fff; font-weight: 700; font-size: .95rem;
       }
-      .lib-avatar-initials {
-         width: 90px; height: 90px; border-radius: 50%; background: #4f8ef7;
-         color: #fff; font-size: 2rem; font-weight: 700;
+      .dept-card .dept-sub { font-size: .72rem; font-weight: 400; opacity: .75; margin-top: 2px; }
+      /* Top-right department icon badge */
+      .dept-card .dept-icon {
+         position: absolute; top: 10px; right: 12px; z-index: 3;
+         width: 32px; height: 32px; border-radius: 8px;
+         background: rgba(255,255,255,.18); backdrop-filter: blur(4px);
          display: flex; align-items: center; justify-content: center;
-         margin: 0 auto 16px;
+         font-size: .9rem; color: rgba(255,255,255,.9);
       }
-      .librarian-card h5 { font-size: 1rem; font-weight: 700; color: #1a1f36; margin-bottom: 4px; }
-      .librarian-card .designation { font-size: .83rem; color: #4f8ef7; font-weight: 600; margin-bottom: 10px; }
-      .librarian-card .meta { font-size: .8rem; color: #6b7280; margin-bottom: 4px; }
+      /* Gradient backgrounds per department */
+      .dept-cse    { background: linear-gradient(150deg, #0f2a6b 0%, #1e4db7 100%); }
+      .dept-eee    { background: linear-gradient(150deg, #0a3d5c 0%, #0e7cb8 100%); }
+      .dept-civil  { background: linear-gradient(150deg, #0c3325 0%, #1a7a52 100%); }
+      .dept-law    { background: linear-gradient(150deg, #3d0e0e 0%, #a31c1c 100%); }
+      .dept-biz    { background: linear-gradient(150deg, #2e1a00 0%, #9c5f0a 100%); }
+      .dept-eng    { background: linear-gradient(150deg, #0e2040 0%, #1d5490 100%); }
+      .dept-bangla { background: linear-gradient(150deg, #280a3d 0%, #7b22c4 100%); }
+      .dept-fash   { background: linear-gradient(150deg, #3d0a2a 0%, #c4227d 100%); }
 
-      /* ── Digital resource cards ────────────────────────────── */
-      .digital-card {
-         background: #fff; border: 1px solid #e8eaf0; border-radius: 14px;
-         padding: 22px; display: flex; gap: 16px; align-items: flex-start;
-         transition: box-shadow .2s; height: 100%;
+      /* ── Facilities ─────────────────────────────────────── */
+      .facility-card {
+         background: var(--white); border: 1px solid var(--border); border-radius: var(--radius-lg);
+         padding: 30px 20px; text-align: center; height: 100%;
+         transition: box-shadow .22s, transform .22s, border-color .22s;
       }
-      .digital-card:hover { box-shadow: 0 4px 18px rgba(0,0,0,.08); }
-      .digital-card .dc-icon {
-         width: 48px; height: 48px; border-radius: 10px; background: #eef2ff;
-         color: #4f8ef7; flex-shrink: 0;
-         display: flex; align-items: center; justify-content: center; font-size: 1.3rem;
+      .facility-card:hover {
+         box-shadow: var(--shadow-md); transform: translateY(-5px);
+         border-color: transparent;
       }
-      .digital-card h6 { font-size: .9rem; font-weight: 600; margin-bottom: 4px; color: #1a1f36; }
-      .digital-card p  { font-size: .78rem; color: #6b7280; margin: 0; }
+      /* Each facility icon gets a unique colour */
+      .fi-circulation  { background: var(--crimson-lt); color: var(--crimson); }
+      .fi-eresource    { background: var(--teal-lt);    color: var(--teal);    }
+      .fi-reading      { background: #e8f0ff;           color: #3563e9;        }
+      .fi-teacher      { background: var(--amber-lt);   color: var(--amber);   }
+      .fi-thesis       { background: #f0e8ff;           color: #7c3aed;        }
+      .fi-wifi         { background: #e8fff3;           color: #16a34a;        }
+      .facility-icon {
+         width: 66px; height: 66px; border-radius: 18px;
+         display: flex; align-items: center; justify-content: center;
+         font-size: 1.7rem; margin: 0 auto 16px;
+         transition: transform .22s;
+      }
+      .facility-card:hover .facility-icon { transform: scale(1.1) rotate(-3deg); }
+      .facility-card h6 { font-weight: 700; color: var(--ink); font-size: .97rem; margin-bottom: 6px; }
+      .facility-card p  { font-size: .8rem; color: var(--muted); margin: 0; line-height: 1.55; }
 
-      /* ── Responsive overrides ──────────────────────────────── */
+      /* ── Online services ────────────────────────────────── */
+      .online-service-item {
+         display: flex; align-items: center; gap: 14px; padding: 13px 16px;
+         background: var(--white); border: 1.5px solid var(--border); border-radius: var(--radius-md);
+         text-decoration: none; color: var(--ink);
+         transition: border-color .2s, box-shadow .2s, background .2s;
+      }
+      .online-service-item:hover {
+         border-color: var(--teal); background: var(--teal-lt);
+         box-shadow: 0 4px 14px rgba(13,138,122,.15);
+         color: var(--ink); text-decoration: none;
+      }
+      .online-service-item .os-icon {
+         width: 40px; height: 40px; flex-shrink: 0; border-radius: 10px;
+         display: flex; align-items: center; justify-content: center; font-size: 1rem;
+      }
+      /* Individual icon colours */
+      .os-catalogue  { background: #e8f0ff; color: #3563e9; }
+      .os-renewal    { background: var(--teal-lt);   color: var(--teal);   }
+      .os-ebook      { background: #f0e8ff; color: #7c3aed; }
+      .os-purchase   { background: var(--amber-lt);  color: var(--amber);  }
+      .os-membership { background: var(--crimson-lt);color: var(--crimson);}
+      .os-feedback   { background: #e8fff3; color: #16a34a; }
+      .online-service-item span { font-weight: 600; font-size: .93rem; }
+
+      /* ── Library service buttons ────────────────────────── */
+      .service-btn {
+         display: flex; align-items: center; justify-content: center; gap: 10px;
+         font-weight: 700; font-size: .93rem; padding: 20px 16px; border-radius: var(--radius-md);
+         text-decoration: none; text-align: center; transition: filter .2s, transform .18s;
+      }
+      .service-btn:hover { filter: brightness(1.1); transform: translateY(-4px); text-decoration: none; }
+      .service-btn i { font-size: 1.3rem; }
+      .svc-circulation { background: linear-gradient(135deg, var(--crimson), #8c0f1f); color: #fff; }
+      .svc-orientation { background: linear-gradient(135deg, var(--ink2), #0e3166); color: #fff; }
+      .svc-reference   { background: linear-gradient(135deg, var(--teal), #076358);  color: #fff; }
+      .svc-ebook       { background: linear-gradient(135deg, #7c3aed, #4c1d95);      color: #fff; }
+
+      /* ── New Arrivals ───────────────────────────────────── */
+      .arrivals-section { background: var(--ink); }
+      .arrivals-header-bar {
+         background: linear-gradient(90deg, var(--crimson), var(--amber));
+         color: #fff; text-align: center; font-weight: 800; font-size: .8rem;
+         letter-spacing: .12em; padding: 9px 0; border-radius: 10px 10px 0 0;
+         text-transform: uppercase;
+      }
+      .arrivals-inner {
+         background: var(--white); border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+         overflow: hidden; box-shadow: var(--shadow-lg);
+      }
+      .spotlight-card { background: var(--white); padding: 28px; height: 100%; }
+      .spotlight-cover {
+         width: 110px; height: 165px; border-radius: 8px; flex-shrink: 0;
+         background: linear-gradient(145deg, #2d1e4a, #7b22c4);
+         display: flex; align-items: center; justify-content: center;
+         color: rgba(255,255,255,.4); font-size: 2.5rem;
+         box-shadow: 4px 6px 18px rgba(0,0,0,.25);
+      }
+      .spotlight-stars { color: var(--amber); font-size: .88rem; }
+      .arrivals-grid-bg { background: var(--cream); padding: 24px; }
+      .mini-book-wrap { text-align: center; }
+      .mini-book-cover {
+         width: 100%; aspect-ratio: 2/3; border-radius: 8px; overflow: hidden;
+         display: flex; align-items: center; justify-content: center;
+         box-shadow: 2px 4px 12px rgba(0,0,0,.2);
+         font-size: 1.3rem; color: rgba(255,255,255,.5);
+         transition: transform .22s;
+      }
+      .mini-book-cover:hover { transform: scale(1.06); }
+      .mini-book-wrap .mini-label {
+         font-size: .72rem; font-weight: 700; color: var(--ink);
+         margin-top: 7px; display: block; letter-spacing: .02em;
+      }
+
+      /* ── User Guide ─────────────────────────────────────── */
+      .guide-section { background: var(--cream); }
+      .guide-btn {
+         display: flex; align-items: center; gap: 12px;
+         background: var(--white); color: var(--ink);
+         border: 1.5px solid var(--border); border-radius: var(--radius-md);
+         padding: 14px 18px; text-decoration: none; font-weight: 600; font-size: .88rem;
+         transition: background .18s, border-color .18s, box-shadow .18s, transform .18s;
+         box-shadow: var(--shadow-sm);
+      }
+      .guide-btn:hover {
+         background: var(--amber); border-color: var(--amber); color: #fff;
+         box-shadow: 0 6px 20px rgba(212,147,10,.3); transform: translateX(4px);
+         text-decoration: none;
+      }
+      .guide-btn .gb-icon {
+         width: 34px; height: 34px; border-radius: 8px; flex-shrink: 0;
+         display: flex; align-items: center; justify-content: center; font-size: .92rem;
+         background: var(--amber-lt); color: var(--amber); transition: background .18s, color .18s;
+      }
+      .guide-btn:hover .gb-icon { background: rgba(255,255,255,.22); color: #fff; }
+      .guide-center-emblem {
+         width: 170px; height: 170px; border-radius: 50%;
+         background: linear-gradient(145deg, var(--ink2), var(--ink));
+         border: 4px solid var(--amber); display: flex; flex-direction: column;
+         align-items: center; justify-content: center; margin: 0 auto;
+         color: var(--amber); font-size: 3.2rem;
+         box-shadow: 0 8px 32px rgba(18,33,58,.35);
+      }
+      .guide-center-emblem span { font-size: .72rem; font-weight: 700; color: rgba(255,255,255,.7);
+         text-transform: uppercase; letter-spacing: .1em; margin-top: 6px; }
+
+      /* ── Gallery ────────────────────────────────────────── */
+      .gallery-section { background: var(--ink); }
+      .gallery-card {
+         border-radius: var(--radius-lg); overflow: hidden; display: block;
+         position: relative; text-decoration: none;
+         transition: transform .25s; box-shadow: var(--shadow-md);
+      }
+      .gallery-card:hover { transform: translateY(-6px); }
+      .gallery-img-wrap {
+         height: 250px; overflow: hidden;
+         display: flex; align-items: center; justify-content: center;
+      }
+      .gallery-img-wrap i { font-size: 4rem; color: rgba(255,255,255,.4); }
+      .gallery-footer { padding: 14px 16px 10px; background: var(--white); }
+      .gallery-footer strong { font-size: 1rem; color: var(--ink); font-weight: 800; display: block; }
+      .gallery-footer small { font-size: .78rem; color: var(--muted); }
+
+      /* ── Forms section ──────────────────────────────────── */
+      .forms-section { background: var(--cream); }
+      .form-doc-card { text-align: center; padding: 20px 12px; transition: transform .22s; }
+      .form-doc-card:hover { transform: translateY(-6px); }
+      .form-doc-icon {
+         width: 88px; height: 108px; margin: 0 auto 14px; border-radius: 10px;
+         position: relative; display: flex; flex-direction: column;
+         align-items: center; justify-content: flex-end; padding-bottom: 16px;
+         color: #fff; box-shadow: 0 6px 20px rgba(0,0,0,.2);
+      }
+      /* folded-corner triangle */
+      .form-doc-icon::before {
+         content: ''; position: absolute; top: 0; right: 0; width: 0; height: 0;
+         border-style: solid; border-width: 0 24px 24px 0;
+         border-color: transparent rgba(255,255,255,.22) transparent transparent;
+      }
+      .form-doc-icon i { font-size: 1.75rem; }
+      .form-doc-student  { background: linear-gradient(145deg, #5b2fa0, #8b5cf6); }
+      .form-doc-faculty  { background: linear-gradient(145deg, #0f5c9e, #3b82f6); }
+      .form-doc-req      { background: linear-gradient(145deg, #065f46, #10b981); }
+      .form-doc-card h6 { font-weight: 700; color: var(--ink); font-size: .88rem; line-height: 1.35; }
+
+      /* ── Contact section ────────────────────────────────── */
+      .contact-section { background: var(--white); }
+      .contact-panel {
+         background: var(--cream); border-radius: var(--radius-lg); padding: 32px 28px;
+         height: 100%; border-top: 4px solid;
+      }
+      .contact-panel.cp-phone { border-color: var(--crimson); }
+      .contact-panel.cp-addr  { border-color: var(--teal);    }
+      .contact-panel h4 { font-weight: 800; color: var(--ink); font-size: 1.2rem; margin-bottom: 20px; }
+      .contact-item { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+      .contact-item .ci-icon {
+         width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0;
+         display: flex; align-items: center; justify-content: center; font-size: 1rem;
+      }
+      .ci-phone { background: var(--crimson-lt); color: var(--crimson); }
+      .ci-cell  { background: var(--amber-lt);   color: var(--amber);   }
+      .ci-map   { background: var(--teal-lt);    color: var(--teal);    }
+      .contact-item span { font-weight: 600; color: var(--ink); font-size: .93rem; }
+      .contact-item a { color: var(--ink); text-decoration: none; }
+      .contact-item a:hover { color: var(--teal); }
+
+      /* ── Responsive ─────────────────────────────────────── */
       @media (max-width: 991.98px) {
-         .lib-hero h1 { font-size: 2.2rem; }
-         .lib-search-box { margin-top: 32px; }
+         .lib-hero h1 { font-size: 2rem; }
+         .lib-search-box { margin-top: 28px; }
+         .koha-banner .koha-btn { margin-left: 0; }
       }
       @media (max-width: 767.98px) {
-         .lib-hero { padding: 50px 0 40px; }
-         .lib-hero h1 { font-size: 1.85rem; }
-         .lib-hero p  { font-size: 1rem; }
-         .lib-search-box { padding: 20px; }
-         .section-heading h2 { font-size: 1.6rem; }
-         .stat-strip .stat-item .num { font-size: 1.5rem; }
-         .pt-100 { padding-top: 60px !important; }
-         .pt-80  { padding-top: 50px !important; }
-         .pb-80  { padding-bottom: 50px !important; }
-         .pb-100 { padding-bottom: 60px !important; }
+         .lib-hero { padding: 52px 0 42px; }
+         .lib-hero h1 { font-size: 1.75rem; }
+         .coll-icon-wrap { width: 66px; height: 66px; font-size: 1.55rem; }
+         .coll-item .coll-count { font-size: 1.4rem; }
+         .lib-section-title { font-size: 1.55rem; }
       }
       @media (max-width: 575.98px) {
-         .lib-hero { padding: 40px 0 32px; }
-         .lib-hero h1 { font-size: 1.55rem; }
-         .lib-search-box { padding: 16px; border-radius: 12px; }
-         .lib-search-box input,
-         .lib-search-box select,
-         .lib-search-box .nice-select { height: 44px; line-height: 44px; }
-         .lib-search-box .btn-search { height: 44px; }
-         .stat-strip .stat-item .num { font-size: 1.3rem; }
-         .stat-strip .stat-item .lbl { font-size: .7rem; }
-         .section-heading { margin-bottom: 28px; }
-         .section-heading h2 { font-size: 1.45rem; }
-         .info-card { padding: 20px; }
-         .pt-100 { padding-top: 48px !important; }
-         .pt-80  { padding-top: 40px !important; }
-         .pb-80  { padding-bottom: 40px !important; }
-         .pb-100 { padding-bottom: 48px !important; }
-         .book-card .book-cover { height: 140px; font-size: 2.2rem; }
+         .lib-hero { padding: 38px 0 32px; }
+         .lib-hero h1 { font-size: 1.5rem; }
+         .guide-btn { transform: none !important; }
       }
    </style>
 </head>
@@ -297,17 +548,17 @@ $resource_icons = [
          <div class="itoffcanvas__info">
             <h3 class="offcanva-title">Get In Touch</h3>
             <div class="it-info-wrapper mb-20 d-flex align-items-center">
-               <div class="itoffcanvas__info-icon"><a href="#"><i class="fal fa-envelope"></i></a></div>
-               <div class="itoffcanvas__info-address">
-                  <span>Email</span>
-                  <a href="mailto:<?= fh($lib_email) ?>"><?= fh($lib_email) ?></a>
-               </div>
-            </div>
-            <div class="it-info-wrapper mb-20 d-flex align-items-center">
                <div class="itoffcanvas__info-icon"><a href="#"><i class="fal fa-phone-alt"></i></a></div>
                <div class="itoffcanvas__info-address">
                   <span>Phone</span>
-                  <a href="tel:<?= fh(sanitize_phone($lib_phone)) ?>"><?= fh($lib_phone) ?></a>
+                  <a href="tel:<?= fh($lib_phone_tel) ?>"><?= fh($lib_phone) ?></a>
+               </div>
+            </div>
+            <div class="it-info-wrapper mb-20 d-flex align-items-center">
+               <div class="itoffcanvas__info-icon"><a href="#"><i class="fal fa-mobile-alt"></i></a></div>
+               <div class="itoffcanvas__info-address">
+                  <span>Cell</span>
+                  <a href="tel:<?= fh($lib_cell_tel) ?>"><?= fh($lib_cell) ?></a>
                </div>
             </div>
          </div>
@@ -324,27 +575,35 @@ $resource_icons = [
 
    <?php include __DIR__ . '/includes/news-ticker.php'; ?>
 
-   <!-- ── Hero ─────────────────────────────────────────── -->
+   <!-- Breadcrumb -->
+   <div class="lib-breadcrumb">
+      <div class="container">
+         <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="<?= fh(SITE_URL) ?>/index.php">Home</a></li>
+            <li class="breadcrumb-item active">Library</li>
+         </ol>
+      </div>
+   </div>
+
+   <!-- ══════════════════════════════════════════════════
+        HERO + SEARCH
+   ══════════════════════════════════════════════════ -->
    <section class="lib-hero">
       <div class="container">
          <div class="row align-items-center gy-4">
             <div class="col-lg-6">
-               <div class="mb-3">
-                  <span style="background:rgba(247,169,30,.25);color:#f7c948;padding:6px 16px;border-radius:20px;font-size:.82rem;font-weight:600;">
-                     <i class="fas fa-book-open me-2"></i>Prime University Library
-                  </span>
-               </div>
+               <span class="lib-badge"><i class="fas fa-book-open me-2"></i>Prime University Library</span>
                <h1><?= fh($lib_name) ?></h1>
                <p class="mt-3 mb-4"><?= fh($lib_desc) ?></p>
-               <div class="d-flex flex-wrap gap-3 hero-meta" style="font-size:.85rem;">
-                  <span><i class="fas fa-map-marker-alt me-2" style="color:#f7a91e;"></i><?= fh($lib_room) ?></span>
-                  <span><i class="fas fa-clock me-2" style="color:#f7a91e;"></i>Open Today</span>
+               <div class="d-flex flex-wrap gap-3 lib-hero-meta">
+                  <span><i class="fas fa-map-marker-alt me-2"></i><?= fh($lib_room) ?>, Mirpur-1, Dhaka</span>
+                  <span><i class="fas fa-clock me-2"></i><?= fh(explode('|', $lib_hours)[0]) ?></span>
                </div>
             </div>
             <div class="col-lg-6">
                <div class="lib-search-box">
-                  <h5 class="text-white mb-20" style="font-weight:600;font-size:1.05rem;">
-                     <i class="fas fa-search me-2" style="color:#f7a91e;"></i>Search the Catalogue
+                  <h5 class="text-white mb-3" style="font-weight:700;font-size:1rem;">
+                     <i class="fas fa-search me-2" style="color:#ffd166;"></i>Search the Catalogue
                   </h5>
                   <form method="GET" action="library.php">
                      <div class="row g-2">
@@ -375,305 +634,429 @@ $resource_icons = [
       </div>
    </section>
 
-   <!-- ── Stats strip ───────────────────────────────────── -->
-   <?php
-   $total_books  = 0; $total_copies = 0; $avail_copies = 0; $total_members = 0; $total_digital = 0;
-   try {
-      $db2 = front_db();
-      if ($db2) {
-         $total_books   = (int)$db2->query('SELECT COUNT(*) FROM library_books')->fetchColumn();
-         $total_copies  = (int)$db2->query('SELECT COUNT(*) FROM library_book_copies')->fetchColumn();
-         $avail_copies  = (int)$db2->query('SELECT COUNT(*) FROM library_book_copies WHERE is_available = 1')->fetchColumn();
-         $total_members = (int)$db2->query('SELECT COUNT(*) FROM library_members WHERE is_active = 1')->fetchColumn();
-         $total_digital = (int)$db2->query("SELECT COUNT(*) FROM library_digital_resources WHERE is_active=1 AND access_level='Public'")->fetchColumn();
-      }
-   } catch (Throwable $e) {}
-   ?>
-   <div class="stat-strip">
+   <!-- ══════════════════════════════════════════════════
+        KOHA OPAC INTEGRATION PLACEHOLDER
+   ══════════════════════════════════════════════════ -->
+   <section class="py-4" style="background:var(--cream);">
+      <div class="container">
+         <div class="koha-banner">
+            <div class="koha-icon"><i class="fas fa-database"></i></div>
+            <div class="flex-grow-1">
+               <div class="koha-badge"><i class="fas fa-plug me-1"></i> Coming Soon</div>
+               <h5>Koha Online Public Access Catalogue (OPAC)</h5>
+               <p>The integrated Koha library management system will be available here. Members will be able to search the full catalogue, check availability, renew books, and manage reservations online.</p>
+            </div>
+            <a href="#" class="koha-btn" title="Koha integration — coming soon">
+               <i class="fas fa-external-link-alt me-1"></i>Access Online Catalogue
+            </a>
+         </div>
+      </div>
+   </section>
+
+   <!-- ══════════════════════════════════════════════════
+        COLLECTION STATS — 5 ICONS
+   ══════════════════════════════════════════════════ -->
+   <div class="coll-strip">
       <div class="container">
          <div class="row g-3 justify-content-center">
-            <div class="col-6 col-md-3 col-lg-2">
-               <div class="stat-item"><div class="num"><?= number_format($total_books) ?></div><div class="lbl">Books</div></div>
+            <?php
+            // TODO: Replace placeholder counts with actual DB queries once Koha tables are populated
+            // e.g. SELECT COUNT(*) FROM library_books, library_ebooks, library_journals, etc.
+            $collections = [
+               ['icon' => 'fas fa-book',         'label' => 'Books',      'count' => 1000, 'cls' => 'coll-books'],
+               ['icon' => 'fas fa-tablet-alt',   'label' => 'E-Books',    'count' => 1000, 'cls' => 'coll-ebooks'],
+               ['icon' => 'fas fa-newspaper',    'label' => 'E-Journal',  'count' => 1000, 'cls' => 'coll-ejournal'],
+               ['icon' => 'fas fa-bookmark',     'label' => 'Magazine',   'count' => 1000, 'cls' => 'coll-magazine'],
+               ['icon' => 'fas fa-scroll',       'label' => 'Newspaper',  'count' => 1000, 'cls' => 'coll-newspaper'],
+            ];
+            foreach ($collections as $c):
+            ?>
+            <div class="col-6 col-md-4 col-lg-2">
+               <div class="coll-item <?= $c['cls'] ?>">
+                  <div class="coll-icon-wrap"><i class="<?= $c['icon'] ?>"></i></div>
+                  <div class="coll-count"><?= number_format($c['count']) ?>+</div>
+                  <div class="coll-label"><?= $c['label'] ?></div>
+               </div>
             </div>
-            <div class="col-6 col-md-3 col-lg-2">
-               <div class="stat-item"><div class="num"><?= number_format($total_copies) ?></div><div class="lbl">Copies</div></div>
-            </div>
-            <div class="col-6 col-md-3 col-lg-2">
-               <div class="stat-item"><div class="num"><?= number_format($avail_copies) ?></div><div class="lbl">Available</div></div>
-            </div>
-            <div class="col-6 col-md-3 col-lg-2">
-               <div class="stat-item"><div class="num"><?= number_format($total_members) ?></div><div class="lbl">Members</div></div>
-            </div>
-            <div class="col-6 col-md-3 col-lg-2">
-               <div class="stat-item"><div class="num"><?= number_format($total_digital) ?></div><div class="lbl">E-Resources</div></div>
-            </div>
+            <?php endforeach; ?>
          </div>
       </div>
    </div>
 
-   <!-- ── Books catalogue ───────────────────────────────── -->
-   <section class="pt-100 pb-80">
+   <!-- ══════════════════════════════════════════════════
+        DEPARTMENT COLLECTION GRID
+   ══════════════════════════════════════════════════ -->
+   <section class="py-5" style="background:var(--white);">
       <div class="container">
-         <div class="row">
-            <div class="col-12 section-heading text-center">
-               <?php if ($search_q !== '' || $search_cat > 0): ?>
-               <h2>Search Results</h2>
-               <p>
-                  <?= empty($books) ? 'No books matched your search.' : count($books) . ' book(s) found.' ?>
-                  <a href="library.php" class="ms-2" style="font-size:.85rem;">Clear filters</a>
-               </p>
-               <?php else: ?>
-               <h2>Recently Added Books</h2>
-               <p>Browse the latest additions to our collection.</p>
-               <?php endif; ?>
-            </div>
+         <div class="text-center lib-section-head">
+            <h2 class="lib-section-title">Department Collections</h2>
+            <p class="lib-section-subtitle">Explore books curated for each department</p>
+            <div class="title-bar mx-auto"></div>
          </div>
-
-         <?php if (!empty($books)): ?>
-         <div class="row g-4">
-            <?php foreach ($books as $book):
-               $cover_url = !empty($book['cover_image'])
-                  ? fh(ADMIN_UPLOAD_URL . '/library/covers/' . $book['cover_image'])
-                  : null;
-               $avail = (int)$book['available_copies'] > 0;
-            ?>
-            <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6 col-6">
-               <div class="book-card">
-                  <div class="book-cover">
-                     <?php if ($cover_url): ?>
-                     <img src="<?= $cover_url ?>" alt="<?= fh($book['title']) ?>">
-                     <?php else: ?>
-                     <i class="fas fa-book"></i>
-                     <?php endif; ?>
-                  </div>
-                  <div class="book-body">
-                     <div class="book-title" title="<?= fh($book['title']) ?>"><?= fh($book['title']) ?></div>
-                     <div class="book-author"><?= fh($book['author']) ?></div>
-                     <?php if ($book['category_name']): ?>
-                     <div style="font-size:.75rem;color:#9ca3af;margin-bottom:8px;">
-                        <i class="fas fa-tag me-1"></i><?= fh($book['category_name']) ?>
-                     </div>
-                     <?php endif; ?>
-                     <div class="d-flex justify-content-between align-items-center">
-                        <span class="availability-badge <?= $avail ? 'avail-yes' : 'avail-no' ?>">
-                           <?= $avail ? 'Available' : 'Issued' ?>
-                        </span>
-                        <?php if ($book['pub_year']): ?>
-                        <span style="font-size:.72rem;color:#9ca3af;"><?= (int)$book['pub_year'] ?></span>
-                        <?php endif; ?>
-                     </div>
+         <div class="row g-3">
+            <?php
+            $depts = [
+               ['label'=>'CSE',            'sub'=>'Computer Science &amp; Eng.',  'cls'=>'dept-cse',    'icon'=>'fas fa-microchip'],
+               ['label'=>'EEE',            'sub'=>'Electrical &amp; Electronic',  'cls'=>'dept-eee',    'icon'=>'fas fa-bolt'],
+               ['label'=>'Civil',          'sub'=>'Civil Engineering',            'cls'=>'dept-civil',  'icon'=>'fas fa-hard-hat'],
+               ['label'=>'Law',            'sub'=>'Department of Law',            'cls'=>'dept-law',    'icon'=>'fas fa-balance-scale'],
+               ['label'=>'Business',       'sub'=>'Business Administration',      'cls'=>'dept-biz',    'icon'=>'fas fa-briefcase'],
+               ['label'=>'English',        'sub'=>'Department of English',        'cls'=>'dept-eng',    'icon'=>'fas fa-pen-nib'],
+               ['label'=>'Bangla',         'sub'=>'Department of Bangla',         'cls'=>'dept-bangla', 'icon'=>'fas fa-language'],
+               ['label'=>'Fashion Design', 'sub'=>'Fashion &amp; Technology',     'cls'=>'dept-fash',   'icon'=>'fas fa-tshirt'],
+            ];
+            foreach ($depts as $d): ?>
+            <div class="col-6 col-md-4 col-lg-3">
+               <div class="dept-card <?= $d['cls'] ?>">
+                  <div class="dept-icon"><i class="<?= $d['icon'] ?>"></i></div>
+                  <div class="dept-label">
+                     <div><?= $d['label'] ?></div>
+                     <div class="dept-sub"><?= $d['sub'] ?></div>
                   </div>
                </div>
             </div>
             <?php endforeach; ?>
          </div>
-         <?php else: ?>
-         <div class="text-center py-60">
-            <i class="fas fa-book-open fa-3x mb-3" style="color:#d1d5db;"></i>
-            <p class="text-muted">No books found<?= ($search_q !== '' ? ' for "' . fh($search_q) . '"' : '') ?>.</p>
-         </div>
-         <?php endif; ?>
       </div>
    </section>
 
-   <!-- ── Library Information ──────────────────────────── -->
-   <section class="pt-80 pb-80" style="background:#f7f9fc;">
+   <!-- ══════════════════════════════════════════════════
+        FACILITIES
+   ══════════════════════════════════════════════════ -->
+   <section class="py-5" style="background:var(--cream);">
       <div class="container">
-         <div class="row">
-            <div class="col-12 section-heading text-center">
-               <h2>Library Information</h2>
-               <p>Everything you need to know about visiting and using the library.</p>
-            </div>
+         <div class="text-center lib-section-head">
+            <h2 class="lib-section-title">Library Facilities</h2>
+            <p class="lib-section-subtitle">Modern spaces designed for effective learning</p>
+            <div class="title-bar mx-auto"></div>
          </div>
          <div class="row g-4">
-            <div class="col-md-6 col-lg-3">
-               <div class="info-card">
-                  <div class="icon-box"><i class="fas fa-map-marker-alt"></i></div>
-                  <h5 style="font-weight:700;color:#1a1f36;margin-bottom:8px;">Location</h5>
-                  <p style="font-size:.875rem;color:#6b7280;margin:0;"><?= fh($lib_location) ?></p>
-                  <p style="font-size:.875rem;color:#6b7280;margin-top:6px;"><?= fh($lib_address) ?></p>
+            <?php
+            $facilities = [
+               ['icon'=>'fas fa-exchange-alt',     'name'=>'Circulation Area',   'desc'=>'Borrow, return and renew books at the main counter.',          'icls'=>'fi-circulation'],
+               ['icon'=>'fas fa-desktop',           'name'=>'E-Resource Centre', 'desc'=>'Access digital databases, e-journals and online resources.',   'icls'=>'fi-eresource'],
+               ['icon'=>'fas fa-book-reader',       'name'=>'Reading Room',      'desc'=>'A quiet space dedicated to focused study and reading.',         'icls'=>'fi-reading'],
+               ['icon'=>'fas fa-chalkboard-teacher','name'=>"Teacher's Corner",  'desc'=>'Reserved section with faculty reference materials.',            'icls'=>'fi-teacher'],
+               ['icon'=>'fas fa-graduation-cap',    'name'=>'Thesis Area',       'desc'=>'Collection of student theses and research dissertations.',      'icls'=>'fi-thesis'],
+               ['icon'=>'fas fa-wifi',              'name'=>'Library Wi-Fi',     'desc'=>'High-speed wireless internet throughout the library.',          'icls'=>'fi-wifi'],
+            ];
+            foreach ($facilities as $f): ?>
+            <div class="col-md-4 col-sm-6">
+               <div class="facility-card">
+                  <div class="facility-icon <?= $f['icls'] ?>"><i class="<?= $f['icon'] ?>"></i></div>
+                  <h6><?= $f['name'] ?></h6>
+                  <p><?= $f['desc'] ?></p>
                </div>
             </div>
-            <div class="col-md-6 col-lg-3">
-               <div class="info-card">
-                  <div class="icon-box"><i class="fas fa-door-open"></i></div>
-                  <h5 style="font-weight:700;color:#1a1f36;margin-bottom:8px;">Room / Floor</h5>
-                  <p style="font-size:.875rem;color:#6b7280;margin:0;"><?= fh($lib_room) ?></p>
+            <?php endforeach; ?>
+         </div>
+      </div>
+   </section>
+
+   <!-- ══════════════════════════════════════════════════
+        ONLINE SERVICES + LIBRARY SERVICES
+   ══════════════════════════════════════════════════ -->
+   <section class="py-5" style="background:#fff;">
+      <div class="container">
+         <div class="row gy-5">
+
+            <!-- Online Services -->
+            <div class="col-lg-6">
+               <div class="lib-section-head mb-4">
+                  <h2 class="lib-section-title" style="font-size:1.5rem;">Online Services</h2>
+                  <div class="title-bar"></div>
                </div>
-            </div>
-            <div class="col-md-6 col-lg-3">
-               <div class="info-card">
-                  <div class="icon-box"><i class="fas fa-clock"></i></div>
-                  <h5 style="font-weight:700;color:#1a1f36;margin-bottom:8px;">Opening Hours</h5>
-                  <?php foreach (explode('|', $lib_hours) as $line): ?>
-                  <p style="font-size:.85rem;color:#6b7280;margin:0 0 4px;"><?= fh(trim($line)) ?></p>
+               <div class="row g-3">
+                  <?php
+                  $online_services = [
+                     ['icon'=>'fas fa-search',       'name'=>'Online Catalogue',    'href'=>'#', 'icls'=>'os-catalogue'],
+                     ['icon'=>'fas fa-redo',          'name'=>'Book Renewal',        'href'=>'#', 'icls'=>'os-renewal'],
+                     ['icon'=>'fas fa-tablet-alt',    'name'=>'E-Book Request',      'href'=>'#', 'icls'=>'os-ebook'],
+                     ['icon'=>'fas fa-cart-plus',     'name'=>'Purchase Suggestion', 'href'=>'#', 'icls'=>'os-purchase'],
+                     ['icon'=>'fas fa-id-card',       'name'=>'Membership',          'href'=>'#', 'icls'=>'os-membership'],
+                     ['icon'=>'fas fa-comment-dots',  'name'=>'Feedback',            'href'=>'#', 'icls'=>'os-feedback'],
+                  ];
+                  foreach ($online_services as $s): ?>
+                  <div class="col-12 col-sm-6">
+                     <a href="<?= $s['href'] ?>" class="online-service-item">
+                        <div class="os-icon <?= $s['icls'] ?>"><i class="<?= $s['icon'] ?>"></i></div>
+                        <span><?= $s['name'] ?></span>
+                        <i class="fas fa-chevron-right ms-auto" style="font-size:.75rem;color:#9ca3af;"></i>
+                     </a>
+                  </div>
                   <?php endforeach; ?>
                </div>
             </div>
-            <div class="col-md-6 col-lg-3">
-               <div class="info-card">
-                  <div class="icon-box"><i class="fas fa-phone-alt"></i></div>
-                  <h5 style="font-weight:700;color:#1a1f36;margin-bottom:8px;">Contact</h5>
-                  <p style="font-size:.875rem;color:#6b7280;margin:0;">
-                     <i class="fas fa-phone me-2"></i>
-                     <a href="tel:<?= fh(sanitize_phone($lib_phone)) ?>" class="text-muted text-decoration-none"><?= fh($lib_phone) ?></a>
-                  </p>
-                  <p style="font-size:.875rem;color:#6b7280;margin-top:6px;">
-                     <i class="fas fa-envelope me-2"></i>
-                     <a href="mailto:<?= fh($lib_email) ?>" class="text-muted text-decoration-none"><?= fh($lib_email) ?></a>
-                  </p>
+
+            <!-- Library Services -->
+            <div class="col-lg-6">
+               <div class="lib-section-head mb-4">
+                  <h2 class="lib-section-title" style="font-size:1.5rem;">Library Services</h2>
+                  <div class="title-bar"></div>
+               </div>
+               <div class="row g-3">
+                  <?php
+                  $lib_services = [
+                     ['icon'=>'fas fa-exchange-alt', 'name'=>'Circulation Service',          'cls'=>'svc-circulation'],
+                     ['icon'=>'fas fa-chalkboard',   'name'=>'Library Orientation Program',  'cls'=>'svc-orientation'],
+                     ['icon'=>'fas fa-book-open',    'name'=>'Reference Service',            'cls'=>'svc-reference'],
+                     ['icon'=>'fas fa-tablet-alt',   'name'=>'E-Book Request',               'cls'=>'svc-ebook'],
+                  ];
+                  foreach ($lib_services as $sv): ?>
+                  <div class="col-12 col-sm-6">
+                     <a href="#" class="service-btn <?= $sv['cls'] ?>">
+                        <i class="<?= $sv['icon'] ?>"></i>
+                        <?= $sv['name'] ?>
+                     </a>
+                  </div>
+                  <?php endforeach; ?>
                </div>
             </div>
+
          </div>
       </div>
    </section>
 
-   <!-- ── Borrowing Rules ───────────────────────────────── -->
-   <section class="pt-80 pb-80">
+   <!-- ══════════════════════════════════════════════════
+        NEW ARRIVALS
+   ══════════════════════════════════════════════════ -->
+   <section class="py-5 arrivals-section">
       <div class="container">
-         <div class="row">
-            <div class="col-12 section-heading text-center">
-               <h2>Borrowing Rules &amp; Policies</h2>
-               <p>Know the library rules before you borrow.</p>
-            </div>
+         <div class="text-center lib-section-head" style="margin-bottom:28px;">
+            <h2 class="lib-section-title" style="color:#fff;">New Arrivals</h2>
+            <p class="lib-section-subtitle" style="color:rgba(255,255,255,.6);">Latest additions to our collection</p>
+            <div class="title-bar mx-auto"></div>
          </div>
-         <?php
-         $borrow_student  = (int)($lib_settings['borrow_limit_student']  ?? 3);
-         $borrow_faculty  = (int)($lib_settings['borrow_limit_faculty']  ?? 10);
-         $days_student    = (int)($lib_settings['borrow_days_student']   ?? 14);
-         $days_faculty    = (int)($lib_settings['borrow_days_faculty']   ?? 30);
-         $fine_per_day    = number_format((float)($lib_settings['fine_per_day'] ?? 5), 2);
-         $max_renewals    = (int)($lib_settings['max_renewals']          ?? 2);
-         $max_reservations= (int)($lib_settings['max_reservations']      ?? 3);
-         ?>
-         <div class="row g-4">
-            <div class="col-md-4">
-               <div class="info-card text-center">
-                  <div class="icon-box mx-auto" style="margin:0 auto 16px;"><i class="fas fa-user-graduate"></i></div>
-                  <h5 style="font-weight:700;color:#1a1f36;">Students</h5>
-                  <ul class="list-unstyled" style="font-size:.875rem;color:#6b7280;margin:0;">
-                     <li class="mb-1"><strong><?= $borrow_student ?></strong> books at a time</li>
-                     <li class="mb-1"><strong><?= $days_student ?></strong> days borrowing period</li>
-                     <li class="mb-1">Up to <strong><?= $max_renewals ?></strong> renewals</li>
-                  </ul>
-               </div>
-            </div>
-            <div class="col-md-4">
-               <div class="info-card text-center">
-                  <div class="icon-box mx-auto" style="background:#fff3e0;color:#e07b00;margin:0 auto 16px;"><i class="fas fa-chalkboard-teacher"></i></div>
-                  <h5 style="font-weight:700;color:#1a1f36;">Faculty / Staff</h5>
-                  <ul class="list-unstyled" style="font-size:.875rem;color:#6b7280;margin:0;">
-                     <li class="mb-1"><strong><?= $borrow_faculty ?></strong> books at a time</li>
-                     <li class="mb-1"><strong><?= $days_faculty ?></strong> days borrowing period</li>
-                     <li class="mb-1">Up to <strong><?= $max_renewals ?></strong> renewals</li>
-                  </ul>
-               </div>
-            </div>
-            <div class="col-md-4">
-               <div class="info-card text-center">
-                  <div class="icon-box mx-auto" style="background:#fee2e2;color:#dc2626;margin:0 auto 16px;"><i class="fas fa-exclamation-triangle"></i></div>
-                  <h5 style="font-weight:700;color:#1a1f36;">Late Fines</h5>
-                  <ul class="list-unstyled" style="font-size:.875rem;color:#6b7280;margin:0;">
-                     <li class="mb-1"><strong>৳<?= $fine_per_day ?></strong> per day overdue</li>
-                     <li class="mb-1">Up to <strong><?= $max_reservations ?></strong> reserves allowed</li>
-                     <li class="mb-1">Fines must be cleared to borrow again</li>
-                  </ul>
-               </div>
-            </div>
-         </div>
-      </div>
-   </section>
-
-   <!-- ── Digital Resources ─────────────────────────────── -->
-   <?php if (!empty($digital)): ?>
-   <section class="pt-80 pb-80" style="background:#f7f9fc;">
-      <div class="container">
-         <div class="row">
-            <div class="col-12 section-heading text-center">
-               <h2>Digital Resources</h2>
-               <p>Free access to publicly available e-books, journals, and research papers.</p>
-            </div>
-         </div>
-         <div class="row g-4">
-            <?php foreach ($digital as $res):
-               $icon = $resource_icons[$res['resource_type']] ?? 'fas fa-file';
-            ?>
-            <div class="col-md-6 col-lg-4">
-               <div class="digital-card">
-                  <div class="dc-icon"><i class="<?= fh($icon) ?>"></i></div>
-                  <div>
-                     <h6><?= fh($res['title']) ?></h6>
-                     <p>
-                        <?= fh($res['resource_type']) ?>
-                        <?php if ($res['author']): ?> &middot; <?= fh($res['author']) ?><?php endif; ?>
-                        <?php if ($res['pub_year']): ?> &middot; <?= (int)$res['pub_year'] ?><?php endif; ?>
-                     </p>
+         <div class="arrivals-header-bar">NEW ARRIVALS</div>
+         <div class="arrivals-inner">
+            <div class="row g-0">
+               <!-- Spotlight book -->
+               <div class="col-lg-5 col-md-6">
+                  <div class="spotlight-card">
+                     <div class="d-flex gap-3 align-items-start">
+                        <div class="spotlight-cover flex-shrink-0">
+                           <i class="fas fa-book"></i>
+                        </div>
+                        <div>
+                           <h5 style="font-weight:800;color:var(--ink);font-size:1.05rem;line-height:1.35;">
+                              কেতা নদী সেরাবর বা বাঙলা ভাষার জীবনী
+                           </h5>
+                           <p style="font-size:.85rem;font-weight:600;color:var(--muted);margin-bottom:6px;">হুমায়ুন আজাদ</p>
+                           <div class="spotlight-stars mb-2">
+                              <i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i>
+                              <i class="far fa-star"></i><i class="far fa-star"></i>
+                           </div>
+                           <p style="font-size:.8rem;color:var(--muted);line-height:1.65;">
+                              হাজার বছর আগে প্রাচীন ভারতীয় আর্যভাষা রূপান্তরিত হয়ে বঙ্গীয় অঞ্চলে জন্ম নিয়েছিলো এক মধুর – কোমলবিচিত্র প্রাকৃত। তার নাম বাঙলা।
+                           </p>
+                           <a href="#" style="font-size:.82rem;color:var(--teal);font-weight:700;">See More →</a>
+                        </div>
+                     </div>
                   </div>
                </div>
+               <!-- Mini book grid -->
+               <div class="col-lg-7 col-md-6 arrivals-grid-bg">
+                  <div class="row g-2 h-100 align-items-center">
+                     <?php
+                     $mini_books = [
+                        ['label'=>'Marketing',        'bg'=>'linear-gradient(145deg,#6b0f0f,#c0392b)'],
+                        ['label'=>'Probability',      'bg'=>'linear-gradient(145deg,#0f2a5c,#2563eb)'],
+                        ['label'=>'Modern Physics',   'bg'=>'linear-gradient(145deg,#0a3325,#16a34a)'],
+                        ['label'=>'C Programming',    'bg'=>'linear-gradient(145deg,#2a0a5c,#7c3aed)'],
+                        ['label'=>'Language Teaching','bg'=>'linear-gradient(145deg,#5c3a0a,#d97706)'],
+                     ];
+                     foreach ($mini_books as $mb): ?>
+                     <div class="col" style="min-width:0;">
+                        <div class="mini-book-wrap">
+                           <div class="mini-book-cover" style="background:<?= $mb['bg'] ?>;min-height:90px;">
+                              <i class="fas fa-book"></i>
+                           </div>
+                           <span class="mini-label"><?= $mb['label'] ?></span>
+                        </div>
+                     </div>
+                     <?php endforeach; ?>
+                  </div>
+               </div>
+            </div>
+         </div>
+      </div>
+   </section>
+
+   <!-- ══════════════════════════════════════════════════
+        USER GUIDE
+   ══════════════════════════════════════════════════ -->
+   <section class="py-5 guide-section">
+      <div class="container">
+         <div class="text-center lib-section-head">
+            <h2 class="lib-section-title">User Guide</h2>
+            <p class="lib-section-subtitle">Policies, rules, and helpful resources</p>
+            <div class="title-bar mx-auto"></div>
+         </div>
+         <div class="row g-3 justify-content-center align-items-center">
+            <div class="col-lg-4">
+               <div class="row g-3">
+                  <?php
+                  $guide_left = [
+                     ['icon'=>'fas fa-sitemap',   'name'=>'Library Flowchart'],
+                     ['icon'=>'fas fa-book',      'name'=>'Library Brochure'],
+                     ['icon'=>'fas fa-id-card',   'name'=>'Membership Rules'],
+                     ['icon'=>'fas fa-door-open', 'name'=>'Entrance Rules'],
+                  ];
+                  foreach ($guide_left as $g): ?>
+                  <div class="col-12">
+                     <a href="#" class="guide-btn">
+                        <div class="gb-icon"><i class="<?= $g['icon'] ?>"></i></div>
+                        <?= $g['name'] ?>
+                        <i class="fas fa-file-pdf ms-auto" style="font-size:.75rem;opacity:.5;"></i>
+                     </a>
+                  </div>
+                  <?php endforeach; ?>
+               </div>
+            </div>
+            <div class="col-lg-4 text-center d-none d-lg-block">
+               <div class="guide-center-emblem">
+                  <i class="fas fa-book-open"></i>
+                  <span>User Guide</span>
+               </div>
+            </div>
+            <div class="col-lg-4">
+               <div class="row g-3">
+                  <?php
+                  $guide_right = [
+                     ['icon'=>'fas fa-exchange-alt', 'name'=>'Borrowing Rules'],
+                     ['icon'=>'fas fa-book-reader',  'name'=>'Reading Room Rules'],
+                     ['icon'=>'fas fa-gavel',        'name'=>'Fine Policy'],
+                     ['icon'=>'fas fa-balance-scale','name'=>'Library Policy'],
+                  ];
+                  foreach ($guide_right as $g): ?>
+                  <div class="col-12">
+                     <a href="#" class="guide-btn">
+                        <div class="gb-icon"><i class="<?= $g['icon'] ?>"></i></div>
+                        <?= $g['name'] ?>
+                        <i class="fas fa-file-pdf ms-auto" style="font-size:.75rem;opacity:.5;"></i>
+                     </a>
+                  </div>
+                  <?php endforeach; ?>
+               </div>
+            </div>
+         </div>
+      </div>
+   </section>
+
+   <!-- ══════════════════════════════════════════════════
+        PHOTO & VIDEO GALLERY
+   ══════════════════════════════════════════════════ -->
+   <section class="py-5 gallery-section">
+      <div class="container">
+         <div class="text-center lib-section-head" style="margin-bottom:32px;">
+            <h2 class="lib-section-title" style="color:#fff;">PHOTO &amp; VIDEO Gallery</h2>
+            <div class="title-bar mx-auto"></div>
+         </div>
+         <div class="row g-4">
+            <div class="col-md-6">
+               <a href="#" class="gallery-card">
+                  <div class="gallery-img-wrap" style="background:linear-gradient(135deg,#1a2744 0%,#b5182e 100%);">
+                     <i class="fas fa-images"></i>
+                  </div>
+                  <div class="gallery-footer">
+                     <strong>Photos</strong>
+                     <small>Browse library photo gallery</small>
+                  </div>
+               </a>
+            </div>
+            <div class="col-md-6">
+               <a href="#" class="gallery-card" target="_blank" title="YouTube Channel">
+                  <div class="gallery-img-wrap" style="background:linear-gradient(135deg,#1a0a0a 0%,#ff0000 100%);">
+                     <i class="fab fa-youtube"></i>
+                  </div>
+                  <div class="gallery-footer">
+                     <strong>Videos</strong>
+                     <small>(youtube channel link)</small>
+                  </div>
+               </a>
+            </div>
+         </div>
+      </div>
+   </section>
+
+   <!-- ══════════════════════════════════════════════════
+        FORMS
+   ══════════════════════════════════════════════════ -->
+   <section class="py-5 forms-section">
+      <div class="container">
+         <div class="text-center lib-section-head">
+            <h2 class="lib-section-title">Forms</h2>
+            <div class="title-bar mx-auto"></div>
+         </div>
+         <div class="row justify-content-center g-4">
+            <?php
+            $forms = [
+               ['name'=>'Membership Form (Student)',           'icon'=>'fas fa-list-ul', 'href'=>'#', 'icls'=>'form-doc-student'],
+               ['name'=>'Membership Form (Faculty/Executive)', 'icon'=>'fas fa-list-ul', 'href'=>'#', 'icls'=>'form-doc-faculty'],
+               ['name'=>'Book Requisition Form',               'icon'=>'fas fa-list-ul', 'href'=>'#', 'icls'=>'form-doc-req'],
+            ];
+            foreach ($forms as $f): ?>
+            <div class="col-6 col-md-4 col-lg-3">
+               <a href="<?= $f['href'] ?>" class="form-doc-card d-block text-decoration-none">
+                  <div class="form-doc-icon <?= $f['icls'] ?> mx-auto">
+                     <i class="<?= $f['icon'] ?>"></i>
+                  </div>
+                  <h6><?= $f['name'] ?></h6>
+               </a>
             </div>
             <?php endforeach; ?>
          </div>
       </div>
    </section>
-   <?php endif; ?>
 
-   <!-- ── Librarians ────────────────────────────────────── -->
-   <?php if (!empty($librarians)): ?>
-   <section class="pt-80 pb-100">
+   <!-- ══════════════════════════════════════════════════
+        CONTACT
+   ══════════════════════════════════════════════════ -->
+   <section class="py-5 contact-section">
       <div class="container">
-         <div class="row">
-            <div class="col-12 section-heading text-center">
-               <h2>Meet Our Librarians</h2>
-               <p>Our dedicated team is here to help you find what you need.</p>
-            </div>
+         <div class="text-center lib-section-head">
+            <h2 class="lib-section-title">Contact Us</h2>
+            <div class="title-bar mx-auto"></div>
          </div>
          <div class="row g-4 justify-content-center">
-            <?php foreach ($librarians as $lib):
-               $photo_url = !empty($lib['photo'])
-                  ? fh(ADMIN_UPLOAD_URL . '/library/librarians/' . $lib['photo'])
-                  : null;
-               $initials = strtoupper(substr($lib['name'], 0, 1));
-            ?>
-            <div class="col-md-6 col-lg-4 col-xl-3">
-               <div class="librarian-card">
-                  <?php if ($photo_url): ?>
-                  <img src="<?= $photo_url ?>" alt="<?= fh($lib['name']) ?>" class="lib-avatar">
-                  <?php else: ?>
-                  <div class="lib-avatar-initials"><?= fh($initials) ?></div>
-                  <?php endif; ?>
-                  <h5><?= fh($lib['name']) ?></h5>
-                  <div class="designation"><?= fh($lib['designation']) ?></div>
-                  <?php if ($lib['room_number']): ?>
-                  <div class="meta"><i class="fas fa-door-open me-1"></i>Room: <?= fh($lib['room_number']) ?></div>
-                  <?php endif; ?>
-                  <?php if ($lib['email']): ?>
-                  <div class="meta">
-                     <i class="fas fa-envelope me-1"></i>
-                     <a href="mailto:<?= fh($lib['email']) ?>" class="text-muted text-decoration-none" style="font-size:.8rem;">
-                        <?= fh($lib['email']) ?>
-                     </a>
+            <div class="col-md-5">
+               <div class="contact-panel cp-phone">
+                  <h4><i class="fas fa-phone-volume me-2"></i>Contact Number</h4>
+                  <div class="contact-item">
+                     <div class="ci-icon ci-phone"><i class="fas fa-phone"></i></div>
+                     <div>
+                        <div style="font-size:.75rem;color:var(--muted);font-weight:500;">Phone</div>
+                        <span><a href="tel:<?= fh($lib_phone_tel) ?>"><?= fh($lib_phone) ?></a></span>
+                     </div>
                   </div>
-                  <?php endif; ?>
-                  <?php if ($lib['phone']): ?>
-                  <div class="meta">
-                     <i class="fas fa-phone me-1"></i>
-                     <a href="tel:<?= fh(sanitize_phone($lib['phone'])) ?>" class="text-muted text-decoration-none" style="font-size:.8rem;">
-                        <?= fh($lib['phone']) ?>
-                     </a>
+                  <div class="contact-item">
+                     <div class="ci-icon ci-cell"><i class="fas fa-mobile-alt"></i></div>
+                     <div>
+                        <div style="font-size:.75rem;color:var(--muted);font-weight:500;">Cell</div>
+                        <span><a href="tel:<?= fh($lib_cell_tel) ?>"><?= fh($lib_cell) ?></a></span>
+                     </div>
                   </div>
-                  <?php endif; ?>
-                  <?php if ($lib['bio']): ?>
-                  <p style="font-size:.78rem;color:#9ca3af;margin-top:12px;margin-bottom:0;">
-                     <?= fh(mb_strimwidth($lib['bio'], 0, 120, '…')) ?>
-                  </p>
-                  <?php endif; ?>
                </div>
             </div>
-            <?php endforeach; ?>
+            <div class="col-md-5">
+               <div class="contact-panel cp-addr">
+                  <h4><i class="fas fa-map-marked-alt me-2"></i>Contact Address</h4>
+                  <div class="contact-item align-items-start">
+                     <div class="ci-icon ci-map" style="margin-top:2px;"><i class="fas fa-map-marker-alt"></i></div>
+                     <div>
+                        <div style="font-size:.75rem;color:var(--muted);font-weight:500;margin-bottom:4px;">Address</div>
+                        <span style="font-size:.93rem;line-height:1.7;">
+                           Prime University (Level-9)<br>
+                           114/116 Mazar Road, Mirpur-1<br>
+                           Dhaka 1216, Bangladesh
+                        </span>
+                     </div>
+                  </div>
+               </div>
+            </div>
          </div>
       </div>
    </section>
-   <?php endif; ?>
 
    </main>
 
@@ -723,8 +1106,8 @@ $resource_icons = [
                         <h4 class="it-footer-widget-title">Contact Library</h4>
                         <div class="it-footer-widget-contact mb-25">
                            <ul>
-                              <li><span>Phone:</span><a href="tel:<?= fh(sanitize_phone($lib_phone)) ?>"><?= fh($lib_phone) ?></a></li>
-                              <li><span>Email:</span><a href="mailto:<?= fh($lib_email) ?>"><?= fh($lib_email) ?></a></li>
+                              <li><span>Phone:</span><a href="tel:<?= fh($lib_phone_tel) ?>"><?= fh($lib_phone) ?></a></li>
+                              <li><span>Cell:</span><a href="tel:<?= fh($lib_cell_tel) ?>"><?= fh($lib_cell) ?></a></li>
                               <li><span>Room:</span><?= fh($lib_room) ?></li>
                            </ul>
                         </div>
