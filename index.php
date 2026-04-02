@@ -237,7 +237,7 @@ if (empty($_features)) {
                <img class="pu-about-img-main" src="<?= !empty($_about['main_image']) ? fh($_about['main_image']) : 'assets/img/about/about-1-1.jpg' ?>" alt="Prime University Campus">
                <div class="pu-about-img-badge">
                   <span class="number"><?= fh($_about['badge_number'] ?? '32+') ?></span>
-                  <span class="text"><?= nl2br(fh($_about['badge_text'] ?? "Years of\nExcellence")) ?></span>
+                  <span class="text"><?= nl2br(fh($_about['badge_text'] ?? "Years of" . "\n" . "Excellence")) ?></span>
                </div>
             </div>
          </div>
@@ -441,7 +441,7 @@ if (empty($_features)) {
             <div class="pu-notice-card">
                <div class="pu-notice-icon"><i class="fas fa-bullhorn"></i></div>
                <div class="pu-notice-body">
-                  <div class="pu-notice-date"><i class="fas fa-calendar-alt"></i> <?= $notice['published_at'] ? date('d M Y', strtotime($notice['published_at'])) : '' ?></div>
+                  <?php if ($notice['published_at']): ?><div class="pu-notice-date"><i class="fas fa-calendar-alt"></i> <?= date('d M Y', strtotime($notice['published_at'])) ?></div><?php endif; ?>
                   <a href="notice-detail.php?slug=<?= urlencode($notice['slug'] ?? '') ?>" class="pu-notice-title"><?= fh($notice['title']) ?></a>
                   <?php
                   $n_excerpt = strip_tags($notice['content'] ?? '');
