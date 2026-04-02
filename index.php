@@ -40,6 +40,45 @@ try {
              WHERE fp.photo IS NOT NULL AND fp.photo != ''
              ORDER BY RAND() LIMIT 8"
         )->fetchAll();
+
+        // Why Choose Us features
+        $_features = $db->query(
+            'SELECT icon, title, description FROM cms_features
+             WHERE is_active = 1 ORDER BY sort_order, id LIMIT 12'
+        )->fetchAll();
+
+        // About settings
+        $_about = [];
+        $_about_rows = $db->query('SELECT setting_key, setting_value FROM cms_about_settings')->fetchAll();
+        foreach ($_about_rows as $_r) $_about[$_r['setting_key']] = $_r['setting_value'];
+
+        // Admission settings
+        $_admission = [];
+        $_adm_rows = $db->query('SELECT setting_key, setting_value FROM cms_admission_settings')->fetchAll();
+        foreach ($_adm_rows as $_r) $_admission[$_r['setting_key']] = $_r['setting_value'];
+
+        // Contact settings
+        $_contact_cfg = [];
+        $_con_rows = $db->query('SELECT setting_key, setting_value FROM cms_contact_settings')->fetchAll();
+        foreach ($_con_rows as $_r) $_contact_cfg[$_r['setting_key']] = $_r['setting_value'];
+
+        // Campus gallery (cms_campus_items)
+        $_campus_items = $db->query(
+            'SELECT title, image, link_url FROM cms_campus_items
+             WHERE is_active = 1 ORDER BY sort_order, id LIMIT 9'
+        )->fetchAll();
+
+        // Notable alumni
+        $_alumni = $db->query(
+            'SELECT name, designation, organization, photo FROM cms_alumni
+             WHERE is_active = 1 ORDER BY sort_order, id LIMIT 8'
+        )->fetchAll();
+
+        // Latest notices
+        $_notices = $db->query(
+            'SELECT id, title, slug, content, published_at FROM cms_notices
+             WHERE is_published = 1 ORDER BY published_at DESC, created_at DESC LIMIT 4'
+        )->fetchAll();
     }
 } catch (Throwable $e) {}
 
@@ -63,14 +102,16 @@ if (empty($_departments)) {
     ];
 }
 
-$_gallery_imgs = [
-    ['src'=>'assets/img/campus/campus-3-1.jpg','alt'=>'Prime University Campus'],
-    ['src'=>'assets/img/about/about-1-1.jpg',  'alt'=>'Academic Environment'],
-    ['src'=>'assets/img/about/about-5-1.jpg',  'alt'=>'Student Activities'],
-    ['src'=>'assets/img/campus/campus-3-2.jpg','alt'=>'Campus Life'],
-    ['src'=>'assets/img/about/about-10-1.jpg', 'alt'=>'Research Facilities'],
-    ['src'=>'assets/img/campus/campus-3-3.jpg','alt'=>'Modern Classrooms'],
-];
+if (empty($_features)) {
+    $_features = [
+        ['icon'=>'fas fa-graduation-cap', 'title'=>'Bachelor Programs',  'description'=>'Comprehensive undergraduate degrees in Engineering, Business, Law, Pharmacy, Architecture and more.'],
+        ['icon'=>'fas fa-user-tie',        'title'=>'Masters Degrees',    'description'=>'Advance your expertise with research-driven postgraduate programmes taught by internationally qualified faculty.'],
+        ['icon'=>'fas fa-flask',           'title'=>'Research Excellence','description'=>'State-of-the-art laboratories and dedicated research centres producing innovation that matters.'],
+        ['icon'=>'fas fa-handshake',       'title'=>'Industry Placement', 'description'=>'Strong industry ties and a dedicated career office help graduates secure top positions.'],
+        ['icon'=>'fas fa-globe-asia',      'title'=>'Global Network',     'description'=>'International affiliations and exchange programmes connect our students worldwide.'],
+        ['icon'=>'fas fa-shield-alt',      'title'=>'Accredited Quality', 'description'=>'UGC-approved and internationally benchmarked — our degrees are recognised by employers worldwide.'],
+    ];
+}
 ?>
 <!doctype html>
 <html class="no-js" lang="en">
@@ -172,21 +213,14 @@ $_gallery_imgs = [
       </div>
       <div class="row g-4">
          <?php
-         $features = [
-            ['icon'=>'fas fa-graduation-cap',  'cls'=>'pu-feature-icon-1','title'=>'Bachelor Programs',  'desc'=>'Comprehensive undergraduate degrees in Engineering, Business, Law, Pharmacy, Architecture and more.'],
-            ['icon'=>'fas fa-user-tie',         'cls'=>'pu-feature-icon-2','title'=>'Masters Degrees',    'desc'=>'Advance your expertise with research-driven postgraduate programmes taught by internationally qualified faculty.'],
-            ['icon'=>'fas fa-flask',            'cls'=>'pu-feature-icon-3','title'=>'Research Excellence','desc'=>'State-of-the-art laboratories and dedicated research centres producing innovation that matters.'],
-            ['icon'=>'fas fa-handshake',        'cls'=>'pu-feature-icon-4','title'=>'Industry Placement', 'desc'=>'Strong industry ties and a dedicated career office help graduates secure top positions before finishing their final semester.'],
-            ['icon'=>'fas fa-globe-asia',       'cls'=>'pu-feature-icon-5','title'=>'Global Network',     'desc'=>'International affiliations and exchange programmes connect our students to a worldwide academic community.'],
-            ['icon'=>'fas fa-shield-alt',       'cls'=>'pu-feature-icon-6','title'=>'Accredited Quality', 'desc'=>'UGC-approved and internationally benchmarked — our degrees are recognised by employers worldwide.'],
-         ];
-         foreach ($features as $i => $f):
+         $icon_classes = ['pu-feature-icon-1','pu-feature-icon-2','pu-feature-icon-3','pu-feature-icon-4','pu-feature-icon-5','pu-feature-icon-6'];
+         foreach ($_features as $i => $f):
          ?>
          <div class="col-xl-4 col-lg-4 col-md-6 wow itfadeUp" data-wow-duration=".7s" data-wow-delay="<?= .1 + .1 * $i ?>s">
             <div class="pu-feature-card">
-               <div class="pu-feature-icon <?= $f['cls'] ?>"><i class="<?= $f['icon'] ?>"></i></div>
-               <h5><?= $f['title'] ?></h5>
-               <p><?= $f['desc'] ?></p>
+               <div class="pu-feature-icon <?= $icon_classes[$i % count($icon_classes)] ?>"><i class="<?= fh($f['icon']) ?>"></i></div>
+               <h5><?= fh($f['title']) ?></h5>
+               <p><?= fh($f['description']) ?></p>
             </div>
          </div>
          <?php endforeach; ?>
@@ -200,28 +234,42 @@ $_gallery_imgs = [
       <div class="row align-items-center g-5">
          <div class="col-lg-6 wow itfadeLeft" data-wow-duration=".9s" data-wow-delay=".2s">
             <div class="pu-about-img-wrap">
-               <img class="pu-about-img-main" src="assets/img/about/about-1-1.jpg" alt="Prime University Campus">
+               <img class="pu-about-img-main" src="<?= !empty($_about['main_image']) ? fh($_about['main_image']) : 'assets/img/about/about-1-1.jpg' ?>" alt="Prime University Campus">
                <div class="pu-about-img-badge">
-                  <span class="number">32<span class="pu-text-half">+</span></span>
-                  <span class="text">Years of<br>Excellence</span>
+                  <span class="number"><?= fh($_about['badge_number'] ?? '32+') ?></span>
+                  <span class="text"><?= nl2br(fh($_about['badge_text'] ?? "Years of" . "\n" . "Excellence")) ?></span>
                </div>
             </div>
          </div>
          <div class="col-lg-6 wow itfadeRight" data-wow-duration=".9s" data-wow-delay=".3s">
             <div class="pu-about-content">
-               <div class="pu-label">About the University</div>
-               <h2 class="pu-section-title mb-3">Shaping Leaders Since <span class="accent">1993</span></h2>
-               <p class="pu-section-sub mb-4">Prime University is a premier private university in Bangladesh, committed to quality higher education through academic rigour, research innovation and industry relevance. Located in Mirpur, Dhaka, our campus is home to over 15,000 students from across the country and abroad.</p>
+               <div class="pu-label"><?= fh($_about['about_section_subtitle'] ?? 'About the University') ?></div>
+               <h2 class="pu-section-title mb-3"><?= fh($_about['about_section_title'] ?? 'Shaping Leaders Since') ?> <span class="accent"><?= fh($_about['about_section_title_accent'] ?? '1993') ?></span></h2>
+               <p class="pu-section-sub mb-4"><?= fh($_about['description'] ?? 'Prime University is a premier private university in Bangladesh, committed to quality higher education through academic rigour, research innovation and industry relevance.') ?></p>
+               <?php
+               $list_items = [];
+               for ($li = 1; $li <= 5; $li++) {
+                   $val = $_about['list_item_' . $li] ?? '';
+                   if ($val !== '') $list_items[] = $val;
+               }
+               if (empty($list_items)) {
+                   $list_items = [
+                       'UGC-approved with internationally recognised degree programs',
+                       '250+ highly qualified and research-active faculty members',
+                       'Modern libraries, labs and digital learning infrastructure',
+                       'Dedicated career centre with industry placement programmes',
+                       'Active student clubs, sports and cultural programmes',
+                   ];
+               }
+               ?>
                <ul class="pu-about-list mb-4">
-                  <li><div class="check"><i class="fas fa-check"></i></div>UGC-approved with internationally recognised degree programs</li>
-                  <li><div class="check"><i class="fas fa-check"></i></div>250+ highly qualified and research-active faculty members</li>
-                  <li><div class="check"><i class="fas fa-check"></i></div>Modern libraries, labs and digital learning infrastructure</li>
-                  <li><div class="check"><i class="fas fa-check"></i></div>Dedicated career centre with industry placement programmes</li>
-                  <li><div class="check"><i class="fas fa-check"></i></div>Active student clubs, sports and cultural programmes</li>
+                  <?php foreach ($list_items as $li_text): ?>
+                  <li><div class="check"><i class="fas fa-check"></i></div><?= fh($li_text) ?></li>
+                  <?php endforeach; ?>
                </ul>
                <div class="d-flex flex-wrap gap-3">
-                  <a href="admission.php" class="pu-btn pu-btn-primary"><i class="fas fa-paper-plane"></i> Apply Now</a>
-                  <a href="contact.php" class="pu-btn pu-btn-outline"><i class="fas fa-phone-alt"></i> Contact Us</a>
+                  <a href="<?= fh($_about['apply_url'] ?? 'admission.php') ?>" class="pu-btn pu-btn-primary"><i class="fas fa-paper-plane"></i> Apply Now</a>
+                  <a href="<?= fh($_about['contact_url'] ?? 'contact.php') ?>" class="pu-btn pu-btn-outline"><i class="fas fa-phone-alt"></i> Contact Us</a>
                </div>
             </div>
          </div>
@@ -279,19 +327,30 @@ $_gallery_imgs = [
    <div class="container">
       <div class="row align-items-center g-4">
          <div class="col-lg-7 wow itfadeLeft" data-wow-duration=".9s" data-wow-delay=".2s">
-            <div class="pu-admission-badge"><span class="dot"></span> Admissions Open</div>
-            <h2 class="pu-admission-title">Begin Your Journey at<br><span class="gold">Prime University</span></h2>
-            <p class="pu-admission-text">Applications for Summer 2026 are now open. Secure your place in one of our prestigious undergraduate or postgraduate programmes and start building the future you deserve.</p>
+            <div class="pu-admission-badge"><span class="dot"></span> <?= fh($_admission['badge_text'] ?? 'Admissions Open') ?></div>
+            <h2 class="pu-admission-title"><?= fh($_admission['title'] ?? 'Begin Your Journey at') ?><br><span class="gold"><?= fh($_admission['title_accent'] ?? 'Prime University') ?></span></h2>
+            <p class="pu-admission-text"><?= fh($_admission['description'] ?? 'Applications are now open. Secure your place in one of our prestigious programmes.') ?></p>
             <div class="d-flex flex-wrap gap-3">
-               <a href="admission.php" class="pu-btn pu-btn-primary"><i class="fas fa-paper-plane"></i> Apply Now</a>
-               <a href="scholarships-waivers.php" class="pu-btn pu-btn-outline-white"><i class="fas fa-award"></i> Scholarships</a>
+               <a href="<?= fh($_admission['btn1_url'] ?? 'admission.php') ?>" class="pu-btn pu-btn-primary"><i class="fas fa-paper-plane"></i> <?= fh($_admission['btn1_text'] ?? 'Apply Now') ?></a>
+               <a href="<?= fh($_admission['btn2_url'] ?? 'scholarships-waivers.php') ?>" class="pu-btn pu-btn-outline-white"><i class="fas fa-award"></i> <?= fh($_admission['btn2_text'] ?? 'Scholarships') ?></a>
             </div>
          </div>
          <div class="col-lg-5 wow itfadeRight" data-wow-duration=".9s" data-wow-delay=".3s">
             <div class="d-flex flex-column gap-3">
-               <div class="pu-admission-deadline"><i class="fas fa-calendar-alt"></i><div><div style="font-weight:700;font-size:.95rem;">Application Deadline</div><div style="font-size:.85rem;opacity:.75;">Summer Semester 2026 – Rolling admissions</div></div></div>
-               <div class="pu-admission-deadline"><i class="fas fa-graduation-cap"></i><div><div style="font-weight:700;font-size:.95rem;">35+ Programs Available</div><div style="font-size:.85rem;opacity:.75;">Undergraduate, Postgraduate &amp; Diploma</div></div></div>
-               <div class="pu-admission-deadline"><i class="fas fa-award"></i><div><div style="font-weight:700;font-size:.95rem;">Scholarships Available</div><div style="font-size:.85rem;opacity:.75;">Merit-based &amp; need-based financial aid</div></div></div>
+               <?php for ($ii = 1; $ii <= 3; $ii++): 
+                   $i_icon  = $_admission['info_' . $ii . '_icon']  ?? '';
+                   $i_title = $_admission['info_' . $ii . '_title'] ?? '';
+                   $i_text  = $_admission['info_' . $ii . '_text']  ?? '';
+                   if ($i_title === '') continue;
+               ?>
+               <div class="pu-admission-deadline">
+                  <?php if ($i_icon): ?><i class="<?= fh($i_icon) ?>"></i><?php endif; ?>
+                  <div>
+                     <div style="font-weight:700;font-size:.95rem;"><?= fh($i_title) ?></div>
+                     <div style="font-size:.85rem;opacity:.75;"><?= fh($i_text) ?></div>
+                  </div>
+               </div>
+               <?php endfor; ?>
             </div>
          </div>
       </div>
@@ -362,6 +421,41 @@ $_gallery_imgs = [
       </div>
    </div>
 </section>
+
+<!-- NOTICE BOARD -->
+<?php if (!empty($_notices)): ?>
+<section class="pu-notices-section pu-section" id="pu-notices">
+   <div class="container">
+      <div class="row justify-content-between align-items-end mb-50">
+         <div class="col-lg-7">
+            <div class="pu-label wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".1s">Announcements</div>
+            <h2 class="pu-section-title wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".2s">Notice <span class="accent">Board</span></h2>
+         </div>
+         <div class="col-lg-auto wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".3s">
+            <a href="notice-board.php" class="pu-view-all">All Notices <i class="fas fa-arrow-right"></i></a>
+         </div>
+      </div>
+      <div class="row g-4">
+         <?php foreach ($_notices as $ni => $notice): ?>
+         <div class="col-lg-6 wow itfadeUp" data-wow-duration=".7s" data-wow-delay="<?= .1 + .1 * $ni ?>s">
+            <div class="pu-notice-card">
+               <div class="pu-notice-icon"><i class="fas fa-bullhorn"></i></div>
+               <div class="pu-notice-body">
+                  <?php if ($notice['published_at']): ?><div class="pu-notice-date"><i class="fas fa-calendar-alt"></i> <?= date('d M Y', strtotime($notice['published_at'])) ?></div><?php endif; ?>
+                  <a href="notice-detail.php?slug=<?= urlencode($notice['slug'] ?? '') ?>" class="pu-notice-title"><?= fh($notice['title']) ?></a>
+                  <?php
+                  $n_excerpt = strip_tags($notice['content'] ?? '');
+                  $n_excerpt = mb_strlen($n_excerpt) > 80 ? mb_substr($n_excerpt, 0, 80) . '…' : $n_excerpt;
+                  if ($n_excerpt): ?><p class="pu-notice-excerpt"><?= fh($n_excerpt) ?></p><?php endif; ?>
+                  <a href="notice-detail.php?slug=<?= urlencode($notice['slug'] ?? '') ?>" class="pu-news-link">Read More <i class="fas fa-arrow-right"></i></a>
+               </div>
+            </div>
+         </div>
+         <?php endforeach; ?>
+      </div>
+   </div>
+</section>
+<?php endif; ?>
 
 <!-- FACULTY SPOTLIGHT -->
 <?php if (!empty($_faculty)): ?>
@@ -467,53 +561,118 @@ $_gallery_imgs = [
          </div>
       </div>
       <div class="pu-gallery-grid wow itfadeUp" data-wow-duration=".9s" data-wow-delay=".3s">
-         <?php foreach ($_gallery_imgs as $gimg): ?>
+         <?php
+         $static_gallery = [
+             ['src'=>'assets/img/campus/campus-3-1.jpg','alt'=>'Prime University Campus'],
+             ['src'=>'assets/img/about/about-1-1.jpg',  'alt'=>'Academic Environment'],
+             ['src'=>'assets/img/about/about-5-1.jpg',  'alt'=>'Student Activities'],
+             ['src'=>'assets/img/campus/campus-3-2.jpg','alt'=>'Campus Life'],
+             ['src'=>'assets/img/about/about-10-1.jpg', 'alt'=>'Research Facilities'],
+             ['src'=>'assets/img/campus/campus-3-3.jpg','alt'=>'Modern Classrooms'],
+         ];
+         $gallery_source = !empty($_campus_items) ? $_campus_items : [];
+         if (!empty($gallery_source)):
+             foreach ($gallery_source as $ci):
+                 $img_src = !empty($ci['image'])
+                     ? (ADMIN_UPLOAD_URL . '/campus/' . basename($ci['image']))
+                     : 'assets/img/campus/campus-3-1.jpg';
+         ?>
+         <div class="pu-gallery-item">
+            <a class="popup-image" href="<?= fh($img_src) ?>">
+               <img src="<?= fh($img_src) ?>" alt="<?= fh($ci['title']) ?>" onerror="this.closest('.pu-gallery-item').style.background='#1e3a5c'">
+               <div class="pu-gallery-item-overlay"><i class="fas fa-search-plus"></i></div>
+            </a>
+         </div>
+         <?php endforeach; else:
+             foreach ($static_gallery as $gimg): ?>
          <div class="pu-gallery-item">
             <a class="popup-image" href="<?= fh($gimg['src']) ?>">
                <img src="<?= fh($gimg['src']) ?>" alt="<?= fh($gimg['alt']) ?>" onerror="this.closest('.pu-gallery-item').style.background='#1e3a5c'">
                <div class="pu-gallery-item-overlay"><i class="fas fa-search-plus"></i></div>
             </a>
          </div>
+         <?php endforeach; endif; ?>
+      </div>
+   </div>
+</section>
+
+<!-- NOTABLE ALUMNI -->
+<?php if (!empty($_alumni)): ?>
+<section class="pu-alumni-section pu-section" id="pu-alumni">
+   <div class="container">
+      <div class="row justify-content-center mb-50">
+         <div class="col-xl-7 col-lg-9 text-center">
+            <div class="pu-label wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".1s">Our Legacy</div>
+            <h2 class="pu-section-title wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".2s">Notable <span class="accent">Alumni</span></h2>
+            <p class="pu-section-sub mx-auto mt-3 wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".3s">Our graduates are making a difference across industries, institutions and borders — carrying the Prime University legacy forward.</p>
+         </div>
+      </div>
+      <div class="row g-4 justify-content-center">
+         <?php foreach ($_alumni as $ai => $alum): ?>
+         <div class="col-xl-3 col-lg-3 col-md-4 col-sm-6 wow itfadeUp" data-wow-duration=".7s" data-wow-delay="<?= .1 + .1 * $ai ?>s">
+            <div class="pu-alumni-card text-center">
+               <div class="pu-alumni-photo-wrap">
+                  <?php if ($alum['photo']): ?>
+                  <img class="pu-alumni-photo"
+                       src="<?= fh(ADMIN_UPLOAD_URL . '/alumni/' . basename($alum['photo'])) ?>"
+                       alt="<?= fh($alum['name']) ?>"
+                       onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                  <div class="pu-alumni-photo-placeholder" style="display:none"><i class="fas fa-user"></i></div>
+                  <?php else: ?>
+                  <div class="pu-alumni-photo-placeholder"><i class="fas fa-user"></i></div>
+                  <?php endif; ?>
+               </div>
+               <div class="pu-alumni-info mt-3">
+                  <div class="pu-alumni-name"><?= fh($alum['name']) ?></div>
+                  <?php if ($alum['designation']): ?>
+                  <div class="pu-alumni-designation"><?= fh($alum['designation']) ?></div>
+                  <?php endif; ?>
+                  <?php if ($alum['organization']): ?>
+                  <div class="pu-alumni-org"><?= fh($alum['organization']) ?></div>
+                  <?php endif; ?>
+               </div>
+            </div>
+         </div>
          <?php endforeach; ?>
       </div>
    </div>
 </section>
+<?php endif; ?>
 
 <!-- CONTACT CTA -->
 <section class="pu-contact-section pu-section" id="pu-contact">
    <div class="container">
       <div class="row justify-content-center mb-50">
          <div class="col-xl-7 col-lg-9 text-center">
-            <div class="pu-label wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".1s">Get In Touch</div>
-            <h2 class="pu-section-title wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".2s">We're Here to <span class="accent">Help You</span></h2>
-            <p class="pu-section-sub mx-auto mt-3 wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".3s">Reach out to our admissions team or visit us on campus. We'll guide you through every step of your application.</p>
+            <div class="pu-label wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".1s"><?= fh($_contact_cfg['section_subtitle'] ?? 'Get In Touch') ?></div>
+            <h2 class="pu-section-title wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".2s"><?= fh($_contact_cfg['section_title'] ?? "We're Here to Help You") ?></h2>
+            <p class="pu-section-sub mx-auto mt-3 wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".3s"><?= fh($_contact_cfg['section_description'] ?? 'Reach out to our admissions team or visit us on campus.') ?></p>
          </div>
       </div>
       <div class="row g-4">
-         <?php
-         $contacts = [
-            ['icon'=>'fas fa-phone-alt',    'title'=>'Call Us',      'value'=>'+880-1710-996196',           'href'=>'tel:+8801710996196',                'sub'=>'Mon – Fri, 9am – 5pm'],
-            ['icon'=>'fas fa-envelope',     'title'=>'Email Us',     'value'=>'info@primeuniversity.edu.bd','href'=>'mailto:info@primeuniversity.edu.bd','sub'=>'We reply within 24 hours'],
-            ['icon'=>'fas fa-map-marker-alt','title'=>'Visit Campus','value'=>'114/116, Mazar Rd, Dhaka',  'href'=>'https://maps.google.com/?q=Prime+University+Dhaka','sub'=>'View on Google Maps'],
-            ['icon'=>'fas fa-clock',        'title'=>'Office Hours', 'value'=>'Sunday – Thursday',         'href'=>'#',                                'sub'=>'9:00 AM – 5:00 PM'],
-         ];
-         foreach ($contacts as $ci => $c):
+         <?php for ($ci = 1; $ci <= 4; $ci++):
+            $c_icon  = $_contact_cfg['card_' . $ci . '_icon']  ?? '';
+            $c_title = $_contact_cfg['card_' . $ci . '_title'] ?? '';
+            $c_value = $_contact_cfg['card_' . $ci . '_value'] ?? '';
+            $c_href  = $_contact_cfg['card_' . $ci . '_href']  ?? '#';
+            $c_sub   = $_contact_cfg['card_' . $ci . '_sub']   ?? '';
+            if ($c_title === '' && $c_value === '') continue;
          ?>
-         <div class="col-lg-3 col-sm-6 wow itfadeUp" data-wow-duration=".7s" data-wow-delay="<?= .1 + .1 * $ci ?>s">
+         <div class="col-lg-3 col-sm-6 wow itfadeUp" data-wow-duration=".7s" data-wow-delay="<?= .1 + .1 * ($ci - 1) ?>s">
             <div class="pu-contact-card">
-               <div class="pu-contact-card-icon"><i class="<?= $c['icon'] ?>"></i></div>
+               <div class="pu-contact-card-icon"><i class="<?= fh($c_icon) ?>"></i></div>
                <div>
-                  <div class="pu-contact-card-title"><?= $c['title'] ?></div>
-                  <a class="pu-contact-card-value" href="<?= fh($c['href']) ?>" <?= str_starts_with($c['href'], 'http') ? 'target="_blank" rel="noopener"' : '' ?>><?= fh($c['value']) ?></a>
-                  <div class="pu-contact-card-sub"><?= fh($c['sub']) ?></div>
+                  <div class="pu-contact-card-title"><?= fh($c_title) ?></div>
+                  <a class="pu-contact-card-value" href="<?= fh($c_href) ?>" <?= str_starts_with($c_href, 'http') ? 'target="_blank" rel="noopener"' : '' ?>><?= fh($c_value) ?></a>
+                  <div class="pu-contact-card-sub"><?= fh($c_sub) ?></div>
                </div>
             </div>
          </div>
-         <?php endforeach; ?>
+         <?php endfor; ?>
       </div>
       <div class="text-center mt-5 wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".5s">
-         <a href="contact.php" class="pu-btn pu-btn-primary me-3"><i class="fas fa-envelope"></i> Send a Message</a>
-         <a href="admission.php" class="pu-btn pu-btn-outline"><i class="fas fa-paper-plane"></i> Apply Online</a>
+         <a href="<?= fh($_contact_cfg['btn1_url'] ?? 'contact.php') ?>" class="pu-btn pu-btn-primary me-3"><i class="fas fa-envelope"></i> <?= fh($_contact_cfg['btn1_text'] ?? 'Send a Message') ?></a>
+         <a href="<?= fh($_contact_cfg['btn2_url'] ?? 'admission.php') ?>" class="pu-btn pu-btn-outline"><i class="fas fa-paper-plane"></i> <?= fh($_contact_cfg['btn2_text'] ?? 'Apply Online') ?></a>
       </div>
    </div>
 </section>
