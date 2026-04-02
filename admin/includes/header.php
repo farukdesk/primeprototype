@@ -192,6 +192,47 @@ $user       = auth_user();
         /* ── Alerts ── */
         .alert { border: none; border-radius: 10px; font-size: .875rem; }
 
+        /* ── Nav Groups (collapsible) ── */
+        .nav-group-toggle {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            padding: 9px 20px;
+            background: none;
+            border: none;
+            border-left: 3px solid transparent;
+            color: #8892c4;
+            font-size: .75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .07em;
+            cursor: pointer;
+            transition: color .15s, background .15s;
+            gap: 9px;
+            margin-top: 6px;
+        }
+        .nav-group-toggle:hover { color: #fff; background: rgba(255,255,255,.04); }
+        .nav-group-toggle .grp-icon { width: 18px; text-align: center; font-size: .85rem; }
+        .nav-group-toggle .toggle-icon {
+            margin-left: auto;
+            font-size: .6rem;
+            opacity: .5;
+            transition: transform .2s;
+        }
+        .nav-group-toggle:not(.collapsed) .toggle-icon { transform: rotate(180deg); }
+        .grp-items { margin: 0; padding: 0; }
+        .grp-items .nav-item a {
+            padding-left: 40px;
+            font-size: .83rem;
+            border-left: 3px solid transparent;
+        }
+        .grp-items .nav-item a:hover,
+        .grp-items .nav-item a.active {
+            background: var(--sidebar-hover);
+            color: #fff;
+            border-left-color: var(--sidebar-active);
+        }
+
         /* ── Responsive ── */
         @media (max-width: 768px) {
             #sidebar { transform: translateX(-100%); }
@@ -210,363 +251,405 @@ $user       = auth_user();
         <span>Prime University<br><small style="font-weight:400;font-size:.7rem;opacity:.7">Admin Panel</small></span>
     </a>
 
+    <?php
+    $current_path = $_SERVER['PHP_SELF'];
+    $is_website_active  = strpos($current_path, '/cms/') !== false || strpos($current_path, '/homepage/') !== false || strpos($current_path, '/pages/') !== false;
+    $is_academic_active = strpos($current_path, '/departments/') !== false || strpos($current_path, '/faculty-profiles/') !== false || strpos($current_path, '/students/') !== false;
+    $is_comms_active    = strpos($current_path, '/contact/') !== false || strpos($current_path, '/support-tickets/') !== false || strpos($current_path, '/knowledge-base/') !== false;
+    $is_jobs_active     = strpos($current_path, '/jobs/') !== false;
+    $is_library_active  = strpos($current_path, '/library/') !== false;
+    $is_admin_active    = strpos($current_path, '/users/') !== false || strpos($current_path, '/user-groups/') !== false
+                       || strpos($current_path, '/modules/') !== false || strpos($current_path, '/access/') !== false
+                       || strpos($current_path, '/email-templates/') !== false || strpos($current_path, '/change-log/') !== false;
+    ?>
+
+    <!-- Dashboard -->
     <?php if (is_super_admin() || can_access('dashboard')): ?>
-    <p class="nav-label">Main</p>
-    <ul class="nav flex-column">
+    <ul class="nav flex-column mt-2">
         <li class="nav-item">
             <a href="<?= APP_URL ?>/index.php"
-               class="<?= preg_match('#/admin/index\.php$#', $_SERVER['PHP_SELF']) ? 'active' : '' ?>">
+               class="<?= preg_match('#/admin/index\.php$#', $current_path) ? 'active' : '' ?>">
                 <i class="fas fa-tachometer-alt"></i> Dashboard
             </a>
         </li>
     </ul>
     <?php endif; ?>
 
-    <?php if (is_super_admin() || can_access('users')): ?>
-    <p class="nav-label">User Management</p>
-    <ul class="nav flex-column">
-        <?php if (is_super_admin() || can_access('user-groups')): ?>
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/user-groups/index.php"
-               class="<?= strpos($_SERVER['PHP_SELF'], '/user-groups/') !== false ? 'active' : '' ?>">
-                <i class="fas fa-layer-group"></i> User Groups
-            </a>
-        </li>
-        <?php endif; ?>
-        <?php if (is_super_admin() || can_access('users')): ?>
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/users/index.php"
-               class="<?= strpos($_SERVER['PHP_SELF'], '/users/') !== false ? 'active' : '' ?>">
-                <i class="fas fa-users"></i> Users
-            </a>
-        </li>
-        <?php endif; ?>
-    </ul>
-    <?php endif; ?>
-
-    <?php if (is_super_admin() || can_access('modules') || can_access('access') || can_access('email-templates')): ?>
-    <p class="nav-label">System</p>
-    <ul class="nav flex-column">
-        <?php if (is_super_admin() || can_access('modules')): ?>
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/modules/index.php"
-               class="<?= strpos($_SERVER['PHP_SELF'], '/modules/') !== false ? 'active' : '' ?>">
-                <i class="fas fa-cubes"></i> Modules
-            </a>
-        </li>
-        <?php endif; ?>
-        <?php if (is_super_admin() || can_access('access')): ?>
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/access/index.php"
-               class="<?= strpos($_SERVER['PHP_SELF'], '/access/') !== false ? 'active' : '' ?>">
-                <i class="fas fa-shield-alt"></i> Module Access
-            </a>
-        </li>
-        <?php endif; ?>
-        <?php if (is_super_admin() || can_access('email-templates')): ?>
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/email-templates/index.php"
-               class="<?= strpos($_SERVER['PHP_SELF'], '/email-templates/') !== false ? 'active' : '' ?>">
-                <i class="fas fa-envelope-open-text"></i> Email Templates
-            </a>
-        </li>
-        <?php endif; ?>
-        <?php if (is_super_admin()): ?>
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/change-log/index.php"
-               class="<?= strpos($_SERVER['PHP_SELF'], '/change-log/') !== false ? 'active' : '' ?>">
-                <i class="fas fa-history"></i> Change Log
-            </a>
-        </li>
-        <?php endif; ?>
-    </ul>
-    <?php endif; ?>
-
-    <?php if (is_super_admin()): ?>
-    <p class="nav-label">Departments</p>
-    <ul class="nav flex-column">
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/departments/index.php"
-               class="<?= strpos($_SERVER['PHP_SELF'], '/departments/') !== false ? 'active' : '' ?>">
-                <i class="fas fa-building-columns"></i> Departments
-            </a>
-        </li>
-    </ul>
-    <?php endif; ?>
-
-    <?php if (is_super_admin()): ?>
-    <p class="nav-label">CMS</p>
-    <ul class="nav flex-column">
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/cms/header/index.php"
-               class="<?= strpos($_SERVER['PHP_SELF'], '/cms/header/') !== false ? 'active' : '' ?>">
-                <i class="fas fa-heading"></i> Header Settings
-            </a>
-        </li>
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/cms/menus/index.php"
-               class="<?= strpos($_SERVER['PHP_SELF'], '/cms/menus/') !== false ? 'active' : '' ?>">
-                <i class="fas fa-bars"></i> Navigation Menus
-            </a>
-        </li>
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/cms/news/index.php"
-               class="<?= strpos($_SERVER['PHP_SELF'], '/cms/news/') !== false ? 'active' : '' ?>">
-                <i class="fas fa-newspaper"></i> Latest News
-            </a>
-        </li>
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/cms/sliders/index.php"
-               class="<?= strpos($_SERVER['PHP_SELF'], '/cms/sliders/') !== false ? 'active' : '' ?>">
-                <i class="fas fa-images"></i> Sliders
-            </a>
-        </li>
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/cms/programs/index.php"
-               class="<?= strpos($_SERVER['PHP_SELF'], '/cms/programs/') !== false ? 'active' : '' ?>">
-                <i class="fas fa-graduation-cap"></i> Programs
-            </a>
-        </li>
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/cms/about/index.php"
-               class="<?= strpos($_SERVER['PHP_SELF'], '/cms/about/') !== false ? 'active' : '' ?>">
-                <i class="fas fa-info-circle"></i> About Section
-            </a>
-        </li>
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/cms/campus/index.php"
-               class="<?= strpos($_SERVER['PHP_SELF'], '/cms/campus/') !== false ? 'active' : '' ?>">
-                <i class="fas fa-university"></i> Campus Life
-            </a>
-        </li>
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/cms/alumni/index.php"
-               class="<?= strpos($_SERVER['PHP_SELF'], '/cms/alumni/') !== false ? 'active' : '' ?>">
-                <i class="fas fa-user-graduate"></i> Notable Alumni
-            </a>
-        </li>
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/cms/why-choose-us/index.php"
-               class="<?= strpos($_SERVER['PHP_SELF'], '/cms/why-choose-us/') !== false ? 'active' : '' ?>">
-                <i class="fas fa-star"></i> Why Choose Us
-            </a>
-        </li>
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/cms/admissions/index.php"
-               class="<?= strpos($_SERVER['PHP_SELF'], '/cms/admissions/') !== false ? 'active' : '' ?>">
-                <i class="fas fa-door-open"></i> Admissions Section
-            </a>
-        </li>
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/cms/contact-settings/index.php"
-               class="<?= strpos($_SERVER['PHP_SELF'], '/cms/contact-settings/') !== false ? 'active' : '' ?>">
-                <i class="fas fa-address-card"></i> Contact Section
-            </a>
-        </li>
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/cms/notice-board/index.php"
-               class="<?= strpos($_SERVER['PHP_SELF'], '/cms/notice-board/') !== false ? 'active' : '' ?>">
-                <i class="fas fa-bullhorn"></i> Notice Board
-            </a>
-        </li>
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/homepage/index.php"
-               class="<?= strpos($_SERVER['PHP_SELF'], '/homepage/') !== false ? 'active' : '' ?>">
-                <i class="fas fa-home"></i> Homepage (Stats &amp; Reviews)
-            </a>
-        </li>
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/cms/footer/index.php"
-               class="<?= strpos($_SERVER['PHP_SELF'], '/cms/footer/') !== false ? 'active' : '' ?>">
-                <i class="fas fa-shoe-prints"></i> Footer Settings
-            </a>
-        </li>
-    </ul>
-    <?php endif; ?>
-
+    <!-- ── Website & CMS ── -->
     <?php if (is_super_admin() || can_access('homepage')): ?>
-    <p class="nav-label">Pages</p>
-    <ul class="nav flex-column">
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/pages/index.php?category=general"
-               class="<?= (strpos($_SERVER['PHP_SELF'], '/pages/') !== false && ($_GET['category'] ?? '') === 'general') ? 'active' : '' ?>">
-                <i class="fas fa-columns"></i> General Pages
-            </a>
-        </li>
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/pages/index.php?category=profile"
-               class="<?= (strpos($_SERVER['PHP_SELF'], '/pages/') !== false && ($_GET['category'] ?? '') === 'profile') ? 'active' : '' ?>">
-                <i class="fas fa-id-card"></i> Profile Pages
-            </a>
-        </li>
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/pages/index.php?category=policy"
-               class="<?= (strpos($_SERVER['PHP_SELF'], '/pages/') !== false && ($_GET['category'] ?? '') === 'policy') ? 'active' : '' ?>">
-                <i class="fas fa-file-contract"></i> Policy Pages
-            </a>
-        </li>
-    </ul>
+    <button class="nav-group-toggle <?= $is_website_active ? '' : 'collapsed' ?>"
+            data-bs-toggle="collapse" data-bs-target="#grp-website"
+            aria-expanded="<?= $is_website_active ? 'true' : 'false' ?>">
+        <i class="fas fa-globe grp-icon" style="color:#4f8ef7"></i>
+        Website & CMS
+        <i class="fas fa-chevron-down toggle-icon"></i>
+    </button>
+    <div class="collapse <?= $is_website_active ? 'show' : '' ?>" id="grp-website">
+        <ul class="nav flex-column grp-items">
+            <?php if (is_super_admin()): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/cms/header/index.php"
+                   class="<?= strpos($current_path, '/cms/header/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-heading"></i> Header
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/cms/menus/index.php"
+                   class="<?= strpos($current_path, '/cms/menus/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-bars"></i> Menus
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/cms/sliders/index.php"
+                   class="<?= strpos($current_path, '/cms/sliders/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-images"></i> Sliders
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/cms/news/index.php"
+                   class="<?= strpos($current_path, '/cms/news/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-newspaper"></i> News
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/cms/programs/index.php"
+                   class="<?= strpos($current_path, '/cms/programs/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-graduation-cap"></i> Programs
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/cms/about/index.php"
+                   class="<?= strpos($current_path, '/cms/about/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-info-circle"></i> About
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/cms/why-choose-us/index.php"
+                   class="<?= strpos($current_path, '/cms/why-choose-us/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-star"></i> Why Choose Us
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/cms/admissions/index.php"
+                   class="<?= strpos($current_path, '/cms/admissions/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-door-open"></i> Admissions
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/cms/campus/index.php"
+                   class="<?= strpos($current_path, '/cms/campus/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-university"></i> Campus Life
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/cms/alumni/index.php"
+                   class="<?= strpos($current_path, '/cms/alumni/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-user-graduate"></i> Alumni
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/cms/notice-board/index.php"
+                   class="<?= strpos($current_path, '/cms/notice-board/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-bullhorn"></i> Notice Board
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/homepage/index.php"
+                   class="<?= strpos($current_path, '/homepage/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-home"></i> Homepage
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/cms/contact-settings/index.php"
+                   class="<?= strpos($current_path, '/cms/contact-settings/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-address-card"></i> Contact Info
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/cms/footer/index.php"
+                   class="<?= strpos($current_path, '/cms/footer/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-shoe-prints"></i> Footer
+                </a>
+            </li>
+            <?php endif; ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/pages/index.php?category=general"
+                   class="<?= (strpos($current_path, '/pages/') !== false && ($_GET['category'] ?? '') === 'general') ? 'active' : '' ?>">
+                    <i class="fas fa-columns"></i> General Pages
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/pages/index.php?category=profile"
+                   class="<?= (strpos($current_path, '/pages/') !== false && ($_GET['category'] ?? '') === 'profile') ? 'active' : '' ?>">
+                    <i class="fas fa-id-card"></i> Profile Pages
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/pages/index.php?category=policy"
+                   class="<?= (strpos($current_path, '/pages/') !== false && ($_GET['category'] ?? '') === 'policy') ? 'active' : '' ?>">
+                    <i class="fas fa-file-contract"></i> Policy Pages
+                </a>
+            </li>
+        </ul>
+    </div>
     <?php endif; ?>
 
-    <?php if (is_super_admin()): ?>
-    <p class="nav-label">Faculty</p>
-    <ul class="nav flex-column">
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/faculty-profiles/index.php"
-               class="<?= strpos($_SERVER['PHP_SELF'], '/faculty-profiles/') !== false ? 'active' : '' ?>">
-                <i class="fas fa-id-card"></i> Faculty Profiles
-            </a>
-        </li>
-    </ul>
+    <!-- ── Academic ── -->
+    <?php if (is_super_admin() || can_access('students')): ?>
+    <button class="nav-group-toggle <?= $is_academic_active ? '' : 'collapsed' ?>"
+            data-bs-toggle="collapse" data-bs-target="#grp-academic"
+            aria-expanded="<?= $is_academic_active ? 'true' : 'false' ?>">
+        <i class="fas fa-graduation-cap grp-icon" style="color:#2ecc71"></i>
+        Academic
+        <i class="fas fa-chevron-down toggle-icon"></i>
+    </button>
+    <div class="collapse <?= $is_academic_active ? 'show' : '' ?>" id="grp-academic">
+        <ul class="nav flex-column grp-items">
+            <?php if (is_super_admin()): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/departments/index.php"
+                   class="<?= strpos($current_path, '/departments/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-building-columns"></i> Departments
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/faculty-profiles/index.php"
+                   class="<?= strpos($current_path, '/faculty-profiles/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-chalkboard-teacher"></i> Faculty Profiles
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('students')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/students/index.php"
+                   class="<?= strpos($current_path, '/students/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-user-graduate"></i> Students
+                </a>
+            </li>
+            <?php endif; ?>
+        </ul>
+    </div>
     <?php endif; ?>
 
+    <!-- ── Communication ── -->
+    <?php if (is_super_admin() || can_access('contact') || can_access('support-tickets') || can_access('knowledge-base')): ?>
+    <button class="nav-group-toggle <?= $is_comms_active ? '' : 'collapsed' ?>"
+            data-bs-toggle="collapse" data-bs-target="#grp-comms"
+            aria-expanded="<?= $is_comms_active ? 'true' : 'false' ?>">
+        <i class="fas fa-comments grp-icon" style="color:#9b59b6"></i>
+        Communication
+        <i class="fas fa-chevron-down toggle-icon"></i>
+    </button>
+    <div class="collapse <?= $is_comms_active ? 'show' : '' ?>" id="grp-comms">
+        <ul class="nav flex-column grp-items">
+            <?php if (is_super_admin() || can_access('contact')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/contact/index.php"
+                   class="<?= strpos($current_path, '/contact/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-envelope-open-text"></i> Contact Messages
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('support-tickets')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/support-tickets/index.php"
+                   class="<?= (strpos($current_path, '/support-tickets/') !== false && strpos($current_path, '/reports') === false) ? 'active' : '' ?>">
+                    <i class="fas fa-ticket-alt"></i> IT Support
+                </a>
+            </li>
+            <?php if (is_super_admin()): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/support-tickets/reports.php"
+                   class="<?= strpos($current_path, '/support-tickets/reports') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-chart-bar"></i> Support Reports
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('knowledge-base')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/knowledge-base/index.php"
+                   class="<?= strpos($current_path, '/knowledge-base/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-book-open"></i> Knowledge Base
+                </a>
+            </li>
+            <?php endif; ?>
+        </ul>
+    </div>
+    <?php endif; ?>
+
+    <!-- ── HR & Jobs ── -->
+    <?php if (is_super_admin() || can_access('jobs')): ?>
+    <button class="nav-group-toggle <?= $is_jobs_active ? '' : 'collapsed' ?>"
+            data-bs-toggle="collapse" data-bs-target="#grp-jobs"
+            aria-expanded="<?= $is_jobs_active ? 'true' : 'false' ?>">
+        <i class="fas fa-briefcase grp-icon" style="color:#e67e22"></i>
+        HR &amp; Jobs
+        <i class="fas fa-chevron-down toggle-icon"></i>
+    </button>
+    <div class="collapse <?= $is_jobs_active ? 'show' : '' ?>" id="grp-jobs">
+        <ul class="nav flex-column grp-items">
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/jobs/index.php"
+                   class="<?= (strpos($current_path, '/jobs/') !== false && strpos($current_path, '/jobs/application') === false) ? 'active' : '' ?>">
+                    <i class="fas fa-briefcase"></i> Job Postings
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/jobs/applications.php"
+                   class="<?= strpos($current_path, '/jobs/application') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-file-alt"></i> Applications
+                </a>
+            </li>
+        </ul>
+    </div>
+    <?php endif; ?>
+
+    <!-- ── Library ── -->
+    <?php if (is_super_admin() || can_access('library') || can_access('library-circulation') || can_access('library-digital')): ?>
+    <button class="nav-group-toggle <?= $is_library_active ? '' : 'collapsed' ?>"
+            data-bs-toggle="collapse" data-bs-target="#grp-library"
+            aria-expanded="<?= $is_library_active ? 'true' : 'false' ?>">
+        <i class="fas fa-book grp-icon" style="color:#1abc9c"></i>
+        Library
+        <i class="fas fa-chevron-down toggle-icon"></i>
+    </button>
+    <div class="collapse <?= $is_library_active ? 'show' : '' ?>" id="grp-library">
+        <ul class="nav flex-column grp-items">
+            <?php if (is_super_admin() || can_access('library')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/library/index.php"
+                   class="<?= (strpos($current_path, '/library/') !== false && strpos($current_path, '/library/circulation') === false && strpos($current_path, '/library/digital') === false) ? 'active' : '' ?>">
+                    <i class="fas fa-book-open"></i> Dashboard
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/library/books/index.php"
+                   class="<?= strpos($current_path, '/library/books/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-books"></i> Books
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/library/members/index.php"
+                   class="<?= strpos($current_path, '/library/members/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-users"></i> Members
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('library-circulation')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/library/circulation/index.php"
+                   class="<?= strpos($current_path, '/library/circulation/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-exchange-alt"></i> Circulation
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('library-digital')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/library/digital/index.php"
+                   class="<?= strpos($current_path, '/library/digital/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-file-pdf"></i> Digital Library
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('library')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/library/fines/index.php"
+                   class="<?= strpos($current_path, '/library/fines/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-money-bill-wave"></i> Fines
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/library/reports/index.php"
+                   class="<?= strpos($current_path, '/library/reports/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-chart-bar"></i> Reports
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin()): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/library/settings/index.php"
+                   class="<?= strpos($current_path, '/library/settings/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-cog"></i> Settings
+                </a>
+            </li>
+            <?php endif; ?>
+        </ul>
+    </div>
+    <?php endif; ?>
+
+    <!-- ── Administration ── -->
+    <?php if (is_super_admin() || can_access('users') || can_access('modules') || can_access('access') || can_access('email-templates')): ?>
+    <button class="nav-group-toggle <?= $is_admin_active ? '' : 'collapsed' ?>"
+            data-bs-toggle="collapse" data-bs-target="#grp-admin"
+            aria-expanded="<?= $is_admin_active ? 'true' : 'false' ?>">
+        <i class="fas fa-cogs grp-icon" style="color:#e74c3c"></i>
+        Administration
+        <i class="fas fa-chevron-down toggle-icon"></i>
+    </button>
+    <div class="collapse <?= $is_admin_active ? 'show' : '' ?>" id="grp-admin">
+        <ul class="nav flex-column grp-items">
+            <?php if (is_super_admin() || can_access('user-groups')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/user-groups/index.php"
+                   class="<?= strpos($current_path, '/user-groups/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-layer-group"></i> User Groups
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('users')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/users/index.php"
+                   class="<?= strpos($current_path, '/users/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-users"></i> Users
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('modules')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/modules/index.php"
+                   class="<?= strpos($current_path, '/modules/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-cubes"></i> Modules
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('access')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/access/index.php"
+                   class="<?= strpos($current_path, '/access/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-shield-alt"></i> Module Access
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('email-templates')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/email-templates/index.php"
+                   class="<?= strpos($current_path, '/email-templates/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-envelope-open-text"></i> Email Templates
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin()): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/change-log/index.php"
+                   class="<?= strpos($current_path, '/change-log/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-history"></i> Change Log
+                </a>
+            </li>
+            <?php endif; ?>
+        </ul>
+    </div>
+    <?php endif; ?>
+
+    <!-- ── My Profile (non-super-admin faculty) ── -->
     <?php if (!is_super_admin() && can_access('faculty-profile')): ?>
-    <p class="nav-label">My Profile</p>
-    <ul class="nav flex-column">
+    <ul class="nav flex-column mt-2">
         <li class="nav-item">
             <a href="<?= APP_URL ?>/faculty-profiles/my-profile.php"
-               class="<?= strpos($_SERVER['PHP_SELF'], '/faculty-profiles/') !== false ? 'active' : '' ?>">
+               class="<?= strpos($current_path, '/faculty-profiles/') !== false ? 'active' : '' ?>">
                 <i class="fas fa-id-card"></i> My Faculty Profile
             </a>
         </li>
-    </ul>
-    <?php endif; ?>
-
-    <?php if (is_super_admin() || can_access('support-tickets')): ?>
-    <p class="nav-label">IT Support</p>
-    <ul class="nav flex-column">
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/support-tickets/index.php"
-               class="<?= (strpos($_SERVER['PHP_SELF'], '/support-tickets/') !== false && strpos($_SERVER['PHP_SELF'], '/reports') === false) ? 'active' : '' ?>">
-                <i class="fas fa-ticket-alt"></i> My Tickets
-            </a>
-        </li>
-        <?php if (is_super_admin()): ?>
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/support-tickets/reports.php"
-               class="<?= strpos($_SERVER['PHP_SELF'], '/support-tickets/reports') !== false ? 'active' : '' ?>">
-                <i class="fas fa-chart-bar"></i> Reports
-            </a>
-        </li>
-        <?php endif; ?>
-    </ul>
-    <?php endif; ?>
-
-    <?php if (is_super_admin() || can_access('knowledge-base')): ?>
-    <p class="nav-label">Knowledge Base</p>
-    <ul class="nav flex-column">
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/knowledge-base/index.php"
-               class="<?= strpos($_SERVER['PHP_SELF'], '/knowledge-base/') !== false ? 'active' : '' ?>">
-                <i class="fas fa-book-open"></i> Knowledge Base
-            </a>
-        </li>
-    </ul>
-    <?php endif; ?>
-
-    <?php if (is_super_admin() || can_access('students')): ?>
-    <p class="nav-label">Students</p>
-    <ul class="nav flex-column">
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/students/index.php"
-               class="<?= strpos($_SERVER['PHP_SELF'], '/students/') !== false ? 'active' : '' ?>">
-                <i class="fas fa-user-graduate"></i> Student Management
-            </a>
-        </li>
-    </ul>
-    <?php endif; ?>
-
-    <?php if (is_super_admin() || can_access('jobs')): ?>
-    <p class="nav-label">Jobs</p>
-    <ul class="nav flex-column">
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/jobs/index.php"
-               class="<?= (strpos($_SERVER['PHP_SELF'], '/jobs/') !== false && strpos($_SERVER['PHP_SELF'], '/jobs/application') === false) ? 'active' : '' ?>">
-                <i class="fas fa-briefcase"></i> Job Postings
-            </a>
-        </li>
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/jobs/applications.php"
-               class="<?= strpos($_SERVER['PHP_SELF'], '/jobs/application') !== false ? 'active' : '' ?>">
-                <i class="fas fa-file-alt"></i> Applications
-            </a>
-        </li>
-    </ul>
-    <?php endif; ?>
-
-    <?php if (is_super_admin() || can_access('contact')): ?>
-    <p class="nav-label">Contact</p>
-    <ul class="nav flex-column">
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/contact/index.php"
-               class="<?= strpos($_SERVER['PHP_SELF'], '/contact/') !== false ? 'active' : '' ?>">
-                <i class="fas fa-envelope-open-text"></i> Contact Messages
-            </a>
-        </li>
-    </ul>
-    <?php endif; ?>
-
-    <?php if (is_super_admin() || can_access('library') || can_access('library-circulation') || can_access('library-digital')): ?>
-    <p class="nav-label">Library</p>
-    <ul class="nav flex-column">
-        <?php if (is_super_admin() || can_access('library')): ?>
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/library/index.php"
-               class="<?= (strpos($_SERVER['PHP_SELF'], '/library/') !== false && strpos($_SERVER['PHP_SELF'], '/library/circulation') === false && strpos($_SERVER['PHP_SELF'], '/library/digital') === false) ? 'active' : '' ?>">
-                <i class="fas fa-book-open"></i> Library Dashboard
-            </a>
-        </li>
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/library/books/index.php"
-               class="<?= strpos($_SERVER['PHP_SELF'], '/library/books/') !== false ? 'active' : '' ?>">
-                <i class="fas fa-books"></i> Books
-            </a>
-        </li>
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/library/members/index.php"
-               class="<?= strpos($_SERVER['PHP_SELF'], '/library/members/') !== false ? 'active' : '' ?>">
-                <i class="fas fa-users"></i> Members
-            </a>
-        </li>
-        <?php endif; ?>
-        <?php if (is_super_admin() || can_access('library-circulation')): ?>
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/library/circulation/index.php"
-               class="<?= strpos($_SERVER['PHP_SELF'], '/library/circulation/') !== false ? 'active' : '' ?>">
-                <i class="fas fa-exchange-alt"></i> Circulation
-            </a>
-        </li>
-        <?php endif; ?>
-        <?php if (is_super_admin() || can_access('library-digital')): ?>
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/library/digital/index.php"
-               class="<?= strpos($_SERVER['PHP_SELF'], '/library/digital/') !== false ? 'active' : '' ?>">
-                <i class="fas fa-file-pdf"></i> Digital Library
-            </a>
-        </li>
-        <?php endif; ?>
-        <?php if (is_super_admin() || can_access('library')): ?>
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/library/fines/index.php"
-               class="<?= strpos($_SERVER['PHP_SELF'], '/library/fines/') !== false ? 'active' : '' ?>">
-                <i class="fas fa-money-bill-wave"></i> Fines
-            </a>
-        </li>
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/library/reports/index.php"
-               class="<?= strpos($_SERVER['PHP_SELF'], '/library/reports/') !== false ? 'active' : '' ?>">
-                <i class="fas fa-chart-bar"></i> Reports
-            </a>
-        </li>
-        <?php endif; ?>
-        <?php if (is_super_admin()): ?>
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/library/settings/index.php"
-               class="<?= strpos($_SERVER['PHP_SELF'], '/library/settings/') !== false ? 'active' : '' ?>">
-                <i class="fas fa-cog"></i> Library Settings
-            </a>
-        </li>
-        <?php endif; ?>
     </ul>
     <?php endif; ?>
 

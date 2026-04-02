@@ -135,6 +135,18 @@ function flash_get(string $type): ?string {
     return $msg;
 }
 
+function flash_show(): void {
+    foreach (['success', 'error', 'warning', 'info'] as $type) {
+        $msg = flash_get($type);
+        if ($msg) {
+            $cls = $type === 'error' ? 'danger' : $type;
+            echo '<div class="alert alert-' . $cls . ' alert-dismissible fade show" role="alert">'
+               . strip_tags($msg, '<strong><em><b><i>')
+               . '<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
+        }
+    }
+}
+
 // ── Misc helpers ─────────────────────────────────────────────────────────────
 function redirect(string $url): never {
     header('Location: ' . $url);
