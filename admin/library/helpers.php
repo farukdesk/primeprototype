@@ -184,6 +184,41 @@ function lib_upload_librarian_photo(array $file): string
 }
 
 /**
+ * Upload a department collection image to UPLOAD_DIR/library/dept-collections/.
+ *
+ * @param  array  $file  $_FILES entry.
+ * @return string        Stored filename on success.
+ * @throws RuntimeException on validation or move failure.
+ */
+function lib_upload_dept_image(array $file): string
+{
+    if ($file['error'] !== UPLOAD_ERR_OK) {
+        throw new RuntimeException('Image upload error code: ' . $file['error']);
+    }
+    if ($file['size'] > LIB_COVER_MAX) {
+        throw new RuntimeException('Department image exceeds maximum size of 5 MB.');
+    }
+    $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    if (!in_array($ext, LIB_COVER_EXTS, true)) {
+        throw new RuntimeException('Invalid image extension: ' . $ext);
+    }
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $mime  = $finfo->file($file['tmp_name']);
+    if (!in_array($mime, LIB_COVER_MIMES, true)) {
+        throw new RuntimeException('Invalid image MIME type: ' . $mime);
+    }
+
+    $dir = UPLOAD_DIR . '/library/dept-collections';
+    if (!is_dir($dir)) mkdir($dir, 0755, true);
+
+    $stored = bin2hex(random_bytes(16)) . '.' . $ext;
+    if (!move_uploaded_file($file['tmp_name'], $dir . '/' . $stored)) {
+        throw new RuntimeException('Failed to move department image to storage.');
+    }
+    return $stored;
+}
+
+/**
  * Upload a digital resource file to UPLOAD_DIR/library/digital/.
  *
  * @param  array $file  $_FILES entry.

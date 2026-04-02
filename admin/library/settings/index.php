@@ -176,6 +176,126 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash_set('success','Category deleted.');
         redirect(APP_URL.'/admin/library/settings/index.php?tab=categories');
     }
+
+    // ── Dept. Collections ──────────────────────────────────────────────────────
+
+    if ($action === 'add_dept_collection') {
+        csrf_check();
+        $label      = trim($_POST['dc_label'] ?? '');
+        $sub_label  = trim($_POST['dc_sub_label'] ?? '');
+        $icon_class = trim($_POST['dc_icon_class'] ?? 'fas fa-book');
+        $color_from = trim($_POST['dc_color_from'] ?? '#0f2a6b');
+        $color_to   = trim($_POST['dc_color_to'] ?? '#1e4db7');
+        $sort_order = (int)($_POST['dc_sort_order'] ?? 0);
+        $is_active  = isset($_POST['dc_is_active']) ? 1 : 0;
+        if (!$label) { flash_set('error','Label is required.'); redirect(APP_URL.'/admin/library/settings/index.php?tab=deptcol'); }
+        $image_file = '';
+        if (!empty($_FILES['dc_image']['name'])) {
+            try { $image_file = lib_upload_dept_image($_FILES['dc_image']); }
+            catch (RuntimeException $e) { flash_set('error',$e->getMessage()); redirect(APP_URL.'/admin/library/settings/index.php?tab=deptcol'); }
+        }
+        $pdo->prepare('INSERT INTO library_dept_collections (label,sub_label,icon_class,color_from,color_to,image_file,sort_order,is_active) VALUES (?,?,?,?,?,?,?,?)')
+            ->execute([$label,$sub_label,$icon_class,$color_from,$color_to,$image_file,$sort_order,$is_active]);
+        lib_audit('DEPT_COLLECTION_ADDED','library',(int)$pdo->lastInsertId(),$label,'Dept. collection added');
+        flash_set('success','Department collection added.');
+        redirect(APP_URL.'/admin/library/settings/index.php?tab=deptcol');
+    }
+
+    if ($action === 'edit_dept_collection') {
+        csrf_check();
+        $dcid = (int)($_POST['dc_id'] ?? 0);
+        $stmt = $pdo->prepare('SELECT * FROM library_dept_collections WHERE id=?'); $stmt->execute([$dcid]);
+        $dc   = $stmt->fetch();
+        if (!$dc) { flash_set('error','Not found.'); redirect(APP_URL.'/admin/library/settings/index.php?tab=deptcol'); }
+        $label      = trim($_POST['dc_label'] ?? '');
+        $image_file = $dc['image_file'];
+        if (!empty($_FILES['dc_image']['name'])) {
+            if ($image_file) lib_delete_file('dept-collections', $image_file);
+            try { $image_file = lib_upload_dept_image($_FILES['dc_image']); }
+            catch (RuntimeException $e) { flash_set('error',$e->getMessage()); redirect(APP_URL.'/admin/library/settings/index.php?tab=deptcol'); }
+        }
+        if (isset($_POST['dc_remove_image']) && $dc['image_file']) {
+            lib_delete_file('dept-collections', $dc['image_file']);
+            $image_file = '';
+        }
+        $pdo->prepare('UPDATE library_dept_collections SET label=?,sub_label=?,icon_class=?,color_from=?,color_to=?,image_file=?,sort_order=?,is_active=? WHERE id=?')
+            ->execute([$label,trim($_POST['dc_sub_label']??''),trim($_POST['dc_icon_class']??'fas fa-book'),trim($_POST['dc_color_from']??'#0f2a6b'),trim($_POST['dc_color_to']??'#1e4db7'),$image_file,(int)($_POST['dc_sort_order']??0),(int)(isset($_POST['dc_is_active'])),$dcid]);
+        lib_audit('DEPT_COLLECTION_UPDATED','library',$dcid,$label,'Dept. collection updated');
+        flash_set('success','Department collection updated.');
+        redirect(APP_URL.'/admin/library/settings/index.php?tab=deptcol');
+    }
+
+    if ($action === 'delete_dept_collection') {
+        csrf_check();
+        $dcid = (int)($_POST['dc_id'] ?? 0);
+        $stmt = $pdo->prepare('SELECT * FROM library_dept_collections WHERE id=?'); $stmt->execute([$dcid]);
+        $dc   = $stmt->fetch();
+        if (!$dc) { flash_set('error','Not found.'); redirect(APP_URL.'/admin/library/settings/index.php?tab=deptcol'); }
+        if ($dc['image_file']) lib_delete_file('dept-collections', $dc['image_file']);
+        $pdo->prepare('DELETE FROM library_dept_collections WHERE id=?')->execute([$dcid]);
+        lib_audit('DEPT_COLLECTION_DELETED','library',$dcid,$dc['label'],'Dept. collection deleted');
+        flash_set('success','Department collection deleted.');
+        redirect(APP_URL.'/admin/library/settings/index.php?tab=deptcol');
+    }
+
+    if ($action === 'toggle_dept_collection') {
+        csrf_check();
+        $dcid = (int)($_POST['dc_id'] ?? 0);
+        $pdo->prepare('UPDATE library_dept_collections SET is_active = NOT is_active WHERE id=?')->execute([$dcid]);
+        flash_set('success','Status updated.');
+        redirect(APP_URL.'/admin/library/settings/index.php?tab=deptcol');
+    }
+
+    // ── Library Facilities ─────────────────────────────────────────────────────
+
+    if ($action === 'add_facility') {
+        csrf_check();
+        $name            = trim($_POST['fac_name'] ?? '');
+        $icon_class      = trim($_POST['fac_icon_class'] ?? 'fas fa-star');
+        $description     = trim($_POST['fac_description'] ?? '');
+        $icon_bg_color   = trim($_POST['fac_icon_bg_color'] ?? '#f9e8eb');
+        $icon_text_color = trim($_POST['fac_icon_text_color'] ?? '#b5182e');
+        $sort_order      = (int)($_POST['fac_sort_order'] ?? 0);
+        $is_active       = isset($_POST['fac_is_active']) ? 1 : 0;
+        if (!$name) { flash_set('error','Facility name is required.'); redirect(APP_URL.'/admin/library/settings/index.php?tab=facilities'); }
+        $pdo->prepare('INSERT INTO library_facilities (icon_class,name,description,icon_bg_color,icon_text_color,sort_order,is_active) VALUES (?,?,?,?,?,?,?)')
+            ->execute([$icon_class,$name,$description,$icon_bg_color,$icon_text_color,$sort_order,$is_active]);
+        lib_audit('FACILITY_ADDED','library',(int)$pdo->lastInsertId(),$name,'Facility added');
+        flash_set('success','Facility added.');
+        redirect(APP_URL.'/admin/library/settings/index.php?tab=facilities');
+    }
+
+    if ($action === 'edit_facility') {
+        csrf_check();
+        $fid  = (int)($_POST['fac_id'] ?? 0);
+        $name = trim($_POST['fac_name'] ?? '');
+        if (!$fid || !$name) { flash_set('error','Invalid data.'); redirect(APP_URL.'/admin/library/settings/index.php?tab=facilities'); }
+        $pdo->prepare('UPDATE library_facilities SET icon_class=?,name=?,description=?,icon_bg_color=?,icon_text_color=?,sort_order=?,is_active=? WHERE id=?')
+            ->execute([trim($_POST['fac_icon_class']??'fas fa-star'),$name,trim($_POST['fac_description']??''),trim($_POST['fac_icon_bg_color']??'#f9e8eb'),trim($_POST['fac_icon_text_color']??'#b5182e'),(int)($_POST['fac_sort_order']??0),(int)(isset($_POST['fac_is_active'])),$fid]);
+        lib_audit('FACILITY_UPDATED','library',$fid,$name,'Facility updated');
+        flash_set('success','Facility updated.');
+        redirect(APP_URL.'/admin/library/settings/index.php?tab=facilities');
+    }
+
+    if ($action === 'delete_facility') {
+        csrf_check();
+        $fid  = (int)($_POST['fac_id'] ?? 0);
+        $stmt = $pdo->prepare('SELECT * FROM library_facilities WHERE id=?'); $stmt->execute([$fid]);
+        $fac  = $stmt->fetch();
+        if (!$fac) { flash_set('error','Not found.'); redirect(APP_URL.'/admin/library/settings/index.php?tab=facilities'); }
+        $pdo->prepare('DELETE FROM library_facilities WHERE id=?')->execute([$fid]);
+        lib_audit('FACILITY_DELETED','library',$fid,$fac['name'],'Facility deleted');
+        flash_set('success','Facility deleted.');
+        redirect(APP_URL.'/admin/library/settings/index.php?tab=facilities');
+    }
+
+    if ($action === 'toggle_facility') {
+        csrf_check();
+        $fid = (int)($_POST['fac_id'] ?? 0);
+        $pdo->prepare('UPDATE library_facilities SET is_active = NOT is_active WHERE id=?')->execute([$fid]);
+        flash_set('success','Status updated.');
+        redirect(APP_URL.'/admin/library/settings/index.php?tab=facilities');
+    }
 }
 
 // ── Data for display ──────────────────────────────────────────────────────────
@@ -183,6 +303,12 @@ $settings    = lib_settings_all();
 $librarians  = $pdo->query('SELECT * FROM library_librarians ORDER BY sort_order ASC, name ASC')->fetchAll();
 $categories  = $pdo->query('SELECT c.*, p.name as parent_name, (SELECT COUNT(*) FROM library_books b WHERE b.category_id=c.id) as book_count FROM library_categories c LEFT JOIN library_categories p ON p.id=c.parent_id ORDER BY c.sort_order ASC, c.name ASC')->fetchAll();
 $root_cats   = array_filter($categories, fn($c) => !$c['parent_id']);
+$dept_collections = [];
+$facilities       = [];
+try {
+    $dept_collections = $pdo->query('SELECT * FROM library_dept_collections ORDER BY sort_order ASC, id ASC')->fetchAll();
+    $facilities       = $pdo->query('SELECT * FROM library_facilities ORDER BY sort_order ASC, id ASC')->fetchAll();
+} catch (Throwable $e) { /* tables may not exist yet */ }
 
 $page_title  = 'Library Settings';
 $breadcrumbs = [
@@ -208,11 +334,13 @@ $s = fn(string $k, mixed $d='') => $settings[$k] ?? $d;
     <?php endif; ?>
 
     <!-- Tabs Nav -->
-    <ul class="nav nav-tabs mb-3" id="settingsTabs">
+    <ul class="nav nav-tabs mb-3 flex-wrap" id="settingsTabs">
         <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-info" type="button"><i class="fa fa-info-circle me-1"></i>Library Info</button></li>
         <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-rules" type="button"><i class="fa fa-gavel me-1"></i>Borrowing Rules</button></li>
         <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-librarians" type="button"><i class="fa fa-id-badge me-1"></i>Librarians</button></li>
         <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-categories" type="button"><i class="fa fa-tags me-1"></i>Categories</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-deptcol" type="button"><i class="fa fa-th-large me-1"></i>Dept. Collections</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-facilities" type="button"><i class="fa fa-building me-1"></i>Facilities</button></li>
     </ul>
 
     <div class="tab-content">
@@ -480,7 +608,171 @@ $s = fn(string $k, mixed $d='') => $settings[$k] ?? $d;
             </div>
         </div>
 
-    </div><!-- /tab-content -->
+        <!-- TAB: Dept. Collections -->
+        <div class="tab-pane fade" id="tab-deptcol">
+            <div class="card mb-3">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <span class="fw-semibold"><i class="fa fa-th-large me-1 text-primary"></i>Department Collections</span>
+                    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addDeptColModal">
+                        <i class="fa fa-plus me-1"></i>Add Collection
+                    </button>
+                </div>
+                <div class="card-body p-0">
+                    <?php if (!$dept_collections): ?>
+                        <div class="text-center text-muted py-4">No department collections yet. Run <code>library-v2.sql</code> and add collections above.</div>
+                    <?php else: ?>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Preview</th>
+                                    <th>Label</th>
+                                    <th>Sub Label</th>
+                                    <th>Icon</th>
+                                    <th>Gradient</th>
+                                    <th class="text-center">Sort</th>
+                                    <th class="text-center">Status</th>
+                                    <th class="text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($dept_collections as $dc): ?>
+                                <tr>
+                                    <td>
+                                        <?php if ($dc['image_file']): ?>
+                                            <img src="<?= h(UPLOAD_URL) ?>/library/dept-collections/<?= h($dc['image_file']) ?>" alt="" style="width:60px;height:40px;object-fit:cover;border-radius:6px;">
+                                        <?php else: ?>
+                                            <div style="width:60px;height:40px;border-radius:6px;background:linear-gradient(150deg,<?= h($dc['color_from']) ?> 0%,<?= h($dc['color_to']) ?> 100%);display:flex;align-items:center;justify-content:center;">
+                                                <i class="<?= h($dc['icon_class']) ?>" style="color:#fff;font-size:.85rem;"></i>
+                                            </div>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td class="fw-semibold"><?= h($dc['label']) ?></td>
+                                    <td><?= h($dc['sub_label']) ?></td>
+                                    <td><code><?= h($dc['icon_class']) ?></code></td>
+                                    <td>
+                                        <span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:<?= h($dc['color_from']) ?>;vertical-align:middle;"></span>
+                                        → <span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:<?= h($dc['color_to']) ?>;vertical-align:middle;"></span>
+                                    </td>
+                                    <td class="text-center"><?= (int)$dc['sort_order'] ?></td>
+                                    <td class="text-center">
+                                        <form method="post" class="d-inline">
+                                            <?= csrf_field() ?>
+                                            <input type="hidden" name="action" value="toggle_dept_collection">
+                                            <input type="hidden" name="dc_id" value="<?= $dc['id'] ?>">
+                                            <button type="submit" class="btn btn-sm <?= $dc['is_active'] ? 'btn-success' : 'btn-secondary' ?>">
+                                                <?= $dc['is_active'] ? 'Active' : 'Hidden' ?>
+                                            </button>
+                                        </form>
+                                    </td>
+                                    <td class="text-end">
+                                        <button class="btn btn-sm btn-outline-primary me-1"
+                                            data-bs-toggle="modal" data-bs-target="#editDeptColModal"
+                                            data-id="<?= $dc['id'] ?>"
+                                            data-label="<?= h($dc['label']) ?>"
+                                            data-sublabel="<?= h($dc['sub_label']) ?>"
+                                            data-icon="<?= h($dc['icon_class']) ?>"
+                                            data-from="<?= h($dc['color_from']) ?>"
+                                            data-to="<?= h($dc['color_to']) ?>"
+                                            data-sort="<?= (int)$dc['sort_order'] ?>"
+                                            data-active="<?= (int)$dc['is_active'] ?>"
+                                            data-image="<?= $dc['image_file'] ? h(UPLOAD_URL).'/library/dept-collections/'.h($dc['image_file']) : '' ?>">
+                                            <i class="fa fa-edit"></i>
+                                        </button>
+                                        <form method="post" class="d-inline" onsubmit="return confirm('Delete this collection?')">
+                                            <?= csrf_field() ?>
+                                            <input type="hidden" name="action" value="delete_dept_collection">
+                                            <input type="hidden" name="dc_id" value="<?= $dc['id'] ?>">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger"><i class="fa fa-trash"></i></button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: Library Facilities -->
+        <div class="tab-pane fade" id="tab-facilities">
+            <div class="card mb-3">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <span class="fw-semibold"><i class="fa fa-building me-1 text-primary"></i>Library Facilities</span>
+                    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addFacilityModal">
+                        <i class="fa fa-plus me-1"></i>Add Facility
+                    </button>
+                </div>
+                <div class="card-body p-0">
+                    <?php if (!$facilities): ?>
+                        <div class="text-center text-muted py-4">No facilities yet. Run <code>library-v2.sql</code> and add facilities above.</div>
+                    <?php else: ?>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Icon Preview</th>
+                                    <th>Name</th>
+                                    <th>Description</th>
+                                    <th class="text-center">Sort</th>
+                                    <th class="text-center">Status</th>
+                                    <th class="text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($facilities as $fac): ?>
+                                <tr>
+                                    <td>
+                                        <div style="width:40px;height:40px;border-radius:8px;background:<?= h($fac['icon_bg_color']) ?>;display:flex;align-items:center;justify-content:center;">
+                                            <i class="<?= h($fac['icon_class']) ?>" style="color:<?= h($fac['icon_text_color']) ?>;font-size:1rem;"></i>
+                                        </div>
+                                    </td>
+                                    <td class="fw-semibold"><?= h($fac['name']) ?></td>
+                                    <td style="max-width:260px;white-space:normal;font-size:.85rem;"><?= h($fac['description']) ?></td>
+                                    <td class="text-center"><?= (int)$fac['sort_order'] ?></td>
+                                    <td class="text-center">
+                                        <form method="post" class="d-inline">
+                                            <?= csrf_field() ?>
+                                            <input type="hidden" name="action" value="toggle_facility">
+                                            <input type="hidden" name="fac_id" value="<?= $fac['id'] ?>">
+                                            <button type="submit" class="btn btn-sm <?= $fac['is_active'] ? 'btn-success' : 'btn-secondary' ?>">
+                                                <?= $fac['is_active'] ? 'Active' : 'Hidden' ?>
+                                            </button>
+                                        </form>
+                                    </td>
+                                    <td class="text-end">
+                                        <button class="btn btn-sm btn-outline-primary me-1"
+                                            data-bs-toggle="modal" data-bs-target="#editFacilityModal"
+                                            data-id="<?= $fac['id'] ?>"
+                                            data-name="<?= h($fac['name']) ?>"
+                                            data-desc="<?= h($fac['description']) ?>"
+                                            data-icon="<?= h($fac['icon_class']) ?>"
+                                            data-bg="<?= h($fac['icon_bg_color']) ?>"
+                                            data-color="<?= h($fac['icon_text_color']) ?>"
+                                            data-sort="<?= (int)$fac['sort_order'] ?>"
+                                            data-active="<?= (int)$fac['is_active'] ?>">
+                                            <i class="fa fa-edit"></i>
+                                        </button>
+                                        <form method="post" class="d-inline" onsubmit="return confirm('Delete this facility?')">
+                                            <?= csrf_field() ?>
+                                            <input type="hidden" name="action" value="delete_facility">
+                                            <input type="hidden" name="fac_id" value="<?= $fac['id'] ?>">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger"><i class="fa fa-trash"></i></button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /tab-content wrapper -->
 </div><!-- /container-fluid -->
 
 <!-- ── Add Librarian Modal ─────────────────────────────────────────────────── -->
@@ -730,6 +1022,279 @@ document.getElementById('editCategoryModal').addEventListener('show.bs.modal', f
     document.getElementById('editCatParent').value = btn.dataset.parent;
     document.getElementById('editCatSort').value   = btn.dataset.sort;
 });
+
+// Edit Dept. Collection modal population
+const editDeptColModal = document.getElementById('editDeptColModal');
+if (editDeptColModal) {
+    editDeptColModal.addEventListener('show.bs.modal', function(e) {
+        const btn = e.relatedTarget;
+        document.getElementById('editDcId').value       = btn.dataset.id;
+        document.getElementById('editDcLabel').value    = btn.dataset.label;
+        document.getElementById('editDcSubLabel').value = btn.dataset.sublabel;
+        document.getElementById('editDcIcon').value     = btn.dataset.icon;
+        document.getElementById('editDcFrom').value     = btn.dataset.from;
+        document.getElementById('editDcTo').value       = btn.dataset.to;
+        document.getElementById('editDcSort').value     = btn.dataset.sort;
+        document.getElementById('editDcActive').checked = btn.dataset.active === '1';
+        const wrap = document.getElementById('editDcImgWrap');
+        const img  = document.getElementById('editDcImg');
+        if (btn.dataset.image) { img.src = btn.dataset.image; wrap.classList.remove('d-none'); }
+        else { wrap.classList.add('d-none'); }
+    });
+}
+
+// Edit Facility modal population
+const editFacilityModal = document.getElementById('editFacilityModal');
+if (editFacilityModal) {
+    editFacilityModal.addEventListener('show.bs.modal', function(e) {
+        const btn = e.relatedTarget;
+        document.getElementById('editFacId').value     = btn.dataset.id;
+        document.getElementById('editFacName').value   = btn.dataset.name;
+        document.getElementById('editFacDesc').value   = btn.dataset.desc;
+        document.getElementById('editFacIcon').value   = btn.dataset.icon;
+        document.getElementById('editFacBg').value     = btn.dataset.bg;
+        document.getElementById('editFacColor').value  = btn.dataset.color;
+        document.getElementById('editFacSort').value   = btn.dataset.sort;
+        document.getElementById('editFacActive').checked = btn.dataset.active === '1';
+    });
+}
 </script>
+
+<!-- ── Add Dept. Collection Modal ─────────────────────────────────────────── -->
+<div class="modal fade" id="addDeptColModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <form method="post" enctype="multipart/form-data">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="add_dept_collection">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fa fa-plus me-1"></i>Add Department Collection</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Label <span class="text-danger">*</span></label>
+                            <input type="text" name="dc_label" class="form-control" placeholder="e.g. CSE" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Sub Label</label>
+                            <input type="text" name="dc_sub_label" class="form-control" placeholder="e.g. Computer Science &amp; Eng.">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Icon Class <small class="text-muted">(Font Awesome)</small></label>
+                            <input type="text" name="dc_icon_class" class="form-control" value="fas fa-book" placeholder="fas fa-microchip">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Gradient From</label>
+                            <input type="color" name="dc_color_from" class="form-control form-control-color w-100" value="#0f2a6b">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Gradient To</label>
+                            <input type="color" name="dc_color_to" class="form-control form-control-color w-100" value="#1e4db7">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Background Image <small class="text-muted">(optional, max 5 MB)</small></label>
+                            <input type="file" name="dc_image" class="form-control" accept="image/jpeg,image/png,image/gif,image/webp">
+                            <div class="form-text">If set, the image overrides the gradient background.</div>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Sort Order</label>
+                            <input type="number" name="dc_sort_order" class="form-control" value="0">
+                        </div>
+                        <div class="col-md-3 d-flex align-items-end pb-1">
+                            <div class="form-check">
+                                <input type="checkbox" name="dc_is_active" class="form-check-input" id="addDcActive" checked>
+                                <label class="form-check-label" for="addDcActive">Active</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary"><i class="fa fa-save me-1"></i>Add Collection</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ── Edit Dept. Collection Modal ────────────────────────────────────────── -->
+<div class="modal fade" id="editDeptColModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <form method="post" enctype="multipart/form-data">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="edit_dept_collection">
+            <input type="hidden" name="dc_id" id="editDcId">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fa fa-edit me-1"></i>Edit Department Collection</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Label <span class="text-danger">*</span></label>
+                            <input type="text" name="dc_label" id="editDcLabel" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Sub Label</label>
+                            <input type="text" name="dc_sub_label" id="editDcSubLabel" class="form-control">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Icon Class <small class="text-muted">(Font Awesome)</small></label>
+                            <input type="text" name="dc_icon_class" id="editDcIcon" class="form-control">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Gradient From</label>
+                            <input type="color" name="dc_color_from" id="editDcFrom" class="form-control form-control-color w-100">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Gradient To</label>
+                            <input type="color" name="dc_color_to" id="editDcTo" class="form-control form-control-color w-100">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Replace Image <small class="text-muted">(leave blank to keep)</small></label>
+                            <input type="file" name="dc_image" class="form-control" accept="image/jpeg,image/png,image/gif,image/webp">
+                        </div>
+                        <div class="col-md-6 d-none" id="editDcImgWrap">
+                            <label class="form-label">Current Image</label>
+                            <div class="d-flex align-items-center gap-2">
+                                <img id="editDcImg" src="" alt="" style="height:50px;border-radius:6px;">
+                                <div class="form-check">
+                                    <input type="checkbox" name="dc_remove_image" class="form-check-input" id="editDcRemoveImg">
+                                    <label class="form-check-label" for="editDcRemoveImg">Remove image</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Sort Order</label>
+                            <input type="number" name="dc_sort_order" id="editDcSort" class="form-control">
+                        </div>
+                        <div class="col-md-3 d-flex align-items-end pb-1">
+                            <div class="form-check">
+                                <input type="checkbox" name="dc_is_active" class="form-check-input" id="editDcActive">
+                                <label class="form-check-label" for="editDcActive">Active</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary"><i class="fa fa-save me-1"></i>Save Changes</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ── Add Facility Modal ─────────────────────────────────────────────────── -->
+<div class="modal fade" id="addFacilityModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <form method="post">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="add_facility">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fa fa-plus me-1"></i>Add Facility</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Name <span class="text-danger">*</span></label>
+                            <input type="text" name="fac_name" class="form-control" placeholder="e.g. Reading Room" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Icon Class <small class="text-muted">(Font Awesome)</small></label>
+                            <input type="text" name="fac_icon_class" class="form-control" value="fas fa-star" placeholder="fas fa-book-reader">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Description</label>
+                            <input type="text" name="fac_description" class="form-control" placeholder="Brief description of the facility">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Icon Background Color</label>
+                            <input type="color" name="fac_icon_bg_color" class="form-control form-control-color w-100" value="#f9e8eb">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Icon Text Color</label>
+                            <input type="color" name="fac_icon_text_color" class="form-control form-control-color w-100" value="#b5182e">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Sort Order</label>
+                            <input type="number" name="fac_sort_order" class="form-control" value="0">
+                        </div>
+                        <div class="col-md-2 d-flex align-items-end pb-1">
+                            <div class="form-check">
+                                <input type="checkbox" name="fac_is_active" class="form-check-input" id="addFacActive" checked>
+                                <label class="form-check-label" for="addFacActive">Active</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary"><i class="fa fa-save me-1"></i>Add Facility</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ── Edit Facility Modal ────────────────────────────────────────────────── -->
+<div class="modal fade" id="editFacilityModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <form method="post">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="edit_facility">
+            <input type="hidden" name="fac_id" id="editFacId">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fa fa-edit me-1"></i>Edit Facility</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Name <span class="text-danger">*</span></label>
+                            <input type="text" name="fac_name" id="editFacName" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Icon Class <small class="text-muted">(Font Awesome)</small></label>
+                            <input type="text" name="fac_icon_class" id="editFacIcon" class="form-control">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Description</label>
+                            <input type="text" name="fac_description" id="editFacDesc" class="form-control">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Icon Background Color</label>
+                            <input type="color" name="fac_icon_bg_color" id="editFacBg" class="form-control form-control-color w-100">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Icon Text Color</label>
+                            <input type="color" name="fac_icon_text_color" id="editFacColor" class="form-control form-control-color w-100">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Sort Order</label>
+                            <input type="number" name="fac_sort_order" id="editFacSort" class="form-control">
+                        </div>
+                        <div class="col-md-2 d-flex align-items-end pb-1">
+                            <div class="form-check">
+                                <input type="checkbox" name="fac_is_active" class="form-check-input" id="editFacActive">
+                                <label class="form-check-label" for="editFacActive">Active</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary"><i class="fa fa-save me-1"></i>Save Changes</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
 
 <?php require_once __DIR__ . '/../../includes/footer.php'; ?>

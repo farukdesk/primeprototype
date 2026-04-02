@@ -4,11 +4,13 @@ require_once __DIR__ . '/includes/config.php';
 $page_title = 'Library – Prime University';
 
 // Fetch library data (gracefully fail if tables don't exist yet)
-$lib_settings = [];
-$librarians   = [];
-$books        = [];
-$digital      = [];
-$categories   = [];
+$lib_settings     = [];
+$librarians       = [];
+$books            = [];
+$digital          = [];
+$categories       = [];
+$dept_collections = [];
+$facilities       = [];
 $search_q     = trim($_GET['q'] ?? '');
 $search_cat   = (int)($_GET['cat'] ?? 0);
 
@@ -57,6 +59,20 @@ try {
              WHERE is_active = 1 AND access_level = 'Public'
              ORDER BY created_at DESC LIMIT 6"
         )->fetchAll();
+
+        // Dept. collections (v2 table — optional)
+        try {
+            $dept_collections = $db->query(
+                'SELECT * FROM library_dept_collections WHERE is_active = 1 ORDER BY sort_order ASC, id ASC'
+            )->fetchAll();
+        } catch (Throwable $e2) { /* table not yet created */ }
+
+        // Library facilities (v2 table — optional)
+        try {
+            $facilities = $db->query(
+                'SELECT * FROM library_facilities WHERE is_active = 1 ORDER BY sort_order ASC, id ASC'
+            )->fetchAll();
+        } catch (Throwable $e3) { /* table not yet created */ }
     }
 } catch (Throwable $e) {
     // Tables may not exist yet; silently fall through
@@ -145,14 +161,7 @@ $lib_desc    = $lib_settings['lib_description']  ?? 'A modern academic library s
       .lib-section-head.left .title-bar { margin-left: 0; }
 
       /* ── Breadcrumb ─────────────────────────────────────── */
-      .lib-breadcrumb {
-         background: var(--ink); border-bottom: 3px solid var(--crimson); padding: 10px 0;
-      }
-      .lib-breadcrumb ol { margin: 0; background: transparent; padding: 0; }
-      .lib-breadcrumb .breadcrumb-item a { color: #aec0d8; text-decoration: none; font-size: .85rem; }
-      .lib-breadcrumb .breadcrumb-item a:hover { color: #fff; }
-      .lib-breadcrumb .breadcrumb-item.active { color: rgba(255,255,255,.6); font-size: .85rem; }
-      .lib-breadcrumb .breadcrumb-item + .breadcrumb-item::before { color: rgba(255,255,255,.35); }
+      .lib-breadcrumb { display: none; }
 
       /* ── Hero ───────────────────────────────────────────── */
       .lib-hero {
@@ -489,6 +498,30 @@ $lib_desc    = $lib_settings['lib_description']  ?? 'A modern academic library s
       .contact-item a { color: var(--ink); text-decoration: none; }
       .contact-item a:hover { color: var(--teal); }
 
+      /* ── Librarians ──────────────────────────────────────── */
+      .librarian-card {
+         background: var(--white); border: 1px solid var(--border);
+         border-radius: var(--radius-lg); padding: 28px 20px 22px;
+         text-align: center; height: 100%;
+         transition: box-shadow .22s, transform .22s, border-color .22s;
+      }
+      .librarian-card:hover { box-shadow: var(--shadow-md); transform: translateY(-5px); border-color: transparent; }
+      .librarian-photo {
+         width: 90px; height: 90px; border-radius: 50%; object-fit: cover;
+         border: 3px solid var(--crimson-lt); margin: 0 auto 14px; display: block;
+      }
+      .librarian-avatar {
+         width: 90px; height: 90px; border-radius: 50%;
+         background: linear-gradient(135deg, var(--ink) 0%, var(--ink2) 100%);
+         display: flex; align-items: center; justify-content: center;
+         margin: 0 auto 14px; font-size: 2rem; color: rgba(255,255,255,.6);
+      }
+      .librarian-name { font-weight: 700; color: var(--ink); font-size: 1rem; margin-bottom: 4px; }
+      .librarian-designation { font-size: .8rem; color: var(--crimson); font-weight: 600; margin-bottom: 10px; }
+      .librarian-info { font-size: .8rem; color: var(--muted); line-height: 1.6; }
+      .librarian-info a { color: var(--teal); text-decoration: none; }
+      .librarian-info a:hover { text-decoration: underline; }
+
       /* ── Responsive ─────────────────────────────────────── */
       @media (max-width: 991.98px) {
          .lib-hero h1 { font-size: 2rem; }
@@ -695,23 +728,28 @@ $lib_desc    = $lib_settings['lib_description']  ?? 'A modern academic library s
          </div>
          <div class="row g-3">
             <?php
-            $depts = [
-               ['label'=>'CSE',            'sub'=>'Computer Science &amp; Eng.',  'cls'=>'dept-cse',    'icon'=>'fas fa-microchip'],
-               ['label'=>'EEE',            'sub'=>'Electrical &amp; Electronic',  'cls'=>'dept-eee',    'icon'=>'fas fa-bolt'],
-               ['label'=>'Civil',          'sub'=>'Civil Engineering',            'cls'=>'dept-civil',  'icon'=>'fas fa-hard-hat'],
-               ['label'=>'Law',            'sub'=>'Department of Law',            'cls'=>'dept-law',    'icon'=>'fas fa-balance-scale'],
-               ['label'=>'Business',       'sub'=>'Business Administration',      'cls'=>'dept-biz',    'icon'=>'fas fa-briefcase'],
-               ['label'=>'English',        'sub'=>'Department of English',        'cls'=>'dept-eng',    'icon'=>'fas fa-pen-nib'],
-               ['label'=>'Bangla',         'sub'=>'Department of Bangla',         'cls'=>'dept-bangla', 'icon'=>'fas fa-language'],
-               ['label'=>'Fashion Design', 'sub'=>'Fashion &amp; Technology',     'cls'=>'dept-fash',   'icon'=>'fas fa-tshirt'],
+            // Use DB data if available, otherwise fall back to defaults
+            $depts_display = $dept_collections ?: [
+               ['label'=>'CSE',            'sub_label'=>'Computer Science & Eng.',  'icon_class'=>'fas fa-microchip',           'color_from'=>'#0f2a6b','color_to'=>'#1e4db7','image_file'=>''],
+               ['label'=>'EEE',            'sub_label'=>'Electrical & Electronic',  'icon_class'=>'fas fa-bolt',                'color_from'=>'#0a3d5c','color_to'=>'#0e7cb8','image_file'=>''],
+               ['label'=>'Civil',          'sub_label'=>'Civil Engineering',         'icon_class'=>'fas fa-hard-hat',            'color_from'=>'#0c3325','color_to'=>'#1a7a52','image_file'=>''],
+               ['label'=>'Law',            'sub_label'=>'Department of Law',         'icon_class'=>'fas fa-balance-scale',       'color_from'=>'#3d0e0e','color_to'=>'#a31c1c','image_file'=>''],
+               ['label'=>'Business',       'sub_label'=>'Business Administration',   'icon_class'=>'fas fa-briefcase',           'color_from'=>'#2e1a00','color_to'=>'#9c5f0a','image_file'=>''],
+               ['label'=>'English',        'sub_label'=>'Department of English',     'icon_class'=>'fas fa-pen-nib',             'color_from'=>'#0e2040','color_to'=>'#1d5490','image_file'=>''],
+               ['label'=>'Bangla',         'sub_label'=>'Department of Bangla',      'icon_class'=>'fas fa-language',            'color_from'=>'#280a3d','color_to'=>'#7b22c4','image_file'=>''],
+               ['label'=>'Fashion Design', 'sub_label'=>'Fashion & Technology',      'icon_class'=>'fas fa-tshirt',              'color_from'=>'#3d0a2a','color_to'=>'#c4227d','image_file'=>''],
             ];
-            foreach ($depts as $d): ?>
+            foreach ($depts_display as $d):
+               $bg_style = $d['image_file']
+                  ? 'background:url(' . fh(ADMIN_UPLOAD_URL) . '/library/dept-collections/' . fh($d['image_file']) . ') center/cover no-repeat'
+                  : 'background:linear-gradient(150deg,' . fh($d['color_from']) . ' 0%,' . fh($d['color_to']) . ' 100%)';
+            ?>
             <div class="col-6 col-md-4 col-lg-3">
-               <div class="dept-card <?= $d['cls'] ?>">
-                  <div class="dept-icon"><i class="<?= $d['icon'] ?>"></i></div>
+               <div class="dept-card" style="<?= $bg_style ?>">
+                  <div class="dept-icon"><i class="<?= fh($d['icon_class']) ?>"></i></div>
                   <div class="dept-label">
-                     <div><?= $d['label'] ?></div>
-                     <div class="dept-sub"><?= $d['sub'] ?></div>
+                     <div><?= fh($d['label']) ?></div>
+                     <div class="dept-sub"><?= fh($d['sub_label']) ?></div>
                   </div>
                </div>
             </div>
@@ -732,26 +770,71 @@ $lib_desc    = $lib_settings['lib_description']  ?? 'A modern academic library s
          </div>
          <div class="row g-4">
             <?php
-            $facilities = [
-               ['icon'=>'fas fa-exchange-alt',     'name'=>'Circulation Area',   'desc'=>'Borrow, return and renew books at the main counter.',          'icls'=>'fi-circulation'],
-               ['icon'=>'fas fa-desktop',           'name'=>'E-Resource Centre', 'desc'=>'Access digital databases, e-journals and online resources.',   'icls'=>'fi-eresource'],
-               ['icon'=>'fas fa-book-reader',       'name'=>'Reading Room',      'desc'=>'A quiet space dedicated to focused study and reading.',         'icls'=>'fi-reading'],
-               ['icon'=>'fas fa-chalkboard-teacher','name'=>"Teacher's Corner",  'desc'=>'Reserved section with faculty reference materials.',            'icls'=>'fi-teacher'],
-               ['icon'=>'fas fa-graduation-cap',    'name'=>'Thesis Area',       'desc'=>'Collection of student theses and research dissertations.',      'icls'=>'fi-thesis'],
-               ['icon'=>'fas fa-wifi',              'name'=>'Library Wi-Fi',     'desc'=>'High-speed wireless internet throughout the library.',          'icls'=>'fi-wifi'],
+            // Use DB data if available, otherwise fall back to defaults
+            $fac_display = $facilities ?: [
+               ['icon_class'=>'fas fa-exchange-alt',      'name'=>'Circulation Area',   'description'=>'Borrow, return and renew books at the main counter.',         'icon_bg_color'=>'#f9e8eb','icon_text_color'=>'#b5182e'],
+               ['icon_class'=>'fas fa-desktop',           'name'=>'E-Resource Centre',  'description'=>'Access digital databases, e-journals and online resources.',  'icon_bg_color'=>'#e3f5f2','icon_text_color'=>'#0d8a7a'],
+               ['icon_class'=>'fas fa-book-reader',       'name'=>'Reading Room',        'description'=>'A quiet space dedicated to focused study and reading.',        'icon_bg_color'=>'#e8f0ff','icon_text_color'=>'#3563e9'],
+               ['icon_class'=>'fas fa-chalkboard-teacher','name'=>"Teacher's Corner",   'description'=>'Reserved section with faculty reference materials.',           'icon_bg_color'=>'#fef3dc','icon_text_color'=>'#d4930a'],
+               ['icon_class'=>'fas fa-graduation-cap',    'name'=>'Thesis Area',         'description'=>'Collection of student theses and research dissertations.',     'icon_bg_color'=>'#f0e8ff','icon_text_color'=>'#7c3aed'],
+               ['icon_class'=>'fas fa-wifi',              'name'=>'Library Wi-Fi',        'description'=>'High-speed wireless internet throughout the library.',         'icon_bg_color'=>'#e8fff3','icon_text_color'=>'#16a34a'],
             ];
-            foreach ($facilities as $f): ?>
+            foreach ($fac_display as $f): ?>
             <div class="col-md-4 col-sm-6">
                <div class="facility-card">
-                  <div class="facility-icon <?= $f['icls'] ?>"><i class="<?= $f['icon'] ?>"></i></div>
-                  <h6><?= $f['name'] ?></h6>
-                  <p><?= $f['desc'] ?></p>
+                  <div class="facility-icon" style="background:<?= fh($f['icon_bg_color']) ?>;color:<?= fh($f['icon_text_color']) ?>"><i class="<?= fh($f['icon_class']) ?>"></i></div>
+                  <h6><?= fh($f['name']) ?></h6>
+                  <p><?= fh($f['description']) ?></p>
                </div>
             </div>
             <?php endforeach; ?>
          </div>
       </div>
    </section>
+
+   <!-- ══════════════════════════════════════════════════
+        LIBRARIANS
+   ══════════════════════════════════════════════════ -->
+   <?php if ($librarians): ?>
+   <section class="py-5" style="background:var(--white);">
+      <div class="container">
+         <div class="text-center lib-section-head">
+            <h2 class="lib-section-title">Meet Our Librarians</h2>
+            <p class="lib-section-subtitle">Our dedicated team is here to help you</p>
+            <div class="title-bar mx-auto"></div>
+         </div>
+         <div class="row g-4 justify-content-center">
+            <?php foreach ($librarians as $lib): ?>
+            <div class="col-sm-6 col-md-4 col-lg-3">
+               <div class="librarian-card">
+                  <?php if ($lib['photo']): ?>
+                     <img src="<?= fh(ADMIN_UPLOAD_URL) ?>/library/librarians/<?= fh($lib['photo']) ?>" alt="<?= fh($lib['name']) ?>" class="librarian-photo">
+                  <?php else: ?>
+                     <div class="librarian-avatar"><i class="fas fa-user-tie"></i></div>
+                  <?php endif; ?>
+                  <div class="librarian-name"><?= fh($lib['name']) ?></div>
+                  <div class="librarian-designation"><?= fh($lib['designation']) ?></div>
+                  <div class="librarian-info">
+                     <?php if ($lib['email']): ?>
+                        <div><i class="fas fa-envelope me-1" style="color:var(--crimson);"></i><a href="mailto:<?= fh($lib['email']) ?>"><?= fh($lib['email']) ?></a></div>
+                     <?php endif; ?>
+                     <?php if ($lib['phone']): ?>
+                        <div><i class="fas fa-phone me-1" style="color:var(--teal);"></i><a href="tel:<?= fh($lib['phone']) ?>"><?= fh($lib['phone']) ?></a></div>
+                     <?php endif; ?>
+                     <?php if ($lib['room_number']): ?>
+                        <div><i class="fas fa-door-open me-1" style="color:var(--amber);"></i>Room: <?= fh($lib['room_number']) ?></div>
+                     <?php endif; ?>
+                     <?php if ($lib['bio']): ?>
+                        <p class="mt-2 mb-0" style="font-size:.78rem;"><?= fh($lib['bio']) ?></p>
+                     <?php endif; ?>
+                  </div>
+               </div>
+            </div>
+            <?php endforeach; ?>
+         </div>
+      </div>
+   </section>
+   <?php endif; ?>
 
    <!-- ══════════════════════════════════════════════════
         ONLINE SERVICES + LIBRARY SERVICES
