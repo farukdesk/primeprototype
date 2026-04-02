@@ -21,6 +21,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'stat_1_number', 'stat_1_label',
         'stat_2_number', 'stat_2_label',
         'stat_3_number', 'stat_3_label',
+        // v2 fields
+        'about_section_subtitle', 'about_section_title', 'about_section_title_accent',
+        'main_image',
+        'badge_number', 'badge_text',
+        'list_item_1', 'list_item_2', 'list_item_3', 'list_item_4', 'list_item_5',
+        'apply_url', 'contact_url',
     ];
 
     $stmt = db()->prepare(
@@ -142,6 +148,75 @@ require_once __DIR__ . '/../../includes/header.php';
                     <label class="form-label fw-medium">Stat 3 – Label</label>
                     <input type="text" name="stat_3_label" class="form-control"
                            value="<?= h($settings['stat_3_label'] ?? 'Mentorship Programs') ?>" maxlength="100">
+                </div>
+            </div>
+
+            <h6 class="fw-semibold mb-3 mt-4 text-muted border-bottom pb-2">Section Heading (v2)</h6>
+
+            <div class="row g-3 mb-3">
+                <div class="col-md-4">
+                    <label class="form-label fw-medium">Section Sub-label</label>
+                    <input type="text" name="about_section_subtitle" class="form-control"
+                           value="<?= h($settings['about_section_subtitle'] ?? 'About the University') ?>" maxlength="100">
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label fw-medium">Section Title</label>
+                    <input type="text" name="about_section_title" class="form-control"
+                           value="<?= h($settings['about_section_title'] ?? 'Shaping Leaders Since') ?>" maxlength="255">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-medium">Title Accent</label>
+                    <input type="text" name="about_section_title_accent" class="form-control"
+                           value="<?= h($settings['about_section_title_accent'] ?? '1993') ?>" maxlength="50">
+                    <div class="form-text">e.g. the year "1993"</div>
+                </div>
+            </div>
+
+            <h6 class="fw-semibold mb-3 mt-4 text-muted border-bottom pb-2">About Image &amp; Badge</h6>
+
+            <div class="mb-3">
+                <label class="form-label fw-medium">Main Image URL</label>
+                <input type="text" name="main_image" class="form-control"
+                       value="<?= h($settings['main_image'] ?? '') ?>"
+                       placeholder="https://… or relative path" maxlength="500">
+                <div class="form-text">URL of the about section image.</div>
+            </div>
+
+            <div class="row g-3 mb-4">
+                <div class="col-md-3">
+                    <label class="form-label fw-medium">Badge Number</label>
+                    <input type="text" name="badge_number" class="form-control"
+                           value="<?= h($settings['badge_number'] ?? '32+') ?>" maxlength="20">
+                </div>
+                <div class="col-md-9">
+                    <label class="form-label fw-medium">Badge Text</label>
+                    <input type="text" name="badge_text" class="form-control"
+                           value="<?= h($settings['badge_text'] ?? 'Years of Excellence') ?>" maxlength="100">
+                </div>
+            </div>
+
+            <h6 class="fw-semibold mb-3 mt-4 text-muted border-bottom pb-2">Bullet Points (Why Choose Us list)</h6>
+
+            <?php for ($i = 1; $i <= 5; $i++): ?>
+            <div class="mb-3">
+                <label class="form-label fw-medium">List Item <?= $i ?></label>
+                <input type="text" name="list_item_<?= $i ?>" class="form-control"
+                       value="<?= h($settings["list_item_{$i}"] ?? '') ?>" maxlength="255">
+            </div>
+            <?php endfor; ?>
+
+            <h6 class="fw-semibold mb-3 mt-4 text-muted border-bottom pb-2">CTA Button URLs</h6>
+
+            <div class="row g-3 mb-4">
+                <div class="col-md-6">
+                    <label class="form-label fw-medium">Apply URL</label>
+                    <input type="text" name="apply_url" class="form-control"
+                           value="<?= h($settings['apply_url'] ?? 'admission.php') ?>" maxlength="500">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-medium">Contact URL</label>
+                    <input type="text" name="contact_url" class="form-control"
+                           value="<?= h($settings['contact_url'] ?? 'contact.php') ?>" maxlength="500">
                 </div>
             </div>
 
