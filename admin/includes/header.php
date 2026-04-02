@@ -346,6 +346,30 @@ $user       = auth_user();
             </a>
         </li>
         <li class="nav-item">
+            <a href="<?= APP_URL ?>/cms/why-choose-us/index.php"
+               class="<?= strpos($_SERVER['PHP_SELF'], '/cms/why-choose-us/') !== false ? 'active' : '' ?>">
+                <i class="fas fa-star"></i> Why Choose Us
+            </a>
+        </li>
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/cms/admissions/index.php"
+               class="<?= strpos($_SERVER['PHP_SELF'], '/cms/admissions/') !== false ? 'active' : '' ?>">
+                <i class="fas fa-door-open"></i> Admissions Section
+            </a>
+        </li>
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/cms/contact-settings/index.php"
+               class="<?= strpos($_SERVER['PHP_SELF'], '/cms/contact-settings/') !== false ? 'active' : '' ?>">
+                <i class="fas fa-address-card"></i> Contact Section
+            </a>
+        </li>
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/cms/notice-board/index.php"
+               class="<?= strpos($_SERVER['PHP_SELF'], '/cms/notice-board/') !== false ? 'active' : '' ?>">
+                <i class="fas fa-bullhorn"></i> Notice Board
+            </a>
+        </li>
+        <li class="nav-item">
             <a href="<?= APP_URL ?>/homepage/index.php"
                class="<?= strpos($_SERVER['PHP_SELF'], '/homepage/') !== false ? 'active' : '' ?>">
                 <i class="fas fa-home"></i> Homepage (Stats &amp; Reviews)
