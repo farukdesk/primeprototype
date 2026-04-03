@@ -187,7 +187,7 @@ $page_title = 'Notice Board';
                 $date_str = date('d M, Y', strtotime($n['created_at']));
             }
             $excerpt   = mb_strimwidth(strip_tags($n['content']), 0, 100, '…');
-            $detail_url = fh(SITE_URL) . '/notice-detail.php?slug=' . urlencode($n['slug']);
+            $detail_url = fh(SITE_URL) . '/notice/' . urlencode($n['slug']);
             ?>
 
             <div class="col-xl-6 col-lg-6">

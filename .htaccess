@@ -1,0 +1,33 @@
+Options -Indexes
+RewriteEngine On
+RewriteBase /
+
+# Skip rewriting for existing files and directories
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# ── Department sub-pages (must come before department overview) ───────────────
+RewriteRule ^department/([^/]+)/faculty/?$            department-faculty.php?slug=$1 [L,QSA]
+RewriteRule ^department/([^/]+)/facilities/?$         department-facilities.php?slug=$1 [L,QSA]
+RewriteRule ^department/([^/]+)/academic-programs/?$  department-academic-programs.php?slug=$1 [L,QSA]
+RewriteRule ^department/([^/]+)/routine/?$            department-routine.php?slug=$1 [L,QSA]
+RewriteRule ^department/([^/]+)/clubs/?$              department-clubs.php?slug=$1 [L,QSA]
+RewriteRule ^department/([^/]+)/prime-pride/?$        department-prime-pride.php?slug=$1 [L,QSA]
+RewriteRule ^department/([^/]+)/notice/?$             department-notice.php?slug=$1 [L,QSA]
+
+# ── Department overview ───────────────────────────────────────────────────────
+RewriteRule ^department/([^/]+)/?$                    department.php?slug=$1 [L,QSA]
+
+# ── News / Notices / Jobs ─────────────────────────────────────────────────────
+RewriteRule ^news/([^/]+)/?$                          news-detail.php?slug=$1 [L,QSA]
+RewriteRule ^notice/([^/]+)/?$                        notice-detail.php?slug=$1 [L,QSA]
+RewriteRule ^jobs/([^/]+)/?$                          job-detail.php?slug=$1 [L,QSA]
+
+# ── Pages ─────────────────────────────────────────────────────────────────────
+RewriteRule ^page/([^/]+)/?$                          page.php?slug=$1 [L,QSA]
+RewriteRule ^policy/([^/]+)/?$                        policy-page.php?slug=$1 [L,QSA]
+RewriteRule ^profile/([^/]+)/?$                       profile-page.php?slug=$1 [L,QSA]
+
+# ── Faculty profile ───────────────────────────────────────────────────────────
+RewriteRule ^faculty/([^/]+)/?$                       faculty-profile.php?id=$1 [L,QSA]

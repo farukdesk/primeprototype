@@ -33,7 +33,7 @@ try {
                <?php if (!empty($_news_items)): ?>
                   <?php foreach ($_news_items as $n): ?>
                   <div class="it-news-ticker-item">
-                     <a href="news-detail.php?slug=<?= urlencode($n['slug']) ?>"><?= fh($n['title']) ?></a>
+                     <a href="<?= SITE_URL ?>/news/<?= urlencode($n['slug']) ?>"><?= fh($n['title']) ?></a>
                   </div>
                   <?php endforeach; ?>
                <?php else: ?>

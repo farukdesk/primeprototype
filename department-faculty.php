@@ -132,7 +132,7 @@ $dept_name    = fh($dept['name'] ?? 'Department');
                <nav aria-label="breadcrumb" class="mb-20">
                   <ol class="breadcrumb" style="background:transparent; padding:0; margin:0;">
                      <li class="breadcrumb-item"><a href="<?= fh(SITE_URL) ?>/index.php" style="color:#FFB81C;">Home</a></li>
-                     <li class="breadcrumb-item"><a href="<?= fh(SITE_URL) ?>/department.php?slug=<?= urlencode($slug) ?>" style="color:#E8EEF4;"><?= $dept_name ?></a></li>
+                     <li class="breadcrumb-item"><a href="<?= fh(SITE_URL) ?>/department/<?= urlencode($slug) ?>" style="color:#E8EEF4;"><?= $dept_name ?></a></li>
                      <li class="breadcrumb-item active" style="color:#E8EEF4;">Faculty Members</li>
                   </ol>
                </nav>
@@ -179,7 +179,7 @@ $dept_name    = fh($dept['name'] ?? 'Department');
                <?php endif; ?>
                <h5 class="mt-20 mb-5">
                <?php if (!empty($hf['user_id'])): ?>
-               <a href="<?= fh(SITE_URL) ?>/faculty-profile.php?id=<?= (int)$hf['user_id'] ?>" style="color:#002147;text-decoration:none;font-weight:700;"><?= fh($hf['name'] ?? '') ?></a>
+               <a href="<?= fh(SITE_URL) ?>/faculty/<?= (int)$hf['user_id'] ?>" style="color:#002147;text-decoration:none;font-weight:700;"><?= fh($hf['name'] ?? '') ?></a>
                <?php else: ?>
                <span style="color:#002147; font-weight:700;"><?= fh($hf['name'] ?? '') ?></span>
                <?php endif; ?>
@@ -225,7 +225,7 @@ $dept_name    = fh($dept['name'] ?? 'Department');
             <?php foreach ($regular_faculty as $f): ?>
             <div class="col-xl-4 col-lg-4 col-md-6 wow itfadeUp" data-wow-duration=".9s">
                <?php if (!empty($f['user_id'])): ?>
-               <a href="<?= fh(SITE_URL) ?>/faculty-profile.php?id=<?= (int)$f['user_id'] ?>" style="text-decoration:none; color:inherit;">
+               <a href="<?= fh(SITE_URL) ?>/faculty/<?= (int)$f['user_id'] ?>" style="text-decoration:none; color:inherit;">
                <?php endif; ?>
                <div class="card faculty-card h-100 border-0 shadow-sm text-center" style="border-top:3px solid #002147 !important;">
                   <div class="card-body p-30">

@@ -126,7 +126,7 @@ $dept_name    = fh($dept['name'] ?? 'Department');
                <nav aria-label="breadcrumb" class="mb-20">
                   <ol class="breadcrumb" style="background:transparent; padding:0; margin:0;">
                      <li class="breadcrumb-item"><a href="<?= fh(SITE_URL) ?>/index.php" style="color:#FFB81C;">Home</a></li>
-                     <li class="breadcrumb-item"><a href="<?= fh(SITE_URL) ?>/department.php?slug=<?= urlencode($slug) ?>" style="color:#E8EEF4;"><?= $dept_name ?></a></li>
+                     <li class="breadcrumb-item"><a href="<?= fh(SITE_URL) ?>/department/<?= urlencode($slug) ?>" style="color:#E8EEF4;"><?= $dept_name ?></a></li>
                      <li class="breadcrumb-item active" style="color:#E8EEF4;">Notice Board</li>
                   </ol>
                </nav>
