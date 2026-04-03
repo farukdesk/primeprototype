@@ -1090,3 +1090,31 @@
 }
 .pu-notice-title:hover { color: #4f8ef7; }
 .pu-notice-excerpt { font-size: .85rem; color: #666; margin-bottom: 8px; line-height: 1.5; }
+
+/* ── Slider: enforce consistent height across all slides ───────────────────── */
+/* Without an explicit height, .it-slider-box grows/shrinks with its text
+   content (padding-only layout), causing slides with shorter titles to be
+   visibly shorter than slides with longer titles. Setting min-height here
+   ensures every slide fills the same vertical space regardless of how many
+   lines the title wraps to. */
+.it-slider-box {
+  min-height: 620px;
+}
+@media only screen and (min-width: 1400px) and (max-width: 1599px) {
+  .it-slider-box { min-height: 560px; }
+}
+@media only screen and (min-width: 1200px) and (max-width: 1399px) {
+  .it-slider-box { min-height: 540px; }
+}
+@media only screen and (min-width: 992px) and (max-width: 1199px) {
+  .it-slider-box { min-height: 510px; }
+}
+@media only screen and (min-width: 768px) and (max-width: 991px) {
+  .it-slider-box { min-height: 490px; }
+}
+@media only screen and (min-width: 576px) and (max-width: 767px) {
+  .it-slider-box { min-height: 450px; }
+}
+@media (max-width: 575px) {
+  .it-slider-box { min-height: 420px; }
+}
