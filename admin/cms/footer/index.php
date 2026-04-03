@@ -141,7 +141,7 @@ require_once __DIR__ . '/../../includes/header.php';
                         <input type="file" name="logo_footer" class="form-control" id="logoFooterInput"
                                accept=".jpg,.jpeg,.png,.gif,.webp,.svg">
                         <div class="form-text">JPG, PNG, GIF, WebP or SVG. A white/light version is recommended for the dark footer.</div>
-                        <div id="logoFooterPreviewWrap" class="mt-2" style="display:none;background:#1e293b;padding:8px;border-radius:6px;display:none;">
+                        <div id="logoFooterPreviewWrap" class="mt-2" style="display:none;background:#1e293b;padding:8px;border-radius:6px;">
                             <img id="logoFooterPreview" src="" alt="Preview"
                                  style="max-height:60px;max-width:200px;object-fit:contain;">
                         </div>

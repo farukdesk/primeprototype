@@ -1156,7 +1156,7 @@ $lib_desc    = $lib_settings['lib_description']  ?? 'A modern academic library s
    <script src="/assets/js/magnific-popup.js"></script>
    <script src="/assets/js/parallax.js"></script>
    <script src="/assets/js/isotope-pkgd.js"></script>
-<script src="/assets/js/imagesloaded-pkgd.js"></script>
-<script src="/assets/js/main.js"></script>
+   <script src="/assets/js/imagesloaded-pkgd.js"></script>
+   <script src="/assets/js/main.js"></script>
 </body>
 </html>
