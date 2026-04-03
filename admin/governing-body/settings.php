@@ -46,7 +46,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // Re-populate on error
-    $settings = array_merge($settings ?: [], compact('title', 'subtitle', 'hero_intro', 'is_published'));
+    $settings = array_merge($settings ?: [], [
+        'title'            => $title,
+        'subtitle'         => $subtitle,
+        'hero_intro'       => $hero_intro,
+        'meta_description' => $meta_desc,
+        'is_published'     => $is_published,
+    ]);
 }
 
 require_once __DIR__ . '/../includes/header.php';
