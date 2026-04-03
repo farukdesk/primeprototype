@@ -57,7 +57,7 @@ $_svg_arrow = '<svg width="16" height="15" viewBox="0 0 16 15" fill="none" xmlns
       <div class="row align-items-center">
          <div class="col-xxl-2 col-xl-2 col-lg-4 col-md-5 col-6">
             <div class="it-header-logo">
-               <a href="<?= fh(SITE_URL) ?>/index.php"><img src="assets/img/logo/logo-black.png" alt="Prime University"></a>
+               <a href="<?= fh(SITE_URL) ?>/index.php"><img src="/assets/img/logo/logo-black.png" alt="Prime University"></a>
             </div>
          </div>
          <div class="col-xxl-8 col-xl-8 d-none d-xl-block">

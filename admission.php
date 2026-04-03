@@ -13,18 +13,18 @@ $page_title = 'Admission – Prime University';
    <meta name="description" content="Apply for admission at Prime University. Undergraduate, Postgraduate and Foreign Student admission information, eligibility and requirements.">
    <meta name="viewport" content="width=device-width, initial-scale=1">
 
-   <link rel="shortcut icon" type="image/x-icon" href="assets/img/logo/favicon.png">
+   <link rel="shortcut icon" type="image/x-icon" href="/assets/img/logo/favicon.png">
 
    <!-- CSS Here -->
-   <link rel="stylesheet" href="assets/css/bootstrap.min.css">
-   <link rel="stylesheet" href="assets/css/font-awesome-pro.css">
-   <link rel="stylesheet" href="assets/css/swiper-bundle.min.css">
-   <link rel="stylesheet" href="assets/css/slick.css">
-   <link rel="stylesheet" href="assets/css/magnific-popup.css">
-   <link rel="stylesheet" href="assets/css/nice-select.css">
-   <link rel="stylesheet" href="assets/css/custom-animation.css">
-   <link rel="stylesheet" href="assets/css/spacing.css">
-   <link rel="stylesheet" href="assets/css/main.css">
+   <link rel="stylesheet" href="/assets/css/bootstrap.min.css">
+   <link rel="stylesheet" href="/assets/css/font-awesome-pro.css">
+   <link rel="stylesheet" href="/assets/css/swiper-bundle.min.css">
+   <link rel="stylesheet" href="/assets/css/slick.css">
+   <link rel="stylesheet" href="/assets/css/magnific-popup.css">
+   <link rel="stylesheet" href="/assets/css/nice-select.css">
+   <link rel="stylesheet" href="/assets/css/custom-animation.css">
+   <link rel="stylesheet" href="/assets/css/spacing.css">
+   <link rel="stylesheet" href="/assets/css/main.css">
 </head>
 
 <body id="body" class="it-magic-cursor">
@@ -68,7 +68,7 @@ $page_title = 'Admission – Prime University';
          </div>
          <div class="itoffcanvas__logo">
             <a href="<?= fh(SITE_URL) ?>/index.php">
-               <img src="assets/img/logo/logo-black.png" alt="Prime University">
+               <img src="/assets/img/logo/logo-black.png" alt="Prime University">
             </a>
          </div>
          <div class="it-menu-mobile d-xl-none"></div>
@@ -926,16 +926,16 @@ $page_title = 'Admission – Prime University';
 <?php include __DIR__ . '/includes/footer.php'; ?>
 
    <!-- JS Libraries -->
-   <script src="assets/js/jquery.js"></script>
-   <script src="assets/js/bootstrap.bundle.min.js"></script>
-   <script src="assets/js/purecounter.js"></script>
-   <script src="assets/js/nice-select.js"></script>
-   <script src="assets/js/swiper-bundle.min.js"></script>
-   <script src="assets/js/slick.min.js"></script>
-   <script src="assets/js/wow.js"></script>
-   <script src="assets/js/magnific-popup.js"></script>
-   <script src="assets/js/parallax.js"></script>
-   <script src="assets/js/main.js"></script>
+   <script src="/assets/js/jquery.js"></script>
+   <script src="/assets/js/bootstrap.bundle.min.js"></script>
+   <script src="/assets/js/purecounter.js"></script>
+   <script src="/assets/js/nice-select.js"></script>
+   <script src="/assets/js/swiper-bundle.min.js"></script>
+   <script src="/assets/js/slick.min.js"></script>
+   <script src="/assets/js/wow.js"></script>
+   <script src="/assets/js/magnific-popup.js"></script>
+   <script src="/assets/js/parallax.js"></script>
+   <script src="/assets/js/main.js"></script>
 
    <script>
    (function () {

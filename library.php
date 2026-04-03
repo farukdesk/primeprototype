@@ -101,17 +101,17 @@ $lib_desc    = $lib_settings['lib_description']  ?? 'A modern academic library s
    <meta name="description" content="Explore the <?= fh($lib_name) ?> – books, digital resources, and more.">
    <meta name="viewport" content="width=device-width, initial-scale=1">
 
-   <link rel="shortcut icon" type="image/x-icon" href="assets/img/logo/favicon.png">
+   <link rel="shortcut icon" type="image/x-icon" href="/assets/img/logo/favicon.png">
 
-   <link rel="stylesheet" href="assets/css/bootstrap.min.css">
-   <link rel="stylesheet" href="assets/css/font-awesome-pro.css">
-   <link rel="stylesheet" href="assets/css/swiper-bundle.min.css">
-   <link rel="stylesheet" href="assets/css/slick.css">
-   <link rel="stylesheet" href="assets/css/magnific-popup.css">
-   <link rel="stylesheet" href="assets/css/nice-select.css">
-   <link rel="stylesheet" href="assets/css/custom-animation.css">
-   <link rel="stylesheet" href="assets/css/spacing.css">
-   <link rel="stylesheet" href="assets/css/main.css">
+   <link rel="stylesheet" href="/assets/css/bootstrap.min.css">
+   <link rel="stylesheet" href="/assets/css/font-awesome-pro.css">
+   <link rel="stylesheet" href="/assets/css/swiper-bundle.min.css">
+   <link rel="stylesheet" href="/assets/css/slick.css">
+   <link rel="stylesheet" href="/assets/css/magnific-popup.css">
+   <link rel="stylesheet" href="/assets/css/nice-select.css">
+   <link rel="stylesheet" href="/assets/css/custom-animation.css">
+   <link rel="stylesheet" href="/assets/css/spacing.css">
+   <link rel="stylesheet" href="/assets/css/main.css">
    <style>
       /* ══════════════════════════════════════════════════════
          PRIME UNIVERSITY LIBRARY — Design System
@@ -574,7 +574,7 @@ $lib_desc    = $lib_settings['lib_description']  ?? 'A modern academic library s
          <div class="itoffcanvas__close-btn"><button class="close-btn"><i class="fal fa-times"></i></button></div>
          <div class="itoffcanvas__logo">
             <a href="<?= fh(SITE_URL) ?>/index.php">
-               <img src="assets/img/logo/logo-black.png" alt="Prime University">
+               <img src="/assets/img/logo/logo-black.png" alt="Prime University">
             </a>
          </div>
          <div class="it-menu-mobile d-xl-none"></div>
@@ -1146,15 +1146,15 @@ $lib_desc    = $lib_settings['lib_description']  ?? 'A modern academic library s
 <?php include __DIR__ . '/includes/footer.php'; ?>
 
    <!-- JS Libraries -->
-   <script src="assets/js/jquery.js"></script>
-   <script src="assets/js/bootstrap.bundle.min.js"></script>
-   <script src="assets/js/purecounter.js"></script>
-   <script src="assets/js/nice-select.js"></script>
-   <script src="assets/js/swiper-bundle.min.js"></script>
-   <script src="assets/js/slick.min.js"></script>
-   <script src="assets/js/wow.js"></script>
-   <script src="assets/js/magnific-popup.js"></script>
-   <script src="assets/js/parallax.js"></script>
-   <script src="assets/js/main.js"></script>
+   <script src="/assets/js/jquery.js"></script>
+   <script src="/assets/js/bootstrap.bundle.min.js"></script>
+   <script src="/assets/js/purecounter.js"></script>
+   <script src="/assets/js/nice-select.js"></script>
+   <script src="/assets/js/swiper-bundle.min.js"></script>
+   <script src="/assets/js/slick.min.js"></script>
+   <script src="/assets/js/wow.js"></script>
+   <script src="/assets/js/magnific-popup.js"></script>
+   <script src="/assets/js/parallax.js"></script>
+   <script src="/assets/js/main.js"></script>
 </body>
 </html>

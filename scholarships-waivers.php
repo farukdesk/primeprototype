@@ -13,18 +13,18 @@ $page_title = 'Scholarships & Waivers – Prime University';
    <meta name="description" content="Prime University offers a range of scholarships and tuition waivers including GPA-based, merit-based, attendance-based, and flat waivers for special categories.">
    <meta name="viewport" content="width=device-width, initial-scale=1">
 
-   <link rel="shortcut icon" type="image/x-icon" href="assets/img/logo/favicon.png">
+   <link rel="shortcut icon" type="image/x-icon" href="/assets/img/logo/favicon.png">
 
    <!-- CSS Libraries -->
-   <link rel="stylesheet" href="assets/css/bootstrap.min.css">
-   <link rel="stylesheet" href="assets/css/font-awesome-pro.css">
-   <link rel="stylesheet" href="assets/css/swiper-bundle.min.css">
-   <link rel="stylesheet" href="assets/css/slick.css">
-   <link rel="stylesheet" href="assets/css/magnific-popup.css">
-   <link rel="stylesheet" href="assets/css/nice-select.css">
-   <link rel="stylesheet" href="assets/css/custom-animation.css">
-   <link rel="stylesheet" href="assets/css/spacing.css">
-   <link rel="stylesheet" href="assets/css/main.css">
+   <link rel="stylesheet" href="/assets/css/bootstrap.min.css">
+   <link rel="stylesheet" href="/assets/css/font-awesome-pro.css">
+   <link rel="stylesheet" href="/assets/css/swiper-bundle.min.css">
+   <link rel="stylesheet" href="/assets/css/slick.css">
+   <link rel="stylesheet" href="/assets/css/magnific-popup.css">
+   <link rel="stylesheet" href="/assets/css/nice-select.css">
+   <link rel="stylesheet" href="/assets/css/custom-animation.css">
+   <link rel="stylesheet" href="/assets/css/spacing.css">
+   <link rel="stylesheet" href="/assets/css/main.css">
 
    <style>
    /* ===== SCHOLARSHIPS PAGE – CUSTOM STYLES ===== */
@@ -615,7 +615,7 @@ $page_title = 'Scholarships & Waivers – Prime University';
          </div>
          <div class="itoffcanvas__logo">
             <a href="<?= fh(SITE_URL) ?>/index.php">
-               <img src="assets/img/logo/logo-black.png" alt="Prime University">
+               <img src="/assets/img/logo/logo-black.png" alt="Prime University">
             </a>
          </div>
          <div class="it-menu-mobile d-xl-none"></div>
@@ -1215,7 +1215,7 @@ $page_title = 'Scholarships & Waivers – Prime University';
    <div class="it-newsletter-area it-newsletter-style-2">
       <div class="container">
          <div class="it-newsletter-wrap theme-bg z-index-2 wow itfadeUp" data-wow-duration=".9s" data-wow-delay=".3s">
-            <img class="it-newsletter-shape-1" src="assets/img/shape/newsletter-2-1.png" alt="">
+            <img class="it-newsletter-shape-1" src="/assets/img/shape/newsletter-2-1.png" alt="">
             <div class="row align-items-center">
                <div class="col-lg-6">
                   <div class="it-newsletter-2-left">
@@ -1242,21 +1242,21 @@ $page_title = 'Scholarships & Waivers – Prime University';
 <?php include __DIR__ . '/includes/footer.php'; ?>
 
    <!-- JS Libraries -->
-   <script src="assets/js/jquery.js"></script>
-   <script src="assets/js/bootstrap.bundle.min.js"></script>
-   <script src="assets/js/purecounter.js"></script>
-   <script src="assets/js/range-slider.js"></script>
-   <script src="assets/js/nice-select.js"></script>
-   <script src="assets/js/swiper-bundle.min.js"></script>
-   <script src="assets/js/isotope-pkgd.js"></script>
-   <script src="assets/js/slick.min.js"></script>
-   <script src="assets/js/wow.js"></script>
-   <script src="assets/js/countdown.js"></script>
-   <script src="assets/js/magnific-popup.js"></script>
-   <script src="assets/js/imagesloaded-pkgd.js"></script>
-   <script src="assets/js/parallax.js"></script>
-   <script src="assets/js/slider.js"></script>
-   <script src="assets/js/main.js"></script>
+   <script src="/assets/js/jquery.js"></script>
+   <script src="/assets/js/bootstrap.bundle.min.js"></script>
+   <script src="/assets/js/purecounter.js"></script>
+   <script src="/assets/js/range-slider.js"></script>
+   <script src="/assets/js/nice-select.js"></script>
+   <script src="/assets/js/swiper-bundle.min.js"></script>
+   <script src="/assets/js/isotope-pkgd.js"></script>
+   <script src="/assets/js/slick.min.js"></script>
+   <script src="/assets/js/wow.js"></script>
+   <script src="/assets/js/countdown.js"></script>
+   <script src="/assets/js/magnific-popup.js"></script>
+   <script src="/assets/js/imagesloaded-pkgd.js"></script>
+   <script src="/assets/js/parallax.js"></script>
+   <script src="/assets/js/slider.js"></script>
+   <script src="/assets/js/main.js"></script>
 
    <script>
    (function () {

@@ -39,9 +39,9 @@ $_btn_arrow_svg = '<svg width="16" height="15" viewBox="0 0 16 15" fill="none" x
                <?php foreach ($_slides as $slide): ?>
                <div class="swiper-slide">
                   <div class="it-slider-box it-slider-overlay z-index-1">
-                     <img class="it-slider-shape-1" src="assets/img/shape/slider-1-1.png" alt="">
-                     <img class="it-slider-shape-2" src="assets/img/shape/slider-1-2.png" alt="">
-                     <img class="it-slider-shape-3" src="assets/img/shape/slider-1-3.png" alt="">
+                     <img class="it-slider-shape-1" src="/assets/img/shape/slider-1-1.png" alt="">
+                     <img class="it-slider-shape-2" src="/assets/img/shape/slider-1-2.png" alt="">
+                     <img class="it-slider-shape-3" src="/assets/img/shape/slider-1-3.png" alt="">
                      <div class="it-slider-bg">
                         <img src="<?= fh(ADMIN_UPLOAD_URL . '/sliders/' . basename($slide['image'])) ?>"
                              alt="<?= fh($slide['title'] ?? '') ?>">
@@ -86,10 +86,10 @@ $_btn_arrow_svg = '<svg width="16" height="15" viewBox="0 0 16 15" fill="none" x
                <!-- No slides configured yet – show placeholder -->
                <div class="swiper-slide">
                   <div class="it-slider-box it-slider-overlay z-index-1">
-                     <img class="it-slider-shape-1" src="assets/img/shape/slider-1-1.png" alt="">
-                     <img class="it-slider-shape-2" src="assets/img/shape/slider-1-2.png" alt="">
-                     <img class="it-slider-shape-3" src="assets/img/shape/slider-1-3.png" alt="">
-                     <div class="it-slider-bg"><img src="assets/img/slider/01.png" alt=""></div>
+                     <img class="it-slider-shape-1" src="/assets/img/shape/slider-1-1.png" alt="">
+                     <img class="it-slider-shape-2" src="/assets/img/shape/slider-1-2.png" alt="">
+                     <img class="it-slider-shape-3" src="/assets/img/shape/slider-1-3.png" alt="">
+                     <div class="it-slider-bg"><img src="/assets/img/slider/01.png" alt=""></div>
                      <div class="container">
                         <div class="row">
                            <div class="col-xxl-7 col-xl-8 col-lg-9">
