@@ -456,14 +456,20 @@ $page_title   = fh($dept['hero_title'] ?? $dept['name'] ?? 'Department');
                      </div>
                      <?php endif; ?>
                      <h6 style="color:#002147; font-weight:700;"><?= fh($alum['name'] ?? '') ?></h6>
-                     <?php if (!empty($alum['batch_year'])): ?>
-                     <p style="color:#D21034; font-size:13px; font-weight:600;">Batch <?= fh($alum['batch_year']) ?></p>
+                     <?php if (!empty($alum['batch'])): ?>
+                     <p style="color:#D21034; font-size:13px; font-weight:600;">Batch <?= fh($alum['batch']) ?></p>
                      <?php endif; ?>
-                     <?php if (!empty($alum['current_position'])): ?>
-                     <p style="color:#334155; font-size:13px;"><?= fh($alum['current_position']) ?></p>
+                     <?php if (!empty($alum['position'])): ?>
+                     <p style="color:#334155; font-size:13px;"><?= fh($alum['position']) ?></p>
                      <?php endif; ?>
                      <?php if (!empty($alum['company'])): ?>
                      <p style="color:#334155; font-size:13px; font-weight:500;"><?= fh($alum['company']) ?></p>
+                     <?php endif; ?>
+                     <?php if (!empty($alum['linkedin_url'])): ?>
+                     <a href="<?= fh($alum['linkedin_url']) ?>" target="_blank" rel="noopener noreferrer"
+                        style="color:#0A66C2; font-size:13px; text-decoration:none;">
+                         <i class="fab fa-linkedin me-1"></i>LinkedIn
+                     </a>
                      <?php endif; ?>
                   </div>
                </div>
