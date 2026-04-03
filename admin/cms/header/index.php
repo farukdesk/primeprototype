@@ -24,11 +24,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'old_website_url',
     ];
 
-    // Handle checkbox separately (unchecked = not submitted)
-    $enabled = isset($_POST['old_website_enabled']) ? '1' : '0';
-    $stmt->execute(['old_website_enabled', $enabled]);
-    $settings['old_website_enabled'] = $enabled;
-
     $stmt = db()->prepare(
         'INSERT INTO cms_header_settings (setting_key, setting_value)
          VALUES (?, ?)
@@ -40,6 +35,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->execute([$key, $value ?: null]);
         $settings[$key] = $value;
     }
+
+    // Handle checkbox separately (unchecked checkboxes are not submitted)
+    $enabled = isset($_POST['old_website_enabled']) ? '1' : '0';
+    $stmt->execute(['old_website_enabled', $enabled]);
+    $settings['old_website_enabled'] = $enabled;
 
     flash_set('success', 'Header settings saved.');
     redirect(APP_URL . '/cms/header/index.php');
