@@ -1,8 +1,8 @@
 -- ============================================================
 -- CMS Homepage Modules – v2
--- Run this after cms-homepage-v1.sql to add tables for the
--- Why Choose Us, Admissions CTA, Contact, and Notice Board
--- sections, plus extra keys for the About section.
+-- NOTE: This schema is already included in database.sql.
+-- Only run this file on existing installs that were set up
+-- before this content was added to the main schema.
 -- ============================================================
 
 -- -------------------------------------------------------

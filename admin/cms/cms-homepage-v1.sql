@@ -1,7 +1,8 @@
 -- ============================================================
 -- CMS Homepage Modules – v1
--- Run this after database.sql to add the four homepage
--- content management tables and their seed data.
+-- NOTE: This schema is already included in database.sql.
+-- Only run this file on existing installs that were set up
+-- before this content was added to the main schema.
 -- ============================================================
 
 -- -------------------------------------------------------
