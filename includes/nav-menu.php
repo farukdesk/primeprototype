@@ -131,9 +131,13 @@ $_svg_arrow = '<svg width="16" height="15" viewBox="0 0 16 15" fill="none" xmlns
                   <i><?= $_svg_arrow ?></i>
                </a>
                <div class="it-header-bar d-xl-none">
-                  <button class="it-menu-bar">
+                  <button type="button" class="it-menu-bar" aria-label="Open menu">
                      <span>
-                        <i class="fa-light fa-bars-staggered"></i>
+                        <svg width="20" height="16" viewBox="0 0 20 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                           <rect y="0"  width="20" height="2.2" rx="1.1" fill="currentColor"/>
+                           <rect y="6.9" width="14" height="2.2" rx="1.1" fill="currentColor"/>
+                           <rect y="13.8" width="20" height="2.2" rx="1.1" fill="currentColor"/>
+                        </svg>
                      </span>
                   </button>
                </div>
