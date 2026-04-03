@@ -12,7 +12,7 @@ try {
         $_news_items = $db->query(
             'SELECT title, slug
              FROM cms_news
-             WHERE is_published = 1
+             WHERE is_published = 1 AND show_in_ticker = 1
              ORDER BY published_at DESC, created_at DESC
              LIMIT 10'
         )->fetchAll();
