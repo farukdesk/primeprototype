@@ -81,7 +81,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $content      = $_POST['content']           ?? '';
     $content_type = in_array($_POST['content_type'] ?? '', ['html','text']) ? $_POST['content_type'] : 'html';
     $is_published = isset($_POST['is_published']) ? 1 : 0;
-    $show_in_ticker = isset($_POST['show_in_ticker']) ? 1 : 0;
     $published_at = $is_published ? (trim($_POST['published_at'] ?? '') ?: date('Y-m-d H:i:s')) : null;
 
     if ($title === '') $errors[] = 'Title is required.';
@@ -115,9 +114,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         db()->prepare(
             'UPDATE cms_news
-             SET title=?, slug=?, content=?, content_type=?, featured_image=?, is_published=?, show_in_ticker=?, published_at=?
+             SET title=?, slug=?, content=?, content_type=?, featured_image=?, is_published=?, published_at=?
              WHERE id=?'
-        )->execute([$title, $slug, $content, $content_type, $featured_image, $is_published, $show_in_ticker, $published_at, $id]);
+        )->execute([$title, $slug, $content, $content_type, $featured_image, $is_published, $published_at, $id]);
 
         // Process new attachments
         $db = db();
@@ -146,7 +145,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect(APP_URL . '/cms/news/edit.php?id=' . $id);
     }
 
-    $news = array_merge($news, compact('title','content','content_type','is_published','show_in_ticker','featured_image'));
+    $news = array_merge($news, compact('title','content','content_type','is_published','featured_image'));
     $news['published_at'] = $_POST['published_at'] ?? $news['published_at'];
 }
 
@@ -291,13 +290,6 @@ require_once __DIR__ . '/../../includes/header.php';
                         <input class="form-check-input" type="checkbox" id="is_published" name="is_published"
                                value="1" <?= $news['is_published'] ? 'checked' : '' ?>>
                         <label class="form-check-label fw-medium" for="is_published">Published</label>
-                    </div>
-                    <div class="form-check form-switch mb-3">
-                        <input class="form-check-input" type="checkbox" id="show_in_ticker" name="show_in_ticker"
-                               value="1" <?= !empty($news['show_in_ticker']) ? 'checked' : '' ?>>
-                        <label class="form-check-label fw-medium" for="show_in_ticker">
-                            <i class="fas fa-bullhorn me-1 text-warning"></i>Visible in News Ticker
-                        </label>
                     </div>
                     <div class="mb-3" id="pubDateWrap">
                         <label class="form-label fw-medium">Publish Date &amp; Time</label>
