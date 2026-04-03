@@ -246,7 +246,6 @@ CREATE TABLE IF NOT EXISTS `cms_news` (
     `content_type`    ENUM('html','text') DEFAULT 'html',
     `featured_image`  VARCHAR(500)  DEFAULT NULL,
     `is_published`    TINYINT(1)    DEFAULT 0,
-    `show_in_ticker`  TINYINT(1)    NOT NULL DEFAULT 0 COMMENT 'Show title in homepage news ticker',
     `published_at`    DATETIME      DEFAULT NULL,
     `created_at`      DATETIME      DEFAULT CURRENT_TIMESTAMP,
     `updated_at`      DATETIME      DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

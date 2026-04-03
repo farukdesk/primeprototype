@@ -75,7 +75,6 @@ require_once __DIR__ . '/../../includes/header.php';
                         <th>Title</th>
                         <th>Type</th>
                         <th>Status</th>
-                        <th>Ticker</th>
                         <th>Published At</th>
                         <th>Updated</th>
                         <th>Actions</th>
@@ -83,7 +82,7 @@ require_once __DIR__ . '/../../includes/header.php';
                 </thead>
                 <tbody>
                 <?php if (empty($news_list)): ?>
-                    <tr><td colspan="8" class="text-center text-muted py-4">No news articles found.</td></tr>
+                    <tr><td colspan="7" class="text-center text-muted py-4">No news articles found.</td></tr>
                 <?php else: ?>
                     <?php foreach ($news_list as $idx => $n): ?>
                     <tr>
@@ -115,11 +114,6 @@ require_once __DIR__ . '/../../includes/header.php';
                             <?= $n['is_published']
                                 ? '<span class="badge bg-success">Published</span>'
                                 : '<span class="badge bg-warning text-dark">Draft</span>' ?>
-                        </td>
-                        <td>
-                            <?= !empty($n['show_in_ticker'])
-                                ? '<span class="badge bg-warning text-dark"><i class="fas fa-rss me-1"></i>Ticker</span>'
-                                : '<span class="text-muted" style="font-size:.8rem;">—</span>' ?>
                         </td>
                         <td>
                             <?= $n['published_at']

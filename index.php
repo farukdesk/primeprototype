@@ -30,7 +30,7 @@ if ($db) {
         $_latest_news = $db->query(
             'SELECT id, title, slug, featured_image, content, published_at
              FROM cms_news WHERE is_published = 1
-             ORDER BY published_at DESC, created_at DESC LIMIT 5'
+             ORDER BY published_at DESC, created_at DESC LIMIT 3'
         )->fetchAll();
     } catch (Throwable $e) {}
 
@@ -105,7 +105,7 @@ if ($db) {
     try {
         $_notices = $db->query(
             'SELECT id, title, slug, content, published_at FROM cms_notices
-             WHERE is_published = 1 ORDER BY published_at DESC, created_at DESC LIMIT 6'
+             WHERE is_published = 1 ORDER BY published_at DESC, created_at DESC LIMIT 4'
         )->fetchAll();
     } catch (Throwable $e) {}
 }
@@ -388,111 +388,105 @@ if (empty($_features)) {
    </div>
 </section>
 
-<!-- NEWS & NOTICE BOARD (combined) -->
-<section class="pu-board-section pu-section" id="pu-news-notice">
+<!-- LATEST NEWS & EVENTS -->
+<section class="pu-news-section pu-section" id="pu-news">
    <div class="container">
-      <div class="row justify-content-center mb-50">
-         <div class="col-lg-8 text-center">
-            <div class="pu-label wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".1s">Updates &amp; Announcements</div>
-            <h2 class="pu-section-title wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".2s">News <span class="accent">&amp;</span> Notice Board</h2>
-            <p class="pu-section-sub mt-3 wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".3s">Stay informed with the latest news, events and official notices from Prime University.</p>
+      <div class="row justify-content-between align-items-end mb-50">
+         <div class="col-lg-7">
+            <div class="pu-label wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".1s">What's Happening</div>
+            <h2 class="pu-section-title wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".2s">Latest <span class="accent">News & Events</span></h2>
+         </div>
+         <div class="col-lg-auto wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".3s">
+            <a href="news-detail.php" class="pu-view-all">All News <i class="fas fa-arrow-right"></i></a>
          </div>
       </div>
-      <div class="row g-4 pu-board-row">
-
-         <!-- ── Left: Latest News ────────────────────────────── -->
-         <div class="col-lg-7 wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".2s">
-            <div class="pu-board-panel pu-board-news">
-               <div class="pu-board-header">
-                  <div class="pu-board-header-inner">
-                     <span class="pu-board-icon"><i class="fas fa-newspaper"></i></span>
-                     <h3 class="pu-board-title">Latest News</h3>
+      <div class="row g-4">
+         <?php if (!empty($_latest_news)): ?>
+            <?php foreach ($_latest_news as $ni => $news): ?>
+            <div class="col-lg-4 col-md-6 wow itfadeUp" data-wow-duration=".7s" data-wow-delay="<?= .1 + .1 * $ni ?>s">
+               <article class="pu-news-card">
+                  <div class="pu-news-img-wrap">
+                     <?php if ($news['featured_image']): ?>
+                     <img class="pu-news-img" src="<?= fh(ADMIN_UPLOAD_URL . '/news/' . basename($news['featured_image'])) ?>" alt="<?= fh($news['title']) ?>">
+                     <?php else: ?>
+                     <div class="pu-news-placeholder"><i class="fas fa-newspaper"></i></div>
+                     <?php endif; ?>
+                     <span class="pu-news-category">News</span>
                   </div>
-                  <a href="news-detail.php" class="pu-board-viewall">All News <i class="fas fa-arrow-right"></i></a>
-               </div>
-               <div class="pu-board-body">
-                  <?php
-                  $placeholder_news = [
-                     ['title'=>'Prime University Hosts Annual Research Symposium 2026','date'=>'March 2026','cat'=>'Research','featured_image'=>null,'slug'=>'#'],
-                     ['title'=>'New Computer Science Lab Inaugurated with State-of-the-Art Equipment','date'=>'February 2026','cat'=>'Facilities','featured_image'=>null,'slug'=>'#'],
-                     ['title'=>'Prime University Students Win National Moot Court Competition','date'=>'January 2026','cat'=>'Achievement','featured_image'=>null,'slug'=>'#'],
-                  ];
-                  $news_items = !empty($_latest_news) ? $_latest_news : array_map(function($p){ return ['title'=>$p['title'],'slug'=>$p['slug'],'featured_image'=>$p['featured_image'],'content'=>'','published_at'=>null,'_placeholder'=>true,'_cat'=>$p['cat'],'_date'=>$p['date']]; }, $placeholder_news);
-                  foreach ($news_items as $ni => $news):
-                     $is_ph   = !empty($news['_placeholder']);
-                     $news_url = $is_ph ? '#' : (SITE_URL . '/news/' . urlencode($news['slug'] ?? ''));
-                     $cat      = $is_ph ? ($news['_cat'] ?? 'News') : 'News';
-                     $exc      = $is_ph ? '' : strip_tags($news['content'] ?? '');
-                     if (!$is_ph && mb_strlen($exc) > 90) $exc = mb_substr($exc, 0, 90) . '…';
-                  ?>
-                  <article class="pu-bcard pu-bcard-news wow itfadeUp" data-wow-duration=".6s" data-wow-delay="<?= .1 + .08 * $ni ?>s">
-                     <div class="pu-bcard-img-wrap">
-                        <?php if (!$is_ph && $news['featured_image']): ?>
-                        <img class="pu-bcard-img" src="<?= fh(ADMIN_UPLOAD_URL . '/news/' . basename($news['featured_image'])) ?>" alt="<?= fh($news['title']) ?>">
-                        <?php else: ?>
-                        <div class="pu-bcard-img-ph"><i class="fas fa-newspaper"></i></div>
-                        <?php endif; ?>
-                        <span class="pu-bcard-cat"><?= h($cat) ?></span>
-                     </div>
-                     <div class="pu-bcard-body">
-                        <div class="pu-bcard-date">
-                           <i class="fas fa-calendar-alt"></i>
-                           <?php if ($is_ph): ?><?= $news['_date'] ?><?php
-                           elseif ($news['published_at']): ?><?= date('d M Y', strtotime($news['published_at'])) ?><?php
-                           endif; ?>
-                        </div>
-                        <a href="<?= $news_url ?>" class="pu-bcard-title"><?= fh($news['title']) ?></a>
-                        <?php if ($exc): ?><p class="pu-bcard-excerpt"><?= fh($exc) ?></p><?php endif; ?>
-                        <a href="<?= $news_url ?>" class="pu-bcard-link">Read More <i class="fas fa-arrow-right"></i></a>
-                     </div>
-                  </article>
-                  <?php endforeach; ?>
-               </div>
+                  <div class="pu-news-body">
+                     <div class="pu-news-date"><i class="fas fa-calendar-alt"></i> <?= $news['published_at'] ? date('d M Y', strtotime($news['published_at'])) : '' ?></div>
+                     <a href="<?= SITE_URL ?>/news/<?= urlencode($news['slug'] ?? '') ?>" class="pu-news-title"><?= fh($news['title']) ?></a>
+                     <?php
+                     $excerpt = strip_tags($news['content'] ?? '');
+                     $excerpt = mb_strlen($excerpt) > 100 ? mb_substr($excerpt, 0, 100) . '…' : $excerpt;
+                     if ($excerpt): ?><p class="pu-news-excerpt"><?= fh($excerpt) ?></p><?php endif; ?>
+                     <a href="<?= SITE_URL ?>/news/<?= urlencode($news['slug'] ?? '') ?>" class="pu-news-link">Read More <i class="fas fa-arrow-right"></i></a>
+                  </div>
+               </article>
             </div>
-         </div>
-
-         <!-- ── Right: Notice Board ─────────────────────────── -->
-         <div class="col-lg-5 wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".35s">
-            <div class="pu-board-panel pu-board-notices">
-               <div class="pu-board-header pu-board-header--notice">
-                  <div class="pu-board-header-inner">
-                     <span class="pu-board-icon"><i class="fas fa-bullhorn"></i></span>
-                     <h3 class="pu-board-title">Notice Board</h3>
+            <?php endforeach; ?>
+         <?php else: ?>
+            <?php
+            $placeholder_news = [
+               ['title'=>'Prime University Hosts Annual Research Symposium 2026', 'date'=>'March 2026', 'cat'=>'Research'],
+               ['title'=>'New Computer Science Lab Inaugurated with State-of-the-Art Equipment', 'date'=>'February 2026', 'cat'=>'Facilities'],
+               ['title'=>'Prime University Students Win National Moot Court Competition', 'date'=>'January 2026', 'cat'=>'Achievement'],
+            ];
+            foreach ($placeholder_news as $pi => $pn):
+            ?>
+            <div class="col-lg-4 col-md-6 wow itfadeUp" data-wow-duration=".7s" data-wow-delay="<?= .1 + .1 * $pi ?>s">
+               <article class="pu-news-card">
+                  <div class="pu-news-img-wrap">
+                     <div class="pu-news-placeholder"><i class="fas fa-newspaper"></i></div>
+                     <span class="pu-news-category"><?= $pn['cat'] ?></span>
                   </div>
-                  <a href="notice-board.php" class="pu-board-viewall pu-board-viewall--notice">All Notices <i class="fas fa-arrow-right"></i></a>
-               </div>
-               <div class="pu-board-body pu-noticelist">
-                  <?php
-                  $placeholder_notices = [
-                     ['title'=>'Admission Open for Spring Semester 2026','published_at'=>null,'slug'=>'#','content'=>''],
-                     ['title'=>'Examination Schedule – Final Term 2026 Released','published_at'=>null,'slug'=>'#','content'=>''],
-                     ['title'=>'Library Timing Updated for Ramadan','published_at'=>null,'slug'=>'#','content'=>''],
-                     ['title'=>'Fee Submission Deadline – Spring 2026','published_at'=>null,'slug'=>'#','content'=>''],
-                     ['title'=>'Campus Closed on National Holiday','published_at'=>null,'slug'=>'#','content'=>''],
-                  ];
-                  $notice_items = !empty($_notices) ? $_notices : array_map(function($p){ return array_merge($p, ['_placeholder'=>true]); }, $placeholder_notices);
-                  foreach ($notice_items as $ni => $notice):
-                     $is_ph_n    = !empty($notice['_placeholder']);
-                     $notice_url = $is_ph_n ? '#' : (SITE_URL . '/notice/' . urlencode($notice['slug'] ?? ''));
-                  ?>
-                  <div class="pu-notice-item wow itfadeUp" data-wow-duration=".6s" data-wow-delay="<?= .1 + .07 * $ni ?>s">
-                     <div class="pu-notice-num"><?= $ni + 1 ?></div>
-                     <div class="pu-notice-content">
-                        <a href="<?= $notice_url ?>" class="pu-notice-item-title"><?= fh($notice['title']) ?></a>
-                        <?php if (!$is_ph_n && $notice['published_at']): ?>
-                        <div class="pu-notice-item-date"><i class="fas fa-calendar-alt"></i> <?= date('d M Y', strtotime($notice['published_at'])) ?></div>
-                        <?php endif; ?>
-                     </div>
-                     <a href="<?= $notice_url ?>" class="pu-notice-arrow" title="View"><i class="fas fa-chevron-right"></i></a>
+                  <div class="pu-news-body">
+                     <div class="pu-news-date"><i class="fas fa-calendar-alt"></i> <?= $pn['date'] ?></div>
+                     <span class="pu-news-title d-block"><?= $pn['title'] ?></span>
+                     <a href="#" class="pu-news-link">Read More <i class="fas fa-arrow-right"></i></a>
                   </div>
-                  <?php endforeach; ?>
-               </div>
+               </article>
             </div>
-         </div>
-
-      </div><!-- /.row -->
+            <?php endforeach; ?>
+         <?php endif; ?>
+      </div>
    </div>
 </section>
+
+<!-- NOTICE BOARD -->
+<?php if (!empty($_notices)): ?>
+<section class="pu-notices-section pu-section" id="pu-notices">
+   <div class="container">
+      <div class="row justify-content-between align-items-end mb-50">
+         <div class="col-lg-7">
+            <div class="pu-label wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".1s">Announcements</div>
+            <h2 class="pu-section-title wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".2s">Notice <span class="accent">Board</span></h2>
+         </div>
+         <div class="col-lg-auto wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".3s">
+            <a href="notice-board.php" class="pu-view-all">All Notices <i class="fas fa-arrow-right"></i></a>
+         </div>
+      </div>
+      <div class="row g-4">
+         <?php foreach ($_notices as $ni => $notice): ?>
+         <div class="col-lg-6 wow itfadeUp" data-wow-duration=".7s" data-wow-delay="<?= .1 + .1 * $ni ?>s">
+            <div class="pu-notice-card">
+               <div class="pu-notice-icon"><i class="fas fa-bullhorn"></i></div>
+               <div class="pu-notice-body">
+                  <?php if ($notice['published_at']): ?><div class="pu-notice-date"><i class="fas fa-calendar-alt"></i> <?= date('d M Y', strtotime($notice['published_at'])) ?></div><?php endif; ?>
+                  <a href="<?= SITE_URL ?>/notice/<?= urlencode($notice['slug'] ?? '') ?>" class="pu-notice-title"><?= fh($notice['title']) ?></a>
+                  <?php
+                  $n_excerpt = strip_tags($notice['content'] ?? '');
+                  $n_excerpt = mb_strlen($n_excerpt) > 80 ? mb_substr($n_excerpt, 0, 80) . '…' : $n_excerpt;
+                  if ($n_excerpt): ?><p class="pu-notice-excerpt"><?= fh($n_excerpt) ?></p><?php endif; ?>
+                  <a href="<?= SITE_URL ?>/notice/<?= urlencode($notice['slug'] ?? '') ?>" class="pu-news-link">Read More <i class="fas fa-arrow-right"></i></a>
+               </div>
+            </div>
+         </div>
+         <?php endforeach; ?>
+      </div>
+   </div>
+</section>
+<?php endif; ?>
 
 <!-- FACULTY SPOTLIGHT -->
 <?php if (!empty($_faculty)): ?>
