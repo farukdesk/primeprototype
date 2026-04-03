@@ -7,32 +7,49 @@ $_latest_news  = [];
 $_testimonials = [];
 $_departments  = [];
 $_faculty      = [];
+$_features     = [];
+$_about        = [];
+$_admission    = [];
+$_contact_cfg  = [];
+$_campus_items = [];
+$_alumni       = [];
+$_notices      = [];
 
-try {
-    $db = front_db();
-    if ($db) {
+$db = null;
+try { $db = front_db(); } catch (Throwable $e) {}
+
+if ($db) {
+    try {
         $_stats = $db->query(
             'SELECT icon, value, label, suffix FROM homepage_stats
              WHERE is_active = 1 ORDER BY sort_order, id'
         )->fetchAll();
+    } catch (Throwable $e) {}
 
+    try {
         $_latest_news = $db->query(
             'SELECT id, title, slug, featured_image, content, published_at
              FROM cms_news WHERE is_published = 1
              ORDER BY published_at DESC, created_at DESC LIMIT 3'
         )->fetchAll();
+    } catch (Throwable $e) {}
 
+    try {
         $_testimonials = $db->query(
             'SELECT name, designation, quote, photo, rating FROM homepage_testimonials
              WHERE is_active = 1 ORDER BY sort_order, id LIMIT 8'
         )->fetchAll();
+    } catch (Throwable $e) {}
 
+    try {
         $_departments = $db->query(
             'SELECT id, name, slug, code, hero_icon, hero_subtitle
              FROM dept_departments WHERE is_active = 1
              ORDER BY name LIMIT 6'
         )->fetchAll();
+    } catch (Throwable $e) {}
 
+    try {
         $_faculty = $db->query(
             "SELECT fp.photo, fp.designation, u.name
              FROM faculty_profiles fp
@@ -40,47 +57,58 @@ try {
              WHERE fp.photo IS NOT NULL AND fp.photo != ''
              ORDER BY RAND() LIMIT 8"
         )->fetchAll();
+    } catch (Throwable $e) {}
 
-        // Why Choose Us features
+    // Why Choose Us features
+    try {
         $_features = $db->query(
             'SELECT icon, title, description FROM cms_features
              WHERE is_active = 1 ORDER BY sort_order, id LIMIT 12'
         )->fetchAll();
+    } catch (Throwable $e) {}
 
-        // About settings
-        $_about = [];
+    // About settings
+    try {
         $_about_rows = $db->query('SELECT setting_key, setting_value FROM cms_about_settings')->fetchAll();
         foreach ($_about_rows as $_r) $_about[$_r['setting_key']] = $_r['setting_value'];
+    } catch (Throwable $e) {}
 
-        // Admission settings
-        $_admission = [];
+    // Admission settings
+    try {
         $_adm_rows = $db->query('SELECT setting_key, setting_value FROM cms_admission_settings')->fetchAll();
         foreach ($_adm_rows as $_r) $_admission[$_r['setting_key']] = $_r['setting_value'];
+    } catch (Throwable $e) {}
 
-        // Contact settings
-        $_contact_cfg = [];
+    // Contact settings
+    try {
         $_con_rows = $db->query('SELECT setting_key, setting_value FROM cms_contact_settings')->fetchAll();
         foreach ($_con_rows as $_r) $_contact_cfg[$_r['setting_key']] = $_r['setting_value'];
+    } catch (Throwable $e) {}
 
-        // Campus gallery (cms_campus_items)
+    // Campus gallery (cms_campus_items)
+    try {
         $_campus_items = $db->query(
             'SELECT title, image, link_url FROM cms_campus_items
              WHERE is_active = 1 ORDER BY sort_order, id LIMIT 9'
         )->fetchAll();
+    } catch (Throwable $e) {}
 
-        // Notable alumni
+    // Notable alumni
+    try {
         $_alumni = $db->query(
             'SELECT name, designation, organization, photo FROM cms_alumni
              WHERE is_active = 1 ORDER BY sort_order, id LIMIT 8'
         )->fetchAll();
+    } catch (Throwable $e) {}
 
-        // Latest notices
+    // Latest notices
+    try {
         $_notices = $db->query(
             'SELECT id, title, slug, content, published_at FROM cms_notices
              WHERE is_published = 1 ORDER BY published_at DESC, created_at DESC LIMIT 4'
         )->fetchAll();
-    }
-} catch (Throwable $e) {}
+    } catch (Throwable $e) {}
+}
 
 if (empty($_stats)) {
     $_stats = [
@@ -235,7 +263,7 @@ if (empty($_features)) {
       <div class="row align-items-center g-5">
          <div class="col-lg-6 wow itfadeLeft" data-wow-duration=".9s" data-wow-delay=".2s">
             <div class="pu-about-img-wrap">
-               <img class="pu-about-img-main" src="<?= !empty($_about['main_image']) ? fh($_about['main_image']) : 'assets/img/about/about-1-1.jpg' ?>" alt="Prime University Campus">
+               <img class="pu-about-img-main" src="<?= !empty($_about['main_image']) ? fh(ADMIN_UPLOAD_URL . '/about/' . basename($_about['main_image'])) : 'assets/img/about/about-1-1.jpg' ?>" alt="Prime University Campus">
                <div class="pu-about-img-badge">
                   <span class="number"><?= fh($_about['badge_number'] ?? '24+') ?></span>
                   <span class="text"><?= nl2br(fh($_about['badge_text'] ?? "Years of" . "\n" . "Excellence")) ?></span>
