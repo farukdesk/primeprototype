@@ -141,9 +141,9 @@ $dept_name    = fh($dept['name'] ?? 'Department');
    <?php include __DIR__ . '/includes/dept-subnav.php'; ?>
 
    <!-- Notices List -->
-   <section class="pt-100 pb-120" style="background-color: #F8FAFC;">
+   <section class="pt-80 pb-100" style="background-color: #F8FAFC;">
       <div class="container">
-         <div class="row justify-content-center mb-60">
+         <div class="row justify-content-center mb-50">
             <div class="col-12 text-center">
                <span class="it-section-subtitle" style="color: #D21034;"><i class="fas fa-bell"></i> Announcements</span>
                <h4 class="it-section-title" style="color: #002147;">Official Notices</h4>
@@ -162,15 +162,15 @@ $dept_name    = fh($dept['name'] ?? 'Department');
                      $n_year  = $n_date ? date('Y', $n_date) : '';
                   ?>
                   <div class="card notice-card border-0 shadow-sm wow itfadeUp" data-wow-duration=".9s">
-                     <div class="card-body p-30">
-                        <div class="d-flex align-items-start gap-25">
-                           <div class="notice-date-badge">
+                     <div class="card-body p-3 p-md-4">
+                        <div class="d-flex align-items-start gap-3 gap-md-4">
+                           <div class="notice-date-badge flex-shrink-0">
                               <span class="day"><?= fh($n_day) ?></span>
                               <span class="month"><?= fh($n_month) ?></span>
                               <span class="year"><?= fh($n_year) ?></span>
                            </div>
-                           <div class="flex-grow-1">
-                              <h6 style="color:#002147; font-weight:700; margin-bottom:10px; font-size:16px;">
+                           <div class="flex-grow-1 min-w-0">
+                              <h6 style="color:#002147; font-weight:700; margin-bottom:8px; font-size:16px;">
                                  <?= fh($notice['title'] ?? '') ?>
                               </h6>
                               <?php if (!empty($notice['content'])): ?>
@@ -179,12 +179,21 @@ $dept_name    = fh($dept['name'] ?? 'Department');
                               </div>
                               <?php endif; ?>
                               <?php if (!empty($notice['attachment'])): ?>
+                              <?php
+                                 $att_ext = strtolower(pathinfo($notice['attachment'], PATHINFO_EXTENSION));
+                                 $att_icon = match($att_ext) {
+                                     'pdf'  => 'fa-file-pdf',
+                                     'doc', 'docx' => 'fa-file-word',
+                                     'jpg', 'jpeg', 'png' => 'fa-file-image',
+                                     default => 'fa-file-alt',
+                                 };
+                              ?>
                               <div class="mt-15">
                                  <a href="<?= fh(ADMIN_UPLOAD_URL . '/departments/' . $notice['attachment']) ?>"
                                     class="d-inline-flex align-items-center gap-2"
                                     style="background:#002147; color:#FFB81C; padding:8px 18px; border-radius:25px; font-size:13px; font-weight:600; text-decoration:none;"
-                                    target="_blank" rel="noopener">
-                                    <i class="fas fa-download"></i> Download Attachment
+                                    target="_blank" rel="noopener" download>
+                                    <i class="fas <?= $att_icon ?>"></i> Download Attachment
                                  </a>
                               </div>
                               <?php endif; ?>
