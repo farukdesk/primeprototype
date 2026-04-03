@@ -175,16 +175,18 @@ if (empty($_features)) {
     font-weight: 600;
 }
 .pu-launch-title {
-    font-size: clamp(1.8rem, 5vw, 3rem);
+    font-size: clamp(1.6rem, 5vw, 3rem);
     font-weight: 800;
     margin-bottom: 12px;
     line-height: 1.2;
 }
 .pu-launch-sub {
     font-size: 1rem;
-    color: rgba(255,255,255,0.65);
-    margin-bottom: 48px;
+    color: rgba(255,255,255,0.85);
+    margin-bottom: 40px;
     max-width: 460px;
+    margin-left: auto;
+    margin-right: auto;
 }
 .pu-launch-btn {
     display: inline-flex;
@@ -194,8 +196,8 @@ if (empty($_features)) {
     color: #002147;
     border: none;
     border-radius: 50px;
-    padding: 18px 54px;
-    font-size: 1.2rem;
+    padding: 16px 48px;
+    font-size: 1.1rem;
     font-weight: 800;
     letter-spacing: 1px;
     cursor: pointer;
@@ -220,7 +222,7 @@ if (empty($_features)) {
 }
 .pu-countdown-ring circle.bg {
     fill: none;
-    stroke: rgba(255,255,255,0.15);
+    stroke: rgba(255,255,255,0.3);
     stroke-width: 6;
 }
 .pu-countdown-ring circle.progress {
@@ -244,9 +246,64 @@ if (empty($_features)) {
 }
 .pu-launch-ready {
     font-size: 1rem;
-    color: rgba(255,255,255,0.6);
+    color: rgba(255,255,255,0.85);
     letter-spacing: 2px;
     text-transform: uppercase;
+}
+@media (max-width: 575.98px) {
+    .pu-launch-inner {
+        padding: 24px 16px;
+    }
+    .pu-launch-logo {
+        width: 120px;
+        margin-bottom: 20px;
+    }
+    .pu-launch-tagline {
+        font-size: 0.75rem;
+        letter-spacing: 2px;
+        margin-bottom: 10px;
+    }
+    .pu-launch-sub {
+        font-size: 0.875rem;
+        margin-bottom: 28px;
+    }
+    .pu-launch-btn {
+        padding: 13px 32px;
+        font-size: 0.95rem;
+        gap: 8px;
+    }
+    .pu-countdown-ring {
+        width: 120px;
+        height: 120px;
+    }
+    .pu-countdown-ring svg {
+        width: 120px;
+        height: 120px;
+    }
+    #pu-countdown-num {
+        font-size: 3rem;
+    }
+    .pu-launch-ready {
+        font-size: 0.8rem;
+        letter-spacing: 1.5px;
+    }
+}
+@media (max-height: 600px) {
+    #pu-launch-overlay {
+        overflow-y: auto;
+        align-items: flex-start;
+        padding: 20px 0;
+    }
+    .pu-launch-inner {
+        padding: 16px;
+    }
+    .pu-launch-logo {
+        width: 100px;
+        margin-bottom: 12px;
+    }
+    .pu-launch-sub {
+        margin-bottom: 20px;
+    }
 }
 </style>
 
@@ -270,7 +327,7 @@ if (empty($_features)) {
                     <circle class="bg" cx="80" cy="80" r="65"/>
                     <circle class="progress" id="pu-ring" cx="80" cy="80" r="65"/>
                 </svg>
-                <span id="pu-countdown-num">5</span>
+                <span id="pu-countdown-num">10</span>
             </div>
             <p class="pu-launch-ready">Preparing your experience…</p>
         </div>
@@ -294,7 +351,7 @@ if (empty($_features)) {
         document.getElementById('pu-btn-wrap').style.display = 'none';
         document.getElementById('pu-countdown-wrap').style.display = 'block';
 
-        var total = 5;
+        var total = 10;
         var current = total;
         var numEl = document.getElementById('pu-countdown-num');
         var ring = document.getElementById('pu-ring');
