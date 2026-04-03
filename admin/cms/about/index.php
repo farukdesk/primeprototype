@@ -100,6 +100,14 @@ require_once __DIR__ . '/../../includes/header.php';
         <form method="POST" enctype="multipart/form-data" novalidate>
             <?= csrf_field() ?>
 
+            <?php if ($errors): ?>
+            <div class="alert alert-danger">
+                <ul class="mb-0 ps-3">
+                    <?php foreach ($errors as $e): ?><li><?= h($e) ?></li><?php endforeach; ?>
+                </ul>
+            </div>
+            <?php endif; ?>
+
             <h6 class="fw-semibold mb-3 text-muted border-bottom pb-2">Section Heading</h6>
 
             <div class="row g-3 mb-3">
@@ -129,11 +137,23 @@ require_once __DIR__ . '/../../includes/header.php';
             <h6 class="fw-semibold mb-3 mt-4 text-muted border-bottom pb-2">About Image &amp; Badge</h6>
 
             <div class="mb-3">
-                <label class="form-label fw-medium">Main Image URL</label>
-                <input type="text" name="main_image" class="form-control"
-                       value="<?= h($settings['main_image'] ?? '') ?>"
-                       placeholder="https://… or relative path" maxlength="500">
-                <div class="form-text">URL of the about section image.</div>
+                <label class="form-label fw-medium">Main Image</label>
+                <?php $current_img = $settings['main_image'] ?? ''; ?>
+                <?php if ($current_img): ?>
+                <div class="mb-2">
+                    <img src="<?= h(UPLOAD_URL . '/about/' . basename($current_img)) ?>"
+                         alt="Current about image" id="aboutImgPreview"
+                         style="max-height:180px;border-radius:8px;object-fit:contain;">
+                </div>
+                <?php else: ?>
+                <div class="mb-2" id="aboutImgPreviewWrap" style="display:none;">
+                    <img src="" alt="Preview" id="aboutImgPreview"
+                         style="max-height:180px;border-radius:8px;object-fit:contain;">
+                </div>
+                <?php endif; ?>
+                <input type="file" name="main_image_file" class="form-control"
+                       accept=".jpg,.jpeg,.png,.gif,.webp" id="aboutImgInput">
+                <div class="form-text">JPG, PNG, GIF, WebP. Leave blank to keep the current image.</div>
             </div>
 
             <div class="row g-3 mb-4">
@@ -182,5 +202,20 @@ require_once __DIR__ . '/../../includes/header.php';
 </div>
 </div>
 </div>
+
+<script>
+document.getElementById('aboutImgInput').addEventListener('change', function () {
+    var preview = document.getElementById('aboutImgPreview');
+    var wrap    = document.getElementById('aboutImgPreviewWrap');
+    if (this.files && this.files[0]) {
+        var reader = new FileReader();
+        reader.onload = function (e) {
+            preview.src = e.target.result;
+            if (wrap) wrap.style.display = '';
+        };
+        reader.readAsDataURL(this.files[0]);
+    }
+});
+</script>
 
 <?php require_once __DIR__ . '/../../includes/footer.php'; ?>
