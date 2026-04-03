@@ -364,8 +364,10 @@
 	const sliderswiper = new Swiper('.it-slider-active', {
 		slidesPerView: 1,
 		loop: true,
-		autoplay: true,
-		effect:'fade',
+		effect: 'fade',
+		fadeEffect: {
+			crossFade: true,
+		},
 		autoplay: {
 			delay: 4000,
 		},
@@ -377,7 +379,6 @@
 			prevEl: '.arrow-prev',
 			nextEl: '.arrow-next',
 		},
-
 	});
 
   // hero-slider
