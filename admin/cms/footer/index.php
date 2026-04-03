@@ -6,6 +6,11 @@ $page_title = 'Footer Settings';
 $errors     = [];
 $success    = false;
 
+if (!defined('LOGO_EXTS')) {
+    define('LOGO_EXTS',  ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg']);
+    define('LOGO_MIMES', ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml']);
+}
+
 // Load current settings into associative array
 $rows = db()->query('SELECT setting_key, setting_value FROM cms_footer_settings')->fetchAll();
 $settings = [];
@@ -47,8 +52,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $settings[$key] = $value;
     }
 
-    flash_set('success', 'Footer settings saved.');
-    redirect(APP_URL . '/cms/footer/index.php');
+    // Handle footer logo upload
+    if (!empty($_FILES['logo_footer']['name'])) {
+        $f = $_FILES['logo_footer'];
+        if ($f['error'] !== UPLOAD_ERR_OK) {
+            $errors[] = 'Logo upload failed (code ' . $f['error'] . ').';
+        } else {
+            $ext = strtolower(pathinfo($f['name'], PATHINFO_EXTENSION));
+            if (!in_array($ext, LOGO_EXTS, true)) {
+                $errors[] = 'Logo: unsupported format. Allowed: JPG, PNG, GIF, WebP, SVG.';
+            } else {
+                $finfo = new finfo(FILEINFO_MIME_TYPE);
+                $mime  = $finfo->file($f['tmp_name']);
+                if (!in_array($mime, LOGO_MIMES, true)) {
+                    $errors[] = 'Logo: MIME type not allowed.';
+                } else {
+                    $dir = UPLOAD_DIR . '/logos';
+                    if (!is_dir($dir)) mkdir($dir, 0755, true);
+                    // Delete old logo file if it exists
+                    if (!empty($settings['logo_footer'])) {
+                        $old = $dir . '/' . $settings['logo_footer'];
+                        if (is_file($old)) unlink($old);
+                    }
+                    $filename = 'footer_' . bin2hex(random_bytes(8)) . '.' . $ext;
+                    if (!move_uploaded_file($f['tmp_name'], $dir . '/' . $filename)) {
+                        $errors[] = 'Failed to save logo. Check server permissions.';
+                    } else {
+                        $stmt->execute(['logo_footer', $filename]);
+                        $settings['logo_footer'] = $filename;
+                    }
+                }
+            }
+        }
+    }
+
+    if (empty($errors)) {
+        flash_set('success', 'Footer settings saved.');
+        redirect(APP_URL . '/cms/footer/index.php');
+    }
 }
 
 require_once __DIR__ . '/../../includes/header.php';
@@ -67,12 +108,48 @@ require_once __DIR__ . '/../../includes/header.php';
 <div class="alert alert-success"><?= h($msg) ?></div>
 <?php endif; ?>
 
-<form method="POST" novalidate>
+<?php if ($errors): ?>
+<div class="alert alert-danger">
+    <ul class="mb-0 ps-3">
+        <?php foreach ($errors as $e): ?><li><?= h($e) ?></li><?php endforeach; ?>
+    </ul>
+</div>
+<?php endif; ?>
+
+<form method="POST" enctype="multipart/form-data" novalidate>
 <?= csrf_field() ?>
 
 <div class="row g-4">
 
-    <!-- Column 1 – About / CTA -->
+    <!-- Footer Logo -->
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header py-3 px-4">
+                <h6 class="mb-0 fw-semibold"><i class="fas fa-image me-2 text-muted"></i>Footer Logo</h6>
+            </div>
+            <div class="card-body p-4">
+                <div class="row align-items-center g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-medium">Footer Logo <span class="text-muted fw-normal small">(displayed on the dark footer background)</span></label>
+                        <?php if (!empty($settings['logo_footer'])): ?>
+                        <div class="mb-2 p-2 border rounded d-inline-block" style="background:#1e293b;">
+                            <img src="<?= UPLOAD_URL ?>/logos/<?= h($settings['logo_footer']) ?>"
+                                 alt="Current Footer Logo" style="max-height:60px;max-width:200px;object-fit:contain;">
+                            <div class="text-muted mt-1" style="font-size:.75rem;color:#adb5bd!important;">Current logo</div>
+                        </div>
+                        <?php endif; ?>
+                        <input type="file" name="logo_footer" class="form-control" id="logoFooterInput"
+                               accept=".jpg,.jpeg,.png,.gif,.webp,.svg">
+                        <div class="form-text">JPG, PNG, GIF, WebP or SVG. A white/light version is recommended for the dark footer.</div>
+                        <div id="logoFooterPreviewWrap" class="mt-2" style="display:none;background:#1e293b;padding:8px;border-radius:6px;">
+                            <img id="logoFooterPreview" src="" alt="Preview"
+                                 style="max-height:60px;max-width:200px;object-fit:contain;">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
     <div class="col-lg-6">
         <div class="card h-100">
             <div class="card-header py-3 px-4">
@@ -209,5 +286,19 @@ require_once __DIR__ . '/../../includes/header.php';
 </div>
 
 </form>
+
+<script>
+document.getElementById('logoFooterInput').addEventListener('change', function () {
+    var wrap    = document.getElementById('logoFooterPreviewWrap');
+    var preview = document.getElementById('logoFooterPreview');
+    if (this.files && this.files[0]) {
+        var reader = new FileReader();
+        reader.onload = function (e) { preview.src = e.target.result; wrap.style.display = 'block'; };
+        reader.readAsDataURL(this.files[0]);
+    } else {
+        wrap.style.display = 'none';
+    }
+});
+</script>
 
 <?php require_once __DIR__ . '/../../includes/footer.php'; ?>

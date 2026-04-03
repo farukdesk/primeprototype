@@ -22,6 +22,12 @@ $contact_address     = $fs['contact_address']     ?? '114/116, Mazar Rd, Dhaka-1
 $contact_address_url = $fs['contact_address_url'] ?? 'https://maps.google.com/?q=Prime+University+Dhaka';
 $copyright_text      = $fs['copyright_text']      ?? 'Prime University';
 
+// Footer logo: use uploaded logo if set, otherwise fall back to static asset
+$footer_logo_url = '/assets/img/logo/logo-white.png';
+if (!empty($fs['logo_footer'])) {
+    $footer_logo_url = ADMIN_UPLOAD_URL . '/logos/' . $fs['logo_footer'];
+}
+
 // Social links from header settings
 $facebook_url  = $hs['facebook_url']  ?? '';
 $twitter_url   = $hs['twitter_url']   ?? '';
@@ -55,7 +61,7 @@ for ($i = 1; $i <= 5; $i++) {
             <div class="col-xl-4 col-lg-4 col-md-12">
                <div class="pu-footer__brand">
                   <a href="/" class="pu-footer__logo">
-                     <img src="/assets/img/logo/logo-white.png" alt="Prime University" class="pu-footer__logo-img">
+                     <img src="<?= fh($footer_logo_url) ?>" alt="Prime University" class="pu-footer__logo-img">
                   </a>
                   <p class="pu-footer__about"><?= fh($about_text) ?></p>
 

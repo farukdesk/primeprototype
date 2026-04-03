@@ -91,7 +91,7 @@
 
 	////////////////////////////////////////////////////
 	//  isotope
-	$('.grid').imagesLoaded(function () {
+	if ($('.grid').length && typeof $.fn.imagesLoaded === 'function') $('.grid').imagesLoaded(function () {
 		// init Isotope
 		var $grid = $('.grid').isotope({
 			itemSelector: '.grid-item',
