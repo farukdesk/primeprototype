@@ -39,8 +39,8 @@ for ($i = 1; $i <= 5; $i++) {
 <footer>
 <section class="it-footer-wrap it-footer-style-2 fix">
    <div class="it-footer-area z-index-1 pt-120 pb-80" data-background="assets/img/shape/footer-bg-3-1.jpg">
-      <img class="it-footer-shape-1 d-none d-xxl-block" src="assets/img/shape/footer-3-1.png" alt="">
-      <img class="it-footer-shape-2" data-parallax='{"y": -200, "smoothness": 30}' src="assets/img/shape/footer-3-2.png" alt="">
+      <img class="it-footer-shape-1 d-none d-xxl-block" src="/assets/img/shape/footer-3-1.png" alt="">
+      <img class="it-footer-shape-2" data-parallax='{"y": -200, "smoothness": 30}' src="/assets/img/shape/footer-3-2.png" alt="">
       <div class="it-footer-border"><span></span></div>
       <div class="container">
          <div class="row">
@@ -49,7 +49,7 @@ for ($i = 1; $i <= 5; $i++) {
             <div class="col-xl-3 col-lg-3 col-md-6 col-sm-6 mb-50 wow itfadeUp" data-wow-duration=".9s" data-wow-delay=".3s">
                <div class="it-footer-widget it-footer-col-1-1">
                   <div class="it-footer-widget-logo mb-30">
-                     <a href="index.php"><img src="assets/img/logo/logo-black.png" alt="Prime University"></a>
+                     <a href="/"><img src="/assets/img/logo/logo-black.png" alt="Prime University"></a>
                   </div>
                   <div class="it-footer-widget-text"><p><?= fh($about_text) ?></p></div>
                   <div class="it-footer-widget-btn">
@@ -117,7 +117,7 @@ for ($i = 1; $i <= 5; $i++) {
          <div class="row align-items-center">
             <div class="col-12">
                <div class="it-copyright-left style-2 text-center">
-                  <p class="mb-0">Copyright &copy; <?= date('Y') ?> <a href="index.php"><?= fh($copyright_text) ?></a>. All Rights Reserved.</p>
+                  <p class="mb-0">Copyright &copy; <?= date('Y') ?> <a href="/"><?= fh($copyright_text) ?></a>. All Rights Reserved.</p>
                </div>
             </div>
          </div>

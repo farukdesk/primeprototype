@@ -121,17 +121,17 @@ if (empty($_features)) {
    <title>Prime University – Empowering Future Leaders</title>
    <meta name="description" content="Prime University Bangladesh – Quality higher education with expert faculty, modern facilities and industry-focused programs.">
    <meta name="viewport" content="width=device-width, initial-scale=1">
-   <link rel="shortcut icon" type="image/x-icon" href="assets/img/logo/favicon.png">
-   <link rel="stylesheet" href="assets/css/bootstrap.min.css">
-   <link rel="stylesheet" href="assets/css/font-awesome-pro.css">
-   <link rel="stylesheet" href="assets/css/swiper-bundle.min.css">
-   <link rel="stylesheet" href="assets/css/slick.css">
-   <link rel="stylesheet" href="assets/css/magnific-popup.css">
-   <link rel="stylesheet" href="assets/css/nice-select.css">
-   <link rel="stylesheet" href="assets/css/custom-animation.css">
-   <link rel="stylesheet" href="assets/css/spacing.css">
-   <link rel="stylesheet" href="assets/css/main.css">
-   <link rel="stylesheet" href="assets/css/prime-home.css">
+   <link rel="shortcut icon" type="image/x-icon" href="/assets/img/logo/favicon.png">
+   <link rel="stylesheet" href="/assets/css/bootstrap.min.css">
+   <link rel="stylesheet" href="/assets/css/font-awesome-pro.css">
+   <link rel="stylesheet" href="/assets/css/swiper-bundle.min.css">
+   <link rel="stylesheet" href="/assets/css/slick.css">
+   <link rel="stylesheet" href="/assets/css/magnific-popup.css">
+   <link rel="stylesheet" href="/assets/css/nice-select.css">
+   <link rel="stylesheet" href="/assets/css/custom-animation.css">
+   <link rel="stylesheet" href="/assets/css/spacing.css">
+   <link rel="stylesheet" href="/assets/css/main.css">
+   <link rel="stylesheet" href="/assets/css/prime-home.css">
 </head>
 <body id="body" class="it-magic-cursor">
 
@@ -153,7 +153,7 @@ if (empty($_features)) {
 <div class="it-offcanvas-area">
    <div class="itoffcanvas">
       <div class="itoffcanvas__close-btn"><button class="close-btn"><i class="fal fa-times"></i></button></div>
-      <div class="itoffcanvas__logo"><a href="index.php"><img src="assets/img/logo/logo-black.png" alt="Prime University"></a></div>
+      <div class="itoffcanvas__logo"><a href="/"><img src="/assets/img/logo/logo-black.png" alt="Prime University"></a></div>
       <div class="it-menu-mobile d-xl-none"></div>
       <div class="itoffcanvas__info">
          <h3 class="offcanva-title">Get In Touch</h3>
@@ -683,17 +683,17 @@ if (empty($_features)) {
 <?php include __DIR__ . '/includes/footer.php'; ?>
 
 <!-- SCRIPTS -->
-<script src="assets/js/jquery.js"></script>
-<script src="assets/js/bootstrap.bundle.min.js"></script>
-<script src="assets/js/purecounter.js"></script>
-<script src="assets/js/nice-select.js"></script>
-<script src="assets/js/swiper-bundle.min.js"></script>
-<script src="assets/js/slick.min.js"></script>
-<script src="assets/js/wow.js"></script>
-<script src="assets/js/magnific-popup.js"></script>
-<script src="assets/js/parallax.js"></script>
-<script src="assets/js/slider.js"></script>
-<script src="assets/js/main.js"></script>
+<script src="/assets/js/jquery.js"></script>
+<script src="/assets/js/bootstrap.bundle.min.js"></script>
+<script src="/assets/js/purecounter.js"></script>
+<script src="/assets/js/nice-select.js"></script>
+<script src="/assets/js/swiper-bundle.min.js"></script>
+<script src="/assets/js/slick.min.js"></script>
+<script src="/assets/js/wow.js"></script>
+<script src="/assets/js/magnific-popup.js"></script>
+<script src="/assets/js/parallax.js"></script>
+<script src="/assets/js/slider.js"></script>
+<script src="/assets/js/main.js"></script>
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
