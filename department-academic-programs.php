@@ -237,6 +237,7 @@ function degree_badge_color(string $type): string {
                   <div class="collapse" id="<?= $collapse_id ?>">
                      <div style="border-top:1px solid #E2E8F0; padding:30px 30px 30px; background:#F8FAFC;">
                         <div class="prog-details-content" style="color:#334155; font-size:15px; line-height:1.8;">
+                           <?php /* Rich HTML authored by super-admin via TinyMCE – output as-is (trusted source). */ ?>
                            <?= $prog['details_content'] ?>
                         </div>
                      </div>
