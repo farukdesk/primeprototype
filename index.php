@@ -228,7 +228,7 @@ if (empty($_features)) {
     stroke: #FFB81C;
     stroke-width: 6;
     stroke-linecap: round;
-    stroke-dasharray: 408;
+    stroke-dasharray: var(--pu-circ, 408);
     stroke-dashoffset: 0;
     transition: stroke-dashoffset 0.9s linear;
 }
@@ -283,7 +283,9 @@ if (empty($_features)) {
     var overlay = document.getElementById('pu-launch-overlay');
 
     // Skip overlay if already launched before
-    if (localStorage.getItem(STORAGE_KEY)) {
+    var alreadyLaunched = false;
+    try { alreadyLaunched = !!localStorage.getItem(STORAGE_KEY); } catch (e) {}
+    if (alreadyLaunched) {
         overlay.style.display = 'none';
         return;
     }
@@ -296,11 +298,14 @@ if (empty($_features)) {
         var current = total;
         var numEl = document.getElementById('pu-countdown-num');
         var ring = document.getElementById('pu-ring');
-        var circumference = 408; // 2 * π * 65 ≈ 408.41
+        var circumference = 2 * Math.PI * 65;
+
+        // Sync CSS custom property with the computed circumference
+        ring.style.strokeDasharray = circumference;
+        ring.style.strokeDashoffset = 0;
 
         function setProgress(remaining) {
-            var offset = circumference * (1 - remaining / total);
-            ring.style.strokeDashoffset = offset;
+            ring.style.strokeDashoffset = circumference * (1 - remaining / total);
             numEl.textContent = remaining;
         }
 
@@ -313,7 +318,7 @@ if (empty($_features)) {
                 numEl.textContent = '🚀';
                 ring.style.strokeDashoffset = circumference;
                 setTimeout(function () {
-                    localStorage.setItem(STORAGE_KEY, '1');
+                    try { localStorage.setItem(STORAGE_KEY, '1'); } catch (e) {}
                     overlay.classList.add('pu-fade-out');
                     setTimeout(function () {
                         overlay.style.display = 'none';
