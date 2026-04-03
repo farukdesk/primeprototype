@@ -36,7 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } else {
                     $dir = UPLOAD_DIR . '/about';
                     if (!is_dir($dir)) mkdir($dir, 0755, true);
-                    $new_image = bin2hex(random_bytes(12)) . '.' . $ext;
+                    $new_image = time() . '_' . bin2hex(random_bytes(12)) . '.' . $ext;
                     if (!move_uploaded_file($f['tmp_name'], $dir . '/' . $new_image)) {
                         $errors[] = 'Failed to save image. Check server permissions.';
                         $new_image = null;
