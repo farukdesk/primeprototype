@@ -21,7 +21,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'student_portal_url', 'student_portal_text',
         'find_result_url',    'find_result_text',
         'facebook_url', 'twitter_url', 'instagram_url', 'linkedin_url',
+        'old_website_url',
     ];
+
+    // Handle checkbox separately (unchecked = not submitted)
+    $enabled = isset($_POST['old_website_enabled']) ? '1' : '0';
+    $stmt->execute(['old_website_enabled', $enabled]);
+    $settings['old_website_enabled'] = $enabled;
 
     $stmt = db()->prepare(
         'INSERT INTO cms_header_settings (setting_key, setting_value)
@@ -130,6 +136,24 @@ require_once __DIR__ . '/../../includes/header.php';
                     <label class="form-label fw-medium"><i class="fab fa-linkedin me-1"></i> LinkedIn URL</label>
                     <input type="text" name="linkedin_url" class="form-control"
                            value="<?= h($settings['linkedin_url'] ?? '#') ?>" placeholder="https://linkedin.com/…" maxlength="500">
+                </div>
+            </div>
+
+            <h6 class="fw-semibold mb-3 mt-4 text-muted border-bottom pb-2">Old Website Button</h6>
+
+            <div class="row g-3 mb-4">
+                <div class="col-md-8">
+                    <label class="form-label fw-medium"><i class="fas fa-link me-1"></i> Old Website URL</label>
+                    <input type="text" name="old_website_url" class="form-control"
+                           value="<?= h($settings['old_website_url'] ?? '') ?>" placeholder="https://old.primeuniversity.edu.bd" maxlength="500">
+                    <div class="form-text">The URL that the "Old Website" button in the navigation will point to.</div>
+                </div>
+                <div class="col-md-4 d-flex align-items-center pt-3">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" name="old_website_enabled" id="old_website_enabled" role="switch"
+                               <?= !empty($settings['old_website_enabled']) && $settings['old_website_enabled'] === '1' ? 'checked' : '' ?>>
+                        <label class="form-check-label fw-medium" for="old_website_enabled">Enable Button</label>
+                    </div>
                 </div>
             </div>
 

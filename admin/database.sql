@@ -315,7 +315,9 @@ INSERT INTO `cms_header_settings` (`setting_key`, `setting_value`) VALUES
 ('facebook_url',        '#'),
 ('twitter_url',         '#'),
 ('instagram_url',       '#'),
-('linkedin_url',        '#');
+('linkedin_url',        '#'),
+('old_website_url',     ''),
+('old_website_enabled', '0');
 
 -- -------------------------------------------------------
 -- Seed: Module for Header Settings
