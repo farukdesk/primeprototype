@@ -31,6 +31,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($slug === '')       $errors[] = 'Slug is required.';
     if ($hero_title === '') $errors[] = 'Hero title is required.';
 
+    // Handle card image upload
+    $image = null;
+    if (!empty($_FILES['image']['name'])) {
+        $ext   = strtolower(pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION));
+        $mime  = (new finfo(FILEINFO_MIME_TYPE))->file($_FILES['image']['tmp_name']);
+        $okExt  = ['jpg','jpeg','png','gif','webp'];
+        $okMime = ['image/jpeg','image/png','image/gif','image/webp'];
+        if ($_FILES['image']['error'] !== UPLOAD_ERR_OK || !in_array($ext, $okExt, true) || !in_array($mime, $okMime, true)) {
+            $errors[] = 'Invalid card image. Allowed: jpg, jpeg, png, gif, webp.';
+        } else {
+            $dir = UPLOAD_DIR . '/departments';
+            if (!is_dir($dir)) mkdir($dir, 0755, true);
+            $fname = bin2hex(random_bytes(12)) . '.' . $ext;
+            if (!move_uploaded_file($_FILES['image']['tmp_name'], $dir . '/' . $fname)) {
+                $errors[] = 'Failed to save card image.';
+            } else {
+                $image = $fname;
+            }
+        }
+    }
+
     if (empty($errors)) {
         $dup = db()->prepare('SELECT id FROM dept_departments WHERE slug = ?');
         $dup->execute([$slug]);
@@ -42,11 +63,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->prepare(
             'INSERT INTO dept_departments
              (name, slug, code, faculty_label, hero_title, hero_subtitle, hero_description,
-              hero_icon, cta_url, cta_text, cta_section_title, cta_section_text, is_active)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)'
+              hero_icon, image, cta_url, cta_text, cta_section_title, cta_section_text, is_active)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
         )->execute([
             $name, $slug, $code, $faculty_label, $hero_title, $hero_subtitle, $hero_description,
             $hero_icon ?: 'fas fa-graduation-cap',
+            $image,
             $cta_url ?: 'apply-now.html',
             $cta_text ?: 'Apply Now',
             $cta_section_title ?: null,
@@ -60,6 +82,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         flash_set('success', "Department <strong>" . h($name) . "</strong> created.");
         redirect(APP_URL . '/departments/index.php');
+    }
+
+    // Delete uploaded image if there were other validation errors
+    if ($image) {
+        @unlink(UPLOAD_DIR . '/departments/' . $image);
+        $image = null;
     }
 
     save_old(compact(
@@ -87,7 +115,7 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 <?php endif; ?>
 
-<form method="POST" novalidate>
+<form method="POST" enctype="multipart/form-data" novalidate>
     <?= csrf_field() ?>
 
     <!-- Department Info -->
@@ -125,6 +153,12 @@ require_once __DIR__ . '/../includes/header.php';
                            value="<?= old('hero_icon', 'fas fa-graduation-cap') ?>" maxlength="100"
                            placeholder="fas fa-graduation-cap">
                     <small class="text-muted">Font Awesome class, e.g. <code>fas fa-laptop-code</code></small>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-medium">Card Background Image</label>
+                    <input type="file" name="image" class="form-control" style="border-radius:10px;"
+                           accept=".jpg,.jpeg,.png,.gif,.webp">
+                    <small class="text-muted">Displayed as the department card background on the homepage. Allowed: jpg, jpeg, png, gif, webp.</small>
                 </div>
             </div>
         </div>

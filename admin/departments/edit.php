@@ -95,17 +95,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    // Handle card background image upload
+    $image = $dept['image'] ?? null;
+    if (!empty($_FILES['image']['name'])) {
+        $uploaded = dept_upload_file(
+            $_FILES['image'], 'departments',
+            ['jpg','jpeg','png','gif','webp'],
+            ['image/jpeg','image/png','image/gif','image/webp']
+        );
+        if ($uploaded === false) {
+            $errors[] = 'Invalid card image file. Allowed: jpg, jpeg, png, gif, webp.';
+        } else {
+            // Remove old image
+            if ($image) {
+                $old_path = UPLOAD_DIR . '/departments/' . $image;
+                if (file_exists($old_path)) @unlink($old_path);
+            }
+            $image = $uploaded;
+        }
+    }
+    // Allow removing the card image
+    if (isset($_POST['remove_image']) && $_POST['remove_image'] === '1') {
+        if ($image) {
+            @unlink(UPLOAD_DIR . '/departments/' . $image);
+        }
+        $image = null;
+    }
+
     if (empty($errors)) {
         db()->prepare(
             'UPDATE dept_departments SET
              name=?, slug=?, code=?, faculty_label=?, hero_title=?, hero_subtitle=?,
-             hero_description=?, hero_icon=?, cta_url=?, cta_text=?,
+             hero_description=?, hero_icon=?, image=?, cta_url=?, cta_text=?,
              cta_section_title=?, cta_section_text=?, is_active=?
              WHERE id=?'
         )->execute([
             $name, $slug, $code, $faculty_label, $hero_title, $hero_subtitle,
             $hero_description,
             $hero_icon ?: 'fas fa-graduation-cap',
+            $image,
             $cta_url ?: 'apply-now.html',
             $cta_text ?: 'Apply Now',
             $cta_section_title ?: null,
@@ -141,6 +169,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'vision','mission','head_name','head_designation','head_edu_qualifications','head_message'
     ));
     $dept['head_photo'] = $head_photo;
+    $dept['image']      = $image;
 }
 
 require_once __DIR__ . '/../includes/header.php';
@@ -200,6 +229,22 @@ require_once __DIR__ . '/../includes/header.php';
                     <input type="text" name="hero_icon" class="form-control" style="border-radius:10px;"
                            value="<?= h($dept['hero_icon']) ?>" maxlength="100">
                     <small class="text-muted">Font Awesome class, e.g. <code>fas fa-laptop-code</code></small>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-medium">Card Background Image</label>
+                    <?php if (!empty($dept['image'])): ?>
+                    <div class="mb-2 d-flex align-items-center gap-3">
+                        <img src="<?= UPLOAD_URL ?>/departments/<?= h($dept['image']) ?>"
+                             alt="Card Image" style="height:72px;border-radius:8px;object-fit:cover;">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="remove_image" value="1" id="removeImage">
+                            <label class="form-check-label text-danger small" for="removeImage">Remove image</label>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+                    <input type="file" name="image" class="form-control" style="border-radius:10px;"
+                           accept=".jpg,.jpeg,.png,.gif,.webp">
+                    <small class="text-muted">Displayed as the department card background on the homepage. Leave blank to keep current.</small>
                 </div>
                 <div class="col-md-6">
                     <label class="form-label fw-medium">Hero Title <span class="text-danger">*</span></label>
