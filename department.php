@@ -46,6 +46,19 @@ if ($db) {
     } catch (Throwable $e) {}
 }
 
+$hero_slides = [];
+if ($db) {
+    try {
+        $st = $db->prepare(
+            'SELECT image, caption FROM dept_hero_slides
+             WHERE dept_id = ? AND is_active = 1
+             ORDER BY sort_order ASC, id ASC'
+        );
+        $st->execute([$dept['id']]);
+        $hero_slides = $st->fetchAll();
+    } catch (Throwable $e) {}
+}
+
 $current_page = 'overview';
 $base         = SITE_URL . '/department';
 $page_title   = fh($dept['hero_title'] ?? $dept['name'] ?? 'Department');
@@ -104,6 +117,83 @@ $page_title   = fh($dept['hero_title'] ?? $dept['name'] ?? 'Department');
    }
    @media (max-width: 768px) {
       .dept-subnav-inner ul li a { padding: 12px 14px; font-size: 13px; }
+   }
+
+   /* ── Department Hero Slider ── */
+   .dept-hero-slider-wrap {
+      position: relative;
+      padding: 20px 0 20px 20px;
+   }
+   .dept-hero-swiper {
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0, 33, 71, 0.18);
+   }
+   .dept-hero-slide-inner {
+      position: relative;
+      overflow: hidden;
+      border-radius: 20px;
+      aspect-ratio: 4 / 3;
+      background: #e8eef4;
+   }
+   .dept-hero-slide-inner img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      transition: transform 0.6s ease;
+   }
+   .dept-hero-swiper .swiper-slide-active .dept-hero-slide-inner img {
+      transform: scale(1.04);
+   }
+   .dept-hero-slide-caption {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: linear-gradient(to top, rgba(0,33,71,0.75) 0%, transparent 100%);
+      color: #fff;
+      font-size: 13px;
+      padding: 28px 14px 12px;
+      line-height: 1.4;
+   }
+   /* floating dot badge */
+   .dept-hero-slider-wrap::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      width: 80px; height: 80px;
+      border-radius: 50%;
+      background: rgba(210, 16, 52, 0.08);
+      z-index: 0;
+   }
+   .dept-hero-slider-wrap::after {
+      content: '';
+      position: absolute;
+      bottom: 10px; right: 0;
+      width: 50px; height: 50px;
+      border-radius: 50%;
+      background: rgba(0, 33, 71, 0.07);
+      z-index: 0;
+   }
+   /* pagination dots */
+   .dept-hero-pagination {
+      position: relative !important;
+      bottom: unset !important;
+      margin-top: 12px;
+      text-align: center;
+   }
+   .dept-hero-pagination .swiper-pagination-bullet {
+      width: 6px; height: 6px;
+      background: #002147;
+      opacity: 0.25;
+      transition: all 0.3s;
+      border-radius: 3px;
+   }
+   .dept-hero-pagination .swiper-pagination-bullet-active {
+      width: 20px;
+      opacity: 1;
+      background: #D21034;
    }
    </style>
 </head>
@@ -204,9 +294,33 @@ $page_title   = fh($dept['hero_title'] ?? $dept['name'] ?? 'Department');
                </div>
             </div>
             <div class="col-xxl-4 col-xl-5 col-lg-5 d-none d-lg-block">
+               <?php if (!empty($hero_slides)): ?>
+               <!-- Department Hero Slider -->
+               <div class="dept-hero-slider-wrap">
+                  <div class="swiper dept-hero-swiper">
+                     <div class="swiper-wrapper">
+                        <?php foreach ($hero_slides as $hs): ?>
+                        <div class="swiper-slide">
+                           <div class="dept-hero-slide-inner">
+                              <img src="<?= fh(ADMIN_UPLOAD_URL . '/departments/' . basename($hs['image'])) ?>"
+                                   alt="<?= fh($hs['caption'] ?? '') ?>">
+                              <?php if (!empty($hs['caption'])): ?>
+                              <div class="dept-hero-slide-caption"><?= fh($hs['caption']) ?></div>
+                              <?php endif; ?>
+                           </div>
+                        </div>
+                        <?php endforeach; ?>
+                     </div>
+                     <?php if (count($hero_slides) > 1): ?>
+                     <div class="dept-hero-pagination swiper-pagination"></div>
+                     <?php endif; ?>
+                  </div>
+               </div>
+               <?php else: ?>
                <div class="text-center">
                   <i class="<?= fh($dept['hero_icon'] ?? 'fas fa-university') ?>" style="font-size: 200px; color: #002147; opacity: 0.1;"></i>
                </div>
+               <?php endif; ?>
             </div>
          </div>
       </div>
@@ -455,5 +569,28 @@ $page_title   = fh($dept['hero_title'] ?? $dept['name'] ?? 'Department');
    <script src="/assets/js/parallax.js"></script>
    <script src="/assets/js/slider.js"></script>
    <script src="/assets/js/main.js"></script>
+   <?php if (!empty($hero_slides) && count($hero_slides) >= 1): ?>
+   <script>
+   (function () {
+      var heroSwiper = new Swiper('.dept-hero-swiper', {
+         loop: <?= count($hero_slides) > 1 ? 'true' : 'false' ?>,
+         effect: 'fade',
+         fadeEffect: { crossFade: true },
+         speed: 700,
+         autoplay: <?= count($hero_slides) > 1 ? '{ delay: 3500, disableOnInteraction: false }' : 'false' ?>,
+         pagination: {
+            el: '.dept-hero-pagination',
+            clickable: true,
+         },
+      });
+      /* pause autoplay on hover */
+      var wrap = document.querySelector('.dept-hero-slider-wrap');
+      if (wrap && heroSwiper.autoplay) {
+         wrap.addEventListener('mouseenter', function () { heroSwiper.autoplay.stop(); });
+         wrap.addEventListener('mouseleave', function () { heroSwiper.autoplay.start(); });
+      }
+   }());
+   </script>
+   <?php endif; ?>
 </body>
 </html>
