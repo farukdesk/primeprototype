@@ -236,7 +236,7 @@ if (empty($_features)) {
             <div class="pu-about-img-wrap">
                <img class="pu-about-img-main" src="<?= !empty($_about['main_image']) ? fh($_about['main_image']) : 'assets/img/about/about-1-1.jpg' ?>" alt="Prime University Campus">
                <div class="pu-about-img-badge">
-                  <span class="number"><?= fh($_about['badge_number'] ?? '32+') ?></span>
+                  <span class="number"><?= fh($_about['badge_number'] ?? '24+') ?></span>
                   <span class="text"><?= nl2br(fh($_about['badge_text'] ?? "Years of" . "\n" . "Excellence")) ?></span>
                </div>
             </div>
@@ -244,7 +244,7 @@ if (empty($_features)) {
          <div class="col-lg-6 wow itfadeRight" data-wow-duration=".9s" data-wow-delay=".3s">
             <div class="pu-about-content">
                <div class="pu-label"><?= fh($_about['about_section_subtitle'] ?? 'About the University') ?></div>
-               <h2 class="pu-section-title mb-3"><?= fh($_about['about_section_title'] ?? 'Shaping Leaders Since') ?> <span class="accent"><?= fh($_about['about_section_title_accent'] ?? '1993') ?></span></h2>
+               <h2 class="pu-section-title mb-3"><?= fh($_about['about_section_title'] ?? 'Shaping Leaders Since') ?> <span class="accent"><?= fh($_about['about_section_title_accent'] ?? '2002') ?></span></h2>
                <p class="pu-section-sub mb-4"><?= fh($_about['description'] ?? 'Prime University is a premier private university in Bangladesh, committed to quality higher education through academic rigour, research innovation and industry relevance.') ?></p>
                <?php
                $list_items = [];
@@ -255,7 +255,7 @@ if (empty($_features)) {
                if (empty($list_items)) {
                    $list_items = [
                        'UGC-approved with internationally recognised degree programs',
-                       '250+ highly qualified and research-active faculty members',
+                       '100+ highly qualified and research-active faculty members',
                        'Modern libraries, labs and digital learning infrastructure',
                        'Dedicated career centre with industry placement programmes',
                        'Active student clubs, sports and cultural programmes',
