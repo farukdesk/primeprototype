@@ -15,34 +15,76 @@ foreach ($rows as $row) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
-    $fields = [
-        'subtitle', 'title', 'description', 'youtube_url', 'view_program_url',
-        'mission_1_title', 'mission_2_title',
-        'stat_1_number', 'stat_1_label',
-        'stat_2_number', 'stat_2_label',
-        'stat_3_number', 'stat_3_label',
-        // v2 fields
-        'about_section_subtitle', 'about_section_title', 'about_section_title_accent',
-        'main_image',
-        'badge_number', 'badge_text',
-        'list_item_1', 'list_item_2', 'list_item_3', 'list_item_4', 'list_item_5',
-        'apply_url', 'contact_url',
-    ];
-
-    $stmt = db()->prepare(
-        'INSERT INTO cms_about_settings (setting_key, setting_value)
-         VALUES (?, ?)
-         ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)'
-    );
-
-    foreach ($fields as $key) {
-        $value = trim($_POST[$key] ?? '');
-        $stmt->execute([$key, $value ?: null]);
-        $settings[$key] = $value;
+    // Handle main_image file upload (takes priority over text URL field)
+    $main_image_value = trim($_POST['main_image'] ?? $settings['main_image'] ?? '');
+    if (!empty($_FILES['main_image_file']['name'])) {
+        $f          = $_FILES['main_image_file'];
+        $img_exts   = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+        $img_mimes  = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        if ($f['error'] !== UPLOAD_ERR_OK) {
+            $errors[] = 'Image upload failed (code ' . $f['error'] . ').';
+        } else {
+            $ext = strtolower(pathinfo($f['name'], PATHINFO_EXTENSION));
+            if (!in_array($ext, $img_exts, true)) {
+                $errors[] = 'Image: unsupported format. Allowed: JPG, PNG, GIF, WebP.';
+            } else {
+                $finfo = new finfo(FILEINFO_MIME_TYPE);
+                $mime  = $finfo->file($f['tmp_name']);
+                if (!in_array($mime, $img_mimes, true)) {
+                    $errors[] = 'Image: MIME type not allowed.';
+                } else {
+                    $dir = UPLOAD_DIR . '/about';
+                    if (!is_dir($dir)) mkdir($dir, 0755, true);
+                    $fname = bin2hex(random_bytes(12)) . '.' . $ext;
+                    if (!move_uploaded_file($f['tmp_name'], $dir . '/' . $fname)) {
+                        $errors[] = 'Failed to save image. Check server write permissions.';
+                    } else {
+                        // Delete the old uploaded image if it was stored in our directory
+                        $old_val = $settings['main_image'] ?? '';
+                        if ($old_val && strpos($old_val, '/uploads/about/') !== false) {
+                            $old_path = UPLOAD_DIR . '/about/' . basename($old_val);
+                            if (file_exists($old_path)) unlink($old_path);
+                        }
+                        $main_image_value = UPLOAD_URL . '/about/' . $fname;
+                    }
+                }
+            }
+        }
     }
 
-    flash_set('success', 'About section settings saved.');
-    redirect(APP_URL . '/cms/about/index.php');
+    if (empty($errors)) {
+        $fields = [
+            'subtitle', 'title', 'description', 'youtube_url', 'view_program_url',
+            'mission_1_title', 'mission_2_title',
+            'stat_1_number', 'stat_1_label',
+            'stat_2_number', 'stat_2_label',
+            'stat_3_number', 'stat_3_label',
+            // v2 fields
+            'about_section_subtitle', 'about_section_title', 'about_section_title_accent',
+            'badge_number', 'badge_text',
+            'list_item_1', 'list_item_2', 'list_item_3', 'list_item_4', 'list_item_5',
+            'apply_url', 'contact_url',
+        ];
+
+        $stmt = db()->prepare(
+            'INSERT INTO cms_about_settings (setting_key, setting_value)
+             VALUES (?, ?)
+             ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)'
+        );
+
+        foreach ($fields as $key) {
+            $value = trim($_POST[$key] ?? '');
+            $stmt->execute([$key, $value ?: null]);
+            $settings[$key] = $value;
+        }
+
+        // Save main_image separately (may have been set from file upload)
+        $stmt->execute(['main_image', $main_image_value ?: null]);
+        $settings['main_image'] = $main_image_value;
+
+        flash_set('success', 'About section settings saved.');
+        redirect(APP_URL . '/cms/about/index.php');
+    }
 }
 
 require_once __DIR__ . '/../../includes/header.php';
@@ -64,7 +106,15 @@ require_once __DIR__ . '/../../includes/header.php';
         <h6 class="mb-0 fw-semibold"><i class="fas fa-info-circle me-2 text-muted"></i>About Section Settings</h6>
     </div>
     <div class="card-body p-4">
-        <form method="POST" novalidate>
+        <?php if ($errors): ?>
+        <div class="alert alert-danger">
+            <ul class="mb-0 ps-3">
+                <?php foreach ($errors as $e): ?><li><?= h($e) ?></li><?php endforeach; ?>
+            </ul>
+        </div>
+        <?php endif; ?>
+
+        <form method="POST" enctype="multipart/form-data" novalidate>
             <?= csrf_field() ?>
 
             <h6 class="fw-semibold mb-3 text-muted border-bottom pb-2">Section Heading</h6>
@@ -175,11 +225,28 @@ require_once __DIR__ . '/../../includes/header.php';
             <h6 class="fw-semibold mb-3 mt-4 text-muted border-bottom pb-2">About Image &amp; Badge</h6>
 
             <div class="mb-3">
-                <label class="form-label fw-medium">Main Image URL</label>
-                <input type="text" name="main_image" class="form-control"
-                       value="<?= h($settings['main_image'] ?? '') ?>"
-                       placeholder="https://… or relative path" maxlength="500">
-                <div class="form-text">URL of the about section image.</div>
+                <label class="form-label fw-medium">Main Image</label>
+                <?php if (!empty($settings['main_image'])): ?>
+                <div class="mb-2">
+                    <img src="<?= h($settings['main_image']) ?>" alt="Current about image"
+                         style="max-height:180px;border-radius:8px;object-fit:cover;"
+                         onerror="this.style.opacity='.3'">
+                </div>
+                <?php endif; ?>
+                <input type="file" name="main_image_file" class="form-control mb-2" id="aboutImgInput"
+                       accept=".jpg,.jpeg,.png,.gif,.webp">
+                <div class="form-text">Upload an image (JPG, PNG, GIF, WebP). Leave blank to keep the current image.</div>
+                <div id="aboutImgPreviewWrap" class="mt-2" style="display:none;">
+                    <img id="aboutImgPreview" src="" alt="New image preview"
+                         style="max-height:180px;border-radius:8px;object-fit:contain;">
+                </div>
+                <div class="mt-2">
+                    <label class="form-label fw-medium">Or enter image URL</label>
+                    <input type="text" name="main_image" class="form-control"
+                           value="<?= h($settings['main_image'] ?? '') ?>"
+                           placeholder="https://… or relative path" maxlength="500">
+                    <div class="form-text">If a file is uploaded above, this field is ignored.</div>
+                </div>
             </div>
 
             <div class="row g-3 mb-4">
@@ -230,3 +297,22 @@ require_once __DIR__ . '/../../includes/header.php';
 </div>
 
 <?php require_once __DIR__ . '/../../includes/footer.php'; ?>
+<script>
+var aboutImgInput = document.getElementById('aboutImgInput');
+if (aboutImgInput) {
+    aboutImgInput.addEventListener('change', function () {
+        var wrap    = document.getElementById('aboutImgPreviewWrap');
+        var preview = document.getElementById('aboutImgPreview');
+        if (this.files && this.files[0]) {
+            var reader = new FileReader();
+            reader.onload = function (e) {
+                preview.src = e.target.result;
+                wrap.style.display = '';
+            };
+            reader.readAsDataURL(this.files[0]);
+        } else {
+            wrap.style.display = 'none';
+        }
+    });
+}
+</script>
