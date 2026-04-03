@@ -1132,13 +1132,17 @@ button.it-menu-bar {
   align-items: center;
   justify-content: center;
 }
+button.it-menu-bar > span {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
 button.it-menu-bar:focus-visible {
   outline: 2px solid var(--it-theme-1, #FFB81C);
   outline-offset: 2px;
   border-radius: 5px;
-}
-.it-header-bar span {
-  cursor: pointer;
 }
 
 
@@ -1443,12 +1447,4 @@ button.it-menu-bar:focus-visible {
 @media (max-width: 575px) {
   .pu-footer__body { padding: 40px 0 24px; }
   .pu-footer__widget { padding-top: 0; }
-}
-
-/* Ensure SVG inside hamburger span is properly centered */
-.it-header-bar span {
-  display: inline-flex !important;
-  align-items: center;
-  justify-content: center;
-  line-height: 1 !important;
 }

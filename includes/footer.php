@@ -55,8 +55,7 @@ for ($i = 1; $i <= 5; $i++) {
             <div class="col-xl-4 col-lg-4 col-md-12">
                <div class="pu-footer__brand">
                   <a href="/" class="pu-footer__logo">
-                     <img src="/assets/img/logo/logo-white.png" alt="Prime University"
-                          onerror="this.src='/assets/img/logo/logo-black.png'">
+                     <img src="/assets/img/logo/logo-white.png" alt="Prime University" class="pu-footer__logo-img">
                   </a>
                   <p class="pu-footer__about"><?= fh($about_text) ?></p>
 
