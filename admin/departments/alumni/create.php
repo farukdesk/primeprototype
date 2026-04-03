@@ -31,13 +31,21 @@ function dept_upload_file(array $file, string $subdir, array $allowed_exts, arra
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
-    $name       = trim($_POST['name']       ?? '');
-    $position   = trim($_POST['position']   ?? '');
-    $company    = trim($_POST['company']    ?? '');
-    $sort_order = (int)($_POST['sort_order'] ?? 0);
-    $is_active  = isset($_POST['is_active']) ? 1 : 0;
+    $name         = trim($_POST['name']         ?? '');
+    $batch        = trim($_POST['batch']        ?? '');
+    $position     = trim($_POST['position']     ?? '');
+    $company      = trim($_POST['company']      ?? '');
+    $linkedin_url = trim($_POST['linkedin_url'] ?? '');
+    $sort_order   = (int)($_POST['sort_order']  ?? 0);
+    $is_active    = isset($_POST['is_active']) ? 1 : 0;
 
     if ($name === '') $errors[] = 'Name is required.';
+    if ($linkedin_url !== '' && !filter_var($linkedin_url, FILTER_VALIDATE_URL)) {
+        $errors[] = 'LinkedIn URL must be a valid URL.';
+    }
+    if ($linkedin_url !== '' && !str_starts_with($linkedin_url, 'https://')) {
+        $errors[] = 'LinkedIn URL must start with https://.';
+    }
 
     $photo = null;
     if (!empty($_FILES['photo']['name'])) {
@@ -55,15 +63,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (empty($errors)) {
         db()->prepare(
-            'INSERT INTO dept_alumni (dept_id, name, position, company, photo, sort_order, is_active)
-             VALUES (?,?,?,?,?,?,?)'
-        )->execute([$dept_id, $name, $position ?: null, $company ?: null, $photo, $sort_order, $is_active]);
+            'INSERT INTO dept_alumni (dept_id, name, batch, position, company, linkedin_url, photo, sort_order, is_active)
+             VALUES (?,?,?,?,?,?,?,?,?)'
+        )->execute([$dept_id, $name, $batch ?: null, $position ?: null, $company ?: null, $linkedin_url ?: null, $photo, $sort_order, $is_active]);
 
         flash_set('success', "Alumni <strong>" . h($name) . "</strong> added.");
         redirect(APP_URL . '/departments/alumni/index.php?dept_id=' . $dept_id);
     }
 
-    save_old(compact('name','position','company','sort_order'));
+    save_old(compact('name','batch','position','company','linkedin_url','sort_order'));
 }
 
 require_once __DIR__ . '/../../includes/header.php';
@@ -105,6 +113,11 @@ require_once __DIR__ . '/../../includes/header.php';
                            value="<?= old('name') ?>" required maxlength="200">
                 </div>
                 <div class="col-md-6">
+                    <label class="form-label fw-medium">Batch</label>
+                    <input type="text" name="batch" class="form-control" style="border-radius:10px;"
+                           value="<?= old('batch') ?>" maxlength="100" placeholder="e.g. 2018 or Spring 2018">
+                </div>
+                <div class="col-md-6">
                     <label class="form-label fw-medium">Position</label>
                     <input type="text" name="position" class="form-control" style="border-radius:10px;"
                            value="<?= old('position') ?>" maxlength="200">
@@ -113,6 +126,11 @@ require_once __DIR__ . '/../../includes/header.php';
                     <label class="form-label fw-medium">Company</label>
                     <input type="text" name="company" class="form-control" style="border-radius:10px;"
                            value="<?= old('company') ?>" maxlength="200">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-medium">LinkedIn URL</label>
+                    <input type="url" name="linkedin_url" class="form-control" style="border-radius:10px;"
+                           value="<?= old('linkedin_url') ?>" maxlength="500" placeholder="https://linkedin.com/in/...">
                 </div>
                 <div class="col-md-6">
                     <label class="form-label fw-medium">Photo</label>

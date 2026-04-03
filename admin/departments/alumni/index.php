@@ -51,6 +51,7 @@ require_once __DIR__ . '/../../includes/header.php';
                     <tr>
                         <th class="px-4" style="width:40px;">#</th>
                         <th>Name</th>
+                        <th>Batch</th>
                         <th>Position</th>
                         <th>Company</th>
                         <th>Order</th>
@@ -60,7 +61,7 @@ require_once __DIR__ . '/../../includes/header.php';
                 </thead>
                 <tbody>
                 <?php if (empty($alumni)): ?>
-                    <tr><td colspan="7" class="text-center text-muted py-4">No alumni found.</td></tr>
+                    <tr><td colspan="8" class="text-center text-muted py-4">No alumni found.</td></tr>
                 <?php else: ?>
                     <?php foreach ($alumni as $i => $a): ?>
                     <tr>
@@ -79,6 +80,7 @@ require_once __DIR__ . '/../../includes/header.php';
                                 <?= h($a['name']) ?>
                             </div>
                         </td>
+                        <td><?= h($a['batch'] ?? '—') ?></td>
                         <td><?= h($a['position'] ?? '—') ?></td>
                         <td><?= h($a['company'] ?? '—') ?></td>
                         <td><?= (int)$a['sort_order'] ?></td>
