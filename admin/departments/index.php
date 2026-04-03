@@ -41,6 +41,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <thead class="table-light">
                     <tr>
                         <th class="px-4" style="width:50px;">#</th>
+                        <th style="width:70px;">Image</th>
                         <th>Name</th>
                         <th>Code</th>
                         <th>Faculty Label</th>
@@ -55,6 +56,15 @@ require_once __DIR__ . '/../includes/header.php';
                     <?php foreach ($departments as $i => $dept): ?>
                     <tr>
                         <td class="px-4"><?= $i + 1 ?></td>
+                        <td>
+                            <?php if (!empty($dept['image'])): ?>
+                            <img src="<?= UPLOAD_URL ?>/departments/<?= h($dept['image']) ?>"
+                                 alt="" style="width:52px;height:40px;border-radius:6px;object-fit:cover;"
+                                 onerror="this.style.display='none'">
+                            <?php else: ?>
+                            <span class="text-muted small">—</span>
+                            <?php endif; ?>
+                        </td>
                         <td>
                             <div class="fw-medium"><?= h($dept['name']) ?></div>
                             <small class="text-muted">slug: <?= h($dept['slug']) ?></small>

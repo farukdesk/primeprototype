@@ -302,7 +302,9 @@ if (empty($_features)) {
       <div class="row g-3">
          <?php foreach ($_departments as $idx => $dept):
             $dept_url  = $dept['slug'] ? 'department.php?dept=' . urlencode($dept['slug']) : 'department.php';
-            $dept_img  = $dept_bg_images[$idx % count($dept_bg_images)];
+            $dept_img  = !empty($dept['image'])
+                ? ADMIN_UPLOAD_URL . '/departments/' . $dept['image']
+                : $dept_bg_images[$idx % count($dept_bg_images)];
             $dept_icon = $dept['hero_icon'] ?: 'fas fa-graduation-cap';
             $dept_sub  = $dept['hero_subtitle'] ?? '';
          ?>
