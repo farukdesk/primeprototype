@@ -5,6 +5,9 @@ require_super_admin();
 $page_title = 'About Section';
 $errors     = [];
 
+const ABOUT_IMG_EXTS  = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+const ABOUT_IMG_MIMES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+
 // Load current settings
 $rows = db()->query('SELECT setting_key, setting_value FROM cms_about_settings')->fetchAll();
 $settings = [];
@@ -15,29 +18,64 @@ foreach ($rows as $row) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
-    $fields = [
-        'description',
-        'about_section_subtitle', 'about_section_title', 'about_section_title_accent',
-        'main_image',
-        'badge_number', 'badge_text',
-        'list_item_1', 'list_item_2', 'list_item_3', 'list_item_4', 'list_item_5',
-        'apply_url', 'contact_url',
-    ];
-
-    $stmt = db()->prepare(
-        'INSERT INTO cms_about_settings (setting_key, setting_value)
-         VALUES (?, ?)
-         ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)'
-    );
-
-    foreach ($fields as $key) {
-        $value = trim($_POST[$key] ?? '');
-        $stmt->execute([$key, $value ?: null]);
-        $settings[$key] = $value;
+    // Handle main_image file upload
+    $new_image = null;
+    if (!empty($_FILES['main_image_file']['name'])) {
+        $f = $_FILES['main_image_file'];
+        if ($f['error'] !== UPLOAD_ERR_OK) {
+            $errors[] = 'Image upload failed (code ' . $f['error'] . ').';
+        } else {
+            $ext = strtolower(pathinfo($f['name'], PATHINFO_EXTENSION));
+            if (!in_array($ext, ABOUT_IMG_EXTS, true)) {
+                $errors[] = 'Image: unsupported format. Allowed: JPG, PNG, GIF, WebP.';
+            } else {
+                $finfo = new finfo(FILEINFO_MIME_TYPE);
+                $mime  = $finfo->file($f['tmp_name']);
+                if (!in_array($mime, ABOUT_IMG_MIMES, true)) {
+                    $errors[] = 'Image: MIME type not allowed.';
+                } else {
+                    $dir = UPLOAD_DIR . '/about';
+                    if (!is_dir($dir)) mkdir($dir, 0755, true);
+                    $new_image = bin2hex(random_bytes(12)) . '.' . $ext;
+                    if (!move_uploaded_file($f['tmp_name'], $dir . '/' . $new_image)) {
+                        $errors[] = 'Failed to save image. Check server permissions.';
+                        $new_image = null;
+                    }
+                }
+            }
+        }
     }
 
-    flash_set('success', 'About section settings saved.');
-    redirect(APP_URL . '/cms/about/index.php');
+    if (empty($errors)) {
+        $fields = [
+            'description',
+            'about_section_subtitle', 'about_section_title', 'about_section_title_accent',
+            'badge_number', 'badge_text',
+            'list_item_1', 'list_item_2', 'list_item_3', 'list_item_4', 'list_item_5',
+            'apply_url', 'contact_url',
+        ];
+
+        $stmt = db()->prepare(
+            'INSERT INTO cms_about_settings (setting_key, setting_value)
+             VALUES (?, ?)
+             ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)'
+        );
+
+        foreach ($fields as $key) {
+            $value = trim($_POST[$key] ?? '');
+            $stmt->execute([$key, $value ?: null]);
+            $settings[$key] = $value;
+        }
+
+        // Only update main_image if a new file was uploaded
+        if ($new_image !== null) {
+            $stmt->execute(['main_image', $new_image]);
+            $settings['main_image'] = $new_image;
+        }
+
+        flash_set('success', 'About section settings saved.');
+        redirect(APP_URL . '/cms/about/index.php');
+    }
 }
 
 require_once __DIR__ . '/../../includes/header.php';
@@ -59,7 +97,7 @@ require_once __DIR__ . '/../../includes/header.php';
         <h6 class="mb-0 fw-semibold"><i class="fas fa-info-circle me-2 text-muted"></i>About Section Settings</h6>
     </div>
     <div class="card-body p-4">
-        <form method="POST" novalidate>
+        <form method="POST" enctype="multipart/form-data" novalidate>
             <?= csrf_field() ?>
 
             <h6 class="fw-semibold mb-3 text-muted border-bottom pb-2">Section Heading</h6>
