@@ -291,7 +291,7 @@ $total_members = count($members);
             <nav aria-label="breadcrumb" class="mb-3">
                <ol class="breadcrumb justify-content-center gb-breadcrumb">
                   <li class="breadcrumb-item"><a href="<?= fh(SITE_URL) ?>/index.php">Home</a></li>
-                  <li class="breadcrumb-item"><a href="<?= fh(SITE_URL) ?>/board-of-trustees.php" style="color:#FFB81C;">Governance</a></li>
+                  <li class="breadcrumb-item" style="color:rgba(255,255,255,.5);">Governance</li>
                   <li class="breadcrumb-item active"><?= $hero_title ?></li>
                </ol>
             </nav>

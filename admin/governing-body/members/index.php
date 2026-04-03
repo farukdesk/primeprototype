@@ -166,7 +166,7 @@ require_once __DIR__ . '/../../includes/header.php';
                                 <?php if (can_access('governing-body', 'can_delete')): ?>
                                 <form method="POST"
                                       action="<?= APP_URL ?>/governing-body/members/delete.php"
-                                      onsubmit="return confirm('Remove <?= h(addslashes($m['full_name'])) ?>?');">
+                                      onsubmit="return confirm('Remove ' + <?= json_encode($m['full_name']) ?> + '?');">
                                     <?= csrf_field() ?>
                                     <input type="hidden" name="id" value="<?= $m['id'] ?>">
                                     <input type="hidden" name="page_type" value="<?= h($page_type) ?>">

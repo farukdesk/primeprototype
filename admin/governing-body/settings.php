@@ -23,7 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $subtitle   = trim($_POST['subtitle']         ?? '');
     $hero_intro = trim($_POST['hero_intro']       ?? '');
     $meta_desc  = trim($_POST['meta_description'] ?? '');
-    $is_pub     = isset($_POST['is_published']) ? 1 : 0;
+    $is_published = isset($_POST['is_published']) ? 1 : 0;
 
     if ($title === '') $errors[] = 'Title is required.';
 
@@ -33,20 +33,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'UPDATE governing_body_pages
                  SET title=?, subtitle=?, hero_intro=?, meta_description=?, is_published=?
                  WHERE page_type=?'
-            )->execute([$title, $subtitle, $hero_intro, $meta_desc, $is_pub, $page_type]);
+            )->execute([$title, $subtitle, $hero_intro, $meta_desc, $is_published, $page_type]);
         } else {
             db()->prepare(
                 'INSERT INTO governing_body_pages
                  (page_type, title, subtitle, hero_intro, meta_description, is_published)
                  VALUES (?,?,?,?,?,?)'
-            )->execute([$page_type, $title, $subtitle, $hero_intro, $meta_desc, $is_pub]);
+            )->execute([$page_type, $title, $subtitle, $hero_intro, $meta_desc, $is_published]);
         }
         flash_set('success', 'Settings saved.');
         redirect(APP_URL . '/governing-body/settings.php?page_type=' . urlencode($page_type));
     }
 
     // Re-populate on error
-    $settings = array_merge($settings ?: [], compact('title','subtitle','hero_intro','meta_desc','is_pub'));
+    $settings = array_merge($settings ?: [], compact('title', 'subtitle', 'hero_intro', 'is_published'));
 }
 
 require_once __DIR__ . '/../includes/header.php';
