@@ -22,6 +22,7 @@ $sections = [
     'facilities' => 'dept_facilities',
     'academic_programs' => 'dept_academic_programs',
     'prime_pride'       => 'dept_prime_pride',
+    'hero_slides'       => 'dept_hero_slides',
 ];
 foreach ($sections as $key => $table) {
     $s = db()->prepare("SELECT COUNT(*) FROM $table WHERE dept_id = ?");
@@ -69,6 +70,7 @@ require_once __DIR__ . '/../includes/header.php';
 <!-- Sub-section Cards -->
 <?php
 $cards = [
+    ['key' => 'hero_slides',  'label' => 'Hero Slides',         'icon' => 'fas fa-images',             'color' => '#6c5ce7', 'path' => 'hero-slides'],
     ['key' => 'faculty',    'label' => 'Faculty',           'icon' => 'fas fa-chalkboard-teacher', 'color' => '#4f8ef7', 'path' => 'faculty'],
     ['key' => 'events',     'label' => 'Events',            'icon' => 'fas fa-calendar-alt',       'color' => '#f5a623', 'path' => 'events'],
     ['key' => 'alumni',     'label' => 'Alumni',            'icon' => 'fas fa-user-graduate',      'color' => '#2ecc71', 'path' => 'alumni'],
