@@ -135,6 +135,199 @@ if (empty($_features)) {
 </head>
 <body id="body" class="it-magic-cursor">
 
+<!-- ── Opening Ceremony Overlay ────────────────────────────────────────────── -->
+<style>
+#pu-launch-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #002147;
+    transition: opacity 0.8s ease, visibility 0.8s ease;
+}
+#pu-launch-overlay.pu-fade-out {
+    opacity: 0;
+    visibility: hidden;
+}
+.pu-launch-inner {
+    text-align: center;
+    color: #fff;
+    padding: 20px;
+    animation: puFadeIn 0.8s ease forwards;
+}
+@keyframes puFadeIn {
+    from { opacity: 0; transform: translateY(30px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.pu-launch-logo {
+    width: 180px;
+    margin-bottom: 30px;
+}
+.pu-launch-tagline {
+    font-size: 1.1rem;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: #FFB81C;
+    margin-bottom: 16px;
+    font-weight: 600;
+}
+.pu-launch-title {
+    font-size: clamp(1.8rem, 5vw, 3rem);
+    font-weight: 800;
+    margin-bottom: 12px;
+    line-height: 1.2;
+}
+.pu-launch-sub {
+    font-size: 1rem;
+    color: rgba(255,255,255,0.65);
+    margin-bottom: 48px;
+    max-width: 460px;
+}
+.pu-launch-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    background: #FFB81C;
+    color: #002147;
+    border: none;
+    border-radius: 50px;
+    padding: 18px 54px;
+    font-size: 1.2rem;
+    font-weight: 800;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    box-shadow: 0 8px 32px rgba(255,184,28,0.35);
+}
+.pu-launch-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 12px 40px rgba(255,184,28,0.5);
+}
+.pu-launch-btn:active { transform: scale(0.98); }
+.pu-launch-btn svg { flex-shrink: 0; }
+#pu-countdown-wrap { display: none; }
+.pu-countdown-ring {
+    position: relative;
+    width: 160px;
+    height: 160px;
+    margin: 0 auto 32px;
+}
+.pu-countdown-ring svg {
+    transform: rotate(-90deg);
+}
+.pu-countdown-ring circle.bg {
+    fill: none;
+    stroke: rgba(255,255,255,0.15);
+    stroke-width: 6;
+}
+.pu-countdown-ring circle.progress {
+    fill: none;
+    stroke: #FFB81C;
+    stroke-width: 6;
+    stroke-linecap: round;
+    stroke-dasharray: 408;
+    stroke-dashoffset: 0;
+    transition: stroke-dashoffset 0.9s linear;
+}
+#pu-countdown-num {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 4.5rem;
+    font-weight: 900;
+    color: #FFB81C;
+    line-height: 1;
+}
+.pu-launch-ready {
+    font-size: 1rem;
+    color: rgba(255,255,255,0.6);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+</style>
+
+<div id="pu-launch-overlay">
+    <div class="pu-launch-inner">
+        <img src="assets/img/logo/logo.png" alt="Prime University" class="pu-launch-logo" onerror="this.style.display='none'">
+        <p class="pu-launch-tagline">Official Launch</p>
+        <h1 class="pu-launch-title">Welcome to Prime University</h1>
+        <p class="pu-launch-sub">A new digital experience — thoughtfully crafted for students, faculty &amp; staff.</p>
+
+        <div id="pu-btn-wrap">
+            <button class="pu-launch-btn" id="pu-launch-btn" type="button" onclick="puStartLaunch()">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 3l14 9-14 9V3z" fill="#002147"/></svg>
+                Launch Website
+            </button>
+        </div>
+
+        <div id="pu-countdown-wrap">
+            <div class="pu-countdown-ring">
+                <svg width="160" height="160" viewBox="0 0 160 160">
+                    <circle class="bg" cx="80" cy="80" r="65"/>
+                    <circle class="progress" id="pu-ring" cx="80" cy="80" r="65"/>
+                </svg>
+                <span id="pu-countdown-num">5</span>
+            </div>
+            <p class="pu-launch-ready">Preparing your experience…</p>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    var STORAGE_KEY = 'pu_launch_done';
+    var overlay = document.getElementById('pu-launch-overlay');
+
+    // Skip overlay if already launched before
+    if (localStorage.getItem(STORAGE_KEY)) {
+        overlay.style.display = 'none';
+        return;
+    }
+
+    window.puStartLaunch = function () {
+        document.getElementById('pu-btn-wrap').style.display = 'none';
+        document.getElementById('pu-countdown-wrap').style.display = 'block';
+
+        var total = 5;
+        var current = total;
+        var numEl = document.getElementById('pu-countdown-num');
+        var ring = document.getElementById('pu-ring');
+        var circumference = 408; // 2 * π * 65 ≈ 408.41
+
+        function setProgress(remaining) {
+            var offset = circumference * (1 - remaining / total);
+            ring.style.strokeDashoffset = offset;
+            numEl.textContent = remaining;
+        }
+
+        setProgress(current);
+
+        var timer = setInterval(function () {
+            current--;
+            if (current <= 0) {
+                clearInterval(timer);
+                numEl.textContent = '🚀';
+                ring.style.strokeDashoffset = circumference;
+                setTimeout(function () {
+                    localStorage.setItem(STORAGE_KEY, '1');
+                    overlay.classList.add('pu-fade-out');
+                    setTimeout(function () {
+                        overlay.style.display = 'none';
+                    }, 850);
+                }, 400);
+            } else {
+                setProgress(current);
+            }
+        }, 1000);
+    };
+}());
+</script>
+<!-- ── /Opening Ceremony Overlay ─────────────────────────────────────────────── -->
+
 <div id="preloader"><div class="preloader"><span></span><span></span></div></div>
 <div id="magic-cursor"><div id="ball"></div></div>
 <button class="scroll-top scroll-to-target" data-target="html"><i class="far fa-angle-double-up"></i></button>
