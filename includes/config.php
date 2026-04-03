@@ -13,7 +13,7 @@ define('DB_PASS',    '48l0cE5x?');
 define('DB_CHARSET', 'utf8mb4');
 
 // ── Site ─────────────────────────────────────────────────────────────────────
-define('SITE_URL',         'https://prototype.primeuniversity.ac.bd');   // no trailing slash
+define('SITE_URL',         'https://primeuniversity.ac.bd');   // no trailing slash
 define('ADMIN_UPLOAD_URL', SITE_URL . '/admin/uploads');                  // for slider images etc.
 
 // ── Timezone ─────────────────────────────────────────────────────────────────

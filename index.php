@@ -302,7 +302,7 @@ if (empty($_features)) {
       ?>
       <div class="row g-3">
          <?php foreach ($_departments as $idx => $dept):
-            $dept_url  = $dept['slug'] ? 'department.php?dept=' . urlencode($dept['slug']) : 'department.php';
+            $dept_url  = $dept['slug'] ? SITE_URL . '/department/' . urlencode($dept['slug']) : SITE_URL . '/department';
             $dept_img  = !empty($dept['image'])
                 ? ADMIN_UPLOAD_URL . '/departments/' . $dept['image']
                 : $dept_bg_images[$idx % count($dept_bg_images)];
@@ -387,12 +387,12 @@ if (empty($_features)) {
                   </div>
                   <div class="pu-news-body">
                      <div class="pu-news-date"><i class="fas fa-calendar-alt"></i> <?= $news['published_at'] ? date('d M Y', strtotime($news['published_at'])) : '' ?></div>
-                     <a href="news-detail.php?slug=<?= urlencode($news['slug'] ?? '') ?>" class="pu-news-title"><?= fh($news['title']) ?></a>
+                     <a href="<?= SITE_URL ?>/news/<?= urlencode($news['slug'] ?? '') ?>" class="pu-news-title"><?= fh($news['title']) ?></a>
                      <?php
                      $excerpt = strip_tags($news['content'] ?? '');
                      $excerpt = mb_strlen($excerpt) > 100 ? mb_substr($excerpt, 0, 100) . '…' : $excerpt;
                      if ($excerpt): ?><p class="pu-news-excerpt"><?= fh($excerpt) ?></p><?php endif; ?>
-                     <a href="news-detail.php?slug=<?= urlencode($news['slug'] ?? '') ?>" class="pu-news-link">Read More <i class="fas fa-arrow-right"></i></a>
+                     <a href="<?= SITE_URL ?>/news/<?= urlencode($news['slug'] ?? '') ?>" class="pu-news-link">Read More <i class="fas fa-arrow-right"></i></a>
                   </div>
                </article>
             </div>
@@ -445,12 +445,12 @@ if (empty($_features)) {
                <div class="pu-notice-icon"><i class="fas fa-bullhorn"></i></div>
                <div class="pu-notice-body">
                   <?php if ($notice['published_at']): ?><div class="pu-notice-date"><i class="fas fa-calendar-alt"></i> <?= date('d M Y', strtotime($notice['published_at'])) ?></div><?php endif; ?>
-                  <a href="notice-detail.php?slug=<?= urlencode($notice['slug'] ?? '') ?>" class="pu-notice-title"><?= fh($notice['title']) ?></a>
+                  <a href="<?= SITE_URL ?>/notice/<?= urlencode($notice['slug'] ?? '') ?>" class="pu-notice-title"><?= fh($notice['title']) ?></a>
                   <?php
                   $n_excerpt = strip_tags($notice['content'] ?? '');
                   $n_excerpt = mb_strlen($n_excerpt) > 80 ? mb_substr($n_excerpt, 0, 80) . '…' : $n_excerpt;
                   if ($n_excerpt): ?><p class="pu-notice-excerpt"><?= fh($n_excerpt) ?></p><?php endif; ?>
-                  <a href="notice-detail.php?slug=<?= urlencode($notice['slug'] ?? '') ?>" class="pu-news-link">Read More <i class="fas fa-arrow-right"></i></a>
+                  <a href="<?= SITE_URL ?>/notice/<?= urlencode($notice['slug'] ?? '') ?>" class="pu-news-link">Read More <i class="fas fa-arrow-right"></i></a>
                </div>
             </div>
          </div>

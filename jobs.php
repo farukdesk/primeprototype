@@ -669,7 +669,7 @@ $locations   = array_keys($locations);
             foreach ($jobs as $job):
                 $badge_cls  = $type_badge_cls[$job['job_type']] ?? 'pu-badge-parttime';
                 $type_lbl   = $type_label[$job['job_type']]    ?? ucfirst($job['job_type']);
-                $detail_url = fh(SITE_URL) . '/job-detail.php?slug=' . urlencode($job['slug']);
+                $detail_url = fh(SITE_URL) . '/jobs/' . urlencode($job['slug']);
 
                 // "Posted X days ago"
                 $created_ts = strtotime($job['created_at']);
