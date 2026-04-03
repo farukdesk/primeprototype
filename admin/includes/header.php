@@ -256,8 +256,9 @@ $user       = auth_user();
     $is_website_active  = strpos($current_path, '/cms/') !== false || strpos($current_path, '/homepage/') !== false || strpos($current_path, '/pages/') !== false;
     $is_academic_active = strpos($current_path, '/departments/') !== false || strpos($current_path, '/faculty-profiles/') !== false || strpos($current_path, '/students/') !== false;
     $is_comms_active    = strpos($current_path, '/contact/') !== false || strpos($current_path, '/support-tickets/') !== false || strpos($current_path, '/knowledge-base/') !== false;
-    $is_jobs_active     = strpos($current_path, '/jobs/') !== false;
-    $is_library_active  = strpos($current_path, '/library/') !== false;
+    $is_jobs_active          = strpos($current_path, '/jobs/') !== false;
+    $is_library_active       = strpos($current_path, '/library/') !== false;
+    $is_governing_body_active = strpos($current_path, '/governing-body/') !== false;
     $is_admin_active    = strpos($current_path, '/users/') !== false || strpos($current_path, '/user-groups/') !== false
                        || strpos($current_path, '/modules/') !== false || strpos($current_path, '/access/') !== false
                        || strpos($current_path, '/email-templates/') !== false || strpos($current_path, '/change-log/') !== false;
@@ -388,6 +389,33 @@ $user       = auth_user();
                 <a href="<?= APP_URL ?>/pages/index.php?category=policy"
                    class="<?= (strpos($current_path, '/pages/') !== false && ($_GET['category'] ?? '') === 'policy') ? 'active' : '' ?>">
                     <i class="fas fa-file-contract"></i> Policy Pages
+                </a>
+            </li>
+        </ul>
+    </div>
+    <?php endif; ?>
+
+    <!-- ── Governing Body ── -->
+    <?php if (is_super_admin() || can_access('governing-body')): ?>
+    <button class="nav-group-toggle <?= $is_governing_body_active ? '' : 'collapsed' ?>"
+            data-bs-toggle="collapse" data-bs-target="#grp-governing-body"
+            aria-expanded="<?= $is_governing_body_active ? 'true' : 'false' ?>">
+        <i class="fas fa-university grp-icon" style="color:#002147"></i>
+        Governing Body
+        <i class="fas fa-chevron-down toggle-icon"></i>
+    </button>
+    <div class="collapse <?= $is_governing_body_active ? 'show' : '' ?>" id="grp-governing-body">
+        <ul class="nav flex-column grp-items">
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/governing-body/index.php"
+                   class="<?= (strpos($current_path, '/governing-body/') !== false && strpos($current_path, '/members/') === false && strpos($current_path, '/settings') === false) ? 'active' : '' ?>">
+                    <i class="fas fa-th-large"></i> Overview
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/governing-body/members/index.php?page_type=board-of-trustees"
+                   class="<?= strpos($current_path, '/governing-body/members/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-users"></i> Members
                 </a>
             </li>
         </ul>
