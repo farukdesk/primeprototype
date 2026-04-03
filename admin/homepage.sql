@@ -1,6 +1,7 @@
 -- Homepage Management Module
 -- Tables: homepage_stats, homepage_testimonials
--- Run this after database.sql
+-- NOTE: This schema is already included in database.sql.
+-- Only run this file on existing installs that were set up before homepage management was added.
 
 -- ── Homepage Stats/Counters ────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `homepage_stats` (

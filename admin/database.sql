@@ -322,3 +322,46 @@ INSERT INTO `cms_header_settings` (`setting_key`, `setting_value`) VALUES
 -- -------------------------------------------------------
 INSERT INTO `modules` (`name`, `slug`, `description`, `icon`, `sort_order`) VALUES
 ('CMS – Header', 'cms-header', 'Manage header top bar settings', 'fas fa-heading', 9);
+
+-- -------------------------------------------------------
+-- Homepage Management Module
+-- Tables: homepage_stats, homepage_testimonials
+-- -------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `homepage_stats` (
+  `id`          INT           NOT NULL AUTO_INCREMENT,
+  `icon`        VARCHAR(100)  NOT NULL DEFAULT 'fas fa-star'  COMMENT 'Font Awesome class e.g. fas fa-user-graduate',
+  `value`       VARCHAR(50)   NOT NULL                        COMMENT 'Numeric or text value e.g. 15000',
+  `label`       VARCHAR(120)  NOT NULL                        COMMENT 'Label shown below the number',
+  `suffix`      VARCHAR(20)            DEFAULT '+'            COMMENT 'Suffix appended after animated number e.g. +',
+  `sort_order`  INT           NOT NULL DEFAULT 0,
+  `is_active`   TINYINT(1)   NOT NULL DEFAULT 1,
+  `created_at`  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO `homepage_stats` (`icon`, `value`, `label`, `suffix`, `sort_order`, `is_active`) VALUES
+('fas fa-user-graduate',      '15000', 'Students Enrolled',   '+', 1, 1),
+('fas fa-chalkboard-teacher', '250',   'Expert Faculty',      '+', 2, 1),
+('fas fa-book-open',          '35',    'Academic Programs',   '+', 3, 1),
+('fas fa-award',              '32',    'Years of Excellence', '+', 4, 1);
+
+CREATE TABLE IF NOT EXISTS `homepage_testimonials` (
+  `id`          INT           NOT NULL AUTO_INCREMENT,
+  `name`        VARCHAR(120)  NOT NULL,
+  `designation` VARCHAR(200)           DEFAULT NULL,
+  `quote`       TEXT          NOT NULL,
+  `photo`       VARCHAR(255)           DEFAULT NULL COMMENT 'Filename inside uploads/homepage/',
+  `rating`      TINYINT       NOT NULL DEFAULT 5    COMMENT '1-5 stars',
+  `sort_order`  INT           NOT NULL DEFAULT 0,
+  `is_active`   TINYINT(1)   NOT NULL DEFAULT 1,
+  `created_at`  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -------------------------------------------------------
+-- Seed: Module for Homepage Management
+-- -------------------------------------------------------
+INSERT IGNORE INTO `modules` (`name`, `slug`, `description`, `icon`, `sort_order`) VALUES
+('Homepage Management', 'homepage', 'Manage homepage stats and testimonials', 'fas fa-home', 13);
