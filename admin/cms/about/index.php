@@ -16,12 +16,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
     $fields = [
-        'subtitle', 'title', 'description', 'youtube_url', 'view_program_url',
-        'mission_1_title', 'mission_2_title',
-        'stat_1_number', 'stat_1_label',
-        'stat_2_number', 'stat_2_label',
-        'stat_3_number', 'stat_3_label',
-        // v2 fields
+        'description',
         'about_section_subtitle', 'about_section_title', 'about_section_title_accent',
         'main_image',
         'badge_number', 'badge_text',
@@ -71,90 +66,6 @@ require_once __DIR__ . '/../../includes/header.php';
 
             <div class="row g-3 mb-3">
                 <div class="col-md-4">
-                    <label class="form-label fw-medium">Subtitle Label</label>
-                    <input type="text" name="subtitle" class="form-control"
-                           value="<?= h($settings['subtitle'] ?? 'About us') ?>" maxlength="100">
-                </div>
-                <div class="col-md-8">
-                    <label class="form-label fw-medium">Main Title</label>
-                    <input type="text" name="title" class="form-control"
-                           value="<?= h($settings['title'] ?? '') ?>" maxlength="255">
-                </div>
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label fw-medium">Description Paragraph</label>
-                <textarea name="description" class="form-control" rows="3"><?= h($settings['description'] ?? '') ?></textarea>
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label fw-medium">YouTube Embed URL</label>
-                <input type="text" name="youtube_url" class="form-control"
-                       value="<?= h($settings['youtube_url'] ?? '') ?>"
-                       placeholder="https://www.youtube.com/embed/VIDEO_ID" maxlength="500">
-                <div class="form-text">Use the embed URL format, e.g. https://www.youtube.com/embed/0Cx-Xk5i6SM</div>
-            </div>
-
-            <div class="mb-4">
-                <label class="form-label fw-medium">"View Our Program" Button URL</label>
-                <input type="text" name="view_program_url" class="form-control"
-                       value="<?= h($settings['view_program_url'] ?? '#') ?>" maxlength="500">
-            </div>
-
-            <h6 class="fw-semibold mb-3 mt-4 text-muted border-bottom pb-2">Mission Statement Items</h6>
-
-            <div class="row g-3 mb-4">
-                <div class="col-md-6">
-                    <label class="form-label fw-medium">Mission Item 1 Title</label>
-                    <input type="text" name="mission_1_title" class="form-control"
-                           value="<?= h($settings['mission_1_title'] ?? 'University Mission Statement') ?>" maxlength="150">
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label fw-medium">Mission Item 2 Title</label>
-                    <input type="text" name="mission_2_title" class="form-control"
-                           value="<?= h($settings['mission_2_title'] ?? 'University Mission Statement') ?>" maxlength="150">
-                </div>
-            </div>
-
-            <h6 class="fw-semibold mb-3 mt-4 text-muted border-bottom pb-2">Stats Counter</h6>
-
-            <div class="row g-3 mb-4">
-                <div class="col-md-2">
-                    <label class="form-label fw-medium">Stat 1 – Number</label>
-                    <input type="text" name="stat_1_number" class="form-control"
-                           value="<?= h($settings['stat_1_number'] ?? '1') ?>" maxlength="20">
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label fw-medium">Stat 1 – Label</label>
-                    <input type="text" name="stat_1_label" class="form-control"
-                           value="<?= h($settings['stat_1_label'] ?? 'Modern Smart Campus') ?>" maxlength="100">
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label fw-medium">Stat 2 – Number</label>
-                    <input type="text" name="stat_2_number" class="form-control"
-                           value="<?= h($settings['stat_2_number'] ?? '4+') ?>" maxlength="20">
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label fw-medium">Stat 2 – Label</label>
-                    <input type="text" name="stat_2_label" class="form-control"
-                           value="<?= h($settings['stat_2_label'] ?? 'Hostel Facilities') ?>" maxlength="100">
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label fw-medium">Stat 3 – Number</label>
-                    <input type="text" name="stat_3_number" class="form-control"
-                           value="<?= h($settings['stat_3_number'] ?? '20+') ?>" maxlength="20">
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label fw-medium">Stat 3 – Label</label>
-                    <input type="text" name="stat_3_label" class="form-control"
-                           value="<?= h($settings['stat_3_label'] ?? 'Mentorship Programs') ?>" maxlength="100">
-                </div>
-            </div>
-
-            <h6 class="fw-semibold mb-3 mt-4 text-muted border-bottom pb-2">Section Heading (v2)</h6>
-
-            <div class="row g-3 mb-3">
-                <div class="col-md-4">
                     <label class="form-label fw-medium">Section Sub-label</label>
                     <input type="text" name="about_section_subtitle" class="form-control"
                            value="<?= h($settings['about_section_subtitle'] ?? 'About the University') ?>" maxlength="100">
@@ -168,8 +79,13 @@ require_once __DIR__ . '/../../includes/header.php';
                     <label class="form-label fw-medium">Title Accent</label>
                     <input type="text" name="about_section_title_accent" class="form-control"
                            value="<?= h($settings['about_section_title_accent'] ?? '1993') ?>" maxlength="50">
-                    <div class="form-text">e.g. the year "1993"</div>
+                    <div class="form-text">e.g. the founding year "1993"</div>
                 </div>
+            </div>
+
+            <div class="mb-4">
+                <label class="form-label fw-medium">Description Paragraph</label>
+                <textarea name="description" class="form-control" rows="3"><?= h($settings['description'] ?? '') ?></textarea>
             </div>
 
             <h6 class="fw-semibold mb-3 mt-4 text-muted border-bottom pb-2">About Image &amp; Badge</h6>
@@ -195,7 +111,7 @@ require_once __DIR__ . '/../../includes/header.php';
                 </div>
             </div>
 
-            <h6 class="fw-semibold mb-3 mt-4 text-muted border-bottom pb-2">Bullet Points (Why Choose Us list)</h6>
+            <h6 class="fw-semibold mb-3 mt-4 text-muted border-bottom pb-2">Bullet Points (About section list)</h6>
 
             <?php for ($i = 1; $i <= 5; $i++): ?>
             <div class="mb-3">
