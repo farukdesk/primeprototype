@@ -391,6 +391,14 @@ $user       = auth_user();
                     <i class="fas fa-file-contract"></i> Policy Pages
                 </a>
             </li>
+            <?php if (is_super_admin()): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/cms/popup/index.php"
+                   class="<?= strpos($current_path, '/cms/popup/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-window-restore"></i> Popup
+                </a>
+            </li>
+            <?php endif; ?>
         </ul>
     </div>
     <?php endif; ?>

@@ -2,7 +2,11 @@
 /**
  * Front-end include: Site Footer
  * Pulls all content from cms_footer_settings via get_footer_settings().
+ * Also renders the site popup (if enabled via admin Popup Settings).
  */
+
+// Popup – rendered before the footer markup so it is always in the DOM
+require_once __DIR__ . '/popup.php';
 $fs = get_footer_settings();
 
 $about_text          = $fs['about_text']          ?? 'Empowering future leaders through quality education, research and vibrant campus life since 1993.';
