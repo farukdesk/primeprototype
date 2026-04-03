@@ -40,6 +40,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $is_active    = isset($_POST['is_active']) ? 1 : 0;
 
     if ($name === '') $errors[] = 'Name is required.';
+    if ($linkedin_url !== '' && !filter_var($linkedin_url, FILTER_VALIDATE_URL)) {
+        $errors[] = 'LinkedIn URL must be a valid URL.';
+    }
+    if ($linkedin_url !== '' && !str_starts_with($linkedin_url, 'https://')) {
+        $errors[] = 'LinkedIn URL must start with https://.';
+    }
 
     $photo = null;
     if (!empty($_FILES['photo']['name'])) {

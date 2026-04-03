@@ -465,7 +465,7 @@ $page_title   = fh($dept['hero_title'] ?? $dept['name'] ?? 'Department');
                      <?php if (!empty($alum['company'])): ?>
                      <p style="color:#334155; font-size:13px; font-weight:500;"><?= fh($alum['company']) ?></p>
                      <?php endif; ?>
-                     <?php if (!empty($alum['linkedin_url'])): ?>
+                     <?php if (!empty($alum['linkedin_url']) && str_starts_with($alum['linkedin_url'], 'https://')): ?>
                      <a href="<?= fh($alum['linkedin_url']) ?>" target="_blank" rel="noopener noreferrer"
                         style="color:#0A66C2; font-size:13px; text-decoration:none;">
                          <i class="fab fa-linkedin me-1"></i>LinkedIn
