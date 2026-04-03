@@ -295,7 +295,9 @@ if ($article && !empty($article['published_at'])) {
    <script src="/assets/js/parallax.js"></script>
 
    <!-- Custom JS -->
-   <script src="/assets/js/main.js"></script>
+   <script src="/assets/js/isotope-pkgd.js"></script>
+<script src="/assets/js/imagesloaded-pkgd.js"></script>
+<script src="/assets/js/main.js"></script>
 
 </body>
 </html>

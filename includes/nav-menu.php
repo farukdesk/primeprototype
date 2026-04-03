@@ -48,6 +48,15 @@ try {
 
 $_nav_tree = _nav_build_tree($_nav_items);
 
+// Resolve header logo: use uploaded logo if set, otherwise fall back to static asset
+$_header_logo_url = '/assets/img/logo/logo-black.png';
+try {
+    $_hs = get_header_settings();
+    if (!empty($_hs['logo_header'])) {
+        $_header_logo_url = ADMIN_UPLOAD_URL . '/logos/' . $_hs['logo_header'];
+    }
+} catch (Throwable $e) {}
+
 // SVG arrow used on button labels
 $_svg_arrow = '<svg width="16" height="15" viewBox="0 0 16 15" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M15.0544 8.1364C15.4058 7.78492 15.4058 7.21508 15.0544 6.8636L9.3268 1.13604C8.97533 0.784567 8.40548 0.784567 8.05401 1.13604C7.70254 1.48751 7.70254 2.05736 8.05401 2.40883L13.1452 7.5L8.05401 12.5912C7.70254 12.9426 7.70254 13.5125 8.05401 13.864C8.40548 14.2154 8.97533 14.2154 9.3268 13.864L15.0544 8.1364ZM0.417969 7.5V8.4H14.418V7.5V6.6H0.417969V7.5Z" fill="currentcolor"/></svg>';
 ?>
@@ -57,7 +66,7 @@ $_svg_arrow = '<svg width="16" height="15" viewBox="0 0 16 15" fill="none" xmlns
       <div class="row align-items-center">
          <div class="col-xxl-2 col-xl-2 col-lg-4 col-md-5 col-6">
             <div class="it-header-logo">
-               <a href="<?= fh(SITE_URL) ?>/index.php"><img src="/assets/img/logo/logo-black.png" alt="Prime University"></a>
+               <a href="<?= fh(SITE_URL) ?>/index.php"><img src="<?= fh($_header_logo_url) ?>" alt="Prime University"></a>
             </div>
          </div>
          <div class="col-xxl-8 col-xl-8 d-none d-xl-block">

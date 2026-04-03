@@ -1264,7 +1264,9 @@ $page_title = 'Credit Transfer – Prime University';
    <script src="/assets/js/wow.js"></script>
    <script src="/assets/js/magnific-popup.js"></script>
    <script src="/assets/js/parallax.js"></script>
-   <script src="/assets/js/main.js"></script>
+   <script src="/assets/js/isotope-pkgd.js"></script>
+<script src="/assets/js/imagesloaded-pkgd.js"></script>
+<script src="/assets/js/main.js"></script>
 
    <script>
    (function () {
