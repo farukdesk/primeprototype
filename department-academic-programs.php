@@ -76,6 +76,14 @@ function degree_badge_color(string $type): string {
    .prog-stat { text-align: center; }
    .prog-stat .value { font-size: 22px; font-weight: 700; color: #002147; display: block; }
    .prog-stat .label { font-size: 12px; color: #334155; font-weight: 500; }
+   .prog-details-content table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+   .prog-details-content table th, .prog-details-content table td { border: 1px solid #dee2e6; padding: 10px 14px; font-size: 14px; }
+   .prog-details-content table th { background-color: #002147; color: #fff; font-weight: 600; }
+   .prog-details-content table tr:nth-child(even) td { background-color: #f8fafc; }
+   .prog-details-content h4, .prog-details-content h5 { color: #002147; margin-top: 24px; margin-bottom: 12px; }
+   .prog-details-content ul, .prog-details-content ol { padding-left: 24px; margin-bottom: 16px; }
+   .prog-details-content li { margin-bottom: 6px; color: #334155; font-size: 14px; line-height: 1.7; }
+   @media (max-width: 576px) { .p-30 { padding: 20px !important; } }
    </style>
 </head>
 <body id="body" class="it-magic-cursor">
@@ -150,9 +158,9 @@ function degree_badge_color(string $type): string {
    <?php include __DIR__ . '/includes/dept-subnav.php'; ?>
 
    <!-- Programs -->
-   <section class="pt-100 pb-120" style="background-color: #FFFFFF;">
+   <section class="pt-80 pb-100" style="background-color: #FFFFFF;">
       <div class="container">
-         <div class="row justify-content-center mb-60">
+         <div class="row justify-content-center mb-50">
             <div class="col-12 text-center">
                <span class="it-section-subtitle" style="color: #D21034;"><i class="fas fa-graduation-cap"></i> What We Offer</span>
                <h4 class="it-section-title" style="color: #002147;">Academic Programs</h4>
@@ -160,24 +168,48 @@ function degree_badge_color(string $type): string {
          </div>
 
          <?php if (!empty($programs)): ?>
-         <div class="row g-4">
-            <?php foreach ($programs as $prog): ?>
-            <div class="col-xl-6 col-lg-6 wow itfadeUp" data-wow-duration=".9s">
-               <div class="card program-card h-100 border-0 shadow-sm" style="border-left:4px solid #002147 !important;">
-                  <div class="card-body p-40">
-                     <div class="d-flex align-items-start justify-content-between mb-20 flex-wrap gap-2">
-                        <h5 style="color:#002147; font-weight:700; margin-bottom:0;"><?= fh($prog['program_name'] ?? '') ?></h5>
-                        <?php if (!empty($prog['degree_type'])): ?>
-                        <span class="badge" style="background-color:<?= degree_badge_color($prog['degree_type']) ?>; font-size:12px; padding:6px 12px; border-radius:20px;">
-                           <?= fh($prog['degree_type']) ?>
-                        </span>
-                        <?php endif; ?>
+         <div class="d-flex flex-column gap-4">
+            <?php foreach ($programs as $idx => $prog): ?>
+            <?php $collapse_id = 'progDetails' . (int)$prog['id']; ?>
+            <div class="card program-card border-0 shadow-sm" style="border-left:4px solid #002147 !important;">
+               <div class="card-body p-0">
+
+                  <!-- Program Header -->
+                  <div class="p-30 p-md-40">
+                     <div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-20">
+                        <div>
+                           <?php if (!empty($prog['degree_type'])): ?>
+                           <span class="badge mb-10 d-inline-block" style="background-color:<?= degree_badge_color($prog['degree_type']) ?>; font-size:12px; padding:6px 14px; border-radius:20px;">
+                              <?= fh($prog['degree_type']) ?>
+                           </span>
+                           <?php endif; ?>
+                           <h5 style="color:#002147; font-weight:700; margin-bottom:0;"><?= fh($prog['program_name'] ?? '') ?></h5>
+                        </div>
+                        <div class="d-flex gap-2 flex-wrap">
+                           <?php if (!empty($prog['attachment'])): ?>
+                           <a href="<?= fh(ADMIN_UPLOAD_URL . '/departments/' . $prog['attachment']) ?>"
+                              class="d-inline-flex align-items-center gap-2"
+                              style="background:#D21034; color:#FFFFFF; padding:8px 18px; border-radius:25px; font-size:13px; font-weight:600; text-decoration:none;"
+                              target="_blank" rel="noopener" download>
+                              <i class="fas fa-download"></i> Download Brochure
+                           </a>
+                           <?php endif; ?>
+                           <?php if (!empty($prog['details_content'])): ?>
+                           <button class="btn btn-sm d-inline-flex align-items-center gap-2"
+                                   style="background:#002147; color:#FFB81C; border:none; padding:8px 18px; border-radius:25px; font-size:13px; font-weight:600;"
+                                   type="button" data-bs-toggle="collapse" data-bs-target="#<?= $collapse_id ?>"
+                                   aria-expanded="false" aria-controls="<?= $collapse_id ?>">
+                              <i class="fas fa-info-circle"></i> View Details
+                              <i class="fas fa-chevron-down ms-1" style="font-size:11px;"></i>
+                           </button>
+                           <?php endif; ?>
+                        </div>
                      </div>
 
                      <?php if (!empty($prog['duration']) || !empty($prog['total_credit'])): ?>
-                     <div class="row g-3 mb-25">
+                     <div class="row g-3 mb-20">
                         <?php if (!empty($prog['duration'])): ?>
-                        <div class="col-6">
+                        <div class="col-6 col-md-3">
                            <div class="prog-stat p-15 rounded" style="background:#F8FAFC;">
                               <span class="value"><?= fh($prog['duration']) ?></span>
                               <span class="label">Duration</span>
@@ -185,7 +217,7 @@ function degree_badge_color(string $type): string {
                         </div>
                         <?php endif; ?>
                         <?php if (!empty($prog['total_credit'])): ?>
-                        <div class="col-6">
+                        <div class="col-6 col-md-3">
                            <div class="prog-stat p-15 rounded" style="background:#F8FAFC;">
                               <span class="value"><?= fh($prog['total_credit']) ?></span>
                               <span class="label">Total Credits</span>
@@ -199,6 +231,19 @@ function degree_badge_color(string $type): string {
                      <p style="color:#334155; font-size:15px; line-height:1.8; margin-bottom:0;"><?= nl2br(fh($prog['description'])) ?></p>
                      <?php endif; ?>
                   </div>
+
+                  <!-- Collapsible Details -->
+                  <?php if (!empty($prog['details_content'])): ?>
+                  <div class="collapse" id="<?= $collapse_id ?>">
+                     <div style="border-top:1px solid #E2E8F0; padding:30px 30px 30px; background:#F8FAFC;">
+                        <div class="prog-details-content" style="color:#334155; font-size:15px; line-height:1.8;">
+                           <?php /* Rich HTML authored by super-admin via TinyMCE – output as-is (trusted source). */ ?>
+                           <?= $prog['details_content'] ?>
+                        </div>
+                     </div>
+                  </div>
+                  <?php endif; ?>
+
                </div>
             </div>
             <?php endforeach; ?>

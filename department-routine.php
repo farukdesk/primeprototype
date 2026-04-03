@@ -147,9 +147,9 @@ $dept_name    = fh($dept['name'] ?? 'Department');
    <?php include __DIR__ . '/includes/dept-subnav.php'; ?>
 
    <!-- Routines -->
-   <section class="pt-100 pb-120" style="background-color: #FFFFFF;">
+   <section class="pt-80 pb-100" style="background-color: #FFFFFF;">
       <div class="container">
-         <div class="row justify-content-center mb-60">
+         <div class="row justify-content-center mb-50">
             <div class="col-12 text-center">
                <span class="it-section-subtitle" style="color: #D21034;"><i class="fas fa-calendar-check"></i> Schedules</span>
                <h4 class="it-section-title" style="color: #002147;">Class &amp; Exam Routines</h4>
@@ -158,7 +158,7 @@ $dept_name    = fh($dept['name'] ?? 'Department');
 
          <?php if (!empty($routines)): ?>
             <?php foreach ($grouped as $type => $items): ?>
-            <div class="mb-60">
+            <div class="mb-40">
                <h5 class="mb-30 pb-15" style="color:#002147; font-weight:700; border-bottom:2px solid #FFB81C; display:inline-block; padding-right:20px;">
                   <i class="fas <?= strtolower($type) === 'exam' ? 'fa-file-alt' : 'fa-clock' ?> me-2" style="color:#D21034;"></i>
                   <?= fh(ucfirst($type)) ?> Routines

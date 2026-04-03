@@ -137,9 +137,9 @@ $dept_name    = fh($dept['name'] ?? 'Department');
    <?php include __DIR__ . '/includes/dept-subnav.php'; ?>
 
    <!-- Prime Pride Grid -->
-   <section class="pt-100 pb-120" style="background-color: #FFFFFF;">
+   <section class="pt-80 pb-100" style="background-color: #FFFFFF;">
       <div class="container">
-         <div class="row justify-content-center mb-60">
+         <div class="row justify-content-center mb-50">
             <div class="col-12 text-center">
                <span class="it-section-subtitle" style="color: #D21034;"><i class="fas fa-trophy"></i> Achievements</span>
                <h4 class="it-section-title" style="color: #002147;">Our Pride</h4>
@@ -152,39 +152,70 @@ $dept_name    = fh($dept['name'] ?? 'Department');
             <?php foreach ($prime_pride as $pp): ?>
             <div class="col-xl-4 col-lg-4 col-md-6 wow itfadeUp" data-wow-duration=".9s">
                <div class="card pride-card h-100 border-0 shadow-sm" style="border-top:3px solid #FFB81C !important;">
-                  <?php if (!empty($pp['image'])): ?>
-                  <img src="<?= fh(ADMIN_UPLOAD_URL . '/departments/' . $pp['image']) ?>"
-                       alt="<?= fh($pp['title'] ?? '') ?>"
-                       class="card-img-top"
-                       style="height:200px; object-fit:cover;">
-                  <?php endif; ?>
-                  <div class="card-body p-30">
-                     <?php if (!empty($pp['title'])): ?>
-                     <h5 style="color:#002147; font-weight:700; margin-bottom:10px;"><?= fh($pp['title']) ?></h5>
-                     <?php endif; ?>
+                  <div class="card-body p-30 text-center">
 
-                     <div class="d-flex flex-wrap gap-2 mb-15">
-                        <?php if (!empty($pp['student_name'])): ?>
-                        <span class="badge" style="background:#002147; color:#FFB81C; font-size:12px; padding:5px 12px; border-radius:20px;">
-                           <i class="fas fa-user me-1"></i><?= fh($pp['student_name']) ?>
-                        </span>
-                        <?php endif; ?>
-                        <?php if (!empty($pp['batch_year'])): ?>
-                        <span class="badge" style="background:#F8FAFC; color:#334155; font-size:12px; padding:5px 12px; border-radius:20px; border:1px solid #E2E8F0;">
-                           Batch <?= fh($pp['batch_year']) ?>
-                        </span>
+                     <!-- Profile Photo -->
+                     <div class="mb-20">
+                        <?php if (!empty($pp['image'])): ?>
+                        <img src="<?= fh(ADMIN_UPLOAD_URL . '/departments/' . $pp['image']) ?>"
+                             alt="<?= fh($pp['student_name'] ?? $pp['title'] ?? '') ?>"
+                             style="width:100px; height:100px; border-radius:50%; object-fit:cover; border:3px solid #FFB81C;">
+                        <?php else: ?>
+                        <div style="width:100px; height:100px; border-radius:50%; background:linear-gradient(135deg,#002147,#003d73); display:inline-flex; align-items:center; justify-content:center; border:3px solid #FFB81C;">
+                           <i class="fas fa-user" style="font-size:36px; color:#FFB81C;"></i>
+                        </div>
                         <?php endif; ?>
                      </div>
 
+                     <!-- Student Name -->
+                     <?php if (!empty($pp['student_name'])): ?>
+                     <h5 style="color:#002147; font-weight:700; margin-bottom:6px; font-size:17px;"><?= fh($pp['student_name']) ?></h5>
+                     <?php endif; ?>
+
+                     <!-- Batch Year -->
+                     <?php if (!empty($pp['batch_year'])): ?>
+                     <p style="color:#334155; font-size:13px; margin-bottom:8px;">
+                        <i class="fas fa-calendar-alt me-1" style="color:#FFB81C;"></i>Batch <?= fh($pp['batch_year']) ?>
+                     </p>
+                     <?php endif; ?>
+
+                     <!-- Position / Achievement -->
                      <?php if (!empty($pp['position'])): ?>
-                     <p style="color:#D21034; font-size:14px; font-weight:600; margin-bottom:10px;">
+                     <p style="color:#D21034; font-size:13px; font-weight:600; margin-bottom:6px;">
                         <i class="fas fa-medal me-1"></i><?= fh($pp['position']) ?>
                      </p>
                      <?php endif; ?>
 
-                     <?php if (!empty($pp['description'])): ?>
-                     <p style="color:#334155; font-size:14px; line-height:1.8; margin-bottom:0;"><?= nl2br(fh($pp['description'])) ?></p>
+                     <!-- Company -->
+                     <?php if (!empty($pp['company'])): ?>
+                     <p style="color:#334155; font-size:13px; margin-bottom:8px;">
+                        <i class="fas fa-building me-1" style="color:#002147;"></i><?= fh($pp['company']) ?>
+                     </p>
                      <?php endif; ?>
+
+                     <!-- Achievement Title -->
+                     <?php if (!empty($pp['title'])): ?>
+                     <div style="background:#F8FAFC; border-radius:8px; padding:10px 14px; margin-bottom:12px;">
+                        <p style="color:#002147; font-size:14px; font-weight:600; margin:0;">
+                           <i class="fas fa-trophy me-1" style="color:#FFB81C;"></i><?= fh($pp['title']) ?>
+                        </p>
+                     </div>
+                     <?php endif; ?>
+
+                     <!-- Description -->
+                     <?php if (!empty($pp['description'])): ?>
+                     <p style="color:#334155; font-size:13px; line-height:1.7; margin-bottom:12px; text-align:left;"><?= nl2br(fh($pp['description'])) ?></p>
+                     <?php endif; ?>
+
+                     <!-- LinkedIn -->
+                     <?php if (!empty($pp['linkedin_url'])): ?>
+                     <a href="<?= fh($pp['linkedin_url']) ?>" target="_blank" rel="noopener"
+                        class="d-inline-flex align-items-center gap-2"
+                        style="background:#0077B5; color:#fff; padding:7px 16px; border-radius:20px; font-size:12px; font-weight:600; text-decoration:none; margin-top:6px;">
+                        <i class="fab fa-linkedin"></i> LinkedIn
+                     </a>
+                     <?php endif; ?>
+
                   </div>
                </div>
             </div>

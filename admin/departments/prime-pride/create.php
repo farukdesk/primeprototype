@@ -35,6 +35,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $description  = trim($_POST['description']  ?? '');
     $student_name = trim($_POST['student_name'] ?? '');
     $position     = trim($_POST['position']     ?? '');
+    $company      = trim($_POST['company']      ?? '');
+    $linkedin_url = trim($_POST['linkedin_url'] ?? '');
     $batch_year   = trim($_POST['batch_year']   ?? '');
     $sort_order   = (int)($_POST['sort_order']  ?? 0);
     $is_active    = isset($_POST['is_active'])  ? 1 : 0;
@@ -58,17 +60,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($errors)) {
         db()->prepare(
             'INSERT INTO dept_prime_pride
-             (dept_id, title, description, image, student_name, position, batch_year, sort_order, is_active)
-             VALUES (?,?,?,?,?,?,?,?,?)'
+             (dept_id, title, description, image, student_name, position, company, linkedin_url, batch_year, sort_order, is_active)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?)'
         )->execute([$dept_id, $title, $description ?: null, $image,
                     $student_name ?: null, $position ?: null,
+                    $company ?: null, $linkedin_url ?: null,
                     $batch_year ?: null, $sort_order, $is_active]);
 
         flash_set('success', "Prime Pride entry <strong>" . h($title) . "</strong> added.");
         redirect(APP_URL . '/departments/prime-pride/index.php?dept_id=' . $dept_id);
     }
 
-    save_old(compact('title','description','student_name','position','batch_year','sort_order'));
+    save_old(compact('title','description','student_name','position','company','linkedin_url','batch_year','sort_order'));
 }
 
 require_once __DIR__ . '/../../includes/header.php';
@@ -118,6 +121,16 @@ require_once __DIR__ . '/../../includes/header.php';
                     <label class="form-label fw-medium">Position / Achievement</label>
                     <input type="text" name="position" class="form-control" style="border-radius:10px;"
                            value="<?= old('position') ?>" maxlength="200">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-medium">Current Company / Employer</label>
+                    <input type="text" name="company" class="form-control" style="border-radius:10px;"
+                           value="<?= old('company') ?>" maxlength="200" placeholder="e.g. Google, Microsoft">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-medium">LinkedIn Profile URL</label>
+                    <input type="url" name="linkedin_url" class="form-control" style="border-radius:10px;"
+                           value="<?= old('linkedin_url') ?>" maxlength="500" placeholder="https://linkedin.com/in/...">
                 </div>
                 <div class="col-md-6">
                     <label class="form-label fw-medium">Batch Year</label>
