@@ -139,7 +139,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_access'])) {
         }
 
         // Fetch old access for change log comparison
-        $old_rows = $db->prepare('SELECT uma.*, m.slug, m.name AS mname FROM user_module_access uma JOIN modules m ON m.id = uma.module_id WHERE uma.user_id = ?');
+        $old_rows = $db->prepare('SELECT uma.*, m.slug FROM user_module_access uma JOIN modules m ON m.id = uma.module_id WHERE uma.user_id = ?');
         $old_rows->execute([$uid]);
         $old_map = [];
         foreach ($old_rows->fetchAll() as $r) {

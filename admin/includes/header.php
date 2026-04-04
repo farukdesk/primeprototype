@@ -356,6 +356,7 @@ $user       = auth_user();
                 $_pc_count = (int)$_pcdb->query(
                     "SELECT
                         (SELECT COUNT(*) FROM cms_pending_changes WHERE status='pending') +
+                        (SELECT COUNT(*) FROM cms_news    WHERE is_approved=0) +
                         (SELECT COUNT(*) FROM cms_notices WHERE is_approved=0)"
                 )->fetchColumn();
             } catch (Throwable $_pce) { $_pc_count = 0; }
