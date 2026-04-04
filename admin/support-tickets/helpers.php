@@ -285,20 +285,23 @@ function st_notify_assigned(array $ticket, array $assignee, array $submitter): v
     ]);
 }
 
-function st_notify_status_changed(array $ticket, array $creator, string $old_status, string $new_status): void
+function st_notify_status_changed(array $ticket, ?array $creator, string $old_status, string $new_status): void
 {
-    send_template_email('ticket_status_changed', $creator['email'], $creator['full_name'], [
-        'full_name'      => $creator['full_name'],
-        'ticket_number'  => $ticket['ticket_number'],
-        'ticket_title'   => $ticket['title'],
-        'old_status'     => $old_status,
-        'new_status'     => $new_status,
-        'ticket_url'     => st_ticket_url($ticket['id']),
-    ]);
+    if ($creator) {
+        send_template_email('ticket_status_changed', $creator['email'], $creator['full_name'], [
+            'full_name'      => $creator['full_name'],
+            'ticket_number'  => $ticket['ticket_number'],
+            'ticket_title'   => $ticket['title'],
+            'old_status'     => $old_status,
+            'new_status'     => $new_status,
+            'ticket_url'     => st_ticket_url($ticket['id']),
+        ]);
+    }
 
     // Also notify configured IT admin emails
+    $skip_email = $creator ? $creator['email'] : '';
     foreach (st_get_notify_emails() as $admin_email) {
-        if ($admin_email === $creator['email']) continue;
+        if ($admin_email === $skip_email) continue;
         send_template_email('ticket_status_changed', $admin_email, 'IT Support Team', [
             'full_name'      => 'IT Support Team',
             'ticket_number'  => $ticket['ticket_number'],

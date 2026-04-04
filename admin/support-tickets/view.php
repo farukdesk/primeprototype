@@ -125,8 +125,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Notify creator of status change
             $cr = db()->prepare('SELECT * FROM users WHERE id = ?');
             $cr->execute([$ticket['created_by']]);
-            $creator = $cr->fetch();
-            if ($creator && $old_status !== $new_status) {
+            $creator = $cr->fetch() ?: null;
+            if ($old_status !== $new_status) {
                 $updated = array_merge($ticket, ['status' => $new_status]);
                 st_notify_status_changed($updated, $creator, $old_status, $new_status);
             }
