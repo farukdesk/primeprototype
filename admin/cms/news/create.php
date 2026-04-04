@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../../includes/auth.php';
-require_super_admin();
+require_once __DIR__ . '/../../change-log/helpers.php';
+require_access('cms-news', 'can_create');
 
 $page_title = 'New News Article';
 $errors     = [];
@@ -79,13 +80,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (empty($errors)) {
-        $slug = unique_news_slug(cms_slug($title));
+        $slug        = unique_news_slug(cms_slug($title));
+        $current_user = auth_user();
+        $is_super    = is_super_admin();
+        $is_approved = $is_super ? 1 : 0;
+        $approved_by = $is_super ? $current_user['id'] : null;
+        $approved_at = $is_super ? date('Y-m-d H:i:s') : null;
 
         $db = db();
         $db->prepare(
-            'INSERT INTO cms_news (title, slug, content, content_type, featured_image, is_published, published_at)
-             VALUES (?,?,?,?,?,?,?)'
-        )->execute([$title, $slug, $content, $content_type, $featured_image, $is_published, $published_at]);
+            'INSERT INTO cms_news
+             (title, slug, content, content_type, featured_image, is_published, published_at,
+              created_by, is_approved, approved_by, approved_at)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?)'
+        )->execute([
+            $title, $slug, $content, $content_type, $featured_image, $is_published, $published_at,
+            $current_user['id'], $is_approved, $approved_by, $approved_at,
+        ]);
 
         $news_id = (int)$db->lastInsertId();
 
@@ -111,7 +122,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        flash_set('success', 'Article <strong>' . h($title) . '</strong> created.');
+        log_change('cms-news', 'CREATE', $news_id, $title, null, null, null,
+            $is_super ? 'Article created and approved.' : 'Article created – pending super-admin approval.');
+
+        if ($is_super) {
+            flash_set('success', 'Article <strong>' . h($title) . '</strong> created.');
+        } else {
+            flash_set('success', 'Article <strong>' . h($title) . '</strong> submitted for super-admin approval.');
+        }
         redirect(APP_URL . '/cms/news/index.php');
     }
 
@@ -214,7 +232,8 @@ require_once __DIR__ . '/../../includes/header.php';
                     </div>
                     <div class="d-grid gap-2">
                         <button type="submit" class="btn btn-primary" style="border-radius:10px;">
-                            <i class="fas fa-save me-1"></i> Save Article
+                            <i class="fas fa-save me-1"></i>
+                            <?= is_super_admin() ? 'Save Article' : 'Submit for Approval' ?>
                         </button>
                         <a href="<?= APP_URL ?>/cms/news/index.php" class="btn btn-light" style="border-radius:10px;">
                             Cancel

@@ -354,6 +354,29 @@ $user       = auth_user();
                     <i class="fas fa-bullhorn"></i> Notice Board
                 </a>
             </li>
+            <?php if (is_super_admin()): ?>
+            <?php
+            // Pending approvals badge count (cached per request)
+            try {
+                $_pcdb = db();
+                $_pc_count = (int)$_pcdb->query(
+                    "SELECT
+                        (SELECT COUNT(*) FROM cms_pending_changes WHERE status='pending') +
+                        (SELECT COUNT(*) FROM cms_news    WHERE is_approved=0) +
+                        (SELECT COUNT(*) FROM cms_notices WHERE is_approved=0)"
+                )->fetchColumn();
+            } catch (Throwable $_pce) { $_pc_count = 0; }
+            ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/cms/pending-changes/index.php"
+                   class="<?= strpos($current_path, '/cms/pending-changes/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-clock"></i> Pending Approvals
+                    <?php if ($_pc_count > 0): ?>
+                    <span class="badge bg-warning text-dark ms-auto" style="font-size:.65rem;"><?= $_pc_count ?></span>
+                    <?php endif; ?>
+                </a>
+            </li>
+            <?php endif; ?>
             <li class="nav-item">
                 <a href="<?= APP_URL ?>/homepage/index.php"
                    class="<?= strpos($current_path, '/homepage/') !== false ? 'active' : '' ?>">

@@ -1,7 +1,10 @@
 <?php
 require_once __DIR__ . '/../../includes/auth.php';
-require_super_admin();
+require_once __DIR__ . '/../../change-log/helpers.php';
+require_access('cms-notice-board', 'can_edit');
 
+$is_super     = is_super_admin();
+$current_user = auth_user();
 $id     = (int)($_GET['id'] ?? 0);
 $notice = null;
 $errors = [];
@@ -13,6 +16,12 @@ if ($id) {
 }
 if (!$notice) {
     flash_set('error', 'Notice not found.');
+    redirect(APP_URL . '/cms/notice-board/index.php');
+}
+
+// Non-super admins may only edit their own notices
+if (!$is_super && (int)($notice['created_by'] ?? 0) !== (int)$current_user['id']) {
+    flash_set('error', 'You do not have permission to edit this notice.');
     redirect(APP_URL . '/cms/notice-board/index.php');
 }
 
@@ -90,12 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $attachment_mime          = $notice['attachment_mime'];
     $attachment_size          = $notice['attachment_size'];
     $remove_attachment        = isset($_POST['remove_attachment']);
-
-    if ($remove_attachment && $attachment) {
-        $old_path = UPLOAD_DIR . '/notices/' . $attachment;
-        if (file_exists($old_path)) @unlink($old_path);
-        $attachment = $attachment_original_name = $attachment_mime = $attachment_size = null;
-    }
+    $new_attachment           = null;
 
     if (!empty($_FILES['attachment']['name'])) {
         $file   = $_FILES['attachment'];
@@ -103,12 +107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($result === false) {
             $errors[] = 'Attachment: invalid file. Allowed types: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG, ZIP, TXT.';
         } else {
-            // Delete old file if present
-            if ($attachment) {
-                $old_path = UPLOAD_DIR . '/notices/' . $attachment;
-                if (file_exists($old_path)) @unlink($old_path);
-            }
-            $attachment               = $result;
+            $new_attachment = $result;
             $attachment_original_name = $file['name'];
             $finfo = new finfo(FILEINFO_MIME_TYPE);
             $attachment_mime = $finfo->file(UPLOAD_DIR . '/notices/' . $result);
@@ -117,55 +116,104 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (empty($errors)) {
-        $db              = db();
-        $old_publish_as  = (int)$notice['publish_as_news'];
-        $old_news_id     = (int)($notice['news_id'] ?? 0);
+        $db = db();
 
-        $db->prepare(
-            'UPDATE cms_notices SET
-             title=?, content=?, content_type=?, attachment=?, attachment_original_name=?,
-             attachment_mime=?, attachment_size=?, publish_as_news=?, is_published=?, published_at=?,
-             updated_at=NOW()
-             WHERE id=?'
-        )->execute([
-            $title, $content, $content_type,
-            $attachment, $attachment_original_name, $attachment_mime, $attachment_size,
-            $publish_as_news, $is_published, $published_at,
-            $id,
-        ]);
+        if ($is_super) {
+            // ── Super admin: apply change directly ──────────────────────
+            if ($remove_attachment && $attachment) {
+                $old_path = UPLOAD_DIR . '/notices/' . $attachment;
+                if (file_exists($old_path)) @unlink($old_path);
+                $attachment = $attachment_original_name = $attachment_mime = $attachment_size = null;
+            }
+            if ($new_attachment !== null) {
+                if ($attachment) {
+                    $old_path = UPLOAD_DIR . '/notices/' . $attachment;
+                    if (file_exists($old_path)) @unlink($old_path);
+                }
+                $attachment = $new_attachment;
+            }
 
-        // Handle publish_as_news state changes
-        if ($publish_as_news && !$old_news_id) {
-            // Newly checked: insert news row
-            $st = $db->prepare('SELECT id FROM cms_news WHERE slug = ?');
-            $st->execute([$notice['slug']]);
-            $news_slug = $st->fetch()
-                ? nbe_unique_news_slug($notice['slug'] . '-notice')
-                : $notice['slug'];
+            $old_publish_as  = (int)$notice['publish_as_news'];
+            $old_news_id     = (int)($notice['news_id'] ?? 0);
 
             $db->prepare(
-                'INSERT INTO cms_news (title, slug, content, content_type, featured_image, is_published, published_at)
-                 VALUES (?,?,?,?,NULL,?,?)'
-            )->execute([$title, $news_slug, $content, $content_type, $is_published, $published_at]);
-
-            $new_news_id = (int)$db->lastInsertId();
-            $db->prepare('UPDATE cms_notices SET news_id = ? WHERE id = ?')->execute([$new_news_id, $id]);
-
-        } elseif (!$publish_as_news && $old_news_id) {
-            // Unchecked: delete news row
-            $db->prepare('DELETE FROM cms_news WHERE id = ?')->execute([$old_news_id]);
-            $db->prepare('UPDATE cms_notices SET news_id = NULL WHERE id = ?')->execute([$id]);
-
-        } elseif ($publish_as_news && $old_news_id) {
-            // Still checked: update existing news row
-            $db->prepare(
-                'UPDATE cms_news SET title=?, content=?, content_type=?, is_published=?, published_at=?, updated_at=NOW()
+                'UPDATE cms_notices SET
+                 title=?, content=?, content_type=?, attachment=?, attachment_original_name=?,
+                 attachment_mime=?, attachment_size=?, publish_as_news=?, is_published=?, published_at=?,
+                 updated_at=NOW()
                  WHERE id=?'
-            )->execute([$title, $content, $content_type, $is_published, $published_at, $old_news_id]);
-        }
+            )->execute([
+                $title, $content, $content_type,
+                $attachment, $attachment_original_name, $attachment_mime, $attachment_size,
+                $publish_as_news, $is_published, $published_at,
+                $id,
+            ]);
 
-        flash_set('success', 'Notice <strong>' . h($title) . '</strong> updated.');
-        redirect(APP_URL . '/cms/notice-board/index.php');
+            // Handle publish_as_news state changes
+            if ($publish_as_news && !$old_news_id) {
+                $st = $db->prepare('SELECT id FROM cms_news WHERE slug = ?');
+                $st->execute([$notice['slug']]);
+                $news_slug = $st->fetch()
+                    ? nbe_unique_news_slug($notice['slug'] . '-notice')
+                    : $notice['slug'];
+                $db->prepare(
+                    'INSERT INTO cms_news (title, slug, content, content_type, featured_image, is_published, published_at)
+                     VALUES (?,?,?,?,NULL,?,?)'
+                )->execute([$title, $news_slug, $content, $content_type, $is_published, $published_at]);
+                $new_news_id = (int)$db->lastInsertId();
+                $db->prepare('UPDATE cms_notices SET news_id = ? WHERE id = ?')->execute([$new_news_id, $id]);
+            } elseif (!$publish_as_news && $old_news_id) {
+                $db->prepare('DELETE FROM cms_news WHERE id = ?')->execute([$old_news_id]);
+                $db->prepare('UPDATE cms_notices SET news_id = NULL WHERE id = ?')->execute([$id]);
+            } elseif ($publish_as_news && $old_news_id) {
+                $db->prepare(
+                    'UPDATE cms_news SET title=?, content=?, content_type=?, is_published=?, published_at=?, updated_at=NOW()
+                     WHERE id=?'
+                )->execute([$title, $content, $content_type, $is_published, $published_at, $old_news_id]);
+            }
+
+            log_change('cms-notice-board', 'UPDATE', $id, $title, null, null, null,
+                'Notice updated directly by super admin.');
+
+            flash_set('success', 'Notice <strong>' . h($title) . '</strong> updated.');
+            redirect(APP_URL . '/cms/notice-board/index.php');
+
+        } else {
+            // ── Non-super admin: queue edit request for approval ─────────
+            $payload = [
+                'title'            => $title,
+                'content'          => $content,
+                'content_type'     => $content_type,
+                'publish_as_news'  => $publish_as_news,
+                'is_published'     => $is_published,
+                'published_at'     => $published_at,
+                'attachment_new'           => $new_attachment,
+                'attachment_original_name' => $attachment_original_name,
+                'attachment_mime'          => $attachment_mime,
+                'attachment_size'          => $attachment_size,
+                'attachment_remove'        => $remove_attachment,
+                'old_attachment'           => $notice['attachment'],
+            ];
+
+            // Replace any existing pending EDIT for this record by this user
+            $db->prepare(
+                "DELETE FROM cms_pending_changes
+                 WHERE module='notice' AND record_id=? AND action='EDIT'
+                   AND requested_by=? AND status='pending'"
+            )->execute([$id, $current_user['id']]);
+
+            $db->prepare(
+                "INSERT INTO cms_pending_changes
+                 (module, record_id, record_title, action, requested_by, payload)
+                 VALUES ('notice', ?, ?, 'EDIT', ?, ?)"
+            )->execute([$id, $notice['title'], $current_user['id'], json_encode($payload)]);
+
+            log_change('cms-notice-board', 'UPDATE', $id, $title, null, null, null,
+                'Edit request submitted by ' . $current_user['name'] . ' – awaiting super-admin approval.');
+
+            flash_set('success', 'Edit request submitted for super-admin approval.');
+            redirect(APP_URL . '/cms/notice-board/index.php');
+        }
     }
 
     // Merge posted values back for form re-display
@@ -195,6 +243,13 @@ if (!empty($notice['published_at'])) {
         </ol>
     </nav>
 </div>
+
+<?php if (!$is_super): ?>
+<div class="alert alert-info py-2 mb-4" style="border-radius:10px;font-size:.875rem;">
+    <i class="fas fa-info-circle me-1"></i>
+    Your changes will be queued for super-admin approval and will not take effect immediately.
+</div>
+<?php endif; ?>
 
 <?php if ($errors): ?>
 <div class="alert alert-danger">
@@ -314,7 +369,8 @@ if (!empty($notice['published_at'])) {
 
                     <div class="d-grid gap-2">
                         <button type="submit" class="btn btn-primary" style="border-radius:10px;">
-                            <i class="fas fa-save me-1"></i> Update Notice
+                            <i class="fas fa-save me-1"></i>
+                            <?= $is_super ? 'Update Notice' : 'Submit Edit Request' ?>
                         </button>
                         <a href="<?= APP_URL ?>/cms/notice-board/index.php" class="btn btn-light" style="border-radius:10px;">
                             Cancel
