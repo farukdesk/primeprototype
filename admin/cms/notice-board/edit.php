@@ -404,7 +404,7 @@ if (!empty($notice['published_at'])) {
     </div>
 </form>
 
-<script src="https://cdn.tiny.cloud/1/no-api-key/tinymce/6/tinymce.min.js" referrerpolicy="origin"></script>
+<script src="https://cdn.tiny.cloud/1/0fkb6zlxpds5u8r0f2l2votobmdgvvf2izxzbndjv3dgl73f/tinymce/6/tinymce.min.js" referrerpolicy="origin"></script>
 <script>
 (function () {
     var htmlRadio  = document.getElementById('ct_html');

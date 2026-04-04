@@ -105,7 +105,7 @@ if ($db) {
     try {
         $_notices = $db->query(
             'SELECT id, title, slug, content, published_at FROM cms_notices
-             WHERE is_published = 1 ORDER BY published_at DESC, created_at DESC LIMIT 6'
+             WHERE is_published = 1 AND is_approved = 1 ORDER BY published_at DESC, created_at DESC LIMIT 6'
         )->fetchAll();
     } catch (Throwable $e) {}
 }
