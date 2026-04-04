@@ -20,9 +20,12 @@ if ($search !== '') {
     $params   = array_merge($params, [$like, $like, $like]);
 }
 
-$sql = 'SELECT u.*, g.name AS group_name, g.is_super
+$sql = 'SELECT u.*, g.name AS group_name, g.is_super,
+               fp.dept_id, d.name AS dept_name
         FROM users u
-        JOIN user_groups g ON g.id = u.group_id'
+        JOIN user_groups g ON g.id = u.group_id
+        LEFT JOIN faculty_profiles fp ON fp.user_id = u.id
+        LEFT JOIN dept_departments d ON d.id = fp.dept_id'
      . ($where ? ' WHERE ' . implode(' AND ', $where) : '')
      . ' ORDER BY u.created_at DESC';
 
@@ -79,11 +82,11 @@ require_once __DIR__ . '/../includes/header.php';
                     <tr>
                         <th class="px-4" style="width:40px;">#</th>
                         <th>Name</th>
-                        <th>Username</th>
                         <th>Email</th>
+                        <th>Phone</th>
                         <th>Group</th>
+                        <th>Department</th>
                         <th>Status</th>
-                        <th>Last Login</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -109,8 +112,8 @@ require_once __DIR__ . '/../includes/header.php';
                                 </div>
                             </div>
                         </td>
-                        <td><code><?= h($u['username']) ?></code></td>
                         <td><?= h($u['email']) ?></td>
+                        <td><?= $u['phone'] ? h($u['phone']) : '<span class="text-muted">—</span>' ?></td>
                         <td>
                             <?php if ($u['is_super']): ?>
                                 <span class="badge badge-super"><?= h($u['group_name']) ?></span>
@@ -118,17 +121,13 @@ require_once __DIR__ . '/../includes/header.php';
                                 <span class="badge bg-primary bg-opacity-10 text-primary"><?= h($u['group_name']) ?></span>
                             <?php endif; ?>
                         </td>
+                        <td><?= $u['dept_name'] ? h($u['dept_name']) : '<span class="text-muted">—</span>' ?></td>
                         <td>
                             <?php if ($u['is_active']): ?>
                                 <span class="badge bg-success">Active</span>
                             <?php else: ?>
                                 <span class="badge bg-secondary">Inactive</span>
                             <?php endif; ?>
-                        </td>
-                        <td>
-                            <?= $u['last_login']
-                                ? date('M d, Y H:i', strtotime($u['last_login']))
-                                : '<span class="text-muted">Never</span>' ?>
                         </td>
                         <td>
                             <div class="d-flex gap-1">

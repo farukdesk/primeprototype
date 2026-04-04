@@ -1,11 +1,17 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
 auth_check();
+require_once __DIR__ . '/fp-helpers.php';
 
-// Non-super-admin faculty users go straight to their own profile
+// Non-super-admin: Register Office can see index; Faculty goes to my-profile
 if (!is_super_admin()) {
-    require_access('faculty-profile', 'can_view');
-    redirect(APP_URL . '/faculty-profiles/my-profile.php');
+    if (fp_is_register_office() && can_access('faculty-profile', 'can_view')) {
+        // allowed to continue
+    } elseif (can_access('faculty-profile', 'can_view')) {
+        redirect(APP_URL . '/faculty-profiles/my-profile.php');
+    } else {
+        require_access('faculty-profile', 'can_view'); // triggers redirect/error
+    }
 }
 
 $page_title = 'Faculty Profiles';
@@ -20,6 +26,13 @@ $faculty = db()->query(
      ORDER BY u.full_name ASC"
 )->fetchAll();
 
+// Count pending registrations for badge
+$pending_count = 0;
+if (fp_can_manage_pending()) {
+    $pcs = db()->query("SELECT COUNT(*) FROM faculty_registrations WHERE status = 'pending'");
+    $pending_count = (int)($pcs ? $pcs->fetchColumn() : 0);
+}
+
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
@@ -30,6 +43,14 @@ require_once __DIR__ . '/../includes/header.php';
             <li class="breadcrumb-item active">Faculty Profiles</li>
         </ol>
     </nav>
+    <?php if (fp_can_manage_pending()): ?>
+    <a href="<?= APP_URL ?>/faculty-profiles/pending.php" class="btn btn-outline-warning" style="border-radius:10px;font-size:.875rem;">
+        <i class="fas fa-user-clock me-1"></i>Pending Registrations
+        <?php if ($pending_count > 0): ?>
+        <span class="badge bg-danger ms-1"><?= $pending_count ?></span>
+        <?php endif; ?>
+    </a>
+    <?php endif; ?>
 </div>
 
 <div class="card">
@@ -78,10 +99,16 @@ require_once __DIR__ . '/../includes/header.php';
                         </td>
                         <td><?php if ($row['updated_at']): ?><?= h(date('d M Y', strtotime($row['updated_at']))) ?><?php else: ?><span class="text-muted">Never</span><?php endif; ?></td>
                         <td class="text-end pe-4">
+                            <div class="d-flex gap-1 justify-content-end">
                             <a href="<?= APP_URL ?>/faculty-profiles/edit.php?user_id=<?= $row['id'] ?>"
                                class="btn btn-sm btn-outline-primary" style="border-radius:7px;" title="Edit Profile">
                                 <i class="fas fa-edit"></i> Edit
                             </a>
+                            <a href="<?= APP_URL ?>/faculty-profiles/files.php?user_id=<?= $row['id'] ?>"
+                               class="btn btn-sm btn-outline-secondary" style="border-radius:7px;" title="Files">
+                                <i class="fas fa-folder-open"></i> Files
+                            </a>
+                            </div>
                         </td>
                     </tr>
                     <?php endforeach; ?>
