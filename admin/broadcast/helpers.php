@@ -128,7 +128,7 @@ function bc_send_email(
         $headers .= 'Reply-To: ' . $from_email . "\r\n";
         $headers .= 'X-Mailer: PHP/' . PHP_VERSION;
 
-        return mail($to_email, $subject, $body_html, $headers, '-f' . $from_email);
+        return mail($to_email, $subject, $body_html, $headers, '-f' . escapeshellarg($from_email));
     }
 
     // Multipart message with attachments
@@ -159,7 +159,7 @@ function bc_send_email(
 
     $body .= '--' . $boundary . '--';
 
-    return mail($to_email, $subject, $body, $headers, '-f' . $from_email);
+    return mail($to_email, $subject, $body, $headers, '-f' . escapeshellarg($from_email));
 }
 
 // ── Broadcast sender ──────────────────────────────────────────────────────────
@@ -198,8 +198,8 @@ function bc_send_broadcast(int $broadcast_id, array $recipients, string $subject
     );
 
     foreach ($recipients as $r) {
-        // Personalise greeting in body
-        $personalised = str_replace('{{full_name}}', h($r['full_name']), $body_html);
+        // Personalise greeting in body (insert as plain text into existing HTML body)
+        $personalised = str_replace('{{full_name}}', $r['full_name'], $body_html);
 
         $ok = bc_send_email($r['email'], $r['full_name'], $subject, $personalised, $attachments);
         $ins->execute([

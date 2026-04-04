@@ -130,7 +130,8 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="card-body p-0">
                 <iframe id="body-preview"
                         style="width:100%;min-height:420px;border:none;border-radius:0 0 .375rem .375rem;"
-                        sandbox="allow-same-origin"></iframe>
+                        sandbox=""
+                        srcdoc="<?= htmlspecialchars($bc['body_html'], ENT_QUOTES, 'UTF-8') ?>"></iframe>
             </div>
         </div>
 
@@ -201,20 +202,13 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <script>
-// Render email body in sandboxed iframe
-(function () {
-    const iframe = document.getElementById('body-preview');
-    const doc    = iframe.contentDocument || iframe.contentWindow.document;
-    doc.open();
-    doc.write(<?= json_encode($bc['body_html']) ?>);
-    doc.close();
-
-    // Auto-adjust height
-    iframe.addEventListener('load', function () {
-        const h = iframe.contentDocument.body.scrollHeight;
-        if (h > 0) iframe.style.minHeight = h + 32 + 'px';
-    });
-})();
+// Auto-adjust iframe height after load
+document.getElementById('body-preview').addEventListener('load', function () {
+    try {
+        const h = this.contentDocument.body.scrollHeight;
+        if (h > 0) this.style.minHeight = h + 32 + 'px';
+    } catch (e) {}
+});
 </script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
