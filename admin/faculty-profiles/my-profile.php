@@ -186,6 +186,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-office">Office &amp; Contact</a></li>
                 <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-online">Online Presence</a></li>
                 <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-additional">Additional</a></li>
+                <li class="nav-item"><a class="nav-link" href="<?= APP_URL ?>/faculty-profiles/files.php"><i class="fas fa-folder-open me-1"></i>Files</a></li>
             </ul>
 
             <div class="tab-content">
