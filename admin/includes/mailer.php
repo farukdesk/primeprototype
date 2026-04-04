@@ -11,7 +11,7 @@
  * @param  string $action   Template action slug (e.g. 'forgot_password')
  * @param  string $to_email Recipient email address
  * @param  string $to_name  Recipient display name
- * @param  array  $vars     Associative array: ['full_name' => '...', 'reset_link' => '...']
+ * @param  array  $vars      Associative array: ['full_name' => '...', 'reset_link' => '...']
  * @return bool             True on success, false on failure or if template not found/inactive
  */
 function send_template_email(string $action, string $to_email, string $to_name, array $vars = []): bool
@@ -37,7 +37,7 @@ function send_template_email(string $action, string $to_email, string $to_name, 
         $replace[] = $val;
     }
 
-    $subject  = str_replace($search, $replace, $tpl['subject']);
+    $subject   = str_replace($search, $replace, $tpl['subject']);
     $body_html = str_replace($search, $replace, $tpl['body_html']);
 
     // Build RFC 2822 headers
@@ -46,13 +46,17 @@ function send_template_email(string $action, string $to_email, string $to_name, 
 
     // Encode display names as RFC 2047 Base64 UTF-8
     $encoded_from = '=?UTF-8?B?' . base64_encode($from_name) . '?=';
-    $encoded_to   = '=?UTF-8?B?' . base64_encode($to_name)   . '?=';
 
+    // IMPORTANT: We removed the "To:" header line from here.
+    // The PHP mail() function adds the "To:" header automatically using the first parameter.
+    // Adding it here again was causing the "Multiple To headers" error in Google Workspace.
+    
     $headers  = 'MIME-Version: 1.0' . "\r\n";
     $headers .= 'Content-Type: text/html; charset=UTF-8' . "\r\n";
     $headers .= 'From: ' . $encoded_from . ' <' . $from_email . '>' . "\r\n";
-    $headers .= 'To: '   . $encoded_to   . ' <' . $to_email   . '>' . "\r\n";
+    $headers .= 'Reply-To: ' . $from_email . "\r\n";
     $headers .= 'X-Mailer: PHP/' . PHP_VERSION;
 
+    // Use the -f flag to set the "Envelope Sender" for better deliverability
     return mail($to_email, $subject, $body_html, $headers, '-f' . $from_email);
 }
