@@ -34,7 +34,7 @@ if ($module === 'news') {
         'UPDATE cms_news SET is_approved=1, approved_by=?, approved_at=NOW() WHERE id=?'
     )->execute([$reviewer['id'], $id]);
     log_change('cms-news', 'UPDATE', $id, $rec['title'], 'is_approved', '0', '1',
-        'New article approved by ' . $reviewer['name'] . '.');
+        'New article approved by ' . $reviewer['full_name'] . '.');
     flash_set('success', 'Article <strong>' . h($rec['title']) . '</strong> approved.');
     redirect(APP_URL . '/cms/news/index.php?approval=pending');
 
@@ -50,7 +50,7 @@ if ($module === 'news') {
         'UPDATE cms_notices SET is_approved=1, approved_by=?, approved_at=NOW() WHERE id=?'
     )->execute([$reviewer['id'], $id]);
     log_change('cms-notice-board', 'UPDATE', $id, $rec['title'], 'is_approved', '0', '1',
-        'New notice approved by ' . $reviewer['name'] . '.');
+        'New notice approved by ' . $reviewer['full_name'] . '.');
     flash_set('success', 'Notice <strong>' . h($rec['title']) . '</strong> approved.');
     redirect(APP_URL . '/cms/notice-board/index.php?approval=pending');
 }

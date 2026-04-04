@@ -193,6 +193,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'attachment_size'          => $attachment_size,
                 'attachment_remove'        => $remove_attachment,
                 'old_attachment'           => $notice['attachment'],
+                'was_approved'             => (int)$notice['is_approved'],
             ];
 
             // Replace any existing pending EDIT for this record by this user
@@ -208,8 +209,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                  VALUES ('notice', ?, ?, 'EDIT', ?, ?)"
             )->execute([$id, $notice['title'], $current_user['id'], json_encode($payload)]);
 
+            // Hide notice from public website until super admin approves the edit
+            $db->prepare('UPDATE cms_notices SET is_approved=0 WHERE id=?')->execute([$id]);
+
             log_change('cms-notice-board', 'UPDATE', $id, $title, null, null, null,
-                'Edit request submitted by ' . $current_user['name'] . ' – awaiting super-admin approval.');
+                'Edit request submitted by ' . $current_user['full_name'] . ' – awaiting super-admin approval.');
+
+            // Notify super admins by email
+            require_once __DIR__ . '/../../includes/mailer.php';
+            $supers = db()->query(
+                'SELECT u.full_name, u.email FROM users u
+                 JOIN user_groups g ON g.id = u.group_id
+                 WHERE g.is_super = 1 AND u.is_active = 1'
+            )->fetchAll();
+            foreach ($supers as $su) {
+                send_template_email('notice_approval_needed', $su['email'], $su['full_name'], [
+                    'full_name'      => $su['full_name'],
+                    'requester_name' => $current_user['full_name'],
+                    'notice_title'   => $notice['title'],
+                    'action'         => 'EDIT',
+                    'pending_url'    => APP_URL . '/cms/pending-changes/index.php',
+                ]);
+            }
 
             flash_set('success', 'Edit request submitted for super-admin approval.');
             redirect(APP_URL . '/cms/notice-board/index.php');

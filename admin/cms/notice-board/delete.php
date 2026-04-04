@@ -63,12 +63,33 @@ if ($is_super) {
 
     $db->prepare(
         "INSERT INTO cms_pending_changes
-         (module, record_id, record_title, action, requested_by)
-         VALUES ('notice', ?, ?, 'DELETE', ?)"
-    )->execute([$id, $notice['title'], $current_user['id']]);
+         (module, record_id, record_title, action, requested_by, payload)
+         VALUES ('notice', ?, ?, 'DELETE', ?, ?)"
+    )->execute([$id, $notice['title'], $current_user['id'],
+        json_encode(['was_approved' => (int)$notice['is_approved']])]);
+
+    // Hide notice from public website until super admin approves or rejects
+    $db->prepare('UPDATE cms_notices SET is_approved=0 WHERE id=?')->execute([$id]);
 
     log_change('cms-notice-board', 'DELETE', $id, $notice['title'], null, null, null,
-        'Delete request submitted by ' . $current_user['name'] . ' – awaiting super-admin approval.');
+        'Delete request submitted by ' . $current_user['full_name'] . ' – awaiting super-admin approval.');
+
+    // Notify super admins by email
+    require_once __DIR__ . '/../../includes/mailer.php';
+    $supers = db()->query(
+        'SELECT u.full_name, u.email FROM users u
+         JOIN user_groups g ON g.id = u.group_id
+         WHERE g.is_super = 1 AND u.is_active = 1'
+    )->fetchAll();
+    foreach ($supers as $su) {
+        send_template_email('notice_approval_needed', $su['email'], $su['full_name'], [
+            'full_name'      => $su['full_name'],
+            'requester_name' => $current_user['full_name'],
+            'notice_title'   => $notice['title'],
+            'action'         => 'DELETE',
+            'pending_url'    => APP_URL . '/cms/pending-changes/index.php',
+        ]);
+    }
 
     flash_set('success', 'Deletion request for <strong>' . h($notice['title']) . '</strong> submitted for super-admin approval.');
 }

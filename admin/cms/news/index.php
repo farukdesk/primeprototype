@@ -35,7 +35,7 @@ if ($is_super) {
     $params[] = $current_user['id'];
 }
 
-$sql = 'SELECT n.*, u.name AS creator_name
+$sql = 'SELECT n.*, u.full_name AS creator_name
         FROM cms_news n
         LEFT JOIN users u ON u.id = n.created_by'
      . ($where ? ' WHERE ' . implode(' AND ', $where) : '')

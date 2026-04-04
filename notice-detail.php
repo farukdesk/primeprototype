@@ -9,10 +9,10 @@ try {
     $db = front_db();
     if ($db && ($slug || $id)) {
         if ($slug) {
-            $st = $db->prepare('SELECT * FROM cms_notices WHERE slug = ? AND is_published = 1 LIMIT 1');
+            $st = $db->prepare('SELECT * FROM cms_notices WHERE slug = ? AND is_published = 1 AND is_approved = 1 LIMIT 1');
             $st->execute([$slug]);
         } else {
-            $st = $db->prepare('SELECT * FROM cms_notices WHERE id = ? AND is_published = 1 LIMIT 1');
+            $st = $db->prepare('SELECT * FROM cms_notices WHERE id = ? AND is_published = 1 AND is_approved = 1 LIMIT 1');
             $st->execute([$id]);
         }
         $notice = $st->fetch();
