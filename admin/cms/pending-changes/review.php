@@ -169,6 +169,8 @@ if ($decision === 'reject') {
                 $content_type = $p['content_type'] ?? $rec['content_type'];
                 $is_published = isset($p['is_published']) ? (int)$p['is_published'] : (int)$rec['is_published'];
                 $published_at = $p['published_at'] ?? $rec['published_at'];
+                // Preserve original approval state; default to 1 so approving an edit approves the record
+                $edit_approved = isset($p['was_approved']) ? (int)$p['was_approved'] : 1;
 
                 // Handle featured image
                 $featured_image = $rec['featured_image'];
@@ -194,11 +196,11 @@ if ($decision === 'reject') {
                 $db->prepare(
                     'UPDATE cms_news
                      SET title=?, slug=?, content=?, content_type=?, featured_image=?,
-                         is_published=?, published_at=?, is_approved=1, approved_by=?, approved_at=NOW(),
+                         is_published=?, published_at=?, is_approved=?, approved_by=?, approved_at=NOW(),
                          updated_at=NOW()
                      WHERE id=?'
                 )->execute([$title, $slug, $content, $content_type, $featured_image,
-                             $is_published, $published_at, $reviewer['id'], $change['record_id']]);
+                             $is_published, $published_at, $edit_approved, $reviewer['id'], $change['record_id']]);
 
                 // Add any new attachments from payload
                 foreach ($p['new_attachments'] ?? [] as $att) {
@@ -233,6 +235,8 @@ if ($decision === 'reject') {
                 $publish_as_news = isset($p['publish_as_news']) ? (int)$p['publish_as_news'] : (int)$rec['publish_as_news'];
                 $is_published    = isset($p['is_published'])    ? (int)$p['is_published']    : (int)$rec['is_published'];
                 $published_at    = $p['published_at'] ?? $rec['published_at'];
+                // Preserve original approval state; default to 1 so approving an edit approves the record
+                $edit_approved   = isset($p['was_approved']) ? (int)$p['was_approved'] : 1;
 
                 // Attachment handling
                 $attachment               = $rec['attachment'];
@@ -262,13 +266,13 @@ if ($decision === 'reject') {
                     'UPDATE cms_notices SET
                      title=?, content=?, content_type=?, attachment=?, attachment_original_name=?,
                      attachment_mime=?, attachment_size=?, publish_as_news=?, is_published=?,
-                     published_at=?, is_approved=1, approved_by=?, approved_at=NOW(), updated_at=NOW()
+                     published_at=?, is_approved=?, approved_by=?, approved_at=NOW(), updated_at=NOW()
                      WHERE id=?'
                 )->execute([
                     $title, $content, $content_type,
                     $attachment, $attachment_original_name, $attachment_mime, $attachment_size,
                     $publish_as_news, $is_published, $published_at,
-                    $reviewer['id'], $change['record_id'],
+                    $edit_approved, $reviewer['id'], $change['record_id'],
                 ]);
 
                 // Sync linked news row

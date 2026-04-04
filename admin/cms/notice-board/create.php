@@ -156,11 +156,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                  JOIN user_groups g ON g.id = u.group_id
                  WHERE g.is_super = 1 AND u.is_active = 1'
             )->fetchAll();
-            $current_user_for_email = auth_user();
             foreach ($supers as $su) {
                 send_template_email('notice_approval_needed', $su['email'], $su['full_name'], [
                     'full_name'      => $su['full_name'],
-                    'requester_name' => $current_user_for_email['full_name'],
+                    'requester_name' => $current_user['full_name'],
                     'notice_title'   => $title,
                     'action'         => 'CREATE',
                     'pending_url'    => APP_URL . '/cms/pending-changes/index.php',
