@@ -133,7 +133,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['_action'] ?? '') === 'facu
                     if (!in_array($mime, $allowed_mimes, true)) {
                         $form_errors[] = 'Invalid file content. Allowed: JPG, PNG, PDF.';
                     } else {
-                        $upload_dir = dirname(__DIR__) . '/admin/uploads/faculty-registrations';
+                        $upload_dir = __DIR__ . '/admin/uploads/faculty-registrations';
                         if (!is_dir($upload_dir)) mkdir($upload_dir, 0755, true);
                         $stored = bin2hex(random_bytes(12)) . '.' . $ext;
                         if (!move_uploaded_file($file['tmp_name'], $upload_dir . '/' . $stored)) {

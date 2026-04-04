@@ -198,9 +198,9 @@ VALUES (
   <div style="background:#fff;padding:28px;border-radius:0 0 8px 8px;border:1px solid #e0e7ef;border-top:none;">
     <p>Dear <strong>{{full_name}}</strong>,</p>
     <p>We regret to inform you that your faculty registration at <strong>{{app_name}}</strong> could not be approved at this time.</p>
-    {{#notes}}<p style="background:#fff3f3;border:1px solid #f5c6cb;border-radius:8px;padding:12px 16px;font-size:.9rem;">
+    <p style="background:#fff3f3;border:1px solid #f5c6cb;border-radius:8px;padding:12px 16px;font-size:.9rem;">
       <strong>Reason:</strong> {{notes}}
-    </p>{{/notes}}
+    </p>
     <p>If you believe this is an error or would like more information, please contact the Register Office directly.</p>
     <p style="color:#888;font-size:.85rem;margin-top:24px;">This is an automated message from {{app_name}}. Please do not reply.</p>
   </div>
