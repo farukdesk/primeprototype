@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../change-log/helpers.php';
-require_access('cms-news', 'can_delete');
+require_access('cms-notice-board', 'can_delete');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     redirect(APP_URL . '/cms/news/index.php');
@@ -45,7 +45,7 @@ if ($is_super) {
         if (file_exists($path)) @unlink($path);
     }
 
-    log_change('cms-news', 'DELETE', $id, $news['title'], null, null, null,
+    log_change('cms-notice-board', 'DELETE', $id, $news['title'], null, null, null,
         'Article deleted directly by super admin.');
 
     // Delete DB record (cascade removes attachments)
@@ -71,7 +71,7 @@ if ($is_super) {
          VALUES ('news', ?, ?, 'DELETE', ?)"
     )->execute([$id, $news['title'], $current_user['id']]);
 
-    log_change('cms-news', 'DELETE', $id, $news['title'], null, null, null,
+    log_change('cms-notice-board', 'DELETE', $id, $news['title'], null, null, null,
         'Delete request submitted by ' . $current_user['name'] . ' – awaiting super-admin approval.');
 
     flash_set('success', 'Deletion request for <strong>' . h($news['title']) . '</strong> submitted for super-admin approval.');

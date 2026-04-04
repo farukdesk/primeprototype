@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../change-log/helpers.php';
-require_access('cms-news', 'can_create');
+require_access('cms-notice-board', 'can_create');
 
 $page_title = 'New News Article';
 $errors     = [];
@@ -122,7 +122,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        log_change('cms-news', 'CREATE', $news_id, $title, null, null, null,
+        log_change('cms-notice-board', 'CREATE', $news_id, $title, null, null, null,
             $is_super ? 'Article created and approved.' : 'Article created – pending super-admin approval.');
 
         if ($is_super) {

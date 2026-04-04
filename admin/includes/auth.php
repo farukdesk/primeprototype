@@ -82,14 +82,34 @@ function is_super_admin(): bool {
 /**
  * Check whether the current user can access a given module slug.
  * Super admins bypass all checks.
+ * User-level access (user_module_access) takes precedence over group-level access.
  */
 function can_access(string $slug, string $permission = 'can_view'): bool {
     if (is_super_admin()) return true;
     $user = auth_user();
     if (!$user) return false;
 
-    static $access = [];
-    if (!isset($access[$slug])) {
+    static $user_access  = [];
+    static $group_access = [];
+
+    // Check user-level override first
+    if (!isset($user_access[$slug])) {
+        $stmt = db()->prepare(
+            'SELECT uma.*
+             FROM user_module_access uma
+             JOIN modules m ON m.id = uma.module_id
+             WHERE uma.user_id = ? AND m.slug = ? AND m.is_active = 1'
+        );
+        $stmt->execute([$user['id'], $slug]);
+        $row = $stmt->fetch();
+        $user_access[$slug] = $row !== false ? $row : null;
+    }
+    if ($user_access[$slug] !== null) {
+        return !empty($user_access[$slug][$permission]);
+    }
+
+    // Fall back to group-level access
+    if (!isset($group_access[$slug])) {
         $stmt = db()->prepare(
             'SELECT gma.*
              FROM group_module_access gma
@@ -97,9 +117,9 @@ function can_access(string $slug, string $permission = 'can_view'): bool {
              WHERE gma.group_id = ? AND m.slug = ? AND m.is_active = 1'
         );
         $stmt->execute([$user['group_id'], $slug]);
-        $access[$slug] = $stmt->fetch() ?: [];
+        $group_access[$slug] = $stmt->fetch() ?: [];
     }
-    return !empty($access[$slug][$permission]);
+    return !empty($group_access[$slug][$permission]);
 }
 
 /**

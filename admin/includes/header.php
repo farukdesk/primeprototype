@@ -277,7 +277,7 @@ $user       = auth_user();
     <?php endif; ?>
 
     <!-- ── Website & CMS ── -->
-    <?php if (is_super_admin() || can_access('homepage')): ?>
+    <?php if (is_super_admin() || can_access('homepage') || can_access('cms-notice-board')): ?>
     <button class="nav-group-toggle <?= $is_website_active ? '' : 'collapsed' ?>"
             data-bs-toggle="collapse" data-bs-target="#grp-website"
             aria-expanded="<?= $is_website_active ? 'true' : 'false' ?>">
@@ -348,12 +348,6 @@ $user       = auth_user();
                     <i class="fas fa-user-graduate"></i> Alumni
                 </a>
             </li>
-            <li class="nav-item">
-                <a href="<?= APP_URL ?>/cms/notice-board/index.php"
-                   class="<?= strpos($current_path, '/cms/notice-board/') !== false ? 'active' : '' ?>">
-                    <i class="fas fa-bullhorn"></i> Notice Board
-                </a>
-            </li>
             <?php if (is_super_admin()): ?>
             <?php
             // Pending approvals badge count (cached per request)
@@ -393,6 +387,14 @@ $user       = auth_user();
                 <a href="<?= APP_URL ?>/cms/footer/index.php"
                    class="<?= strpos($current_path, '/cms/footer/') !== false ? 'active' : '' ?>">
                     <i class="fas fa-shoe-prints"></i> Footer
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('cms-notice-board')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/cms/notice-board/index.php"
+                   class="<?= strpos($current_path, '/cms/notice-board/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-bullhorn"></i> Notice Board
                 </a>
             </li>
             <?php endif; ?>
