@@ -54,5 +54,5 @@ function send_template_email(string $action, string $to_email, string $to_name, 
     $headers .= 'To: '   . $encoded_to   . ' <' . $to_email   . '>' . "\r\n";
     $headers .= 'X-Mailer: PHP/' . PHP_VERSION;
 
-    return mail($to_email, $subject, $body_html, $headers);
+    return mail($to_email, $subject, $body_html, $headers, '-f' . $from_email);
 }
