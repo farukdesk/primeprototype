@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../../includes/auth.php';
-require_access('cms-news', 'can_view');
+require_access('cms-notice-board', 'can_view');
 
 $page_title  = 'News';
 $is_super    = is_super_admin();
@@ -95,7 +95,7 @@ require_once __DIR__ . '/../../includes/header.php';
             <span class="badge bg-dark ms-1"><?= $total_pending ?></span>
         </a>
         <?php endif; ?>
-        <?php if ($is_super || can_access('cms-news', 'can_create')): ?>
+        <?php if ($is_super || can_access('cms-notice-board', 'can_create')): ?>
         <a href="<?= APP_URL ?>/cms/news/create.php" class="btn btn-primary" style="border-radius:10px;font-size:.875rem;">
             <i class="fas fa-plus me-1"></i> New Article
         </a>
@@ -228,13 +228,13 @@ require_once __DIR__ . '/../../includes/header.php';
                                     </button>
                                 </form>
                                 <?php endif; ?>
-                                <?php if ($is_super || can_access('cms-news', 'can_edit')): ?>
+                                <?php if ($is_super || can_access('cms-notice-board', 'can_edit')): ?>
                                 <a href="<?= APP_URL ?>/cms/news/edit.php?id=<?= $n['id'] ?>"
                                    class="btn btn-sm btn-outline-primary" title="Edit" style="border-radius:7px;">
                                     <i class="fas fa-edit"></i>
                                 </a>
                                 <?php endif; ?>
-                                <?php if ($is_super || can_access('cms-news', 'can_delete')): ?>
+                                <?php if ($is_super || can_access('cms-notice-board', 'can_delete')): ?>
                                 <form method="POST" action="<?= APP_URL ?>/cms/news/delete.php"
                                       onsubmit="return confirm('<?= $is_super ? 'Delete' : 'Request deletion of' ?> article \"<?= h(addslashes($n['title'])) ?>\"?');">
                                     <?= csrf_field() ?>

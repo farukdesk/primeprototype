@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../change-log/helpers.php';
-require_access('cms-news', 'can_edit');
+require_access('cms-notice-board', 'can_edit');
 
 $is_super    = is_super_admin();
 $current_user = auth_user();
@@ -159,7 +159,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
 
-            log_change('cms-news', 'UPDATE', $id, $title, null, null, null,
+            log_change('cms-notice-board', 'UPDATE', $id, $title, null, null, null,
                 'Article updated directly by super admin.');
 
             flash_set('success', 'Article <strong>' . h($title) . '</strong> updated.');
@@ -218,7 +218,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                  VALUES ('news', ?, ?, 'EDIT', ?, ?)"
             )->execute([$id, $news['title'], $current_user['id'], json_encode($payload)]);
 
-            log_change('cms-news', 'UPDATE', $id, $title, null, null, null,
+            log_change('cms-notice-board', 'UPDATE', $id, $title, null, null, null,
                 'Edit request submitted by ' . $current_user['name'] . ' – awaiting super-admin approval.');
 
             flash_set('success', 'Edit request submitted for super-admin approval.');
