@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../../includes/auth.php';
-require_super_admin();
+require_once __DIR__ . '/../../change-log/helpers.php';
+require_access('cms-notice-board', 'can_create');
 
 $page_title = 'Add Notice';
 $errors     = [];
@@ -100,16 +101,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($errors)) {
         $db   = db();
         $slug = nb_unique_notice_slug(nb_cms_slug($title));
+        $current_user = auth_user();
+        $is_super    = is_super_admin();
+        $is_approved  = $is_super ? 1 : 0;
+        $approved_by  = $is_super ? $current_user['id'] : null;
+        $approved_at  = $is_super ? date('Y-m-d H:i:s') : null;
 
         $db->prepare(
             'INSERT INTO cms_notices
              (title, slug, content, content_type, attachment, attachment_original_name,
-              attachment_mime, attachment_size, publish_as_news, is_published, published_at)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?)'
+              attachment_mime, attachment_size, publish_as_news, is_published, published_at,
+              created_by, is_approved, approved_by, approved_at)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
         )->execute([
             $title, $slug, $content, $content_type,
             $attachment, $attachment_original_name, $attachment_mime, $attachment_size,
             $publish_as_news, $is_published, $published_at,
+            $current_user['id'], $is_approved, $approved_by, $approved_at,
         ]);
 
         $notice_id = (int)$db->lastInsertId();
@@ -122,15 +130,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $news_slug = $st->fetch() ? nb_unique_news_slug($slug . '-notice') : $slug;
 
             $db->prepare(
-                'INSERT INTO cms_news (title, slug, content, content_type, featured_image, is_published, published_at)
-                 VALUES (?,?,?,?,NULL,?,?)'
-            )->execute([$title, $news_slug, $content, $content_type, $is_published, $published_at]);
+                'INSERT INTO cms_news
+                 (title, slug, content, content_type, featured_image, is_published, published_at,
+                  created_by, is_approved, approved_by, approved_at)
+                 VALUES (?,?,?,?,NULL,?,?,?,?,?,?)'
+            )->execute([
+                $title, $news_slug, $content, $content_type, $is_published, $published_at,
+                $current_user['id'], $is_approved, $approved_by, $approved_at,
+            ]);
 
             $news_id = (int)$db->lastInsertId();
             $db->prepare('UPDATE cms_notices SET news_id = ? WHERE id = ?')->execute([$news_id, $notice_id]);
         }
 
-        flash_set('success', 'Notice <strong>' . h($title) . '</strong> created.');
+        log_change('cms-notice-board', 'CREATE', $notice_id, $title, null, null, null,
+            $is_super ? 'Notice created and approved.' : 'Notice created – pending super-admin approval.');
+
+        if ($is_super) {
+            flash_set('success', 'Notice <strong>' . h($title) . '</strong> created.');
+        } else {
+            flash_set('success', 'Notice <strong>' . h($title) . '</strong> submitted for super-admin approval.');
+        }
         redirect(APP_URL . '/cms/notice-board/index.php');
     }
 
@@ -244,7 +264,8 @@ require_once __DIR__ . '/../../includes/header.php';
 
                     <div class="d-grid gap-2">
                         <button type="submit" class="btn btn-primary" style="border-radius:10px;">
-                            <i class="fas fa-save me-1"></i> Save Notice
+                            <i class="fas fa-save me-1"></i>
+                            <?= is_super_admin() ? 'Save Notice' : 'Submit for Approval' ?>
                         </button>
                         <a href="<?= APP_URL ?>/cms/notice-board/index.php" class="btn btn-light" style="border-radius:10px;">
                             Cancel

@@ -1,7 +1,10 @@
 <?php
 require_once __DIR__ . '/../../includes/auth.php';
-require_super_admin();
+require_once __DIR__ . '/../../change-log/helpers.php';
+require_access('cms-news', 'can_edit');
 
+$is_super    = is_super_admin();
+$current_user = auth_user();
 $id     = (int)($_GET['id'] ?? 0);
 $news   = null;
 $errors = [];
@@ -13,6 +16,12 @@ if ($id) {
 }
 if (!$news) {
     flash_set('error', 'News article not found.');
+    redirect(APP_URL . '/cms/news/index.php');
+}
+
+// Non-super admins may only edit their own articles
+if (!$is_super && (int)($news['created_by'] ?? 0) !== (int)$current_user['id']) {
+    flash_set('error', 'You do not have permission to edit this article.');
     redirect(APP_URL . '/cms/news/index.php');
 }
 
@@ -87,62 +96,134 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Featured image upload (optional replacement) or removal
     $featured_image = $news['featured_image'];
+    $new_featured_image = null;
     if (!empty($_FILES['featured_image']['name'])) {
         $result = upload_file_e($_FILES['featured_image'], 'news', IMG_EXTS_E, IMG_MIMES_E);
         if ($result === false) {
             $errors[] = 'Featured image: invalid file. Allowed types: JPG, PNG, GIF, WebP.';
         } else {
-            // Delete old featured image
-            if ($featured_image && file_exists(UPLOAD_DIR . '/news/' . $featured_image)) {
-                @unlink(UPLOAD_DIR . '/news/' . $featured_image);
-            }
-            $featured_image = $result;
+            $new_featured_image = $result;
         }
-    } elseif (isset($_POST['remove_featured'])) {
-        if ($featured_image && file_exists(UPLOAD_DIR . '/news/' . $featured_image)) {
-            @unlink(UPLOAD_DIR . '/news/' . $featured_image);
-        }
-        $featured_image = null;
     }
+    $remove_featured = isset($_POST['remove_featured']);
 
     if (empty($errors)) {
-        // Regenerate slug only if title changed
-        $slug = $news['slug'];
-        if ($title !== $news['title']) {
-            $slug = unique_news_slug_e(cms_slug_e($title), $id);
-        }
-
-        db()->prepare(
-            'UPDATE cms_news
-             SET title=?, slug=?, content=?, content_type=?, featured_image=?, is_published=?, published_at=?
-             WHERE id=?'
-        )->execute([$title, $slug, $content, $content_type, $featured_image, $is_published, $published_at, $id]);
-
-        // Process new attachments
         $db = db();
-        if (!empty($_FILES['attachments']['name'][0])) {
-            foreach ($_FILES['attachments']['name'] as $k => $fname) {
-                if ($_FILES['attachments']['error'][$k] !== UPLOAD_ERR_OK) continue;
-                $file = [
-                    'name'     => $fname,
-                    'tmp_name' => $_FILES['attachments']['tmp_name'][$k],
-                    'error'    => $_FILES['attachments']['error'][$k],
-                    'size'     => $_FILES['attachments']['size'][$k],
-                ];
-                $stored = upload_file_e($file, 'news', ATTACH_EXTS_E, ATTACH_MIMES_E);
-                if ($stored) {
-                    $finfo = new finfo(FILEINFO_MIME_TYPE);
-                    $mime  = $finfo->file(UPLOAD_DIR . '/news/' . $stored);
-                    $db->prepare(
-                        'INSERT INTO cms_news_attachments (news_id, original_name, stored_name, mime_type, size)
-                         VALUES (?,?,?,?,?)'
-                    )->execute([$id, $fname, $stored, $mime, $file['size']]);
+
+        if ($is_super) {
+            // ── Super admin: apply change directly ──────────────────────
+            if ($new_featured_image !== null) {
+                if ($featured_image && file_exists(UPLOAD_DIR . '/news/' . $featured_image)) {
+                    @unlink(UPLOAD_DIR . '/news/' . $featured_image);
+                }
+                $featured_image = $new_featured_image;
+            } elseif ($remove_featured) {
+                if ($featured_image && file_exists(UPLOAD_DIR . '/news/' . $featured_image)) {
+                    @unlink(UPLOAD_DIR . '/news/' . $featured_image);
+                }
+                $featured_image = null;
+            }
+
+            $slug = $news['slug'];
+            if ($title !== $news['title']) {
+                $slug = unique_news_slug_e(cms_slug_e($title), $id);
+            }
+
+            $db->prepare(
+                'UPDATE cms_news
+                 SET title=?, slug=?, content=?, content_type=?, featured_image=?,
+                     is_published=?, published_at=?, updated_at=NOW()
+                 WHERE id=?'
+            )->execute([$title, $slug, $content, $content_type, $featured_image,
+                        $is_published, $published_at, $id]);
+
+            // Process new attachments
+            if (!empty($_FILES['attachments']['name'][0])) {
+                foreach ($_FILES['attachments']['name'] as $k => $fname) {
+                    if ($_FILES['attachments']['error'][$k] !== UPLOAD_ERR_OK) continue;
+                    $file = [
+                        'name'     => $fname,
+                        'tmp_name' => $_FILES['attachments']['tmp_name'][$k],
+                        'error'    => $_FILES['attachments']['error'][$k],
+                        'size'     => $_FILES['attachments']['size'][$k],
+                    ];
+                    $stored = upload_file_e($file, 'news', ATTACH_EXTS_E, ATTACH_MIMES_E);
+                    if ($stored) {
+                        $finfo = new finfo(FILEINFO_MIME_TYPE);
+                        $mime  = $finfo->file(UPLOAD_DIR . '/news/' . $stored);
+                        $db->prepare(
+                            'INSERT INTO cms_news_attachments (news_id, original_name, stored_name, mime_type, size)
+                             VALUES (?,?,?,?,?)'
+                        )->execute([$id, $fname, $stored, $mime, $file['size']]);
+                    }
                 }
             }
-        }
 
-        flash_set('success', 'Article <strong>' . h($title) . '</strong> updated.');
-        redirect(APP_URL . '/cms/news/edit.php?id=' . $id);
+            log_change('cms-news', 'UPDATE', $id, $title, null, null, null,
+                'Article updated directly by super admin.');
+
+            flash_set('success', 'Article <strong>' . h($title) . '</strong> updated.');
+            redirect(APP_URL . '/cms/news/edit.php?id=' . $id);
+
+        } else {
+            // ── Non-super admin: queue edit request for approval ─────────
+            // Build payload JSON (files already uploaded, stored in /news/ dir)
+            $payload = [
+                'title'           => $title,
+                'content'         => $content,
+                'content_type'    => $content_type,
+                'is_published'    => $is_published,
+                'published_at'    => $published_at,
+                'featured_image_new'    => $new_featured_image,
+                'featured_image_remove' => $remove_featured,
+                'old_featured_image'    => $news['featured_image'],
+            ];
+
+            // Process new attachments (upload now, reference in payload)
+            $new_attachments = [];
+            if (!empty($_FILES['attachments']['name'][0])) {
+                foreach ($_FILES['attachments']['name'] as $k => $fname) {
+                    if ($_FILES['attachments']['error'][$k] !== UPLOAD_ERR_OK) continue;
+                    $file = [
+                        'name'     => $fname,
+                        'tmp_name' => $_FILES['attachments']['tmp_name'][$k],
+                        'error'    => $_FILES['attachments']['error'][$k],
+                        'size'     => $_FILES['attachments']['size'][$k],
+                    ];
+                    $stored = upload_file_e($file, 'news', ATTACH_EXTS_E, ATTACH_MIMES_E);
+                    if ($stored) {
+                        $finfo = new finfo(FILEINFO_MIME_TYPE);
+                        $mime  = $finfo->file(UPLOAD_DIR . '/news/' . $stored);
+                        $new_attachments[] = [
+                            'stored_name'   => $stored,
+                            'original_name' => $fname,
+                            'mime_type'     => $mime,
+                            'size'          => $file['size'],
+                        ];
+                    }
+                }
+            }
+            $payload['new_attachments'] = $new_attachments;
+
+            // Replace any existing pending EDIT for this record by this user
+            $db->prepare(
+                "DELETE FROM cms_pending_changes
+                 WHERE module='news' AND record_id=? AND action='EDIT'
+                   AND requested_by=? AND status='pending'"
+            )->execute([$id, $current_user['id']]);
+
+            $db->prepare(
+                "INSERT INTO cms_pending_changes
+                 (module, record_id, record_title, action, requested_by, payload)
+                 VALUES ('news', ?, ?, 'EDIT', ?, ?)"
+            )->execute([$id, $news['title'], $current_user['id'], json_encode($payload)]);
+
+            log_change('cms-news', 'UPDATE', $id, $title, null, null, null,
+                'Edit request submitted by ' . $current_user['name'] . ' – awaiting super-admin approval.');
+
+            flash_set('success', 'Edit request submitted for super-admin approval.');
+            redirect(APP_URL . '/cms/news/index.php');
+        }
     }
 
     $news = array_merge($news, compact('title','content','content_type','is_published','featured_image'));
@@ -156,11 +237,18 @@ require_once __DIR__ . '/../../includes/header.php';
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb mb-0">
             <li class="breadcrumb-item"><a href="<?= APP_URL ?>/index.php">Dashboard</a></li>
-            <li class="breadcrumb-item"><a href="<?= APP_URL ?>/cms/news/index.php">Latest News</a></li>
+            <li class="breadcrumb-item"><a href="<?= APP_URL ?>/cms/news/index.php">News</a></li>
             <li class="breadcrumb-item active">Edit</li>
         </ol>
     </nav>
 </div>
+
+<?php if (!$is_super): ?>
+<div class="alert alert-info py-2 mb-4" style="border-radius:10px;font-size:.875rem;">
+    <i class="fas fa-info-circle me-1"></i>
+    Your changes will be queued for super-admin approval and will not take effect immediately.
+</div>
+<?php endif; ?>
 
 <?php if ($errors): ?>
 <div class="alert alert-danger">
@@ -307,7 +395,8 @@ require_once __DIR__ . '/../../includes/header.php';
                     </div>
                     <div class="d-grid gap-2">
                         <button type="submit" class="btn btn-primary" style="border-radius:10px;">
-                            <i class="fas fa-save me-1"></i> Update Article
+                            <i class="fas fa-save me-1"></i>
+                            <?= $is_super ? 'Update Article' : 'Submit Edit Request' ?>
                         </button>
                         <a href="<?= APP_URL ?>/cms/news/index.php" class="btn btn-light" style="border-radius:10px;">
                             Cancel

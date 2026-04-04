@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../../includes/auth.php';
-require_super_admin();
+require_access('cms-notice-board', 'can_view');
 
 $id     = (int)($_GET['id'] ?? 0);
 $notice = null;
