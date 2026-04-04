@@ -105,7 +105,7 @@ if ($db) {
     try {
         $_notices = $db->query(
             'SELECT id, title, slug, content, published_at FROM cms_notices
-             WHERE is_published = 1 ORDER BY published_at DESC, created_at DESC LIMIT 4'
+             WHERE is_published = 1 ORDER BY published_at DESC, created_at DESC LIMIT 6'
         )->fetchAll();
     } catch (Throwable $e) {}
 }
@@ -454,39 +454,101 @@ if (empty($_features)) {
 </section>
 
 <!-- NOTICE BOARD -->
-<?php if (!empty($_notices)): ?>
 <section class="pu-notices-section pu-section" id="pu-notices">
-   <div class="container">
+   <div class="pu-notices-bg-shape"></div>
+   <div class="container position-relative">
       <div class="row justify-content-between align-items-end mb-50">
          <div class="col-lg-7">
             <div class="pu-label wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".1s">Announcements</div>
             <h2 class="pu-section-title wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".2s">Notice <span class="accent">Board</span></h2>
+            <p class="pu-section-sub wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".25s">Stay informed with the latest institutional announcements and updates.</p>
          </div>
          <div class="col-lg-auto wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".3s">
             <a href="notice-board.php" class="pu-view-all">All Notices <i class="fas fa-arrow-right"></i></a>
          </div>
       </div>
-      <div class="row g-4">
-         <?php foreach ($_notices as $ni => $notice): ?>
-         <div class="col-lg-6 wow itfadeUp" data-wow-duration=".7s" data-wow-delay="<?= .1 + .1 * $ni ?>s">
-            <div class="pu-notice-card">
-               <div class="pu-notice-icon"><i class="fas fa-bullhorn"></i></div>
-               <div class="pu-notice-body">
-                  <?php if ($notice['published_at']): ?><div class="pu-notice-date"><i class="fas fa-calendar-alt"></i> <?= date('d M Y', strtotime($notice['published_at'])) ?></div><?php endif; ?>
-                  <a href="<?= SITE_URL ?>/notice/<?= urlencode($notice['slug'] ?? '') ?>" class="pu-notice-title"><?= fh($notice['title']) ?></a>
-                  <?php
-                  $n_excerpt = strip_tags($notice['content'] ?? '');
-                  $n_excerpt = mb_strlen($n_excerpt) > 80 ? mb_substr($n_excerpt, 0, 80) . '…' : $n_excerpt;
-                  if ($n_excerpt): ?><p class="pu-notice-excerpt"><?= fh($n_excerpt) ?></p><?php endif; ?>
-                  <a href="<?= SITE_URL ?>/notice/<?= urlencode($notice['slug'] ?? '') ?>" class="pu-news-link">Read More <i class="fas fa-arrow-right"></i></a>
+      <?php
+      // Use real notices when available, otherwise show placeholder data
+      $_nb_notices = !empty($_notices) ? $_notices : [];
+      $nb_featured = !empty($_nb_notices) ? $_nb_notices[0] : null;
+      $nb_rest     = !empty($_nb_notices) ? array_slice($_nb_notices, 1) : [];
+
+      // Placeholder featured notice
+      $nb_ph_featured = [
+         'title'        => 'Spring Semester 2026 Admission Open for All Programs',
+         'slug'         => '',
+         'published_at' => '2026-04-04',
+         'content'      => 'Applications are now being accepted for Spring Semester 2026 for all undergraduate and postgraduate programs. Eligible candidates are encouraged to apply before the deadline of April 30, 2026.',
+      ];
+      // Placeholder list notices
+      $nb_ph_list = [
+         ['title' => 'Exam Schedule: Mid-Term Examinations Spring 2026',        'slug' => '', 'published_at' => '2026-04-01'],
+         ['title' => 'Class Suspension – University Annual Sports Day',          'slug' => '', 'published_at' => '2026-03-30'],
+         ['title' => 'Scholarship Application Deadline Extended to April 15',   'slug' => '', 'published_at' => '2026-03-28'],
+         ['title' => 'Library Closed on March 29 (Public Holiday)',             'slug' => '', 'published_at' => '2026-03-25'],
+         ['title' => 'Workshop on Research Methodology – Registration Open',    'slug' => '', 'published_at' => '2026-03-20'],
+      ];
+      if (!$nb_featured) { $nb_featured = $nb_ph_featured; $nb_rest = $nb_ph_list; }
+      if (empty($nb_rest)) { $nb_rest = array_slice($nb_ph_list, 0, 5); }
+      ?>
+      <div class="row g-4 align-items-start">
+
+         <!-- Featured Notice -->
+         <div class="col-lg-5 wow itfadeUp" data-wow-duration=".8s" data-wow-delay=".1s">
+            <div class="pu-notice-featured">
+               <div class="pu-notice-featured-top">
+                  <span class="pu-notice-badge pu-notice-badge--new"><i class="fas fa-circle-dot"></i> Latest</span>
+                  <div class="pu-notice-featured-icon"><i class="fas fa-bullhorn"></i></div>
                </div>
+               <?php if (!empty($nb_featured['published_at'])): ?>
+               <div class="pu-notice-date"><i class="fas fa-calendar-alt"></i> <?= date('d M Y', strtotime($nb_featured['published_at'])) ?></div>
+               <?php endif; ?>
+               <?php if (!empty($nb_featured['slug'])): ?>
+               <a href="<?= SITE_URL ?>/notice/<?= urlencode($nb_featured['slug']) ?>" class="pu-notice-featured-title"><?= fh($nb_featured['title']) ?></a>
+               <?php else: ?>
+               <span class="pu-notice-featured-title"><?= fh($nb_featured['title']) ?></span>
+               <?php endif; ?>
+               <?php
+               $nf_excerpt = strip_tags($nb_featured['content'] ?? '');
+               $nf_excerpt = mb_strlen($nf_excerpt) > 160 ? mb_substr($nf_excerpt, 0, 160) . '…' : $nf_excerpt;
+               if ($nf_excerpt): ?>
+               <p class="pu-notice-featured-excerpt"><?= fh($nf_excerpt) ?></p>
+               <?php endif; ?>
+               <a href="<?= !empty($nb_featured['slug']) ? SITE_URL . '/notice/' . urlencode($nb_featured['slug']) : 'notice-board.php' ?>" class="pu-notice-readmore">
+                  Read Full Notice <i class="fas fa-arrow-right"></i>
+               </a>
             </div>
          </div>
-         <?php endforeach; ?>
+
+         <!-- Notice List -->
+         <div class="col-lg-7 wow itfadeUp" data-wow-duration=".8s" data-wow-delay=".2s">
+            <div class="pu-notice-list">
+               <?php foreach ($nb_rest as $ni => $notice): ?>
+               <div class="pu-notice-item">
+                  <div class="pu-notice-num"><?= str_pad($ni + 2, 2, '0', STR_PAD_LEFT) ?></div>
+                  <div class="pu-notice-item-body">
+                     <?php if (!empty($notice['published_at'])): ?>
+                     <div class="pu-notice-date"><i class="fas fa-calendar-alt"></i> <?= date('d M Y', strtotime($notice['published_at'])) ?></div>
+                     <?php endif; ?>
+                     <?php if (!empty($notice['slug'])): ?>
+                     <a href="<?= SITE_URL ?>/notice/<?= urlencode($notice['slug']) ?>" class="pu-notice-item-title"><?= fh($notice['title']) ?></a>
+                     <?php else: ?>
+                     <span class="pu-notice-item-title"><?= fh($notice['title']) ?></span>
+                     <?php endif; ?>
+                  </div>
+                  <?php if (!empty($notice['slug'])): ?>
+                  <a href="<?= SITE_URL ?>/notice/<?= urlencode($notice['slug']) ?>" class="pu-notice-item-arrow" aria-label="Read notice"><i class="fas fa-chevron-right"></i></a>
+                  <?php else: ?>
+                  <span class="pu-notice-item-arrow"><i class="fas fa-chevron-right"></i></span>
+                  <?php endif; ?>
+               </div>
+               <?php endforeach; ?>
+            </div>
+         </div>
+
       </div>
    </div>
 </section>
-<?php endif; ?>
 
 <!-- FACULTY SPOTLIGHT -->
 <?php if (!empty($_faculty)): ?>
