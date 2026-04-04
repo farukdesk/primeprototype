@@ -634,4 +634,175 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
+<style>
+#mention-dropdown {
+    position: absolute;
+    z-index: 9999;
+    background: #fff;
+    border: 1px solid #dde4f0;
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(31,51,93,.12);
+    min-width: 220px;
+    max-height: 220px;
+    overflow-y: auto;
+    display: none;
+}
+#mention-dropdown .mention-item {
+    padding: 7px 14px;
+    cursor: pointer;
+    font-size: .875rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+#mention-dropdown .mention-item:hover,
+#mention-dropdown .mention-item.active {
+    background: #f0f4ff;
+}
+#mention-dropdown .mention-item .mention-username {
+    font-weight: 600;
+    color: #0d6efd;
+}
+#mention-dropdown .mention-item .mention-fullname {
+    color: #6c757d;
+    font-size: .82rem;
+}
+</style>
+
+<div id="mention-dropdown"></div>
+
+<script>
+(function () {
+    var textarea   = document.querySelector('textarea[name="comment"]');
+    var dropdown   = document.getElementById('mention-dropdown');
+    if (!textarea || !dropdown) return;
+
+    var mentionStart = -1;   // caret position where '@' was typed
+    var activeIdx    = -1;
+    var results      = [];
+    var debounceTimer;
+
+    function positionDropdown() {
+        var rect = textarea.getBoundingClientRect();
+        dropdown.style.left = (rect.left + window.scrollX) + 'px';
+        dropdown.style.top  = (rect.bottom + window.scrollY + 4) + 'px';
+    }
+
+    function closeDropdown() {
+        dropdown.style.display = 'none';
+        dropdown.innerHTML = '';
+        mentionStart = -1;
+        activeIdx    = -1;
+        results      = [];
+    }
+
+    function renderDropdown(users) {
+        results = users;
+        activeIdx = -1;
+        dropdown.innerHTML = '';
+        if (!users.length) { closeDropdown(); return; }
+        users.forEach(function (u, i) {
+            var item = document.createElement('div');
+            item.className = 'mention-item';
+            item.innerHTML =
+                '<i class="fas fa-user fa-xs text-muted"></i>' +
+                '<span class="mention-username">@' + escHtml(u.username) + '</span>' +
+                '<span class="mention-fullname">' + escHtml(u.full_name) + '</span>';
+            item.addEventListener('mousedown', function (e) {
+                e.preventDefault();
+                insertMention(u.username);
+            });
+            dropdown.appendChild(item);
+        });
+        positionDropdown();
+        dropdown.style.display = 'block';
+    }
+
+    function escHtml(str) {
+        return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function setActive(idx) {
+        var items = dropdown.querySelectorAll('.mention-item');
+        items.forEach(function (el) { el.classList.remove('active'); });
+        if (idx >= 0 && idx < items.length) {
+            items[idx].classList.add('active');
+            activeIdx = idx;
+        }
+    }
+
+    function insertMention(username) {
+        var val    = textarea.value;
+        var before = val.slice(0, mentionStart);        // text before '@'
+        var after  = val.slice(textarea.selectionEnd);  // text after cursor
+        textarea.value = before + '@' + username + ' ' + after;
+        var pos = (before + '@' + username + ' ').length;
+        textarea.setSelectionRange(pos, pos);
+        textarea.focus();
+        closeDropdown();
+    }
+
+    function fetchUsers(query) {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(function () {
+            fetch('mention-search.php?q=' + encodeURIComponent(query))
+                .then(function (r) { return r.json(); })
+                .then(renderDropdown)
+                .catch(function () {
+                    // Silently close on network or parse errors
+                    closeDropdown();
+                });
+        }, 150);
+    }
+
+    textarea.addEventListener('keydown', function (e) {
+        if (dropdown.style.display === 'none') return;
+        var items = dropdown.querySelectorAll('.mention-item');
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setActive(Math.min(activeIdx + 1, items.length - 1));
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            setActive(Math.max(activeIdx - 1, 0));
+        } else if (e.key === 'Enter' && activeIdx >= 0) {
+            e.preventDefault();
+            insertMention(results[activeIdx].username);
+        } else if (e.key === 'Escape') {
+            closeDropdown();
+        }
+    });
+
+    textarea.addEventListener('input', function () {
+        var val    = textarea.value;
+        var caret  = textarea.selectionStart;
+        var before = val.slice(0, caret);
+
+        // Find the last '@' before the caret that starts a mention token
+        var match = before.match(/@([A-Za-z0-9_.]*)$/);
+        if (!match) { closeDropdown(); return; }
+
+        mentionStart = before.lastIndexOf('@');
+        var query    = match[1];
+
+        if (query.length < 3) {
+            closeDropdown();
+            return;
+        }
+
+        fetchUsers(query);
+    });
+
+    // Close when clicking outside
+    document.addEventListener('mousedown', function (e) {
+        if (!dropdown.contains(e.target) && e.target !== textarea) {
+            closeDropdown();
+        }
+    });
+
+    window.addEventListener('scroll', function () {
+        if (dropdown.style.display !== 'none') positionDropdown();
+    }, true);
+})();
+</script>
+
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
