@@ -61,20 +61,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $pdo->prepare('UPDATE support_tickets SET updated_at = NOW() WHERE id = ?')->execute([$id]);
 
+            $already_notified = [];
+
             // Notify ticket creator (only for public comments, not self)
             if (!$is_internal && (int)$ticket['created_by'] !== (int)$user['id']) {
                 $cr = $pdo->prepare('SELECT * FROM users WHERE id = ?');
                 $cr->execute([$ticket['created_by']]);
                 $creator = $cr->fetch();
-                if ($creator) st_notify_comment_added($ticket, $creator, $user, $comment);
+                if ($creator) {
+                    st_notify_comment_added($ticket, $creator, $user, $comment);
+                    $already_notified[] = $creator['email'];
+                }
             }
             // Notify assigned staff (if not the commenter)
             if ($ticket['assigned_to'] && (int)$ticket['assigned_to'] !== (int)$user['id']) {
                 $as = $pdo->prepare('SELECT * FROM users WHERE id = ?');
                 $as->execute([$ticket['assigned_to']]);
                 $assignee = $as->fetch();
-                if ($assignee) st_notify_comment_added($ticket, $assignee, $user, $comment);
+                if ($assignee && !in_array($assignee['email'], $already_notified, true)) {
+                    st_notify_comment_added($ticket, $assignee, $user, $comment);
+                    $already_notified[] = $assignee['email'];
+                }
             }
+
+            // Notify IT admins + public submitter (non-internal only)
+            if (!$is_internal) {
+                st_notify_comment_to_admins($ticket, $user, $comment, $already_notified);
+            }
+
+            // Handle @mention notifications
+            st_notify_mentions($ticket, $user, $comment);
+
             flash_set('success', 'Comment posted.');
         }
         redirect(APP_URL . '/support-tickets/view.php?id=' . $id . '#comments');
@@ -363,7 +380,7 @@ require_once __DIR__ . '/../includes/header.php';
                                 </form>
                                 <?php endif; ?>
                             </div>
-                            <div style="line-height:1.65;font-size:.875rem;white-space:pre-wrap;"><?= h($comment['comment']) ?></div>
+                            <div style="line-height:1.65;font-size:.875rem;white-space:pre-wrap;"><?= st_render_mentions($comment['comment']) ?></div>
                             <!-- Comment attachments -->
                             <?php if (!empty($comment_attachments[$comment['id']])): ?>
                             <div class="d-flex flex-wrap gap-2 mt-2">
@@ -393,8 +410,9 @@ require_once __DIR__ . '/../includes/header.php';
                         <?= csrf_field() ?>
                         <input type="hidden" name="action" value="add_comment">
                         <div class="mb-2">
-                            <textarea name="comment" class="form-control" rows="4"
-                                      placeholder="Write your comment…" style="border-radius:10px;"></textarea>
+                             <textarea name="comment" class="form-control" rows="4"
+                                       placeholder="Write your comment… Use @username to mention someone" style="border-radius:10px;"></textarea>
+                             <div class="form-text">Use @username to mention and notify a specific user.</div>
                         </div>
                         <div class="mb-2">
                             <input type="file" name="comment_files[]" class="form-control form-control-sm" multiple
@@ -448,6 +466,51 @@ require_once __DIR__ . '/../includes/header.php';
                     <tr>
                         <td class="px-4 py-2 text-muted fw-medium">Department</td>
                         <td class="py-2"><?= h($ticket['department']) ?></td>
+                    </tr>
+                    <?php endif; ?>
+                    <?php if (!empty($ticket['user_type'])): ?>
+                    <tr>
+                        <td class="px-4 py-2 text-muted fw-medium">User Type</td>
+                        <td class="py-2"><span class="badge bg-secondary"><?= h($ticket['user_type']) ?></span></td>
+                    </tr>
+                    <?php if ($ticket['user_type'] === 'Student'): ?>
+                        <?php if (!empty($ticket['student_id'])): ?>
+                        <tr>
+                            <td class="px-4 py-2 text-muted fw-medium">Student ID</td>
+                            <td class="py-2"><?= h($ticket['student_id']) ?></td>
+                        </tr>
+                        <?php endif; ?>
+                        <?php if (!empty($ticket['student_department'])): ?>
+                        <tr>
+                            <td class="px-4 py-2 text-muted fw-medium">S. Department</td>
+                            <td class="py-2"><?= h($ticket['student_department']) ?></td>
+                        </tr>
+                        <?php endif; ?>
+                        <?php if (!empty($ticket['student_program'])): ?>
+                        <tr>
+                            <td class="px-4 py-2 text-muted fw-medium">Program</td>
+                            <td class="py-2"><?= h($ticket['student_program']) ?></td>
+                        </tr>
+                        <?php endif; ?>
+                        <?php if (!empty($ticket['student_batch'])): ?>
+                        <tr>
+                            <td class="px-4 py-2 text-muted fw-medium">Batch</td>
+                            <td class="py-2"><?= h($ticket['student_batch']) ?></td>
+                        </tr>
+                        <?php endif; ?>
+                    <?php elseif ($ticket['user_type'] === 'Faculty' || $ticket['user_type'] === 'Administrative Employee'): ?>
+                        <?php if (!empty($ticket['student_department'])): ?>
+                        <tr>
+                            <td class="px-4 py-2 text-muted fw-medium">Department</td>
+                            <td class="py-2"><?= h($ticket['student_department']) ?></td>
+                        </tr>
+                        <?php endif; ?>
+                    <?php endif; ?>
+                    <?php endif; ?>
+                    <?php if (!empty($ticket['submitter_phone'])): ?>
+                    <tr>
+                        <td class="px-4 py-2 text-muted fw-medium">Phone</td>
+                        <td class="py-2"><?= h($ticket['submitter_phone']) ?></td>
                     </tr>
                     <?php endif; ?>
                     <tr>

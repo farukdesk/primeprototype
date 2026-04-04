@@ -489,7 +489,7 @@ $user       = auth_user();
             <?php if (is_super_admin() || can_access('support-tickets')): ?>
             <li class="nav-item">
                 <a href="<?= APP_URL ?>/support-tickets/index.php"
-                   class="<?= (strpos($current_path, '/support-tickets/') !== false && strpos($current_path, '/reports') === false) ? 'active' : '' ?>">
+                   class="<?= (strpos($current_path, '/support-tickets/') !== false && strpos($current_path, '/reports') === false && strpos($current_path, '/settings') === false) ? 'active' : '' ?>">
                     <i class="fas fa-ticket-alt"></i> IT Support
                 </a>
             </li>
@@ -498,6 +498,12 @@ $user       = auth_user();
                 <a href="<?= APP_URL ?>/support-tickets/reports.php"
                    class="<?= strpos($current_path, '/support-tickets/reports') !== false ? 'active' : '' ?>">
                     <i class="fas fa-chart-bar"></i> Support Reports
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/support-tickets/settings.php"
+                   class="<?= strpos($current_path, '/support-tickets/settings') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-cog"></i> Support Settings
                 </a>
             </li>
             <?php endif; ?>

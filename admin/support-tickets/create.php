@@ -10,29 +10,36 @@ clear_old();
 
 // All active users for tagging (excludes self)
 $all_users = db()->query(
-    'SELECT id, full_name FROM users WHERE is_active = 1 ORDER BY full_name'
+    'SELECT id, full_name, username FROM users WHERE is_active = 1 ORDER BY full_name'
 )->fetchAll();
 
 // ── Handle POST ───────────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
-    $title       = trim($_POST['title']       ?? '');
-    $description = $_POST['description']      ?? '';
-    $category    = $_POST['category']         ?? 'Other';
-    $priority    = $_POST['priority']         ?? 'Medium';
-    $department  = trim($_POST['department']  ?? '');
-    $deadline    = trim($_POST['deadline']    ?? '');
-    $tag_users   = array_filter(array_map('intval', (array)($_POST['tag_users'] ?? [])));
+    $title              = trim($_POST['title']              ?? '');
+    $description        = $_POST['description']             ?? '';
+    $category           = $_POST['category']                ?? 'Other';
+    $priority           = $_POST['priority']                ?? 'Medium';
+    $department         = trim($_POST['department']         ?? '');
+    $deadline           = trim($_POST['deadline']           ?? '');
+    $tag_users          = array_filter(array_map('intval', (array)($_POST['tag_users'] ?? [])));
+    $user_type          = $_POST['user_type']               ?? '';
+    $student_id         = trim($_POST['student_id']         ?? '');
+    $student_department = trim($_POST['student_department'] ?? '');
+    $student_program    = trim($_POST['student_program']    ?? '');
+    $student_batch      = trim($_POST['student_batch']      ?? '');
 
-    $valid_cats  = ['Hardware','Software','Network','Email','Other'];
-    $valid_prios = ['Low','Medium','High','Critical'];
+    $valid_cats   = ['Hardware','Software','Network','Email','Other'];
+    $valid_prios  = ['Low','Medium','High','Critical'];
+    $valid_utypes = ['','Student','Faculty','Administrative Employee'];
 
     if ($title === '')             $errors[] = 'Title is required.';
     if (mb_strlen($title) > 500)   $errors[] = 'Title must be 500 characters or less.';
     if (trim(strip_tags($description)) === '') $errors[] = 'Description is required.';
     if (!in_array($category, $valid_cats,  true)) $category = 'Other';
     if (!in_array($priority, $valid_prios, true)) $priority = 'Medium';
+    if (!in_array($user_type, $valid_utypes, true)) $user_type = '';
 
     // Deadline: auto-compute from SLA if not provided
     if ($deadline === '') {
@@ -53,11 +60,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $pdo->prepare(
             'INSERT INTO support_tickets
-               (ticket_number, title, description, category, priority, status, department, deadline, created_by)
-             VALUES (?,?,?,?,?,\'Open\',?,?,?)'
+               (ticket_number, title, description, category, priority, status, department, deadline, created_by,
+                user_type, student_id, student_department, student_program, student_batch)
+             VALUES (?,?,?,?,?,\'Open\',?,?,?,?,?,?,?,?)'
         )->execute([
             $ticket_number, $title, $description, $category,
             $priority, $department ?: null, $deadline_dt, $user['id'],
+            $user_type ?: null,
+            $student_id ?: null,
+            $student_department ?: null,
+            $student_program ?: null,
+            $student_batch ?: null,
         ]);
         $ticket_id = (int)$pdo->lastInsertId();
 
@@ -114,7 +127,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect(APP_URL . '/support-tickets/view.php?id=' . $ticket_id);
     }
 
-    save_old(compact('title','description','category','priority','department','deadline'));
+    save_old(compact('title','description','category','priority','department','deadline',
+                     'user_type','student_id','student_department','student_program','student_batch'));
 }
 
 require_once __DIR__ . '/../includes/header.php';
@@ -190,6 +204,20 @@ require_once __DIR__ . '/../includes/header.php';
         <!-- ── Right column ────────────────────────────────────────────── -->
         <div class="col-lg-4">
 
+            <!-- Auto-filled submitter info (read-only) -->
+            <div class="card mb-4" style="border-radius:12px;border-color:#d0e8ff;background:#f0f7ff;">
+                <div class="card-body p-4">
+                    <h6 class="fw-semibold mb-2" style="font-size:.875rem;">
+                        <i class="fas fa-user-circle me-1 text-primary"></i>Submitting As
+                    </h6>
+                    <p class="mb-1" style="font-size:.9rem;"><strong><?= h($user['full_name']) ?></strong></p>
+                    <p class="mb-0 text-muted" style="font-size:.82rem;"><?= h($user['email']) ?></p>
+                    <?php if (!empty($user['username'])): ?>
+                    <p class="mb-0 text-muted" style="font-size:.82rem;">@<?= h($user['username']) ?></p>
+                    <?php endif; ?>
+                </div>
+            </div>
+
             <div class="card" style="border-radius:12px;">
                 <div class="card-header py-3 px-4">
                     <h6 class="mb-0 fw-semibold">
@@ -224,6 +252,51 @@ require_once __DIR__ . '/../includes/header.php';
                                value="<?= old('department') ?>" placeholder="e.g. Computer Science" maxlength="200">
                     </div>
 
+                    <!-- User Type section -->
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">User Type</label>
+                        <select name="user_type" id="user_type_select" class="form-select"
+                                onchange="toggleUserTypeFields(this.value)">
+                            <option value="">— Select —</option>
+                            <?php foreach (['Student','Faculty','Administrative Employee'] as $ut): ?>
+                            <option value="<?= $ut ?>" <?= old('user_type') === $ut ? 'selected' : '' ?>><?= $ut ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <!-- Student fields -->
+                    <div id="student_fields" style="display:none;">
+                        <div class="mb-3">
+                            <label class="form-label fw-medium">Student ID</label>
+                            <input type="text" name="student_id" class="form-control"
+                                   value="<?= old('student_id') ?>" placeholder="e.g. 2312345678" maxlength="20">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-medium">Department</label>
+                            <input type="text" name="student_department" class="form-control"
+                                   value="<?= old('student_department') ?>" placeholder="e.g. Computer Science" maxlength="200">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-medium">Program</label>
+                            <input type="text" name="student_program" class="form-control"
+                                   value="<?= old('student_program') ?>" placeholder="e.g. BSc in CSE" maxlength="200">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-medium">Batch</label>
+                            <input type="text" name="student_batch" class="form-control"
+                                   value="<?= old('student_batch') ?>" placeholder="e.g. Spring 2023" maxlength="100">
+                        </div>
+                    </div>
+
+                    <!-- Faculty / Admin Employee fields -->
+                    <div id="faculty_fields" style="display:none;">
+                        <div class="mb-3">
+                            <label class="form-label fw-medium">Department</label>
+                            <input type="text" name="student_department" class="form-control"
+                                   value="<?= old('student_department') ?>" placeholder="e.g. Computer Science" maxlength="200">
+                        </div>
+                    </div>
+
                     <div class="mb-3">
                         <label class="form-label fw-medium">Custom Deadline</label>
                         <input type="datetime-local" name="deadline" class="form-control"
@@ -238,11 +311,11 @@ require_once __DIR__ . '/../includes/header.php';
                         <select name="tag_users[]" class="form-select" multiple size="5">
                             <?php foreach ($all_users as $u): ?>
                             <?php if ((int)$u['id'] !== (int)$user['id']): ?>
-                            <option value="<?= $u['id'] ?>"><?= h($u['full_name']) ?></option>
+                            <option value="<?= $u['id'] ?>"><?= h($u['full_name']) ?><?= !empty($u['username']) ? ' (@' . h($u['username']) . ')' : '' ?></option>
                             <?php endif; ?>
                             <?php endforeach; ?>
                         </select>
-                        <div class="form-text">Hold Ctrl/⌘ to select multiple. Tagged users receive an email notification.</div>
+                        <div class="form-text">Hold Ctrl/⌘ to select multiple. Tagged users receive an email notification.<br>You can also <code>@username</code> in comments to notify specific users.</div>
                     </div>
 
                     <div class="d-grid gap-2">
@@ -294,6 +367,13 @@ document.getElementById('attachments').addEventListener('change', function () {
         preview.appendChild(badge);
     });
 });
+
+function toggleUserTypeFields(val) {
+    document.getElementById('student_fields').style.display = (val === 'Student') ? '' : 'none';
+    document.getElementById('faculty_fields').style.display = (val === 'Faculty' || val === 'Administrative Employee') ? '' : 'none';
+}
+// Init on page load
+toggleUserTypeFields(document.getElementById('user_type_select').value);
 </script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
