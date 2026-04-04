@@ -144,8 +144,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <div class="login-card">
     <div class="login-logo">
         <img src="<?= LOGO_URL ?>" alt="Prime University">
-        <h1>Prime University</h1>
-        <p>Admin Control Panel</p>
+        <p>Prime University Management System (PUMIS)</p>
     </div>
 
     <?php if ($error): ?>
