@@ -61,9 +61,11 @@ function pch_make_slug(string $title): string {
 
 if ($decision === 'reject') {
     // ── Reject ────────────────────────────────────────────────────────────
+    // Read payload once (needed for both file cleanup and was_approved restore)
+    $p = ($change['payload']) ? (json_decode($change['payload'], true) ?? []) : [];
+
     // Clean up any uploaded files that were staged in the payload
-    if ($action === 'EDIT' && $change['payload']) {
-        $p = json_decode($change['payload'], true) ?? [];
+    if ($action === 'EDIT') {
         if ($module === 'news') {
             if (!empty($p['featured_image_new'])) {
                 $path = UPLOAD_DIR . '/news/' . $p['featured_image_new'];
@@ -81,6 +83,16 @@ if ($decision === 'reject') {
         }
     }
 
+    // Restore is_approved to its state before the pending request was created
+    $was_approved = isset($p['was_approved']) ? (int)$p['was_approved'] : 1;
+    if ($module === 'notice') {
+        $db->prepare('UPDATE cms_notices SET is_approved=? WHERE id=?')
+           ->execute([$was_approved, $change['record_id']]);
+    } elseif ($module === 'news') {
+        $db->prepare('UPDATE cms_news SET is_approved=? WHERE id=?')
+           ->execute([$was_approved, $change['record_id']]);
+    }
+
     $db->prepare(
         "UPDATE cms_pending_changes
          SET status='rejected', reviewed_by=?, reviewed_at=NOW(), review_note=?
@@ -91,7 +103,7 @@ if ($decision === 'reject') {
     log_change($log_module, $action === 'DELETE' ? 'DELETE' : 'UPDATE',
         $change['record_id'], $change['record_title'],
         null, null, null,
-        ucfirst($action) . ' request rejected by ' . $reviewer['name']
+        ucfirst($action) . ' request rejected by ' . $reviewer['full_name']
             . ($review_note ? ': ' . $review_note : '.'));
 
     flash_set('success', ucfirst(strtolower($action)) . ' request for <strong>' . h($change['record_title']) . '</strong> rejected.');
@@ -139,7 +151,7 @@ if ($decision === 'reject') {
         log_change($log_module, 'DELETE',
             $change['record_id'], $change['record_title'],
             null, null, null,
-            'Delete request approved and executed by ' . $reviewer['name'] . '.');
+            'Delete request approved and executed by ' . $reviewer['full_name'] . '.');
 
     } else {
         // EDIT – apply the proposed changes from payload JSON
@@ -182,10 +194,11 @@ if ($decision === 'reject') {
                 $db->prepare(
                     'UPDATE cms_news
                      SET title=?, slug=?, content=?, content_type=?, featured_image=?,
-                         is_published=?, published_at=?, updated_at=NOW()
+                         is_published=?, published_at=?, is_approved=1, approved_by=?, approved_at=NOW(),
+                         updated_at=NOW()
                      WHERE id=?'
                 )->execute([$title, $slug, $content, $content_type, $featured_image,
-                             $is_published, $published_at, $change['record_id']]);
+                             $is_published, $published_at, $reviewer['id'], $change['record_id']]);
 
                 // Add any new attachments from payload
                 foreach ($p['new_attachments'] ?? [] as $att) {
@@ -204,7 +217,7 @@ if ($decision === 'reject') {
                 log_change($log_module, 'UPDATE',
                     $change['record_id'], $title,
                     null, null, null,
-                    'Edit request approved and applied by ' . $reviewer['name'] . '.');
+                    'Edit request approved and applied by ' . $reviewer['full_name'] . '.');
             }
 
         } else {
@@ -249,13 +262,13 @@ if ($decision === 'reject') {
                     'UPDATE cms_notices SET
                      title=?, content=?, content_type=?, attachment=?, attachment_original_name=?,
                      attachment_mime=?, attachment_size=?, publish_as_news=?, is_published=?,
-                     published_at=?, updated_at=NOW()
+                     published_at=?, is_approved=1, approved_by=?, approved_at=NOW(), updated_at=NOW()
                      WHERE id=?'
                 )->execute([
                     $title, $content, $content_type,
                     $attachment, $attachment_original_name, $attachment_mime, $attachment_size,
                     $publish_as_news, $is_published, $published_at,
-                    $change['record_id'],
+                    $reviewer['id'], $change['record_id'],
                 ]);
 
                 // Sync linked news row
@@ -282,7 +295,7 @@ if ($decision === 'reject') {
                 log_change($log_module, 'UPDATE',
                     $change['record_id'], $title,
                     null, null, null,
-                    'Edit request approved and applied by ' . $reviewer['name'] . '.');
+                    'Edit request approved and applied by ' . $reviewer['full_name'] . '.');
             }
         }
     }

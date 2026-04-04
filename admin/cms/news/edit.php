@@ -219,7 +219,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             )->execute([$id, $news['title'], $current_user['id'], json_encode($payload)]);
 
             log_change('cms-notice-board', 'UPDATE', $id, $title, null, null, null,
-                'Edit request submitted by ' . $current_user['name'] . ' – awaiting super-admin approval.');
+                'Edit request submitted by ' . $current_user['full_name'] . ' – awaiting super-admin approval.');
 
             flash_set('success', 'Edit request submitted for super-admin approval.');
             redirect(APP_URL . '/cms/news/index.php');

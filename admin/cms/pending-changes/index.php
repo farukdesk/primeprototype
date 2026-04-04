@@ -30,7 +30,7 @@ if ($filter_record > 0) {
     $params[] = $filter_record;
 }
 
-$sql = 'SELECT pc.*, u.name AS requester_name, r.name AS reviewer_name
+$sql = 'SELECT pc.*, u.full_name AS requester_name, r.full_name AS reviewer_name
         FROM cms_pending_changes pc
         LEFT JOIN users u ON u.id = pc.requested_by
         LEFT JOIN users r ON r.id = pc.reviewed_by'

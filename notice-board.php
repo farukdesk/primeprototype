@@ -8,7 +8,7 @@ try {
         $notices = $db->query(
             'SELECT id, title, slug, content, content_type, attachment, attachment_original_name, published_at, created_at
              FROM cms_notices
-             WHERE is_published = 1
+             WHERE is_published = 1 AND is_approved = 1
              ORDER BY published_at DESC, created_at DESC'
         )->fetchAll();
     }

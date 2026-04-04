@@ -72,7 +72,7 @@ if ($is_super) {
     )->execute([$id, $news['title'], $current_user['id']]);
 
     log_change('cms-notice-board', 'DELETE', $id, $news['title'], null, null, null,
-        'Delete request submitted by ' . $current_user['name'] . ' – awaiting super-admin approval.');
+        'Delete request submitted by ' . $current_user['full_name'] . ' – awaiting super-admin approval.');
 
     flash_set('success', 'Deletion request for <strong>' . h($news['title']) . '</strong> submitted for super-admin approval.');
 }

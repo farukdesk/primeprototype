@@ -11,7 +11,7 @@ if ($slug !== '') {
         if ($db) {
             $stmt = $db->prepare(
                 'SELECT * FROM cms_news
-                 WHERE slug = ? AND is_published = 1
+                 WHERE slug = ? AND is_published = 1 AND is_approved = 1
                  LIMIT 1'
             );
             $stmt->execute([$slug]);
