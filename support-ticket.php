@@ -309,7 +309,7 @@ function pub_status_color(string $status): string
          pointer-events: none;
       }
       .pu-support-hero h1 { font-size: 1.9rem; font-weight: 700; margin-bottom: 8px; }
-      .pu-support-hero p  { font-size: .98rem; opacity: .88; margin-bottom: 0; }
+      .pu-support-hero p  { font-size: .98rem; opacity: .88; margin-bottom: 0; color: #fff; }
       @media (max-width: 767px) {
          .pu-support-hero { padding: 36px 0 24px; }
          .pu-support-hero h1 { font-size: 1.4rem; }
