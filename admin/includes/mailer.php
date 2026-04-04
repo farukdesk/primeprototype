@@ -28,6 +28,7 @@ function send_template_email(string $action, string $to_email, string $to_name, 
 
     // Add built-in variables
     $vars['app_name'] = APP_NAME;
+    $vars['logo_url'] = defined('LOGO_URL') ? LOGO_URL : '';
 
     // Replace {{variable}} placeholders in subject and body
     $search  = [];

@@ -79,17 +79,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             padding: 44px 40px;
         }
         .login-logo { text-align: center; margin-bottom: 28px; }
-        .login-logo .logo-circle {
-            width: 66px; height: 66px;
-            border-radius: 18px;
-            background: linear-gradient(135deg,#4f8ef7,#2d63e8);
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.8rem;
-            color: #fff;
+        .login-logo img {
+            max-height: 72px;
+            max-width: 200px;
+            object-fit: contain;
             margin-bottom: 12px;
-            box-shadow: 0 8px 24px rgba(79,142,247,.4);
+            display: block;
+            margin-left: auto;
+            margin-right: auto;
         }
         .login-logo h1 { font-size: 1.2rem; font-weight: 700; color: #1a1f36; margin: 0; }
         .login-logo p  { font-size: .8rem; color: #888; margin: 4px 0 0; }
@@ -133,7 +130,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <body>
 <div class="login-card">
     <div class="login-logo">
-        <div class="logo-circle"><i class="fas fa-graduation-cap"></i></div>
+        <img src="<?= LOGO_URL ?>" alt="Prime University">
         <h1>Prime University</h1>
         <p>Admin Control Panel</p>
     </div>

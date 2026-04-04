@@ -18,6 +18,8 @@ define('DB_CHARSET',  'utf8mb4');
 define('APP_NAME',    'Prime University Admin');
 define('APP_URL',     'https://primeuniversity.ac.bd/admin'); // no trailing slash
 define('APP_VERSION', '1.0.0');
+define('SITE_URL',    'https://primeuniversity.ac.bd');       // root domain, no trailing slash
+define('LOGO_URL',    SITE_URL . '/assets/img/logo/logo-black.png'); // absolute URL for logo
 
 // ── Session ──────────────────────────────────────────────────────────────────
 define('SESSION_NAME',     'pu_admin_sess');
