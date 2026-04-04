@@ -2424,6 +2424,71 @@ ALTER TABLE `support_ticket_user_tags`
 --
 ALTER TABLE `users`
   ADD CONSTRAINT `users_ibfk_1` FOREIGN KEY (`group_id`) REFERENCES `user_groups` (`id`);
+--
+-- Seed data for table `email_templates`
+--
+
+INSERT INTO `email_templates` (`name`, `action`, `subject`, `body_html`, `variables`, `is_active`) VALUES
+(
+  'Forgot Password',
+  'forgot_password',
+  'Reset Your Password – {{app_name}}',
+  '<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Reset Your Password</title>
+<style>
+  body { margin:0; padding:0; background:#f4f6fb; font-family:''Inter'',Arial,sans-serif; }
+  .wrapper { max-width:580px; margin:40px auto; background:#fff; border-radius:16px; box-shadow:0 4px 24px rgba(0,0,0,.08); overflow:hidden; }
+  .header { background:linear-gradient(135deg,#1a1f36 0%,#2d3561 100%); padding:36px 40px; text-align:center; }
+  .header h1 { color:#fff; margin:0; font-size:1.5rem; font-weight:700; }
+  .header p  { color:rgba(255,255,255,.7); margin:8px 0 0; font-size:.9rem; }
+  .body { padding:36px 40px; color:#374151; }
+  .body p  { margin:0 0 16px; line-height:1.7; font-size:.925rem; }
+  .btn-wrap { text-align:center; margin:28px 0; }
+  .btn { display:inline-block; padding:14px 36px; background:linear-gradient(135deg,#4f8ef7,#2d63e8); color:#fff !important;
+         text-decoration:none; border-radius:10px; font-weight:600; font-size:.95rem; }
+  .expire { background:#fff8e1; border-left:4px solid #f5a623; padding:12px 16px; border-radius:6px; font-size:.85rem; color:#7a5c00; margin:20px 0; }
+  .footer { background:#f4f6fb; padding:20px 40px; text-align:center; font-size:.78rem; color:#9ca3af; }
+</style>
+</head>
+<body>
+<div class="wrapper">
+  <div class="header">
+    <h1>Password Reset Request</h1>
+    <p>{{app_name}}</p>
+  </div>
+  <div class="body">
+    <p>Hi <strong>{{full_name}}</strong>,</p>
+    <p>We received a request to reset the password for your admin account. Click the button below to choose a new password:</p>
+    <div class="btn-wrap">
+      <a href="{{reset_link}}" class="btn">Reset My Password</a>
+    </div>
+    <div class="expire">
+      <strong>⏰ This link expires in {{expire_minutes}} minutes.</strong><br>
+      If you did not request a password reset, please ignore this email – your account remains secure.
+    </div>
+    <p>If the button above does not work, copy and paste the following link into your browser:</p>
+    <p style="word-break:break-all;font-size:.82rem;color:#6b7280;">{{reset_link}}</p>
+  </div>
+  <div class="footer">
+    &copy; {{app_name}} &mdash; This is an automated message, please do not reply.
+  </div>
+</div>
+</body>
+</html>',
+  '{{full_name}},{{reset_link}},{{app_name}},{{expire_minutes}}',
+  1
+)
+ON DUPLICATE KEY UPDATE
+  `name`      = VALUES(`name`),
+  `subject`   = VALUES(`subject`),
+  `body_html` = VALUES(`body_html`),
+  `variables` = VALUES(`variables`),
+  `is_active` = VALUES(`is_active`);
+
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
