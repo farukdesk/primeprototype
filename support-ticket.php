@@ -55,7 +55,7 @@ function pub_notify_emails(): array
         if (!$row) return [];
         return array_values(array_filter(array_map('trim', explode(',', $row))));
     } catch (Throwable $e) {
-        return ['dd.it@primeuniversity.ac.bd', 'belayet@primeuniversity.ac.bd'];
+        return [];
     }
 }
 
