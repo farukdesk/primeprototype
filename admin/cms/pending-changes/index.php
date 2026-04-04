@@ -21,6 +21,9 @@ if (in_array($filter_action, ['EDIT','DELETE'], true)) {
     $where[]  = 'pc.action = ?';
     $params[] = $filter_action;
 }
+
+// If the action filter is explicitly "CREATE", skip the cms_pending_changes query
+$skip_pending_changes = ($filter_action === 'CREATE');
 if (in_array($filter_status, ['pending','approved','rejected'], true)) {
     $where[]  = 'pc.status = ?';
     $params[] = $filter_status;
@@ -30,16 +33,79 @@ if ($filter_record > 0) {
     $params[] = $filter_record;
 }
 
-$sql = 'SELECT pc.*, u.full_name AS requester_name, r.full_name AS reviewer_name
-        FROM cms_pending_changes pc
-        LEFT JOIN users u ON u.id = pc.requested_by
-        LEFT JOIN users r ON r.id = pc.reviewed_by'
-     . ($where ? ' WHERE ' . implode(' AND ', $where) : '')
-     . ' ORDER BY pc.created_at DESC';
+$changes = [];
+if (!$skip_pending_changes) {
+    $sql = 'SELECT pc.*, u.full_name AS requester_name, r.full_name AS reviewer_name
+            FROM cms_pending_changes pc
+            LEFT JOIN users u ON u.id = pc.requested_by
+            LEFT JOIN users r ON r.id = pc.reviewed_by'
+         . ($where ? ' WHERE ' . implode(' AND ', $where) : '')
+         . ' ORDER BY pc.created_at DESC';
 
-$stmt = db()->prepare($sql);
-$stmt->execute($params);
-$changes = $stmt->fetchAll();
+    $stmt = db()->prepare($sql);
+    $stmt->execute($params);
+    $changes = $stmt->fetchAll();
+}
+
+// Also fetch unapproved new posts (CREATE actions) when the filter allows it
+$show_creates = (!$filter_action || $filter_action === 'CREATE')
+             && (!$filter_status  || $filter_status  === 'pending');
+if ($show_creates) {
+    $create_rows = [];
+    if (!$filter_module || $filter_module === 'news') {
+        $news_rows = db()->query(
+            'SELECT n.id, n.title, n.created_at, u.full_name AS requester_name
+             FROM cms_news n
+             LEFT JOIN users u ON u.id = n.created_by
+             WHERE n.is_approved = 0
+             ORDER BY n.created_at DESC'
+        )->fetchAll();
+        foreach ($news_rows as $r) {
+            $create_rows[] = [
+                'id'             => null,
+                'module'         => 'news',
+                'record_id'      => $r['id'],
+                'record_title'   => $r['title'],
+                'action'         => 'CREATE',
+                'status'         => 'pending',
+                'created_at'     => $r['created_at'],
+                'requester_name' => $r['requester_name'],
+                'reviewer_name'  => null,
+                'payload'        => null,
+                'review_note'    => null,
+                '_is_create'     => true,
+            ];
+        }
+    }
+    if (!$filter_module || $filter_module === 'notice') {
+        $notice_rows = db()->query(
+            'SELECT n.id, n.title, n.created_at, u.full_name AS requester_name
+             FROM cms_notices n
+             LEFT JOIN users u ON u.id = n.created_by
+             WHERE n.is_approved = 0
+             ORDER BY n.created_at DESC'
+        )->fetchAll();
+        foreach ($notice_rows as $r) {
+            $create_rows[] = [
+                'id'             => null,
+                'module'         => 'notice',
+                'record_id'      => $r['id'],
+                'record_title'   => $r['title'],
+                'action'         => 'CREATE',
+                'status'         => 'pending',
+                'created_at'     => $r['created_at'],
+                'requester_name' => $r['requester_name'],
+                'reviewer_name'  => null,
+                'payload'        => null,
+                'review_note'    => null,
+                '_is_create'     => true,
+            ];
+        }
+    }
+    // Merge creates into changes and sort by created_at DESC
+    $changes = array_merge($create_rows, $changes);
+    usort($changes, fn($a, $b) => strcmp($b['created_at'], $a['created_at']));
+}
 
 // Summary counts
 $counts = db()->query(
@@ -128,6 +194,7 @@ require_once __DIR__ . '/../../includes/header.php';
             </select>
             <select name="action" class="form-select" style="max-width:150px;border-radius:10px;">
                 <option value="">All actions</option>
+                <option value="CREATE" <?= $filter_action === 'CREATE' ? 'selected' : '' ?>>New Post</option>
                 <option value="EDIT"   <?= $filter_action === 'EDIT'   ? 'selected' : '' ?>>Edit</option>
                 <option value="DELETE" <?= $filter_action === 'DELETE' ? 'selected' : '' ?>>Delete</option>
             </select>
@@ -188,6 +255,8 @@ require_once __DIR__ . '/../../includes/header.php';
                         <td>
                             <?php if ($ch['action'] === 'DELETE'): ?>
                                 <span class="badge bg-danger"><i class="fas fa-trash me-1"></i>Delete</span>
+                            <?php elseif ($ch['action'] === 'CREATE'): ?>
+                                <span class="badge bg-success"><i class="fas fa-plus me-1"></i>New Post</span>
                             <?php else: ?>
                                 <span class="badge bg-warning text-dark"><i class="fas fa-edit me-1"></i>Edit</span>
                             <?php endif; ?>
@@ -214,6 +283,23 @@ require_once __DIR__ . '/../../includes/header.php';
                         <td>
                             <?php if ($ch['status'] === 'pending'): ?>
                             <div class="d-flex gap-1 flex-wrap">
+                                <?php if (!empty($ch['_is_create'])): ?>
+                                <!-- Approve new post -->
+                                <form method="POST" action="<?= APP_URL ?>/cms/pending-changes/approve-create.php"
+                                      onsubmit="return confirm('Approve this new post?');">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="module" value="<?= h($ch['module']) ?>">
+                                    <input type="hidden" name="id"     value="<?= (int)$ch['record_id'] ?>">
+                                    <button class="btn btn-sm btn-success" style="border-radius:7px;" title="Approve">
+                                        <i class="fas fa-check"></i>
+                                    </button>
+                                </form>
+                                <!-- View post in its module -->
+                                <a href="<?= APP_URL ?>/cms/<?= $ch['module'] === 'news' ? 'news' : 'notice-board' ?>/index.php?approval=pending"
+                                   class="btn btn-sm btn-outline-secondary" style="border-radius:7px;" title="View in module">
+                                    <i class="fas fa-external-link-alt"></i>
+                                </a>
+                                <?php else: ?>
                                 <!-- View change details (modal trigger) -->
                                 <?php if ($ch['action'] === 'EDIT' && $ch['payload']): ?>
                                 <button class="btn btn-sm btn-outline-secondary" style="border-radius:7px;"
@@ -250,6 +336,7 @@ require_once __DIR__ . '/../../includes/header.php';
                                         <button type="submit" class="btn btn-danger" style="border-radius:0 7px 7px 0;">Reject</button>
                                     </div>
                                 </form>
+                                <?php endif; ?>
                             </div>
                             <?php else: ?>
                             <span class="text-muted" style="font-size:.8rem;">—</span>
@@ -257,7 +344,7 @@ require_once __DIR__ . '/../../includes/header.php';
                         </td>
                     </tr>
 
-                    <?php if ($ch['action'] === 'EDIT' && $ch['payload']): ?>
+                    <?php if (empty($ch['_is_create']) && $ch['action'] === 'EDIT' && $ch['payload']): ?>
                     <!-- Diff modal for this change -->
                     <div class="modal fade" id="diffModal<?= $ch['id'] ?>" tabindex="-1">
                         <div class="modal-dialog modal-lg modal-dialog-scrollable">
