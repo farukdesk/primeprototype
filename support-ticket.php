@@ -291,52 +291,150 @@ function pub_status_color(string $status): string
    <link rel="stylesheet" href="/assets/css/spacing.css">
    <link rel="stylesheet" href="/assets/css/main.css">
    <style>
+      /* ── Support Portal Custom Styles ──────────────────────────────── */
       .pu-support-hero {
-         background: linear-gradient(135deg, #1a1f70 0%, #0d6efd 100%);
-         padding: 60px 0 40px;
+         background: linear-gradient(135deg, #1a1f70 0%, #0d6efd 60%, #1da1f2 100%);
+         padding: 56px 0 36px;
          color: #fff;
+         position: relative;
+         overflow: hidden;
       }
-      .pu-support-hero h1 { font-size: 2rem; font-weight: 700; margin-bottom: 8px; }
-      .pu-support-hero p  { font-size: 1rem; opacity: .85; }
+      .pu-support-hero::after {
+         content: '';
+         position: absolute;
+         right: -60px; bottom: -40px;
+         width: 300px; height: 300px;
+         border-radius: 50%;
+         background: rgba(255,255,255,.06);
+         pointer-events: none;
+      }
+      .pu-support-hero h1 { font-size: 1.9rem; font-weight: 700; margin-bottom: 8px; }
+      .pu-support-hero p  { font-size: .98rem; opacity: .88; margin-bottom: 0; }
+      @media (max-width: 767px) {
+         .pu-support-hero { padding: 36px 0 24px; }
+         .pu-support-hero h1 { font-size: 1.4rem; }
+      }
+
+      /* Tabs */
       .pu-tab-btn {
          border: 2px solid #0d6efd;
          background: #fff;
          color: #0d6efd;
          border-radius: 10px;
-         padding: 10px 28px;
+         padding: 9px 26px;
          font-weight: 600;
+         font-size: .93rem;
          cursor: pointer;
          transition: all .2s;
+         white-space: nowrap;
       }
       .pu-tab-btn.active, .pu-tab-btn:hover {
          background: #0d6efd;
          color: #fff;
+         box-shadow: 0 4px 12px rgba(13,110,253,.25);
       }
+
+      /* Cards */
       .pu-support-card {
          border-radius: 14px;
-         border: 1px solid #e0e7ef;
+         border: 1px solid #dde4f0;
          overflow: hidden;
+         box-shadow: 0 2px 12px rgba(31,51,93,.06);
+         background: #fff;
       }
       .pu-support-card .card-header {
-         background: #f8f9ff;
-         border-bottom: 1px solid #e0e7ef;
-         padding: 18px 24px;
+         background: linear-gradient(90deg, #f0f4ff 0%, #f8faff 100%);
+         border-bottom: 1px solid #dde4f0;
+         padding: 15px 22px;
          font-weight: 600;
-         font-size: 1.05rem;
+         font-size: 1rem;
+         color: #1e2d50;
       }
+      .pu-support-card .card-header.ch-success {
+         background: linear-gradient(90deg, #d1f7ec 0%, #e8fff7 100%);
+         border-color: #a3e9cf;
+         color: #0a5c42;
+      }
+      .pu-support-card .card-header.ch-info   { background: linear-gradient(90deg, #e8f4ff 0%, #f0f8ff 100%); border-color: #b8deff; color: #0a4a80; }
+      .pu-support-card .card-header.ch-warn   { background: linear-gradient(90deg, #fff8e1 0%, #fffdf0 100%); border-color: #ffe082; color: #7a5700; }
+      .pu-support-card .card-header.ch-green  { background: linear-gradient(90deg, #f0fff4 0%, #f7fff9 100%); border-color: #b2dfce; color: #0a5c42; }
+      .pu-support-card .card-header.ch-blue   { background: linear-gradient(90deg, #e8f0fe 0%, #f0f4ff 100%); border-color: #c2d3ff; color: #1a3a8f; }
+
+      /* Form */
       .form-control, .form-select {
          border-radius: 8px !important;
+         border-color: #c8d4e8;
       }
+      .form-control:focus, .form-select:focus {
+         border-color: #0d6efd;
+         box-shadow: 0 0 0 3px rgba(13,110,253,.12);
+      }
+      .form-label.fw-medium { color: #374569; }
+
+      /* Status pill */
       .status-pill {
          display: inline-block;
-         padding: 5px 14px;
+         padding: 4px 14px;
          border-radius: 20px;
          color: #fff;
-         font-size: .85rem;
+         font-size: .82rem;
          font-weight: 600;
+         letter-spacing: .02em;
       }
-      .pu-ticket-info td { padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-size: .9rem; }
-      .pu-ticket-info td:first-child { font-weight: 600; color: #555; width: 150px; }
+
+      /* Ticket info table */
+      .pu-ticket-info { width: 100%; border-collapse: collapse; }
+      .pu-ticket-info td { padding: 8px 12px; border-bottom: 1px solid #f0f3f8; font-size: .88rem; vertical-align: middle; }
+      .pu-ticket-info tr:last-child td { border-bottom: none; }
+      .pu-ticket-info td:first-child { font-weight: 600; color: #4a5568; width: 140px; white-space: nowrap; }
+
+      /* Progress steps */
+      .pu-step-line { width: 2px; height: 20px; background: #dee2e6; margin-left: 15px; }
+      .pu-step-line.done { background: #0d6efd; }
+
+      /* Success box */
+      .pu-success-box {
+         background: linear-gradient(135deg, #e8fff4 0%, #f0fff8 100%);
+         border: 1px solid #a3e9cf;
+         border-radius: 14px;
+         padding: 32px;
+         text-align: center;
+      }
+      .pu-success-icon {
+         width: 72px; height: 72px;
+         border-radius: 50%;
+         background: #20c997;
+         color: #fff;
+         display: flex; align-items: center; justify-content: center;
+         font-size: 2rem;
+         margin: 0 auto 20px;
+         box-shadow: 0 6px 20px rgba(32,201,151,.35);
+      }
+      .pu-ticket-number-badge {
+         display: inline-block;
+         background: #fff;
+         border: 2px solid #0d6efd;
+         color: #0d6efd;
+         font-size: 1.35rem;
+         font-weight: 700;
+         padding: 8px 24px;
+         border-radius: 10px;
+         letter-spacing: .04em;
+         margin: 12px 0;
+         font-family: monospace;
+      }
+
+      /* Sidebar response-time table */
+      .pu-sla-table { width: 100%; font-size: .875rem; }
+      .pu-sla-table td { padding: 7px 6px; vertical-align: middle; }
+
+      /* Mobile tweaks */
+      @media (max-width: 767px) {
+         .pu-support-card .card-header { padding: 12px 16px; font-size: .93rem; }
+         .pu-support-card .p-4 { padding: 16px !important; }
+         .pu-ticket-info td:first-child { width: 110px; font-size: .82rem; }
+         .pu-ticket-number-badge { font-size: 1.1rem; padding: 6px 16px; }
+      }
    </style>
 </head>
 
@@ -351,6 +449,8 @@ function pub_status_color(string $status): string
       <?php include __DIR__ . '/includes/header-top.php'; ?>
       <?php include __DIR__ . '/includes/nav-menu.php'; ?>
    </header>
+
+   <?php include __DIR__ . '/includes/news-ticker.php'; ?>
 
    <!-- Hero Section -->
    <div class="pu-support-hero">
@@ -370,37 +470,37 @@ function pub_status_color(string $status): string
 
       <!-- Tab Switcher -->
       <div class="d-flex gap-3 mb-4 flex-wrap">
-         <button class="pu-tab-btn <?= ($track_number === '' && !$form_success) ? 'active' : '' ?>"
+         <button class="pu-tab-btn <?= ($track_number === '') ? 'active' : '' ?>"
                  onclick="showTab('submit')" id="tab-submit-btn">
             <i class="fas fa-paper-plane me-1"></i> Submit a Ticket
          </button>
-         <button class="pu-tab-btn <?= ($track_number !== '' || $form_success) ? 'active' : '' ?>"
+         <button class="pu-tab-btn <?= ($track_number !== '') ? 'active' : '' ?>"
                  onclick="showTab('track')" id="tab-track-btn">
             <i class="fas fa-search me-1"></i> Track My Ticket
          </button>
       </div>
 
       <!-- ── SUBMIT TICKET PANEL ──────────────────────────────────────────── -->
-      <div id="panel-submit" <?= ($track_number !== '' || $form_success) ? 'style="display:none;"' : '' ?>>
+      <div id="panel-submit" <?= ($track_number !== '') ? 'style="display:none;"' : '' ?>>
 
          <?php if ($form_success): ?>
          <!-- Success Message -->
-         <div class="pu-support-card p-0 mb-4">
-            <div class="card-header" style="background:#d1f7ec;border-color:#a3e9cf;color:#0a5c42;">
-               <i class="fas fa-check-circle me-2 text-success"></i>Ticket Submitted Successfully!
+         <div class="pu-success-box mb-4">
+            <div class="pu-success-icon">
+               <i class="fas fa-check"></i>
             </div>
-            <div class="p-4">
-               <p class="mb-2">Your IT support ticket has been submitted. A confirmation has been sent to your email address.</p>
-               <p class="mb-3"><strong>Your Ticket Number:</strong>
-                  <span style="font-size:1.3rem;font-weight:700;color:#0d6efd;"><?= pub_h($submitted_ticket_no) ?></span>
-               </p>
-               <p class="text-muted mb-3" style="font-size:.9rem;">
-                  Please save this ticket number. You can use it along with your email address to track the progress of your request.
-               </p>
-               <button class="btn btn-outline-primary btn-sm" onclick="document.getElementById('track-input').value='<?= pub_h($submitted_ticket_no) ?>'; showTab('track');" style="border-radius:8px;">
+            <h4 class="fw-bold mb-1" style="color:#0a5c42;">Ticket Submitted Successfully!</h4>
+            <p class="text-muted mb-3">Your IT support request has been received. A confirmation email has been sent to your address.</p>
+            <div class="pu-ticket-number-badge"><?= pub_h($submitted_ticket_no) ?></div>
+            <p class="mb-4" style="font-size:.9rem;color:#4a5568;">
+               <i class="fas fa-info-circle me-1 text-primary"></i>
+               Save this ticket number — use it to track your request status anytime.
+            </p>
+            <div class="d-flex gap-2 justify-content-center flex-wrap">
+               <button class="btn btn-outline-primary" onclick="document.getElementById('track-input').value='<?= pub_h($submitted_ticket_no) ?>'; showTab('track');" style="border-radius:8px;">
                   <i class="fas fa-search me-1"></i> Track This Ticket
                </button>
-               <button class="btn btn-primary btn-sm ms-2" onclick="location.reload();" style="border-radius:8px;">
+               <button class="btn btn-primary" onclick="location.reload();" style="border-radius:8px;">
                   <i class="fas fa-plus me-1"></i> Submit Another Ticket
                </button>
             </div>
@@ -552,20 +652,20 @@ function pub_status_color(string $status): string
             <!-- Sidebar Info -->
             <div class="col-lg-4">
                <div class="pu-support-card mb-3">
-                  <div class="card-header" style="background:#e8f4ff;">
+                  <div class="card-header ch-info">
                      <i class="fas fa-clock me-2 text-primary"></i>Response Times
                   </div>
                   <div class="p-4">
-                     <table style="width:100%;font-size:.875rem;">
-                        <tr><td class="py-1"><span class="badge" style="background:#dc3545;">Critical</span></td><td class="py-1 ps-2">Within <strong>4 hours</strong></td></tr>
-                        <tr><td class="py-1"><span class="badge" style="background:#ffc107;color:#000;">High</span></td><td class="py-1 ps-2">Within <strong>1 day</strong></td></tr>
-                        <tr><td class="py-1"><span class="badge" style="background:#0dcaf0;color:#000;">Medium</span></td><td class="py-1 ps-2">Within <strong>3 days</strong></td></tr>
-                        <tr><td class="py-1"><span class="badge" style="background:#198754;">Low</span></td><td class="py-1 ps-2">Within <strong>5 days</strong></td></tr>
+                     <table class="pu-sla-table">
+                        <tr><td><span class="badge" style="background:#dc3545;">Critical</span></td><td class="ps-2">Within <strong>4 hours</strong></td></tr>
+                        <tr><td><span class="badge" style="background:#ffc107;color:#000;">High</span></td><td class="ps-2">Within <strong>1 day</strong></td></tr>
+                        <tr><td><span class="badge" style="background:#0dcaf0;color:#000;">Medium</span></td><td class="ps-2">Within <strong>3 days</strong></td></tr>
+                        <tr><td><span class="badge" style="background:#198754;">Low</span></td><td class="ps-2">Within <strong>5 days</strong></td></tr>
                      </table>
                   </div>
                </div>
                <div class="pu-support-card mb-3">
-                  <div class="card-header" style="background:#fff8e1;">
+                  <div class="card-header ch-warn">
                      <i class="fas fa-info-circle me-2 text-warning"></i>What to Include
                   </div>
                   <div class="p-4" style="font-size:.875rem;">
@@ -579,7 +679,7 @@ function pub_status_color(string $status): string
                   </div>
                </div>
                <div class="pu-support-card">
-                  <div class="card-header" style="background:#f0fff4;">
+                  <div class="card-header ch-green">
                      <i class="fas fa-phone me-2 text-success"></i>Direct Contact
                   </div>
                   <div class="p-4" style="font-size:.875rem;">
@@ -595,11 +695,11 @@ function pub_status_color(string $status): string
       </div>
 
       <!-- ── TRACK TICKET PANEL ────────────────────────────────────────────── -->
-      <div id="panel-track" <?= ($track_number === '' && !$form_success) ? 'style="display:none;"' : '' ?>>
+      <div id="panel-track" <?= ($track_number === '') ? 'style="display:none;"' : '' ?>>
 
          <!-- Search Form -->
          <div class="pu-support-card mb-4">
-            <div class="card-header">
+            <div class="card-header ch-blue">
                <i class="fas fa-search me-2 text-primary"></i>Track Your Ticket Status
             </div>
             <div class="p-4">
@@ -707,7 +807,7 @@ function pub_status_color(string $status): string
          </div>
          <?php endif; ?>
 
-         <?php if ($track_number === '' && !$form_success): ?>
+         <?php if ($track_number === ''): ?>
          <div class="text-center py-5 text-muted">
             <i class="fas fa-ticket-alt" style="font-size:3rem;color:#dee2e6;margin-bottom:16px;display:block;"></i>
             Enter your ticket number above to check its current status.
@@ -718,10 +818,7 @@ function pub_status_color(string $status): string
 
    </div><!-- /container -->
 
-   <?php include __DIR__ . '/includes/news-ticker.php'; ?>
    <?php include __DIR__ . '/includes/footer.php'; ?>
-
-   <!-- Scripts -->
    <script src="/assets/js/vendor/jquery.js"></script>
    <script src="/assets/js/bootstrap.bundle.min.js"></script>
    <script src="/assets/js/main.js"></script>

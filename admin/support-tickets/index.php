@@ -51,9 +51,9 @@ if ($assigned_me) {
     $params[] = $user['id'];
 }
 
-$sql = 'SELECT t.*, u.full_name AS creator_name, a.full_name AS assignee_name
+$sql = 'SELECT t.*, COALESCE(u.full_name, t.submitter_name) AS creator_name, a.full_name AS assignee_name
         FROM support_tickets t
-        JOIN users u ON u.id = t.created_by
+        LEFT JOIN users u ON u.id = t.created_by
         LEFT JOIN users a ON a.id = t.assigned_to'
      . ($where ? ' WHERE ' . implode(' AND ', $where) : '')
      . ' ORDER BY FIELD(t.priority,\'Critical\',\'High\',\'Medium\',\'Low\'), t.created_at DESC';
@@ -238,7 +238,12 @@ require_once __DIR__ . '/../includes/header.php';
                         <td><?= st_priority_badge($ticket['priority']) ?></td>
                         <td><?= st_status_badge($ticket['status']) ?></td>
                         <?php if ($is_staff): ?>
-                        <td style="font-size:.85rem;"><?= h($ticket['creator_name']) ?></td>
+                        <td style="font-size:.85rem;">
+                            <?= h($ticket['creator_name'] ?: '—') ?>
+                            <?php if ($ticket['is_public']): ?>
+                            <span class="badge bg-secondary ms-1" style="font-size:.65rem;">Public</span>
+                            <?php endif; ?>
+                        </td>
                         <?php endif; ?>
                         <td>
                             <?php if ($ticket['deadline']): ?>
