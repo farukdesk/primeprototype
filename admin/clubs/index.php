@@ -45,7 +45,7 @@ $pages = max(1, (int)ceil($total / $per_page));
 $st = $db->prepare(
     "SELECT c.*,
             d.name AS dept_name,
-            p.name AS program_name,
+            p.program_name AS program_name,
             (SELECT COUNT(*) FROM club_members   cm WHERE cm.club_id = c.id) AS member_count,
             (SELECT COUNT(*) FROM club_events    ce WHERE ce.club_id = c.id AND ce.is_published = 1) AS event_count
      FROM clubs c

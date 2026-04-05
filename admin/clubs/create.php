@@ -9,7 +9,7 @@ $errors     = [];
 
 $db    = db();
 $depts = $db->query("SELECT id, name FROM dept_departments ORDER BY name")->fetchAll();
-$progs = $db->query("SELECT id, dept_id, name FROM dept_academic_programs ORDER BY name")->fetchAll();
+$progs = $db->query("SELECT id, dept_id, program_name FROM dept_academic_programs ORDER BY program_name")->fetchAll();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
@@ -111,7 +111,7 @@ require_once __DIR__ . '/../includes/header.php';
                             <select name="program_id" id="program_id" class="form-select">
                                 <option value="">— Select Program —</option>
                                 <?php foreach ($progs as $p): ?>
-                                <option value="<?= $p['id'] ?>" data-dept="<?= $p['dept_id'] ?>" <?= old('program_id') == $p['id'] ? 'selected' : '' ?>><?= h($p['name']) ?></option>
+                                <option value="<?= $p['id'] ?>" data-dept="<?= $p['dept_id'] ?>" <?= old('program_id') == $p['id'] ? 'selected' : '' ?>><?= h($p['program_name']) ?></option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
