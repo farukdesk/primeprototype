@@ -152,7 +152,7 @@ require_once __DIR__ . '/../includes/header.php';
                             </option>
                             <?php endforeach; ?>
                         </select>
-                        <small class="text-muted">Link this staff department to an academic department so General Staff appear there.</small>
+                        <small class="text-muted">Link this staff department to an academic department to display its staff on that department's page.</small>
                     </div>
 
                     <div class="mb-3">

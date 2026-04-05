@@ -42,7 +42,7 @@ if ($f_dept > 0) {
     $params[] = $f_dept;
 }
 if ($f_edu_dept > 0) {
-    $where[]  = 'sp.department_type = \'educational\' AND sp.staff_dept_id IN (SELECT id FROM staff_departments WHERE dept_id = ?)';
+    $where[]  = 'sp.department_type = \'educational\' AND sd.dept_id = ?';
     $params[] = $f_edu_dept;
 }
 
