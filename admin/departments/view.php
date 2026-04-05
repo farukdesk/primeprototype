@@ -18,7 +18,6 @@ $sections = [
     'alumni'     => 'dept_alumni',
     'notices'    => 'dept_notices',
     'routines'   => 'dept_routines',
-    'clubs'      => 'dept_clubs',
     'facilities' => 'dept_facilities',
     'academic_programs' => 'dept_academic_programs',
     'prime_pride'       => 'dept_prime_pride',
@@ -29,6 +28,10 @@ foreach ($sections as $key => $table) {
     $s->execute([$id]);
     $counts[$key] = (int)$s->fetchColumn();
 }
+// Count clubs from the main clubs module
+$s = db()->prepare("SELECT COUNT(*) FROM clubs WHERE dept_id = ?");
+$s->execute([$id]);
+$counts['clubs'] = (int)$s->fetchColumn();
 
 $page_title = 'Manage: ' . $dept['name'];
 require_once __DIR__ . '/../includes/header.php';
@@ -76,7 +79,7 @@ $cards = [
     ['key' => 'alumni',     'label' => 'Alumni',            'icon' => 'fas fa-user-graduate',      'color' => '#2ecc71', 'path' => 'alumni'],
     ['key' => 'notices',    'label' => 'Notices',           'icon' => 'fas fa-bell',               'color' => '#e74c3c', 'path' => 'notices'],
     ['key' => 'routines',   'label' => 'Routines',          'icon' => 'fas fa-clock',              'color' => '#9b59b6', 'path' => 'routines'],
-    ['key' => 'clubs',      'label' => 'Clubs',             'icon' => 'fas fa-users',              'color' => '#1abc9c', 'path' => 'clubs'],
+    ['key' => 'clubs',      'label' => 'Clubs',             'icon' => 'fas fa-users',              'color' => '#1abc9c', 'url' => APP_URL . '/clubs/index.php?dept=' . $id],
     ['key' => 'facilities', 'label' => 'Facilities',        'icon' => 'fas fa-building',           'color' => '#e67e22', 'path' => 'facilities'],
     ['key' => 'academic_programs', 'label' => 'Academic Programs', 'icon' => 'fas fa-book-open',   'color' => '#3498db', 'path' => 'academic-programs'],
     ['key' => 'prime_pride','label' => 'Prime Pride',       'icon' => 'fas fa-star',               'color' => '#f39c12', 'path' => 'prime-pride'],
@@ -85,7 +88,7 @@ $cards = [
 <div class="row g-4">
 <?php foreach ($cards as $card): ?>
 <div class="col-lg-4 col-md-6">
-    <a href="<?= APP_URL ?>/departments/<?= $card['path'] ?>/index.php?dept_id=<?= $id ?>"
+    <a href="<?= isset($card['url']) ? h($card['url']) : APP_URL . '/departments/' . $card['path'] . '/index.php?dept_id=' . $id ?>"
        class="card text-decoration-none h-100" style="transition:.2s;border-radius:12px;">
         <div class="card-body p-4">
             <div class="d-flex align-items-center gap-3">

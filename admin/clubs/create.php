@@ -118,15 +118,15 @@ require_once __DIR__ . '/../includes/header.php';
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Club Goal</label>
-                        <textarea name="goal" class="form-control" rows="4" placeholder="Describe the purpose and goals of this club…"><?= h(old('goal')) ?></textarea>
+                        <textarea name="goal" id="goal" class="form-control" rows="4" placeholder="Describe the purpose and goals of this club…"><?= h(old('goal')) ?></textarea>
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Facilities</label>
-                        <textarea name="facilities" class="form-control" rows="3" placeholder="Available facilities for club members…"><?= h(old('facilities')) ?></textarea>
+                        <textarea name="facilities" id="facilities" class="form-control" rows="3" placeholder="Available facilities for club members…"><?= h(old('facilities')) ?></textarea>
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Club Notice</label>
-                        <textarea name="notice" class="form-control" rows="3" placeholder="Any current notices or announcements…"><?= h(old('notice')) ?></textarea>
+                        <textarea name="notice" id="notice" class="form-control" rows="3" placeholder="Any current notices or announcements…"><?= h(old('notice')) ?></textarea>
                     </div>
                 </div>
             </div>
@@ -177,6 +177,20 @@ function filterPrograms() {
 }
 deptSel.addEventListener('change', filterPrograms);
 filterPrograms();
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/tinymce@5.10.9/tinymce.min.js" referrerpolicy="origin"></script>
+<script>
+tinymce.init({
+    selector: '#goal, #facilities, #notice',
+    height: 220,
+    menubar: false,
+    plugins: 'advlist autolink lists link charmap preview anchor searchreplace visualblocks code fullscreen table help wordcount',
+    toolbar: 'undo redo | blocks | bold italic underline strikethrough | ' +
+             'alignleft aligncenter alignright alignjustify | ' +
+             'bullist numlist outdent indent | removeformat | link | code fullscreen',
+    content_style: 'body { font-family: Inter, sans-serif; font-size: 15px; }',
+});
 </script>
 
 <?php clear_old(); require_once __DIR__ . '/../includes/footer.php'; ?>

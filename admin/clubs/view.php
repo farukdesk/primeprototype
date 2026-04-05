@@ -124,7 +124,13 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
     <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small">
         <li class="breadcrumb-item"><a href="<?= APP_URL ?>/dashboard.php">Dashboard</a></li>
+        <?php if ($club['dept_id']): ?>
+        <li class="breadcrumb-item"><a href="<?= APP_URL ?>/departments/index.php">Departments</a></li>
+        <li class="breadcrumb-item"><a href="<?= APP_URL ?>/departments/view.php?id=<?= $club['dept_id'] ?>"><?= h($club['dept_name']) ?></a></li>
+        <li class="breadcrumb-item"><a href="<?= APP_URL ?>/clubs/index.php?dept=<?= $club['dept_id'] ?>">Clubs</a></li>
+        <?php else: ?>
         <li class="breadcrumb-item"><a href="<?= APP_URL ?>/clubs/index.php">Clubs</a></li>
+        <?php endif; ?>
         <li class="breadcrumb-item active"><?= h($club['name']) ?></li>
     </ol></nav>
     <div class="d-flex gap-2">

@@ -6,7 +6,11 @@ require_access('clubs', 'can_edit');
 
 $db   = db();
 $id   = (int)($_GET['id'] ?? 0);
-$stmt = $db->prepare('SELECT * FROM clubs WHERE id = ?');
+$stmt = $db->prepare(
+    'SELECT c.*, d.name AS dept_name FROM clubs c
+     LEFT JOIN dept_departments d ON d.id = c.dept_id
+     WHERE c.id = ?'
+);
 $stmt->execute([$id]);
 $club   = $stmt->fetch();
 if (!$club) { flash_set('error', 'Club not found.'); redirect(APP_URL . '/clubs/index.php'); }
@@ -80,7 +84,13 @@ require_once __DIR__ . '/../includes/header.php';
         <h1 class="h3 mb-0"><i class="fas fa-edit me-2 text-primary"></i>Edit Club</h1>
         <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small">
             <li class="breadcrumb-item"><a href="<?= APP_URL ?>/dashboard.php">Dashboard</a></li>
+            <?php if ($club['dept_id']): ?>
+            <li class="breadcrumb-item"><a href="<?= APP_URL ?>/departments/index.php">Departments</a></li>
+            <li class="breadcrumb-item"><a href="<?= APP_URL ?>/departments/view.php?id=<?= $club['dept_id'] ?>"><?= h($club['dept_name']) ?></a></li>
+            <li class="breadcrumb-item"><a href="<?= APP_URL ?>/clubs/index.php?dept=<?= $club['dept_id'] ?>">Clubs</a></li>
+            <?php else: ?>
             <li class="breadcrumb-item"><a href="<?= APP_URL ?>/clubs/index.php">Clubs</a></li>
+            <?php endif; ?>
             <li class="breadcrumb-item"><a href="<?= APP_URL ?>/clubs/view.php?id=<?= $id ?>"><?= h($club['name']) ?></a></li>
             <li class="breadcrumb-item active">Edit</li>
         </ol></nav>
@@ -124,15 +134,15 @@ require_once __DIR__ . '/../includes/header.php';
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Club Goal</label>
-                        <textarea name="goal" class="form-control" rows="4"><?= h(old('goal', $club['goal'])) ?></textarea>
+                        <textarea name="goal" id="goal" class="form-control" rows="4"><?= h(old('goal', $club['goal'])) ?></textarea>
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Facilities</label>
-                        <textarea name="facilities" class="form-control" rows="3"><?= h(old('facilities', $club['facilities'])) ?></textarea>
+                        <textarea name="facilities" id="facilities" class="form-control" rows="3"><?= h(old('facilities', $club['facilities'])) ?></textarea>
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Club Notice</label>
-                        <textarea name="notice" class="form-control" rows="3"><?= h(old('notice', $club['notice'])) ?></textarea>
+                        <textarea name="notice" id="notice" class="form-control" rows="3"><?= h(old('notice', $club['notice'])) ?></textarea>
                     </div>
                 </div>
             </div>
@@ -194,6 +204,20 @@ function filterPrograms() {
 }
 deptSel.addEventListener('change', filterPrograms);
 filterPrograms();
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/tinymce@5.10.9/tinymce.min.js" referrerpolicy="origin"></script>
+<script>
+tinymce.init({
+    selector: '#goal, #facilities, #notice',
+    height: 220,
+    menubar: false,
+    plugins: 'advlist autolink lists link charmap preview anchor searchreplace visualblocks code fullscreen table help wordcount',
+    toolbar: 'undo redo | blocks | bold italic underline strikethrough | ' +
+             'alignleft aligncenter alignright alignjustify | ' +
+             'bullist numlist outdent indent | removeformat | link | code fullscreen',
+    content_style: 'body { font-family: Inter, sans-serif; font-size: 15px; }',
+});
 </script>
 
 <?php clear_old(); require_once __DIR__ . '/../includes/footer.php'; ?>
