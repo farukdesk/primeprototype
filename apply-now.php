@@ -926,10 +926,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
    <script src="/assets/js/imagesloaded-pkgd.js"></script>
    <script src="/assets/js/main.js"></script>
    <script>
-      const programsByDept = <?= json_encode($programs_by_dept, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+      const programsByDept = <?= json_encode($programs_by_dept, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
       const deptSelect = document.getElementById('an_dept_select');
       const progSelect = document.getElementById('an_program_select');
-      const initialProgramId = <?= json_encode(an_old('program_id', $old)) ?>;
+      const initialProgramId = <?= json_encode(an_old('program_id', $old), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 
       function updatePrograms() {
          if (!deptSelect || !progSelect) return;
