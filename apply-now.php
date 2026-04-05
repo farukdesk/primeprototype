@@ -570,6 +570,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       .pu-outline-btn:hover {
          transform:translateY(-2px);
       }
+      .close-search:focus-visible,
+      .close-btn:focus-visible,
+      .pu-back-link:focus-visible,
+      .pu-submit-btn:focus-visible,
+      .pu-outline-btn:focus-visible {
+         outline:3px solid rgba(37, 99, 235, .35);
+         outline-offset:3px;
+      }
       @media (max-width: 1199px) {
          .pu-apply-shell { border-radius:24px; }
          .pu-apply-aside { border-right:0; border-bottom:1px solid #e6ecf5; }
@@ -615,7 +623,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
    </button>
 
    <div class="search-popup">
-      <button class="close-search" aria-label="Close search"><span class="flaticon-multiply"><i class="fal fa-times" aria-hidden="true"></i></span></button>
+      <button class="close-search" aria-label="Close search"><i class="fal fa-times" aria-hidden="true"></i></button>
       <form method="post" action="#">
          <div class="form-group">
             <input type="search" name="search-field" value="" placeholder="Search Here" required>
@@ -638,21 +646,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
          <div class="itoffcanvas__info">
             <h3 class="offcanva-title">Admissions Help Desk</h3>
             <div class="it-info-wrapper mb-20 d-flex align-items-center">
-               <div class="itoffcanvas__info-icon"><a href="#"><i class="fal fa-envelope"></i></a></div>
+               <div class="itoffcanvas__info-icon"><a href="mailto:admissions@primeuniversity.ac.bd" aria-label="Email admissions"><i class="fal fa-envelope" aria-hidden="true"></i></a></div>
                <div class="itoffcanvas__info-address">
                   <span>Email</span>
                   <a href="mailto:admissions@primeuniversity.ac.bd">admissions@primeuniversity.ac.bd</a>
                </div>
             </div>
             <div class="it-info-wrapper mb-20 d-flex align-items-center">
-               <div class="itoffcanvas__info-icon"><a href="#"><i class="fal fa-phone-alt"></i></a></div>
+               <div class="itoffcanvas__info-icon"><a href="tel:+8801710996196" aria-label="Call admissions"><i class="fal fa-phone-alt" aria-hidden="true"></i></a></div>
                <div class="itoffcanvas__info-address">
                   <span>Phone</span>
                   <a href="tel:+8801710996196">+880-1710996196</a>
                </div>
             </div>
             <div class="it-info-wrapper mb-20 d-flex align-items-center">
-               <div class="itoffcanvas__info-icon"><a href="#"><i class="fas fa-map-marker-alt"></i></a></div>
+               <div class="itoffcanvas__info-icon"><a href="https://maps.google.com/?q=Prime+University+Dhaka" target="_blank" rel="noopener" aria-label="Open campus location map"><i class="fas fa-map-marker-alt" aria-hidden="true"></i></a></div>
                <div class="itoffcanvas__info-address">
                   <span>Location</span>
                   <a href="https://maps.google.com/?q=Prime+University+Dhaka" target="_blank" rel="noopener">114/116 Mazar Road, Mirpur-1, Dhaka 1216</a>
@@ -930,7 +938,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       const programsByDept = <?= json_encode($programs_by_dept, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
       const deptSelect = document.getElementById('an_dept_select');
       const progSelect = document.getElementById('an_program_select');
-      const initialProgramId = <?= json_encode(an_old('program_id', $old), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+      const initialProgramId = Number(<?= json_encode(an_old('program_id', $old), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>) || 0;
 
       function updatePrograms() {
          if (!deptSelect || !progSelect) return;
@@ -943,7 +951,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             const option = document.createElement('option');
             option.value = program.id;
             option.textContent = program.program_name;
-            if (String(program.id) === String(initialProgramId)) {
+            if (Number(program.id) === initialProgramId) {
                option.selected = true;
             }
             progSelect.appendChild(option);
