@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/includes/config.php';
 
+$page_title = 'Contact Us – Prime University';
 
 if (session_status() === PHP_SESSION_NONE) session_start();
 $csrf_token = $_SESSION['pub_csrf'] ?? ($_SESSION['pub_csrf'] = bin2hex(random_bytes(16)));
@@ -9,6 +10,7 @@ $form_success = false;
 $form_errors  = [];
 $form_data    = ['name' => '', 'email' => '', 'phone' => '', 'subject' => '', 'message' => ''];
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // CSRF
     if (!hash_equals($_SESSION['pub_csrf'] ?? '', $_POST['_csrf'] ?? '')) {
         $form_errors[] = 'Invalid security token. Please try again.';
@@ -23,6 +25,7 @@ $form_data    = ['name' => '', 'email' => '', 'phone' => '', 'subject' => '', 'm
         if ($form_data['subject'] === '')                           $form_errors[] = 'Subject is required.';
         if (strlen($form_data['message']) < 10)                    $form_errors[] = 'Message must be at least 10 characters.';
 
+        if (empty($form_errors)) {
             try {
                 $db = front_db();
                 if ($db) {
@@ -49,7 +52,7 @@ $form_data    = ['name' => '', 'email' => '', 'phone' => '', 'subject' => '', 'm
 ?>
 <!doctype html>
 <html class="no-js" lang="en">
-
+<head>
    <meta charset="utf-8">
    <meta http-equiv="x-ua-compatible" content="ie=edge">
    <title><?= fh($page_title) ?></title>
@@ -66,7 +69,7 @@ $form_data    = ['name' => '', 'email' => '', 'phone' => '', 'subject' => '', 'm
    <link rel="stylesheet" href="/assets/css/custom-animation.css">
    <link rel="stylesheet" href="/assets/css/spacing.css">
    <link rel="stylesheet" href="/assets/css/main.css">
-
+   <style>
    /* ── Contact Page Custom Styles ──────────────────────────────────────────── */
 
    .pu-contact-hero {
@@ -321,7 +324,7 @@ $form_data    = ['name' => '', 'email' => '', 'phone' => '', 'subject' => '', 'm
    .wow-stagger > * { opacity: 0; }
    </style>
 </head>
-
+<body id="body" class="it-magic-cursor">
 
    <div id="preloader">
       <div class="preloader">
@@ -331,6 +334,7 @@ $form_data    = ['name' => '', 'email' => '', 'phone' => '', 'subject' => '', 'm
    </div>
    <!-- preloader end -->
 
+   <div id="magic-cursor">
       <div id="ball"></div>
    </div>
 
@@ -388,6 +392,7 @@ $form_data    = ['name' => '', 'email' => '', 'phone' => '', 'subject' => '', 'm
    <div class="body-overlay"></div>
    <!-- offcanvas end -->
 
+   <header class="it-header-height">
       <?php include __DIR__ . '/includes/header-top.php'; ?>
       <?php include __DIR__ . '/includes/nav-menu.php'; ?>
    </header>
@@ -510,6 +515,7 @@ $form_data    = ['name' => '', 'email' => '', 'phone' => '', 'subject' => '', 'm
                   </div>
                </div>
 
+            </div>
 
             <div class="col-lg-7 wow fadeInRight" data-wow-delay=".15s">
                <div class="pu-form-card">
@@ -521,12 +527,14 @@ $form_data    = ['name' => '', 'email' => '', 'phone' => '', 'subject' => '', 'm
                      </p>
                   </div>
 
+                  <?php if ($form_success): ?>
                   <div class="pu-alert-success mb-4" role="alert">
                      <i class="fas fa-check-circle me-2"></i>
                      <strong>Thank you!</strong> Your message has been sent. We&rsquo;ll be in touch soon.
                   </div>
                   <?php endif; ?>
 
+                  <?php if (!empty($form_errors)): ?>
                   <div class="pu-alert-danger mb-4" role="alert">
                      <i class="fas fa-exclamation-circle me-2"></i>
                      <?php foreach ($form_errors as $err): ?>
@@ -535,8 +543,9 @@ $form_data    = ['name' => '', 'email' => '', 'phone' => '', 'subject' => '', 'm
                   </div>
                   <?php endif; ?>
 
+                  <form method="post" novalidate id="contact-form">
                      <input type="hidden" name="_csrf" value="<?= fh($csrf_token) ?>">
-
+                     <div class="row g-3">
                         <div class="col-sm-6">
                            <label class="form-label" for="cf-name">Full Name <span style="color:#e11d48;">*</span></label>
                            <input type="text" id="cf-name" name="name" class="form-control"
@@ -574,15 +583,18 @@ $form_data    = ['name' => '', 'email' => '', 'phone' => '', 'subject' => '', 'm
                      </div>
                   </form>
 
+               </div>
+
             </div>
 
+         </div>
       </div>
    </section>
    <!-- ── MAP + FORM END ───────────────────────────────────────────────────── -->
 
 
    <?php include __DIR__ . '/includes/scripts.php'; ?>
-
+   <script>
    (function () {
       'use strict';
 
@@ -627,4 +639,5 @@ $form_data    = ['name' => '', 'email' => '', 'phone' => '', 'subject' => '', 'm
 
    </script>
 
+</body>
 </html>
