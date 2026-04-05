@@ -194,19 +194,24 @@ function degree_badge_color(string $type): string {
                               <i class="fas fa-download"></i> Download Brochure
                            </a>
                            <?php endif; ?>
+                           <a href="<?= fh(SITE_URL) ?>/academic-program-detail.php?id=<?= (int)$prog['id'] ?>"
+                              class="d-inline-flex align-items-center gap-2"
+                              style="background:#FFB81C; color:#002147; padding:8px 18px; border-radius:25px; font-size:13px; font-weight:600; text-decoration:none;">
+                              <i class="fas fa-arrow-right"></i> View Full Details
+                           </a>
                            <?php if (!empty($prog['details_content'])): ?>
                            <button class="btn btn-sm d-inline-flex align-items-center gap-2"
                                    style="background:#002147; color:#FFB81C; border:none; padding:8px 18px; border-radius:25px; font-size:13px; font-weight:600;"
                                    type="button" data-bs-toggle="collapse" data-bs-target="#<?= $collapse_id ?>"
                                    aria-expanded="false" aria-controls="<?= $collapse_id ?>">
-                              <i class="fas fa-info-circle"></i> View Details
+                              <i class="fas fa-info-circle"></i> Quick View
                               <i class="fas fa-chevron-down ms-1" style="font-size:11px;"></i>
                            </button>
                            <?php endif; ?>
                         </div>
                      </div>
 
-                     <?php if (!empty($prog['duration']) || !empty($prog['total_credit'])): ?>
+                     <?php if (!empty($prog['duration']) || !empty($prog['total_credit']) || !empty($prog['semester_type'])): ?>
                      <div class="row g-3 mb-20">
                         <?php if (!empty($prog['duration'])): ?>
                         <div class="col-6 col-md-3">
@@ -223,6 +228,17 @@ function degree_badge_color(string $type): string {
                               <span class="label">Total Credits</span>
                            </div>
                         </div>
+                        <?php endif; ?>
+                        <?php if (!empty($prog['semester_type'])): ?>
+                        <?php $st_map = ['trimester' => 'Trimester', 'semester' => 'Semester', 'annual' => 'Annual']; ?>
+                        <?php if (isset($st_map[$prog['semester_type']])): ?>
+                        <div class="col-6 col-md-3">
+                           <div class="prog-stat p-15 rounded" style="background:#F8FAFC;">
+                              <span class="value" style="font-size:15px;"><?= fh($st_map[$prog['semester_type']]) ?></span>
+                              <span class="label">Semester System</span>
+                           </div>
+                        </div>
+                        <?php endif; ?>
                         <?php endif; ?>
                      </div>
                      <?php endif; ?>

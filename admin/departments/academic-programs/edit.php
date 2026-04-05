@@ -41,10 +41,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $degree_type     = trim($_POST['degree_type']     ?? '');
     $duration        = trim($_POST['duration']        ?? '');
     $total_credit    = trim($_POST['total_credit']    ?? '');
+    $semester_type   = trim($_POST['semester_type']   ?? '');
     $description     = trim($_POST['description']     ?? '');
     $details_content = trim($_POST['details_content'] ?? '');
     $sort_order      = (int)($_POST['sort_order']     ?? 0);
     $is_active       = isset($_POST['is_active'])     ? 1 : 0;
+
+    $allowed_semester_types = ['trimester', 'semester', 'annual', ''];
+    if (!in_array($semester_type, $allowed_semester_types, true)) $semester_type = '';
 
     if ($program_name === '') $errors[] = 'Program name is required.';
 
@@ -76,19 +80,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($errors)) {
         db()->prepare(
             'UPDATE dept_academic_programs SET
-             program_name=?, degree_type=?, duration=?, total_credit=?,
+             program_name=?, degree_type=?, duration=?, total_credit=?, semester_type=?,
              description=?, details_content=?, attachment=?, sort_order=?, is_active=?
              WHERE id=?'
         )->execute([$program_name, $degree_type ?: null, $duration ?: null,
-                    $total_credit ?: null, $description ?: null, $details_content ?: null,
-                    $attachment, $sort_order, $is_active, $id]);
+                    $total_credit ?: null, $semester_type ?: null, $description ?: null,
+                    $details_content ?: null, $attachment, $sort_order, $is_active, $id]);
 
         flash_set('success', "Program <strong>" . h($program_name) . "</strong> updated.");
         redirect(APP_URL . '/departments/academic-programs/index.php?dept_id=' . $dept_id);
     }
 
     $program = array_merge($program, compact(
-        'program_name','degree_type','duration','total_credit','description','details_content','sort_order','is_active'
+        'program_name','degree_type','duration','total_credit','semester_type','description','details_content','sort_order','is_active'
     ));
     $program['attachment'] = $attachment;
 }
@@ -145,6 +149,15 @@ require_once __DIR__ . '/../../includes/header.php';
                     <label class="form-label fw-medium">Total Credit</label>
                     <input type="text" name="total_credit" class="form-control" style="border-radius:10px;"
                            value="<?= h($program['total_credit'] ?? '') ?>" maxlength="50">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-medium">Semester Type</label>
+                    <select name="semester_type" class="form-select" style="border-radius:10px;">
+                        <option value="">— Select —</option>
+                        <option value="trimester" <?= ($program['semester_type'] ?? '') === 'trimester' ? 'selected' : '' ?>>Trimester (Spring / Summer / Fall)</option>
+                        <option value="semester"  <?= ($program['semester_type'] ?? '') === 'semester'  ? 'selected' : '' ?>>Semester (Spring / Fall)</option>
+                        <option value="annual"    <?= ($program['semester_type'] ?? '') === 'annual'    ? 'selected' : '' ?>>Annual</option>
+                    </select>
                 </div>
                 <div class="col-12">
                     <label class="form-label fw-medium">Short Description</label>
