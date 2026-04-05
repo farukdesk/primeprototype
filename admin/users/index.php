@@ -137,6 +137,16 @@ require_once __DIR__ . '/../includes/header.php';
                                     <i class="fas fa-edit"></i>
                                 </a>
                                 <?php endif; ?>
+                                <?php if (is_super_admin() && $u['id'] != $me['id']): ?>
+                                <form method="POST" action="<?= APP_URL ?>/users/reset-password.php"
+                                      onsubmit="return confirm('Reset password for ' + <?= json_encode($u['full_name']) ?> + '? A new system-generated password will be emailed to them.');">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="id" value="<?= $u['id'] ?>">
+                                    <button class="btn btn-sm btn-outline-warning" title="Reset Password" style="border-radius:7px;">
+                                        <i class="fas fa-key"></i>
+                                    </button>
+                                </form>
+                                <?php endif; ?>
                                 <?php if ((is_super_admin() || can_access('users', 'can_delete')) && $u['id'] != $me['id']): ?>
                                 <form method="POST" action="<?= APP_URL ?>/users/delete.php"
                                       onsubmit="return confirm('Delete user ' + <?= json_encode($u['full_name']) ?> + '?');">
