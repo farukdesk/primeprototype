@@ -68,6 +68,14 @@ FROM clubs")->fetch();
 // ── Departments for filter ────────────────────────────────────────────────────
 $depts = $db->query("SELECT id, name FROM dept_departments ORDER BY name")->fetchAll();
 
+// ── Dept name for breadcrumb when filtering by dept ───────────────────────────
+$filter_dept = null;
+if ($dept_id > 0) {
+    $ds = $db->prepare('SELECT * FROM dept_departments WHERE id = ?');
+    $ds->execute([$dept_id]);
+    $filter_dept = $ds->fetch() ?: null;
+}
+
 require_once __DIR__ . '/../includes/header.php';
 ?>
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
@@ -75,6 +83,10 @@ require_once __DIR__ . '/../includes/header.php';
         <h1 class="h3 mb-0"><i class="fas fa-users me-2 text-success"></i>Clubs</h1>
         <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small">
             <li class="breadcrumb-item"><a href="<?= APP_URL ?>/dashboard.php">Dashboard</a></li>
+            <?php if ($filter_dept): ?>
+            <li class="breadcrumb-item"><a href="<?= APP_URL ?>/departments/index.php">Departments</a></li>
+            <li class="breadcrumb-item"><a href="<?= APP_URL ?>/departments/view.php?id=<?= $filter_dept['id'] ?>"><?= h($filter_dept['name']) ?></a></li>
+            <?php endif; ?>
             <li class="breadcrumb-item active">Clubs</li>
         </ol></nav>
     </div>
