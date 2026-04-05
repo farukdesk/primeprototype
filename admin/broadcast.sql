@@ -10,12 +10,19 @@ CREATE TABLE IF NOT EXISTS `broadcasts` (
     `id`                  INT UNSIGNED  NOT NULL AUTO_INCREMENT,
     `subject`             VARCHAR(255)  NOT NULL,
     `body_html`           LONGTEXT      NOT NULL,
-    `recipient_type`      ENUM('individual','group','all') NOT NULL DEFAULT 'all',
+    `recipient_type`      ENUM('individual','group','all','students') NOT NULL DEFAULT 'all',
     `recipient_user_id`   INT UNSIGNED  DEFAULT NULL COMMENT 'FK users.id – used when recipient_type=individual',
     `recipient_group_id`  INT UNSIGNED  DEFAULT NULL COMMENT 'FK user_groups.id – used when recipient_type=group',
     `sent_count`          INT UNSIGNED  NOT NULL DEFAULT 0,
     `failed_count`        INT UNSIGNED  NOT NULL DEFAULT 0,
-    `status`              ENUM('draft','sent','partial') NOT NULL DEFAULT 'draft',
+    `status`              ENUM('draft','sent','partial','pending_approval','rejected') NOT NULL DEFAULT 'draft',
+    `review_note`         VARCHAR(500)  DEFAULT NULL  COMMENT 'Rejection reason from reviewer',
+    `reviewed_by`         INT UNSIGNED  DEFAULT NULL  COMMENT 'FK users.id – who approved/rejected',
+    `reviewed_at`         DATETIME      DEFAULT NULL  COMMENT 'When approval/rejection happened',
+    `student_dept_id`     INT UNSIGNED  DEFAULT NULL  COMMENT 'FK dept_departments.id – NULL = all departments',
+    `student_program_id`  INT UNSIGNED  DEFAULT NULL  COMMENT 'FK dept_academic_programs.id – NULL = all programs',
+    `student_status`      VARCHAR(20)   DEFAULT NULL  COMMENT 'Active|Inactive|Graduated|Dropped – NULL = all',
+    `student_semester`    VARCHAR(50)   DEFAULT NULL  COMMENT 'e.g. Summer 2025 – NULL = all semesters',
     `sent_by`             INT UNSIGNED  NOT NULL COMMENT 'FK users.id',
     `sent_at`             DATETIME      DEFAULT NULL,
     `created_at`          DATETIME      DEFAULT CURRENT_TIMESTAMP,
@@ -26,7 +33,10 @@ CREATE TABLE IF NOT EXISTS `broadcasts` (
     KEY `idx_recipient`    (`recipient_type`),
     FOREIGN KEY (`sent_by`)            REFERENCES `users`(`id`)        ON DELETE CASCADE,
     FOREIGN KEY (`recipient_user_id`)  REFERENCES `users`(`id`)        ON DELETE SET NULL,
-    FOREIGN KEY (`recipient_group_id`) REFERENCES `user_groups`(`id`)  ON DELETE SET NULL
+    FOREIGN KEY (`recipient_group_id`) REFERENCES `user_groups`(`id`)  ON DELETE SET NULL,
+    FOREIGN KEY (`reviewed_by`)        REFERENCES `users`(`id`)        ON DELETE SET NULL,
+    FOREIGN KEY (`student_dept_id`)    REFERENCES `dept_departments`(`id`)       ON DELETE SET NULL,
+    FOREIGN KEY (`student_program_id`) REFERENCES `dept_academic_programs`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- -------------------------------------------------------
