@@ -262,6 +262,7 @@ $user       = auth_user();
     $is_admin_active    = strpos($current_path, '/users/') !== false || strpos($current_path, '/user-groups/') !== false
                        || strpos($current_path, '/modules/') !== false || strpos($current_path, '/access/') !== false
                        || strpos($current_path, '/email-templates/') !== false || strpos($current_path, '/change-log/') !== false;
+    $is_internal_active = strpos($current_path, '/file-manager/') !== false || strpos($current_path, '/notice-signing/') !== false || strpos($current_path, '/my-signature/') !== false;
     ?>
 
     <!-- Dashboard -->
@@ -653,6 +654,43 @@ $user       = auth_user();
     </div>
     <?php endif; ?>
 
+    <!-- ── Internal (File Manager & Notice Signing) ── -->
+    <?php if (is_super_admin() || can_access('file-manager') || can_access('notice-signing') || can_access('my-signature')): ?>
+    <button class="nav-group-toggle <?= $is_internal_active ? '' : 'collapsed' ?>"
+            data-bs-toggle="collapse" data-bs-target="#grp-internal"
+            aria-expanded="<?= $is_internal_active ? 'true' : 'false' ?>">
+        <i class="fas fa-building grp-icon" style="color:#8e44ad"></i>
+        Internal
+        <i class="fas fa-chevron-down toggle-icon"></i>
+    </button>
+    <div class="collapse <?= $is_internal_active ? 'show' : '' ?>" id="grp-internal">
+        <ul class="nav flex-column grp-items">
+            <?php if (is_super_admin() || can_access('file-manager')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/file-manager/index.php"
+                   class="<?= strpos($current_path, '/file-manager/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-folder-open"></i> File Manager
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('notice-signing')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/notice-signing/index.php"
+                   class="<?= strpos($current_path, '/notice-signing/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-file-signature"></i> Notice Signing
+                </a>
+            </li>
+            <?php endif; ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/my-signature/index.php"
+                   class="<?= strpos($current_path, '/my-signature/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-pen-nib"></i> My Signature
+                </a>
+            </li>
+        </ul>
+    </div>
+    <?php endif; ?>
+
     <!-- ── Administration ── -->
     <?php if (is_super_admin() || can_access('users') || can_access('modules') || can_access('access') || can_access('email-templates')): ?>
     <button class="nav-group-toggle <?= $is_admin_active ? '' : 'collapsed' ?>"
@@ -755,6 +793,8 @@ $user       = auth_user();
             <ul class="dropdown-menu dropdown-menu-end shadow border-0" style="border-radius:12px;font-size:.875rem;">
                 <li><a class="dropdown-item" href="<?= APP_URL ?>/users/edit.php?id=<?= $user['id'] ?>">
                     <i class="fas fa-user-edit me-2 text-muted"></i>My Profile</a></li>
+                <li><a class="dropdown-item" href="<?= APP_URL ?>/my-signature/index.php">
+                    <i class="fas fa-pen-nib me-2 text-muted"></i>My Signature</a></li>
                 <li><hr class="dropdown-divider"></li>
                 <li><a class="dropdown-item text-danger" href="<?= APP_URL ?>/logout.php">
                     <i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
