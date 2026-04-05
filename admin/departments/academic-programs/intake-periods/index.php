@@ -94,7 +94,7 @@ require_once __DIR__ . '/../../../includes/header.php';
                                     <i class="fas fa-edit"></i>
                                 </a>
                                 <form method="POST" action="<?= APP_URL ?>/departments/academic-programs/intake-periods/delete.php"
-                                      onsubmit="return confirm('Delete intake period &quot;<?= h(addslashes($item['intake_name'])) ?>&quot;?');">
+                                      onsubmit="return confirm('Delete intake period &quot;' + <?= json_encode(h($item['intake_name'])) ?> + '&quot;?');">
                                     <?= csrf_field() ?>
                                     <input type="hidden" name="id" value="<?= $item['id'] ?>">
                                     <input type="hidden" name="program_id" value="<?= $program_id ?>">
