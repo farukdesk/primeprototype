@@ -21,8 +21,6 @@ if (!$slide) {
 $dept_id = (int)$slide['dept_id'];
 require_access_dept($dept_id);
 
-$dept_id = $dept_id ?: (int)$slide['dept_id'];
-
 // Delete image file from disk
 $path = UPLOAD_DIR . '/departments/' . $slide['image'];
 if (file_exists($path)) @unlink($path);
