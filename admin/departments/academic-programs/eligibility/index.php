@@ -40,7 +40,7 @@ require_once __DIR__ . '/../../../includes/header.php';
     </div>
 </div>
 
-<?= flash_html() ?>
+<?php flash_show(); ?>
 
 <div class="card">
     <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between">
