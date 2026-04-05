@@ -36,9 +36,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $duration        = trim($_POST['duration']        ?? '');
     $total_credit    = trim($_POST['total_credit']    ?? '');
     $semester_type   = trim($_POST['semester_type']   ?? '');
-    $description     = trim($_POST['description']     ?? '');
-    $details_content = trim($_POST['details_content'] ?? '');
-    $sort_order      = (int)($_POST['sort_order']     ?? 0);
+    $description        = trim($_POST['description']        ?? '');
+    $details_content    = trim($_POST['details_content']    ?? '');
+    $admission_content  = trim($_POST['admission_content']  ?? '');
+    $fees_content       = trim($_POST['fees_content']       ?? '');
+    $curriculum_content = trim($_POST['curriculum_content'] ?? '');
+    $sort_order         = (int)($_POST['sort_order']        ?? 0);
     $is_active       = isset($_POST['is_active'])     ? 1 : 0;
 
     $allowed_semester_types = ['trimester', 'semester', 'annual', ''];
@@ -64,17 +67,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($errors)) {
         db()->prepare(
             'INSERT INTO dept_academic_programs
-             (dept_id, program_name, degree_type, duration, total_credit, semester_type, description, details_content, attachment, sort_order, is_active)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?)'
+             (dept_id, program_name, degree_type, duration, total_credit, semester_type, description, details_content, admission_content, fees_content, curriculum_content, attachment, sort_order, is_active)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
         )->execute([$dept_id, $program_name, $degree_type ?: null, $duration ?: null,
                     $total_credit ?: null, $semester_type ?: null, $description ?: null,
-                    $details_content ?: null, $attachment, $sort_order, $is_active]);
+                    $details_content ?: null, $admission_content ?: null,
+                    $fees_content ?: null, $curriculum_content ?: null,
+                    $attachment, $sort_order, $is_active]);
 
         flash_set('success', "Program <strong>" . h($program_name) . "</strong> added.");
         redirect(APP_URL . '/departments/academic-programs/index.php?dept_id=' . $dept_id);
     }
 
-    save_old(compact('program_name','degree_type','duration','total_credit','semester_type','description','details_content','sort_order'));
+    save_old(compact('program_name','degree_type','duration','total_credit','semester_type','description','details_content','admission_content','fees_content','curriculum_content','sort_order'));
 }
 
 require_once __DIR__ . '/../../includes/header.php';
@@ -148,6 +153,23 @@ require_once __DIR__ . '/../../includes/header.php';
                     <small class="text-muted d-block mb-2">Add admission requirements, fees structure, curriculum, and any other details students should know.</small>
                     <textarea name="details_content" id="details_content" class="form-control" style="border-radius:10px;" rows="10"><?= old('details_content') ?></textarea>
                 </div>
+                <div class="col-12">
+                    <hr class="my-2">
+                    <h6 class="fw-semibold text-muted mb-1"><i class="fas fa-book-open me-2"></i>Academic Information Sections</h6>
+                    <small class="text-muted">These appear as separate styled cards on the public program detail page.</small>
+                </div>
+                <div class="col-12">
+                    <label class="form-label fw-medium"><i class="fas fa-door-open me-1 text-warning"></i> Admission Intake &amp; Requirements</label>
+                    <textarea name="admission_content" id="admission_content" class="form-control" style="border-radius:10px;" rows="8"><?= old('admission_content') ?></textarea>
+                </div>
+                <div class="col-12">
+                    <label class="form-label fw-medium"><i class="fas fa-money-bill-wave me-1 text-warning"></i> Fees Structure</label>
+                    <textarea name="fees_content" id="fees_content" class="form-control" style="border-radius:10px;" rows="8"><?= old('fees_content') ?></textarea>
+                </div>
+                <div class="col-12">
+                    <label class="form-label fw-medium"><i class="fas fa-graduation-cap me-1 text-warning"></i> Course Curriculum</label>
+                    <textarea name="curriculum_content" id="curriculum_content" class="form-control" style="border-radius:10px;" rows="10"><?= old('curriculum_content') ?></textarea>
+                </div>
                 <div class="col-md-6">
                     <label class="form-label fw-medium">Brochure / Attachment</label>
                     <input type="file" name="attachment" class="form-control" style="border-radius:10px;"
@@ -182,9 +204,8 @@ require_once __DIR__ . '/../../includes/header.php';
 
 <script src="https://cdn.jsdelivr.net/npm/tinymce@5.10.9/tinymce.min.js" referrerpolicy="origin"></script>
 <script>
-tinymce.init({
-    selector: '#details_content',
-    height: 450,
+const tinymceConfig = {
+    height: 400,
     menubar: false,
     plugins: 'advlist autolink lists link image charmap preview anchor ' +
              'searchreplace visualblocks code fullscreen table help wordcount',
@@ -192,7 +213,11 @@ tinymce.init({
              'alignleft aligncenter alignright | bullist numlist outdent indent | ' +
              'table | removeformat | link | code fullscreen',
     content_style: 'body { font-family: Inter, sans-serif; font-size: 15px; }',
-});
+};
+tinymce.init({ ...tinymceConfig, selector: '#details_content',    height: 450 });
+tinymce.init({ ...tinymceConfig, selector: '#admission_content'  });
+tinymce.init({ ...tinymceConfig, selector: '#fees_content'       });
+tinymce.init({ ...tinymceConfig, selector: '#curriculum_content', height: 500 });
 </script>
 
 <?php require_once __DIR__ . '/../../includes/footer.php'; ?>
