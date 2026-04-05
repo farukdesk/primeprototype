@@ -248,8 +248,8 @@ require_once __DIR__ . '/../includes/header.php';
                     <!-- Group picker -->
                     <div id="field_group" class="mb-3" style="display:none">
                         <label class="form-label" for="recipient_group_id">Select Group</label>
-                        <select name="recipient_group_id" id="recipient_group_id" class="form-select">
-                            <option value="">— Choose group —</option>
+                        <select name="recipient_group_id" id="recipient_group_id" placeholder="Search groups…">
+                            <option value=""></option>
                             <?php foreach ($all_groups as $g): ?>
                             <option value="<?= $g['id'] ?>" <?= old('recipient_group_id') == $g['id'] ? 'selected' : '' ?>>
                                 <?= h($g['name']) ?>
@@ -261,8 +261,8 @@ require_once __DIR__ . '/../includes/header.php';
                     <!-- Individual user picker -->
                     <div id="field_user" class="mb-1" style="display:none">
                         <label class="form-label" for="recipient_user_id">Select User</label>
-                        <select name="recipient_user_id" id="recipient_user_id" class="form-select">
-                            <option value="">— Choose user —</option>
+                        <select name="recipient_user_id" id="recipient_user_id" placeholder="Search by name or email…">
+                            <option value=""></option>
                             <?php foreach ($all_users as $u): ?>
                             <option value="<?= $u['id'] ?>" <?= old('recipient_user_id') == $u['id'] ? 'selected' : '' ?>>
                                 <?= h($u['full_name']) ?> (<?= h($u['email']) ?>)
@@ -289,7 +289,9 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
 </form>
 
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.min.css">
 <script src="https://cdn.jsdelivr.net/npm/tinymce@5.10.9/tinymce.min.js" referrerpolicy="origin"></script>
+<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
 <script>
 tinymce.init({
     selector: '#body_html',
@@ -302,10 +304,32 @@ tinymce.init({
     content_style: 'body { font-family: Inter, Arial, sans-serif; font-size: 15px; }',
 });
 
+// ── Tom Select: Group picker ──────────────────────────────────────────────────
+const tsGroup = new TomSelect('#recipient_group_id', {
+    placeholder: 'Search groups…',
+    allowEmptyOption: true,
+    maxOptions: null,
+    sortField: { field: 'text', direction: 'asc' },
+});
+
+// ── Tom Select: Individual user picker ───────────────────────────────────────
+// Each option text is "Full Name (email)" so searching by name OR email works
+// through the single 'text' field without extra configuration.
+const tsUser = new TomSelect('#recipient_user_id', {
+    placeholder: 'Search by name or email…',
+    allowEmptyOption: true,
+    maxOptions: 50,
+    searchField: ['text'],
+    sortField: { field: 'text', direction: 'asc' },
+});
+
 // Recipient field toggling
 function toggleRecipientFields(val) {
     document.getElementById('field_group').style.display = (val === 'group')      ? '' : 'none';
     document.getElementById('field_user').style.display  = (val === 'individual') ? '' : 'none';
+    // Sync Tom Select layout after display change
+    if (val === 'group')      tsGroup.sync();
+    if (val === 'individual') tsUser.sync();
 }
 // Init on page load
 const checkedType = document.querySelector('input[name="recipient_type"]:checked');
