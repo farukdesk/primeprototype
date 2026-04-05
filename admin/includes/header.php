@@ -254,7 +254,7 @@ $user       = auth_user();
     <?php
     $current_path = $_SERVER['PHP_SELF'];
     $is_website_active  = strpos($current_path, '/cms/') !== false || strpos($current_path, '/homepage/') !== false || strpos($current_path, '/pages/') !== false;
-    $is_academic_active = strpos($current_path, '/departments/') !== false || strpos($current_path, '/faculty-profiles/') !== false || strpos($current_path, '/students/') !== false || strpos($current_path, '/course-curriculum/') !== false || strpos($current_path, '/clubs/') !== false;
+    $is_academic_active = strpos($current_path, '/departments/') !== false || strpos($current_path, '/faculty-profiles/') !== false || strpos($current_path, '/students/') !== false || strpos($current_path, '/course-curriculum/') !== false || strpos($current_path, '/clubs/') !== false || strpos($current_path, '/staff-profiles/') !== false;
     $is_comms_active    = strpos($current_path, '/contact/') !== false || strpos($current_path, '/support-tickets/') !== false || strpos($current_path, '/knowledge-base/') !== false || strpos($current_path, '/broadcast/') !== false;
     $is_jobs_active          = strpos($current_path, '/jobs/') !== false;
     $is_library_active       = strpos($current_path, '/library/') !== false;
@@ -459,7 +459,7 @@ $user       = auth_user();
     <?php endif; ?>
 
     <!-- ── Academic ── -->
-    <?php if (is_super_admin() || can_access('departments') || can_access('students') || can_access('course-curriculum') || can_access('clubs')): ?>
+    <?php if (is_super_admin() || can_access('departments') || can_access('students') || can_access('course-curriculum') || can_access('clubs') || can_access('staff-departments')): ?>
     <button class="nav-group-toggle <?= $is_academic_active ? '' : 'collapsed' ?>"
             data-bs-toggle="collapse" data-bs-target="#grp-academic"
             aria-expanded="<?= $is_academic_active ? 'true' : 'false' ?>">
@@ -506,6 +506,20 @@ $user       = auth_user();
                 <a href="<?= APP_URL ?>/clubs/index.php"
                    class="<?= strpos($current_path, '/clubs/') !== false ? 'active' : '' ?>">
                     <i class="fas fa-users"></i> Clubs
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('staff-departments')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/staff-profiles/index.php"
+                   class="<?= strpos($current_path, '/staff-profiles/') !== false && strpos($current_path, '/my-profile') === false ? 'active' : '' ?>">
+                    <i class="fas fa-id-badge"></i> Staff Profiles
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/staff-profiles/departments.php"
+                   class="<?= strpos($current_path, '/staff-profiles/departments') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-sitemap"></i> Staff Departments
                 </a>
             </li>
             <?php endif; ?>
@@ -781,6 +795,18 @@ $user       = auth_user();
             <a href="<?= APP_URL ?>/faculty-profiles/my-profile.php"
                class="<?= strpos($current_path, '/faculty-profiles/') !== false ? 'active' : '' ?>">
                 <i class="fas fa-id-card"></i> My Faculty Profile
+            </a>
+        </li>
+    </ul>
+    <?php endif; ?>
+
+    <!-- ── My Staff Profile (non-super-admin general staff) ── -->
+    <?php if (!is_super_admin() && can_access('staff-profile') && !can_access('staff-departments')): ?>
+    <ul class="nav flex-column mt-2">
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/staff-profiles/my-profile.php"
+               class="<?= strpos($current_path, '/staff-profiles/my-profile') !== false ? 'active' : '' ?>">
+                <i class="fas fa-id-badge"></i> My Staff Profile
             </a>
         </li>
     </ul>
