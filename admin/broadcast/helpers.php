@@ -229,12 +229,14 @@ function bc_recipient_label(array $broadcast): string
 function bc_status_badge(string $status): string
 {
     $map = [
-        'draft'   => 'secondary',
-        'sent'    => 'success',
-        'partial' => 'warning',
+        'draft'            => ['secondary', 'Draft'],
+        'sent'             => ['success',   'Sent'],
+        'partial'          => ['warning',   'Partial'],
+        'pending_approval' => ['info',      '<i class="fas fa-clock me-1"></i>Pending Approval'],
+        'rejected'         => ['danger',    'Rejected'],
     ];
-    $cls = $map[$status] ?? 'secondary';
-    return '<span class="badge bg-' . $cls . '">' . ucfirst($status) . '</span>';
+    [$cls, $label] = $map[$status] ?? ['secondary', ucfirst($status)];
+    return '<span class="badge bg-' . $cls . '">' . $label . '</span>';
 }
 
 function bc_format_bytes(int $bytes): string

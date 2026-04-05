@@ -15,7 +15,7 @@ $search        = trim($_GET['q'] ?? '');
 $where  = ['1=1'];
 $params = [];
 
-if (in_array($filter_status, ['draft','sent','partial'], true)) {
+if (in_array($filter_status, ['draft','sent','partial','pending_approval','rejected'], true)) {
     $where[]  = 'b.status = ?';
     $params[] = $filter_status;
 }
@@ -43,6 +43,11 @@ $stmt = db()->prepare($sql);
 $stmt->execute($params);
 $broadcasts = $stmt->fetchAll();
 
+// Count broadcasts awaiting approval (for alert)
+$pending_bc_count = (int)db()->query(
+    "SELECT COUNT(*) FROM broadcasts WHERE status = 'pending_approval'"
+)->fetchColumn();
+
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
@@ -60,6 +65,18 @@ require_once __DIR__ . '/../includes/header.php';
 
 <?php flash_show(); ?>
 
+<?php if ($pending_bc_count > 0 && is_super_admin()): ?>
+<div class="alert alert-info d-flex align-items-center gap-3 mb-4" style="border-radius:10px;">
+    <i class="fas fa-clock fa-lg"></i>
+    <div>
+        <strong><?= $pending_bc_count ?> broadcast<?= $pending_bc_count > 1 ? 's' : '' ?> awaiting admin approval.</strong>
+        <a href="<?= APP_URL ?>/cms/pending-changes/index.php?module=broadcast" class="ms-2 btn btn-sm btn-info text-white">
+            Review Now
+        </a>
+    </div>
+</div>
+<?php endif; ?>
+
 <!-- Filters -->
 <form method="get" class="row g-2 mb-4">
     <div class="col-md-4">
@@ -68,9 +85,11 @@ require_once __DIR__ . '/../includes/header.php';
     <div class="col-md-2">
         <select name="status" class="form-select">
             <option value="">All Statuses</option>
-            <option value="sent"    <?= $filter_status === 'sent'    ? 'selected' : '' ?>>Sent</option>
-            <option value="partial" <?= $filter_status === 'partial' ? 'selected' : '' ?>>Partial</option>
-            <option value="draft"   <?= $filter_status === 'draft'   ? 'selected' : '' ?>>Draft</option>
+            <option value="sent"             <?= $filter_status === 'sent'             ? 'selected' : '' ?>>Sent</option>
+            <option value="partial"          <?= $filter_status === 'partial'          ? 'selected' : '' ?>>Partial</option>
+            <option value="pending_approval" <?= $filter_status === 'pending_approval' ? 'selected' : '' ?>>Pending Approval</option>
+            <option value="rejected"         <?= $filter_status === 'rejected'         ? 'selected' : '' ?>>Rejected</option>
+            <option value="draft"            <?= $filter_status === 'draft'            ? 'selected' : '' ?>>Draft</option>
         </select>
     </div>
     <div class="col-md-2">
@@ -133,7 +152,13 @@ require_once __DIR__ . '/../includes/header.php';
                         / <span class="text-danger"><?= $bc['failed_count'] ?> failed</span>
                         <?php endif; ?>
                     </td>
-                    <td><?= bc_status_badge($bc['status']) ?></td>
+                    <td><?= bc_status_badge($bc['status']) ?>
+                        <?php if ($bc['status'] === 'rejected' && !empty($bc['review_note'])): ?>
+                        <div class="text-muted mt-1" style="font-size:.75rem;" title="<?= h($bc['review_note']) ?>">
+                            <?= h(mb_strimwidth($bc['review_note'], 0, 50, '…')) ?>
+                        </div>
+                        <?php endif; ?>
+                    </td>
                     <td><?= h($bc['sender_name'] ?? '—') ?></td>
                     <td>
                         <span title="<?= h($bc['created_at']) ?>">
