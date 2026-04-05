@@ -4,8 +4,10 @@ require_once __DIR__ . '/../includes/mailer.php';
 require_once __DIR__ . '/../change-log/helpers.php';
 require_super_admin();
 
+define('USERS_INDEX', APP_URL . '/users/index.php');
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    redirect(APP_URL . '/users/index.php');
+    redirect(USERS_INDEX);
 }
 
 csrf_check();
@@ -13,13 +15,13 @@ csrf_check();
 $id = (int)($_POST['id'] ?? 0);
 if (!$id) {
     flash_set('error', 'Invalid user.');
-    redirect(APP_URL . '/users/index.php');
+    redirect(USERS_INDEX);
 }
 
 $me = auth_user();
 if ($id === (int)$me['id']) {
     flash_set('error', 'You cannot reset your own password from this action.');
-    redirect(APP_URL . '/users/index.php');
+    redirect(USERS_INDEX);
 }
 
 $stmt = db()->prepare('SELECT id, full_name, email, username FROM users WHERE id = ?');
@@ -28,7 +30,7 @@ $user = $stmt->fetch();
 
 if (!$user) {
     flash_set('error', 'User not found.');
-    redirect(APP_URL . '/users/index.php');
+    redirect(USERS_INDEX);
 }
 
 // Generate a secure random 8-character password
@@ -68,4 +70,4 @@ if ($sent) {
     flash_set('warning', 'Password reset for <strong>' . h($user['full_name']) . '</strong>, but the email could not be sent. Please inform the user manually.');
 }
 
-redirect(APP_URL . '/users/index.php');
+redirect(USERS_INDEX);
