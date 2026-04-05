@@ -35,7 +35,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $group_id  = (int)($_POST['group_id'] ?? $user['group_id']);
     $password  = $_POST['password']  ?? '';
     $password2 = $_POST['password2'] ?? '';
-    $is_active = isset($_POST['is_active']) ? 1 : 0;
+    // Only super admin can change active status, and only for other users (never self)
+    if (is_super_admin() && $id !== (int)$me['id']) {
+        $is_active = isset($_POST['is_active']) ? 1 : 0;
+    } else {
+        $is_active = (int)$user['is_active']; // preserve current value
+    }
 
     // Non-super-admin cannot change own group or assign super group
     if (!is_super_admin()) {
@@ -77,7 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         flash_set('success', "User <strong>" . h($full_name) . "</strong> updated.");
         redirect($id === (int)$me['id']
-            ? APP_URL . '/index.php'
+            ? APP_URL . '/users/edit.php?id=' . $id
             : APP_URL . '/users/index.php');
     }
 
