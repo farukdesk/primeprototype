@@ -62,6 +62,12 @@ if ($db) {
 $current_page = 'overview';
 $base         = SITE_URL . '/department';
 $page_title   = fh($dept['hero_title'] ?? $dept['name'] ?? 'Department');
+$apply_now_url = 'https://primeuniversity.ac.bd/apply-now.php';
+$dept_cta_text = trim((string)($dept['cta_text'] ?? 'Apply Now'));
+$dept_cta_url  = trim((string)($dept['cta_url'] ?? ''));
+if ($dept_cta_text !== '' && strcasecmp($dept_cta_text, 'Apply Now') === 0) {
+    $dept_cta_url = $apply_now_url;
+}
 ?>
 <!doctype html>
 <html class="no-js" lang="en">
@@ -282,11 +288,11 @@ $page_title   = fh($dept['hero_title'] ?? $dept['name'] ?? 'Department');
                   <p class="mb-40" style="color: #334155; font-size: 18px; line-height: 1.8;">
                      <?= fh($dept['hero_description'] ?? '') ?>
                   </p>
-                  <?php if (!empty($dept['cta_url'])): ?>
-                  <a href="<?= fh($dept['cta_url']) ?>" class="it-btn-yellow theme-bg border-radius-100">
+                  <?php if ($dept_cta_url !== ''): ?>
+                  <a href="<?= fh($dept_cta_url) ?>" class="it-btn-yellow theme-bg border-radius-100">
                      <span>
-                        <span class="text-1"><?= fh($dept['cta_text'] ?? 'Apply Now') ?></span>
-                        <span class="text-2"><?= fh($dept['cta_text'] ?? 'Apply Now') ?></span>
+                        <span class="text-1"><?= fh($dept_cta_text ?: 'Apply Now') ?></span>
+                        <span class="text-2"><?= fh($dept_cta_text ?: 'Apply Now') ?></span>
                      </span>
                      <i><svg width="16" height="15" viewBox="0 0 16 15" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M15.0544 8.1364C15.4058 7.78492 15.4058 7.21508 15.0544 6.8636L9.3268 1.13604C8.97533 0.784567 8.40548 0.784567 8.05401 1.13604C7.70254 1.48751 7.70254 2.05736 8.05401 2.40883L13.1452 7.5L8.05401 12.5912C7.70254 12.9426 7.70254 13.5125 8.05401 13.864C8.40548 14.2154 8.97533 14.2154 9.3268 13.864L15.0544 8.1364ZM0.417969 7.5V8.4H14.418V7.5V6.6H0.417969V7.5Z" fill="currentcolor"/></svg></i>
                   </a>
@@ -541,15 +547,15 @@ $page_title   = fh($dept['hero_title'] ?? $dept['name'] ?? 'Department');
                <?php if (!empty($dept['cta_section_text'])): ?>
                <p class="mb-40" style="color:#E8EEF4; font-size:17px; line-height:1.8;"><?= fh($dept['cta_section_text']) ?></p>
                <?php endif; ?>
-               <?php if (!empty($dept['cta_url'])): ?>
-               <a href="<?= fh($dept['cta_url']) ?>" class="it-btn-yellow theme-bg border-radius-100">
-                  <span>
-                     <span class="text-1"><?= fh($dept['cta_text'] ?? 'Apply Now') ?></span>
-                     <span class="text-2"><?= fh($dept['cta_text'] ?? 'Apply Now') ?></span>
-                  </span>
-                  <i><svg width="16" height="15" viewBox="0 0 16 15" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M15.0544 8.1364C15.4058 7.78492 15.4058 7.21508 15.0544 6.8636L9.3268 1.13604C8.97533 0.784567 8.40548 0.784567 8.05401 1.13604C7.70254 1.48751 7.70254 2.05736 8.05401 2.40883L13.1452 7.5L8.05401 12.5912C7.70254 12.9426 7.70254 13.5125 8.05401 13.864C8.40548 14.2154 8.97533 14.2154 9.3268 13.864L15.0544 8.1364ZM0.417969 7.5V8.4H14.418V7.5V6.6H0.417969V7.5Z" fill="currentcolor"/></svg></i>
-               </a>
-               <?php endif; ?>
+                <?php if ($dept_cta_url !== ''): ?>
+                <a href="<?= fh($dept_cta_url) ?>" class="it-btn-yellow theme-bg border-radius-100">
+                   <span>
+                     <span class="text-1"><?= fh($dept_cta_text ?: 'Apply Now') ?></span>
+                     <span class="text-2"><?= fh($dept_cta_text ?: 'Apply Now') ?></span>
+                   </span>
+                   <i><svg width="16" height="15" viewBox="0 0 16 15" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M15.0544 8.1364C15.4058 7.78492 15.4058 7.21508 15.0544 6.8636L9.3268 1.13604C8.97533 0.784567 8.40548 0.784567 8.05401 1.13604C7.70254 1.48751 7.70254 2.05736 8.05401 2.40883L13.1452 7.5L8.05401 12.5912C7.70254 12.9426 7.70254 13.5125 8.05401 13.864C8.40548 14.2154 8.97533 14.2154 9.3268 13.864L15.0544 8.1364ZM0.417969 7.5V8.4H14.418V7.5V6.6H0.417969V7.5Z" fill="currentcolor"/></svg></i>
+                </a>
+                <?php endif; ?>
             </div>
          </div>
       </div>

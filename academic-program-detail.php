@@ -2,6 +2,7 @@
 if (session_status() === PHP_SESSION_NONE) session_start();
 
 require_once __DIR__ . '/includes/config.php';
+$_apply_now_url = 'https://primeuniversity.ac.bd/apply-now.php';
 
 $id      = (int)($_GET['id'] ?? 0);
 $program = null;
@@ -596,7 +597,7 @@ function ap_safe_date(mixed $val): string {
                   <div style="background:linear-gradient(135deg,#002147,#003366); border-radius:12px; padding:24px; margin-bottom:20px; text-align:center;">
                      <div style="font-size:13px; color:#9CB3CC; margin-bottom:6px; text-transform:uppercase; letter-spacing:.06em;">Ready to join?</div>
                      <div style="font-size:20px; font-weight:800; color:#fff; margin-bottom:16px;">Apply Now</div>
-                     <a href="<?= fh(SITE_URL) ?>/apply.php" class="ap-apply-btn">
+                     <a href="https://primeuniversity.ac.bd/apply-now.php" class="ap-apply-btn">
                         <i class="fas fa-paper-plane me-2"></i>Start Application
                      </a>
                      <div style="margin-top:14px;">
