@@ -329,6 +329,22 @@ function fm_needs_to_sign_page(int $page_id): bool
 }
 
 /**
+ * Return all text note annotations for a page.
+ */
+function fm_get_page_text_notes(int $page_id): array
+{
+    $stmt = db()->prepare(
+        'SELECT n.*, u.full_name AS creator_name
+         FROM file_manager_page_text_notes n
+         LEFT JOIN users u ON u.id = n.created_by
+         WHERE n.page_id = ?
+         ORDER BY n.id ASC'
+    );
+    $stmt->execute([$page_id]);
+    return $stmt->fetchAll();
+}
+
+/**
  * Count pending (unsigned) signers for a page.
  */
 function fm_page_pending_signers(int $page_id): int

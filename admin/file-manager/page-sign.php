@@ -109,12 +109,25 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
                                         left:<?= $my_pos['x_percent'] ?>%;
                                         top:<?= $my_pos['y_percent'] ?>%;
                                         transform:translate(-50%,-50%);
-                                        background:rgba(255,255,255,.8);
-                                        border:2px solid #e67e22;border-radius:6px;padding:4px 8px;">
-                                <img src="<?= $sig_url ?>" style="max-height:40px;max-width:120px;" alt="Signature">
+                                        background:rgba(255,255,255,.9);
+                                        border:2px solid #e67e22;border-radius:6px;padding:6px 10px;text-align:center;">
+                                <img src="<?= $sig_url ?>" style="max-height:40px;max-width:120px;display:block;" alt="Signature">
+                                <?php if (!empty($my_pos['show_datetime'])): ?>
+                                <div style="font-size:9px;color:#555;margin-top:3px;white-space:nowrap;">
+                                    <i class="fas fa-clock" style="font-size:8px;"></i>
+                                    Date &amp; time will appear here
+                                </div>
+                                <?php endif; ?>
                             </div>
                         </div>
                         <?php endif; ?>
+                    </div>
+                    <?php endif; ?>
+
+                    <?php if (!empty($my_pos['show_datetime'])): ?>
+                    <div class="alert alert-info py-2 px-3 mb-3" style="border-radius:8px;font-size:.83rem;">
+                        <i class="fas fa-clock me-1"></i>
+                        The date &amp; time of your signature will be automatically recorded and shown below your signature.
                     </div>
                     <?php endif; ?>
 
