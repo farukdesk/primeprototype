@@ -399,6 +399,7 @@ $user       = auth_user();
                 </a>
             </li>
             <?php endif; ?>
+            <?php if (is_super_admin() || can_access('pages')): ?>
             <li class="nav-item">
                 <a href="<?= APP_URL ?>/pages/index.php?category=general"
                    class="<?= (strpos($current_path, '/pages/') !== false && ($_GET['category'] ?? '') === 'general') ? 'active' : '' ?>">
@@ -417,6 +418,7 @@ $user       = auth_user();
                     <i class="fas fa-file-contract"></i> Policy Pages
                 </a>
             </li>
+            <?php endif; ?>
             <?php if (is_super_admin()): ?>
             <li class="nav-item">
                 <a href="<?= APP_URL ?>/cms/popup/index.php"
@@ -457,7 +459,7 @@ $user       = auth_user();
     <?php endif; ?>
 
     <!-- ── Academic ── -->
-    <?php if (is_super_admin() || can_access('students') || can_access('course-curriculum') || can_access('clubs')): ?>
+    <?php if (is_super_admin() || can_access('departments') || can_access('students') || can_access('course-curriculum') || can_access('clubs')): ?>
     <button class="nav-group-toggle <?= $is_academic_active ? '' : 'collapsed' ?>"
             data-bs-toggle="collapse" data-bs-target="#grp-academic"
             aria-expanded="<?= $is_academic_active ? 'true' : 'false' ?>">
@@ -467,13 +469,15 @@ $user       = auth_user();
     </button>
     <div class="collapse <?= $is_academic_active ? 'show' : '' ?>" id="grp-academic">
         <ul class="nav flex-column grp-items">
-            <?php if (is_super_admin()): ?>
+            <?php if (is_super_admin() || can_access('departments')): ?>
             <li class="nav-item">
                 <a href="<?= APP_URL ?>/departments/index.php"
                    class="<?= strpos($current_path, '/departments/') !== false ? 'active' : '' ?>">
                     <i class="fas fa-building-columns"></i> Departments
                 </a>
             </li>
+            <?php endif; ?>
+            <?php if (is_super_admin()): ?>
             <li class="nav-item">
                 <a href="<?= APP_URL ?>/faculty-profiles/index.php"
                    class="<?= strpos($current_path, '/faculty-profiles/') !== false ? 'active' : '' ?>">

@@ -437,8 +437,17 @@ function st_get_ticket(int $id): array
 
     $user = auth_user();
     if (!st_is_staff() && (int)$ticket['created_by'] !== (int)$user['id']) {
-        flash_set('error', 'You do not have permission to view this ticket.');
-        redirect(APP_URL . '/support-tickets/index.php');
+        // Also allow access if user is tagged or mentioned
+        $tagged = db()->prepare('SELECT 1 FROM support_ticket_user_tags WHERE ticket_id = ? AND user_id = ?');
+        $tagged->execute([$ticket['id'], $user['id']]);
+        $mentioned = db()->prepare(
+            "SELECT 1 FROM support_ticket_comments WHERE ticket_id = ? AND comment LIKE ?"
+        );
+        $mentioned->execute([$ticket['id'], '%@' . addcslashes($user['username'], '%_') . '%']);
+        if (!$tagged->fetch() && !$mentioned->fetch()) {
+            flash_set('error', 'You do not have permission to view this ticket.');
+            redirect(APP_URL . '/support-tickets/index.php');
+        }
     }
 
     return $ticket;

@@ -228,6 +228,45 @@ function require_access(string $slug, string $permission = 'can_view'): void {
 }
 
 /**
+ * Return the department scope for the current user.
+ * Returns null  → unrestricted (all departments allowed).
+ * Returns int[] → only those specific dept_ids are allowed.
+ */
+function get_dept_scope(): ?array {
+    if (is_super_admin()) return null;
+    $user = auth_user();
+    if (!$user) return [];
+
+    static $cached = '__unset__';
+    if ($cached !== '__unset__') return $cached;
+
+    // User-level override takes priority
+    $stmt = db()->prepare('SELECT dept_id FROM user_dept_scope WHERE user_id = ?');
+    $stmt->execute([$user['id']]);
+    $rows = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+    if (!empty($rows)) {
+        if (in_array(null, $rows, true)) { $cached = null; return null; }
+        $cached = array_map('intval', $rows);
+        return $cached;
+    }
+
+    // Group-level scope
+    $group_ids = $user['group_ids'];
+    if (empty($group_ids)) { $cached = null; return null; }
+
+    $placeholders = implode(',', array_fill(0, count($group_ids), '?'));
+    $stmt = db()->prepare("SELECT dept_id FROM group_dept_scope WHERE group_id IN ($placeholders)");
+    $stmt->execute($group_ids);
+    $rows = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+    if (empty($rows)) { $cached = null; return null; }
+    if (in_array(null, $rows, true)) { $cached = null; return null; }
+    $cached = array_map('intval', array_unique($rows));
+    return $cached;
+}
+
+/**
  * Gate – redirect with error if user cannot access the given department.
  */
 function require_access_dept(int $dept_id): void {
