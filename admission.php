@@ -487,7 +487,7 @@ $page_title = 'Admission – Prime University';
                   Undergraduate, Postgraduate and international programmes — shaped around your ambitions and built for the future.
                </p>
                <div class="pu-hero-cta wow fadeInUp" data-wow-delay=".4s">
-                  <a href="https://crm.primeuniversity.ac.bd/apply-now.php" target="_blank" rel="noopener" class="pu-btn-white">
+                  <a href="https://primeuniversity.ac.bd/apply-now.php" target="_blank" rel="noopener" class="pu-btn-white">
                      <i class="fas fa-paper-plane"></i> Apply Now
                   </a>
                   <a href="#undergraduate" class="pu-btn-outline-white">
@@ -679,7 +679,7 @@ $page_title = 'Admission – Prime University';
                   <p>Apply online through Prime University's official admission portal. Fast, paperless, and available 24/7 — from anywhere in the world.</p>
                </div>
                <div class="col-lg-4 text-lg-end">
-                  <a href="https://crm.primeuniversity.ac.bd/apply-now.php" target="_blank" rel="noopener" class="pu-btn-yellow">
+                  <a href="https://primeuniversity.ac.bd/apply-now.php" target="_blank" rel="noopener" class="pu-btn-yellow">
                      <i class="fas fa-paper-plane"></i> Apply Online Now
                   </a>
                </div>
@@ -720,7 +720,7 @@ $page_title = 'Admission – Prime University';
                      <li><i class="fas fa-circle-check" style="color:#7c3aed;"></i> Department may conduct a written/oral interview for final selection</li>
                   </ul>
                   <div class="mt-24">
-                     <a href="https://crm.primeuniversity.ac.bd/apply-now.php" target="_blank" rel="noopener" class="pu-btn-yellow" style="background:#7c3aed;color:#fff;box-shadow:0 4px 20px rgba(124,58,237,.35);">
+                     <a href="https://primeuniversity.ac.bd/apply-now.php" target="_blank" rel="noopener" class="pu-btn-yellow" style="background:#7c3aed;color:#fff;box-shadow:0 4px 20px rgba(124,58,237,.35);">
                         <i class="fas fa-paper-plane"></i> Apply for Postgraduate
                      </a>
                   </div>
@@ -780,7 +780,7 @@ $page_title = 'Admission – Prime University';
                            <li><i class="fas fa-circle-check" style="color:#16a34a;"></i> Student visa / study permit</li>
                         </ul>
                         <div class="mt-20">
-                           <a href="https://crm.primeuniversity.ac.bd/apply-now.php" target="_blank" rel="noopener"
+                           <a href="https://primeuniversity.ac.bd/apply-now.php" target="_blank" rel="noopener"
                               class="pu-btn-yellow" style="background:#16a34a;color:#fff;box-shadow:0 4px 20px rgba(22,163,74,.35);">
                               <i class="fas fa-paper-plane"></i> Apply as International Student
                            </a>
@@ -826,7 +826,7 @@ $page_title = 'Admission – Prime University';
                   </button>
                   <div id="faq2" class="collapse">
                      <div class="pu-faq-body pb-18 pt-12">
-                        You can apply in two ways: (1) Collect a prescribed form from the Admission Office and submit it in person, or (2) Apply online via <a href="https://crm.primeuniversity.ac.bd/apply-now.php" target="_blank" rel="noopener" style="color:#2563eb;">the official admission portal</a>. After submission, the respective department will schedule a written exam or viva-voce.
+                        You can apply in two ways: (1) Collect a prescribed form from the Admission Office and submit it in person, or (2) Apply online via <a href="https://primeuniversity.ac.bd/apply-now.php" target="_blank" rel="noopener" style="color:#2563eb;">the official admission portal</a>. After submission, the respective department will schedule a written exam or viva-voce.
                      </div>
                   </div>
                </div>

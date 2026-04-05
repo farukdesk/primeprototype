@@ -1238,7 +1238,7 @@ $page_title = 'Credit Transfer – Prime University';
                   Contact the Registrar's Office or the relevant Department to receive the application form and begin the credit transfer process.
                </p>
                <div class="ct-cta-btns wow fadeInUp" data-wow-delay=".25s">
-                  <a href="https://crm.primeuniversity.ac.bd/apply-now.php" class="ct-btn-primary">
+                  <a href="https://primeuniversity.ac.bd/apply-now.php" class="ct-btn-primary">
                      <i class="fas fa-paper-plane"></i> Apply Now
                   </a>
                   <a href="contact.php" class="ct-btn-outline">

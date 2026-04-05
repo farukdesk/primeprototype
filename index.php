@@ -14,6 +14,7 @@ $_contact_cfg  = [];
 $_campus_items = [];
 $_alumni       = [];
 $_notices      = [];
+$_apply_now_url = 'https://primeuniversity.ac.bd/apply-now.php';
 
 $db = null;
 try { $db = front_db(); } catch (Throwable $e) {}
@@ -297,7 +298,7 @@ if (empty($_features)) {
                   <?php endforeach; ?>
                </ul>
                <div class="d-flex flex-wrap gap-3">
-                  <a href="<?= fh($_about['apply_url'] ?? 'admission.php') ?>" class="pu-btn pu-btn-primary"><i class="fas fa-paper-plane"></i> Apply Now</a>
+                  <a href="<?= fh($_apply_now_url) ?>" class="pu-btn pu-btn-primary"><i class="fas fa-paper-plane"></i> Apply Now</a>
                   <a href="<?= fh($_about['contact_url'] ?? 'contact.php') ?>" class="pu-btn pu-btn-outline"><i class="fas fa-phone-alt"></i> Contact Us</a>
                </div>
             </div>
@@ -362,7 +363,7 @@ if (empty($_features)) {
             <h2 class="pu-admission-title"><?= fh($_admission['title'] ?? 'Begin Your Journey at') ?><br><span class="gold"><?= fh($_admission['title_accent'] ?? 'Prime University') ?></span></h2>
             <p class="pu-admission-text"><?= fh($_admission['description'] ?? 'Applications are now open. Secure your place in one of our prestigious programmes.') ?></p>
             <div class="d-flex flex-wrap gap-3">
-               <a href="<?= fh($_admission['btn1_url'] ?? 'admission.php') ?>" class="pu-btn pu-btn-primary"><i class="fas fa-paper-plane"></i> <?= fh($_admission['btn1_text'] ?? 'Apply Now') ?></a>
+               <a href="<?= fh($_apply_now_url) ?>" class="pu-btn pu-btn-primary"><i class="fas fa-paper-plane"></i> <?= fh($_admission['btn1_text'] ?? 'Apply Now') ?></a>
                <a href="<?= fh($_admission['btn2_url'] ?? 'scholarships-waivers.php') ?>" class="pu-btn pu-btn-outline-white"><i class="fas fa-award"></i> <?= fh($_admission['btn2_text'] ?? 'Scholarships') ?></a>
             </div>
          </div>
