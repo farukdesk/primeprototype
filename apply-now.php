@@ -630,7 +630,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <button class="close-btn"><i class="fal fa-times"></i></button>
          </div>
          <div class="itoffcanvas__logo">
-            <a href="<?= fh(SITE_URL) ?>/index.php">
+            <a href="<?= an_h(SITE_URL) ?>/index.php">
                <img src="/assets/img/logo/logo-black.png" alt="Prime University">
             </a>
          </div>
@@ -673,7 +673,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
          <div class="row align-items-center g-5">
             <div class="col-lg-7">
                <nav class="breadcrumb-nav mb-20">
-                  <a href="<?= fh(SITE_URL) ?>/index.php">Home</a>
+                  <a href="<?= an_h(SITE_URL) ?>/index.php">Home</a>
                   <span class="sep">/</span>
                   <span>Apply Now</span>
                </nav>
