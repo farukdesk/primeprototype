@@ -7,9 +7,6 @@ require_once __DIR__ . '/helpers.php';
 $id = (int)($_GET['id'] ?? 0);
 if ($id < 1) { flash_set('error', 'Invalid file.'); redirect(APP_URL . '/file-manager/index.php'); }
 
-$file = db()->prepare('SELECT * FROM file_manager_files WHERE id = ?')->execute([$id]) ?
-        db()->prepare('SELECT * FROM file_manager_files WHERE id = ?') : null;
-
 $stmt = db()->prepare('SELECT * FROM file_manager_files WHERE id = ?');
 $stmt->execute([$id]);
 $file = $stmt->fetch();

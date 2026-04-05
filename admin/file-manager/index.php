@@ -38,8 +38,6 @@ $per_page = 20;
 $page     = max(1, (int)($_GET['page'] ?? 1));
 $offset   = ($page - 1) * $per_page;
 
-$total = (int)db()->prepare("SELECT COUNT(*) FROM file_manager_files f WHERE $where_sql")
-                  ->execute($params) ? db()->prepare("SELECT COUNT(*) FROM file_manager_files f WHERE $where_sql")->execute($params) : 0;
 $count_stmt = db()->prepare("SELECT COUNT(*) FROM file_manager_files f WHERE $where_sql");
 $count_stmt->execute($params);
 $total = (int)$count_stmt->fetchColumn();
