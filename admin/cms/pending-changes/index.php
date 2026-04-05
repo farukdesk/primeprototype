@@ -142,15 +142,20 @@ if ($show_broadcasts || $show_broadcast_history) {
     $bc_rows = db()->query(
         "SELECT b.id, b.subject, b.recipient_type, b.status, b.created_at, b.review_note,
                 b.reviewed_at, b.recipient_group_id, b.recipient_user_id,
-                u.full_name  AS sender_name,
-                ug.name      AS group_name,
-                ru.full_name AS user_name,
-                rv.full_name AS reviewer_name
+                b.student_dept_id, b.student_program_id, b.student_status, b.student_semester,
+                u.full_name     AS sender_name,
+                ug.name         AS group_name,
+                ru.full_name    AS user_name,
+                rv.full_name    AS reviewer_name,
+                dd.name         AS dept_name,
+                ap.program_name AS program_name
          FROM broadcasts b
-         LEFT JOIN users       u  ON u.id  = b.sent_by
-         LEFT JOIN user_groups ug ON ug.id = b.recipient_group_id
-         LEFT JOIN users       ru ON ru.id = b.recipient_user_id
-         LEFT JOIN users       rv ON rv.id = b.reviewed_by
+         LEFT JOIN users                  u  ON u.id  = b.sent_by
+         LEFT JOIN user_groups            ug ON ug.id = b.recipient_group_id
+         LEFT JOIN users                  ru ON ru.id = b.recipient_user_id
+         LEFT JOIN users                  rv ON rv.id = b.reviewed_by
+         LEFT JOIN dept_departments       dd ON dd.id = b.student_dept_id
+         LEFT JOIN dept_academic_programs ap ON ap.id = b.student_program_id
          WHERE {$bc_sql_where}
          ORDER BY b.created_at DESC"
     )->fetchAll();

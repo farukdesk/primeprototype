@@ -12,14 +12,18 @@ $pdo = db();
 // Fetch broadcast with sender, group, user names
 $stmt = $pdo->prepare(
     'SELECT b.*,
-            u.full_name  AS sender_name,
-            ug.name      AS group_name,
-            ru.full_name AS user_name,
-            ru.email     AS user_email
+            u.full_name    AS sender_name,
+            ug.name        AS group_name,
+            ru.full_name   AS user_name,
+            ru.email       AS user_email,
+            dd.name        AS dept_name,
+            ap.program_name AS program_name
      FROM broadcasts b
-     LEFT JOIN users       u  ON u.id  = b.sent_by
-     LEFT JOIN user_groups ug ON ug.id = b.recipient_group_id
-     LEFT JOIN users       ru ON ru.id = b.recipient_user_id
+     LEFT JOIN users                  u  ON u.id  = b.sent_by
+     LEFT JOIN user_groups            ug ON ug.id = b.recipient_group_id
+     LEFT JOIN users                  ru ON ru.id = b.recipient_user_id
+     LEFT JOIN dept_departments       dd ON dd.id = b.student_dept_id
+     LEFT JOIN dept_academic_programs ap ON ap.id = b.student_program_id
      WHERE b.id = ?'
 );
 $stmt->execute([$id]);
@@ -92,13 +96,24 @@ require_once __DIR__ . '/../includes/header.php';
                         <td>
                             <?php
                             $icon = match($bc['recipient_type']) {
-                                'all'   => '<i class="fas fa-users text-success me-1"></i>',
-                                'group' => '<i class="fas fa-layer-group text-info me-1"></i>',
-                                default => '<i class="fas fa-user text-warning me-1"></i>',
+                                'all'      => '<i class="fas fa-users text-success me-1"></i>',
+                                'group'    => '<i class="fas fa-layer-group text-info me-1"></i>',
+                                'students' => '<i class="fas fa-user-graduate text-primary me-1"></i>',
+                                default    => '<i class="fas fa-user text-warning me-1"></i>',
                             };
                             echo $icon . bc_recipient_label($bc);
                             if ($bc['recipient_type'] === 'individual' && $bc['user_email']) {
                                 echo ' <small class="text-muted">(' . h($bc['user_email']) . ')</small>';
+                            }
+                            if ($bc['recipient_type'] === 'students') {
+                                $filters = [];
+                                if (!empty($bc['dept_name']))       $filters[] = '<strong>Dept:</strong> ' . h($bc['dept_name']);
+                                if (!empty($bc['program_name']))    $filters[] = '<strong>Program:</strong> ' . h($bc['program_name']);
+                                if (!empty($bc['student_status']))  $filters[] = '<strong>Status:</strong> ' . h($bc['student_status']);
+                                if (!empty($bc['student_semester'])) $filters[] = '<strong>Semester:</strong> ' . h($bc['student_semester']);
+                                if ($filters) {
+                                    echo '<br><small class="text-muted">' . implode(' &middot; ', $filters) . '</small>';
+                                }
                             }
                             ?>
                         </td>

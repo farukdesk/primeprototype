@@ -18,6 +18,24 @@ $all_groups = db()->query(
     'SELECT id, name FROM user_groups WHERE is_active = 1 ORDER BY name'
 )->fetchAll();
 
+// Fetch departments and programs for student filters
+$all_departments = db()->query(
+    'SELECT id, name FROM dept_departments WHERE is_active = 1 ORDER BY name'
+)->fetchAll();
+
+$all_programs = db()->query(
+    'SELECT p.id, p.program_name, p.dept_id, d.name AS dept_name
+     FROM dept_academic_programs p
+     JOIN dept_departments d ON d.id = p.dept_id
+     WHERE p.is_active = 1
+     ORDER BY d.name, p.program_name'
+)->fetchAll();
+
+require_once __DIR__ . '/../students/helpers.php';
+$all_semesters = array_reverse(sm_semester_list()); // most-recent first
+
+$student_statuses = ['Active', 'Inactive', 'Graduated', 'Dropped'];
+
 // ── Handle POST ───────────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
@@ -28,10 +46,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $user_id        = (int)($_POST['recipient_user_id']  ?? 0) ?: null;
     $group_id       = (int)($_POST['recipient_group_id'] ?? 0) ?: null;
 
-    $valid_types = ['individual', 'group', 'all'];
+    // Student-specific filters
+    $student_dept_id    = (int)($_POST['student_dept_id']    ?? 0) ?: null;
+    $student_program_id = (int)($_POST['student_program_id'] ?? 0) ?: null;
+    $student_status     = in_array($_POST['student_status'] ?? '', ['Active', 'Inactive', 'Graduated', 'Dropped'], true)
+                          ? $_POST['student_status'] : null;
+    $student_semester   = trim($_POST['student_semester'] ?? '') ?: null;
+
+    $valid_types = ['individual', 'group', 'all', 'students'];
     if (!in_array($recipient_type, $valid_types, true)) $recipient_type = 'all';
 
-    // Validate
     if ($subject === '')                             $errors[] = 'Subject is required.';
     if (mb_strlen($subject) > 255)                  $errors[] = 'Subject must be 255 characters or less.';
     if (trim(strip_tags($body_html)) === '')         $errors[] = 'Email body is required.';
@@ -77,7 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo = db();
 
         // Resolve recipients first so we can bail if none
-        $recipients = bc_resolve_recipients($recipient_type, $user_id, $group_id);
+        $recipients = bc_resolve_recipients($recipient_type, $user_id, $group_id, $student_dept_id, $student_program_id, $student_status, $student_semester);
         if (empty($recipients)) {
             $errors[] = 'No active users found for the selected recipient.';
         }
@@ -88,13 +112,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->beginTransaction();
 
         try {
-            // Individual sends go straight out; group/all require admin approval
+            // Individual sends go straight out; group/all/students require admin approval
             $initial_status = ($recipient_type === 'individual') ? 'draft' : 'pending_approval';
 
             $pdo->prepare(
-                'INSERT INTO broadcasts (subject, body_html, recipient_type, recipient_user_id, recipient_group_id, sent_by, status)
-                 VALUES (?,?,?,?,?,?,?)'
-            )->execute([$subject, $body_html, $recipient_type, $user_id, $group_id, $user['id'], $initial_status]);
+                'INSERT INTO broadcasts
+                    (subject, body_html, recipient_type, recipient_user_id, recipient_group_id,
+                     student_dept_id, student_program_id, student_status, student_semester,
+                     sent_by, status)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?)'
+            )->execute([
+                $subject, $body_html, $recipient_type, $user_id, $group_id,
+                $student_dept_id, $student_program_id, $student_status, $student_semester,
+                $user['id'], $initial_status,
+            ]);
             $broadcast_id = (int)$pdo->lastInsertId();
 
             // Save attachments
@@ -140,7 +171,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 flash_set('success', $msg);
                 redirect(APP_URL . '/broadcast/view.php?id=' . $broadcast_id);
             } else {
-                // ── Queue for admin approval (group / all users) ───────────────
+                // ── Queue for admin approval (group / all users / students) ───────────────
                 flash_set('info', 'Broadcast queued for admin approval. It will be sent once an administrator approves it.');
                 redirect(APP_URL . '/broadcast/view.php?id=' . $broadcast_id);
             }
@@ -243,6 +274,14 @@ require_once __DIR__ . '/../includes/header.php';
                                 </label>
                             </div>
                             <div class="form-check">
+                                <input class="form-check-input" type="radio" name="recipient_type" id="rt_students"
+                                       value="students" <?= old('recipient_type') === 'students' ? 'checked' : '' ?>
+                                       onchange="toggleRecipientFields(this.value)">
+                                <label class="form-check-label" for="rt_students">
+                                    <i class="fas fa-user-graduate text-primary me-1"></i> Students
+                                </label>
+                            </div>
+                            <div class="form-check">
                                 <input class="form-check-input" type="radio" name="recipient_type" id="rt_individual"
                                        value="individual" <?= old('recipient_type') === 'individual' ? 'checked' : '' ?>
                                        onchange="toggleRecipientFields(this.value)">
@@ -277,6 +316,67 @@ require_once __DIR__ . '/../includes/header.php';
                             </option>
                             <?php endforeach; ?>
                         </select>
+                    </div>
+
+                    <!-- Student filters -->
+                    <div id="field_students" style="display:none">
+                        <hr class="my-2">
+                        <p class="small fw-semibold text-primary mb-2"><i class="fas fa-filter me-1"></i>Student Filters <span class="fw-normal text-muted">(leave blank = all)</span></p>
+
+                        <!-- Department -->
+                        <div class="mb-2">
+                            <label class="form-label small mb-1" for="student_dept_id">Department</label>
+                            <select name="student_dept_id" id="student_dept_id" class="form-select form-select-sm" onchange="filterProgramsByDept(this.value)">
+                                <option value="">— All Departments —</option>
+                                <?php foreach ($all_departments as $d): ?>
+                                <option value="<?= $d['id'] ?>" <?= old('student_dept_id') == $d['id'] ? 'selected' : '' ?>>
+                                    <?= h($d['name']) ?>
+                                </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+
+                        <!-- Program -->
+                        <div class="mb-2">
+                            <label class="form-label small mb-1" for="student_program_id">Program</label>
+                            <select name="student_program_id" id="student_program_id" class="form-select form-select-sm">
+                                <option value="">— All Programs —</option>
+                                <?php foreach ($all_programs as $p): ?>
+                                <option value="<?= $p['id'] ?>"
+                                        data-dept="<?= $p['dept_id'] ?>"
+                                        <?= old('student_program_id') == $p['id'] ? 'selected' : '' ?>>
+                                    <?= h($p['program_name']) ?>
+                                    <?= $p['dept_id'] ? ' (' . h($p['dept_name']) . ')' : '' ?>
+                                </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+
+                        <!-- Status -->
+                        <div class="mb-2">
+                            <label class="form-label small mb-1" for="student_status">Status</label>
+                            <select name="student_status" id="student_status" class="form-select form-select-sm">
+                                <option value="">— All Statuses —</option>
+                                <?php foreach ($student_statuses as $st): ?>
+                                <option value="<?= $st ?>" <?= old('student_status') === $st ? 'selected' : '' ?>>
+                                    <?= h($st) ?>
+                                </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+
+                        <!-- Semester -->
+                        <div class="mb-1">
+                            <label class="form-label small mb-1" for="student_semester">Admitted Semester</label>
+                            <select name="student_semester" id="student_semester" class="form-select form-select-sm">
+                                <option value="">— All Semesters —</option>
+                                <?php foreach ($all_semesters as $sem): ?>
+                                <option value="<?= h($sem) ?>" <?= old('student_semester') === $sem ? 'selected' : '' ?>>
+                                    <?= h($sem) ?>
+                                </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -338,8 +438,9 @@ const tsUser = new TomSelect('#recipient_user_id', {
 
 // Recipient field toggling
 function toggleRecipientFields(val) {
-    document.getElementById('field_group').style.display = (val === 'group')      ? '' : 'none';
-    document.getElementById('field_user').style.display  = (val === 'individual') ? '' : 'none';
+    document.getElementById('field_group').style.display    = (val === 'group')      ? '' : 'none';
+    document.getElementById('field_user').style.display     = (val === 'individual') ? '' : 'none';
+    document.getElementById('field_students').style.display = (val === 'students')   ? '' : 'none';
     // Sync Tom Select layout after display change
     if (val === 'group')      tsGroup.sync();
     if (val === 'individual') tsUser.sync();
@@ -351,9 +452,26 @@ function toggleRecipientFields(val) {
     document.getElementById('send-icon').className  = isIndividual ? 'fas fa-paper-plane me-1' : 'fas fa-clock me-1';
     document.getElementById('send-label').textContent = isIndividual ? 'Send Broadcast' : 'Submit for Approval';
 }
+
+// Filter programs dropdown when a department is selected
+function filterProgramsByDept(deptId) {
+    const sel = document.getElementById('student_program_id');
+    const currentProgramId = sel.value;
+    [...sel.options].forEach(opt => {
+        if (!opt.value) return; // keep "All Programs" option
+        const match = !deptId || opt.dataset.dept === deptId;
+        opt.hidden = !match;
+        if (!match && opt.selected) opt.selected = false;
+    });
+    if (!currentProgramId || !sel.querySelector(`option[value="${currentProgramId}"]:not([hidden])`)) {
+        sel.value = '';
+    }
+}
 // Init on page load
 const checkedType = document.querySelector('input[name="recipient_type"]:checked');
 if (checkedType) toggleRecipientFields(checkedType.value);
+// Init program filter based on restored department selection
+filterProgramsByDept(document.getElementById('student_dept_id')?.value ?? '');
 
 // File preview
 document.getElementById('attachments').addEventListener('change', function () {

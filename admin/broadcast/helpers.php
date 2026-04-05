@@ -65,13 +65,24 @@ function bc_upload_file(array $file): string|false
 /**
  * Resolve the list of recipient rows [id, email, full_name] for a broadcast.
  *
- * @param  string   $type      'individual' | 'group' | 'all'
- * @param  int|null $user_id   required when $type === 'individual'
- * @param  int|null $group_id  required when $type === 'group'
+ * @param  string      $type             'individual' | 'group' | 'all' | 'students'
+ * @param  int|null    $user_id          required when $type === 'individual'
+ * @param  int|null    $group_id         required when $type === 'group'
+ * @param  int|null    $student_dept_id    optional dept filter for 'students'
+ * @param  int|null    $student_program_id optional program filter for 'students'
+ * @param  string|null $student_status     optional status filter for 'students' (Active/Inactive/Graduated/Dropped)
+ * @param  string|null $student_semester   optional admitted_semester filter for 'students'
  * @return array[]
  */
-function bc_resolve_recipients(string $type, ?int $user_id, ?int $group_id): array
-{
+function bc_resolve_recipients(
+    string  $type,
+    ?int    $user_id,
+    ?int    $group_id,
+    ?int    $student_dept_id    = null,
+    ?int    $student_program_id = null,
+    ?string $student_status     = null,
+    ?string $student_semester   = null
+): array {
     $pdo = db();
 
     if ($type === 'individual' && $user_id) {
@@ -87,6 +98,37 @@ function bc_resolve_recipients(string $type, ?int $user_id, ?int $group_id): arr
             'SELECT id, email, full_name FROM users WHERE group_id = ? AND is_active = 1 AND email != "" ORDER BY full_name'
         );
         $stmt->execute([$group_id]);
+        return $stmt->fetchAll();
+    }
+
+    if ($type === 'students') {
+        $where  = ["s.email IS NOT NULL AND s.email != ''"];
+        $params = [];
+
+        if ($student_dept_id) {
+            $where[]  = 's.dept_id = ?';
+            $params[] = $student_dept_id;
+        }
+        if ($student_program_id) {
+            $where[]  = 's.program_id = ?';
+            $params[] = $student_program_id;
+        }
+        $valid_statuses = ['Active', 'Inactive', 'Graduated', 'Dropped'];
+        if ($student_status && in_array($student_status, $valid_statuses, true)) {
+            $where[]  = 's.status = ?';
+            $params[] = $student_status;
+        }
+        if ($student_semester) {
+            $where[]  = 's.admitted_semester = ?';
+            $params[] = $student_semester;
+        }
+
+        $sql  = 'SELECT NULL AS id, s.email, s.full_name FROM students s'; // id is NULL: students don't have user accounts
+        $sql .= ' WHERE ' . implode(' AND ', $where);
+        $sql .= ' ORDER BY s.full_name';
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
         return $stmt->fetchAll();
     }
 
@@ -222,6 +264,22 @@ function bc_recipient_label(array $broadcast): string
     if ($broadcast['recipient_type'] === 'all') return 'All Users';
     if ($broadcast['recipient_type'] === 'group') {
         return 'Group: ' . h($broadcast['group_name'] ?? '—');
+    }
+    if ($broadcast['recipient_type'] === 'students') {
+        $parts = [];
+        if (!empty($broadcast['dept_name'])) {
+            $parts[] = h($broadcast['dept_name']);
+        }
+        if (!empty($broadcast['program_name'])) {
+            $parts[] = h($broadcast['program_name']);
+        }
+        if (!empty($broadcast['student_status'])) {
+            $parts[] = h($broadcast['student_status']);
+        }
+        if (!empty($broadcast['student_semester'])) {
+            $parts[] = h($broadcast['student_semester']);
+        }
+        return 'Students' . ($parts ? ': ' . implode(', ', $parts) : ' (All)');
     }
     return 'User: ' . h($broadcast['user_name'] ?? '—');
 }
