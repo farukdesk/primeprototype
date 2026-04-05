@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
-require_super_admin();
+require_access('departments', 'can_edit');
 
 $id = (int)($_GET['id'] ?? 0);
 if (!$id) { flash_set('error', 'Invalid department.'); redirect(APP_URL . '/departments/index.php'); }
@@ -17,6 +17,7 @@ $stmt->execute([$id]);
 $dept = $stmt->fetch();
 
 if (!$dept) { flash_set('error', 'Department not found.'); redirect(APP_URL . '/departments/index.php'); }
+require_access_dept($id);
 
 $page_title = 'Edit: ' . $dept['name'];
 $errors = [];

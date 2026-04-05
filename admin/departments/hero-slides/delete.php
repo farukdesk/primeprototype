@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../../includes/auth.php';
-require_super_admin();
+require_access('dept-hero-slides', 'can_delete');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     redirect(APP_URL . '/departments/index.php');
@@ -18,6 +18,8 @@ if (!$slide) {
     flash_set('error', 'Slide not found.');
     redirect(APP_URL . '/departments/index.php');
 }
+$dept_id = (int)$slide['dept_id'];
+require_access_dept($dept_id);
 
 $dept_id = $dept_id ?: (int)$slide['dept_id'];
 

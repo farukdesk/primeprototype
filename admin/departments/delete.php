@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
-require_super_admin();
+require_access('departments', 'can_delete');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     redirect(APP_URL . '/departments/index.php');
@@ -21,6 +21,7 @@ if (!$dept) {
     flash_set('error', 'Department not found.');
     redirect(APP_URL . '/departments/index.php');
 }
+require_access_dept($id);
 
 // Delete associated uploaded files for overview head photo
 $ov = db()->prepare('SELECT head_photo FROM dept_overview WHERE dept_id = ?');

@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../../../includes/auth.php';
-require_super_admin();
+require_access('dept-academic-programs', 'can_create');
 
 $program_id = (int)($_GET['program_id'] ?? $_POST['program_id'] ?? 0);
 if (!$program_id) { flash_set('error', 'Invalid program.'); redirect(APP_URL . '/departments/index.php'); }
@@ -11,6 +11,7 @@ $program = $program->fetch();
 if (!$program) { flash_set('error', 'Program not found.'); redirect(APP_URL . '/departments/index.php'); }
 
 $dept_id = (int)$program['dept_id'];
+require_access_dept($dept_id);
 $page_title = 'Add Intake Period – ' . $program['program_name'];
 $errors = [];
 clear_old();

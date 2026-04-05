@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
-require_super_admin();
+require_access('departments', 'can_create');
 
 $page_title = 'Create Department';
 $errors = [];

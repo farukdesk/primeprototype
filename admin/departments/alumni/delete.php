@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../../includes/auth.php';
-require_super_admin();
+require_access('dept-alumni', 'can_delete');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     redirect(APP_URL . '/departments/index.php');
@@ -18,6 +18,8 @@ if (!$alumni) {
     flash_set('error', 'Alumni not found.');
     redirect(APP_URL . '/departments/alumni/index.php?dept_id=' . $dept_id);
 }
+$dept_id = (int)$alumni['dept_id'];
+require_access_dept($dept_id);
 
 if ($alumni['photo']) {
     $path = UPLOAD_DIR . '/departments/' . $alumni['photo'];
