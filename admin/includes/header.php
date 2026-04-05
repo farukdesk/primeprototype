@@ -254,7 +254,7 @@ $user       = auth_user();
     <?php
     $current_path = $_SERVER['PHP_SELF'];
     $is_website_active  = strpos($current_path, '/cms/') !== false || strpos($current_path, '/homepage/') !== false || strpos($current_path, '/pages/') !== false;
-    $is_academic_active = strpos($current_path, '/departments/') !== false || strpos($current_path, '/faculty-profiles/') !== false || strpos($current_path, '/students/') !== false;
+    $is_academic_active = strpos($current_path, '/departments/') !== false || strpos($current_path, '/faculty-profiles/') !== false || strpos($current_path, '/students/') !== false || strpos($current_path, '/course-curriculum/') !== false;
     $is_comms_active    = strpos($current_path, '/contact/') !== false || strpos($current_path, '/support-tickets/') !== false || strpos($current_path, '/knowledge-base/') !== false || strpos($current_path, '/broadcast/') !== false;
     $is_jobs_active          = strpos($current_path, '/jobs/') !== false;
     $is_library_active       = strpos($current_path, '/library/') !== false;
@@ -457,7 +457,7 @@ $user       = auth_user();
     <?php endif; ?>
 
     <!-- ── Academic ── -->
-    <?php if (is_super_admin() || can_access('students')): ?>
+    <?php if (is_super_admin() || can_access('students') || can_access('course-curriculum')): ?>
     <button class="nav-group-toggle <?= $is_academic_active ? '' : 'collapsed' ?>"
             data-bs-toggle="collapse" data-bs-target="#grp-academic"
             aria-expanded="<?= $is_academic_active ? 'true' : 'false' ?>">
@@ -486,6 +486,14 @@ $user       = auth_user();
                 <a href="<?= APP_URL ?>/students/index.php"
                    class="<?= strpos($current_path, '/students/') !== false ? 'active' : '' ?>">
                     <i class="fas fa-user-graduate"></i> Students
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('course-curriculum')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/course-curriculum/index.php"
+                   class="<?= strpos($current_path, '/course-curriculum/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-book-open"></i> Course Curriculum
                 </a>
             </li>
             <?php endif; ?>

@@ -39,6 +39,43 @@ $slug         = $program['dept_slug'];
 $dept_name    = fh($program['dept_name'] ?? 'Department');
 $current_page = 'academic-programs';
 
+// Fetch dynamic course curriculum from the database
+$curriculum_data = [];
+try {
+    $db2 = front_db();
+    if ($db2) {
+        $cst = $db2->prepare(
+            "SELECT semester, sl_no, bnqf_code, course_code, course_name, credit
+               FROM course_curriculum
+              WHERE program_id = ?
+              ORDER BY semester ASC, sort_order ASC, sl_no ASC, id ASC"
+        );
+        $cst->execute([$id]);
+        foreach ($cst->fetchAll() as $crow) {
+            $curriculum_data[(int)$crow['semester']][] = $crow;
+        }
+    }
+} catch (Throwable $e) {}
+
+function cc_pub_semester_label(int $n): string
+{
+    static $labels = [
+        1  => '1st Year 1st Semester',
+        2  => '1st Year 2nd Semester',
+        3  => '1st Year 3rd Semester',
+        4  => '2nd Year 1st Semester',
+        5  => '2nd Year 2nd Semester',
+        6  => '2nd Year 3rd Semester',
+        7  => '3rd Year 1st Semester',
+        8  => '3rd Year 2nd Semester',
+        9  => '3rd Year 3rd Semester',
+        10 => '4th Year 1st Semester',
+        11 => '4th Year 2nd Semester',
+        12 => '4th Year 3rd Semester',
+    ];
+    return $labels[$n] ?? "Semester $n";
+}
+
 function ap_semester_label(string $type): string {
     return match ($type) {
         'trimester' => 'Trimester (Spring / Summer / Fall)',
@@ -272,7 +309,8 @@ function ap_degree_color(string $type): string {
          <?php
          $has_academic_info = !empty($program['admission_content'])
                            || !empty($program['fees_content'])
-                           || !empty($program['curriculum_content']);
+                           || !empty($program['curriculum_content'])
+                           || !empty($curriculum_data);
          ?>
          <?php if ($has_academic_info): ?>
          <!-- Academic Information Section -->
@@ -327,8 +365,89 @@ function ap_degree_color(string $type): string {
          </div>
          <?php endif; ?>
 
-         <?php if (!empty($program['curriculum_content'])): ?>
-         <!-- Course Curriculum -->
+         <?php if (!empty($curriculum_data)): ?>
+         <!-- Dynamic Course Curriculum (from database) -->
+         <div class="row mb-40">
+            <div class="col-12">
+               <div class="card border-0 shadow-sm">
+                  <div class="card-header" style="background-color:#002147; padding:22px 30px;">
+                     <h4 class="mb-0" style="color:#FFFFFF;">
+                        <i class="fas fa-graduation-cap" style="color:#FFB81C; margin-right:10px;"></i>
+                        Course Curriculum
+                        <?php if (!empty($program['total_credit']) || !empty($program['duration'])): ?>
+                        <span style="font-size:14px; font-weight:400; color:#E8EEF4; margin-left:10px;">
+                           (<?= implode(' &ndash; ', array_filter([fh($program['total_credit'] ?? ''), fh($program['duration'] ?? '')])) ?>)
+                        </span>
+                        <?php endif; ?>
+                     </h4>
+                  </div>
+                  <div class="card-body" style="padding:30px;">
+                     <?php for ($sem_n = 1; $sem_n <= 12; $sem_n++): ?>
+                     <?php $sem_rows = $curriculum_data[$sem_n] ?? []; if (empty($sem_rows)) continue; ?>
+                     <div class="mb-4">
+                        <div style="background-color:#F1F5F9; border-left:4px solid #D21034; padding:12px 18px; margin-bottom:0; border-radius:6px 6px 0 0;">
+                           <h6 style="margin:0; color:#002147; font-weight:700; font-size:14px;">
+                              <span style="display:inline-block; background:#D21034; color:#fff; border-radius:50%; width:24px; height:24px; text-align:center; line-height:24px; font-size:11px; margin-right:8px;"><?= $sem_n ?></span>
+                              <?= fh(cc_pub_semester_label($sem_n)) ?>
+                              <span style="margin-left:10px; font-weight:400; font-size:12px; color:#64748B;">
+                                 <?= count($sem_rows) ?> course<?= count($sem_rows) !== 1 ? 's' : '' ?>
+                                 &nbsp;&middot;&nbsp;
+                                 <?= number_format((float)array_sum(array_column($sem_rows, 'credit')), 2) ?> credits
+                              </span>
+                           </h6>
+                        </div>
+                        <div class="table-responsive" style="border:1px solid #E2E8F0; border-top:none; border-radius:0 0 6px 6px;">
+                           <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                              <thead>
+                                 <tr style="background-color:#002147;">
+                                    <th style="color:#fff; padding:10px 14px; font-weight:600; width:50px;">SL</th>
+                                    <th style="color:#fff; padding:10px 14px; font-weight:600; width:110px;">BNQF Code</th>
+                                    <th style="color:#fff; padding:10px 14px; font-weight:600; width:110px;">Course Code</th>
+                                    <th style="color:#fff; padding:10px 14px; font-weight:600;">Course Name</th>
+                                    <th style="color:#fff; padding:10px 14px; font-weight:600; width:70px; text-align:center;">Credit</th>
+                                 </tr>
+                              </thead>
+                              <tbody>
+                                 <?php foreach ($sem_rows as $i => $cr): ?>
+                                 <tr style="<?= $i % 2 === 0 ? 'background:#fff;' : 'background:#F8FAFC;' ?>">
+                                    <td style="padding:10px 14px; color:#334155; border-bottom:1px solid #E2E8F0;"><?= fh($cr['sl_no']) ?></td>
+                                    <td style="padding:10px 14px; color:#334155; border-bottom:1px solid #E2E8F0;">
+                                       <?= !empty($cr['bnqf_code']) ? fh($cr['bnqf_code']) : '<span style="color:#94A3B8;">—</span>' ?>
+                                    </td>
+                                    <td style="padding:10px 14px; border-bottom:1px solid #E2E8F0;">
+                                       <?php if (!empty($cr['course_code'])): ?>
+                                       <span style="background:#EEF2FF; color:#4F46E5; padding:3px 8px; border-radius:4px; font-size:12px; font-weight:600;"><?= fh($cr['course_code']) ?></span>
+                                       <?php else: ?><span style="color:#94A3B8;">—</span><?php endif; ?>
+                                    </td>
+                                    <td style="padding:10px 14px; color:#1E293B; font-weight:500; border-bottom:1px solid #E2E8F0;"><?= fh($cr['course_name']) ?></td>
+                                    <td style="padding:10px 14px; text-align:center; border-bottom:1px solid #E2E8F0;">
+                                       <?php if ($cr['credit'] !== null): ?>
+                                       <span style="background:#002147; color:#fff; padding:3px 10px; border-radius:12px; font-size:12px; font-weight:600;"><?= fh(rtrim(rtrim(number_format((float)$cr['credit'], 2), '0'), '.')) ?></span>
+                                       <?php else: ?><span style="color:#94A3B8;">—</span><?php endif; ?>
+                                    </td>
+                                 </tr>
+                                 <?php endforeach; ?>
+                              </tbody>
+                              <tfoot>
+                                 <tr style="background-color:#F1F5F9;">
+                                    <td colspan="4" style="padding:10px 14px; font-size:12px; color:#64748B; font-weight:600;">
+                                       Total
+                                    </td>
+                                    <td style="padding:10px 14px; text-align:center; font-weight:700; color:#002147; font-size:13px;">
+                                       <?= number_format((float)array_sum(array_column($sem_rows, 'credit')), 2) ?>
+                                    </td>
+                                 </tr>
+                              </tfoot>
+                           </table>
+                        </div>
+                     </div>
+                     <?php endfor; ?>
+                  </div>
+               </div>
+            </div>
+         </div>
+         <?php elseif (!empty($program['curriculum_content'])): ?>
+         <!-- Fallback: static curriculum content -->
          <div class="row mb-40">
             <div class="col-12">
                <div class="card border-0 shadow-sm">
