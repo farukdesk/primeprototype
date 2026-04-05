@@ -34,6 +34,15 @@ $s = db()->prepare("SELECT COUNT(*) FROM clubs WHERE dept_id = ?");
 $s->execute([$id]);
 $counts['clubs'] = (int)$s->fetchColumn();
 
+// Count general staff (staff profiles linked to this academic dept via educational staff departments)
+$s = db()->prepare(
+    "SELECT COUNT(*) FROM staff_profiles sp
+     JOIN staff_departments sd ON sd.id = sp.staff_dept_id
+     WHERE sp.department_type = 'educational' AND sd.dept_id = ?"
+);
+$s->execute([$id]);
+$counts['general_staff'] = (int)$s->fetchColumn();
+
 $page_title = 'Manage: ' . $dept['name'];
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -76,6 +85,7 @@ require_once __DIR__ . '/../includes/header.php';
 $cards = [
     ['key' => 'hero_slides',  'label' => 'Hero Slides',         'icon' => 'fas fa-images',             'color' => '#6c5ce7', 'path' => 'hero-slides'],
     ['key' => 'faculty',    'label' => 'Faculty',           'icon' => 'fas fa-chalkboard-teacher', 'color' => '#4f8ef7', 'path' => 'faculty'],
+    ['key' => 'general_staff', 'label' => 'General Staff',   'icon' => 'fas fa-id-badge',           'color' => '#00b894', 'url' => APP_URL . '/staff-profiles/index.php?edu_dept_id=' . $id],
     ['key' => 'events',     'label' => 'Events',            'icon' => 'fas fa-calendar-alt',       'color' => '#f5a623', 'path' => 'events'],
     ['key' => 'alumni',     'label' => 'Alumni',            'icon' => 'fas fa-user-graduate',      'color' => '#2ecc71', 'path' => 'alumni'],
     ['key' => 'notices',    'label' => 'Notices',           'icon' => 'fas fa-bell',               'color' => '#e74c3c', 'path' => 'notices'],
