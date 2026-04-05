@@ -26,8 +26,8 @@ CREATE TABLE IF NOT EXISTS `clubs` (
   KEY `idx_clubs_dept`    (`dept_id`),
   KEY `idx_clubs_program` (`program_id`),
   KEY `idx_clubs_active`  (`is_active`),
-  CONSTRAINT `fk_clubs_dept`    FOREIGN KEY (`dept_id`)    REFERENCES `dept_departments`(`id`)        ON DELETE SET NULL,
-  CONSTRAINT `fk_clubs_program` FOREIGN KEY (`program_id`) REFERENCES `dept_academic_programs`(`id`) ON DELETE SET NULL
+  CONSTRAINT `fk_clubs_tbl_dept`    FOREIGN KEY (`dept_id`)    REFERENCES `dept_departments`(`id`)        ON DELETE SET NULL,
+  CONSTRAINT `fk_clubs_tbl_program` FOREIGN KEY (`program_id`) REFERENCES `dept_academic_programs`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ─────────────────────────────────────────────────────────────────────────────
