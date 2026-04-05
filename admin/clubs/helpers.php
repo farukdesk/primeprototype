@@ -99,6 +99,9 @@ function clubs_upload_image(array $file, string $dest_dir): string
     if (!in_array($mime, CLUB_IMG_MIMES, true)) {
         throw new RuntimeException('Invalid image file.');
     }
+    if (!is_dir($dest_dir)) {
+        mkdir($dest_dir, 0775, true);
+    }
     $stored = bin2hex(random_bytes(16)) . '.' . $ext;
     if (!move_uploaded_file($file['tmp_name'], $dest_dir . '/' . $stored)) {
         throw new RuntimeException('Could not save image.');
