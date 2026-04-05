@@ -487,6 +487,6 @@ $cv_url = !empty($profile['cv_file']) ? ADMIN_UPLOAD_URL . '/faculty-profiles/' 
 
 <?php include __DIR__ . '/includes/footer.php'; ?>
 
-   <?php include __DIR__ . \'/includes/scripts.php\'; ?>
+   <?php include __DIR__ . '/includes/scripts.php'; ?>
 </body>
 </html>

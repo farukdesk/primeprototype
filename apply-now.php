@@ -925,7 +925,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
    <?php include __DIR__ . '/includes/footer.php'; ?>
 
-   <?php include __DIR__ . \'/includes/scripts.php\'; ?>
+   <?php include __DIR__ . '/includes/scripts.php'; ?>
    <script>
       const programsByDept = <?= json_encode($programs_by_dept, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
       const deptSelect = document.getElementById('an_dept_select');

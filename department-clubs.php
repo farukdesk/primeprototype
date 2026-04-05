@@ -206,6 +206,6 @@ $dept_name    = fh($dept['name'] ?? 'Department');
 
 <?php include __DIR__ . '/includes/footer.php'; ?>
 
-   <?php include __DIR__ . \'/includes/scripts.php\'; ?>
+   <?php include __DIR__ . '/includes/scripts.php'; ?>
 </body>
 </html>

@@ -1255,7 +1255,7 @@ $page_title = 'Credit Transfer – Prime University';
 <?php include __DIR__ . '/includes/footer.php'; ?>
 
    <!-- JS Libraries -->
-   <?php include __DIR__ . \'/includes/scripts.php\'; ?>
+   <?php include __DIR__ . '/includes/scripts.php'; ?>
 
    <script>
    (function () {

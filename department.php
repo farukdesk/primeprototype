@@ -566,7 +566,7 @@ if ($dept_cta_text !== '' && strcasecmp($dept_cta_text, 'Apply Now') === 0) {
 
 <?php include __DIR__ . '/includes/footer.php'; ?>
 
-   <?php include __DIR__ . \'/includes/scripts.php\'; ?>
+   <?php include __DIR__ . '/includes/scripts.php'; ?>
    <?php if (!empty($hero_slides) && count($hero_slides) >= 1): ?>
    <script>
    (function () {

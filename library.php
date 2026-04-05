@@ -1146,6 +1146,6 @@ $lib_desc    = $lib_settings['lib_description']  ?? 'A modern academic library s
 <?php include __DIR__ . '/includes/footer.php'; ?>
 
    <!-- JS Libraries -->
-   <?php include __DIR__ . \'/includes/scripts.php\'; ?>
+   <?php include __DIR__ . '/includes/scripts.php'; ?>
 </body>
 </html>

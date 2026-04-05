@@ -147,6 +147,6 @@ $page_title = fh($pg['title']);
 
 <?php include __DIR__ . '/includes/footer.php'; ?>
 
-   <?php include __DIR__ . \'/includes/scripts.php\'; ?>
+   <?php include __DIR__ . '/includes/scripts.php'; ?>
 </body>
 </html>

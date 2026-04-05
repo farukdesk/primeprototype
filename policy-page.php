@@ -325,6 +325,6 @@ $eff_date = $eff_dt ? $eff_dt->format('F j, Y') : null;
 
 <?php include __DIR__ . '/includes/footer.php'; ?>
 
-   <?php include __DIR__ . \'/includes/scripts.php\'; ?>
+   <?php include __DIR__ . '/includes/scripts.php'; ?>
 </body>
 </html>
