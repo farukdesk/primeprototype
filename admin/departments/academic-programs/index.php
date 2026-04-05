@@ -54,6 +54,7 @@ require_once __DIR__ . '/../../includes/header.php';
                         <th>Degree Type</th>
                         <th>Duration</th>
                         <th>Total Credit</th>
+                        <th>Semester Type</th>
                         <th>Order</th>
                         <th>Status</th>
                         <th class="text-end pe-4">Actions</th>
@@ -70,6 +71,13 @@ require_once __DIR__ . '/../../includes/header.php';
                         <td><?= h($p['degree_type'] ?? '—') ?></td>
                         <td><?= h($p['duration'] ?? '—') ?></td>
                         <td><?= h($p['total_credit'] ?? '—') ?></td>
+                        <td>
+                            <?php
+                            $st_labels = ['trimester' => 'Trimester', 'semester' => 'Semester', 'annual' => 'Annual'];
+                            $st = $p['semester_type'] ?? '';
+                            echo $st ? '<span class="badge bg-info text-dark">' . h($st_labels[$st] ?? $st) . '</span>' : '<span class="text-muted">—</span>';
+                            ?>
+                        </td>
                         <td><?= (int)$p['sort_order'] ?></td>
                         <td>
                             <span class="badge <?= $p['is_active'] ? 'bg-success' : 'bg-secondary' ?>">
@@ -78,6 +86,10 @@ require_once __DIR__ . '/../../includes/header.php';
                         </td>
                         <td class="text-end pe-4">
                             <div class="d-flex gap-1 justify-content-end">
+                                <a href="<?= SITE_URL ?>/academic-program-detail.php?id=<?= $p['id'] ?>"
+                                   target="_blank" class="btn btn-sm btn-outline-secondary" style="border-radius:7px;" title="View Detail Page">
+                                    <i class="fas fa-external-link-alt"></i>
+                                </a>
                                 <a href="<?= APP_URL ?>/departments/academic-programs/edit.php?id=<?= $p['id'] ?>&dept_id=<?= $dept_id ?>"
                                    class="btn btn-sm btn-outline-primary" style="border-radius:7px;" title="Edit">
                                     <i class="fas fa-edit"></i>
