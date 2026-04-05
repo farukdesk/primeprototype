@@ -112,9 +112,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // All active users for tagging (excluding current user)
-$all_users = db()->query(
-    "SELECT id, full_name, email FROM users WHERE is_active = 1 AND id <> {$user['id']} ORDER BY full_name"
-)->fetchAll();
+$all_users_stmt = db()->prepare(
+    'SELECT id, full_name, email FROM users WHERE is_active = 1 AND id <> ? ORDER BY full_name'
+);
+$all_users_stmt->execute([$user['id']]);
+$all_users = $all_users_stmt->fetchAll();
 
 require_once __DIR__ . '/../includes/header.php';
 ?>

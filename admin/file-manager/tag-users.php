@@ -154,7 +154,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <input type="hidden" name="file_id"     value="<?= $file_id ?>">
                         <input type="hidden" name="tag_user_id" value="<?= $tu['id'] ?>">
                         <button type="submit" class="btn btn-sm btn-outline-danger" style="border-radius:6px;"
-                                onclick="return confirm('Remove access for <?= h(addslashes($tu['full_name'])) ?>?')">
+                                onclick="return confirm('Remove access for ' + <?= json_encode($tu['full_name']) ?> + '?')">
                             <i class="fas fa-times"></i>
                         </button>
                     </form>

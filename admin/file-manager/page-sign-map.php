@@ -260,7 +260,7 @@ require_once __DIR__ . '/../includes/header.php';
                             <input type="hidden" name="page_id" value="<?= $page_id ?>">
                             <input type="hidden" name="pos_id"  value="<?= $pos['id'] ?>">
                             <button type="submit" class="btn btn-sm btn-outline-danger" style="border-radius:6px;"
-                                    onclick="return confirm('Remove <?= h(addslashes($pos['full_name'])) ?>?')">
+                                    onclick="return confirm('Remove ' + <?= json_encode($pos['full_name']) ?> + '?')">
                                 <i class="fas fa-times"></i>
                             </button>
                         </form>

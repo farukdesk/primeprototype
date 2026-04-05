@@ -130,7 +130,7 @@ function fm_format_size(int $bytes): string
  */
 function fm_mime_icon(string $mime): string
 {
-    if ($mime === 'application/pdf')                                              return 'fas fa-file-pdf text-danger';
+    if ($mime === 'application/pdf')                                             return 'fas fa-file-pdf text-danger';
     if (str_contains($mime, 'word'))                                             return 'fas fa-file-word text-primary';
     if (str_contains($mime, 'excel') || str_contains($mime, 'spreadsheet'))     return 'fas fa-file-excel text-success';
     if (str_contains($mime, 'powerpoint') || str_contains($mime, 'presentation')) return 'fas fa-file-powerpoint text-warning';

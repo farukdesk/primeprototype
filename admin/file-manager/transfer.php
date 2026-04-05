@@ -157,9 +157,11 @@ $pending_stmt = db()->prepare(
 $pending_stmt->execute([$user['id'], 'pending']);
 $pending_transfers = $pending_stmt->fetchAll();
 
-$all_users = db()->query(
-    "SELECT id, full_name, email FROM users WHERE is_active = 1 AND id <> {$user['id']} ORDER BY full_name"
-)->fetchAll();
+$all_users_stmt = db()->prepare(
+    'SELECT id, full_name, email FROM users WHERE is_active = 1 AND id <> ? ORDER BY full_name'
+);
+$all_users_stmt->execute([$user['id']]);
+$all_users = $all_users_stmt->fetchAll();
 
 $page_title = $file ? 'Transfer File – ' . h($file['file_name']) : 'Pending Transfers';
 

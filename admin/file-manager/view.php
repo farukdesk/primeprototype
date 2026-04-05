@@ -330,7 +330,7 @@ require_once __DIR__ . '/../includes/header.php';
                                 <?php endif; ?>
                                 <?php if (fm_can_delete()): ?>
                                 <button type="button" class="btn btn-sm btn-outline-danger" style="border-radius:6px;"
-                                        onclick="confirmPageDelete(<?= $pg['id'] ?>, '<?= h(addslashes($pg['title'] ?: 'Page ' . $pg['page_number'])) ?>')">
+                                        onclick="confirmPageDelete(<?= $pg['id'] ?>, <?= json_encode($pg['title'] ?: 'Page ' . $pg['page_number']) ?>)">
                                     <i class="fas fa-trash"></i>
                                 </button>
                                 <?php endif; ?>
