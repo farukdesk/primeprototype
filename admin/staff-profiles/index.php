@@ -14,11 +14,12 @@ if (!is_super_admin() && !sp_is_admin()) {
 $page_title = 'Staff Profiles';
 
 // ── Filters ───────────────────────────────────────────────────────────────────
-$search   = trim($_GET['search'] ?? '');
-$f_type   = $_GET['dept_type'] ?? '';
-$f_dept   = (int)($_GET['dept'] ?? 0);
-$page     = max(1, (int)($_GET['page'] ?? 1));
-$per_page = 20;
+$search      = trim($_GET['search'] ?? '');
+$f_type      = $_GET['dept_type'] ?? '';
+$f_dept      = (int)($_GET['dept'] ?? 0);
+$f_edu_dept  = (int)($_GET['edu_dept_id'] ?? 0);
+$page        = max(1, (int)($_GET['page'] ?? 1));
+$per_page    = 20;
 
 // Only show users whose primary group has staff-profile module access
 $where  = [
@@ -39,6 +40,10 @@ if (in_array($f_type, ['administrative', 'educational'], true)) {
 if ($f_dept > 0) {
     $where[]  = 'sp.staff_dept_id = ?';
     $params[] = $f_dept;
+}
+if ($f_edu_dept > 0) {
+    $where[]  = 'sp.department_type = \'educational\' AND sd.dept_id = ?';
+    $params[] = $f_edu_dept;
 }
 
 $where_sql = ' WHERE ' . implode(' AND ', $where);

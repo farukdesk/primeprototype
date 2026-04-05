@@ -18,11 +18,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Add or edit a department
     if (in_array($action, ['add', 'edit'], true)) {
-        $name  = trim($_POST['name'] ?? '');
-        $type  = in_array($_POST['type'] ?? '', ['administrative', 'educational']) ? $_POST['type'] : '';
-        $sort  = max(0, (int)($_POST['sort_order'] ?? 0));
-        $active = isset($_POST['is_active']) ? 1 : 0;
+        $name    = trim($_POST['name'] ?? '');
+        $type    = in_array($_POST['type'] ?? '', ['administrative', 'educational']) ? $_POST['type'] : '';
+        $sort    = max(0, (int)($_POST['sort_order'] ?? 0));
+        $active  = isset($_POST['is_active']) ? 1 : 0;
         $edit_id = (int)($_POST['edit_id'] ?? 0);
+        $dept_id = ($type === 'educational') ? ((int)($_POST['dept_id'] ?? 0) ?: null) : null;
 
         if ($name === '') $errors[] = 'Department name is required.';
         if ($type === '') $errors[] = 'Department type is required.';
@@ -30,15 +31,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (empty($errors)) {
             if ($action === 'add') {
                 db()->prepare(
-                    'INSERT INTO staff_departments (name, type, sort_order, is_active) VALUES (?,?,?,?)'
-                )->execute([$name, $type, $sort, 1]);
-                log_change('staff_departments', (int)db()->lastInsertId(), 'create', 'Staff department created: ' . $name);
+                    'INSERT INTO staff_departments (name, type, dept_id, sort_order, is_active) VALUES (?,?,?,?,?)'
+                )->execute([$name, $type, $dept_id, $sort, 1]);
+                log_change('staff-departments', 'CREATE', (int)db()->lastInsertId(), 'Staff department created: ' . $name);
                 $success = 'Department "' . h($name) . '" added successfully.';
             } else {
                 db()->prepare(
-                    'UPDATE staff_departments SET name=?, type=?, sort_order=?, is_active=? WHERE id=?'
-                )->execute([$name, $type, $sort, $active, $edit_id]);
-                log_change('staff_departments', $edit_id, 'update', 'Staff department updated: ' . $name);
+                    'UPDATE staff_departments SET name=?, type=?, dept_id=?, sort_order=?, is_active=? WHERE id=?'
+                )->execute([$name, $type, $dept_id, $sort, $active, $edit_id]);
+                log_change('staff-departments', 'UPDATE', $edit_id, 'Staff department updated: ' . $name);
                 $success = 'Department "' . h($name) . '" updated successfully.';
             }
         }
@@ -47,16 +48,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // ── Load data ─────────────────────────────────────────────────────────────────
 $departments = db()->query(
-    "SELECT * FROM staff_departments ORDER BY type ASC, sort_order ASC, name ASC"
+    "SELECT sd.*, dd.name AS mapped_dept_name
+     FROM staff_departments sd
+     LEFT JOIN dept_departments dd ON dd.id = sd.dept_id
+     ORDER BY sd.type ASC, sd.sort_order ASC, sd.name ASC"
 )->fetchAll();
 
 $admin_depts = array_filter($departments, fn($d) => $d['type'] === 'administrative');
 $edu_depts   = array_filter($departments, fn($d) => $d['type'] === 'educational');
 
+// Academic departments (for mapping educational staff depts)
+$academic_depts = db()->query(
+    "SELECT id, name FROM dept_departments WHERE is_active = 1 ORDER BY name ASC"
+)->fetchAll();
+
 // Edit mode
 $editing = null;
 if (isset($_GET['edit'])) {
-    $stmt = db()->prepare('SELECT * FROM staff_departments WHERE id = ?');
+    $stmt = db()->prepare(
+        'SELECT sd.*, dd.name AS mapped_dept_name
+         FROM staff_departments sd
+         LEFT JOIN dept_departments dd ON dd.id = sd.dept_id
+         WHERE sd.id = ?'
+    );
     $stmt->execute([(int)$_GET['edit']]);
     $editing = $stmt->fetch() ?: null;
 }
@@ -114,7 +128,8 @@ require_once __DIR__ . '/../includes/header.php';
 
                     <div class="mb-3">
                         <label class="form-label fw-medium">Type <span class="text-danger">*</span></label>
-                        <select name="type" class="form-select" style="border-radius:10px;" required>
+                        <select name="type" id="dept_type_select" class="form-select" style="border-radius:10px;" required
+                                onchange="document.getElementById('dept_id_row').style.display=this.value==='educational'?'':'none'">
                             <option value="">— Select type —</option>
                             <option value="administrative" <?= ($editing['type'] ?? '') === 'administrative' ? 'selected' : '' ?>>
                                 Administrative Department
@@ -123,6 +138,21 @@ require_once __DIR__ . '/../includes/header.php';
                                 Educational Department
                             </option>
                         </select>
+                    </div>
+
+                    <div class="mb-3" id="dept_id_row"
+                         style="display:<?= ($editing['type'] ?? '') === 'educational' ? '' : 'none' ?>">
+                        <label class="form-label fw-medium">Maps to Academic Department</label>
+                        <select name="dept_id" class="form-select" style="border-radius:10px;">
+                            <option value="">— None —</option>
+                            <?php foreach ($academic_depts as $ad): ?>
+                            <option value="<?= (int)$ad['id'] ?>"
+                                <?= (int)($editing['dept_id'] ?? 0) === (int)$ad['id'] ? 'selected' : '' ?>>
+                                <?= h($ad['name']) ?>
+                            </option>
+                            <?php endforeach; ?>
+                        </select>
+                        <small class="text-muted">Link this staff department to an academic department to display its staff on that department's page.</small>
                     </div>
 
                     <div class="mb-3">
@@ -229,6 +259,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <thead class="table-light">
                             <tr>
                                 <th>Name</th>
+                                <th>Maps To</th>
                                 <th>Sort</th>
                                 <th>Status</th>
                                 <th class="text-end">Actions</th>
@@ -238,6 +269,16 @@ require_once __DIR__ . '/../includes/header.php';
                         <?php foreach ($edu_depts as $dept): ?>
                             <tr>
                                 <td><?= h($dept['name']) ?></td>
+                                <td>
+                                    <?php if (!empty($dept['mapped_dept_name'])): ?>
+                                    <a href="<?= APP_URL ?>/departments/view.php?id=<?= (int)$dept['dept_id'] ?>"
+                                       class="text-decoration-none small">
+                                        <i class="fas fa-link me-1 text-muted"></i><?= h($dept['mapped_dept_name']) ?>
+                                    </a>
+                                    <?php else: ?>
+                                    <span class="text-muted small">—</span>
+                                    <?php endif; ?>
+                                </td>
                                 <td><?= (int)$dept['sort_order'] ?></td>
                                 <td>
                                     <?php if ($dept['is_active']): ?>

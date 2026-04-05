@@ -48,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $hash = password_hash($new_pass, PASSWORD_BCRYPT);
             db()->prepare('UPDATE users SET password = ? WHERE id = ?')
                  ->execute([$hash, $user_id]);
-            log_change('staff_profiles', $user_id, 'password_change', 'Password changed by user');
+            log_change('staff-profile', 'UPDATE', (int)$user_id, 'Password changed by user');
             $success = true;
         }
 
@@ -119,7 +119,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $ec_name, $ec_relation, $ec_address,
             ]);
 
-            log_change('staff_profiles', $user_id, 'update', 'Staff profile updated');
+            log_change('staff-profile', 'UPDATE', (int)$user_id, 'Staff profile updated');
             $success = true;
 
             // Reload current user and profile
