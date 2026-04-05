@@ -615,7 +615,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
    </button>
 
    <div class="search-popup">
-      <button class="close-search"><span class="flaticon-multiply"><i class="fal fa-times"></i></span></button>
+      <button class="close-search" aria-label="Close search"><span class="flaticon-multiply"><i class="fal fa-times" aria-hidden="true"></i></span></button>
       <form method="post" action="#">
          <div class="form-group">
             <input type="search" name="search-field" value="" placeholder="Search Here" required>
@@ -627,7 +627,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
    <div class="it-offcanvas-area">
       <div class="itoffcanvas">
          <div class="itoffcanvas__close-btn">
-            <button class="close-btn"><i class="fal fa-times"></i></button>
+            <button class="close-btn" aria-label="Close offcanvas menu"><i class="fal fa-times" aria-hidden="true"></i></button>
          </div>
          <div class="itoffcanvas__logo">
             <a href="<?= an_h(SITE_URL) ?>/index.php">
@@ -672,12 +672,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <div class="container position-relative" style="z-index:2;">
          <div class="row align-items-center g-5">
             <div class="col-lg-7">
-               <nav class="breadcrumb-nav mb-20">
+               <nav class="breadcrumb-nav mb-20" aria-label="breadcrumb">
                   <a href="<?= an_h(SITE_URL) ?>/index.php">Home</a>
-                  <span class="sep">/</span>
+                  <span class="sep" aria-hidden="true">/</span>
                   <span>Apply Now</span>
                </nav>
-               <span class="pu-apply-kicker"><i class="fas fa-graduation-cap"></i> Admissions Open</span>
+               <span class="pu-apply-kicker"><i class="fas fa-graduation-cap" aria-hidden="true"></i> Admissions Open</span>
                <h1>Start Your Prime University Journey Today</h1>
                <p>Submit your application in minutes and let our admissions team guide you toward the right department, program, and upcoming intake.</p>
                <div class="pu-hero-points wow fadeInUp" data-wow-delay=".15s">
