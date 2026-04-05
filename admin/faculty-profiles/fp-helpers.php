@@ -42,7 +42,37 @@ function fp_can_manage_files(): bool
 }
 
 /**
+ * Returns true if the current user can see the given file record.
+ * Internal files are hidden from the owning faculty member,
+ * but visible to: the uploader, super admins, and Register Office staff.
+ *
+ * @param array $file  A row from faculty_files (must include is_internal, uploaded_by).
+ */
+function fp_can_view_file(array $file): bool
+{
+    if (!$file['is_internal']) {
+        return true; // public file – everyone with page access can see it
+    }
+    $user = auth_user();
+    return is_super_admin()
+        || fp_is_register_office()
+        || ((int)$file['uploaded_by'] === (int)$user['id']);
+}
+
+/**
+ * Returns true if the current user can request deletion of faculty files.
+ * Register Office staff (with can_delete) and uploaders may submit delete
+ * requests; super admins may delete directly without queuing.
+ */
+function fp_can_request_delete(): bool
+{
+    return is_super_admin() || (fp_is_register_office() && can_access('faculty-files', 'can_delete'));
+}
+
+/**
  * Returns true if current user can delete faculty files.
+ * Kept for backward-compatibility; now only super admins delete directly —
+ * others must go through the approval workflow (fp_can_request_delete()).
  */
 function fp_can_delete_files(): bool
 {
