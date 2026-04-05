@@ -87,10 +87,18 @@ require_once __DIR__ . '/../../includes/header.php';
                             </span>
                         </td>
                         <td class="text-end pe-4">
-                            <div class="d-flex gap-1 justify-content-end">
+                            <div class="d-flex gap-1 justify-content-end flex-wrap">
                                 <a href="<?= SITE_URL ?>/academic-program-detail.php?id=<?= $p['id'] ?>"
-                                   target="_blank" class="btn btn-sm btn-outline-secondary" style="border-radius:7px;" title="View Detail Page">
+                                   target="_blank" class="btn btn-sm btn-outline-secondary" style="border-radius:7px;" title="View Public Page">
                                     <i class="fas fa-external-link-alt"></i>
+                                </a>
+                                <a href="<?= APP_URL ?>/departments/academic-programs/intake-periods/index.php?program_id=<?= $p['id'] ?>"
+                                   class="btn btn-sm btn-outline-info" style="border-radius:7px;" title="Intake Periods">
+                                    <i class="fas fa-calendar-alt"></i>
+                                </a>
+                                <a href="<?= APP_URL ?>/departments/academic-programs/eligibility/index.php?program_id=<?= $p['id'] ?>"
+                                   class="btn btn-sm btn-outline-success" style="border-radius:7px;" title="Eligibility Criteria">
+                                    <i class="fas fa-check-circle"></i>
                                 </a>
                                 <a href="<?= APP_URL ?>/departments/academic-programs/edit.php?id=<?= $p['id'] ?>&dept_id=<?= $dept_id ?>"
                                    class="btn btn-sm btn-outline-primary" style="border-radius:7px;" title="Edit">
