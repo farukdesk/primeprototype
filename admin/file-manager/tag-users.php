@@ -51,6 +51,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    if ($action === 'add_multiple') {
+        $raw_ids = array_map('intval', $_POST['tag_user_ids'] ?? []);
+        $ids     = array_filter($raw_ids, fn($id) => $id > 0 && $id !== (int)$file['creator_id']);
+        $ids     = array_unique($ids);
+
+        if (empty($ids)) {
+            $errors[] = 'Please select at least one user to grant access.';
+        } else {
+            $ins        = db()->prepare('INSERT IGNORE INTO file_manager_tagged_users (file_id, user_id, tagged_by) VALUES (?,?,?)');
+            $u_stmt     = db()->prepare('SELECT id, full_name, email FROM users WHERE id = ? AND is_active = 1');
+            $added      = 0;
+            $addedNames = [];
+            foreach ($ids as $uid) {
+                $u_stmt->execute([$uid]);
+                $tagged_user = $u_stmt->fetch();
+                if (!$tagged_user) continue;
+                $ins->execute([$file_id, $uid, $user['id']]);
+                if ($ins->rowCount()) {
+                    fm_notify_tagged($file, $tagged_user, $user);
+                    $addedNames[] = $tagged_user['full_name'];
+                    $added++;
+                }
+            }
+            if ($added > 0) {
+                log_change('file-manager', 'UPDATE', $file_id,
+                    "Granted access to {$added} user(s): " . implode(', ', $addedNames));
+                flash_set('success', "Access granted to {$added} user(s).");
+            } else {
+                flash_set('info', 'Selected users already have access.');
+            }
+            redirect(APP_URL . '/file-manager/tag-users.php?file_id=' . $file_id);
+        }
+    }
+
     if ($action === 'remove' && $user_id > 0) {
         db()->prepare(
             'DELETE FROM file_manager_tagged_users WHERE file_id = ? AND user_id = ?'
@@ -174,26 +208,87 @@ require_once __DIR__ . '/../includes/header.php';
                 <?php if (empty($avail_users)): ?>
                 <p class="text-muted" style="font-size:.88rem;">All active users already have access.</p>
                 <?php else: ?>
-                <form method="POST">
+                <form method="POST" id="grantAccessForm">
                     <?= csrf_field() ?>
-                    <input type="hidden" name="action"  value="add">
+                    <input type="hidden" name="action"  value="add_multiple">
                     <input type="hidden" name="file_id" value="<?= $file_id ?>">
                     <div class="mb-3">
-                        <label class="form-label fw-medium">Select User <span class="text-danger">*</span></label>
-                        <select name="tag_user_id" class="form-select" required>
-                            <option value="">— Select user —</option>
+                        <label class="form-label fw-medium">Search Users <span class="text-danger">*</span></label>
+                        <input type="text" id="grantSearch" class="form-control mb-2"
+                               placeholder="Type name or email to filter…" autocomplete="off">
+                        <div id="grantUserList" style="max-height:240px;overflow-y:auto;border:1px solid #dee2e6;border-radius:8px;padding:8px;">
                             <?php foreach ($avail_users as $u): ?>
-                            <option value="<?= $u['id'] ?>"><?= h($u['full_name']) ?> &lt;<?= h($u['email']) ?>&gt;</option>
+                            <div class="form-check mb-1 grant-user-item"
+                                 data-name="<?= strtolower(h($u['full_name'])) ?>"
+                                 data-email="<?= strtolower(h($u['email'])) ?>">
+                                <input class="form-check-input grant-user-cb" type="checkbox"
+                                       name="tag_user_ids[]" value="<?= $u['id'] ?>"
+                                       id="grant_<?= $u['id'] ?>">
+                                <label class="form-check-label" for="grant_<?= $u['id'] ?>" style="font-size:.85rem;">
+                                    <?= h($u['full_name']) ?>
+                                    <span class="text-muted">&lt;<?= h($u['email']) ?>&gt;</span>
+                                </label>
+                            </div>
                             <?php endforeach; ?>
-                        </select>
+                        </div>
+                        <div id="grantNoMatch" class="text-muted d-none mt-1" style="font-size:.82rem;">No users match your search.</div>
+                        <div class="mt-2 d-flex gap-2">
+                            <button type="button" id="grantSelectAll" class="btn btn-sm btn-outline-secondary" style="border-radius:6px;">Select all visible</button>
+                            <button type="button" id="grantClearAll"  class="btn btn-sm btn-outline-secondary" style="border-radius:6px;">Clear all</button>
+                        </div>
                     </div>
                     <div class="form-text mb-3">
-                        The user will receive an email notification and can view this file.
+                        Selected users will receive an email notification and can view this file.
                     </div>
                     <button type="submit" class="btn btn-warning w-100" style="border-radius:10px;">
                         <i class="fas fa-tags me-1"></i> Grant Access
                     </button>
                 </form>
+                <script>
+                (function () {
+                    var searchInput  = document.getElementById('grantSearch');
+                    var items        = document.querySelectorAll('.grant-user-item');
+                    var noMatch      = document.getElementById('grantNoMatch');
+                    var selectAllBtn = document.getElementById('grantSelectAll');
+                    var clearAllBtn  = document.getElementById('grantClearAll');
+                    var form         = document.getElementById('grantAccessForm');
+
+                    function visibleItems() {
+                        return Array.from(items).filter(function (el) { return el.style.display !== 'none'; });
+                    }
+
+                    searchInput.addEventListener('input', function () {
+                        var q = this.value.toLowerCase().trim();
+                        var count = 0;
+                        items.forEach(function (el) {
+                            var match = !q || el.dataset.name.includes(q) || el.dataset.email.includes(q);
+                            el.style.display = match ? '' : 'none';
+                            if (match) count++;
+                        });
+                        noMatch.classList.toggle('d-none', count > 0);
+                    });
+
+                    selectAllBtn.addEventListener('click', function () {
+                        visibleItems().forEach(function (el) {
+                            el.querySelector('.grant-user-cb').checked = true;
+                        });
+                    });
+
+                    clearAllBtn.addEventListener('click', function () {
+                        items.forEach(function (el) {
+                            el.querySelector('.grant-user-cb').checked = false;
+                        });
+                    });
+
+                    form.addEventListener('submit', function (e) {
+                        var checked = Array.from(document.querySelectorAll('.grant-user-cb:checked'));
+                        if (checked.length === 0) {
+                            e.preventDefault();
+                            alert('Please select at least one user to grant access.');
+                        }
+                    });
+                })();
+                </script>
                 <?php endif; ?>
             </div>
         </div>
