@@ -460,21 +460,6 @@ function ap_intake_status_badge(string $status): string {
                </div>
                <?php endif; ?>
 
-               <?php if (!empty($program['admission_content'])): ?>
-               <!-- Admission Requirements -->
-               <div style="background:#fff; border-radius:12px; margin-bottom:24px; box-shadow:0 1px 4px rgba(0,0,0,.06); overflow:hidden;">
-                  <div class="ap-section-header" data-bs-toggle="collapse" data-bs-target="#sec-admission" aria-expanded="true">
-                     <h5><i class="fas fa-door-open" style="color:#FFB81C;"></i> Admission Intake &amp; Requirements</h5>
-                     <i class="fas fa-chevron-down ap-toggle-icon"></i>
-                  </div>
-                  <div id="sec-admission" class="collapse show ap-section-body">
-                     <div class="prog-details-content" style="padding:24px 28px;">
-                        <?= $program['admission_content'] ?>
-                     </div>
-                  </div>
-               </div>
-               <?php endif; ?>
-
                <?php if (!empty($program['fees_content'])): ?>
                <!-- Fees Structure -->
                <div style="background:#fff; border-radius:12px; margin-bottom:24px; box-shadow:0 1px 4px rgba(0,0,0,.06); overflow:hidden;">
