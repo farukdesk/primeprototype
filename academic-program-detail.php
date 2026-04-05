@@ -44,7 +44,7 @@ function ap_semester_label(string $type): string {
         'trimester' => 'Trimester (Spring / Summer / Fall)',
         'semester'  => 'Semester (Spring / Fall)',
         'annual'    => 'Annual',
-        default     => ucfirst($type),
+        default     => '',
     };
 }
 
@@ -217,12 +217,15 @@ function ap_degree_color(string $type): string {
                         </div>
                         <?php endif; ?>
                         <?php if (!empty($program['semester_type'])): ?>
+                        <?php $semester_label = ap_semester_label($program['semester_type']); ?>
+                        <?php if ($semester_label !== ''): ?>
                         <div class="col-6 col-md-3">
                            <div class="prog-stat">
-                              <span class="value" style="font-size:16px;"><?= fh(ap_semester_label($program['semester_type'])) ?></span>
+                              <span class="value" style="font-size:16px;"><?= fh($semester_label) ?></span>
                               <span class="label"><i class="fas fa-calendar-alt me-1" style="color:#D21034;"></i>Semester System</span>
                            </div>
                         </div>
+                        <?php endif; ?>
                         <?php endif; ?>
                         <div class="col-6 col-md-3">
                            <div class="prog-stat">

@@ -75,7 +75,9 @@ require_once __DIR__ . '/../../includes/header.php';
                             <?php
                             $st_labels = ['trimester' => 'Trimester', 'semester' => 'Semester', 'annual' => 'Annual'];
                             $st = $p['semester_type'] ?? '';
-                            echo $st ? '<span class="badge bg-info text-dark">' . h($st_labels[$st] ?? $st) . '</span>' : '<span class="text-muted">—</span>';
+                            echo isset($st_labels[$st])
+                                ? '<span class="badge bg-info text-dark">' . h($st_labels[$st]) . '</span>'
+                                : '<span class="text-muted">—</span>';
                             ?>
                         </td>
                         <td><?= (int)$p['sort_order'] ?></td>

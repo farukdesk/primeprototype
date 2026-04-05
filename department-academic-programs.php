@@ -231,12 +231,14 @@ function degree_badge_color(string $type): string {
                         <?php endif; ?>
                         <?php if (!empty($prog['semester_type'])): ?>
                         <?php $st_map = ['trimester' => 'Trimester', 'semester' => 'Semester', 'annual' => 'Annual']; ?>
+                        <?php if (isset($st_map[$prog['semester_type']])): ?>
                         <div class="col-6 col-md-3">
                            <div class="prog-stat p-15 rounded" style="background:#F8FAFC;">
-                              <span class="value" style="font-size:15px;"><?= fh($st_map[$prog['semester_type']] ?? ucfirst($prog['semester_type'])) ?></span>
+                              <span class="value" style="font-size:15px;"><?= fh($st_map[$prog['semester_type']]) ?></span>
                               <span class="label">Semester System</span>
                            </div>
                         </div>
+                        <?php endif; ?>
                         <?php endif; ?>
                      </div>
                      <?php endif; ?>
