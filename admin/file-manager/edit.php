@@ -12,6 +12,10 @@ $stmt->execute([$id]);
 $file = $stmt->fetch();
 if (!$file) { flash_set('error', 'File not found.'); redirect(APP_URL . '/file-manager/index.php'); }
 
+if (!fm_can_view_file($file)) {
+    flash_set('error', 'Access denied.'); redirect(APP_URL . '/file-manager/index.php');
+}
+
 $page_title = 'Edit File';
 $errors     = [];
 clear_old();
@@ -19,15 +23,18 @@ clear_old();
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
-    $file_name     = trim($_POST['file_name']     ?? '');
-    $description   = trim($_POST['description']   ?? '');
-    $category      = trim($_POST['category']      ?? '');
-    $file_location = trim($_POST['file_location'] ?? '');
-    $notes         = trim($_POST['notes']         ?? '');
-    $proposal      = trim($_POST['proposal']      ?? '');
-    $page_number   = trim($_POST['page_number']   ?? '');
-    $status        = in_array($_POST['status'] ?? '', ['active','archived'], true) ? $_POST['status'] : 'active';
-    $remove_file   = !empty($_POST['remove_file']);
+    $file_name             = trim($_POST['file_name']             ?? '');
+    $description           = trim($_POST['description']           ?? '');
+    $category              = trim($_POST['category']              ?? '');
+    $file_location         = trim($_POST['file_location']         ?? '');
+    $notes                 = trim($_POST['notes']                 ?? '');
+    $proposal              = trim($_POST['proposal']              ?? '');
+    $page_number           = trim($_POST['page_number']           ?? '');
+    $initiator_name        = trim($_POST['initiator_name']        ?? '');
+    $initiator_department  = trim($_POST['initiator_department']  ?? '');
+    $initiator_designation = trim($_POST['initiator_designation'] ?? '');
+    $status                = in_array($_POST['status'] ?? '', ['active','archived'], true) ? $_POST['status'] : 'active';
+    $remove_file           = !empty($_POST['remove_file']);
 
     if ($file_name === '')           $errors[] = 'File name is required.';
     if (mb_strlen($file_name) > 255) $errors[] = 'File name must be 255 characters or less.';
@@ -50,7 +57,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (empty($errors)) {
-        // Determine final file fields
         if ($new_uploaded) {
             fm_delete_file($file['uploaded_file']);
             $final_uploaded = $new_uploaded;
@@ -74,20 +80,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'UPDATE file_manager_files
              SET file_name=?, description=?, category=?, file_location=?,
                  uploaded_file=?, original_name=?, mime_type=?, file_size=?,
-                 notes=?, proposal=?, page_number=?, status=?
+                 notes=?, proposal=?, page_number=?,
+                 initiator_name=?, initiator_department=?, initiator_designation=?,
+                 status=?
              WHERE id=?'
         )->execute([
             $file_name,
-            $description   ?: null,
-            $category      ?: null,
-            $file_location ?: null,
+            $description           ?: null,
+            $category              ?: null,
+            $file_location         ?: null,
             $final_uploaded,
             $final_original,
             $final_mime,
             $final_size,
-            $notes ?: null,
-            $proposal    ?: null,
-            $page_number ?: null,
+            $notes                 ?: null,
+            $proposal              ?: null,
+            $page_number           ?: null,
+            $initiator_name        ?: null,
+            $initiator_department  ?: null,
+            $initiator_designation ?: null,
             $status,
             $id,
         ]);
@@ -98,7 +109,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($new_uploaded) fm_delete_file($new_uploaded);
-    save_old(compact('file_name','description','category','file_location','notes','proposal','page_number','status'));
+    save_old(compact(
+        'file_name','description','category','file_location','notes','proposal','page_number',
+        'initiator_name','initiator_department','initiator_designation','status'
+    ));
 }
 
 require_once __DIR__ . '/../includes/header.php';
@@ -127,6 +141,37 @@ require_once __DIR__ . '/../includes/header.php';
 
         <!-- Left column -->
         <div class="col-lg-8">
+
+            <!-- Initiator Info -->
+            <div class="card mb-4" style="border-radius:12px;">
+                <div class="card-header py-3 px-4">
+                    <h6 class="mb-0 fw-semibold"><i class="fas fa-user-tie me-2 text-primary"></i>Initiator Information</h6>
+                </div>
+                <div class="card-body p-4">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label fw-medium">Initiator Name</label>
+                            <input type="text" name="initiator_name" class="form-control"
+                                   value="<?= old('initiator_name', $file['initiator_name'] ?? '') ?>"
+                                   maxlength="150">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-medium">Department</label>
+                            <input type="text" name="initiator_department" class="form-control"
+                                   value="<?= old('initiator_department', $file['initiator_department'] ?? '') ?>"
+                                   maxlength="200">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-medium">Designation</label>
+                            <input type="text" name="initiator_designation" class="form-control"
+                                   value="<?= old('initiator_designation', $file['initiator_designation'] ?? '') ?>"
+                                   maxlength="200">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- File Details -->
             <div class="card mb-4" style="border-radius:12px;">
                 <div class="card-header py-3 px-4">
                     <h6 class="mb-0 fw-semibold"><i class="fas fa-info-circle me-2 text-muted"></i>File Details</h6>
@@ -153,7 +198,7 @@ require_once __DIR__ . '/../includes/header.php';
                                value="<?= old('file_location', $file['file_location'] ?? '') ?>" maxlength="500">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label fw-medium">Proposal</label>
+                        <label class="form-label fw-medium">Proposal / Purpose</label>
                         <textarea name="proposal" class="form-control" rows="3"><?= h(old('proposal', $file['proposal'] ?? '')) ?></textarea>
                     </div>
                     <div class="mb-0">
@@ -164,6 +209,7 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
             </div>
 
+            <!-- Digital Copy -->
             <div class="card mb-4" style="border-radius:12px;">
                 <div class="card-header py-3 px-4">
                     <h6 class="mb-0 fw-semibold"><i class="fas fa-upload me-2 text-muted"></i>Digital Copy</h6>
@@ -193,6 +239,7 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
             </div>
 
+            <!-- Notes -->
             <div class="card" style="border-radius:12px;">
                 <div class="card-header py-3 px-4">
                     <h6 class="mb-0 fw-semibold"><i class="fas fa-sticky-note me-2 text-muted"></i>Notes</h6>
