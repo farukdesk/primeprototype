@@ -179,15 +179,15 @@
 
 	////////////////////////////////////////////////////
 	// Sidebar Js
-	$(".it-menu-bar").on("click", function () {
+	$(document).on("click", ".it-menu-bar", function () {
 		$(".itoffcanvas").addClass("opened");
 		$(".body-overlay").addClass("apply");
 	});
-	$(".close-btn").on("click", function () {
+	$(document).on("click", ".close-btn", function () {
 		$(".itoffcanvas").removeClass("opened");
 		$(".body-overlay").removeClass("apply");
 	});
-	$(".body-overlay").on("click", function () {
+	$(document).on("click", ".body-overlay", function () {
 		$(".itoffcanvas").removeClass("opened");
 		$(".body-overlay").removeClass("apply");
 		$(".search__popup").removeClass("search-opened");
