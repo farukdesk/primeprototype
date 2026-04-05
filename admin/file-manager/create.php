@@ -31,43 +31,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($file_name === '')          $errors[] = 'File name is required.';
     if (mb_strlen($file_name) > 255) $errors[] = 'File name must be 255 characters or less.';
 
-    // Optional digital copy upload
-    $uploaded_file = null;
-    $original_name = null;
-    $mime_type     = null;
-    $file_size     = null;
-    if (!empty($_FILES['uploaded_file']['name'])) {
-        $result = fm_upload_file($_FILES['uploaded_file']);
-        if ($result === false) {
-            $errors[] = 'Digital copy: invalid file type or file too large (max 50 MB).';
-        } else {
-            $uploaded_file = $result;
-            $original_name = $_FILES['uploaded_file']['name'];
-            $finfo         = new finfo(FILEINFO_MIME_TYPE);
-            $mime_type     = $finfo->file(UPLOAD_DIR . '/' . FM_UPLOAD_SUBDIR . '/' . $result);
-            $file_size     = (int)$_FILES['uploaded_file']['size'];
-        }
-    }
-
     if (empty($errors)) {
         db()->prepare(
             'INSERT INTO file_manager_files
                (file_name, description, category, creator_id, file_location,
-                uploaded_file, original_name, mime_type, file_size, notes,
-                proposal, page_number,
+                notes, proposal, page_number,
                 initiator_name, initiator_department, initiator_designation,
                 current_holder_id, status)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)'
         )->execute([
             $file_name,
             $description           ?: null,
             $category              ?: null,
             $user['id'],
             $file_location         ?: null,
-            $uploaded_file,
-            $original_name,
-            $mime_type,
-            $file_size,
             $notes                 ?: null,
             $proposal              ?: null,
             $page_number           ?: null,
@@ -104,7 +81,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect(APP_URL . '/file-manager/index.php');
     }
 
-    if ($uploaded_file) fm_delete_file($uploaded_file);
     save_old(compact(
         'file_name','description','category','file_location','notes','proposal','page_number',
         'initiator_name','initiator_department','initiator_designation','status'
@@ -137,7 +113,7 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 <?php endif; ?>
 
-<form method="POST" enctype="multipart/form-data" novalidate>
+<form method="POST" novalidate>
     <?= csrf_field() ?>
     <div class="row g-4">
 
@@ -211,18 +187,6 @@ require_once __DIR__ . '/../includes/header.php';
                         <input type="text" name="page_number" class="form-control" value="<?= old('page_number') ?>"
                                maxlength="50" placeholder="e.g. Page 5, Ref. 2024-001">
                     </div>
-                </div>
-            </div>
-
-            <!-- Digital Copy -->
-            <div class="card mb-4" style="border-radius:12px;">
-                <div class="card-header py-3 px-4">
-                    <h6 class="mb-0 fw-semibold"><i class="fas fa-upload me-2 text-muted"></i>Digital Copy <span class="text-muted fw-normal">(optional)</span></h6>
-                </div>
-                <div class="card-body p-4">
-                    <input type="file" name="uploaded_file" class="form-control"
-                           accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.txt,.jpg,.jpeg,.png,.gif,.webp">
-                    <div class="form-text mt-1">Max 50 MB. Allowed: PDF, Word, Excel, PowerPoint, ZIP, TXT, images.</div>
                 </div>
             </div>
 
