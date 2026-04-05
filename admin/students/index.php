@@ -7,6 +7,10 @@ $page_title = 'Student Management';
 $user       = auth_user();
 $is_staff   = sm_is_staff();
 
+// ── Department scope ──────────────────────────────────────────────────────────
+// null = unrestricted; int[] = allowed dept ids
+$dept_scope = get_dept_scope();
+
 // ── Filters ───────────────────────────────────────────────────────────────────
 $search   = trim($_GET['search']   ?? '');
 $f_dept   = (int)($_GET['dept']    ?? 0);
@@ -41,6 +45,17 @@ if ($f_sem !== '') {
     $params[] = $f_sem;
 }
 
+// Apply department scope restriction for non-super-admins
+if ($dept_scope !== null) {
+    if (empty($dept_scope)) {
+        $where[] = '0 = 1';
+    } else {
+        $phs     = implode(',', array_fill(0, count($dept_scope), '?'));
+        $where[] = "s.dept_id IN ($phs)";
+        array_push($params, ...$dept_scope);
+    }
+}
+
 $where_sql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
 
 $count_stmt = db()->prepare('SELECT COUNT(*) FROM students s' . $where_sql);
@@ -64,9 +79,16 @@ $stmt->execute($params);
 $students = $stmt->fetchAll();
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
-$stats_rows = db()->query(
-    'SELECT status, COUNT(*) AS cnt FROM students GROUP BY status'
-)->fetchAll();
+if ($dept_scope !== null && !empty($dept_scope)) {
+    $phs_s       = implode(',', array_fill(0, count($dept_scope), '?'));
+    $stats_stmt  = db()->prepare("SELECT status, COUNT(*) AS cnt FROM students WHERE dept_id IN ($phs_s) GROUP BY status");
+    $stats_stmt->execute($dept_scope);
+    $stats_rows = $stats_stmt->fetchAll();
+} elseif ($dept_scope !== null && empty($dept_scope)) {
+    $stats_rows = [];
+} else {
+    $stats_rows = db()->query('SELECT status, COUNT(*) AS cnt FROM students GROUP BY status')->fetchAll();
+}
 $stats = array_column($stats_rows, 'cnt', 'status');
 $total_students = array_sum($stats);
 
@@ -74,6 +96,13 @@ $total_students = array_sum($stats);
 $departments = db()->query(
     'SELECT id, name FROM dept_departments WHERE is_active = 1 ORDER BY name ASC'
 )->fetchAll();
+// Restrict dropdown to only departments the user can access
+if ($dept_scope !== null) {
+    $departments = array_values(array_filter(
+        $departments,
+        fn($d) => in_array((int)$d['id'], $dept_scope, true)
+    ));
+}
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
