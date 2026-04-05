@@ -623,7 +623,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
    </button>
 
    <div class="search-popup">
-      <button class="close-search" aria-label="Close search"><i class="fal fa-times" aria-hidden="true"></i></button>
+      <button class="close-search" aria-label="Close search"><span class="visually-hidden">Close search</span><i class="fal fa-times" aria-hidden="true"></i></button>
       <form method="post" action="#">
          <div class="form-group">
             <input type="search" name="search-field" value="" placeholder="Search Here" required>
@@ -635,7 +635,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
    <div class="it-offcanvas-area">
       <div class="itoffcanvas">
          <div class="itoffcanvas__close-btn">
-            <button class="close-btn" aria-label="Close offcanvas menu"><i class="fal fa-times" aria-hidden="true"></i></button>
+            <button class="close-btn" aria-label="Close offcanvas menu"><span class="visually-hidden">Close offcanvas menu</span><i class="fal fa-times" aria-hidden="true"></i></button>
          </div>
          <div class="itoffcanvas__logo">
             <a href="<?= an_h(SITE_URL) ?>/index.php">
