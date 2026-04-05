@@ -20,7 +20,11 @@ $f_dept   = (int)($_GET['dept'] ?? 0);
 $page     = max(1, (int)($_GET['page'] ?? 1));
 $per_page = 20;
 
-$where  = ["ug.name != 'Faculty'", "u.is_active = 1"];
+// Only show users whose primary group has staff-profile module access
+$where  = [
+    "u.is_active = 1",
+    "EXISTS (SELECT 1 FROM group_module_access gma JOIN modules mm ON mm.id = gma.module_id AND mm.slug = 'staff-profile' WHERE gma.group_id = u.group_id AND gma.can_view = 1)",
+];
 $params = [];
 
 if ($search !== '') {
