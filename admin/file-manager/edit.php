@@ -24,6 +24,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $category      = trim($_POST['category']      ?? '');
     $file_location = trim($_POST['file_location'] ?? '');
     $notes         = trim($_POST['notes']         ?? '');
+    $proposal      = trim($_POST['proposal']      ?? '');
+    $page_number   = trim($_POST['page_number']   ?? '');
     $status        = in_array($_POST['status'] ?? '', ['active','archived'], true) ? $_POST['status'] : 'active';
     $remove_file   = !empty($_POST['remove_file']);
 
@@ -72,7 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'UPDATE file_manager_files
              SET file_name=?, description=?, category=?, file_location=?,
                  uploaded_file=?, original_name=?, mime_type=?, file_size=?,
-                 notes=?, status=?
+                 notes=?, proposal=?, page_number=?, status=?
              WHERE id=?'
         )->execute([
             $file_name,
@@ -84,6 +86,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $final_mime,
             $final_size,
             $notes ?: null,
+            $proposal    ?: null,
+            $page_number ?: null,
             $status,
             $id,
         ]);
@@ -94,7 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($new_uploaded) fm_delete_file($new_uploaded);
-    save_old(compact('file_name','description','category','file_location','notes','status'));
+    save_old(compact('file_name','description','category','file_location','notes','proposal','page_number','status'));
 }
 
 require_once __DIR__ . '/../includes/header.php';
@@ -143,10 +147,19 @@ require_once __DIR__ . '/../includes/header.php';
                         <input type="text" name="category" class="form-control"
                                value="<?= old('category', $file['category'] ?? '') ?>" maxlength="100">
                     </div>
-                    <div class="mb-0">
+                    <div class="mb-3">
                         <label class="form-label fw-medium">Physical / Cabinet Location</label>
                         <input type="text" name="file_location" class="form-control"
                                value="<?= old('file_location', $file['file_location'] ?? '') ?>" maxlength="500">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Proposal</label>
+                        <textarea name="proposal" class="form-control" rows="3"><?= h(old('proposal', $file['proposal'] ?? '')) ?></textarea>
+                    </div>
+                    <div class="mb-0">
+                        <label class="form-label fw-medium">Page / Reference Number</label>
+                        <input type="text" name="page_number" class="form-control"
+                               value="<?= old('page_number', $file['page_number'] ?? '') ?>" maxlength="50">
                     </div>
                 </div>
             </div>

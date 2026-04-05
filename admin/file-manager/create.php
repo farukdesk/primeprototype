@@ -16,6 +16,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $category      = trim($_POST['category']      ?? '');
     $file_location = trim($_POST['file_location'] ?? '');
     $notes         = trim($_POST['notes']         ?? '');
+    $proposal      = trim($_POST['proposal']      ?? '');
+    $page_number   = trim($_POST['page_number']   ?? '');
     $status        = in_array($_POST['status'] ?? '', ['active','archived'], true) ? $_POST['status'] : 'active';
 
     if ($file_name === '')          $errors[] = 'File name is required.';
@@ -44,8 +46,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         db()->prepare(
             'INSERT INTO file_manager_files
                (file_name, description, category, creator_id, file_location,
-                uploaded_file, original_name, mime_type, file_size, notes, status)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?)'
+                uploaded_file, original_name, mime_type, file_size, notes,
+                proposal, page_number, status)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)'
         )->execute([
             $file_name,
             $description ?: null,
@@ -57,6 +60,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $mime_type,
             $file_size,
             $notes ?: null,
+            $proposal    ?: null,
+            $page_number ?: null,
             $status,
         ]);
 
@@ -66,7 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($uploaded_file) fm_delete_file($uploaded_file);
-    save_old(compact('file_name','description','category','file_location','notes','status'));
+    save_old(compact('file_name','description','category','file_location','notes','proposal','page_number','status'));
 }
 
 require_once __DIR__ . '/../includes/header.php';
@@ -115,11 +120,21 @@ require_once __DIR__ . '/../includes/header.php';
                                maxlength="100" placeholder="e.g. Finance, HR, Legal…">
                         <div class="form-text">Helps with filtering and organisation.</div>
                     </div>
-                    <div class="mb-0">
+                    <div class="mb-3">
                         <label class="form-label fw-medium">Physical / Cabinet Location</label>
                         <input type="text" name="file_location" class="form-control" value="<?= old('file_location') ?>"
                                maxlength="500" placeholder="e.g. Cabinet A3 – Shelf 2, Room 204">
                         <div class="form-text">Where the physical document is stored in the office.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Proposal</label>
+                        <textarea name="proposal" class="form-control" rows="3"
+                                  placeholder="Proposal or purpose of this file…"><?= h(old('proposal','')) ?></textarea>
+                    </div>
+                    <div class="mb-0">
+                        <label class="form-label fw-medium">Page / Reference Number</label>
+                        <input type="text" name="page_number" class="form-control" value="<?= old('page_number') ?>"
+                               maxlength="50" placeholder="e.g. Page 5, Ref. 2024-001">
                     </div>
                 </div>
             </div>

@@ -8,12 +8,18 @@ $page_title = 'New Notice';
 $errors     = [];
 clear_old();
 
+// Fetch file manager files for linking
+$fm_files = db()->query(
+    "SELECT id, file_name, category FROM file_manager_files WHERE status = 'active' ORDER BY file_name ASC"
+)->fetchAll();
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
     $title       = trim($_POST['title']       ?? '');
     $description = trim($_POST['description'] ?? '');
     $status      = in_array($_POST['status'] ?? '', ['draft','active'], true) ? $_POST['status'] : 'draft';
+    $fm_file_id  = (int)($_POST['fm_file_id'] ?? 0) ?: null;
 
     if ($title === '')           $errors[] = 'Title is required.';
     if (mb_strlen($title) > 255) $errors[] = 'Title must be 255 characters or less.';
@@ -38,9 +44,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($errors)) {
         $user = auth_user();
         db()->prepare(
-            'INSERT INTO notice_documents (title, description, document_file, original_name, document_type, created_by, status)
-             VALUES (?,?,?,?,?,?,?)'
-        )->execute([$title, $description ?: null, $doc_file, $doc_original, $doc_type, $user['id'], $status]);
+            'INSERT INTO notice_documents (title, description, document_file, original_name, document_type, created_by, status, fm_file_id)
+             VALUES (?,?,?,?,?,?,?,?)'
+        )->execute([$title, $description ?: null, $doc_file, $doc_original, $doc_type, $user['id'], $status, $fm_file_id]);
 
         $new_id = (int)db()->lastInsertId();
         log_change('notice-signing', 'CREATE', $new_id, $title);
@@ -49,7 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($doc_file) ns_delete_document($doc_file);
-    save_old(compact('title','description','status'));
+    save_old(compact('title','description','status','fm_file_id'));
 }
 
 require_once __DIR__ . '/../includes/header.php';
@@ -119,6 +125,19 @@ require_once __DIR__ . '/../includes/header.php';
                     <h6 class="mb-0 fw-semibold"><i class="fas fa-cog me-2 text-muted"></i>Settings</h6>
                 </div>
                 <div class="card-body p-4">
+                    <div class="mb-4">
+                        <label class="form-label fw-medium">Link to File Manager</label>
+                        <select name="fm_file_id" class="form-select">
+                            <option value="">— None —</option>
+                            <?php foreach ($fm_files as $fmf): ?>
+                            <option value="<?= $fmf['id'] ?>"
+                                <?= (int)(old('fm_file_id', 0)) === (int)$fmf['id'] ? 'selected' : '' ?>>
+                                <?= h($fmf['file_name']) ?><?= $fmf['category'] ? ' [' . h($fmf['category']) . ']' : '' ?>
+                            </option>
+                            <?php endforeach; ?>
+                        </select>
+                        <div class="form-text">Optionally link this notice to a file in the File Manager.</div>
+                    </div>
                     <div class="mb-4">
                         <label class="form-label fw-medium">Initial Status</label>
                         <div>
