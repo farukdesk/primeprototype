@@ -187,12 +187,12 @@ require_once __DIR__ . '/../../includes/header.php';
                     <div class="col-md-6">
                         <label class="form-label fw-medium">Phone</label>
                         <input type="text" name="contact_phone" class="form-control"
-                               value="<?= h($settings['contact_phone'] ?? '') ?>" placeholder="+880-1710-996196" maxlength="60">
+                               value="<?= h($settings['contact_phone'] ?? '') ?>" placeholder="01969-955566" maxlength="60">
                     </div>
                     <div class="col-md-6">
                         <label class="form-label fw-medium">Email</label>
                         <input type="email" name="contact_email" class="form-control"
-                               value="<?= h($settings['contact_email'] ?? '') ?>" placeholder="info@primeuniversity.edu.bd" maxlength="191">
+                               value="<?= h($settings['contact_email'] ?? '') ?>" placeholder="info@primeuniversity.ac.bd" maxlength="191">
                     </div>
                 </div>
                 <div class="mb-3">

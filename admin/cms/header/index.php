@@ -137,13 +137,15 @@ require_once __DIR__ . '/../../includes/header.php';
             <h6 class="fw-semibold mb-3 text-muted border-bottom pb-2">Contact Info</h6>
 
             <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                    <label class="form-label fw-medium">Phone Number</label>
                     <input type="text" name="phone" class="form-control"
-                           value="<?= h($settings['phone'] ?? '') ?>" placeholder="01710996196" maxlength="30">
+                           value="<?= h($settings['phone'] ?? '') ?>" placeholder="01969-955566" maxlength="30">
                 </div>
                 <div class="col-md-6">
                     <label class="form-label fw-medium">Email Address</label>
                     <input type="email" name="email" class="form-control"
-                           value="<?= h($settings['email'] ?? '') ?>" placeholder="info@primeuniversity.edu.bd" maxlength="191">
+                           value="<?= h($settings['email'] ?? '') ?>" placeholder="info@primeuniversity.ac.bd" maxlength="191">
                 </div>
             </div>
 
