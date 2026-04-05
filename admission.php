@@ -78,21 +78,21 @@ $page_title = 'Admission – Prime University';
                <div class="itoffcanvas__info-icon"><a href="#"><i class="fal fa-envelope"></i></a></div>
                <div class="itoffcanvas__info-address">
                   <span>Email</span>
-                  <a href="mailto:info@primeuniversity.edu.bd">info@primeuniversity.edu.bd</a>
+                  <a href="mailto:info@primeuniversity.ac.bd">info@primeuniversity.ac.bd</a>
                </div>
             </div>
             <div class="it-info-wrapper mb-20 d-flex align-items-center">
                <div class="itoffcanvas__info-icon"><a href="#"><i class="fal fa-phone-alt"></i></a></div>
                <div class="itoffcanvas__info-address">
                   <span>Phone</span>
-                  <a href="tel:+8801710996196">+880-1710996196</a>
+                  <a href="tel:+8801969955566">01969-955566</a>
                </div>
             </div>
             <div class="it-info-wrapper mb-20 d-flex align-items-center">
                <div class="itoffcanvas__info-icon"><a href="#"><i class="fas fa-map-marker-alt"></i></a></div>
                <div class="itoffcanvas__info-address">
                   <span>Location</span>
-                  <a href="https://www.google.com/maps/@23.7934913,90.3547073,15z" target="_blank">114, 116 Mazar Rd, Dhaka 1216</a>
+                  <a href="https://www.google.com/maps/@23.7934913,90.3547073,15z" target="_blank">114/116, Mazar Rd, Dhaka-1216</a>
                </div>
             </div>
          </div>
@@ -874,7 +874,7 @@ $page_title = 'Admission – Prime University';
                   </button>
                   <div id="faq6" class="collapse">
                      <div class="pu-faq-body pb-18 pt-12">
-                        The Admission Office is located at the main campus: <strong>114, 116 Mazar Road, Mirpur, Dhaka 1216, Bangladesh</strong>. Office hours are Sunday–Thursday, 9:00 AM – 5:00 PM. You may also reach us at <a href="mailto:info@primeuniversity.edu.bd" style="color:#2563eb;">info@primeuniversity.edu.bd</a> or <a href="tel:+8801710996196" style="color:#2563eb;">+880-1710996196</a>.
+                        The Admission Office is located at the main campus: <strong>114/116, Mazar Rd, Dhaka-1216</strong>. Office hours are Sunday–Thursday, 9:00 AM – 5:00 PM. You may also reach us at <a href="mailto:info@primeuniversity.ac.bd" style="color:#2563eb;">info@primeuniversity.ac.bd</a> or <a href="tel:+8801969955566" style="color:#2563eb;">01969-955566</a>.
                      </div>
                   </div>
                </div>
@@ -896,7 +896,7 @@ $page_title = 'Admission – Prime University';
                      <i class="fas fa-phone-alt"></i>
                   </div>
                   <h5 style="font-weight:700;color:#0f1f4b;margin-bottom:8px;">Call Us</h5>
-                  <a href="tel:+8801710996196" style="color:#2563eb;font-weight:600;text-decoration:none;">+880-1710996196</a>
+                  <a href="tel:+8801969955566" style="color:#2563eb;font-weight:600;text-decoration:none;">01969-955566</a>
                </div>
             </div>
             <div class="col-md-4 wow fadeInUp" data-wow-delay=".2s">
@@ -905,7 +905,7 @@ $page_title = 'Admission – Prime University';
                      <i class="fas fa-envelope"></i>
                   </div>
                   <h5 style="font-weight:700;color:#0f1f4b;margin-bottom:8px;">Email Us</h5>
-                  <a href="mailto:info@primeuniversity.edu.bd" style="color:#7c3aed;font-weight:600;text-decoration:none;">info@primeuniversity.edu.bd</a>
+                  <a href="mailto:info@primeuniversity.ac.bd" style="color:#7c3aed;font-weight:600;text-decoration:none;">info@primeuniversity.ac.bd</a>
                </div>
             </div>
             <div class="col-md-4 wow fadeInUp" data-wow-delay=".3s">
@@ -914,7 +914,7 @@ $page_title = 'Admission – Prime University';
                      <i class="fas fa-map-marker-alt"></i>
                   </div>
                   <h5 style="font-weight:700;color:#0f1f4b;margin-bottom:8px;">Visit Us</h5>
-                  <p style="color:#16a34a;font-weight:600;margin:0;font-size:.9rem;">114, 116 Mazar Rd,<br>Mirpur, Dhaka 1216</p>
+                  <p style="color:#16a34a;font-weight:600;margin:0;font-size:.9rem;">114/116, Mazar Rd,<br>Dhaka-1216</p>
                </div>
             </div>
          </div>

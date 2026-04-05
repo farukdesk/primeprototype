@@ -636,7 +636,7 @@ $page_title = 'Scholarships & Waivers – Prime University';
                </div>
                <div class="itoffcanvas__info-address">
                   <span>Phone</span>
-                  <a href="tel:01710996196">01710996196</a>
+                  <a href="tel:+8801969955566">01969-955566</a>
                </div>
             </div>
          </div>

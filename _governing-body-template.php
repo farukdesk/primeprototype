@@ -253,14 +253,14 @@ $total_members = count($members);
                <div class="itoffcanvas__info-icon"><a href="#"><i class="fal fa-envelope"></i></a></div>
                <div class="itoffcanvas__info-address">
                   <span>Email</span>
-                  <a href="mailto:info@primeuniversity.edu.bd">info@primeuniversity.edu.bd</a>
+                  <a href="mailto:info@primeuniversity.ac.bd">info@primeuniversity.ac.bd</a>
                </div>
             </div>
             <div class="it-info-wrapper mb-20 d-flex align-items-center">
                <div class="itoffcanvas__info-icon"><a href="#"><i class="fal fa-phone-alt"></i></a></div>
                <div class="itoffcanvas__info-address">
                   <span>Phone</span>
-                  <a href="tel:+8801710996196">+880-1710996196</a>
+                  <a href="tel:+8801969955566">01969-955566</a>
                </div>
             </div>
          </div>
