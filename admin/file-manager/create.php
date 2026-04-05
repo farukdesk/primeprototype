@@ -235,9 +235,13 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
                 <div class="card-body p-4">
                     <div class="form-text mb-2">Only tagged users, the creator, and super admins can see this file.</div>
-                    <div style="max-height:260px;overflow-y:auto;">
+                    <input type="text" id="tagUserSearch" class="form-control form-control-sm mb-2"
+                           placeholder="Search by name or email…" autocomplete="off">
+                    <div id="tagUserList" style="max-height:260px;overflow-y:auto;">
                         <?php foreach ($all_users as $u): ?>
-                        <div class="form-check mb-2">
+                        <div class="form-check mb-2 tag-user-item"
+                             data-name="<?= strtolower(h($u['full_name'])) ?>"
+                             data-email="<?= strtolower(h($u['email'])) ?>">
                             <input class="form-check-input" type="checkbox"
                                    name="tag_users[]" value="<?= $u['id'] ?>"
                                    id="tag_<?= $u['id'] ?>">
@@ -248,8 +252,26 @@ require_once __DIR__ . '/../includes/header.php';
                         </div>
                         <?php endforeach; ?>
                     </div>
+                    <div id="tagUserNoMatch" class="text-muted d-none" style="font-size:.85rem;">No users match your search.</div>
                 </div>
             </div>
+            <script>
+            (function () {
+                var input = document.getElementById('tagUserSearch');
+                var items = document.querySelectorAll('.tag-user-item');
+                var noMatch = document.getElementById('tagUserNoMatch');
+                input.addEventListener('input', function () {
+                    var q = this.value.toLowerCase().trim();
+                    var visible = 0;
+                    items.forEach(function (el) {
+                        var match = !q || el.dataset.name.includes(q) || el.dataset.email.includes(q);
+                        el.style.display = match ? '' : 'none';
+                        if (match) visible++;
+                    });
+                    noMatch.classList.toggle('d-none', visible > 0);
+                });
+            })();
+            </script>
             <?php endif; ?>
 
         </div>
