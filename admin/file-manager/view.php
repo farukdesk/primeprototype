@@ -186,7 +186,7 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
                 <?php endif; ?>
 
-                <?php if ($file['proposal']): ?>
+                <?php if ($file['proposal'] ?? null): ?>
                 <div class="mb-4">
                     <h6 class="fw-semibold text-muted mb-2" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.05em">Proposal / Purpose</h6>
                     <p class="mb-0"><?= nl2br(h($file['proposal'])) ?></p>
@@ -200,7 +200,7 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
                 <?php endif; ?>
 
-                <?php if (!$file['description'] && !$file['file_location'] && !$file['proposal'] && !$file['notes'] && !$file['initiator_name']): ?>
+                <?php if (!$file['description'] && !$file['file_location'] && !($file['proposal'] ?? null) && !$file['notes'] && !$file['initiator_name']): ?>
                 <p class="text-muted mb-0">No additional details recorded.</p>
                 <?php endif; ?>
             </div>
@@ -420,7 +420,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <span class="badge bg-light text-dark border"><?= h($file['category']) ?></span>
                 </li>
                 <?php endif; ?>
-                <?php if ($file['page_number']): ?>
+                <?php if ($file['page_number'] ?? null): ?>
                 <li class="list-group-item px-4 py-3 d-flex justify-content-between">
                     <span class="text-muted" style="font-size:.85rem">Ref. No.</span>
                     <span style="font-size:.85rem"><?= h($file['page_number']) ?></span>
