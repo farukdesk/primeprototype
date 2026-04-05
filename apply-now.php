@@ -925,18 +925,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
    <?php include __DIR__ . '/includes/footer.php'; ?>
 
-   <script src="/assets/js/jquery.js"></script>
-   <script src="/assets/js/bootstrap.bundle.min.js"></script>
-   <script src="/assets/js/purecounter.js"></script>
-   <script src="/assets/js/nice-select.js"></script>
-   <script src="/assets/js/swiper-bundle.min.js"></script>
-   <script src="/assets/js/slick.min.js"></script>
-   <script src="/assets/js/wow.js"></script>
-   <script src="/assets/js/magnific-popup.js"></script>
-   <script src="/assets/js/parallax.js"></script>
-   <script src="/assets/js/isotope-pkgd.js"></script>
-   <script src="/assets/js/imagesloaded-pkgd.js"></script>
-   <script src="/assets/js/main.js"></script>
+   <?php include __DIR__ . \'/includes/scripts.php\'; ?>
    <script>
       const programsByDept = <?= json_encode($programs_by_dept, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
       const deptSelect = document.getElementById('an_dept_select');
