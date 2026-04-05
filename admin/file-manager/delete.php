@@ -17,8 +17,16 @@ $stmt->execute([$id]);
 $file = $stmt->fetch();
 if (!$file) { flash_set('error', 'File not found.'); redirect(APP_URL . '/file-manager/index.php'); }
 
+// Delete all page uploaded files
+$pages = fm_get_pages($id);
+foreach ($pages as $p) {
+    fm_delete_page_file($p['uploaded_file']);
+}
+
+// Delete the main digital copy
 fm_delete_file($file['uploaded_file']);
 
+// Delete DB record (pages/tagged users/transfers cascade via FK)
 db()->prepare('DELETE FROM file_manager_files WHERE id = ?')->execute([$id]);
 
 log_change('file-manager', 'DELETE', $id, $file['file_name']);

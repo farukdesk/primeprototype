@@ -12,8 +12,10 @@ $search   = trim($_GET['q']        ?? '');
 $category = trim($_GET['category'] ?? '');
 $status   = in_array($_GET['status'] ?? '', ['active','archived'], true) ? $_GET['status'] : '';
 
-$where  = ['1=1'];
-$params = [];
+[$vis_sql, $vis_params] = fm_visibility_where();
+
+$where  = [$vis_sql];
+$params = $vis_params;
 
 if ($search !== '') {
     $where[]  = '(f.file_name LIKE ? OR f.file_location LIKE ? OR f.notes LIKE ? OR f.proposal LIKE ? OR f.page_number LIKE ?)';
@@ -46,9 +48,11 @@ $total = (int)$count_stmt->fetchColumn();
 $pages = max(1, (int)ceil($total / $per_page));
 
 $stmt = db()->prepare(
-    "SELECT f.*, u.full_name AS creator_name
+    "SELECT f.*, u.full_name AS creator_name,
+            h.full_name AS holder_name
      FROM file_manager_files f
      LEFT JOIN users u ON u.id = f.creator_id
+     LEFT JOIN users h ON h.id = f.current_holder_id
      WHERE $where_sql
      ORDER BY f.created_at DESC
      LIMIT $per_page OFFSET $offset"
@@ -60,6 +64,9 @@ $files = $stmt->fetchAll();
 $cats = db()->query("SELECT DISTINCT category FROM file_manager_files WHERE category IS NOT NULL AND category <> '' ORDER BY category")
              ->fetchAll(PDO::FETCH_COLUMN);
 
+// ── Pending transfers for current user ───────────────────────────────────────
+$pending_transfers = fm_pending_transfers_count();
+
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
@@ -70,11 +77,19 @@ require_once __DIR__ . '/../includes/header.php';
             <li class="breadcrumb-item active">File Manager</li>
         </ol>
     </nav>
-    <?php if (fm_can_manage()): ?>
-    <a href="<?= APP_URL ?>/file-manager/create.php" class="btn btn-primary" style="border-radius:10px;">
-        <i class="fas fa-plus me-1"></i> New File
-    </a>
-    <?php endif; ?>
+    <div class="d-flex gap-2">
+        <?php if ($pending_transfers > 0): ?>
+        <a href="<?= APP_URL ?>/file-manager/transfer.php" class="btn btn-warning" style="border-radius:10px;">
+            <i class="fas fa-exchange-alt me-1"></i> Pending Transfers
+            <span class="badge bg-dark ms-1"><?= $pending_transfers ?></span>
+        </a>
+        <?php endif; ?>
+        <?php if (fm_can_manage()): ?>
+        <a href="<?= APP_URL ?>/file-manager/create.php" class="btn btn-primary" style="border-radius:10px;">
+            <i class="fas fa-plus me-1"></i> New File
+        </a>
+        <?php endif; ?>
+    </div>
 </div>
 
 <!-- Filter bar -->
@@ -111,12 +126,17 @@ require_once __DIR__ . '/../includes/header.php';
 
 <!-- Stats -->
 <?php
-$stats = db()->query("SELECT
-    COUNT(*) AS total,
-    SUM(status='active') AS active_count,
-    SUM(status='archived') AS archived_count,
-    SUM(uploaded_file IS NOT NULL) AS with_digital
-  FROM file_manager_files")->fetch();
+$stat_params = $vis_params;
+$stats_stmt = db()->prepare(
+    "SELECT COUNT(*) AS total,
+            SUM(f.status='active') AS active_count,
+            SUM(f.status='archived') AS archived_count,
+            SUM(f.uploaded_file IS NOT NULL) AS with_digital
+     FROM file_manager_files f
+     WHERE $vis_sql"
+);
+$stats_stmt->execute($stat_params);
+$stats = $stats_stmt->fetch();
 ?>
 <div class="row g-3 mb-4">
     <div class="col-6 col-md-3">
@@ -166,8 +186,8 @@ $stats = db()->query("SELECT
                     <th>File Name</th>
                     <th>Category</th>
                     <th>Location</th>
-                    <th>Creator</th>
-                    <th>Digital Copy</th>
+                    <th>Initiator</th>
+                    <th>Current Holder</th>
                     <th>Status</th>
                     <th style="width:120px">Actions</th>
                 </tr>
@@ -188,17 +208,14 @@ $stats = db()->query("SELECT
                         <?php endif; ?>
                     </td>
                     <td><?= $f['category'] ? '<span class="badge bg-light text-dark border">' . h($f['category']) . '</span>' : '<span class="text-muted">—</span>' ?></td>
-                    <td style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><?= $f['file_location'] ? h($f['file_location']) : '<span class="text-muted">—</span>' ?></td>
-                    <td style="font-size:.85rem"><?= h($f['creator_name'] ?? '—') ?></td>
-                    <td>
-                        <?php if ($f['uploaded_file']): ?>
-                        <a href="<?= UPLOAD_URL ?>/<?= FM_UPLOAD_SUBDIR ?>/<?= h($f['uploaded_file']) ?>" target="_blank" class="btn btn-sm btn-outline-secondary" style="border-radius:6px;" title="<?= h($f['original_name']) ?>">
-                            <i class="fas fa-download"></i>
-                        </a>
-                        <?php else: ?>
-                        <span class="text-muted">—</span>
+                    <td style="max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><?= $f['file_location'] ? h($f['file_location']) : '<span class="text-muted">—</span>' ?></td>
+                    <td style="font-size:.85rem">
+                        <?= h($f['initiator_name'] ?? $f['creator_name'] ?? '—') ?>
+                        <?php if (!empty($f['initiator_designation'])): ?>
+                        <div class="text-muted" style="font-size:.75rem"><?= h($f['initiator_designation']) ?></div>
                         <?php endif; ?>
                     </td>
+                    <td style="font-size:.85rem"><?= h($f['holder_name'] ?? '—') ?></td>
                     <td>
                         <?php if ($f['status'] === 'active'): ?>
                         <span class="badge bg-success">Active</span>
