@@ -94,19 +94,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['_action'] ?? '') === 'facu
         if ($phone === '')                                   $form_errors[] = 'Phone number is required.';
         if (!$dept_id)                                      $form_errors[] = 'Please select a department.';
 
-        // Duplicate email check
+        // Duplicate email / phone check
         if (empty($form_errors)) {
             $db = front_db();
             if ($db) {
-                $dup = $db->prepare('SELECT id FROM users WHERE email = ? LIMIT 1');
-                $dup->execute([$email]);
-                if ($dup->fetchColumn()) {
-                    $form_errors[] = 'This email address is already registered. Please use a different email.';
+                $already_registered = false;
+
+                // Check approved users by email or phone
+                $dupUser = $db->prepare('SELECT id FROM users WHERE email = ? OR phone = ? LIMIT 1');
+                $dupUser->execute([$email, $phone]);
+                if ($dupUser->fetchColumn()) {
+                    $already_registered = true;
                 }
-                $dupReg = $db->prepare("SELECT id FROM faculty_registrations WHERE email = ? AND status = 'pending' LIMIT 1");
-                $dupReg->execute([$email]);
-                if ($dupReg->fetchColumn()) {
-                    $form_errors[] = 'A pending registration already exists for this email address.';
+
+                // Check pending registrations by email or phone
+                if (!$already_registered) {
+                    $dupReg = $db->prepare("SELECT id FROM faculty_registrations WHERE (email = ? OR phone = ?) AND status = 'pending' LIMIT 1");
+                    $dupReg->execute([$email, $phone]);
+                    if ($dupReg->fetchColumn()) {
+                        $already_registered = true;
+                    }
+                }
+
+                if ($already_registered) {
+                    $form_errors[] = '__already_registered__';
                 }
             }
         }
@@ -328,6 +339,16 @@ require_once __DIR__ . '/includes/nav-menu.php';
                </div>
 
                <?php if ($form_errors): ?>
+               <?php if (in_array('__already_registered__', $form_errors, true)): ?>
+               <div class="alert alert-warning mb-4" style="border-radius:10px;">
+                  <p class="mb-2 fw-semibold"><i class="fas fa-exclamation-circle me-2"></i>You are already registered.</p>
+                  <p class="mb-1" style="font-size:.92rem;">It looks like your email address or phone number already exists in our system.</p>
+                  <ul class="mb-0 ps-3" style="font-size:.92rem;">
+                     <li>If you forgot your password, please <a href="/admin/forgot-password.php" class="alert-link">reset it here</a>.</li>
+                     <li>If you are totally unable to login, please <a href="/support-ticket.php" class="alert-link">create an IT support ticket here</a>.</li>
+                  </ul>
+               </div>
+               <?php else: ?>
                <div class="alert alert-danger mb-4" style="border-radius:10px;">
                   <ul class="mb-0 ps-3">
                   <?php foreach ($form_errors as $e): ?>
@@ -335,6 +356,7 @@ require_once __DIR__ . '/includes/nav-menu.php';
                   <?php endforeach; ?>
                   </ul>
                </div>
+               <?php endif; ?>
                <?php endif; ?>
 
                <div class="note-box mb-4">
