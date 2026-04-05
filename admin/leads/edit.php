@@ -154,7 +154,7 @@ $v = function(string $field) use ($lead, $old): string {
                         </div>
                         <div class="col-12 col-md-6">
                             <label class="form-label">Email</label>
-                            <input type="email" name="email" class="form-control" value="<?= h($v('email')) ?>">
+                            <input type="email" name="email" class="form-control" value="<?= h($v('email')) ?>" autocapitalize="off" autocorrect="off" spellcheck="false">
                         </div>
                         <div class="col-12 col-md-6">
                             <label class="form-label">Phone <span class="text-danger">*</span></label>
