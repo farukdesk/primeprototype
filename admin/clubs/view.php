@@ -7,7 +7,7 @@ require_access('clubs');
 $db   = db();
 $id   = (int)($_GET['id'] ?? 0);
 $stmt = $db->prepare(
-    'SELECT c.*, d.name AS dept_name, p.name AS program_name
+    'SELECT c.*, d.name AS dept_name, p.program_name AS program_name
      FROM clubs c
      LEFT JOIN dept_departments d ON d.id = c.dept_id
      LEFT JOIN dept_academic_programs p ON p.id = c.program_id
