@@ -13,9 +13,9 @@ $stmt = db()->prepare(
     'SELECT u.*, g.is_super FROM users u JOIN user_groups g ON g.id = u.group_id WHERE u.id = ?'
 );
 $stmt->execute([$id]);
-$user = $stmt->fetch();
+$edit_user = $stmt->fetch();
 
-if (!$user) {
+if (!$edit_user) {
     flash_set('error', 'User not found.');
     redirect(APP_URL . '/users/index.php');
 }
@@ -32,19 +32,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username  = trim($_POST['username']  ?? '');
     $email     = trim($_POST['email']     ?? '');
     $phone     = trim($_POST['phone']     ?? '');
-    $group_id  = (int)($_POST['group_id'] ?? $user['group_id']);
+    $group_id  = (int)($_POST['group_id'] ?? $edit_user['group_id']);
     $password  = $_POST['password']  ?? '';
     $password2 = $_POST['password2'] ?? '';
     // Only super admin can change active status, and only for other users (never self)
     if (is_super_admin() && $id !== (int)$me['id']) {
         $is_active = isset($_POST['is_active']) ? 1 : 0;
     } else {
-        $is_active = (int)$user['is_active']; // preserve current value
+        $is_active = (int)$edit_user['is_active']; // preserve current value
     }
 
     // Non-super-admin cannot change own group or assign super group
     if (!is_super_admin()) {
-        $group_id = (int)$user['group_id']; // lock group to current
+        $group_id = (int)$edit_user['group_id']; // lock group to current
     }
 
     if ($full_name === '')             $errors[] = 'Full name is required.';
@@ -86,7 +86,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             : APP_URL . '/users/index.php');
     }
 
-    $user = array_merge($user, compact('full_name', 'username', 'email', 'phone', 'group_id', 'is_active'));
+    $edit_user = array_merge($edit_user, compact('full_name', 'username', 'email', 'phone', 'group_id', 'is_active'));
 }
 
 require_once __DIR__ . '/../includes/header.php';
@@ -106,7 +106,7 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="col-lg-7">
 <div class="card">
     <div class="card-header py-3 px-4">
-        <h6 class="mb-0 fw-semibold"><i class="fas fa-user-edit me-2 text-muted"></i>Edit: <?= h($user['full_name']) ?></h6>
+        <h6 class="mb-0 fw-semibold"><i class="fas fa-user-edit me-2 text-muted"></i>Edit: <?= h($edit_user['full_name']) ?></h6>
     </div>
     <div class="card-body p-4">
 
@@ -125,22 +125,22 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="col-md-6">
                     <label class="form-label fw-medium">Full Name <span class="text-danger">*</span></label>
                     <input type="text" name="full_name" class="form-control"
-                           value="<?= h($user['full_name']) ?>" required maxlength="150">
+                           value="<?= h($edit_user['full_name']) ?>" required maxlength="150">
                 </div>
                 <div class="col-md-6">
                     <label class="form-label fw-medium">Username <span class="text-danger">*</span></label>
                     <input type="text" name="username" class="form-control"
-                           value="<?= h($user['username']) ?>" required maxlength="60">
+                           value="<?= h($edit_user['username']) ?>" required maxlength="60">
                 </div>
                 <div class="col-md-6">
                     <label class="form-label fw-medium">Email <span class="text-danger">*</span></label>
                     <input type="email" name="email" class="form-control"
-                           value="<?= h($user['email']) ?>" required maxlength="191">
+                           value="<?= h($edit_user['email']) ?>" required maxlength="191">
                 </div>
                 <div class="col-md-6">
                     <label class="form-label fw-medium">Phone</label>
                     <input type="text" name="phone" class="form-control"
-                           value="<?= h($user['phone'] ?? '') ?>" maxlength="30">
+                           value="<?= h($edit_user['phone'] ?? '') ?>" maxlength="30">
                 </div>
                 <div class="col-md-6">
                     <label class="form-label fw-medium">New Password
@@ -158,7 +158,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <label class="form-label fw-medium">User Group <span class="text-danger">*</span></label>
                     <select name="group_id" class="form-select" required>
                         <?php foreach ($groups as $g): ?>
-                        <option value="<?= $g['id'] ?>" <?= $user['group_id'] == $g['id'] ? 'selected' : '' ?>>
+                        <option value="<?= $g['id'] ?>" <?= $edit_user['group_id'] == $g['id'] ? 'selected' : '' ?>>
                             <?= h($g['name']) ?>
                         </option>
                         <?php endforeach; ?>
@@ -170,7 +170,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="col-md-6 d-flex align-items-end pb-1">
                     <div class="form-check form-switch">
                         <input class="form-check-input" type="checkbox" id="is_active" name="is_active"
-                               <?= $user['is_active'] ? 'checked' : '' ?> value="1">
+                               <?= $edit_user['is_active'] ? 'checked' : '' ?> value="1">
                         <label class="form-check-label" for="is_active">Active</label>
                     </div>
                 </div>
