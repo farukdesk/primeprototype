@@ -372,8 +372,8 @@ CREATE TABLE IF NOT EXISTS `cms_header_settings` (
 -- Seed: Default header settings
 -- -------------------------------------------------------
 INSERT INTO `cms_header_settings` (`setting_key`, `setting_value`) VALUES
-('phone',               '01710996196'),
-('email',               'info@primeuniversity.edu.bd'),
+('phone',               '01969-955566'),
+('email',               'info@primeuniversity.ac.bd'),
 ('student_portal_url',  '#'),
 ('student_portal_text', 'Student Portal'),
 ('find_result_url',     '#'),

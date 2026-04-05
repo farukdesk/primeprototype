@@ -38,8 +38,8 @@ INSERT INTO `cms_footer_settings` (`setting_key`, `setting_value`) VALUES
   ('col3_link_4_url',   '#'),
   ('col3_link_5_text',  'Contact'),
   ('col3_link_5_url',   'contact.php'),
-  ('contact_phone',     '+880-1710-996196'),
-  ('contact_email',     'info@primeuniversity.edu.bd'),
+  ('contact_phone',     '01969-955566'),
+  ('contact_email',     'info@primeuniversity.ac.bd'),
   ('contact_address',   '114/116, Mazar Rd, Dhaka-1216'),
   ('contact_address_url', 'https://maps.google.com/?q=Prime+University+Dhaka'),
   ('copyright_text',    'Prime University')
