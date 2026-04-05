@@ -23,7 +23,7 @@ $departments = db()->query(
 
 $programs_by_dept = [];
 $prog_stmt = db()->query(
-    'SELECT id, dept_id, program_name, degree_level FROM dept_academic_programs WHERE is_active = 1 ORDER BY program_name ASC'
+    'SELECT id, dept_id, program_name FROM dept_academic_programs WHERE is_active = 1 ORDER BY program_name ASC'
 );
 foreach ($prog_stmt->fetchAll() as $p) {
     $programs_by_dept[(int)$p['dept_id']][] = $p;
