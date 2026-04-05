@@ -422,9 +422,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
          position:relative;
          z-index:1;
       }
-      .pu-form-select {
-         appearance:auto;
-      }
       .pu-form-textarea { min-height:120px; resize:vertical; }
       .pu-form-control:focus,
       .pu-form-select:focus,
