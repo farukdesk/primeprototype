@@ -88,11 +88,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->beginTransaction();
 
         try {
-            // Insert broadcast record (draft initially)
+            // Individual sends go straight out; group/all require admin approval
+            $initial_status = ($recipient_type === 'individual') ? 'draft' : 'pending_approval';
+
             $pdo->prepare(
                 'INSERT INTO broadcasts (subject, body_html, recipient_type, recipient_user_id, recipient_group_id, sent_by, status)
-                 VALUES (?,?,?,?,?,?,\'draft\')'
-            )->execute([$subject, $body_html, $recipient_type, $user_id, $group_id, $user['id']]);
+                 VALUES (?,?,?,?,?,?,?)'
+            )->execute([$subject, $body_html, $recipient_type, $user_id, $group_id, $user['id'], $initial_status]);
             $broadcast_id = (int)$pdo->lastInsertId();
 
             // Save attachments
@@ -112,30 +114,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $pdo->commit();
 
-            // ── Send emails (outside transaction for performance) ──────────────
-            $attach_rows = $pdo->prepare(
-                'SELECT * FROM broadcast_attachments WHERE broadcast_id = ?'
-            );
-            $attach_rows->execute([$broadcast_id]);
-            $attach_rows = $attach_rows->fetchAll();
+            if ($recipient_type === 'individual') {
+                // ── Send immediately for individual recipients ─────────────────
+                $attach_rows = $pdo->prepare(
+                    'SELECT * FROM broadcast_attachments WHERE broadcast_id = ?'
+                );
+                $attach_rows->execute([$broadcast_id]);
+                $attach_rows = $attach_rows->fetchAll();
 
-            $result = bc_send_broadcast($broadcast_id, $recipients, $subject, $body_html, $attach_rows);
+                $result = bc_send_broadcast($broadcast_id, $recipients, $subject, $body_html, $attach_rows);
 
-            // Determine final status
-            $new_status = 'sent';
-            if ($result['failed'] > 0 && $result['sent'] === 0) $new_status = 'draft';
-            elseif ($result['failed'] > 0)                       $new_status = 'partial';
+                // Determine final status
+                $new_status = 'sent';
+                if ($result['failed'] > 0 && $result['sent'] === 0) $new_status = 'draft';
+                elseif ($result['failed'] > 0)                       $new_status = 'partial';
 
-            $pdo->prepare(
-                'UPDATE broadcasts SET sent_count=?, failed_count=?, status=?, sent_at=NOW() WHERE id=?'
-            )->execute([$result['sent'], $result['failed'], $new_status, $broadcast_id]);
+                $pdo->prepare(
+                    'UPDATE broadcasts SET sent_count=?, failed_count=?, status=?, sent_at=NOW() WHERE id=?'
+                )->execute([$result['sent'], $result['failed'], $new_status, $broadcast_id]);
 
-            $msg = 'Broadcast sent to ' . $result['sent'] . ' recipient(s).';
-            if ($result['failed'] > 0) {
-                $msg .= ' ' . $result['failed'] . ' delivery failure(s) – check the broadcast log.';
+                $msg = 'Broadcast sent to ' . $result['sent'] . ' recipient(s).';
+                if ($result['failed'] > 0) {
+                    $msg .= ' ' . $result['failed'] . ' delivery failure(s) – check the broadcast log.';
+                }
+                flash_set('success', $msg);
+                redirect(APP_URL . '/broadcast/view.php?id=' . $broadcast_id);
+            } else {
+                // ── Queue for admin approval (group / all users) ───────────────
+                flash_set('info', 'Broadcast queued for admin approval. It will be sent once an administrator approves it.');
+                redirect(APP_URL . '/broadcast/view.php?id=' . $broadcast_id);
             }
-            flash_set('success', $msg);
-            redirect(APP_URL . '/broadcast/view.php?id=' . $broadcast_id);
 
         } catch (Throwable $e) {
             $pdo->rollBack();
@@ -276,12 +284,17 @@ require_once __DIR__ . '/../includes/header.php';
             <!-- Send button -->
             <div class="card shadow-sm">
                 <div class="card-body">
-                    <div class="alert alert-warning small mb-3 py-2">
+                    <div id="alert-individual" class="alert alert-warning small mb-3 py-2" style="display:none;">
                         <i class="fas fa-exclamation-triangle me-1"></i>
-                        This will send an email immediately to all matched recipients. This action cannot be undone.
+                        This will send an email immediately to the selected recipient. This action cannot be undone.
+                    </div>
+                    <div id="alert-approval" class="alert alert-info small mb-3 py-2">
+                        <i class="fas fa-clock me-1"></i>
+                        Broadcasts to groups or all users require <strong>admin approval</strong> before sending.
                     </div>
                     <button type="submit" class="btn btn-primary w-100" id="send-btn">
-                        <i class="fas fa-paper-plane me-1"></i> Send Broadcast
+                        <i class="fas fa-clock me-1" id="send-icon"></i>
+                        <span id="send-label">Submit for Approval</span>
                     </button>
                 </div>
             </div>
@@ -330,6 +343,13 @@ function toggleRecipientFields(val) {
     // Sync Tom Select layout after display change
     if (val === 'group')      tsGroup.sync();
     if (val === 'individual') tsUser.sync();
+
+    // Update send button and alert based on recipient type
+    const isIndividual = (val === 'individual');
+    document.getElementById('alert-individual').style.display = isIndividual ? '' : 'none';
+    document.getElementById('alert-approval').style.display   = isIndividual ? 'none' : '';
+    document.getElementById('send-icon').className  = isIndividual ? 'fas fa-paper-plane me-1' : 'fas fa-clock me-1';
+    document.getElementById('send-label').textContent = isIndividual ? 'Send Broadcast' : 'Submit for Approval';
 }
 // Init on page load
 const checkedType = document.querySelector('input[name="recipient_type"]:checked');
@@ -355,7 +375,8 @@ document.getElementById('attachments').addEventListener('change', function () {
 document.getElementById('broadcast-form').addEventListener('submit', function () {
     const btn = document.getElementById('send-btn');
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Sending…';
+    const isIndividual = document.querySelector('input[name="recipient_type"]:checked')?.value === 'individual';
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> ' + (isIndividual ? 'Sending…' : 'Submitting…');
     // Sync TinyMCE content before submit
     tinymce.triggerSave();
 });

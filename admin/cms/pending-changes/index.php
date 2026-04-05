@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../../includes/auth.php';
 require_super_admin();
+require_once __DIR__ . '/../../broadcast/helpers.php';
 
 $page_title = 'Pending Approvals';
 
@@ -22,8 +23,9 @@ if (in_array($filter_action, ['EDIT','DELETE'], true)) {
     $params[] = $filter_action;
 }
 
-// If the action filter is explicitly "CREATE", skip the cms_pending_changes query
-$skip_pending_changes = ($filter_action === 'CREATE');
+// If the action filter is explicitly "CREATE" or "SEND", skip the cms_pending_changes query
+// Also skip if module filter is set to 'broadcast'
+$skip_pending_changes = ($filter_action === 'CREATE' || $filter_action === 'SEND' || $filter_module === 'broadcast');
 if (in_array($filter_status, ['pending','approved','rejected'], true)) {
     $where[]  = 'pc.status = ?';
     $params[] = $filter_status;
@@ -48,7 +50,8 @@ if (!$skip_pending_changes) {
 }
 
 // Also fetch unapproved new posts (CREATE actions) when the filter allows it
-$show_creates = (!$filter_action || $filter_action === 'CREATE')
+$show_creates = $filter_module !== 'broadcast'
+             && (!$filter_action || $filter_action === 'CREATE')
              && (!$filter_status  || $filter_status  === 'pending');
 if ($show_creates) {
     $create_rows = [];
@@ -116,6 +119,75 @@ $counts = db()->query(
 $pending_news_creates    = (int)db()->query("SELECT COUNT(*) FROM cms_news    WHERE is_approved=0")->fetchColumn();
 $pending_notice_creates  = (int)db()->query("SELECT COUNT(*) FROM cms_notices WHERE is_approved=0")->fetchColumn();
 
+// ── Pending broadcast approvals ───────────────────────────────────────────────
+$pending_broadcasts = [];
+$show_broadcasts = (!$filter_module || $filter_module === 'broadcast')
+                && (!$filter_action || $filter_action === 'SEND')
+                && (!$filter_status || $filter_status === 'pending');
+
+// Also load broadcast history rows for approved/rejected view
+$show_broadcast_history = (!$filter_module || $filter_module === 'broadcast')
+                       && in_array($filter_status, ['approved', 'rejected'], true);
+
+if ($show_broadcasts || $show_broadcast_history) {
+    $bc_status_filter = $show_broadcasts ? 'pending_approval' : ($filter_status === 'approved' ? 'sent' : 'rejected');
+    // For approved we consider sent/partial as approved; for rejected we use rejected
+    if ($show_broadcasts) {
+        $bc_sql_where = "b.status = 'pending_approval'";
+    } elseif ($filter_status === 'approved') {
+        $bc_sql_where = "b.status IN ('sent','partial')";
+    } else {
+        $bc_sql_where = "b.status = 'rejected'";
+    }
+    $bc_rows = db()->query(
+        "SELECT b.id, b.subject, b.recipient_type, b.status, b.created_at, b.review_note,
+                b.reviewed_at, b.recipient_group_id, b.recipient_user_id,
+                u.full_name  AS sender_name,
+                ug.name      AS group_name,
+                ru.full_name AS user_name,
+                rv.full_name AS reviewer_name
+         FROM broadcasts b
+         LEFT JOIN users       u  ON u.id  = b.sent_by
+         LEFT JOIN user_groups ug ON ug.id = b.recipient_group_id
+         LEFT JOIN users       ru ON ru.id = b.recipient_user_id
+         LEFT JOIN users       rv ON rv.id = b.reviewed_by
+         WHERE {$bc_sql_where}
+         ORDER BY b.created_at DESC"
+    )->fetchAll();
+
+    foreach ($bc_rows as $br) {
+        $mapped_status = ($br['status'] === 'pending_approval') ? 'pending'
+                       : (in_array($br['status'], ['sent','partial']) ? 'approved' : 'rejected');
+        $pending_broadcasts[] = [
+            'id'             => $br['id'],
+            'module'         => 'broadcast',
+            'record_id'      => $br['id'],
+            'record_title'   => $br['subject'],
+            'action'         => 'SEND',
+            'status'         => $mapped_status,
+            'created_at'     => $br['created_at'],
+            'requester_name' => $br['sender_name'],
+            'reviewer_name'  => $br['reviewer_name'],
+            'reviewed_at'    => $br['reviewed_at'],
+            'payload'        => null,
+            'review_note'    => $br['review_note'],
+            '_is_broadcast'  => true,
+            '_bc_recipient'  => bc_recipient_label($br),
+            '_bc_status'     => $br['status'],
+        ];
+    }
+}
+
+// Merge broadcast rows with CMS rows when not filtering by CMS-only module
+if ($filter_module !== 'news' && $filter_module !== 'notice') {
+    $changes = array_merge($pending_broadcasts, $changes);
+    usort($changes, fn($a, $b) => strcmp($b['created_at'], $a['created_at']));
+}
+
+$pending_bc_count = (int)db()->query(
+    "SELECT COUNT(*) FROM broadcasts WHERE status = 'pending_approval'"
+)->fetchColumn();
+
 require_once __DIR__ . '/../../includes/header.php';
 ?>
 
@@ -162,6 +234,16 @@ require_once __DIR__ . '/../../includes/header.php';
             </div>
         </div>
     </div>
+    <?php if ($pending_bc_count > 0): ?>
+    <div class="col-6 col-md-3">
+        <div class="card text-center border-0" style="background:#e2d9f3;">
+            <div class="card-body py-3">
+                <div style="font-size:1.6rem;font-weight:700;color:#3d1a78;"><?= $pending_bc_count ?></div>
+                <div style="font-size:.8rem;color:#3d1a78;">Broadcasts Pending</div>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
 </div>
 
 <?php if ($pending_news_creates > 0 || $pending_notice_creates > 0): ?>
@@ -183,20 +265,34 @@ require_once __DIR__ . '/../../includes/header.php';
 </div>
 <?php endif; ?>
 
+<?php if ($pending_bc_count > 0): ?>
+<div class="alert alert-info d-flex align-items-center gap-3 mb-4" style="border-radius:10px;">
+    <i class="fas fa-bullhorn fa-lg"></i>
+    <div>
+        <strong><?= $pending_bc_count ?> broadcast<?= $pending_bc_count > 1 ? 's' : '' ?> awaiting approval</strong> — once approved they will be sent immediately.
+        <a href="<?= APP_URL ?>/cms/pending-changes/index.php?module=broadcast" class="badge bg-info text-white text-decoration-none ms-1">
+            Review broadcasts
+        </a>
+    </div>
+</div>
+<?php endif; ?>
+
 <!-- Filters -->
 <div class="card mb-4">
     <div class="card-body py-3 px-4">
         <form method="GET" class="d-flex gap-3 flex-wrap align-items-center">
             <select name="module" class="form-select" style="max-width:150px;border-radius:10px;">
                 <option value="">All modules</option>
-                <option value="news"   <?= $filter_module === 'news'   ? 'selected' : '' ?>>News</option>
-                <option value="notice" <?= $filter_module === 'notice' ? 'selected' : '' ?>>Notice Board</option>
+                <option value="news"      <?= $filter_module === 'news'      ? 'selected' : '' ?>>News</option>
+                <option value="notice"    <?= $filter_module === 'notice'    ? 'selected' : '' ?>>Notice Board</option>
+                <option value="broadcast" <?= $filter_module === 'broadcast' ? 'selected' : '' ?>>Broadcast</option>
             </select>
             <select name="action" class="form-select" style="max-width:150px;border-radius:10px;">
                 <option value="">All actions</option>
                 <option value="CREATE" <?= $filter_action === 'CREATE' ? 'selected' : '' ?>>New Post</option>
                 <option value="EDIT"   <?= $filter_action === 'EDIT'   ? 'selected' : '' ?>>Edit</option>
                 <option value="DELETE" <?= $filter_action === 'DELETE' ? 'selected' : '' ?>>Delete</option>
+                <option value="SEND"   <?= $filter_action === 'SEND'   ? 'selected' : '' ?>>Send Broadcast</option>
             </select>
             <select name="status" class="form-select" style="max-width:160px;border-radius:10px;">
                 <option value="">All statuses</option>
@@ -243,11 +339,19 @@ require_once __DIR__ . '/../../includes/header.php';
                         <td class="px-4"><?= $idx + 1 ?></td>
                         <td>
                             <strong><?= h($ch['record_title']) ?></strong>
+                            <?php if (!empty($ch['_is_broadcast'])): ?>
+                            <div style="font-size:.75rem;color:#9ca3af;">
+                                <i class="fas fa-users me-1"></i><?= h($ch['_bc_recipient']) ?>
+                            </div>
+                            <?php else: ?>
                             <div style="font-size:.75rem;color:#9ca3af;">ID #<?= $ch['record_id'] ?></div>
+                            <?php endif; ?>
                         </td>
                         <td>
                             <?php if ($ch['module'] === 'news'): ?>
                                 <span class="badge bg-primary"><i class="fas fa-newspaper me-1"></i>News</span>
+                            <?php elseif ($ch['module'] === 'broadcast'): ?>
+                                <span class="badge bg-purple" style="background:#6f42c1!important;"><i class="fas fa-bullhorn me-1"></i>Broadcast</span>
                             <?php else: ?>
                                 <span class="badge bg-info text-dark"><i class="fas fa-bullhorn me-1"></i>Notice</span>
                             <?php endif; ?>
@@ -257,6 +361,8 @@ require_once __DIR__ . '/../../includes/header.php';
                                 <span class="badge bg-danger"><i class="fas fa-trash me-1"></i>Delete</span>
                             <?php elseif ($ch['action'] === 'CREATE'): ?>
                                 <span class="badge bg-success"><i class="fas fa-plus me-1"></i>New Post</span>
+                            <?php elseif ($ch['action'] === 'SEND'): ?>
+                                <span class="badge bg-secondary"><i class="fas fa-paper-plane me-1"></i>Send Broadcast</span>
                             <?php else: ?>
                                 <span class="badge bg-warning text-dark"><i class="fas fa-edit me-1"></i>Edit</span>
                             <?php endif; ?>
@@ -283,7 +389,43 @@ require_once __DIR__ . '/../../includes/header.php';
                         <td>
                             <?php if ($ch['status'] === 'pending'): ?>
                             <div class="d-flex gap-1 flex-wrap">
-                                <?php if (!empty($ch['_is_create'])): ?>
+                                <?php if (!empty($ch['_is_broadcast'])): ?>
+                                <!-- Broadcast: preview then approve/reject -->
+                                <a href="<?= APP_URL ?>/broadcast/view.php?id=<?= (int)$ch['id'] ?>"
+                                   class="btn btn-sm btn-outline-secondary" style="border-radius:7px;" title="Preview broadcast" target="_blank">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+
+                                <!-- Approve broadcast (send it) -->
+                                <form method="POST" action="<?= APP_URL ?>/broadcast/review.php"
+                                      onsubmit="return confirm('Approve and send this broadcast now?');">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="id"     value="<?= (int)$ch['id'] ?>">
+                                    <input type="hidden" name="action" value="approve">
+                                    <button class="btn btn-sm btn-success" style="border-radius:7px;" title="Approve &amp; Send">
+                                        <i class="fas fa-check me-1"></i>Approve &amp; Send
+                                    </button>
+                                </form>
+
+                                <!-- Reject broadcast -->
+                                <button class="btn btn-sm btn-outline-danger" style="border-radius:7px;"
+                                        onclick="showRejectForm('bc_<?= (int)$ch['id'] ?>')" title="Reject">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                                <!-- Inline reject note form – ID uses 'bc_' prefix to avoid collision with CMS change IDs -->
+                                <form method="POST" action="<?= APP_URL ?>/broadcast/review.php"
+                                      id="rejectFormbc_<?= (int)$ch['id'] ?>" style="display:none;width:100%;margin-top:.4rem;">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="id"     value="<?= (int)$ch['id'] ?>">
+                                    <input type="hidden" name="action" value="reject">
+                                    <div class="input-group input-group-sm">
+                                        <input type="text" name="review_note" class="form-control"
+                                               placeholder="Rejection reason (optional)" style="border-radius:7px 0 0 7px;">
+                                        <button type="submit" class="btn btn-danger" style="border-radius:0 7px 7px 0;">Reject</button>
+                                    </div>
+                                </form>
+
+                                <?php elseif (!empty($ch['_is_create'])): ?>
                                 <!-- Approve new post -->
                                 <form method="POST" action="<?= APP_URL ?>/cms/pending-changes/approve-create.php"
                                       onsubmit="return confirm('Approve this new post?');">
@@ -436,9 +578,11 @@ require_once __DIR__ . '/../../includes/header.php';
 </div>
 
 <script>
+// id for CMS changes is a plain integer; for broadcasts it is prefixed with 'bc_'
+// Both resolve to a unique element ID via 'rejectForm' + id
 function showRejectForm(id) {
     var form = document.getElementById('rejectForm' + id);
-    form.style.display = form.style.display === 'none' ? 'block' : 'none';
+    if (form) form.style.display = form.style.display === 'none' ? 'block' : 'none';
 }
 </script>
 
