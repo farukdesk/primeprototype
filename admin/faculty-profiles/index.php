@@ -55,7 +55,7 @@ $sql = 'SELECT u.id, u.full_name, u.email,
                fp.designation, fp.phone, d.name AS dept_name
         ' . $base_sql . $where_sql . '
         ORDER BY u.full_name ASC
-        LIMIT ' . $per_page . ' OFFSET ' . $offset;
+        LIMIT ' . (int)$per_page . ' OFFSET ' . (int)$offset;
 
 $stmt = db()->prepare($sql);
 $stmt->execute($params);
@@ -148,7 +148,13 @@ require_once __DIR__ . '/../includes/header.php';
                 </thead>
                 <tbody>
                 <?php if (empty($faculty)): ?>
-                    <tr><td colspan="7" class="text-center text-muted py-4">No faculty users found<?= ($search || $f_dept) ? ' matching your filters' : '. Add users to the <strong>Faculty</strong> group first.' ?>.</td></tr>
+                    <tr><td colspan="7" class="text-center text-muted py-4">
+                        <?php if ($search || $f_dept): ?>
+                            No faculty users found matching your filters.
+                        <?php else: ?>
+                            No faculty users found. Add users to the <strong>Faculty</strong> group first.
+                        <?php endif; ?>
+                    </td></tr>
                 <?php else: ?>
                     <?php foreach ($faculty as $i => $row): ?>
                     <tr>
@@ -163,9 +169,21 @@ require_once __DIR__ . '/../includes/header.php';
                             </div>
                         </td>
                         <td><?= h($row['email']) ?></td>
-                        <td><?= $row['phone'] ? h($row['phone']) : '<span class="text-muted">—</span>' ?></td>
+                        <td>
+                            <?php if ($row['phone']): ?>
+                                <?= h($row['phone']) ?>
+                            <?php else: ?>
+                                <span class="text-muted">—</span>
+                            <?php endif; ?>
+                        </td>
                         <td><?= h($row['designation'] ?? '—') ?></td>
-                        <td><?= $row['dept_name'] ? h($row['dept_name']) : '<span class="text-muted">—</span>' ?></td>
+                        <td>
+                            <?php if ($row['dept_name']): ?>
+                                <?= h($row['dept_name']) ?>
+                            <?php else: ?>
+                                <span class="text-muted">—</span>
+                            <?php endif; ?>
+                        </td>
                         <td class="text-end pe-4">
                             <div class="d-flex gap-1 justify-content-end">
                             <a href="<?= APP_URL ?>/faculty-profiles/edit.php?user_id=<?= $row['id'] ?>"
