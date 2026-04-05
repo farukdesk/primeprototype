@@ -822,29 +822,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                               <div class="pu-section-title"><span class="icon"><i class="fas fa-user"></i></span> Personal Information</div>
                               <div class="row g-4">
                                  <div class="col-md-6">
-                                    <label class="pu-form-label">First Name <span class="pu-required">*</span></label>
-                                    <input type="text" name="first_name" class="pu-form-control" maxlength="100" value="<?= an_old('first_name', $old) ?>" placeholder="Enter your first name" required>
+                                    <label class="pu-form-label" for="apply_first_name">First Name <span class="pu-required">*</span></label>
+                                    <input type="text" id="apply_first_name" name="first_name" class="pu-form-control" maxlength="100" value="<?= an_old('first_name', $old) ?>" placeholder="Enter your first name" required>
                                  </div>
                                  <div class="col-md-6">
-                                    <label class="pu-form-label">Last Name <span class="pu-required">*</span></label>
-                                    <input type="text" name="last_name" class="pu-form-control" maxlength="100" value="<?= an_old('last_name', $old) ?>" placeholder="Enter your last name" required>
+                                    <label class="pu-form-label" for="apply_last_name">Last Name <span class="pu-required">*</span></label>
+                                    <input type="text" id="apply_last_name" name="last_name" class="pu-form-control" maxlength="100" value="<?= an_old('last_name', $old) ?>" placeholder="Enter your last name" required>
                                  </div>
                                  <div class="col-md-6">
-                                    <label class="pu-form-label">Email Address</label>
-                                    <input type="email" name="email" class="pu-form-control" maxlength="200" value="<?= an_old('email', $old) ?>" placeholder="you@example.com">
+                                    <label class="pu-form-label" for="apply_email">Email Address</label>
+                                    <input type="email" id="apply_email" name="email" class="pu-form-control" maxlength="200" value="<?= an_old('email', $old) ?>" placeholder="you@example.com">
                                     <div class="pu-form-note">We will send a confirmation email if you provide one.</div>
                                  </div>
                                  <div class="col-md-6">
-                                    <label class="pu-form-label">Phone Number <span class="pu-required">*</span></label>
-                                    <input type="text" name="phone" class="pu-form-control" maxlength="30" value="<?= an_old('phone', $old) ?>" placeholder="+880 1XXX-XXXXXX" required>
+                                    <label class="pu-form-label" for="apply_phone">Phone Number <span class="pu-required">*</span></label>
+                                    <input type="text" id="apply_phone" name="phone" class="pu-form-control" maxlength="30" value="<?= an_old('phone', $old) ?>" placeholder="+880 1XXX-XXXXXX" required>
                                  </div>
                                  <div class="col-md-6">
-                                    <label class="pu-form-label">Current City</label>
-                                    <input type="text" name="current_city" class="pu-form-control" maxlength="200" value="<?= an_old('current_city', $old) ?>" placeholder="e.g. Dhaka">
+                                    <label class="pu-form-label" for="apply_current_city">Current City</label>
+                                    <input type="text" id="apply_current_city" name="current_city" class="pu-form-control" maxlength="200" value="<?= an_old('current_city', $old) ?>" placeholder="e.g. Dhaka">
                                  </div>
                                  <div class="col-12">
-                                    <label class="pu-form-label">Address</label>
-                                    <textarea name="address" class="pu-form-textarea" maxlength="1000" placeholder="Street, area, district"><?= an_old('address', $old) ?></textarea>
+                                    <label class="pu-form-label" for="apply_address">Address</label>
+                                    <textarea id="apply_address" name="address" class="pu-form-textarea" maxlength="1000" placeholder="Street, area, district"><?= an_old('address', $old) ?></textarea>
                                  </div>
                               </div>
                            </div>
@@ -870,8 +870,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     </div>
                                  </div>
                                  <div class="col-md-6">
-                                    <label class="pu-form-label">Preferred Intake Semester</label>
-                                    <select name="preferred_semester" class="pu-form-select">
+                                    <label class="pu-form-label" for="apply_preferred_semester">Preferred Intake Semester</label>
+                                    <select id="apply_preferred_semester" name="preferred_semester" class="pu-form-select">
                                        <option value="">Select semester</option>
                                        <?php foreach ($semesters as $sem): ?>
                                           <option value="<?= an_h($sem) ?>" <?= an_old('preferred_semester', $old) === $sem ? 'selected' : '' ?>><?= an_h($sem) ?></option>
@@ -879,7 +879,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     </select>
                                  </div>
                                  <div class="col-md-6">
-                                    <label class="pu-form-label">Department</label>
+                                    <label class="pu-form-label" for="an_dept_select">Department</label>
                                     <select name="dept_id" class="pu-form-select" id="an_dept_select">
                                        <option value="">Select department</option>
                                        <?php foreach ($departments as $dept): ?>
@@ -888,7 +888,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     </select>
                                  </div>
                                  <div class="col-12">
-                                    <label class="pu-form-label">Interested Program</label>
+                                    <label class="pu-form-label" for="an_program_select">Interested Program</label>
                                     <select name="program_id" class="pu-form-select" id="an_program_select">
                                        <option value="">Select department first</option>
                                        <?php
@@ -951,7 +951,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             const option = document.createElement('option');
             option.value = program.id;
             option.textContent = program.program_name;
-            if (Number(program.id) === initialProgramId) {
+            if (parseInt(program.id, 10) === initialProgramId) {
                option.selected = true;
             }
             progSelect.appendChild(option);
@@ -991,6 +991,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                   field.style.borderColor = '';
                }
             });
+            const emailField = form.querySelector('input[type="email"]');
+            if (emailField && emailField.value.trim()) {
+               const emailOk = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(emailField.value.trim());
+               if (!emailOk) {
+                  emailField.style.borderColor = '#dc2626';
+                  if (!firstInvalid) firstInvalid = emailField;
+               }
+            }
             if (firstInvalid) {
                event.preventDefault();
                firstInvalid.focus();
