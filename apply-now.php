@@ -884,15 +884,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     <select name="program_id" class="pu-form-select" id="an_program_select">
                                        <option value="">Select department first</option>
                                        <?php
-                                       $presel_dept = (int)an_old('dept_id', $old);
-                                       $presel_prog = (int)an_old('program_id', $old);
-                                       if ($presel_dept && isset($programs_by_dept[$presel_dept])) {
-                                           foreach ($programs_by_dept[$presel_dept] as $p) {
-                                               $sel = $presel_prog === (int)$p['id'] ? 'selected' : '';
-                                               echo '<option value="' . (int)$p['id'] . '" ' . $sel . '>' . an_h($p['program_name']) . '</option>';
-                                           }
-                                       }
-                                       ?>
+                                        $presel_dept = (int)an_old('dept_id', $old);
+                                        $presel_prog = (int)an_old('program_id', $old);
+                                        if ($presel_dept && isset($programs_by_dept[$presel_dept])):
+                                            foreach ($programs_by_dept[$presel_dept] as $p):
+                                        ?>
+                                           <option value="<?= (int)$p['id'] ?>" <?= $presel_prog === (int)$p['id'] ? 'selected' : '' ?>><?= an_h($p['program_name']) ?></option>
+                                        <?php
+                                            endforeach;
+                                        endif;
+                                        ?>
                                     </select>
                                  </div>
                               </div>
@@ -926,7 +927,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
    <script src="/assets/js/imagesloaded-pkgd.js"></script>
    <script src="/assets/js/main.js"></script>
    <script>
-      const programsByDept = <?= json_encode($programs_by_dept, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+      const programsByDept = <?= json_encode($programs_by_dept, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
       const deptSelect = document.getElementById('an_dept_select');
       const progSelect = document.getElementById('an_program_select');
       const initialProgramId = <?= json_encode(an_old('program_id', $old), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
