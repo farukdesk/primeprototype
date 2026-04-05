@@ -623,7 +623,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
    </button>
 
    <div class="search-popup">
-      <button class="close-search" aria-label="Close search"><span class="visually-hidden">Close search</span><i class="fal fa-times" aria-hidden="true"></i></button>
+      <button class="close-search" aria-label="Close search"><i class="fal fa-times" aria-hidden="true"></i></button>
       <form method="post" action="#">
          <div class="form-group">
             <input type="search" name="search-field" value="" placeholder="Search Here" required>
@@ -635,7 +635,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
    <div class="it-offcanvas-area">
       <div class="itoffcanvas">
          <div class="itoffcanvas__close-btn">
-            <button class="close-btn" aria-label="Close offcanvas menu"><span class="visually-hidden">Close offcanvas menu</span><i class="fal fa-times" aria-hidden="true"></i></button>
+            <button class="close-btn" aria-label="Close offcanvas menu"><i class="fal fa-times" aria-hidden="true"></i></button>
          </div>
          <div class="itoffcanvas__logo">
             <a href="<?= an_h(SITE_URL) ?>/index.php">
@@ -646,21 +646,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
          <div class="itoffcanvas__info">
             <h3 class="offcanva-title">Admissions Help Desk</h3>
             <div class="it-info-wrapper mb-20 d-flex align-items-center">
-               <div class="itoffcanvas__info-icon"><a href="mailto:admissions@primeuniversity.ac.bd" aria-label="Email admissions"><i class="fal fa-envelope" aria-hidden="true"></i></a></div>
+               <div class="itoffcanvas__info-icon"><a href="mailto:admissions@primeuniversity.ac.bd" aria-label="Send email to admissions@primeuniversity.ac.bd"><i class="fal fa-envelope" aria-hidden="true"></i></a></div>
                <div class="itoffcanvas__info-address">
                   <span>Email</span>
                   <a href="mailto:admissions@primeuniversity.ac.bd">admissions@primeuniversity.ac.bd</a>
                </div>
             </div>
             <div class="it-info-wrapper mb-20 d-flex align-items-center">
-               <div class="itoffcanvas__info-icon"><a href="tel:+8801710996196" aria-label="Call admissions"><i class="fal fa-phone-alt" aria-hidden="true"></i></a></div>
+               <div class="itoffcanvas__info-icon"><a href="tel:+8801710996196" aria-label="Call admissions at +880-1710996196"><i class="fal fa-phone-alt" aria-hidden="true"></i></a></div>
                <div class="itoffcanvas__info-address">
                   <span>Phone</span>
                   <a href="tel:+8801710996196">+880-1710996196</a>
                </div>
             </div>
             <div class="it-info-wrapper mb-20 d-flex align-items-center">
-               <div class="itoffcanvas__info-icon"><a href="https://maps.google.com/?q=Prime+University+Dhaka" target="_blank" rel="noopener" aria-label="Open campus location map"><i class="fas fa-map-marker-alt" aria-hidden="true"></i></a></div>
+               <div class="itoffcanvas__info-icon"><a href="https://maps.google.com/?q=Prime+University+Dhaka" target="_blank" rel="noopener" aria-label="Open campus location map in new tab"><i class="fas fa-map-marker-alt" aria-hidden="true"></i></a></div>
                <div class="itoffcanvas__info-address">
                   <span>Location</span>
                   <a href="https://maps.google.com/?q=Prime+University+Dhaka" target="_blank" rel="noopener">114/116 Mazar Road, Mirpur-1, Dhaka 1216</a>
@@ -938,7 +938,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       const programsByDept = <?= json_encode($programs_by_dept, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
       const deptSelect = document.getElementById('an_dept_select');
       const progSelect = document.getElementById('an_program_select');
-      const initialProgramId = Number(<?= json_encode(an_old('program_id', $old), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>) || 0;
+      const initialProgramId = <?= json_encode((int)an_old('program_id', $old), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 
       function updatePrograms() {
          if (!deptSelect || !progSelect) return;
@@ -966,10 +966,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       }
 
       if (deptSelect && progSelect) {
-         deptSelect.addEventListener('change', function () {
-            progSelect.dataset.userChanged = '1';
-            updatePrograms();
-         });
+         deptSelect.addEventListener('change', updatePrograms);
          updatePrograms();
       }
 
