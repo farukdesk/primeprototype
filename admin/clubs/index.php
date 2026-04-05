@@ -86,10 +86,8 @@ require_once __DIR__ . '/../includes/header.php';
             <?php if ($filter_dept): ?>
             <li class="breadcrumb-item"><a href="<?= APP_URL ?>/departments/index.php">Departments</a></li>
             <li class="breadcrumb-item"><a href="<?= APP_URL ?>/departments/view.php?id=<?= $filter_dept['id'] ?>"><?= h($filter_dept['name']) ?></a></li>
-            <li class="breadcrumb-item active">Clubs</li>
-            <?php else: ?>
-            <li class="breadcrumb-item active">Clubs</li>
             <?php endif; ?>
+            <li class="breadcrumb-item active">Clubs</li>
         </ol></nav>
     </div>
     <?php if (clubs_can_create()): ?>
