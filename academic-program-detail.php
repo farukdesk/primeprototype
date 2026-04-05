@@ -134,6 +134,12 @@ function ap_intake_status_badge(string $status): string {
         default    => ''
     };
 }
+
+function ap_safe_date(mixed $val): string {
+    if (empty($val) || $val === '0000-00-00') return '';
+    $ts = strtotime((string)$val);
+    return $ts !== false ? date('d M Y', $ts) : '';
+}
 ?>
 <!doctype html>
 <html class="no-js" lang="en">
@@ -416,13 +422,14 @@ function ap_intake_status_badge(string $status): string {
                         <div class="ap-intake-card status-<?= fh($ip['intake_status']) ?>">
                            <div class="ap-intake-name"><?= fh($ip['intake_name']) ?></div>
                            <?= ap_intake_status_badge($ip['intake_status']) ?>
-                           <?php if (!empty($ip['open_date']) || !empty($ip['close_date'])): ?>
+                           <?php $od = ap_safe_date($ip['open_date']); $cd = ap_safe_date($ip['close_date']); ?>
+                           <?php if ($od !== '' || $cd !== ''): ?>
                            <div class="ap-intake-dates mt-2">
-                              <?php if (!empty($ip['open_date'])): ?>
-                              <span><i class="fas fa-play-circle me-1" style="color:#16A34A;"></i>Opens: <?= h(date('d M Y', strtotime($ip['open_date']))) ?></span>
+                              <?php if ($od !== ''): ?>
+                              <span><i class="fas fa-play-circle me-1" style="color:#16A34A;"></i>Opens: <?= h($od) ?></span>
                               <?php endif; ?>
-                              <?php if (!empty($ip['close_date'])): ?>
-                              <span class="ms-2"><i class="fas fa-stop-circle me-1" style="color:#D21034;"></i>Closes: <?= h(date('d M Y', strtotime($ip['close_date']))) ?></span>
+                              <?php if ($cd !== ''): ?>
+                              <span class="ms-2"><i class="fas fa-stop-circle me-1" style="color:#D21034;"></i>Closes: <?= h($cd) ?></span>
                               <?php endif; ?>
                            </div>
                            <?php endif; ?>
@@ -669,8 +676,8 @@ function ap_intake_status_badge(string $status): string {
                               <span style="font-size:14px; font-weight:600; color:#1E293B;"><?= fh($ip['intake_name']) ?></span>
                               <?= ap_intake_status_badge($ip['intake_status']) ?>
                            </div>
-                           <?php if (!empty($ip['close_date'])): ?>
-                           <div style="font-size:12px; color:#64748B;"><i class="fas fa-hourglass-end me-1" style="color:#D21034;"></i>Deadline: <?= h(date('d M Y', strtotime($ip['close_date']))) ?></div>
+                           <?php $cd2 = ap_safe_date($ip['close_date']); if ($cd2 !== ''): ?>
+                           <div style="font-size:12px; color:#64748B;"><i class="fas fa-hourglass-end me-1" style="color:#D21034;"></i>Deadline: <?= h($cd2) ?></div>
                            <?php endif; ?>
                         </div>
                         <?php endforeach; ?>
