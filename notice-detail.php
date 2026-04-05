@@ -110,7 +110,7 @@ if (!empty($notice['published_at'])) {
                </div>
                <div class="itoffcanvas__info-address">
                   <span>Email</span>
-                  <a href="mailto:info@primeuniversity.edu.bd">info@primeuniversity.edu.bd</a>
+                  <a href="mailto:info@primeuniversity.ac.bd">info@primeuniversity.ac.bd</a>
                </div>
             </div>
             <div class="it-info-wrapper mb-20 d-flex align-items-center">
@@ -119,7 +119,7 @@ if (!empty($notice['published_at'])) {
                </div>
                <div class="itoffcanvas__info-address">
                   <span>Phone</span>
-                  <a href="tel:+8801710996196">+880-1710996196</a>
+                  <a href="tel:+8801969955566">01969-955566</a>
                </div>
             </div>
             <div class="it-info-wrapper mb-20 d-flex align-items-center">
@@ -128,7 +128,7 @@ if (!empty($notice['published_at'])) {
                </div>
                <div class="itoffcanvas__info-address">
                   <span>Location</span>
-                  <a href="https://www.google.com/maps/@23.7934913,90.3547073,15z" target="_blank">114, 116 Mazar Rd, Dhaka 1216</a>
+                  <a href="https://www.google.com/maps/@23.7934913,90.3547073,15z" target="_blank">114/116, Mazar Rd, Dhaka-1216</a>
                </div>
             </div>
          </div>

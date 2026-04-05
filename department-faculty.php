@@ -102,15 +102,15 @@ $dept_name    = fh($dept['name'] ?? 'Department');
             <h3 class="offcanva-title">Get In Touch</h3>
             <div class="it-info-wrapper mb-20 d-flex align-items-center">
                <div class="itoffcanvas__info-icon"><a href="#"><i class="fal fa-envelope"></i></a></div>
-               <div class="itoffcanvas__info-address"><span>Email</span><a href="mailto:info@primeuniversity.edu.bd">info@primeuniversity.edu.bd</a></div>
+               <div class="itoffcanvas__info-address"><span>Email</span><a href="mailto:info@primeuniversity.ac.bd">info@primeuniversity.ac.bd</a></div>
             </div>
             <div class="it-info-wrapper mb-20 d-flex align-items-center">
                <div class="itoffcanvas__info-icon"><a href="#"><i class="fal fa-phone-alt"></i></a></div>
-               <div class="itoffcanvas__info-address"><span>Phone</span><a href="tel:+8801710996196">+880-1710996196</a></div>
+               <div class="itoffcanvas__info-address"><span>Phone</span><a href="tel:+8801969955566">01969-955566</a></div>
             </div>
             <div class="it-info-wrapper mb-20 d-flex align-items-center">
                <div class="itoffcanvas__info-icon"><a href="#"><i class="fas fa-map-marker-alt"></i></a></div>
-               <div class="itoffcanvas__info-address"><span>Location</span><a href="https://www.google.com/maps/@37.4801311,22.8928877,3z" target="_blank">114, 116 Mazar Rd, Dhaka 1216</a></div>
+               <div class="itoffcanvas__info-address"><span>Location</span><a href="https://www.google.com/maps/@37.4801311,22.8928877,3z" target="_blank">114/116, Mazar Rd, Dhaka-1216</a></div>
             </div>
          </div>
       </div>

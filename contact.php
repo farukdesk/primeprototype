@@ -1,18 +1,14 @@
 <?php
 require_once __DIR__ . '/includes/config.php';
 
-$page_title = 'Contact Us – Prime University';
 
-// ── CSRF token (used for the contact form) ────────────────────────────────────
 if (session_status() === PHP_SESSION_NONE) session_start();
 $csrf_token = $_SESSION['pub_csrf'] ?? ($_SESSION['pub_csrf'] = bin2hex(random_bytes(16)));
 
-// ── Handle form submission ─────────────────────────────────────────────────────
 $form_success = false;
 $form_errors  = [];
 $form_data    = ['name' => '', 'email' => '', 'phone' => '', 'subject' => '', 'message' => ''];
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // CSRF
     if (!hash_equals($_SESSION['pub_csrf'] ?? '', $_POST['_csrf'] ?? '')) {
         $form_errors[] = 'Invalid security token. Please try again.';
@@ -23,12 +19,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $form_data['subject'] = trim($_POST['subject'] ?? '');
         $form_data['message'] = trim($_POST['message'] ?? '');
 
-        if ($form_data['name'] === '')                              $form_errors[] = 'Your name is required.';
         if (!filter_var($form_data['email'], FILTER_VALIDATE_EMAIL)) $form_errors[] = 'A valid email address is required.';
         if ($form_data['subject'] === '')                           $form_errors[] = 'Subject is required.';
         if (strlen($form_data['message']) < 10)                    $form_errors[] = 'Message must be at least 10 characters.';
 
-        if (empty($form_errors)) {
             try {
                 $db = front_db();
                 if ($db) {
@@ -56,16 +50,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <!doctype html>
 <html class="no-js" lang="en">
 
-<head>
    <meta charset="utf-8">
    <meta http-equiv="x-ua-compatible" content="ie=edge">
    <title><?= fh($page_title) ?></title>
    <meta name="description" content="Get in touch with Prime University. We&rsquo;re here to answer your questions about admissions, programs, and campus life.">
    <meta name="viewport" content="width=device-width, initial-scale=1">
 
-   <link rel="shortcut icon" type="image/x-icon" href="/assets/img/logo/favicon.png">
 
-   <!-- CSS Here -->
    <link rel="stylesheet" href="/assets/css/bootstrap.min.css">
    <link rel="stylesheet" href="/assets/css/font-awesome-pro.css">
    <link rel="stylesheet" href="/assets/css/swiper-bundle.min.css">
@@ -76,10 +67,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
    <link rel="stylesheet" href="/assets/css/spacing.css">
    <link rel="stylesheet" href="/assets/css/main.css">
 
-   <style>
    /* ── Contact Page Custom Styles ──────────────────────────────────────────── */
 
-   /* Hero */
    .pu-contact-hero {
       background: linear-gradient(135deg, #1a2e5a 0%, #2563eb 100%);
       padding: 90px 0 80px;
@@ -123,7 +112,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       max-width: 540px;
    }
 
-   /* Info cards strip */
    .pu-info-strip {
       background: #fff;
       border-radius: 20px;
@@ -178,7 +166,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
    }
    .pu-info-card a:hover { color: #2563eb; }
 
-   /* Section labels */
    .pu-section-tag {
       display: inline-block;
       background: #eef2ff;
@@ -198,7 +185,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       line-height: 1.25;
    }
 
-   /* Map container */
    .pu-map-wrap {
       border-radius: 20px;
       overflow: hidden;
@@ -211,7 +197,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       border: 0; display: block;
    }
 
-   /* Contact form card */
    .pu-form-card {
       background: #fff;
       border-radius: 20px;
@@ -263,7 +248,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
    }
    .pu-submit-btn:hover { opacity: .88; transform: translateY(-2px); }
 
-   /* Social links */
    .pu-social-row {
       display: flex;
       gap: 12px;
@@ -284,7 +268,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
    .pu-social-link.li   { background: #0077b5; color: #fff; }
    .pu-social-link.yt   { background: #ff0000; color: #fff; }
 
-   /* Quick details sidebar */
    .pu-detail-box {
       background: #f8fafc;
       border-radius: 16px;
@@ -319,7 +302,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
    .pu-detail-row .text a { color: #2563eb; text-decoration: none; }
    .pu-detail-row .text a:hover { text-decoration: underline; }
 
-   /* Alert overrides */
    .pu-alert-success {
       background: #ecfdf5; border: 1.5px solid #6ee7b7;
       border-radius: 12px; color: #065f46;
@@ -331,20 +313,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       padding: 16px 20px; font-size: .92rem;
    }
 
-   /* Office hours */
    .pu-hours-table { width: 100%; font-size: .88rem; color: #374151; }
    .pu-hours-table td { padding: 6px 0; }
    .pu-hours-table td:last-child { text-align: right; color: #6b7280; }
    .pu-hours-table tr.today td { font-weight: 700; color: #2563eb; }
 
-   /* WOW stagger helpers */
    .wow-stagger > * { opacity: 0; }
    </style>
 </head>
 
-<body id="body" class="it-magic-cursor">
 
-   <!-- preloader -->
    <div id="preloader">
       <div class="preloader">
          <span></span>
@@ -353,16 +331,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
    </div>
    <!-- preloader end -->
 
-   <div id="magic-cursor">
       <div id="ball"></div>
    </div>
 
-   <!-- back-to-top -->
    <button class="scroll-top scroll-to-target" data-target="html">
       <i class="far fa-angle-double-up"></i>
    </button>
 
-   <!-- search popup -->
    <div class="search-popup">
       <button class="close-search"><span class="flaticon-multiply"><i class="fal fa-times"></i></span></button>
       <form method="post" action="#">
@@ -373,7 +348,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       </form>
    </div>
 
-   <!-- offcanvas -->
    <div class="it-offcanvas-area">
       <div class="itoffcanvas">
          <div class="itoffcanvas__close-btn">
@@ -391,14 +365,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                <div class="itoffcanvas__info-icon"><a href="#"><i class="fal fa-envelope"></i></a></div>
                <div class="itoffcanvas__info-address">
                   <span>Email</span>
-                  <a href="mailto:info@primeuniversity.edu.bd">info@primeuniversity.edu.bd</a>
+                  <a href="mailto:info@primeuniversity.ac.bd">info@primeuniversity.ac.bd</a>
                </div>
             </div>
             <div class="it-info-wrapper mb-20 d-flex align-items-center">
                <div class="itoffcanvas__info-icon"><a href="#"><i class="fal fa-phone-alt"></i></a></div>
                <div class="itoffcanvas__info-address">
                   <span>Phone</span>
-                  <a href="tel:+8801710996196">+880-1710996196</a>
+                  <a href="tel:+8801969955566">01969-955566</a>
                </div>
             </div>
             <div class="it-info-wrapper mb-20 d-flex align-items-center">
@@ -414,12 +388,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
    <div class="body-overlay"></div>
    <!-- offcanvas end -->
 
-   <header class="it-header-height">
       <?php include __DIR__ . '/includes/header-top.php'; ?>
       <?php include __DIR__ . '/includes/nav-menu.php'; ?>
    </header>
 
-   <!-- ── HERO ────────────────────────────────────────────────────────────── -->
    <section class="pu-contact-hero">
       <div class="container position-relative" style="z-index:2;">
          <nav class="breadcrumb-nav mb-20">
@@ -436,13 +408,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
    </section>
    <!-- ── HERO END ─────────────────────────────────────────────────────────── -->
 
-   <!-- ── INFO STRIP ───────────────────────────────────────────────────────── -->
    <section style="background:#f5f7fb; padding-bottom:80px;">
       <div class="container">
          <div class="pu-info-strip wow fadeInUp" data-wow-delay=".15s">
             <div class="row g-0">
 
-               <!-- Address -->
                <div class="col-lg-3 col-sm-6">
                   <div class="pu-info-card">
                      <div class="pu-info-icon blue"><i class="fas fa-map-marker-alt"></i></div>
@@ -454,29 +424,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                   </div>
                </div>
 
-               <!-- Phone -->
                <div class="col-lg-3 col-sm-6">
                   <div class="pu-info-card">
                      <div class="pu-info-icon green"><i class="fas fa-phone-alt"></i></div>
                      <h5>Phone Numbers</h5>
                      <a href="tel:+88-02-41002432">PABX: +88-02-41002432</a>
                      <a href="tel:+88-02-41002435">+88-02-41002435</a>
-                     <a href="tel:+8801710996196">01710996196</a>
-                     <a href="tel:+8801939425030">01939425030</a>
+                     <a href="tel:+8801969955566">01969-955566</a>
                   </div>
                </div>
 
-               <!-- Email -->
                <div class="col-lg-3 col-sm-6">
                   <div class="pu-info-card">
                      <div class="pu-info-icon amber"><i class="fas fa-envelope"></i></div>
                      <h5>Email Address</h5>
-                     <a href="mailto:info@primeuniversity.edu.bd">info@primeuniversity.edu.bd</a>
+                     <a href="mailto:info@primeuniversity.ac.bd">info@primeuniversity.ac.bd</a>
                      <p style="margin-top:10px;font-size:.82rem;">We typically respond within<br>1–2 business days.</p>
                   </div>
                </div>
 
-               <!-- Follow Us -->
                <div class="col-lg-3 col-sm-6">
                   <div class="pu-info-card">
                      <div class="pu-info-icon red"><i class="fas fa-share-alt"></i></div>
@@ -498,21 +464,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                   </div>
                </div>
 
-            </div>
          </div>
       </div>
    </section>
    <!-- ── INFO STRIP END ───────────────────────────────────────────────────── -->
 
-   <!-- ── MAP + FORM ───────────────────────────────────────────────────────── -->
    <section style="background:#f5f7fb; padding-top:0; padding-bottom:100px;">
       <div class="container">
          <div class="row g-4 align-items-stretch">
 
-            <!-- Left: Map + Quick Details -->
             <div class="col-lg-5 wow fadeInLeft" data-wow-delay=".1s">
 
-               <!-- Google Map -->
                <div class="pu-map-wrap mb-4">
                   <iframe
                      src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3650.2195706014956!2d90.34560931498184!3d23.790663984524957!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3755b9cb8a002d35%3A0xf36071651f4f6585!2sPrime%20University!5e0!3m2!1sen!2sbd!4v1680000000000!5m2!1sen!2sbd"
@@ -523,14 +485,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                   </iframe>
                </div>
 
-               <!-- Quick Details -->
                <div class="pu-detail-box">
                   <h6>Additional Contacts</h6>
                   <div class="pu-detail-row">
                      <div class="icon blue"><i class="fas fa-phone-alt"></i></div>
                      <div class="text">
-                        <a href="tel:+8801687191986">01687191986</a><br>
-                        <a href="tel:+8801866207160">01866207160</a>
+                        <a href="tel:+8801969955566">01969-955566</a>
                      </div>
                   </div>
                   <div class="pu-detail-row">
@@ -550,9 +510,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                   </div>
                </div>
 
-            </div>
 
-            <!-- Right: Contact Form -->
             <div class="col-lg-7 wow fadeInRight" data-wow-delay=".15s">
                <div class="pu-form-card">
                   <div class="mb-4">
@@ -563,14 +521,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                      </p>
                   </div>
 
-                  <?php if ($form_success): ?>
                   <div class="pu-alert-success mb-4" role="alert">
                      <i class="fas fa-check-circle me-2"></i>
                      <strong>Thank you!</strong> Your message has been sent. We&rsquo;ll be in touch soon.
                   </div>
                   <?php endif; ?>
 
-                  <?php if (!empty($form_errors)): ?>
                   <div class="pu-alert-danger mb-4" role="alert">
                      <i class="fas fa-exclamation-circle me-2"></i>
                      <?php foreach ($form_errors as $err): ?>
@@ -579,10 +535,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                   </div>
                   <?php endif; ?>
 
-                  <form method="POST" action="<?= fh(SITE_URL) ?>/contact.php#contact-form" id="contact-form" novalidate>
                      <input type="hidden" name="_csrf" value="<?= fh($csrf_token) ?>">
 
-                     <div class="row g-3">
                         <div class="col-sm-6">
                            <label class="form-label" for="cf-name">Full Name <span style="color:#e11d48;">*</span></label>
                            <input type="text" id="cf-name" name="name" class="form-control"
@@ -620,29 +574,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                      </div>
                   </form>
 
-               </div>
             </div>
 
-         </div>
       </div>
    </section>
    <!-- ── MAP + FORM END ───────────────────────────────────────────────────── -->
 
-<?php include __DIR__ . '/includes/footer.php'; ?>
 
-   <!-- JS Libraries -->
    <?php include __DIR__ . '/includes/scripts.php'; ?>
 
-   <script>
    (function () {
       'use strict';
 
-      /* ── WOW.js initialisation ─────────────────────────────────────── */
       if (typeof WOW !== 'undefined') {
          new WOW({ mobile: false, offset: 60 }).init();
       }
 
-      /* ── Info-card hover highlight ──────────────────────────────────── */
       document.querySelectorAll('.pu-info-card').forEach(function (card) {
          card.addEventListener('mouseenter', function () {
             this.style.boxShadow = '0 8px 32px rgba(37,99,235,.12)';
@@ -652,7 +599,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
          });
       });
 
-      /* ── Form field validation feedback ────────────────────────────── */
       var form = document.getElementById('contact-form');
       if (form) {
          form.addEventListener('submit', function (e) {
@@ -672,7 +618,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
          });
 
-         /* Live clear error highlight on input */
          form.querySelectorAll('[required]').forEach(function (el) {
             el.addEventListener('input', function () {
                if (this.value.trim()) this.style.borderColor = '';
@@ -680,8 +625,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
          });
       }
 
-   }());
    </script>
 
-</body>
 </html>

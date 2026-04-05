@@ -656,10 +656,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                </div>
             </div>
             <div class="it-info-wrapper mb-20 d-flex align-items-center">
-               <div class="itoffcanvas__info-icon"><a href="tel:+8801710996196" aria-label="Call admissions at +880-1710996196"><i class="fal fa-phone-alt" aria-hidden="true"></i></a></div>
+               <div class="itoffcanvas__info-icon"><a href="tel:+8801969955566" aria-label="Call admissions at 01969-955566"><i class="fal fa-phone-alt" aria-hidden="true"></i></a></div>
                <div class="itoffcanvas__info-address">
                   <span>Phone</span>
-                  <a href="tel:+8801710996196">+880-1710996196</a>
+                  <a href="tel:+8801969955566">01969-955566</a>
                </div>
             </div>
             <div class="it-info-wrapper mb-20 d-flex align-items-center">
@@ -785,7 +785,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                      <div class="pu-contact-box">
                         <h5>Need help before applying?</h5>
                         <p><a href="mailto:admissions@primeuniversity.ac.bd">admissions@primeuniversity.ac.bd</a></p>
-                        <p><a href="tel:+8801710996196">+880-1710996196</a></p>
+                        <p><a href="tel:+8801969955566">01969-955566</a></p>
                         <p>114/116 Mazar Road, Mirpur-1, Dhaka 1216</p>
                      </div>
                   </aside>
