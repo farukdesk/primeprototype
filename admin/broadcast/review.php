@@ -63,7 +63,11 @@ if ($action === 'reject') {
 $recipients = bc_resolve_recipients(
     $broadcast['recipient_type'],
     $broadcast['recipient_user_id'] ? (int)$broadcast['recipient_user_id'] : null,
-    $broadcast['recipient_group_id'] ? (int)$broadcast['recipient_group_id'] : null
+    $broadcast['recipient_group_id'] ? (int)$broadcast['recipient_group_id'] : null,
+    $broadcast['student_dept_id']    ? (int)$broadcast['student_dept_id']    : null,
+    $broadcast['student_program_id'] ? (int)$broadcast['student_program_id'] : null,
+    $broadcast['student_status']     ?: null,
+    $broadcast['student_semester']   ?: null
 );
 
 if (empty($recipients)) {

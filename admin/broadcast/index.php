@@ -19,7 +19,7 @@ if (in_array($filter_status, ['draft','sent','partial','pending_approval','rejec
     $where[]  = 'b.status = ?';
     $params[] = $filter_status;
 }
-if (in_array($filter_type, ['individual','group','all'], true)) {
+if (in_array($filter_type, ['individual','group','all','students'], true)) {
     $where[]  = 'b.recipient_type = ?';
     $params[] = $filter_type;
 }
@@ -29,13 +29,17 @@ if ($search !== '') {
 }
 
 $sql = 'SELECT b.*,
-               u.full_name  AS sender_name,
-               ug.name      AS group_name,
-               ru.full_name AS user_name
+               u.full_name     AS sender_name,
+               ug.name         AS group_name,
+               ru.full_name    AS user_name,
+               dd.name         AS dept_name,
+               ap.program_name AS program_name
         FROM broadcasts b
-        LEFT JOIN users      u  ON u.id  = b.sent_by
-        LEFT JOIN user_groups ug ON ug.id = b.recipient_group_id
-        LEFT JOIN users      ru ON ru.id = b.recipient_user_id
+        LEFT JOIN users                  u  ON u.id  = b.sent_by
+        LEFT JOIN user_groups            ug ON ug.id = b.recipient_group_id
+        LEFT JOIN users                  ru ON ru.id = b.recipient_user_id
+        LEFT JOIN dept_departments       dd ON dd.id = b.student_dept_id
+        LEFT JOIN dept_academic_programs ap ON ap.id = b.student_program_id
         WHERE ' . implode(' AND ', $where) . '
         ORDER BY b.created_at DESC';
 
@@ -54,7 +58,7 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="d-flex align-items-center justify-content-between mb-4">
     <div>
         <h1 class="h3 mb-0"><i class="fas fa-bullhorn me-2 text-primary"></i>Broadcast</h1>
-        <p class="text-muted small mb-0">Send emails to individual users, groups, or all registered users.</p>
+        <p class="text-muted small mb-0">Send emails to individual users, groups, students, or all registered users.</p>
     </div>
     <?php if (bc_is_staff()): ?>
     <a href="<?= APP_URL ?>/broadcast/compose.php" class="btn btn-primary">
@@ -97,6 +101,7 @@ require_once __DIR__ . '/../includes/header.php';
             <option value="">All Types</option>
             <option value="all"        <?= $filter_type === 'all'        ? 'selected' : '' ?>>All Users</option>
             <option value="group"      <?= $filter_type === 'group'      ? 'selected' : '' ?>>Group</option>
+            <option value="students"   <?= $filter_type === 'students'   ? 'selected' : '' ?>>Students</option>
             <option value="individual" <?= $filter_type === 'individual' ? 'selected' : '' ?>>Individual</option>
         </select>
     </div>
@@ -139,9 +144,10 @@ require_once __DIR__ . '/../includes/header.php';
                     <td>
                         <?php
                         $icon = match($bc['recipient_type']) {
-                            'all'   => '<i class="fas fa-users text-success me-1"></i>',
-                            'group' => '<i class="fas fa-layer-group text-info me-1"></i>',
-                            default => '<i class="fas fa-user text-warning me-1"></i>',
+                            'all'      => '<i class="fas fa-users text-success me-1"></i>',
+                            'group'    => '<i class="fas fa-layer-group text-info me-1"></i>',
+                            'students' => '<i class="fas fa-user-graduate text-primary me-1"></i>',
+                            default    => '<i class="fas fa-user text-warning me-1"></i>',
                         };
                         echo $icon . bc_recipient_label($bc);
                         ?>
