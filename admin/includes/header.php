@@ -255,7 +255,7 @@ $user       = auth_user();
     $current_path = $_SERVER['PHP_SELF'];
     $is_website_active  = strpos($current_path, '/cms/') !== false || strpos($current_path, '/homepage/') !== false || strpos($current_path, '/pages/') !== false;
     $is_academic_active = strpos($current_path, '/departments/') !== false || strpos($current_path, '/faculty-profiles/') !== false || strpos($current_path, '/students/') !== false;
-    $is_comms_active    = strpos($current_path, '/contact/') !== false || strpos($current_path, '/support-tickets/') !== false || strpos($current_path, '/knowledge-base/') !== false;
+    $is_comms_active    = strpos($current_path, '/contact/') !== false || strpos($current_path, '/support-tickets/') !== false || strpos($current_path, '/knowledge-base/') !== false || strpos($current_path, '/broadcast/') !== false;
     $is_jobs_active          = strpos($current_path, '/jobs/') !== false;
     $is_library_active       = strpos($current_path, '/library/') !== false;
     $is_governing_body_active = strpos($current_path, '/governing-body/') !== false;
@@ -493,7 +493,7 @@ $user       = auth_user();
     <?php endif; ?>
 
     <!-- ── Communication ── -->
-    <?php if (is_super_admin() || can_access('contact') || can_access('support-tickets') || can_access('knowledge-base')): ?>
+    <?php if (is_super_admin() || can_access('contact') || can_access('support-tickets') || can_access('knowledge-base') || can_access('broadcast')): ?>
     <button class="nav-group-toggle <?= $is_comms_active ? '' : 'collapsed' ?>"
             data-bs-toggle="collapse" data-bs-target="#grp-comms"
             aria-expanded="<?= $is_comms_active ? 'true' : 'false' ?>">
@@ -508,6 +508,14 @@ $user       = auth_user();
                 <a href="<?= APP_URL ?>/contact/index.php"
                    class="<?= strpos($current_path, '/contact/') !== false ? 'active' : '' ?>">
                     <i class="fas fa-envelope-open-text"></i> Contact Messages
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('broadcast')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/broadcast/index.php"
+                   class="<?= strpos($current_path, '/broadcast/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-bullhorn"></i> Broadcast
                 </a>
             </li>
             <?php endif; ?>
