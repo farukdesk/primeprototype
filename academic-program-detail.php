@@ -269,6 +269,91 @@ function ap_degree_color(string $type): string {
          </div>
          <?php endif; ?>
 
+         <?php
+         $has_academic_info = !empty($program['admission_content'])
+                           || !empty($program['fees_content'])
+                           || !empty($program['curriculum_content']);
+         ?>
+         <?php if ($has_academic_info): ?>
+         <!-- Academic Information Section -->
+         <div class="row justify-content-center mb-40">
+            <div class="col-12 text-center">
+               <span style="color:#D21034; font-size:14px; font-weight:600;">
+                  <i class="fas fa-book-open me-1"></i> Program Details
+               </span>
+               <h4 style="color:#002147; font-weight:700; margin-top:8px; margin-bottom:0;">Academic Information</h4>
+            </div>
+         </div>
+
+         <?php if (!empty($program['admission_content'])): ?>
+         <!-- Admission Intake & Requirements -->
+         <div class="row mb-40">
+            <div class="col-12">
+               <div class="card border-0 shadow-sm">
+                  <div class="card-header" style="background-color:#002147; padding:22px 30px;">
+                     <h4 class="mb-0" style="color:#FFFFFF;">
+                        <i class="fas fa-door-open" style="color:#FFB81C; margin-right:10px;"></i>
+                        Admission Intake &amp; Requirements
+                     </h4>
+                  </div>
+                  <div class="card-body" style="padding:30px;">
+                     <div class="prog-details-content">
+                        <?= $program['admission_content'] ?>
+                     </div>
+                  </div>
+               </div>
+            </div>
+         </div>
+         <?php endif; ?>
+
+         <?php if (!empty($program['fees_content'])): ?>
+         <!-- Fees Structure -->
+         <div class="row mb-40">
+            <div class="col-12">
+               <div class="card border-0 shadow-sm">
+                  <div class="card-header" style="background-color:#002147; padding:22px 30px;">
+                     <h4 class="mb-0" style="color:#FFFFFF;">
+                        <i class="fas fa-money-bill-wave" style="color:#FFB81C; margin-right:10px;"></i>
+                        Fees Structure
+                     </h4>
+                  </div>
+                  <div class="card-body" style="padding:30px;">
+                     <div class="prog-details-content">
+                        <?= $program['fees_content'] ?>
+                     </div>
+                  </div>
+               </div>
+            </div>
+         </div>
+         <?php endif; ?>
+
+         <?php if (!empty($program['curriculum_content'])): ?>
+         <!-- Course Curriculum -->
+         <div class="row mb-40">
+            <div class="col-12">
+               <div class="card border-0 shadow-sm">
+                  <div class="card-header" style="background-color:#002147; padding:22px 30px;">
+                     <h4 class="mb-0" style="color:#FFFFFF;">
+                        <i class="fas fa-graduation-cap" style="color:#FFB81C; margin-right:10px;"></i>
+                        Course Curriculum
+                        <?php if (!empty($program['total_credit']) || !empty($program['duration'])): ?>
+                        <span style="font-size:14px; font-weight:400; color:#E8EEF4; margin-left:10px;">
+                           (<?= implode(' &ndash; ', array_filter([fh($program['total_credit'] ?? ''), fh($program['duration'] ?? '')])) ?>)
+                        </span>
+                        <?php endif; ?>
+                     </h4>
+                  </div>
+                  <div class="card-body" style="padding:30px;">
+                     <div class="prog-details-content">
+                        <?= $program['curriculum_content'] ?>
+                     </div>
+                  </div>
+               </div>
+            </div>
+         </div>
+         <?php endif; ?>
+         <?php endif; ?>
+
          <!-- Back Link -->
          <div class="row">
             <div class="col-12">
