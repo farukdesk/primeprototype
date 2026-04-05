@@ -33,7 +33,7 @@ try {
 if (!$event) { header('Location: /clubs.php'); exit; }
 
 // ── Computed flags ────────────────────────────────────────────────────────────
-$deadline_passed  = $event['registration_deadline'] && strtotime($event['registration_deadline']) < strtotime('today');
+$deadline_passed  = $event['registration_deadline'] && $event['registration_deadline'] < date('Y-m-d');
 $is_full          = $event['capacity'] && ($reg_count >= $event['capacity']);
 $registration_open = !$deadline_passed && !$is_full;
 

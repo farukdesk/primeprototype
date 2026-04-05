@@ -242,7 +242,7 @@ $page_title = fh($club['name']) . ' – Prime University';
                <div class="row g-4">
                <?php foreach ($events as $ev): ?>
                <?php
-               $deadline_passed = $ev['registration_deadline'] && strtotime($ev['registration_deadline']) < strtotime('today');
+               $deadline_passed = $ev['registration_deadline'] && $ev['registration_deadline'] < date('Y-m-d');
                $is_full = $ev['capacity'] && ($ev['approved_count'] >= $ev['capacity']);
                $can_register = !$deadline_passed && !$is_full;
                ?>

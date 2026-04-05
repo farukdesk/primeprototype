@@ -83,7 +83,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // ── Load data ─────────────────────────────────────────────────────────────────
-$members    = $db->prepare('SELECT * FROM club_members   WHERE club_id=? ORDER BY sort_order, id')->execute([$id]) ? [] : [];
 $st = $db->prepare('SELECT * FROM club_members WHERE club_id=? ORDER BY sort_order, id'); $st->execute([$id]); $members = $st->fetchAll();
 
 $st = $db->prepare('SELECT * FROM club_photos WHERE club_id=? ORDER BY sort_order, id'); $st->execute([$id]); $photos = $st->fetchAll();
@@ -206,7 +205,7 @@ require_once __DIR__ . '/../includes/header.php';
 <!-- Tabs -->
 <ul class="nav nav-tabs mb-0" id="clubTabs" role="tablist">
     <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-members"  id="members"   ><i class="fas fa-users me-1"></i>Members <span class="badge bg-secondary ms-1"><?= count($members) ?></span></button></li>
-    <li class="nav-item"><button class="nav-link"        data-bs-toggle="tab" data-bs-target="#tab-events"   id="events-tab"><i class="fas fa-calendar me-1"></i>Events <span class="badge bg-secondary ms-1"><?= count($events) ?></span></button></li>
+    <li class="nav-item"><button class="nav-link"        data-bs-toggle="tab" data-bs-target="#tab-events"   id="events"    ><i class="fas fa-calendar me-1"></i>Events <span class="badge bg-secondary ms-1"><?= count($events) ?></span></button></li>
     <li class="nav-item"><button class="nav-link"        data-bs-toggle="tab" data-bs-target="#tab-gallery"  id="gallery"   ><i class="fas fa-images me-1"></i>Gallery <span class="badge bg-secondary ms-1"><?= count($photos) ?></span></button></li>
     <li class="nav-item"><button class="nav-link"        data-bs-toggle="tab" data-bs-target="#tab-activity" id="activities"><i class="fas fa-running me-1"></i>Activities <span class="badge bg-secondary ms-1"><?= count($activities) ?></span></button></li>
 </ul>
@@ -448,7 +447,7 @@ require_once __DIR__ . '/../includes/header.php';
 <script>
 // Activate tab from URL hash
 const hash = window.location.hash.replace('#','');
-const map  = {members:'#tab-members', gallery:'#tab-gallery', activities:'#tab-activity', 'events-tab':'#tab-events'};
+const map  = {members:'#tab-members', gallery:'#tab-gallery', activities:'#tab-activity', events:'#tab-events'};
 if (map[hash]) {
     const trigger = document.querySelector('[data-bs-target="'+map[hash]+'"]');
     if (trigger) new bootstrap.Tab(trigger).show();

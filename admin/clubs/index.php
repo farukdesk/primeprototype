@@ -36,9 +36,8 @@ $per_page = 20;
 $page     = max(1, (int)($_GET['page'] ?? 1));
 $offset   = ($page - 1) * $per_page;
 
-$db    = db();
-$total = (int)$db->prepare("SELECT COUNT(*) FROM clubs c WHERE $where_sql")->execute($params) ? 0 : 0;
-$st    = $db->prepare("SELECT COUNT(*) FROM clubs c WHERE $where_sql");
+$db = db();
+$st = $db->prepare("SELECT COUNT(*) FROM clubs c WHERE $where_sql");
 $st->execute($params);
 $total = (int)$st->fetchColumn();
 $pages = max(1, (int)ceil($total / $per_page));

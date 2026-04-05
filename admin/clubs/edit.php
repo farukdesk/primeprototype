@@ -4,10 +4,9 @@ require_once __DIR__ . '/helpers.php';
 
 require_access('clubs', 'can_edit');
 
-$db     = db();
-$id     = (int)($_GET['id'] ?? 0);
-$club   = $db->prepare('SELECT * FROM clubs WHERE id = ?')->execute([$id]) ? null : null;
-$stmt   = $db->prepare('SELECT * FROM clubs WHERE id = ?');
+$db   = db();
+$id   = (int)($_GET['id'] ?? 0);
+$stmt = $db->prepare('SELECT * FROM clubs WHERE id = ?');
 $stmt->execute([$id]);
 $club   = $stmt->fetch();
 if (!$club) { flash_set('error', 'Club not found.'); redirect(APP_URL . '/clubs/index.php'); }
