@@ -289,9 +289,9 @@ require_once __DIR__ . '/../includes/header.php';
                         </td>
                         <td>
                             <?php if ($pg['uploaded_file']): ?>
-                            <a href="<?= UPLOAD_URL ?>/<?= FM_UPLOAD_SUBDIR ?>/<?= h($pg['uploaded_file']) ?>" target="_blank"
-                               class="btn btn-sm btn-outline-secondary" style="border-radius:6px;" title="<?= h($pg['original_name']) ?>">
-                                <i class="fas fa-download"></i>
+                            <a href="<?= APP_URL ?>/file-manager/page-print.php?page_id=<?= $pg['id'] ?>" target="_blank"
+                               class="btn btn-sm btn-outline-secondary" style="border-radius:6px;" title="View / Download Signed Copy">
+                                <i class="fas fa-file-download"></i>
                             </a>
                             <?php else: ?>
                             <span class="text-muted">—</span>

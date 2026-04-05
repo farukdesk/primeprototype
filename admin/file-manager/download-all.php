@@ -30,6 +30,15 @@ if (empty($pages)) {
     redirect(APP_URL . '/file-manager/view.php?id=' . $file_id);
 }
 
+// Count PDF pages so we know whether to disable the print button until rendering completes
+$pdf_page_count = 0;
+foreach ($pages as $_pg) {
+    if (($_pg['mime_type'] ?? '') === 'application/pdf' && $_pg['uploaded_file']) {
+        $pdf_page_count++;
+    }
+}
+unset($_pg);
+
 // Output a standalone printable HTML document
 ?>
 <!DOCTYPE html>
@@ -166,8 +175,27 @@ if (empty($pages)) {
       max-width: 100%;
     }
     .file-header { border-bottom: 2px solid #000; }
+    .pdf-page-wrap + .pdf-page-wrap { page-break-before: always; }
+  }
+
+  /* PDF rendering */
+  .pdf-render-wrap { padding: 16px; text-align: center; }
+  .pdf-loading-msg { padding: 24px; color: #666; font-size: .88rem; }
+  .pdf-page-wrap { position: relative; display: block; width: 100%; }
+  .pdf-page-wrap + .pdf-page-wrap { margin-top: 24px; }
+  .pdf-page-wrap canvas { width: 100%; display: block; }
+  .no-print button:disabled { background: #888 !important; cursor: not-allowed; }
+  #pdfLoadingBanner {
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    color: #856404;
+    padding: 10px 24px;
+    font-size: .85rem;
+    text-align: center;
   }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 </head>
 <body>
 
@@ -175,8 +203,19 @@ if (empty($pages)) {
 <div class="no-print">
     <h1><i>📄</i> <?= h($file['file_name']) ?></h1>
     <a href="<?= APP_URL ?>/file-manager/view.php?id=<?= $file_id ?>">← Back to file</a>
-    <button onclick="window.print()">🖨 Print / Save as PDF</button>
+    <?php if ($pdf_page_count > 0): ?>
+    <span id="renderStatus" style="font-size:.82rem;color:#aab4cc;">Rendering PDF pages…</span>
+    <?php endif; ?>
+    <button id="btnPrint" onclick="window.print()"
+            <?= $pdf_page_count > 0 ? 'disabled' : '' ?>>
+        🖨 Print / Save as PDF
+    </button>
 </div>
+<?php if ($pdf_page_count > 0): ?>
+<div id="pdfLoadingBanner">
+    ⏳ Rendering <?= $pdf_page_count ?> PDF page<?= $pdf_page_count > 1 ? 's' : '' ?> — please wait before printing.
+</div>
+<?php endif; ?>
 
 <!-- File header on first page -->
 <div class="file-header" style="max-width:860px;margin:16px auto 0;">
@@ -203,7 +242,8 @@ if (empty($pages)) {
 <?php
 $is_image = $pg['mime_type'] && str_starts_with($pg['mime_type'], 'image/');
 $is_pdf   = $pg['mime_type'] === 'application/pdf';
-$positions = $pg['requires_signature'] ? fm_get_page_positions($pg['id']) : [];
+$positions  = $pg['requires_signature'] ? fm_get_page_positions($pg['id']) : [];
+$text_notes = fm_get_page_text_notes($pg['id']);
 ?>
 <div class="page-block">
     <div class="page-header">
@@ -225,13 +265,12 @@ $positions = $pg['requires_signature'] ? fm_get_page_positions($pg['id']) : [];
 
     <?php if ($is_image && $pg['uploaded_file']): ?>
     <div class="page-img-wrap">
-        <?php if (!empty($positions)): ?>
+        <?php if (!empty($positions) || !empty($text_notes)): ?>
         <div class="sig-area">
             <img src="<?= UPLOAD_URL ?>/<?= FM_UPLOAD_SUBDIR ?>/<?= h($pg['uploaded_file']) ?>"
                  alt="Page <?= $pg['page_number'] ?>">
             <?php foreach ($positions as $pos): if (!$pos['sig_id']) continue; ?>
             <?php
-            // Get signer's signature image
             $sig_q = db()->prepare('SELECT signature_file FROM users WHERE id = ?');
             $sig_q->execute([$pos['user_id']]);
             $signer_sig = $sig_q->fetchColumn();
@@ -240,8 +279,18 @@ $positions = $pg['requires_signature'] ? fm_get_page_positions($pg['id']) : [];
             <div class="sig-overlay" style="left:<?= $pos['x_percent'] ?>%;top:<?= $pos['y_percent'] ?>%;">
                 <img src="<?= UPLOAD_URL ?>/signatures/<?= h($signer_sig) ?>" alt="<?= h($pos['full_name']) ?>">
                 <div style="font-size:9px;color:#555;"><?= h($pos['full_name']) ?></div>
+                <?php if (!empty($pos['show_datetime']) && $pos['signed_at']): ?>
+                <div style="font-size:8px;color:#777;"><?= date('d M Y, g:i A', strtotime($pos['signed_at'])) ?></div>
+                <?php endif; ?>
             </div>
             <?php endif; ?>
+            <?php endforeach; ?>
+            <?php foreach ($text_notes as $tn): ?>
+            <div style="position:absolute;transform:translate(-50%,-50%);pointer-events:none;white-space:pre-line;font-weight:600;line-height:1.3;
+                        left:<?= $tn['x_percent'] ?>%;top:<?= $tn['y_percent'] ?>%;
+                        font-size:<?= (int)$tn['font_size'] ?>px;color:<?= h($tn['color']) ?>;">
+                <?= h($tn['content']) ?>
+            </div>
             <?php endforeach; ?>
         </div>
         <?php else: ?>
@@ -250,11 +299,38 @@ $positions = $pg['requires_signature'] ? fm_get_page_positions($pg['id']) : [];
         <?php endif; ?>
     </div>
     <?php elseif ($is_pdf && $pg['uploaded_file']): ?>
-    <div class="page-link-area">
-        <i>📎</i> PDF file: <a href="<?= UPLOAD_URL ?>/<?= FM_UPLOAD_SUBDIR ?>/<?= h($pg['uploaded_file']) ?>" target="_blank">
-            <?= h($pg['original_name']) ?>
-        </a>
-        <span style="color:#aaa;font-size:.8rem;">(PDF pages cannot be embedded; click to open separately)</span>
+    <?php
+    // Build signed-positions JSON for JS rendering
+    $pdf_pos_js = [];
+    foreach ($positions as $pos) {
+        if (!$pos['sig_id']) continue;
+        $sig_q = db()->prepare('SELECT signature_file FROM users WHERE id = ?');
+        $sig_q->execute([$pos['user_id']]);
+        $sf = $sig_q->fetchColumn();
+        if ($sf) {
+            $pdf_pos_js[] = [
+                'x_percent'     => $pos['x_percent'],
+                'y_percent'     => $pos['y_percent'],
+                'full_name'     => $pos['full_name'],
+                'sig_url'       => UPLOAD_URL . '/signatures/' . $sf,
+                'show_datetime' => !empty($pos['show_datetime']),
+                'signed_at'     => $pos['signed_at'],
+            ];
+        }
+    }
+    $pdf_notes_js = array_map(fn($n) => [
+        'x_percent' => $n['x_percent'],
+        'y_percent' => $n['y_percent'],
+        'content'   => $n['content'],
+        'font_size' => $n['font_size'],
+        'color'     => $n['color'],
+    ], $text_notes);
+    ?>
+    <div class="pdf-render-wrap"
+         data-pdf-url="<?= UPLOAD_URL ?>/<?= FM_UPLOAD_SUBDIR ?>/<?= h($pg['uploaded_file']) ?>"
+         data-positions="<?= h(json_encode($pdf_pos_js)) ?>"
+         data-notes="<?= h(json_encode($pdf_notes_js)) ?>">
+        <div class="pdf-loading-msg">⏳ Rendering PDF pages…</div>
     </div>
     <?php elseif ($pg['uploaded_file']): ?>
     <div class="page-link-area">
@@ -286,10 +362,126 @@ $positions = $pg['requires_signature'] ? fm_get_page_positions($pg['id']) : [];
 <?php endforeach; ?>
 
 <script>
-// Auto-trigger print dialog after page fully loads (optional: only if ?print=1)
-<?php if (!empty($_GET['print'])): ?>
-window.addEventListener('load', function() { window.print(); });
-<?php endif; ?>
+(function () {
+    'use strict';
+    var blocks = document.querySelectorAll('.pdf-render-wrap');
+    if (!blocks.length) {
+        <?php if (!empty($_GET['print'])): ?>
+        window.addEventListener('load', function () { window.print(); });
+        <?php endif; ?>
+        return;
+    }
+
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    var pending       = blocks.length;
+    var btnPrint      = document.getElementById('btnPrint');
+    var renderStatus  = document.getElementById('renderStatus');
+    var loadingBanner = document.getElementById('pdfLoadingBanner');
+
+    function onAllDone() {
+        pending--;
+        if (pending > 0) return;
+        if (btnPrint)      { btnPrint.disabled = false; }
+        if (renderStatus)  { renderStatus.textContent = 'Ready'; }
+        if (loadingBanner) { loadingBanner.style.display = 'none'; }
+        <?php if (!empty($_GET['print'])): ?>
+        window.print();
+        <?php endif; ?>
+    }
+
+    blocks.forEach(function (block) {
+        var pdfUrl    = block.dataset.pdfUrl;
+        var positions = JSON.parse(block.dataset.positions || '[]');
+        var notes     = JSON.parse(block.dataset.notes     || '[]');
+
+        pdfjsLib.getDocument(pdfUrl).promise.then(function (pdf) {
+            block.innerHTML = '';
+            var renders = [];
+            for (var n = 1; n <= pdf.numPages; n++) {
+                renders.push(renderPage(pdf, n, block, positions, notes));
+            }
+            return Promise.all(renders);
+        }).then(onAllDone).catch(function (err) {
+            console.error('PDF render error:', err);
+            block.innerHTML =
+                '<div class="page-link-area">⚠️ Could not render PDF. ' +
+                '<a href="' + pdfUrl + '" target="_blank">Open PDF directly</a></div>';
+            onAllDone();
+        });
+    });
+
+    function renderPage(pdf, pageNum, container, positions, notes) {
+        return pdf.getPage(pageNum).then(function (page) {
+            var scale    = container.clientWidth > 0
+                ? (container.clientWidth / page.getViewport({ scale: 1 }).width)
+                : 1.5;
+            var viewport = page.getViewport({ scale: scale });
+
+            var canvas   = document.createElement('canvas');
+            canvas.width  = viewport.width;
+            canvas.height = viewport.height;
+            canvas.style.width   = '100%';
+            canvas.style.display = 'block';
+
+            var wrap = document.createElement('div');
+            wrap.className = 'pdf-page-wrap';
+            wrap.appendChild(canvas);
+            container.appendChild(wrap);
+
+            return page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport }).promise
+                .then(function () {
+                    // Overlays apply only on page 1 (where sign-map places them)
+                    if (pageNum !== 1) return;
+
+                    positions.forEach(function (pos) {
+                        var ov  = document.createElement('div');
+                        ov.className = 'sig-overlay';
+                        ov.style.left = pos.x_percent + '%';
+                        ov.style.top  = pos.y_percent + '%';
+
+                        var img = document.createElement('img');
+                        img.src           = pos.sig_url;
+                        img.style.maxHeight = '48px';
+                        img.style.maxWidth  = '140px';
+                        ov.appendChild(img);
+
+                        var lbl = document.createElement('div');
+                        lbl.textContent    = pos.full_name;
+                        lbl.style.fontSize = '9px';
+                        lbl.style.color    = '#555';
+                        ov.appendChild(lbl);
+
+                        if (pos.show_datetime && pos.signed_at) {
+                            var dt = document.createElement('div');
+                            dt.textContent    = new Date(pos.signed_at).toLocaleString();
+                            dt.style.fontSize = '8px';
+                            dt.style.color    = '#777';
+                            ov.appendChild(dt);
+                        }
+                        wrap.appendChild(ov);
+                    });
+
+                    notes.forEach(function (note) {
+                        var nv = document.createElement('div');
+                        nv.style.position  = 'absolute';
+                        nv.style.transform = 'translate(-50%,-50%)';
+                        nv.style.left      = note.x_percent + '%';
+                        nv.style.top       = note.y_percent + '%';
+                        nv.style.fontSize  = note.font_size + 'px';
+                        nv.style.color     = note.color;
+                        nv.style.fontWeight = '600';
+                        nv.style.lineHeight = '1.3';
+                        nv.style.whiteSpace = 'pre-line';
+                        nv.style.pointerEvents = 'none';
+                        nv.textContent = note.content;
+                        wrap.appendChild(nv);
+                    });
+                });
+        });
+    }
+}());
 </script>
 </body>
 </html>
