@@ -41,6 +41,11 @@ function an_generate_lead_number(): string
 
 function an_send_mail(string $to, string $subject, string $body): void
 {
+    // Validate and sanitise recipient to prevent header injection
+    if (!filter_var($to, FILTER_VALIDATE_EMAIL)) return;
+    $to = filter_var($to, FILTER_SANITIZE_EMAIL);
+    if (strpbrk($to, "\r\n\t") !== false) return;
+
     $from  = 'noreply@primeuniversity.ac.bd';
     $fname = '=?UTF-8?B?' . base64_encode('Prime University Admissions') . '?=';
     $headers  = 'MIME-Version: 1.0' . "\r\n";
@@ -53,8 +58,9 @@ function an_send_mail(string $to, string $subject, string $body): void
 // ── Semester list (next 3 years) ──────────────────────────────────────────────
 function an_semester_list(): array
 {
-    $list = [];
-    for ($y = (int)date('Y'); $y <= (int)date('Y') + 3; $y++) {
+    $list    = [];
+    $curYear = (int)date('Y');
+    for ($y = $curYear; $y <= $curYear + 3; $y++) {
         $list[] = 'Summer ' . $y;
         $list[] = 'Fall '   . $y;
         $list[] = 'Spring ' . $y;

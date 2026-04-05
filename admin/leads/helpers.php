@@ -42,8 +42,9 @@ function leads_generate_number(): string
 
 function leads_semester_list(): array
 {
-    $list = [];
-    for ($y = date('Y'); $y <= (int)date('Y') + 3; $y++) {
+    $list    = [];
+    $curYear = (int)date('Y');
+    for ($y = $curYear; $y <= $curYear + 3; $y++) {
         $list[] = 'Summer ' . $y;
         $list[] = 'Fall '   . $y;
         $list[] = 'Spring ' . $y;

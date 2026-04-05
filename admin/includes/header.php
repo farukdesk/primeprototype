@@ -547,7 +547,7 @@ $user       = auth_user();
             </li>
             <li class="nav-item">
                 <a href="<?= APP_URL ?>/leads/index.php?status=fresh"
-                   class="<?= (strpos($current_path, '/leads/') !== false && ($_GET['status'] ?? '') === 'fresh') ? 'active' : '' ?>">
+                   class="<?php $get_status = $_GET['status'] ?? ''; echo (strpos($current_path, '/leads/') !== false && $get_status === 'fresh') ? 'active' : ''; ?>">
                     <i class="fas fa-bolt"></i> Fresh Leads
                 </a>
             </li>

@@ -474,7 +474,8 @@ require_once __DIR__ . '/../includes/header.php';
 
         <!-- Upcoming appointments summary -->
         <?php
-        $upcoming = array_filter($appointments, fn($a) => $a['status'] === 'scheduled' && $a['appointment_date'] >= date('Y-m-d'));
+        $today    = date('Y-m-d');
+        $upcoming = array_filter($appointments, fn($a) => $a['status'] === 'scheduled' && $a['appointment_date'] >= $today);
         if ($upcoming):
         ?>
         <div class="card border-0 shadow-sm border-start border-4 border-info mb-4">
