@@ -229,6 +229,6 @@ try {
 
    <?php include __DIR__ . '/includes/footer.php'; ?>
 
-   <?php include __DIR__ . \'/includes/scripts.php\'; ?>
+   <?php include __DIR__ . '/includes/scripts.php'; ?>
 </body>
 </html>

@@ -698,7 +698,7 @@ function ap_safe_date(mixed $val): string {
 
 <?php include __DIR__ . '/includes/footer.php'; ?>
 
-   <?php include __DIR__ . \'/includes/scripts.php\'; ?>
+   <?php include __DIR__ . '/includes/scripts.php'; ?>
    <script>
    // Toggle chevron direction on Bootstrap collapse
    document.querySelectorAll('[data-bs-toggle="collapse"]').forEach(function(trigger) {
