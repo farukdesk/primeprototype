@@ -52,12 +52,7 @@ require_once __DIR__ . '/../includes/header.php';
     <?php endif; ?>
 </div>
 
-<?php $flash = flash_get(); if ($flash): ?>
-<div class="alert alert-<?= h($flash['type']) ?> alert-dismissible fade show" role="alert">
-    <?= $flash['message'] ?>
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-</div>
-<?php endif; ?>
+<?php flash_show(); ?>
 
 <!-- ── Selector card ───────────────────────────────────────────────────────── -->
 <div class="card mb-4" style="border-radius:12px;">
