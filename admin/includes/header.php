@@ -256,6 +256,7 @@ $user       = auth_user();
     $is_website_active  = strpos($current_path, '/cms/') !== false || strpos($current_path, '/homepage/') !== false || strpos($current_path, '/pages/') !== false;
     $is_academic_active = strpos($current_path, '/departments/') !== false || strpos($current_path, '/faculty-profiles/') !== false || strpos($current_path, '/students/') !== false || strpos($current_path, '/course-curriculum/') !== false || strpos($current_path, '/clubs/') !== false || strpos($current_path, '/staff-profiles/') !== false;
     $is_comms_active    = strpos($current_path, '/contact/') !== false || strpos($current_path, '/support-tickets/') !== false || strpos($current_path, '/knowledge-base/') !== false || strpos($current_path, '/broadcast/') !== false;
+    $is_leads_active    = strpos($current_path, '/leads/') !== false;
     $is_jobs_active          = strpos($current_path, '/jobs/') !== false;
     $is_library_active       = strpos($current_path, '/library/') !== false;
     $is_governing_body_active = strpos($current_path, '/governing-body/') !== false;
@@ -520,6 +521,51 @@ $user       = auth_user();
                 <a href="<?= APP_URL ?>/staff-profiles/departments.php"
                    class="<?= strpos($current_path, '/staff-profiles/departments') !== false ? 'active' : '' ?>">
                     <i class="fas fa-sitemap"></i> Staff Departments
+                </a>
+            </li>
+            <?php endif; ?>
+        </ul>
+    </div>
+    <?php endif; ?>
+
+    <!-- ── Lead Management ── -->
+    <?php if (is_super_admin() || can_access('leads')): ?>
+    <button class="nav-group-toggle <?= $is_leads_active ? '' : 'collapsed' ?>"
+            data-bs-toggle="collapse" data-bs-target="#grp-leads"
+            aria-expanded="<?= $is_leads_active ? 'true' : 'false' ?>">
+        <i class="fas fa-funnel-dollar grp-icon" style="color:#e74c3c"></i>
+        Lead Management
+        <i class="fas fa-chevron-down toggle-icon"></i>
+    </button>
+    <div class="collapse <?= $is_leads_active ? 'show' : '' ?>" id="grp-leads">
+        <ul class="nav flex-column grp-items">
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/leads/index.php"
+                   class="<?= (strpos($current_path, '/leads/') !== false && strpos($current_path, '/create') === false) ? 'active' : '' ?>">
+                    <i class="fas fa-list"></i> All Leads
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/leads/index.php?status=fresh"
+                   class="<?= (strpos($current_path, '/leads/') !== false && ($_GET['status'] ?? '') === 'fresh') ? 'active' : '' ?>">
+                    <i class="fas fa-bolt"></i> Fresh Leads
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/leads/index.php?status=unable_to_reach">
+                    <i class="fas fa-phone-slash"></i> Unable to Reach
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/leads/index.php?status=converted">
+                    <i class="fas fa-check-circle"></i> Converted
+                </a>
+            </li>
+            <?php if (is_super_admin() || can_access('leads', 'can_create')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/leads/create.php"
+                   class="<?= strpos($current_path, '/leads/create') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-plus"></i> Add Lead
                 </a>
             </li>
             <?php endif; ?>
