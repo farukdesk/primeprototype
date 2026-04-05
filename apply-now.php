@@ -419,6 +419,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
          color:#111827;
          background:#fff;
          transition:border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+         position:relative;
+         z-index:1;
+      }
+      .pu-form-select {
+         appearance:auto;
       }
       .pu-form-textarea { min-height:120px; resize:vertical; }
       .pu-form-control:focus,
@@ -428,6 +433,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
          box-shadow:0 0 0 4px rgba(37, 99, 235, .12);
          outline:0;
          transform:translateY(-1px);
+         z-index:10;
       }
       .pu-required { color:#dc2626; }
       .pu-degree-toggle {
@@ -831,7 +837,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                  </div>
                                  <div class="col-md-6">
                                     <label class="pu-form-label" for="apply_email">Email Address</label>
-                                    <input type="email" id="apply_email" name="email" class="pu-form-control" maxlength="200" value="<?= an_old('email', $old) ?>" placeholder="you@example.com">
+                                    <input type="email" id="apply_email" name="email" class="pu-form-control" maxlength="200" value="<?= an_old('email', $old) ?>" placeholder="you@example.com" autocapitalize="off" autocorrect="off" spellcheck="false">
                                     <div class="pu-form-note">We will send a confirmation email if you provide one.</div>
                                  </div>
                                  <div class="col-md-6">
