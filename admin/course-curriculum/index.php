@@ -264,7 +264,7 @@ $total_courses = array_sum(array_map('count', $curriculum));
                 </tbody>
                 <tfoot style="background-color:#F8FAFC;">
                     <tr>
-                        <td colspan="<?= cc_is_staff() ? 4 : 4 ?>" class="ps-4 text-muted small">
+                        <td colspan="4" class="ps-4 text-muted small">
                             <?= count($rows) ?> course<?= count($rows) !== 1 ? 's' : '' ?>
                         </td>
                         <td class="text-center fw-bold small" style="color:#002147;">
