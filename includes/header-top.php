@@ -5,8 +5,8 @@
  */
 $hs = get_header_settings();
 
-$phone               = $hs['phone']               ?? '01710996196';
-$email               = $hs['email']               ?? 'info@primeuniversity.edu.bd';
+$phone               = $hs['phone']               ?? '01969-955566';
+$email               = $hs['email']               ?? 'info@primeuniversity.ac.bd';
 $student_portal_url  = $hs['student_portal_url']  ?? '#';
 $student_portal_text = $hs['student_portal_text'] ?? 'Student Portal';
 $find_result_url     = $hs['find_result_url']      ?? '#';

@@ -84,9 +84,9 @@ require_once __DIR__ . '/../../includes/header.php';
 
             <?php
             $cardDefaults = [
-                1 => ['icon' => 'fas fa-phone-alt',     'title' => 'Call Us',        'value' => '+880-1710-996196',             'href' => 'tel:+8801710996196',                                  'sub' => 'Mon – Fri, 9am – 5pm'],
-                2 => ['icon' => 'fas fa-envelope',       'title' => 'Email Us',       'value' => 'info@primeuniversity.edu.bd',   'href' => 'mailto:info@primeuniversity.edu.bd',                   'sub' => 'We reply within 24 hours'],
-                3 => ['icon' => 'fas fa-map-marker-alt', 'title' => 'Visit Campus',   'value' => '114/116, Mazar Rd, Dhaka',     'href' => 'https://maps.google.com/?q=Prime+University+Dhaka',    'sub' => 'View on Google Maps'],
+                1 => ['icon' => 'fas fa-phone-alt',     'title' => 'Call Us',        'value' => '01969-955566',             'href' => 'tel:+8801969955566',                                  'sub' => 'Mon – Fri, 9am – 5pm'],
+                2 => ['icon' => 'fas fa-envelope',       'title' => 'Email Us',       'value' => 'info@primeuniversity.ac.bd',   'href' => 'mailto:info@primeuniversity.ac.bd',                   'sub' => 'We reply within 24 hours'],
+                3 => ['icon' => 'fas fa-map-marker-alt', 'title' => 'Visit Campus',   'value' => '114/116, Mazar Rd, Dhaka-1216',     'href' => 'https://maps.google.com/?q=114/116+Mazar+Rd+Dhaka+1216',    'sub' => 'View on Google Maps'],
                 4 => ['icon' => 'fas fa-clock',          'title' => 'Office Hours',   'value' => 'Sunday – Thursday',            'href' => '#',                                                    'sub' => '9:00 AM – 5:00 PM'],
             ];
             for ($n = 1; $n <= 4; $n++):

@@ -20,8 +20,8 @@ if (strcasecmp(trim((string)$cta_text), 'Apply Now') === 0) {
 }
 $col2_title          = $fs['col2_title']          ?? 'Quick Links';
 $col3_title          = $fs['col3_title']          ?? 'Student Services';
-$contact_phone       = $fs['contact_phone']       ?? '+880-1710-996196';
-$contact_email       = $fs['contact_email']       ?? 'info@primeuniversity.edu.bd';
+$contact_phone       = $fs['contact_phone']       ?? '01969-955566';
+$contact_email       = $fs['contact_email']       ?? 'info@primeuniversity.ac.bd';
 $contact_address     = $fs['contact_address']     ?? '114/116, Mazar Rd, Dhaka-1216';
 $contact_address_url = $fs['contact_address_url'] ?? 'https://maps.google.com/?q=Prime+University+Dhaka';
 $copyright_text      = $fs['copyright_text']      ?? 'Prime University';
