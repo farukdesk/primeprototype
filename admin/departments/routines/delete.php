@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../../includes/auth.php';
-require_super_admin();
+require_access('dept-routines', 'can_delete');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     redirect(APP_URL . '/departments/index.php');
@@ -18,6 +18,8 @@ if (!$routine) {
     flash_set('error', 'Routine not found.');
     redirect(APP_URL . '/departments/routines/index.php?dept_id=' . $dept_id);
 }
+$dept_id = (int)$routine['dept_id'];
+require_access_dept($dept_id);
 
 if ($routine['file_path']) {
     $path = UPLOAD_DIR . '/departments/' . $routine['file_path'];

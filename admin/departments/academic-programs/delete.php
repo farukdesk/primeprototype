@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../../includes/auth.php';
-require_super_admin();
+require_access('dept-academic-programs', 'can_delete');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     redirect(APP_URL . '/departments/index.php');
@@ -18,6 +18,8 @@ if (!$program) {
     flash_set('error', 'Program not found.');
     redirect(APP_URL . '/departments/academic-programs/index.php?dept_id=' . $dept_id);
 }
+$dept_id = (int)$program['dept_id'];
+require_access_dept($dept_id);
 
 // Delete attachment file if it exists
 if (!empty($program['attachment'])) {

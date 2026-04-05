@@ -70,6 +70,26 @@ function auth_user(): ?array {
             session_destroy();
             redirect(APP_URL . '/login.php');
         }
+        // Load all group IDs for multi-group support
+        $gstmt = db()->prepare(
+            'SELECT uga.group_id, g.is_super
+             FROM user_group_assignments uga
+             JOIN user_groups g ON g.id = uga.group_id
+             WHERE uga.user_id = ? AND g.is_active = 1'
+        );
+        $gstmt->execute([$user['id']]);
+        $user['group_ids']    = [];
+        $user['is_super']     = 0;
+        foreach ($gstmt->fetchAll() as $row) {
+            $user['group_ids'][] = (int)$row['group_id'];
+            if ((int)$row['is_super'] === 1) {
+                $user['is_super'] = 1;
+            }
+        }
+        // Fallback: if junction table is empty (legacy), use primary group
+        if (empty($user['group_ids'])) {
+            $user['group_ids'] = [(int)$user['group_id']];
+        }
     }
     return $user;
 }
@@ -83,6 +103,7 @@ function is_super_admin(): bool {
  * Check whether the current user can access a given module slug.
  * Super admins bypass all checks.
  * User-level access (user_module_access) takes precedence over group-level access.
+ * When a user belongs to multiple groups, permissions are the union of all groups.
  */
 function can_access(string $slug, string $permission = 'can_view'): bool {
     if (is_super_admin()) return true;
@@ -108,18 +129,91 @@ function can_access(string $slug, string $permission = 'can_view'): bool {
         return !empty($user_access[$slug][$permission]);
     }
 
-    // Fall back to group-level access
+    // Fall back to group-level access (union of all groups the user belongs to)
     if (!isset($group_access[$slug])) {
-        $stmt = db()->prepare(
-            'SELECT gma.*
-             FROM group_module_access gma
-             JOIN modules m ON m.id = gma.module_id
-             WHERE gma.group_id = ? AND m.slug = ? AND m.is_active = 1'
-        );
-        $stmt->execute([$user['group_id'], $slug]);
-        $group_access[$slug] = $stmt->fetch() ?: [];
+        $group_ids = $user['group_ids'];
+        if (empty($group_ids)) {
+            $group_access[$slug] = [];
+        } else {
+            $placeholders = implode(',', array_fill(0, count($group_ids), '?'));
+            $stmt = db()->prepare(
+                "SELECT gma.*
+                 FROM group_module_access gma
+                 JOIN modules m ON m.id = gma.module_id
+                 WHERE gma.group_id IN ($placeholders) AND m.slug = ? AND m.is_active = 1"
+            );
+            $stmt->execute(array_merge($group_ids, [$slug]));
+            $rows = $stmt->fetchAll();
+            // Merge: any granted permission across groups is granted
+            $merged = [];
+            foreach ($rows as $r) {
+                $merged['can_view']   = ($merged['can_view']   ?? 0) | (int)$r['can_view'];
+                $merged['can_create'] = ($merged['can_create'] ?? 0) | (int)$r['can_create'];
+                $merged['can_edit']   = ($merged['can_edit']   ?? 0) | (int)$r['can_edit'];
+                $merged['can_delete'] = ($merged['can_delete'] ?? 0) | (int)$r['can_delete'];
+            }
+            $group_access[$slug] = $merged;
+        }
     }
     return !empty($group_access[$slug][$permission]);
+}
+
+/**
+ * Check whether the current user can access a specific department.
+ * Super admins bypass all checks.
+ * User-level dept scope overrides group-level scope.
+ * No scope rows = unrestricted (access all departments).
+ */
+function can_access_dept(int $dept_id): bool {
+    if (is_super_admin()) return true;
+    $user = auth_user();
+    if (!$user) return false;
+
+    static $user_dept_cache  = null;
+    static $group_dept_cache = null;
+
+    // Load user-level dept scope (once)
+    if ($user_dept_cache === null) {
+        $stmt = db()->prepare(
+            'SELECT dept_id FROM user_dept_scope WHERE user_id = ?'
+        );
+        $stmt->execute([$user['id']]);
+        $rows = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        $user_dept_cache = $rows;  // array of dept_ids (NULL represented as null/empty string)
+    }
+
+    // If user has explicit scope rows, apply them
+    if (!empty($user_dept_cache)) {
+        foreach ($user_dept_cache as $d) {
+            if ($d === null || $d === '') return true;  // NULL = all depts
+            if ((int)$d === $dept_id) return true;
+        }
+        return false;  // user has scope rows but none match
+    }
+
+    // Check group-level scope for all of user's groups
+    if ($group_dept_cache === null) {
+        $group_ids = $user['group_ids'];
+        if (empty($group_ids)) {
+            $group_dept_cache = [];
+        } else {
+            $placeholders = implode(',', array_fill(0, count($group_ids), '?'));
+            $stmt = db()->prepare(
+                "SELECT dept_id FROM group_dept_scope WHERE group_id IN ($placeholders)"
+            );
+            $stmt->execute($group_ids);
+            $group_dept_cache = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        }
+    }
+
+    // No group scope rows = unrestricted (all departments)
+    if (empty($group_dept_cache)) return true;
+
+    foreach ($group_dept_cache as $d) {
+        if ($d === null || $d === '') return true;  // NULL = all depts
+        if ((int)$d === $dept_id) return true;
+    }
+    return false;
 }
 
 /**
@@ -130,6 +224,17 @@ function require_access(string $slug, string $permission = 'can_view'): void {
     if (!can_access($slug, $permission)) {
         $_SESSION['flash_error'] = 'You do not have permission to access this section.';
         redirect(APP_URL . '/index.php');
+    }
+}
+
+/**
+ * Gate – redirect with error if user cannot access the given department.
+ */
+function require_access_dept(int $dept_id): void {
+    auth_check();
+    if (!can_access_dept($dept_id)) {
+        $_SESSION['flash_error'] = 'You do not have permission to access this department.';
+        redirect(APP_URL . '/departments/index.php');
     }
 }
 

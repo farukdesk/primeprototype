@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../../includes/auth.php';
-require_super_admin();
+require_access('dept-academic-programs');
 
 $dept_id = (int)($_GET['dept_id'] ?? 0);
 if (!$dept_id) { flash_set('error', 'Invalid department.'); redirect(APP_URL . '/departments/index.php'); }
@@ -9,6 +9,7 @@ $dept = db()->prepare('SELECT * FROM dept_departments WHERE id = ?');
 $dept->execute([$dept_id]);
 $dept = $dept->fetch();
 if (!$dept) { flash_set('error', 'Department not found.'); redirect(APP_URL . '/departments/index.php'); }
+require_access_dept($dept_id);
 
 $programs = db()->prepare(
     'SELECT * FROM dept_academic_programs WHERE dept_id = ? ORDER BY sort_order ASC, id ASC'

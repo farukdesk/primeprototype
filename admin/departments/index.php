@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
-require_super_admin();
+require_access('departments');
 
 $page_title = 'Departments';
 
@@ -14,6 +14,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action']) && $_POST[
 }
 
 $departments = db()->query('SELECT * FROM dept_departments ORDER BY id ASC')->fetchAll();
+$departments = array_filter($departments, fn($d) => can_access_dept((int)$d['id']));
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
