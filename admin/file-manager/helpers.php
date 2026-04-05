@@ -4,6 +4,7 @@
  */
 
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../change-log/helpers.php';
 
 // ── Upload constants ──────────────────────────────────────────────────────────
 define('FM_UPLOAD_SUBDIR', 'file-manager');

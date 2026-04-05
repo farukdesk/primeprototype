@@ -16,8 +16,10 @@ $where  = ['1=1'];
 $params = [];
 
 if ($search !== '') {
-    $where[]  = '(f.file_name LIKE ? OR f.file_location LIKE ? OR f.notes LIKE ?)';
+    $where[]  = '(f.file_name LIKE ? OR f.file_location LIKE ? OR f.notes LIKE ? OR f.proposal LIKE ? OR f.page_number LIKE ?)';
     $like     = '%' . $search . '%';
+    $params[] = $like;
+    $params[] = $like;
     $params[] = $like;
     $params[] = $like;
     $params[] = $like;
