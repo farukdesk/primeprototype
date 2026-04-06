@@ -427,10 +427,10 @@ function ap_safe_date(mixed $val): string {
                            <?php if ($od !== '' || $cd !== ''): ?>
                            <div class="ap-intake-dates mt-2">
                               <?php if ($od !== ''): ?>
-                              <span><i class="fas fa-play-circle me-1" style="color:#16A34A;"></i>Opens: <?= h($od) ?></span>
+                              <span><i class="fas fa-play-circle me-1" style="color:#16A34A;"></i>Opens: <?= fh($od) ?></span>
                               <?php endif; ?>
                               <?php if ($cd !== ''): ?>
-                              <span class="ms-2"><i class="fas fa-stop-circle me-1" style="color:#D21034;"></i>Closes: <?= h($cd) ?></span>
+                              <span class="ms-2"><i class="fas fa-stop-circle me-1" style="color:#D21034;"></i>Closes: <?= fh($cd) ?></span>
                               <?php endif; ?>
                            </div>
                            <?php endif; ?>
@@ -678,7 +678,7 @@ function ap_safe_date(mixed $val): string {
                               <?= ap_intake_status_badge($ip['intake_status']) ?>
                            </div>
                            <?php $cd2 = ap_safe_date($ip['close_date']); if ($cd2 !== ''): ?>
-                           <div style="font-size:12px; color:#64748B;"><i class="fas fa-hourglass-end me-1" style="color:#D21034;"></i>Deadline: <?= h($cd2) ?></div>
+                           <div style="font-size:12px; color:#64748B;"><i class="fas fa-hourglass-end me-1" style="color:#D21034;"></i>Deadline: <?= fh($cd2) ?></div>
                            <?php endif; ?>
                         </div>
                         <?php endforeach; ?>

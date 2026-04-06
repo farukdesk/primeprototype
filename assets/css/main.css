@@ -10899,8 +10899,7 @@ input[type=radio] {
   opacity: 1;
   visibility: visible;
   width: 100%;
-  z-index: 999;
-  visibility: visible;
+  z-index: 1000;
   background-color: var(--it-common-white);
   box-shadow: 0 2px 4px rgba(7, 37, 68, 0.1);
   animation: 0.95s ease 0s normal forwards 1 running headerSlideDown;
