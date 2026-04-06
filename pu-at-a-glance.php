@@ -287,14 +287,68 @@ function gs_url(array $s, string $key, string $default = '#'): string {
   .glance-section { padding:70px 0; }
   .ugc-banner { padding:32px 24px; }
 }
+
+/* Tablet / large mobile (≤767px) */
+@media (max-width:767px) {
+  /* Stats: 2-column grid with tidy dividers */
+  .glance-stat-item { flex:0 0 50%; border-right:none; border-bottom:1px solid rgba(255,255,255,.1); }
+  .glance-stat-item:nth-child(odd)  { border-right:1px solid rgba(255,255,255,.1); }
+  .glance-stat-item:last-child,
+  .glance-stat-item:nth-last-child(2):nth-child(odd) { border-bottom:none; }
+  /* UGC banner: stack vertically */
+  .ugc-banner { flex-direction:column; text-align:center; gap:20px; padding:28px 20px; }
+  .ugc-icon   { font-size:2.8rem; }
+  .ugc-badge  { margin-left:0; justify-content:center; }
+  /* CTA strip */
+  .glance-cta-strip { padding:50px 0; }
+  .cta-btn-primary,
+  .cta-btn-secondary { width:100%; max-width:320px; justify-content:center; margin-left:0; }
+  .cta-btn-secondary { margin-top:10px; }
+  /* Messages tabs: allow horizontal scroll on narrow devices */
+  .msg-tabs-nav { flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:thin; scrollbar-color:rgba(255,255,255,.25) transparent; padding-bottom:4px; }
+  .msg-tabs-nav::-webkit-scrollbar { height:3px; }
+  .msg-tabs-nav::-webkit-scrollbar-thumb { background:rgba(0,33,71,.25); border-radius:2px; }
+  .msg-tab-btn { flex-shrink:0; }
+}
+
+/* Small mobile (≤575px) */
 @media (max-width:575px) {
   .glance-hero { padding:70px 0 60px; }
   .glance-section { padding:56px 0; }
-  .glance-stat-item { flex:1 1 140px; }
+  /* Hero */
+  .glance-hero .breadcrumb-nav { font-size:.72rem; gap:4px; flex-wrap:wrap; }
+  .glance-hero p.hero-sub { max-width:100%; }
+  /* About */
   .glance-about-img-wrap img { height:240px; }
+  .glance-about-img-wrap .about-badge { font-size:.82rem; padding:10px 14px; bottom:16px; left:16px; gap:6px; }
+  /* Messages */
   .msg-tab-btn { font-size:.82rem; padding:8px 12px; }
-  .ugc-banner { flex-direction:column; gap:18px; }
+  /* Leader cards */
+  .leader-card-top { padding:24px 20px 0; }
+  .leader-card-body { padding:16px 20px; }
+  /* Faculty & highlight cards */
+  .faculty-card-body   { padding:20px 18px 16px; }
+  .faculty-card-footer { padding:12px 18px; }
+  .highlight-card-body { padding:18px 20px 22px; }
+  /* UGC banner */
+  .ugc-banner { gap:16px; }
+  /* CTA buttons */
+  .cta-btn-primary,
+  .cta-btn-secondary { width:100%; max-width:none; }
   .cta-btn-secondary { margin-left:0; margin-top:10px; }
+}
+
+/* Ultra-small (≤400px) */
+@media (max-width:400px) {
+  .glance-hero { padding:60px 0 50px; }
+  .glance-stat-item { flex:0 0 100%; border-right:none; }
+  .glance-stat-item:nth-child(odd) { border-right:none; }
+  .glance-about-feat { padding:14px 16px; }
+  .glance-about-feat .feat-icon { width:38px; height:38px; font-size:.95rem; }
+  .section-title { font-size:1.55rem; }
+  .ugc-banner { padding:22px 16px; }
+  .glance-cta-strip { padding:40px 0; }
+  .cta-btn-primary, .cta-btn-secondary { font-size:.88rem; padding:13px 22px; }
 }
 </style>
 </head>
