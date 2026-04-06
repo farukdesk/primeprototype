@@ -356,6 +356,12 @@ $user       = auth_user();
                     <i class="fas fa-user-graduate"></i> Alumni
                 </a>
             </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/cms/code-of-conduct/index.php"
+                   class="<?= strpos($current_path, '/cms/code-of-conduct/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-gavel"></i> Code of Conduct
+                </a>
+            </li>
             <?php if (is_super_admin()): ?>
             <?php
             // Pending approvals badge count (cached per request)
