@@ -582,6 +582,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
          outline-offset:3px;
       }
       .pu-apply-form-wrap .nice-select .list { z-index: 100; }
+      #apply_email { text-transform: none; }
       @media (max-width: 1199px) {
          .pu-apply-shell { border-radius:24px; }
          .pu-apply-aside { border-right:0; border-bottom:1px solid #e6ecf5; border-radius:24px 24px 0 0; }
@@ -836,7 +837,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                  </div>
                                  <div class="col-md-6">
                                     <label class="pu-form-label" for="apply_email">Email Address</label>
-                                    <input type="email" id="apply_email" name="email" class="pu-form-control" maxlength="200" value="<?= an_old('email', $old) ?>" placeholder="you@example.com" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="email" style="text-transform:none;">
+                                    <input type="email" id="apply_email" name="email" class="pu-form-control" maxlength="200" value="<?= an_old('email', $old) ?>" placeholder="you@example.com" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="email">
                                     <div class="pu-form-note">We will send a confirmation email if you provide one.</div>
                                  </div>
                                  <div class="col-md-6">
@@ -965,13 +966,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
       if (deptSelect && progSelect) {
          deptSelect.addEventListener('change', updatePrograms);
-         updatePrograms();
       }
 
       if (typeof $ !== 'undefined') {
          $(document).ready(function () {
             if (deptSelect && progSelect) updatePrograms();
          });
+      } else if (deptSelect && progSelect) {
+         updatePrograms();
       }
 
       const applyEmailInput = document.getElementById('apply_email');
