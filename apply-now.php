@@ -964,7 +964,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
          });
       }
 
-      if (typeof $ !== 'undefined') {
+      if (typeof $ !== 'undefined' && deptSelect && progSelect) {
          $(deptSelect).on('change', updatePrograms);
       } else if (deptSelect && progSelect) {
          deptSelect.addEventListener('change', updatePrograms);
