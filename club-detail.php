@@ -128,6 +128,7 @@ $page_title = fh($club['name']) . ' – Prime University';
    .pu-activity-img { height:180px; object-fit:cover; width:100%; border-radius:12px 12px 0 0; }
    .pu-activity-placeholder { height:90px; background:linear-gradient(135deg,#f093fb,#f5576c); border-radius:12px 12px 0 0; display:flex; align-items:center; justify-content:center; }
    </style>
+<?php include __DIR__ . '/includes/meta-pixel.php'; ?>
 </head>
 <body id="body" class="it-magic-cursor">
    <div id="preloader"><div class="preloader"><span></span><span></span></div></div>

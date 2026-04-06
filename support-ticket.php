@@ -436,6 +436,7 @@ function pub_status_color(string $status): string
          .pu-ticket-number-badge { font-size: 1.1rem; padding: 6px 16px; }
       }
    </style>
+<?php include __DIR__ . '/includes/meta-pixel.php'; ?>
 </head>
 
 <body id="body">

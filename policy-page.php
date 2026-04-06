@@ -112,6 +112,7 @@ $eff_date = $eff_dt ? $eff_dt->format('F j, Y') : null;
       .policy-toc a:hover { color: #D21034; text-decoration: underline; }
       .policy-toc li { margin-bottom: 6px; padding: 4px 0; border-bottom: 1px dotted #e8eaf0; }
    </style>
+<?php include __DIR__ . '/includes/meta-pixel.php'; ?>
 </head>
 <body id="body" class="it-magic-cursor">
 

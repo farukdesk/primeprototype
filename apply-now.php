@@ -639,6 +639,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
          50%      { box-shadow:0 -4px 30px rgba(245,158,11,.7); }
       }
    </style>
+<?php include __DIR__ . '/includes/meta-pixel.php'; ?>
+<?php if ($form_success): ?>
+<script>fbq('track', 'Lead');</script>
+<?php endif; ?>
 </head>
 <body id="body" class="it-magic-cursor">
    <div id="preloader">

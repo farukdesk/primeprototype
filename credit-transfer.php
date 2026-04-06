@@ -647,6 +647,7 @@ $page_title = 'Credit Transfer – Prime University';
       .ct-authority-card { padding: 28px 22px; }
    }
    </style>
+<?php include __DIR__ . '/includes/meta-pixel.php'; ?>
 </head>
 
 <body id="body" class="it-magic-cursor">

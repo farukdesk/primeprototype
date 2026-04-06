@@ -97,6 +97,7 @@ $subtitle   = fh($pg['profile_subtitle'] ?? 'Leadership');
          opacity: .08;
       }
    </style>
+<?php include __DIR__ . '/includes/meta-pixel.php'; ?>
 </head>
 <body id="body" class="it-magic-cursor">
 

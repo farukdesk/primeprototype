@@ -161,6 +161,7 @@ if (empty($_features)) {
    <link rel="stylesheet" href="/assets/css/spacing.css">
    <link rel="stylesheet" href="/assets/css/main.css">
    <link rel="stylesheet" href="/assets/css/prime-home.css">
+<?php include __DIR__ . '/includes/meta-pixel.php'; ?>
 </head>
 <body id="body" class="it-magic-cursor">
 

@@ -541,6 +541,7 @@ $lib_desc    = $lib_settings['lib_description']  ?? 'A modern academic library s
          .guide-btn { transform: none !important; }
       }
    </style>
+<?php include __DIR__ . '/includes/meta-pixel.php'; ?>
 </head>
 
 <body id="body" class="it-magic-cursor">

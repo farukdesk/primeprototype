@@ -59,6 +59,7 @@ $locations   = array_keys($locations);
    <!-- Theme / Main CSS -->
    <link rel="stylesheet" href="/assets/css/spacing.css">
    <link rel="stylesheet" href="/assets/css/main.css">
+<?php include __DIR__ . '/includes/meta-pixel.php'; ?>
 </head>
 
 <body id="body" class="it-magic-cursor">

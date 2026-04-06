@@ -312,6 +312,7 @@ $page_title = 'Mission & Vision – Prime University';
      .mv-cta-banner { padding: 40px 24px; }
    }
    </style>
+<?php include __DIR__ . '/includes/meta-pixel.php'; ?>
 </head>
 <body id="body" class="it-magic-cursor">
 

@@ -202,6 +202,7 @@ if ($dept_cta_text !== '' && strcasecmp($dept_cta_text, 'Apply Now') === 0) {
       background: #D21034;
    }
    </style>
+<?php include __DIR__ . '/includes/meta-pixel.php'; ?>
 </head>
 <body id="body" class="it-magic-cursor">
 

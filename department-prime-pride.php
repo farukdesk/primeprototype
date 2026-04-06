@@ -64,6 +64,7 @@ $dept_name    = fh($dept['name'] ?? 'Department');
    .pride-card { transition: transform 0.3s ease, box-shadow 0.3s ease; }
    .pride-card:hover { transform: translateY(-5px); box-shadow: 0 15px 40px rgba(0,33,71,0.15) !important; }
    </style>
+<?php include __DIR__ . '/includes/meta-pixel.php'; ?>
 </head>
 <body id="body" class="it-magic-cursor">
 
