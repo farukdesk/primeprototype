@@ -1918,6 +1918,8 @@ input[type=color] {
   font-size: 18px;
   font-weight: 600;
   transition: 0.3s;
+  overflow-wrap: break-word;
+  word-break: break-all;
 }
 @media (max-width: 767px) {
   .itoffcanvas__info-address a {

@@ -908,6 +908,8 @@
   text-decoration: none;
   transition: color .2s;
   display: block;
+  overflow-wrap: break-word;
+  word-break: break-all;
 }
 .pu-contact-card-value:hover { color: var(--pu-gold-dark); }
 .pu-contact-card-sub {

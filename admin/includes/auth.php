@@ -289,6 +289,14 @@ function require_super_admin(): void {
 }
 
 // ── Flash messages ───────────────────────────────────────────────────────────
+function flash(string $type, ?string $message = null): ?string {
+    if ($message !== null) {
+        flash_set($type, $message);
+        return null;
+    }
+    return flash_get($type);
+}
+
 function flash_set(string $type, string $message): void {
     $_SESSION['flash_' . $type] = $message;
 }
