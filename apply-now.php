@@ -177,7 +177,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <tr><td style="padding:8px;border:1px solid #e5e7eb;background:#f9fafb;font-weight:600">Name</td><td style="padding:8px;border:1px solid #e5e7eb;">' . an_h($first_name . ' ' . $last_name) . '</td></tr>
       <tr><td style="padding:8px;border:1px solid #e5e7eb;background:#f9fafb;font-weight:600">Degree</td><td style="padding:8px;border:1px solid #e5e7eb;">' . an_h(ucfirst($degree_type)) . '</td></tr>
     </table>
-    <p style="color:#6b7280;font-size:.85rem;">If you have any questions, feel free to contact us at <a href="mailto:admissions@primeuniversity.ac.bd">admissions@primeuniversity.ac.bd</a></p>
+    <p style="color:#6b7280;font-size:.85rem;">If you have any questions, feel free to contact us at <a href="mailto:info@primeuniversity.ac.bd">info@primeuniversity.ac.bd</a></p>
     <p>Warm regards,<br><strong>Prime University Admissions Team</strong></p>
   </div>
 </div>';
@@ -306,13 +306,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
          background:#fff;
          border-radius:28px;
          box-shadow:0 18px 60px rgba(15, 23, 42, .12);
-         overflow:hidden;
       }
       .pu-apply-aside {
          background:linear-gradient(180deg, #f8fbff 0%, #eef4ff 100%);
          padding:38px 32px;
          height:100%;
          border-right:1px solid #e6ecf5;
+         border-radius:28px 0 0 28px;
       }
       .pu-apply-form-wrap { padding:38px 34px; }
       .pu-panel-title {
@@ -581,9 +581,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
          outline:3px solid rgba(37, 99, 235, .35);
          outline-offset:3px;
       }
+      .pu-apply-form-wrap .nice-select .list { z-index: 100; }
+      #apply_email { text-transform: none; }
       @media (max-width: 1199px) {
          .pu-apply-shell { border-radius:24px; }
-         .pu-apply-aside { border-right:0; border-bottom:1px solid #e6ecf5; }
+         .pu-apply-aside { border-right:0; border-bottom:1px solid #e6ecf5; border-radius:24px 24px 0 0; }
       }
       @media (max-width: 991px) {
          .pu-apply-hero { padding:85px 0 130px; }
@@ -597,6 +599,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
          .pu-apply-hero { padding:70px 0 120px; }
          .pu-apply-overlap { margin-top:-68px; }
          .pu-apply-shell { border-radius:22px; }
+         .pu-apply-aside { border-radius:22px 22px 0 0; }
          .pu-action-row { flex-direction:column; align-items:stretch; }
          .pu-submit-btn,
          .pu-outline-btn { width:100%; }
@@ -649,10 +652,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
          <div class="itoffcanvas__info">
             <h3 class="offcanva-title">Admissions Help Desk</h3>
             <div class="it-info-wrapper mb-20 d-flex align-items-center">
-               <div class="itoffcanvas__info-icon"><a href="mailto:admissions@primeuniversity.ac.bd" aria-label="Send email to admissions@primeuniversity.ac.bd"><i class="fal fa-envelope" aria-hidden="true"></i></a></div>
+               <div class="itoffcanvas__info-icon"><a href="mailto:info@primeuniversity.ac.bd" aria-label="Send email to info@primeuniversity.ac.bd"><i class="fal fa-envelope" aria-hidden="true"></i></a></div>
                <div class="itoffcanvas__info-address">
                   <span>Email</span>
-                  <a href="mailto:admissions@primeuniversity.ac.bd">admissions@primeuniversity.ac.bd</a>
+                  <a href="mailto:info@primeuniversity.ac.bd">info@primeuniversity.ac.bd</a>
                </div>
             </div>
             <div class="it-info-wrapper mb-20 d-flex align-items-center">
@@ -784,7 +787,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                      </ul>
                      <div class="pu-contact-box">
                         <h5>Need help before applying?</h5>
-                        <p><a href="mailto:admissions@primeuniversity.ac.bd">admissions@primeuniversity.ac.bd</a></p>
+                        <p><a href="mailto:info@primeuniversity.ac.bd">info@primeuniversity.ac.bd</a></p>
                         <p><a href="tel:+8801969955566">01969-955566</a></p>
                         <p>114/116 Mazar Road, Mirpur-1, Dhaka 1216</p>
                      </div>
@@ -834,7 +837,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                  </div>
                                  <div class="col-md-6">
                                     <label class="pu-form-label" for="apply_email">Email Address</label>
-                                    <input type="email" id="apply_email" name="email" class="pu-form-control" maxlength="200" value="<?= an_old('email', $old) ?>" placeholder="you@example.com" autocapitalize="off" autocorrect="off" spellcheck="false">
+                                    <input type="email" id="apply_email" name="email" class="pu-form-control" maxlength="200" value="<?= an_old('email', $old) ?>" placeholder="you@example.com" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="email">
                                     <div class="pu-form-note">We will send a confirmation email if you provide one.</div>
                                  </div>
                                  <div class="col-md-6">
@@ -948,6 +951,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             progSelect.appendChild(option);
          });
+
+         if (typeof $ !== 'undefined' && typeof $.fn.niceSelect !== 'undefined') {
+            $(progSelect).niceSelect('update');
+         }
       }
 
       function syncDegreeCards() {
@@ -959,7 +966,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
       if (deptSelect && progSelect) {
          deptSelect.addEventListener('change', updatePrograms);
+      }
+
+      if (typeof $ !== 'undefined') {
+         $(document).ready(function () {
+            if (deptSelect && progSelect) updatePrograms();
+         });
+      } else if (deptSelect && progSelect) {
          updatePrograms();
+      }
+
+      const applyEmailInput = document.getElementById('apply_email');
+      if (applyEmailInput) {
+         applyEmailInput.addEventListener('input', function () {
+            const start = this.selectionStart;
+            const end = this.selectionEnd;
+            this.value = this.value.toLowerCase();
+            this.setSelectionRange(start, end);
+         });
       }
 
       document.querySelectorAll('.pu-radio-card input[type="radio"]').forEach(function (input) {
