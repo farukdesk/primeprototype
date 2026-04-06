@@ -696,7 +696,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                      <div class="icon"><i class="fas fa-bolt"></i></div>
                      <div>
                         <strong>Quick Application</strong>
-                        <span>Simple form designed for fast submission on mobile, tablet, and desktop.</span>
+                        <span>Fill in minutes — our admissions team reviews your enquiry and follows up personally.</span>
                      </div>
                   </div>
                   <div class="pu-hero-point">
@@ -724,7 +724,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <div class="col-sm-6">
                            <div style="background:rgba(255,255,255,.09);border-radius:18px;padding:18px;height:100%;">
                               <strong style="font-size:1.9rem;">100%</strong>
-                              <span>Responsive experience across all devices</span>
+                              <span>We respond to every enquiry — no application goes unanswered</span>
                            </div>
                         </div>
                         <div class="col-12">
