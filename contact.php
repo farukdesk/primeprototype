@@ -490,30 +490,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                   </iframe>
                </div>
 
-               <div class="pu-detail-box">
-                  <h6>Additional Contacts</h6>
-                  <div class="pu-detail-row">
-                     <div class="icon blue"><i class="fas fa-phone-alt"></i></div>
-                     <div class="text">
-                        <a href="tel:+8801969955566">01969-955566</a>
-                     </div>
-                  </div>
-                  <div class="pu-detail-row">
-                     <div class="icon green"><i class="fas fa-clock"></i></div>
-                     <div class="text">
-                        <strong>Office Hours</strong><br>
-                        Sun – Thu: 9:00 AM – 5:00 PM<br>
-                        Friday &amp; Saturday: Closed
-                     </div>
-                  </div>
-                  <div class="pu-detail-row">
-                     <div class="icon amber"><i class="fas fa-map-pin"></i></div>
-                     <div class="text">
-                        <strong>Nearest Landmark</strong><br>
-                        Mirpur-1 Bus Stand,&nbsp;Dhaka
-                     </div>
-                  </div>
-               </div>
+
 
             </div>
 
@@ -592,6 +569,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
    </section>
    <!-- ── MAP + FORM END ───────────────────────────────────────────────────── -->
 
+
+   <?php include __DIR__ . '/includes/footer.php'; ?>
 
    <?php include __DIR__ . '/includes/scripts.php'; ?>
    <script>
