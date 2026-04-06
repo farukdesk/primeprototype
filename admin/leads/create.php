@@ -11,7 +11,6 @@ if (!leads_can_create()) {
 $page_title = 'Add Lead';
 $user       = auth_user();
 $errors     = [];
-$old        = [];
 
 // ── Departments & programs ────────────────────────────────────────────────────
 $departments = db()->query(
@@ -35,7 +34,7 @@ $staff_users = db()->query(
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
-    $old = $_POST;
+    save_old($_POST);
 
     $first_name  = trim($_POST['first_name']  ?? '');
     $last_name   = trim($_POST['last_name']   ?? '');
@@ -86,6 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         log_change('leads', 'CREATE', $lead_id, $first_name . ' ' . $last_name, null, null, $lead_number, 'Lead created');
 
         flash_set('success', 'Lead ' . $lead_number . ' created successfully.');
+        clear_old();
         redirect(APP_URL . '/leads/view.php?id=' . $lead_id);
     }
 }
@@ -116,27 +116,27 @@ require_once __DIR__ . '/../includes/header.php';
                     <div class="row g-3">
                         <div class="col-6">
                             <label class="form-label">First Name <span class="text-danger">*</span></label>
-                            <input type="text" name="first_name" class="form-control" value="<?= h(old('first_name', $old)) ?>" required>
+                            <input type="text" name="first_name" class="form-control" value="<?= h(old('first_name')) ?>" required>
                         </div>
                         <div class="col-6">
                             <label class="form-label">Last Name <span class="text-danger">*</span></label>
-                            <input type="text" name="last_name" class="form-control" value="<?= h(old('last_name', $old)) ?>" required>
+                            <input type="text" name="last_name" class="form-control" value="<?= h(old('last_name')) ?>" required>
                         </div>
                         <div class="col-12 col-md-6">
                             <label class="form-label">Email</label>
-                            <input type="email" name="email" class="form-control" value="<?= h(old('email', $old)) ?>" autocapitalize="off" autocorrect="off" spellcheck="false">
+                            <input type="email" name="email" class="form-control" value="<?= h(old('email')) ?>" autocapitalize="off" autocorrect="off" spellcheck="false">
                         </div>
                         <div class="col-12 col-md-6">
                             <label class="form-label">Phone <span class="text-danger">*</span></label>
-                            <input type="text" name="phone" class="form-control" value="<?= h(old('phone', $old)) ?>" required>
+                            <input type="text" name="phone" class="form-control" value="<?= h(old('phone')) ?>" required>
                         </div>
                         <div class="col-12 col-md-6">
                             <label class="form-label">Current City</label>
-                            <input type="text" name="current_city" class="form-control" value="<?= h(old('current_city', $old)) ?>">
+                            <input type="text" name="current_city" class="form-control" value="<?= h(old('current_city')) ?>">
                         </div>
                         <div class="col-12">
                             <label class="form-label">Address</label>
-                            <textarea name="address" class="form-control" rows="2"><?= h(old('address', $old)) ?></textarea>
+                            <textarea name="address" class="form-control" rows="2"><?= h(old('address')) ?></textarea>
                         </div>
                     </div>
                 </div>
@@ -150,8 +150,8 @@ require_once __DIR__ . '/../includes/header.php';
                         <div class="col-12 col-md-4">
                             <label class="form-label">Applying For</label>
                             <select name="degree_type" class="form-select" id="degree_type">
-                                <option value="bachelor" <?= old('degree_type', $old) !== 'master' ? 'selected' : '' ?>>Bachelor Degree</option>
-                                <option value="master"   <?= old('degree_type', $old) === 'master' ? 'selected' : '' ?>>Master Degree</option>
+                                <option value="bachelor" <?= old('degree_type') !== 'master' ? 'selected' : '' ?>>Bachelor Degree</option>
+                                <option value="master"   <?= old('degree_type') === 'master' ? 'selected' : '' ?>>Master Degree</option>
                             </select>
                         </div>
                         <div class="col-12 col-md-4">
@@ -159,7 +159,7 @@ require_once __DIR__ . '/../includes/header.php';
                             <select name="dept_id" class="form-select" id="dept_id_select">
                                 <option value="">— Select Department —</option>
                                 <?php foreach ($departments as $d): ?>
-                                <option value="<?= $d['id'] ?>" <?= old('dept_id', $old) == $d['id'] ? 'selected' : '' ?>><?= h($d['name']) ?></option>
+                                <option value="<?= $d['id'] ?>" <?= old('dept_id') == $d['id'] ? 'selected' : '' ?>><?= h($d['name']) ?></option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
@@ -168,10 +168,10 @@ require_once __DIR__ . '/../includes/header.php';
                             <select name="program_id" class="form-select" id="program_id_select">
                                 <option value="">— Select Program —</option>
                                 <?php
-                                $sel_dept = (int)old('dept_id', $old);
+                                $sel_dept = (int)old('dept_id');
                                 if ($sel_dept && isset($programs_by_dept[$sel_dept])) {
                                     foreach ($programs_by_dept[$sel_dept] as $p) {
-                                        $sel = old('program_id', $old) == $p['id'] ? 'selected' : '';
+                                        $sel = old('program_id') == $p['id'] ? 'selected' : '';
                                         echo '<option value="' . $p['id'] . '" ' . $sel . '>' . h($p['program_name']) . '</option>';
                                     }
                                 }
@@ -183,7 +183,7 @@ require_once __DIR__ . '/../includes/header.php';
                             <select name="preferred_semester" class="form-select">
                                 <option value="">— Select Semester —</option>
                                 <?php foreach ($semesters as $sem): ?>
-                                <option value="<?= h($sem) ?>" <?= old('preferred_semester', $old) === $sem ? 'selected' : '' ?>><?= h($sem) ?></option>
+                                <option value="<?= h($sem) ?>" <?= old('preferred_semester') === $sem ? 'selected' : '' ?>><?= h($sem) ?></option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
@@ -201,7 +201,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <label class="form-label">Status</label>
                         <select name="status" class="form-select">
                             <?php foreach (['fresh' => 'Fresh', 'unable_to_reach' => 'Unable to Reach', 'converted' => 'Converted'] as $v => $l): ?>
-                            <option value="<?= $v ?>" <?= old('status', $old) === $v ? 'selected' : '' ?>><?= $l ?></option>
+                            <option value="<?= $v ?>" <?= old('status') === $v ? 'selected' : '' ?>><?= $l ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -209,7 +209,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <label class="form-label">Lead Source</label>
                         <select name="source" class="form-select">
                             <?php foreach (['online' => 'Online', 'campus_visit' => 'Campus Visit', 'agent' => 'Agent', 'f2f_marketing' => 'F2F Marketing'] as $v => $l): ?>
-                            <option value="<?= $v ?>" <?= old('source', $old) === $v ? 'selected' : '' ?>><?= $l ?></option>
+                            <option value="<?= $v ?>" <?= old('source') === $v ? 'selected' : '' ?>><?= $l ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -218,7 +218,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <select name="assigned_to" class="form-select">
                             <option value="">— Unassigned —</option>
                             <?php foreach ($staff_users as $su): ?>
-                            <option value="<?= $su['id'] ?>" <?= old('assigned_to', $old) == $su['id'] ? 'selected' : '' ?>><?= h($su['full_name']) ?></option>
+                            <option value="<?= $su['id'] ?>" <?= old('assigned_to') == $su['id'] ? 'selected' : '' ?>><?= h($su['full_name']) ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -249,4 +249,4 @@ function updatePrograms() {
 deptSelect.addEventListener('change', updatePrograms);
 </script>
 
-<?php require_once __DIR__ . '/../includes/footer.php'; ?>
+<?php clear_old(); require_once __DIR__ . '/../includes/footer.php'; ?>
