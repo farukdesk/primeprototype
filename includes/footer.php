@@ -62,7 +62,7 @@ for ($i = 1; $i <= 5; $i++) {
          <div class="row gy-5">
 
             <!-- Col 1 – Brand & About -->
-            <div class="col-xl-4 col-lg-4 col-md-12">
+            <div class="col-12 col-md-12 col-lg-4 col-xl-4">
                <div class="pu-footer__brand">
                   <a href="/" class="pu-footer__logo">
                      <img src="<?= fh($footer_logo_url) ?>" alt="Prime University" class="pu-footer__logo-img">
@@ -130,7 +130,7 @@ for ($i = 1; $i <= 5; $i++) {
             </div>
 
             <!-- Col 4 – Contact -->
-            <div class="col-xl-4 col-lg-4 col-md-4 col-sm-12">
+            <div class="col-12 col-sm-12 col-md-4 col-lg-4 col-xl-4">
                <div class="pu-footer__widget">
                   <h5 class="pu-footer__widget-title">Get In Touch</h5>
                   <ul class="pu-footer__contact">

@@ -1381,7 +1381,6 @@ button.it-menu-bar:focus-visible {
 .pu-footer__logo img {
   max-height: 54px;
   width: auto;
-  filter: brightness(0) invert(1);
 }
 .pu-footer__about {
   color: var(--puf-text);
@@ -1609,10 +1608,14 @@ button.it-menu-bar:focus-visible {
   .pu-footer__widget-title::after { left: 50%; transform: translateX(-50%); }
   .pu-footer__widget { text-align: center; }
   .pu-footer__links li a { justify-content: center; }
+  .pu-footer__contact { max-width: 340px; margin-left: auto; margin-right: auto; text-align: left; }
   .pu-footer__contact li { text-align: left; }
+  .pu-footer__contact div a { word-break: break-word; }
   .pu-footer__bottom { text-align: center; }
 }
 @media (max-width: 575px) {
   .pu-footer__body { padding: 40px 0 24px; }
   .pu-footer__widget { padding-top: 0; }
+  .pu-footer__contact { max-width: 100%; }
+  .pu-footer__contact-label { font-size: .7rem; }
 }
