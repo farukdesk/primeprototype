@@ -379,10 +379,12 @@ try {
 
         <?php if ($sections): ?>
         <div class="coc-hero-stats">
-            <?php foreach ($sections as $sec): ?>
+            <?php foreach ($sections as $sec):
+                $shortTitle = htmlspecialchars(preg_replace('/\s+Code of Conduct|\s+Member\s+/i', '', $sec['title']), ENT_QUOTES, 'UTF-8');
+            ?>
             <div class="stat">
                 <strong><?= count($sec['items']) ?>+</strong>
-                <span><?= htmlspecialchars(preg_replace('/\s+Code of Conduct|\s+Member\s+/i', '', $sec['title']), ENT_QUOTES, 'UTF-8') ?></span>
+                <span><?= $shortTitle ?></span>
             </div>
             <?php endforeach; ?>
         </div>
@@ -394,13 +396,15 @@ try {
 <!-- ══ Tab Nav ══ -->
 <div class="coc-tabs-wrap">
     <div class="coc-tabs" role="tablist">
-        <?php foreach ($sections as $i => $sec): ?>
+        <?php foreach ($sections as $i => $sec):
+            $tabLabel = htmlspecialchars(preg_replace('/\s*Code of Conduct/i', '', $sec['title']), ENT_QUOTES, 'UTF-8');
+        ?>
         <button class="coc-tab-btn <?= $i === 0 ? 'active' : '' ?>"
                 data-target="coc-<?= htmlspecialchars($sec['section_key'], ENT_QUOTES, 'UTF-8') ?>"
                 role="tab"
                 aria-selected="<?= $i === 0 ? 'true' : 'false' ?>">
             <span class="tab-icon"><i class="<?= htmlspecialchars($sec['icon'], ENT_QUOTES, 'UTF-8') ?>"></i></span>
-            <?= htmlspecialchars(preg_replace('/\s*Code of Conduct/i', '', $sec['title']), ENT_QUOTES, 'UTF-8') ?>
+            <?= $tabLabel ?>
         </button>
         <?php endforeach; ?>
     </div>
@@ -444,9 +448,12 @@ try {
 
             <!-- Conduct items -->
             <?php if ($sec['items']): ?>
+            <?php $headingText = $sec['section_key'] === 'student'
+                ? 'The following shall be considered as offences'
+                : 'The following shall constitute misconduct'; ?>
             <div class="coc-items-heading">
                 <i class="fas fa-list-ul" style="color:#4f8ef7;"></i>
-                <?= $i === 0 ? 'The following shall be considered as offences' : 'The following shall constitute misconduct' ?>
+                <?= $headingText ?>
             </div>
             <ul class="coc-list">
                 <?php foreach ($sec['items'] as $n => $item): ?>

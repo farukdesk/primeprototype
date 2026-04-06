@@ -9,6 +9,15 @@ $sections = db()->query(
      FROM cms_coc_sections s ORDER BY s.sort_order, s.id'
 )->fetchAll();
 
+// Fetch all items in one query and group by section_id
+$allItems = db()->query(
+    'SELECT * FROM cms_coc_items ORDER BY section_id, sort_order, id'
+)->fetchAll();
+$itemsBySection = [];
+foreach ($allItems as $row) {
+    $itemsBySection[$row['section_id']][] = $row;
+}
+
 require_once __DIR__ . '/../../includes/header.php';
 ?>
 
@@ -55,9 +64,7 @@ require_once __DIR__ . '/../../includes/header.php';
     </div>
 
     <?php
-    $items = db()->prepare('SELECT * FROM cms_coc_items WHERE section_id = ? ORDER BY sort_order, id');
-    $items->execute([$sec['id']]);
-    $items = $items->fetchAll();
+    $items = $itemsBySection[$sec['id']] ?? [];
     ?>
 
     <?php if ($items): ?>
