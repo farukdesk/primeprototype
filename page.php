@@ -45,6 +45,7 @@ $page_title = fh($pg['title']);
    <?php if ($pg['gjs_css']): ?>
    <style><?= $pg['gjs_css'] ?></style>
    <?php endif; ?>
+<?php include __DIR__ . '/includes/meta-pixel.php'; ?>
 </head>
 <body id="body" class="it-magic-cursor">
 

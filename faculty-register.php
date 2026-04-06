@@ -290,6 +290,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['_action'] ?? '') === 'facu
    }
    .upload-hint { font-size: .8rem; color: #6b7280; margin-top: 4px; }
    </style>
+<?php include __DIR__ . '/includes/meta-pixel.php'; ?>
 </head>
 <body>
 <?php

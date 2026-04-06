@@ -323,6 +323,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
    .wow-stagger > * { opacity: 0; }
    </style>
+<?php include __DIR__ . '/includes/meta-pixel.php'; ?>
 </head>
 <body id="body" class="it-magic-cursor">
 

@@ -68,6 +68,7 @@ $dept_name    = fh($dept['name'] ?? 'Department');
    .notice-date-badge .month { font-size: 11px; font-weight: 600; color: #E8EEF4; letter-spacing: 1px; display: block; }
    .notice-date-badge .year { font-size: 11px; color: #E8EEF4; display: block; }
    </style>
+<?php include __DIR__ . '/includes/meta-pixel.php'; ?>
 </head>
 <body id="body" class="it-magic-cursor">
 

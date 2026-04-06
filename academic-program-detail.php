@@ -246,6 +246,7 @@ function ap_safe_date(mixed $val): string {
        .ap-sticky-sidebar { position: static !important; }
    }
    </style>
+<?php include __DIR__ . '/includes/meta-pixel.php'; ?>
 </head>
 <body id="body" class="it-magic-cursor">
 

@@ -94,6 +94,7 @@ try {
    .pu-stat-strip .stat-num { font-size: 2.5rem; font-weight: 800; color: #fff; }
    .pu-stat-strip .stat-label { font-size: .9rem; color: rgba(255,255,255,.8); }
    </style>
+<?php include __DIR__ . '/includes/meta-pixel.php'; ?>
 </head>
 <body id="body" class="it-magic-cursor">
    <div id="preloader"><div class="preloader"><span></span><span></span></div></div>

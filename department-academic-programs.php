@@ -85,6 +85,7 @@ function degree_badge_color(string $type): string {
    .prog-details-content li { margin-bottom: 6px; color: #334155; font-size: 14px; line-height: 1.7; }
    @media (max-width: 576px) { .p-30 { padding: 20px !important; } }
    </style>
+<?php include __DIR__ . '/includes/meta-pixel.php'; ?>
 </head>
 <body id="body" class="it-magic-cursor">
 

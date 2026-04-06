@@ -351,6 +351,7 @@ function gs_url(array $s, string $key, string $default = '#'): string {
   .cta-btn-primary, .cta-btn-secondary { font-size:.88rem; padding:13px 22px; }
 }
 </style>
+<?php include __DIR__ . '/includes/meta-pixel.php'; ?>
 </head>
 <body id="body" class="it-magic-cursor">
 

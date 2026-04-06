@@ -111,6 +111,7 @@ $cv_url = !empty($profile['cv_file']) ? ADMIN_UPLOAD_URL . '/faculty-profiles/' 
          .fp-tabs-wrap .nav-tabs .nav-link { font-size: 12px; padding: 12px 10px; }
       }
    </style>
+<?php include __DIR__ . '/includes/meta-pixel.php'; ?>
 </head>
 <body id="body" class="it-magic-cursor">
 

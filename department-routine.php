@@ -74,6 +74,7 @@ $dept_name    = fh($dept['name'] ?? 'Department');
    .type-badge-exam  { background-color: #D21034; color: #FFFFFF; }
    .type-badge-other { background-color: #334155; color: #FFFFFF; }
    </style>
+<?php include __DIR__ . '/includes/meta-pixel.php'; ?>
 </head>
 <body id="body" class="it-magic-cursor">
 

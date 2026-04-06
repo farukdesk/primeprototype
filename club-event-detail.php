@@ -179,6 +179,7 @@ $page_title = fh($event['title']) . ' – ' . fh($event['club_name']) . ' – Pr
    /* Closed banner */
    .pu-closed-banner { background:linear-gradient(135deg,#f8fafc,#f1f5f9); border-radius:18px; border:2px dashed #e2e8f0; padding:40px 28px; text-align:center; }
    </style>
+<?php include __DIR__ . '/includes/meta-pixel.php'; ?>
 </head>
 <body id="body" class="it-magic-cursor">
    <div id="preloader"><div class="preloader"><span></span><span></span></div></div>
