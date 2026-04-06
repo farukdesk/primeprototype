@@ -327,6 +327,12 @@ $user       = auth_user();
                 </a>
             </li>
             <li class="nav-item">
+                <a href="<?= APP_URL ?>/cms/glance/index.php"
+                   class="<?= strpos($current_path, '/cms/glance/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-eye"></i> PU At a Glance
+                </a>
+            </li>
+            <li class="nav-item">
                 <a href="<?= APP_URL ?>/cms/why-choose-us/index.php"
                    class="<?= strpos($current_path, '/cms/why-choose-us/') !== false ? 'active' : '' ?>">
                     <i class="fas fa-star"></i> Why Choose Us
