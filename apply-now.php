@@ -585,30 +585,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       #apply_email { text-transform: none; }
       @media (max-width: 1199px) {
          .pu-apply-shell { border-radius:24px; }
-         .pu-apply-aside { border-right:0; border-bottom:1px solid #e6ecf5; border-radius:24px 24px 0 0; }
+         .pu-apply-aside { border-right:0; border-top:1px solid #e6ecf5; border-radius:0 0 24px 24px; }
+         .pu-apply-form-wrap { border-radius:24px 24px 0 0; }
       }
       @media (max-width: 991px) {
-         .pu-apply-hero { padding:85px 0 130px; }
+         .pu-apply-hero { padding:60px 0 110px; }
          .pu-hero-points,
          .pu-stat-grid,
          .pu-degree-toggle { grid-template-columns:1fr; }
          .pu-apply-form-wrap,
          .pu-apply-aside { padding:30px 22px; }
+         .pu-hero-points { display:none; }
       }
       @media (max-width: 767px) {
-         .pu-apply-hero { padding:70px 0 120px; }
-         .pu-apply-overlap { margin-top:-68px; }
+         .pu-apply-hero { padding:50px 0 95px; }
+         .pu-apply-overlap { margin-top:-55px; }
          .pu-apply-shell { border-radius:22px; }
-         .pu-apply-aside { border-radius:22px 22px 0 0; }
+         .pu-apply-aside { border-radius:0 0 22px 22px; border-right:0; border-top:1px solid #e6ecf5; }
          .pu-action-row { flex-direction:column; align-items:stretch; }
          .pu-submit-btn,
          .pu-outline-btn { width:100%; }
+         body { padding-bottom:72px; }
       }
       @media (max-width: 575px) {
-         .pu-apply-hero h1 { font-size:2rem; }
+         .pu-apply-hero h1 { font-size:1.9rem; }
          .pu-panel-title { font-size:1.3rem; }
          .pu-apply-form-wrap,
-         .pu-apply-aside { padding:24px 18px; }
+         .pu-apply-aside { padding:22px 16px; }
+      }
+      /* Sticky mobile apply bar */
+      .pu-sticky-apply {
+         position:fixed;
+         bottom:0; left:0; right:0;
+         z-index:9990;
+         padding:14px 20px;
+         background:linear-gradient(135deg,#ffb81c 0%,#f59e0b 100%);
+         box-shadow:0 -4px 20px rgba(245,158,11,.4);
+         animation:pu-pulse-shadow 2.5s ease-in-out infinite;
+      }
+      .pu-sticky-apply-btn {
+         display:flex;
+         align-items:center;
+         justify-content:center;
+         gap:10px;
+         color:#10224d;
+         font-weight:800;
+         font-size:1rem;
+         text-decoration:none;
+      }
+      .pu-sticky-apply-btn:hover { color:#10224d; opacity:.92; }
+      @keyframes pu-pulse-shadow {
+         0%,100% { box-shadow:0 -4px 20px rgba(245,158,11,.4); }
+         50%      { box-shadow:0 -4px 30px rgba(245,158,11,.7); }
       }
    </style>
 </head>
@@ -711,7 +739,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                   </div>
                </div>
             </div>
-            <div class="col-lg-5">
+            <div class="col-lg-5 d-none d-lg-block">
                <div class="pu-hero-point wow fadeInRight" data-wow-delay=".2s" style="padding:28px; border-radius:24px;">
                   <div>
                      <span class="d-inline-flex align-items-center gap-2 mb-15" style="color:#ffdf8b;font-weight:700;font-size:.85rem;text-transform:uppercase;letter-spacing:.08em;">
@@ -748,7 +776,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <div class="container">
          <div class="pu-apply-shell">
             <div class="row g-0">
-               <div class="col-xl-4">
+               <div class="col-xl-4 order-2 order-xl-1">
                   <aside class="pu-apply-aside">
                      <h2 class="pu-panel-title">Apply with confidence</h2>
                      <p class="pu-panel-text">Share your basic information, choose your preferred department, and our admissions team will help you with the next steps.</p>
@@ -793,7 +821,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                      </div>
                   </aside>
                </div>
-               <div class="col-xl-8">
+               <div class="col-xl-8 order-1 order-xl-2">
                   <div class="pu-apply-form-wrap">
                      <?php if ($form_success): ?>
                         <div class="pu-success-card">
@@ -928,6 +956,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
    <?php include __DIR__ . '/includes/footer.php'; ?>
 
+   <!-- Sticky mobile apply bar (hidden when form is visible) -->
+   <div class="pu-sticky-apply d-xl-none" id="puStickyApply">
+      <a href="#apply-form" class="pu-sticky-apply-btn">
+         <i class="fas fa-paper-plane" aria-hidden="true"></i>
+         <span>Apply Now – Takes 2 Minutes</span>
+         <i class="fas fa-arrow-right" aria-hidden="true"></i>
+      </a>
+   </div>
+
    <?php include __DIR__ . '/includes/scripts.php'; ?>
    <script>
       const programsByDept = <?= json_encode($programs_by_dept, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
@@ -1011,7 +1048,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             });
             const emailField = form.querySelector('input[type="email"]');
             if (emailField && emailField.value.trim()) {
-               const emailOk = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(emailField.value.trim());
+               const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailField.value.trim());
                if (!emailOk) {
                   emailField.style.borderColor = '#dc2626';
                   if (!firstInvalid) firstInvalid = emailField;
@@ -1031,6 +1068,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                this.style.borderColor = '';
             });
          });
+      }
+
+      // Hide sticky bar when the form is visible on screen
+      const puStickyApply = document.getElementById('puStickyApply');
+      if (puStickyApply && typeof IntersectionObserver !== 'undefined') {
+         const formAnchor = document.getElementById('apply-form');
+         if (formAnchor) {
+            const obs = new IntersectionObserver(function (entries) {
+               puStickyApply.style.display = entries[0].isIntersecting ? 'none' : '';
+            }, { threshold: 0.15 });
+            obs.observe(formAnchor);
+         }
       }
    </script>
 </body>
