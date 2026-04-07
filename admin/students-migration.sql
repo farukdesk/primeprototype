@@ -132,12 +132,10 @@ INSERT INTO `_su_dept_map` VALUES
     ('MBA',                             'MBA'),
     -- English
     ('English',                         'ENG'),
-    ('ENGLISH',                         'ENG'),
     -- Bangla
     ('Bangla',                          'BAN'),
     -- Law
     ('Law',                             'LAW'),
-    ('LAW',                             'LAW'),
     -- Civil
     ('Civil',                           'CE'),
     ('CE',                              'CE'),
