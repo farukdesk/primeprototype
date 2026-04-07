@@ -162,10 +162,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
 
                     $file_size   = strlen($raw_content);
-                    if ($file_size > SM_FILE_MAX) {
-                        $errors[] = ['path' => $entry, 'reason' => 'File exceeds ' . round(SM_FILE_MAX / 1048576) . ' MB limit.'];
-                        continue;
-                    }
 
                     $stored_name = bin2hex(random_bytes(12)) . '.pdf';
                     $dest_path   = $dest_dir . '/' . $stored_name;
