@@ -104,12 +104,12 @@ WHERE  d.code IN ('EEE','ETE','BBA','MBA','ENG','BAN','LAW','CE','EDU','MCA')
 -- STEP 4 – Build a temp mapping: old department text → new dept_id
 -- ─────────────────────────────────────────────────────────────────────────────
 
-DROP TEMPORARY TABLE IF EXISTS `_su_dept_map`;
-CREATE TEMPORARY TABLE `_su_dept_map` (
+DROP TABLE IF EXISTS `_su_dept_map`;
+CREATE TABLE `_su_dept_map` (
     `old_dept` VARCHAR(150) NOT NULL,
     `code`     VARCHAR(10)  NOT NULL,
     PRIMARY KEY (`old_dept`)
-) ENGINE=MEMORY;
+) ENGINE=InnoDB;
 
 INSERT INTO `_su_dept_map` VALUES
     -- EEE
@@ -536,7 +536,7 @@ FROM `s_result_entry` sr;
 -- STEP 8 – Cleanup temp table
 -- ─────────────────────────────────────────────────────────────────────────────
 
-DROP TEMPORARY TABLE IF EXISTS `_su_dept_map`;
+DROP TABLE IF EXISTS `_su_dept_map`;
 
 SET FOREIGN_KEY_CHECKS = 1;
 
