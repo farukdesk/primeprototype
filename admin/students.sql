@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS `students` (
   `dept_id`              INT UNSIGNED  NOT NULL,
   `program_id`           INT UNSIGNED  DEFAULT NULL,
   `admitted_semester`    VARCHAR(50)   NOT NULL COMMENT 'e.g. Summer 2025',
+  `batch`                VARCHAR(50)   DEFAULT NULL COMMENT 'Intake batch, e.g. 35th',
+  `shift`                VARCHAR(25)   DEFAULT NULL COMMENT 'Day / Evening / Morning',
   `full_name`            VARCHAR(200)  NOT NULL,
   `father_name`          VARCHAR(200)  DEFAULT NULL,
   `father_phone`         VARCHAR(30)   DEFAULT NULL,
@@ -27,10 +29,26 @@ CREATE TABLE IF NOT EXISTS `students` (
   `nationality`          VARCHAR(100)  DEFAULT NULL,
   `email`                VARCHAR(200)  DEFAULT NULL,
   `phone`                VARCHAR(30)   DEFAULT NULL,
+  `dob`                  DATE          DEFAULT NULL,
+  `blood_group`          VARCHAR(10)   DEFAULT NULL,
+  `nid`                  VARCHAR(50)   DEFAULT NULL COMMENT 'National ID number',
   `place_of_birth`       VARCHAR(200)  DEFAULT NULL,
   `sex`                  ENUM('Male','Female','Other') DEFAULT NULL,
   `religion`             VARCHAR(100)  DEFAULT NULL,
   `photo`                VARCHAR(300)  DEFAULT NULL,
+  `poor_meritorious`      TINYINT(1)   NOT NULL DEFAULT 0,
+  `freedom_fighter_quota` TINYINT(1)   NOT NULL DEFAULT 0,
+  `waiver_percent`        VARCHAR(10)  DEFAULT NULL,
+  `form_fee`              INT          DEFAULT NULL,
+  `regi_fee`              INT          DEFAULT NULL,
+  `tuition_fee`           INT          DEFAULT NULL,
+  `misc_fee`              VARCHAR(50)  DEFAULT NULL,
+  `project_fee`           INT          DEFAULT NULL,
+  `total_fee`             INT          DEFAULT NULL,
+  `waiver_amount`         INT          DEFAULT NULL,
+  `total_payable`         VARCHAR(50)  DEFAULT NULL,
+  `monthly_installment`   VARCHAR(50)  DEFAULT NULL,
+  `ref_number`            VARCHAR(100) DEFAULT NULL,
   `status`               ENUM('Active','Inactive','Graduated','Dropped') NOT NULL DEFAULT 'Active',
   `created_by`           INT UNSIGNED  DEFAULT NULL,
   `created_at`           DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -90,10 +108,58 @@ CREATE TABLE IF NOT EXISTS `student_comments` (
   CONSTRAINT `fk_comments_student` FOREIGN KEY (`student_id`) REFERENCES `students`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 5. student_results: migrated semester result records
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS `student_results` (
+  `id`            INT UNSIGNED  NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `student_id`    INT UNSIGNED  DEFAULT NULL COMMENT 'FK students.id – NULL when SID unmatched',
+  `student_sid`   VARCHAR(25)   DEFAULT NULL COMMENT 'Original student SID',
+  `student_name`  VARCHAR(100)  DEFAULT NULL,
+  `batch`         VARCHAR(20)   DEFAULT NULL,
+  `semester`      VARCHAR(50)   DEFAULT NULL,
+  `semester_year` VARCHAR(20)   DEFAULT NULL,
+  `department`    VARCHAR(50)   DEFAULT NULL,
+  `program`       VARCHAR(50)   DEFAULT NULL,
+  `level`         VARCHAR(30)   DEFAULT NULL,
+  `subject`       VARCHAR(100)  DEFAULT NULL,
+  `subject_code`  VARCHAR(30)   DEFAULT NULL,
+  `grade`         VARCHAR(20)   DEFAULT NULL,
+  `credits`       VARCHAR(20)   DEFAULT NULL,
+  `gpa`           VARCHAR(11)   DEFAULT NULL,
+  `cgpa`          VARCHAR(15)   DEFAULT NULL,
+  `subject_code1` VARCHAR(20)   DEFAULT NULL,
+  `grade1`        VARCHAR(10)   DEFAULT NULL,
+  `credits1`      VARCHAR(10)   DEFAULT NULL,
+  `gpa1`          VARCHAR(10)   DEFAULT NULL,
+  `subject_code2` VARCHAR(20)   DEFAULT NULL,
+  `grade2`        VARCHAR(10)   DEFAULT NULL,
+  `credits2`      VARCHAR(10)   DEFAULT NULL,
+  `gpa2`          VARCHAR(10)   DEFAULT NULL,
+  `subject_code3` VARCHAR(20)   DEFAULT NULL,
+  `grade3`        VARCHAR(10)   DEFAULT NULL,
+  `credits3`      VARCHAR(10)   DEFAULT NULL,
+  `gpa3`          VARCHAR(10)   DEFAULT NULL,
+  `subject_code4` VARCHAR(20)   DEFAULT NULL,
+  `grade4`        VARCHAR(10)   DEFAULT NULL,
+  `credits4`      VARCHAR(10)   DEFAULT NULL,
+  `gpa4`          VARCHAR(10)   DEFAULT NULL,
+  `recorded_date` DATE          DEFAULT NULL,
+  `created_at`    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY `idx_sr_student` (`student_id`),
+  KEY `idx_sr_sid`     (`student_sid`),
+  CONSTRAINT `fk_sr_student` FOREIGN KEY (`student_id`)
+      REFERENCES `students`(`id`) ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT 'Semester result records – linked to students via student_id';
+
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- 5. Register module
+-- 6. Register modules
 -- ─────────────────────────────────────────────────────────────────────────────
 INSERT IGNORE INTO `modules` (`name`, `slug`, `description`, `icon`, `sort_order`)
 VALUES ('Student Management', 'students', 'Manage student records, files, qualifications and comments', 'fas fa-user-graduate', 50);
+
+INSERT IGNORE INTO `modules` (`name`, `slug`, `description`, `icon`, `sort_order`)
+VALUES ('Student Results', 'student-results', 'View and manage semester result records', 'fas fa-chart-bar', 51);

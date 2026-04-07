@@ -100,6 +100,13 @@ $comments_stmt = db()->prepare(
 $comments_stmt->execute([$id]);
 $comments = $comments_stmt->fetchAll();
 
+// Student results (migrated from s_result_entry)
+$results_stmt = db()->prepare(
+    'SELECT * FROM student_results WHERE student_id = ? ORDER BY semester_year DESC, semester ASC, id ASC'
+);
+$results_stmt->execute([$id]);
+$results = $results_stmt->fetchAll();
+
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
@@ -139,7 +146,7 @@ require_once __DIR__ . '/../includes/header.php';
         <div class="row align-items-center g-3">
             <div class="col-auto">
                 <?php if ($student['photo']): ?>
-                <img src="<?= UPLOAD_URL ?>/students/photos/<?= h($student['photo']) ?>"
+                <img src="<?= sm_photo_url($student['photo']) ?>"
                      alt="Photo"
                      style="width:100px;height:120px;object-fit:cover;border-radius:10px;border:2px solid #dee2e6;">
                 <?php else: ?>
@@ -164,6 +171,12 @@ require_once __DIR__ . '/../includes/header.php';
                         &nbsp;·&nbsp; <?= h($student['program_name']) ?>
                     <?php endif; ?>
                     &nbsp;·&nbsp; Admitted: <?= h($student['admitted_semester']) ?>
+                    <?php if (!empty($student['batch'])): ?>
+                        &nbsp;·&nbsp; Batch: <?= h($student['batch']) ?>
+                    <?php endif; ?>
+                    <?php if (!empty($student['shift'])): ?>
+                        &nbsp;·&nbsp; <?= h($student['shift']) ?> Shift
+                    <?php endif; ?>
                 </div>
                 <?php if ($student['email'] || $student['phone']): ?>
                 <div class="mt-1 text-muted" style="font-size:.875rem;">
@@ -193,6 +206,9 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="card-body px-4">
                 <?php
                 $details = [
+                    'Date of Birth'    => $student['dob'],
+                    'Blood Group'      => $student['blood_group'],
+                    'NID'              => $student['nid'],
                     'Place of Birth'   => $student['place_of_birth'],
                     'Nationality'      => $student['nationality'],
                     'Religion'         => $student['religion'],
@@ -255,6 +271,59 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
     </div>
 </div>
+
+<!-- ══════════════════════════════════════════════════════════
+     QUOTA & FEE INFORMATION
+═══════════════════════════════════════════════════════════ -->
+<?php
+$has_fee = $student['form_fee'] !== null || $student['regi_fee'] !== null || $student['tuition_fee'] !== null ||
+           $student['total_fee'] !== null || $student['total_payable'] !== null || $student['waiver_percent'] !== null ||
+           $student['waiver_amount'] !== null || !empty($student['poor_meritorious']) || !empty($student['freedom_fighter_quota']) ||
+           $student['ref_number'] !== null;
+if ($has_fee):
+?>
+<div class="card mb-4">
+    <div class="card-header py-3 px-4">
+        <h6 class="mb-0 fw-semibold"><i class="fas fa-money-bill-wave me-2 text-muted"></i>Quota &amp; Fee Information</h6>
+    </div>
+    <div class="card-body px-4">
+        <div class="row g-3">
+            <?php if ($student['poor_meritorious'] || $student['freedom_fighter_quota']): ?>
+            <div class="col-12">
+                <?php if ($student['poor_meritorious']): ?>
+                <span class="badge bg-info me-1">Poor / Meritorious</span>
+                <?php endif; ?>
+                <?php if ($student['freedom_fighter_quota']): ?>
+                <span class="badge bg-success">Freedom Fighter Family</span>
+                <?php endif; ?>
+            </div>
+            <?php endif; ?>
+        </div>
+        <?php
+        $feefields = [
+            'Waiver %'            => $student['waiver_percent'],
+            'Waiver Amount'       => $student['waiver_amount'] ? 'BDT ' . number_format($student['waiver_amount']) : null,
+            'Form Fee'            => $student['form_fee'] ? 'BDT ' . number_format($student['form_fee']) : null,
+            'Regi. Fee'           => $student['regi_fee'] ? 'BDT ' . number_format($student['regi_fee']) : null,
+            'Tuition Fee'         => $student['tuition_fee'] ? 'BDT ' . number_format($student['tuition_fee']) : null,
+            'Misc Fee'            => $student['misc_fee'],
+            'Project Fee'         => $student['project_fee'] ? 'BDT ' . number_format($student['project_fee']) : null,
+            'Total Fee'           => $student['total_fee'] ? 'BDT ' . number_format($student['total_fee']) : null,
+            'Total Payable'       => $student['total_payable'],
+            'Monthly Installment' => $student['monthly_installment'],
+            'Ref / Receipt No.'   => $student['ref_number'],
+        ];
+        foreach ($feefields as $lbl => $val):
+            if (!$val) continue;
+        ?>
+        <div class="d-flex mb-1 gap-2 mt-1">
+            <div style="min-width:160px;font-size:.78rem;color:#6b7280;font-weight:600;"><?= $lbl ?></div>
+            <div style="font-size:.875rem;"><?= h($val) ?></div>
+        </div>
+        <?php endforeach; ?>
+    </div>
+</div>
+<?php endif; ?>
 
 <!-- ══════════════════════════════════════════════════════════
      ACADEMIC QUALIFICATIONS
@@ -469,5 +538,51 @@ require_once __DIR__ . '/../includes/header.php';
         </form>
     </div>
 </div>
+
+<!-- ══════════════════════════════════════════════════════════
+     RESULTS (migrated from s_result_entry)
+═══════════════════════════════════════════════════════════ -->
+<?php if (!empty($results)): ?>
+<div class="card mb-5" id="results">
+    <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between">
+        <h6 class="mb-0 fw-semibold">
+            <i class="fas fa-chart-bar me-2 text-muted"></i>Academic Results
+            <span class="badge bg-secondary ms-1"><?= count($results) ?></span>
+        </h6>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover mb-0" style="font-size:.85rem;">
+            <thead class="table-light">
+                <tr>
+                    <th>Semester</th>
+                    <th>Year</th>
+                    <th>Batch</th>
+                    <th>Subject</th>
+                    <th>Code</th>
+                    <th>Credits</th>
+                    <th>Grade</th>
+                    <th>GPA</th>
+                    <th>CGPA</th>
+                </tr>
+            </thead>
+            <tbody>
+            <?php foreach ($results as $r): ?>
+                <tr>
+                    <td><?= h($r['semester'] ?? '') ?></td>
+                    <td><?= h($r['semester_year'] ?? '') ?></td>
+                    <td><?= h($r['batch'] ?? '') ?></td>
+                    <td><?= h($r['subject'] ?? '') ?></td>
+                    <td><code><?= h($r['subject_code'] ?? '') ?></code></td>
+                    <td><?= h($r['credits'] ?? '') ?></td>
+                    <td><?= h($r['grade'] ?? '') ?></td>
+                    <td><?= h($r['gpa'] ?? '') ?></td>
+                    <td><?= h($r['cgpa'] ?? '') ?></td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+</div>
+<?php endif; ?>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>

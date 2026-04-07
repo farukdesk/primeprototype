@@ -53,6 +53,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $place_of_birth       = trim($_POST['place_of_birth']       ?? '');
     $sex                  = $_POST['sex']                       ?? '';
     $religion             = trim($_POST['religion']             ?? '');
+    $dob                  = trim($_POST['dob']                  ?? '');
+    $blood_group          = trim($_POST['blood_group']          ?? '');
+    $nid                  = trim($_POST['nid']                  ?? '');
+    $batch                = trim($_POST['batch']                ?? '');
+    $shift                = trim($_POST['shift']                ?? '');
+    $poor_meritorious     = isset($_POST['poor_meritorious'])      ? 1 : 0;
+    $freedom_fighter      = isset($_POST['freedom_fighter_quota']) ? 1 : 0;
+    $waiver_percent       = trim($_POST['waiver_percent']       ?? '');
+    $form_fee             = trim($_POST['form_fee']             ?? '');
+    $regi_fee             = trim($_POST['regi_fee']             ?? '');
+    $tuition_fee          = trim($_POST['tuition_fee']          ?? '');
+    $misc_fee             = trim($_POST['misc_fee']             ?? '');
+    $project_fee          = trim($_POST['project_fee']          ?? '');
+    $total_fee            = trim($_POST['total_fee']            ?? '');
+    $waiver_amount        = trim($_POST['waiver_amount']        ?? '');
+    $total_payable        = trim($_POST['total_payable']        ?? '');
+    $monthly_installment  = trim($_POST['monthly_installment']  ?? '');
+    $ref_number           = trim($_POST['ref_number']           ?? '');
 
     $qual_rows = [];
     if (!empty($_POST['qual'])) {
@@ -86,8 +104,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($student_id_new === '') {
         $errors[] = 'Student ID is required.';
-    } elseif (!preg_match('/^\d{12}$/', $student_id_new)) {
-        $errors[] = 'Student ID must be exactly 12 digits.';
+    } elseif (!preg_match('/^[a-zA-Z0-9\-]{1,20}$/', $student_id_new)) {
+        $errors[] = 'Student ID must be 1–20 alphanumeric characters (digits, letters or hyphens).';
     } elseif ($student_id_new !== $student['student_id']) {
         $dup = db()->prepare('SELECT id FROM students WHERE student_id = ? AND id != ?');
         $dup->execute([$student_id_new, $id]);
@@ -129,19 +147,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->prepare(
             'UPDATE students SET
                student_id = ?, dept_id = ?, program_id = ?, admitted_semester = ?,
+               batch = ?, shift = ?,
                full_name = ?, father_name = ?, father_phone = ?, father_occupation = ?,
                father_yearly_income = ?,
                mother_name = ?, mother_phone = ?, mother_occupation = ?,
                mother_yearly_income = ?,
                present_address = ?, permanent_address = ?, nationality = ?,
-               email = ?, phone = ?, place_of_birth = ?, sex = ?, religion = ?,
-               photo = ?, status = ?
+               email = ?, phone = ?,
+               dob = ?, blood_group = ?, nid = ?,
+               place_of_birth = ?, sex = ?, religion = ?,
+               photo = ?,
+               poor_meritorious = ?, freedom_fighter_quota = ?,
+               waiver_percent = ?, form_fee = ?, regi_fee = ?, tuition_fee = ?,
+               misc_fee = ?, project_fee = ?, total_fee = ?, waiver_amount = ?,
+               total_payable = ?, monthly_installment = ?, ref_number = ?,
+               status = ?
              WHERE id = ?'
         )->execute([
             $student_id_new,
             $dept_id,
             $program_id ?: null,
             $admitted_sem,
+            $batch          ?: null,
+            $shift          ?: null,
             $full_name,
             $father_name          ?: null,
             $father_phone         ?: null,
@@ -156,10 +184,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $nationality          ?: null,
             $email                ?: null,
             $phone                ?: null,
+            $dob                  !== '' ? $dob : null,
+            $blood_group          ?: null,
+            $nid                  ?: null,
             $place_of_birth       ?: null,
             $sex                  ?: null,
             $religion             ?: null,
             $photo_name,
+            $poor_meritorious,
+            $freedom_fighter,
+            $waiver_percent       ?: null,
+            $form_fee             !== '' ? (int)$form_fee    : null,
+            $regi_fee             !== '' ? (int)$regi_fee    : null,
+            $tuition_fee          !== '' ? (int)$tuition_fee : null,
+            $misc_fee             ?: null,
+            $project_fee          !== '' ? (int)$project_fee : null,
+            $total_fee            !== '' ? (int)$total_fee   : null,
+            $waiver_amount        !== '' ? (int)$waiver_amount : null,
+            $total_payable        ?: null,
+            $monthly_installment  ?: null,
+            $ref_number           ?: null,
             $status,
             $id,
         ]);
@@ -326,6 +370,22 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
             </div>
         </div>
+        <div class="row g-3 mt-1">
+            <div class="col-12 col-md-4">
+                <label class="form-label fw-semibold">Batch</label>
+                <input type="text" class="form-control" name="batch"
+                       value="<?= h($student['batch'] ?? '') ?>" maxlength="50" placeholder="e.g. 35th">
+            </div>
+            <div class="col-12 col-md-4">
+                <label class="form-label fw-semibold">Shift</label>
+                <select name="shift" class="form-select">
+                    <option value="">— Select —</option>
+                    <?php foreach (['Day','Evening','Morning'] as $sh): ?>
+                    <option value="<?= $sh ?>" <?= ($student['shift'] ?? '') === $sh ? 'selected' : '' ?>><?= $sh ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -376,6 +436,25 @@ require_once __DIR__ . '/../includes/header.php';
                 <label class="form-label fw-semibold">Place of Birth</label>
                 <input type="text" class="form-control" name="place_of_birth"
                        value="<?= h($student['place_of_birth'] ?? '') ?>" maxlength="200">
+            </div>
+            <div class="col-12 col-md-3">
+                <label class="form-label fw-semibold">Date of Birth</label>
+                <input type="date" class="form-control" name="dob"
+                       value="<?= h($student['dob'] ?? '') ?>">
+            </div>
+            <div class="col-12 col-md-2">
+                <label class="form-label fw-semibold">Blood Group</label>
+                <select name="blood_group" class="form-select">
+                    <option value="">— —</option>
+                    <?php foreach (['A+','A-','B+','B-','AB+','AB-','O+','O-'] as $bg): ?>
+                    <option value="<?= $bg ?>" <?= ($student['blood_group'] ?? '') === $bg ? 'selected' : '' ?>><?= $bg ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-12 col-md-4">
+                <label class="form-label fw-semibold">NID Number</label>
+                <input type="text" class="form-control" name="nid"
+                       value="<?= h($student['nid'] ?? '') ?>" maxlength="50">
             </div>
             <div class="col-12 col-md-6">
                 <label class="form-label fw-semibold">Present Address</label>
@@ -466,7 +545,7 @@ require_once __DIR__ . '/../includes/header.php';
         <div class="row g-3 align-items-end">
             <?php if ($student['photo']): ?>
             <div class="col-auto">
-                <img src="<?= UPLOAD_URL ?>/students/photos/<?= h($student['photo']) ?>"
+                <img src="<?= sm_photo_url($student['photo']) ?>"
                      alt="Photo" style="width:80px;height:100px;object-fit:cover;border-radius:8px;border:1px solid #dee2e6;">
             </div>
             <div class="col-auto">
@@ -481,6 +560,90 @@ require_once __DIR__ . '/../includes/header.php';
                 <input type="file" class="form-control" name="photo"
                        accept="image/jpeg,image/png,image/gif,image/webp">
                 <div class="form-text">JPG, PNG, GIF or WEBP — max 5 MB</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     SECTION 5b – QUOTA & FEE INFORMATION
+═══════════════════════════════════════════════════════════ -->
+<div class="card mb-4">
+    <div class="card-header py-3 px-4">
+        <h6 class="mb-0 fw-semibold"><i class="fas fa-money-bill-wave me-2 text-muted"></i>Quota &amp; Fee Information</h6>
+    </div>
+    <div class="card-body px-4 py-3">
+        <div class="row g-3 mb-3">
+            <div class="col-auto">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" name="poor_meritorious" id="poor_meritorious"
+                           value="1" <?= !empty($student['poor_meritorious']) ? 'checked' : '' ?>>
+                    <label class="form-check-label" for="poor_meritorious">Poor / Meritorious Quota</label>
+                </div>
+            </div>
+            <div class="col-auto">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" name="freedom_fighter_quota" id="freedom_fighter_quota"
+                           value="1" <?= !empty($student['freedom_fighter_quota']) ? 'checked' : '' ?>>
+                    <label class="form-check-label" for="freedom_fighter_quota">Freedom Fighter Family Quota</label>
+                </div>
+            </div>
+        </div>
+        <div class="row g-3">
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold">Waiver %</label>
+                <input type="text" class="form-control" name="waiver_percent"
+                       value="<?= h($student['waiver_percent'] ?? '') ?>" maxlength="10">
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold">Waiver Amount</label>
+                <input type="number" class="form-control" name="waiver_amount"
+                       value="<?= h($student['waiver_amount'] ?? '') ?>" min="0">
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold">Form Fee</label>
+                <input type="number" class="form-control" name="form_fee"
+                       value="<?= h($student['form_fee'] ?? '') ?>" min="0">
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold">Regi. Fee</label>
+                <input type="number" class="form-control" name="regi_fee"
+                       value="<?= h($student['regi_fee'] ?? '') ?>" min="0">
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold">Tuition Fee</label>
+                <input type="number" class="form-control" name="tuition_fee"
+                       value="<?= h($student['tuition_fee'] ?? '') ?>" min="0">
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold">Misc Fee</label>
+                <input type="text" class="form-control" name="misc_fee"
+                       value="<?= h($student['misc_fee'] ?? '') ?>" maxlength="50">
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold">Project Fee</label>
+                <input type="number" class="form-control" name="project_fee"
+                       value="<?= h($student['project_fee'] ?? '') ?>" min="0">
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold">Total Fee</label>
+                <input type="number" class="form-control" name="total_fee"
+                       value="<?= h($student['total_fee'] ?? '') ?>" min="0">
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label fw-semibold">Total Payable</label>
+                <input type="text" class="form-control" name="total_payable"
+                       value="<?= h($student['total_payable'] ?? '') ?>" maxlength="50">
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label fw-semibold">Monthly Installment</label>
+                <input type="text" class="form-control" name="monthly_installment"
+                       value="<?= h($student['monthly_installment'] ?? '') ?>" maxlength="50">
+            </div>
+            <div class="col-12 col-md-4">
+                <label class="form-label fw-semibold">Ref / Receipt Number</label>
+                <input type="text" class="form-control" name="ref_number"
+                       value="<?= h($student['ref_number'] ?? '') ?>" maxlength="100">
             </div>
         </div>
     </div>
