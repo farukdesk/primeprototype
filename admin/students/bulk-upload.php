@@ -33,7 +33,7 @@ $user       = auth_user();
 
 $results        = null;  // null = not yet run
 $imported       = [];
-$skipped_no_stu = [];   // PDFs whose student_id was not found in DB
+$auto_created   = [];   // PDFs whose student_id was not in DB → new stub student created
 $skipped_dup    = [];   // PDFs already attached to the student (same original_name)
 $errors         = [];
 
@@ -76,6 +76,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 foreach ($all_students_stmt->fetchAll() as $row) {
                     $student_map[strtolower(trim($row['student_id']))] = $row;
                 }
+
+                // ── Fallback dept for auto-created stub students ────────────────
+                $fallback_dept = db()->query(
+                    "SELECT id FROM dept_departments WHERE is_active = 1 ORDER BY id ASC LIMIT 1"
+                )->fetchColumn();
+                if (!$fallback_dept) {
+                    $fallback_dept = db()->query(
+                        "SELECT id FROM dept_departments ORDER BY id ASC LIMIT 1"
+                    )->fetchColumn();
+                }
+
+                // ── Prepared statement for auto-creating stub students ──────────
+                $create_student_stmt = db()->prepare(
+                    "INSERT INTO students
+                       (student_id, dept_id, admitted_semester, full_name,
+                        status, created_by)
+                     VALUES (?, ?, 'Unknown', ?, 'Active', ?)"
+                );
 
                 // ── Pre-load already-attached files to detect duplicates ───────
                 $existing_stmt = db()->query(
@@ -125,13 +143,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $dept_str = $parts[0];
                     }
 
-                    // ── Match student ──────────────────────────────────────────
+                    // ── Match student; auto-create a stub if not found ────────
                     if (!isset($student_map[$sid_key])) {
-                        $skipped_no_stu[] = [
+                        if (!$fallback_dept) {
+                            $errors[] = ['path' => $entry, 'reason' => 'No department exists in the database; cannot auto-create student.'];
+                            continue;
+                        }
+                        try {
+                            $create_student_stmt->execute([
+                                $sid_raw,
+                                (int)$fallback_dept,
+                                $sid_raw,   // full_name = student_id as placeholder
+                                $user['id'],
+                            ]);
+                            $new_stu_pk = (int)db()->lastInsertId();
+                        } catch (PDOException $e) {
+                            $errors[] = ['path' => $entry, 'reason' => 'Failed to auto-create student: ' . $e->getMessage()];
+                            continue;
+                        }
+                        $student_map[$sid_key] = [
+                            'id'         => $new_stu_pk,
+                            'student_id' => $sid_raw,
+                            'full_name'  => $sid_raw,
+                            'dept_id'    => (int)$fallback_dept,
+                        ];
+                        $auto_created[] = [
                             'path'       => $entry,
                             'student_id' => $sid_raw,
                         ];
-                        continue;
                     }
 
                     $student = $student_map[$sid_key];
@@ -235,10 +274,10 @@ require_once __DIR__ . '/../includes/header.php';
         <div class="stat-card" style="background:linear-gradient(135deg,#ffc107,#d39e00);">
             <div class="d-flex justify-content-between align-items-start">
                 <div>
-                    <div class="stat-val"><?= count($skipped_no_stu) ?></div>
-                    <div class="stat-lbl">No Student Match</div>
+                    <div class="stat-val"><?= count($auto_created) ?></div>
+                    <div class="stat-lbl">Auto-Created</div>
                 </div>
-                <i class="fas fa-user-times" style="font-size:2rem;opacity:.4"></i>
+                <i class="fas fa-user-plus" style="font-size:2rem;opacity:.4"></i>
             </div>
         </div>
     </div>
@@ -291,18 +330,18 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 <?php endif; ?>
 
-<?php if (!empty($skipped_no_stu)): ?>
+<?php if (!empty($auto_created)): ?>
 <div class="card shadow-sm mb-4">
     <div class="card-header bg-warning text-dark py-2">
-        <i class="fas fa-exclamation-triangle me-1"></i> No Matching Student Found (<?= count($skipped_no_stu) ?>)
-        <small class="d-block mt-1" style="font-weight:400">These PDFs were skipped because their filename did not match any student_id in the database.</small>
+        <i class="fas fa-user-plus me-1"></i> Auto-Created Students (<?= count($auto_created) ?>)
+        <small class="d-block mt-1" style="font-weight:400">No existing student matched these filenames. A stub student record was created for each: Student ID and Name set to the filename, Department set to the first available department, Semester set to "Unknown". Please update their details.</small>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
             <table class="table table-sm table-hover mb-0">
-                <thead class="table-light"><tr><th>#</th><th>Filename (Student ID)</th><th>File in ZIP</th></tr></thead>
+                <thead class="table-light"><tr><th>#</th><th>Student ID (filename)</th><th>File in ZIP</th></tr></thead>
                 <tbody>
-                <?php foreach ($skipped_no_stu as $k => $r): ?>
+                <?php foreach ($auto_created as $k => $r): ?>
                     <tr>
                         <td class="text-muted"><?= $k + 1 ?></td>
                         <td><code><?= h($r['student_id']) ?></code></td>
@@ -396,7 +435,7 @@ require_once __DIR__ . '/../includes/header.php';
 │   └── 25020101.pdf
 ├── MBA/
 └── MCA/</pre>
-                    <p class="mb-0 mt-2 small">Each PDF's <strong>filename</strong> (without <code>.pdf</code>) must match a <strong>Student ID</strong> already in the database. Matching is <strong>case-insensitive</strong> (e.g. <code>25010101.pdf</code> and <code>25010101.PDF</code> are both accepted). The batch and department folder names are stored in the file description for reference.</p>
+                    <p class="mb-0 mt-2 small">Each PDF's <strong>filename</strong> (without <code>.pdf</code>) must match a <strong>Student ID</strong> in the database. Matching is <strong>case-insensitive</strong>. If no matching student is found, a <strong>stub student record</strong> is automatically created: Student ID and Name are set to the filename, Department is set to the first available department, and Semester is set to "Unknown" — please fill in the remaining details afterwards. If the same file is uploaded again it will be <strong>skipped</strong> to avoid duplicates.</p>
                 </div>
 
                 <form method="post" enctype="multipart/form-data" id="bulk-upload-form">
