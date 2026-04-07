@@ -104,7 +104,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($student_id_new === '') {
         $errors[] = 'Student ID is required.';
-    } elseif (!preg_match('/^[\w\-]{1,20}$/', $student_id_new)) {
+    } elseif (!preg_match('/^[a-zA-Z0-9\-]{1,20}$/', $student_id_new)) {
         $errors[] = 'Student ID must be 1–20 alphanumeric characters (digits, letters or hyphens).';
     } elseif ($student_id_new !== $student['student_id']) {
         $dup = db()->prepare('SELECT id FROM students WHERE student_id = ? AND id != ?');

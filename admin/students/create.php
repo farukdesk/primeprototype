@@ -109,7 +109,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $student_id = $student_id_in;
         if ($student_id === '') {
             $errors[] = 'Student ID is required.';
-        } elseif (!preg_match('/^[\w\-]{1,20}$/', $student_id)) {
+        } elseif (!preg_match('/^[a-zA-Z0-9\-]{1,20}$/', $student_id)) {
             $errors[] = 'Student ID must be 1–20 alphanumeric characters (digits, letters or hyphens).';
         } else {
             $exists = db()->prepare('SELECT id FROM students WHERE student_id = ?');

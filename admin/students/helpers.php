@@ -175,8 +175,10 @@ function sm_photo_url(?string $photo): string
     if (is_file($new_path)) {
         return UPLOAD_URL . '/students/photos/' . $photo;
     }
-    // Legacy: photos were kept in upload_spic/ under the site root
-    return APP_URL . '/../upload_spic/' . $photo;
+    // Legacy: photos were stored in upload_spic/ at the site root.
+    // We build the URL via APP_URL minus the /admin segment.
+    $base = rtrim(defined('SITE_URL') ? SITE_URL : dirname(APP_URL), '/');
+    return $base . '/upload_spic/' . rawurlencode($photo);
 }
 
 function sm_status_badge(string $status): string

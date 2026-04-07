@@ -276,10 +276,10 @@ require_once __DIR__ . '/../includes/header.php';
      QUOTA & FEE INFORMATION
 ═══════════════════════════════════════════════════════════ -->
 <?php
-$has_fee = $student['form_fee'] || $student['regi_fee'] || $student['tuition_fee'] ||
-           $student['total_fee'] || $student['total_payable'] || $student['waiver_percent'] ||
-           $student['waiver_amount'] || $student['poor_meritorious'] || $student['freedom_fighter_quota'] ||
-           $student['ref_number'];
+$has_fee = $student['form_fee'] !== null || $student['regi_fee'] !== null || $student['tuition_fee'] !== null ||
+           $student['total_fee'] !== null || $student['total_payable'] !== null || $student['waiver_percent'] !== null ||
+           $student['waiver_amount'] !== null || !empty($student['poor_meritorious']) || !empty($student['freedom_fighter_quota']) ||
+           $student['ref_number'] !== null;
 if ($has_fee):
 ?>
 <div class="card mb-4">
