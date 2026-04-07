@@ -164,6 +164,21 @@ function sm_upload_file(array $file): array|false
 
 // ── Badge helpers ─────────────────────────────────────────────────────────────
 
+/**
+ * Returns the URL for a student's photo.
+ * Checks admin/uploads/students/photos/ first, then the legacy upload_spic/ folder.
+ */
+function sm_photo_url(?string $photo): string
+{
+    if (!$photo) return '';
+    $new_path = UPLOAD_DIR . '/students/photos/' . $photo;
+    if (is_file($new_path)) {
+        return UPLOAD_URL . '/students/photos/' . $photo;
+    }
+    // Legacy: photos were kept in upload_spic/ under the site root
+    return APP_URL . '/../upload_spic/' . $photo;
+}
+
 function sm_status_badge(string $status): string
 {
     $map = [
