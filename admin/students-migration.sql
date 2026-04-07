@@ -114,9 +114,7 @@ CREATE TABLE `_su_dept_map` (
 INSERT INTO `_su_dept_map` VALUES
     -- EEE
     ('EEE',                             'EEE'),
-    ('EEE ',                            'EEE'),
     ('Engineering',                     'EEE'),
-    ('Engineering ',                    'EEE'),
     ('B.Sc in EEE',                     'EEE'),
     -- CSE
     ('CSE',                             'CSE'),
@@ -127,7 +125,6 @@ INSERT INTO `_su_dept_map` VALUES
     -- BBA / Business
     ('BBA',                             'BBA'),
     ('Business Administration',         'BBA'),
-    ('Business Administration ',        'BBA'),
     ('Business Administraton',          'BBA'),
     ('Busniess Administration',         'BBA'),
     ('BBIS',                            'BBA'),
@@ -135,12 +132,10 @@ INSERT INTO `_su_dept_map` VALUES
     ('MBA',                             'MBA'),
     -- English
     ('English',                         'ENG'),
-    ('ENGLISH',                         'ENG'),
     -- Bangla
     ('Bangla',                          'BAN'),
     -- Law
     ('Law',                             'LAW'),
-    ('LAW',                             'LAW'),
     -- Civil
     ('Civil',                           'CE'),
     ('CE',                              'CE'),
