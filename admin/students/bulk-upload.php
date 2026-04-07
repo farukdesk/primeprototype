@@ -108,14 +108,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     // ── Parse path: ignore leading batch/dept folders ──────────
                     // We only care about the filename (which IS the student ID).
+                    // Student IDs are matched case-insensitively; the filename
+                    // may be upper- or lower-case and will still be matched.
                     $original_name = basename($entry);   // e.g. "25010101.pdf"
                     $sid_raw       = pathinfo($original_name, PATHINFO_FILENAME); // "25010101"
                     $sid_key       = strtolower(trim($sid_raw));
 
                     // Parse batch and dept from path parts for description context
                     $parts     = explode('/', $entry);
-                    $batch_str = count($parts) >= 3 ? $parts[0] : '';
-                    $dept_str  = count($parts) >= 3 ? $parts[count($parts) - 2] : (count($parts) === 2 ? $parts[0] : '');
+                    $batch_str = '';
+                    $dept_str  = '';
+                    if (count($parts) >= 3) {
+                        $batch_str = $parts[0];
+                        $dept_str  = $parts[count($parts) - 2];
+                    } elseif (count($parts) === 2) {
+                        $dept_str = $parts[0];
+                    }
 
                     // ── Match student ──────────────────────────────────────────
                     if (!isset($student_map[$sid_key])) {
@@ -155,7 +163,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     $file_size   = strlen($raw_content);
                     if ($file_size > SM_FILE_MAX) {
-                        $errors[] = ['path' => $entry, 'reason' => 'File exceeds 20 MB limit.'];
+                        $errors[] = ['path' => $entry, 'reason' => 'File exceeds ' . round(SM_FILE_MAX / 1048576) . ' MB limit.'];
                         continue;
                     }
 
@@ -392,7 +400,7 @@ require_once __DIR__ . '/../includes/header.php';
 │   └── 25020101.pdf
 ├── MBA/
 └── MCA/</pre>
-                    <p class="mb-0 mt-2 small">Each PDF's <strong>filename</strong> (without <code>.pdf</code>) must match a <strong>Student ID</strong> already in the database. The batch and department folder names are stored in the file description for reference.</p>
+                    <p class="mb-0 mt-2 small">Each PDF's <strong>filename</strong> (without <code>.pdf</code>) must match a <strong>Student ID</strong> already in the database. Matching is <strong>case-insensitive</strong> (e.g. <code>25010101.pdf</code> and <code>25010101.PDF</code> are both accepted). The batch and department folder names are stored in the file description for reference.</p>
                 </div>
 
                 <form method="post" enctype="multipart/form-data" id="bulk-upload-form">
