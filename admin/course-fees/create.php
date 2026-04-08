@@ -236,8 +236,12 @@ require_once __DIR__ . '/../includes/header.php';
                         <div class="form-text">Lower numbers appear first on the public page.</div>
                     </div>
                     <div class="form-check form-switch">
+                        <?php
+                        $is_post      = $_SERVER['REQUEST_METHOD'] === 'POST';
+                        $active_checked = $is_post ? (old('is_active', '') === '1') : true;
+                        ?>
                         <input class="form-check-input" type="checkbox" name="is_active" id="is_active" value="1"
-                               <?= old('is_active', '1') === '1' || !isset($_POST['is_active']) && $_SERVER['REQUEST_METHOD'] !== 'POST' ? 'checked' : '' ?>>
+                               <?= $active_checked ? 'checked' : '' ?>>
                         <label class="form-check-label fw-semibold" for="is_active">Active (visible on public page)</label>
                     </div>
                 </div>

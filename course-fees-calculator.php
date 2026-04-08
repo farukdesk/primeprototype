@@ -13,6 +13,7 @@ if ($db) {
 
         if (!($settings['is_published'] ?? 1)) {
             // Page not published – show a coming-soon message instead of a 404
+            $programs = []; // empty programs will trigger the "not yet configured" message
         }
 
         $programs = $db->query(
@@ -786,12 +787,13 @@ foreach ($programs as $p) {
    }
 
    function updateDots() {
-      var filled = state.programId ? (state.waiver > 0 ? 3 : 2) : (state.programId ? 1 : 0);
-      if (state.programId) {
-         filled = state.waiver > 0 ? 3 : 2;
-         if (state.credits > 0) filled = Math.max(filled, 2);
-      } else {
+      var filled;
+      if (!state.programId) {
          filled = 0;
+      } else if (state.waiver > 0) {
+         filled = 3;
+      } else {
+         filled = 2;
       }
       elDots.forEach(function(d, i) {
          d.classList.toggle('done', i < filled);
