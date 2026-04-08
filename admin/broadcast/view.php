@@ -51,6 +51,19 @@ $recipients = $pdo->prepare(
 $recipients->execute([$id, $per_page, $offset]);
 $recipients = $recipients->fetchAll();
 
+// Acknowledgment counts (only meaningful when ack_required is set)
+$ack_sent_stmt = $pdo->prepare(
+    'SELECT COUNT(*) FROM broadcast_recipients WHERE broadcast_id = ? AND ack_token IS NOT NULL'
+);
+$ack_sent_stmt->execute([$id]);
+$ack_with_token = (int)$ack_sent_stmt->fetchColumn();
+
+$ack_done_stmt = $pdo->prepare(
+    'SELECT COUNT(*) FROM broadcast_recipients WHERE broadcast_id = ? AND acked_at IS NOT NULL'
+);
+$ack_done_stmt->execute([$id]);
+$ack_done = (int)$ack_done_stmt->fetchColumn();
+
 $page_title = 'Broadcast: ' . mb_strimwidth($bc['subject'], 0, 60, '…');
 
 require_once __DIR__ . '/../includes/header.php';
@@ -135,6 +148,22 @@ require_once __DIR__ . '/../includes/header.php';
                             <?php endif; ?>
                         </td>
                     </tr>
+                    <?php if (!empty($bc['ack_required'])): ?>
+                    <tr>
+                        <th class="text-muted fw-normal">Acknowledgment</th>
+                        <td>
+                            <span class="badge bg-success"><i class="fas fa-check me-1"></i><?= $ack_done ?> acknowledged</span>
+                            <?php if ($ack_with_token > 0): ?>
+                            &nbsp;/ <?= $ack_with_token ?> with button
+                            <?php $pct = round($ack_done / $ack_with_token * 100); ?>
+                            <div class="progress mt-1" style="height:6px;max-width:160px;">
+                                <div class="progress-bar bg-success" style="width:<?= $pct ?>%"></div>
+                            </div>
+                            <small class="text-muted"><?= $pct ?>% response rate</small>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                    <?php endif; ?>
                 </table>
             </div>
         </div>
@@ -174,7 +203,7 @@ require_once __DIR__ . '/../includes/header.php';
 
     <!-- Recipient log -->
     <div class="col-lg-4">
-        <div class="card shadow-sm">
+        <div class="card shadow-sm mb-4">
             <div class="card-header fw-semibold">
                 <i class="fas fa-list-check me-1"></i> Recipient Log
                 <span class="badge bg-secondary ms-1"><?= $total ?></span>
@@ -213,6 +242,50 @@ require_once __DIR__ . '/../includes/header.php';
                 <?php endif; ?>
             </div>
         </div>
+
+        <?php if (!empty($bc['ack_required'])): ?>
+        <!-- Acknowledgment report -->
+        <?php
+        $ack_list_stmt = $pdo->prepare(
+            'SELECT full_name, email, ack_department, acked_at, ack_ip
+             FROM broadcast_recipients
+             WHERE broadcast_id = ? AND acked_at IS NOT NULL
+             ORDER BY acked_at ASC'
+        );
+        $ack_list_stmt->execute([$id]);
+        $ack_list = $ack_list_stmt->fetchAll();
+        ?>
+        <div class="card shadow-sm">
+            <div class="card-header fw-semibold">
+                <i class="fas fa-check-circle me-1 text-success"></i> Acknowledgment Report
+                <span class="badge bg-success ms-1"><?= count($ack_list) ?></span>
+            </div>
+            <div class="card-body p-0" style="max-height:520px;overflow-y:auto;">
+                <?php if (empty($ack_list)): ?>
+                <p class="text-muted text-center py-4 mb-0">No acknowledgments yet.</p>
+                <?php else: ?>
+                <ul class="list-group list-group-flush">
+                <?php foreach ($ack_list as $a): ?>
+                <li class="list-group-item py-2 px-3">
+                    <div class="fw-semibold text-truncate" title="<?= h($a['full_name']) ?>">
+                        <?= h($a['full_name']) ?>
+                    </div>
+                    <div class="text-muted small text-truncate" title="<?= h($a['email']) ?>">
+                        <?= h($a['email']) ?>
+                    </div>
+                    <?php if (!empty($a['ack_department'])): ?>
+                    <div class="small text-muted"><i class="fas fa-building me-1"></i><?= h($a['ack_department']) ?></div>
+                    <?php endif; ?>
+                    <div class="small text-success mt-1">
+                        <i class="fas fa-check me-1"></i><?= h(date('d M Y, h:i A', strtotime($a['acked_at']))) ?>
+                    </div>
+                </li>
+                <?php endforeach; ?>
+                </ul>
+                <?php endif; ?>
+            </div>
+        </div>
+        <?php endif; ?>
     </div>
 </div>
 
