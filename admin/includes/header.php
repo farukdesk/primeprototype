@@ -259,6 +259,7 @@ $user       = auth_user();
     $is_leads_active    = strpos($current_path, '/leads/') !== false;
     $is_jobs_active          = strpos($current_path, '/jobs/') !== false;
     $is_library_active       = strpos($current_path, '/library/') !== false;
+    $is_course_fees_active   = strpos($current_path, '/course-fees/') !== false;
     $is_governing_body_active = strpos($current_path, '/governing-body/') !== false;
     $is_admin_active    = strpos($current_path, '/users/') !== false || strpos($current_path, '/user-groups/') !== false
                        || strpos($current_path, '/modules/') !== false || strpos($current_path, '/access/') !== false
@@ -750,6 +751,48 @@ $user       = auth_user();
                 </a>
             </li>
             <?php endif; ?>
+        </ul>
+    </div>
+    <?php endif; ?>
+
+    <!-- ── Course Fees Calculator ── -->
+    <?php if (is_super_admin() || can_access('course-fees')): ?>
+    <button class="nav-group-toggle <?= $is_course_fees_active ? '' : 'collapsed' ?>"
+            data-bs-toggle="collapse" data-bs-target="#grp-course-fees"
+            aria-expanded="<?= $is_course_fees_active ? 'true' : 'false' ?>">
+        <i class="fas fa-calculator grp-icon" style="color:#f59e0b"></i>
+        Course Fees
+        <i class="fas fa-chevron-down toggle-icon"></i>
+    </button>
+    <div class="collapse <?= $is_course_fees_active ? 'show' : '' ?>" id="grp-course-fees">
+        <ul class="nav flex-column grp-items">
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/course-fees/index.php"
+                   class="<?= (strpos($current_path, '/course-fees/') !== false && strpos($current_path, '/create') === false && strpos($current_path, '/settings') === false) ? 'active' : '' ?>">
+                    <i class="fas fa-list"></i> Fee Structures
+                </a>
+            </li>
+            <?php if (is_super_admin() || can_access('course-fees', 'can_create')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/course-fees/create.php"
+                   class="<?= strpos($current_path, '/course-fees/create') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-plus"></i> Add Structure
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('course-fees', 'can_edit')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/course-fees/settings.php"
+                   class="<?= strpos($current_path, '/course-fees/settings') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-cog"></i> Settings
+                </a>
+            </li>
+            <?php endif; ?>
+            <li class="nav-item">
+                <a href="<?= SITE_URL ?>/course-fees-calculator.php" target="_blank">
+                    <i class="fas fa-external-link-alt"></i> Public Page
+                </a>
+            </li>
         </ul>
     </div>
     <?php endif; ?>
