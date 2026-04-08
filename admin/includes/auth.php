@@ -333,6 +333,11 @@ function old(string $key, string $default = ''): string {
     return h($_SESSION['old'][$key] ?? $default);
 }
 
+function old_array(string $key): array {
+    $val = $_SESSION['old'][$key] ?? [];
+    return is_array($val) ? $val : [];
+}
+
 function save_old(array $data): void {
     $_SESSION['old'] = $data;
 }

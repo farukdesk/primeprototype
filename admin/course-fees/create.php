@@ -167,10 +167,10 @@ require_once __DIR__ . '/../includes/header.php';
                             </thead>
                             <tbody id="fees-body">
                                 <?php
-                                $old_names   = old('fee_name',   []);
-                                $old_amounts = old('fee_amount', []);
-                                $old_types   = old('fee_type',   []);
-                                $old_sorts   = old('fee_sort',   []);
+                                $old_names   = old_array('fee_name');
+                                $old_amounts = old_array('fee_amount');
+                                $old_types   = old_array('fee_type');
+                                $old_sorts   = old_array('fee_sort');
                                 $old_rows    = count($old_names) > 0 ? count($old_names) : 0;
                                 ?>
                                 <?php if ($old_rows > 0): ?>
