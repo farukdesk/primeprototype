@@ -115,7 +115,7 @@ function adm_fs_get_mappings(): array
 function adm_fs_get(int $id): array
 {
     $stmt = db()->prepare(
-        'SELECT fs.*, u.name AS sold_by_name
+        'SELECT fs.*, u.full_name AS sold_by_name
          FROM adm_form_sales fs
          LEFT JOIN users u ON u.id = fs.sold_by
          WHERE fs.id = ?'
