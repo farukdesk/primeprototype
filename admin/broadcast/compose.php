@@ -45,6 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $recipient_type = $_POST['recipient_type']        ?? 'all';
     $user_id        = (int)($_POST['recipient_user_id']  ?? 0) ?: null;
     $group_id       = (int)($_POST['recipient_group_id'] ?? 0) ?: null;
+    $ack_required   = isset($_POST['ack_required']) ? 1 : 0;
 
     // Student-specific filters
     $student_dept_id    = (int)($_POST['student_dept_id']    ?? 0) ?: null;
@@ -119,12 +120,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'INSERT INTO broadcasts
                     (subject, body_html, recipient_type, recipient_user_id, recipient_group_id,
                      student_dept_id, student_program_id, student_status, student_semester,
-                     sent_by, status)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?)'
+                     sent_by, status, ack_required)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
             )->execute([
                 $subject, $body_html, $recipient_type, $user_id, $group_id,
                 $student_dept_id, $student_program_id, $student_status, $student_semester,
-                $user['id'], $initial_status,
+                $user['id'], $initial_status, $ack_required,
             ]);
             $broadcast_id = (int)$pdo->lastInsertId();
 
@@ -231,6 +232,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="card-body">
                     <p class="text-muted small mb-2">
                         Tip: use <code>{{full_name}}</code> anywhere in the body – it will be replaced with each recipient's name.
+                        Use <code>{{ack_button}}</code> to insert an acknowledgment button – recipients click it to confirm they received this email.
                     </p>
                     <textarea name="body_html" id="body_html" rows="16"><?= h(old('body_html')) ?></textarea>
                 </div>
@@ -381,6 +383,23 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
             </div>
 
+            <!-- Acknowledgment -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header fw-semibold"><i class="fas fa-check-circle me-1 text-success"></i> Acknowledgment</div>
+                <div class="card-body">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="ack_required" id="ack_required" value="1"
+                               <?= old('ack_required') ? 'checked' : '' ?>>
+                        <label class="form-check-label" for="ack_required">
+                            Require acknowledgment from recipients
+                        </label>
+                    </div>
+                    <div class="text-muted small mt-2">
+                        When enabled, add <code>{{ack_button}}</code> to the email body – a button will be included so recipients can confirm they received and understood this notice. Their response is recorded in the database.
+                    </div>
+                </div>
+            </div>
+
             <!-- Send button -->
             <div class="card shadow-sm">
                 <div class="card-body">
@@ -413,8 +432,20 @@ tinymce.init({
     plugins: 'advlist autolink lists link image charmap preview anchor searchreplace visualblocks code fullscreen table help wordcount',
     toolbar: 'undo redo | blocks | bold italic underline strikethrough forecolor backcolor | ' +
              'alignleft aligncenter alignright | bullist numlist outdent indent | ' +
-             'link image table | removeformat | code fullscreen',
+             'link image table | removeformat | ackbutton | code fullscreen',
     content_style: 'body { font-family: Inter, Arial, sans-serif; font-size: 15px; }',
+    setup: function (editor) {
+        editor.ui.registry.addButton('ackbutton', {
+            text: '✅ Insert Ack Button',
+            tooltip: 'Insert {{ack_button}} acknowledgment placeholder',
+            onAction: function () {
+                editor.insertContent('{{ack_button}}');
+                // Auto-enable acknowledgment checkbox when the button is inserted
+                const cb = document.getElementById('ack_required');
+                if (cb) cb.checked = true;
+            }
+        });
+    },
 });
 
 // ── Tom Select: Group picker ──────────────────────────────────────────────────

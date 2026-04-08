@@ -204,6 +204,28 @@ function bc_send_email(
     return mail($to_email, $subject, $body, $headers, '-f' . escapeshellarg($from_email));
 }
 
+// ── Acknowledgment helpers ────────────────────────────────────────────────────
+
+/**
+ * Build the HTML for the acknowledgment button that is injected into emails.
+ */
+function bc_ack_button_html(string $token): string
+{
+    $url = SITE_URL . '/broadcast-ack.php?token=' . urlencode($token);
+    return
+        '<div style="text-align:center;margin:32px 0;">' .
+        '<a href="' . $url . '" ' .
+           'style="display:inline-block;background:#0d6efd;color:#ffffff;padding:13px 36px;' .
+                  'border-radius:6px;text-decoration:none;font-size:15px;font-weight:600;' .
+                  'letter-spacing:.3px;">' .
+           '&#10003; I Acknowledge / I Have Received This Email' .
+        '</a>' .
+        '<p style="color:#888888;font-size:12px;margin:10px 0 0;">' .
+           'Click once to confirm you have received and understood this notice.' .
+        '</p>' .
+        '</div>';
+}
+
 // ── Broadcast sender ──────────────────────────────────────────────────────────
 
 /**
@@ -222,6 +244,9 @@ function bc_send_broadcast(int $broadcast_id, array $recipients, string $subject
     $sent = 0;
     $fail = 0;
 
+    // Determine whether this broadcast uses the acknowledgment button placeholder
+    $has_ack_placeholder = str_contains($body_html, '{{ack_button}}');
+
     // Build attachment path list
     $attachments = [];
     foreach ($attach_rows as $a) {
@@ -236,12 +261,18 @@ function bc_send_broadcast(int $broadcast_id, array $recipients, string $subject
     }
 
     $ins = $pdo->prepare(
-        'INSERT INTO broadcast_recipients (broadcast_id, user_id, email, full_name, status) VALUES (?,?,?,?,?)'
+        'INSERT INTO broadcast_recipients (broadcast_id, user_id, email, full_name, status, ack_token) VALUES (?,?,?,?,?,?)'
     );
 
     foreach ($recipients as $r) {
-        // Personalise greeting in body (insert as plain text into existing HTML body)
+        // Generate a unique per-recipient acknowledgment token
+        $ack_token = $has_ack_placeholder ? bin2hex(random_bytes(32)) : null;
+
+        // Personalise body: replace {{full_name}} and {{ack_button}}
         $personalised = str_replace('{{full_name}}', $r['full_name'], $body_html);
+        if ($has_ack_placeholder && $ack_token !== null) {
+            $personalised = str_replace('{{ack_button}}', bc_ack_button_html($ack_token), $personalised);
+        }
 
         $ok = bc_send_email($r['email'], $r['full_name'], $subject, $personalised, $attachments);
         $ins->execute([
@@ -250,6 +281,7 @@ function bc_send_broadcast(int $broadcast_id, array $recipients, string $subject
             $r['email'],
             $r['full_name'],
             $ok ? 'sent' : 'failed',
+            $ack_token,
         ]);
         $ok ? $sent++ : $fail++;
     }
