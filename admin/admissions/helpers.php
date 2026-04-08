@@ -242,16 +242,16 @@ function adm_field_value(array $app, string $field_key, array $acad_records = []
 {
     // Semester tick fields
     if ($field_key === 'semester_spring') {
-        $sem = strtolower($app['semester'] ?? '');
-        return (strpos($sem, 'spring') !== false) ? '✓' : '';
+        $sems = array_map('trim', explode(',', strtolower($app['semester'] ?? '')));
+        return in_array('spring', $sems, true) ? '✓' : '';
     }
     if ($field_key === 'semester_summer') {
-        $sem = strtolower($app['semester'] ?? '');
-        return (strpos($sem, 'summer') !== false) ? '✓' : '';
+        $sems = array_map('trim', explode(',', strtolower($app['semester'] ?? '')));
+        return in_array('summer', $sems, true) ? '✓' : '';
     }
     if ($field_key === 'semester_fall') {
-        $sem = strtolower($app['semester'] ?? '');
-        return (strpos($sem, 'fall') !== false) ? '✓' : '';
+        $sems = array_map('trim', explode(',', strtolower($app['semester'] ?? '')));
+        return in_array('fall', $sems, true) ? '✓' : '';
     }
 
     // Sex tick fields
