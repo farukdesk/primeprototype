@@ -153,9 +153,9 @@ require_once __DIR__ . '/../includes/header.php';
                         <th class="text-muted fw-normal">Acknowledgment</th>
                         <td>
                             <span class="badge bg-success"><i class="fas fa-check me-1"></i><?= $ack_done ?> acknowledged</span>
-                            <?php if ($ack_with_token > 0): ?>
+                            <?php if ($ack_with_token > 0):
+                                $pct = round($ack_done / $ack_with_token * 100); ?>
                             &nbsp;/ <?= $ack_with_token ?> with button
-                            <?php $pct = round($ack_done / $ack_with_token * 100); ?>
                             <div class="progress mt-1" style="height:6px;max-width:160px;">
                                 <div class="progress-bar bg-success" style="width:<?= $pct ?>%"></div>
                             </div>

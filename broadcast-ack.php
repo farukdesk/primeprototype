@@ -52,10 +52,7 @@ if ($token !== '' && preg_match('/^[0-9a-f]{64}$/', $token)) {
                 }
 
                 // Record acknowledgment
-                $ip = filter_var(
-                    $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? '',
-                    FILTER_VALIDATE_IP
-                ) ?: null;
+                $ip = filter_var($_SERVER['REMOTE_ADDR'] ?? '', FILTER_VALIDATE_IP) ?: null;
 
                 $upd = $db->prepare(
                     'UPDATE broadcast_recipients
@@ -109,8 +106,8 @@ $page_title = 'Email Acknowledgment – Prime University';
                 <strong>"<?= fh($row['subject']) ?>"</strong>
                 has been successfully recorded.
             </p>
-            <?php if (!empty($row['ack_department'])): ?>
-            <p class="text-muted small">Department / Group: <strong><?= fh($row['ack_department']) ?></strong></p>
+            <?php if (!empty($department)): ?>
+            <p class="text-muted small">Department / Group: <strong><?= fh($department) ?></strong></p>
             <?php endif; ?>
             <div class="alert alert-success mt-3">
                 <i class="fas fa-calendar-check me-1"></i>

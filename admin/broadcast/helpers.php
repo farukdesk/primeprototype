@@ -211,7 +211,7 @@ function bc_send_email(
  */
 function bc_ack_button_html(string $token): string
 {
-    $url = (defined('SITE_URL') ? SITE_URL : rtrim(APP_URL, '/admin')) . '/broadcast-ack.php?token=' . urlencode($token);
+    $url = SITE_URL . '/broadcast-ack.php?token=' . urlencode($token);
     return
         '<div style="text-align:center;margin:32px 0;">' .
         '<a href="' . $url . '" ' .
