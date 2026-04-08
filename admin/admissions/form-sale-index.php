@@ -36,7 +36,7 @@ $total_pages = max(1, (int)ceil($total_rows / $per_page));
 $page        = min($page, $total_pages);
 $offset      = ($page - 1) * $per_page;
 
-$sql = 'SELECT fs.*, u.name AS sold_by_name
+$sql = 'SELECT fs.*, u.full_name AS sold_by_name
         FROM adm_form_sales fs
         LEFT JOIN users u ON u.id = fs.sold_by'
      . $where_sql
