@@ -257,6 +257,7 @@ $user       = auth_user();
     $is_academic_active = strpos($current_path, '/departments/') !== false || strpos($current_path, '/faculty-profiles/') !== false || strpos($current_path, '/students/') !== false || strpos($current_path, '/course-curriculum/') !== false || strpos($current_path, '/clubs/') !== false || strpos($current_path, '/staff-profiles/') !== false;
     $is_comms_active    = strpos($current_path, '/contact/') !== false || strpos($current_path, '/support-tickets/') !== false || strpos($current_path, '/knowledge-base/') !== false || strpos($current_path, '/broadcast/') !== false;
     $is_leads_active    = strpos($current_path, '/leads/') !== false;
+    $is_admissions_active = strpos($current_path, '/admissions/') !== false;
     $is_jobs_active          = strpos($current_path, '/jobs/') !== false;
     $is_library_active       = strpos($current_path, '/library/') !== false;
     $is_course_fees_active   = strpos($current_path, '/course-fees/') !== false;
@@ -587,6 +588,43 @@ $user       = auth_user();
                 <a href="<?= APP_URL ?>/leads/create.php"
                    class="<?= strpos($current_path, '/leads/create') !== false ? 'active' : '' ?>">
                     <i class="fas fa-plus"></i> Add Lead
+                </a>
+            </li>
+            <?php endif; ?>
+        </ul>
+    </div>
+    <?php endif; ?>
+
+    <!-- ── Admissions ── -->
+    <?php if (is_super_admin() || can_access('admissions')): ?>
+    <button class="nav-group-toggle <?= $is_admissions_active ? '' : 'collapsed' ?>"
+            data-bs-toggle="collapse" data-bs-target="#grp-admissions"
+            aria-expanded="<?= $is_admissions_active ? 'true' : 'false' ?>">
+        <i class="fas fa-user-plus grp-icon" style="color:#e67e22"></i>
+        Admissions
+        <i class="fas fa-chevron-down toggle-icon"></i>
+    </button>
+    <div class="collapse <?= $is_admissions_active ? 'show' : '' ?>" id="grp-admissions">
+        <ul class="nav flex-column grp-items">
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/admissions/index.php"
+                   class="<?= (strpos($current_path, '/admissions/') !== false && strpos($current_path, '/create') === false && strpos($current_path, '/settings') === false) ? 'active' : '' ?>">
+                    <i class="fas fa-list"></i> All Applications
+                </a>
+            </li>
+            <?php if (is_super_admin() || can_access('admissions', 'can_create')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/admissions/create.php"
+                   class="<?= strpos($current_path, '/admissions/create') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-plus"></i> New Application
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('admissions', 'can_edit')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/admissions/settings.php"
+                   class="<?= strpos($current_path, '/admissions/settings') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-cog"></i> Settings
                 </a>
             </li>
             <?php endif; ?>
