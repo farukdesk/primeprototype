@@ -110,19 +110,49 @@ function adm_upload_template(array $file): string|false
     return $stored;
 }
 
+// ── Settings helpers ──────────────────────────────────────────────────────────
+
+function adm_get_setting(string $key, string $default = ''): string
+{
+    $stmt = db()->prepare('SELECT setting_value FROM admissions_settings WHERE setting_key = ?');
+    $stmt->execute([$key]);
+    $val = $stmt->fetchColumn();
+    return ($val !== false) ? (string)$val : $default;
+}
+
+function adm_save_setting(string $key, string $value): void
+{
+    db()->prepare(
+        'INSERT INTO admissions_settings (setting_key, setting_value) VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)'
+    )->execute([$key, $value]);
+}
+
 // ── Application number generator ─────────────────────────────────────────────
 
 function adm_generate_number(): string
 {
-    $year = date('Y');
-    $pfx  = 'ADM-' . $year . '-';
-    $stmt = db()->prepare(
-        "SELECT app_number FROM admissions_applications WHERE app_number LIKE ? ORDER BY id DESC LIMIT 1"
-    );
-    $stmt->execute([$pfx . '%']);
-    $last = $stmt->fetchColumn();
-    $seq  = $last ? (int)substr($last, strrpos($last, '-') + 1) + 1 : 1;
-    return $pfx . str_pad((string)$seq, 4, '0', STR_PAD_LEFT);
+    $db   = db();
+    // Use a transaction to atomically read-and-increment the counter
+    $db->beginTransaction();
+    try {
+        $stmt = $db->prepare(
+            'SELECT setting_value FROM admissions_settings WHERE setting_key = ? FOR UPDATE'
+        );
+        $stmt->execute(['next_form_number']);
+        $current = (int)($stmt->fetchColumn() ?: 1);
+
+        $db->prepare(
+            'INSERT INTO admissions_settings (setting_key, setting_value) VALUES (?, ?)
+             ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)'
+        )->execute(['next_form_number', (string)($current + 1)]);
+
+        $db->commit();
+    } catch (\Throwable $e) {
+        $db->rollBack();
+        throw $e;
+    }
+    return (string)$current;
 }
 
 // ── Status badge ──────────────────────────────────────────────────────────────
@@ -204,8 +234,69 @@ function adm_get_template(int $page_number): array|false
 
 // ── Field value resolver ──────────────────────────────────────────────────────
 
-function adm_field_value(array $app, string $field_key): string
+/**
+ * Resolve a mapped field key to its printable string value for the given application.
+ * $acad_records should be the indexed array from adm_get_academic_records() keyed 0-based.
+ */
+function adm_field_value(array $app, string $field_key, array $acad_records = []): string
 {
+    // Semester tick fields
+    if ($field_key === 'semester_spring') {
+        $sem = strtolower($app['semester'] ?? '');
+        return (strpos($sem, 'spring') !== false) ? '✓' : '';
+    }
+    if ($field_key === 'semester_summer') {
+        $sem = strtolower($app['semester'] ?? '');
+        return (strpos($sem, 'summer') !== false) ? '✓' : '';
+    }
+    if ($field_key === 'semester_fall') {
+        $sem = strtolower($app['semester'] ?? '');
+        return (strpos($sem, 'fall') !== false) ? '✓' : '';
+    }
+
+    // Sex tick fields
+    if ($field_key === 'sex_male') {
+        return ($app['sex'] ?? '') === 'Male' ? '✓' : '';
+    }
+    if ($field_key === 'sex_female') {
+        return ($app['sex'] ?? '') === 'Female' ? '✓' : '';
+    }
+
+    // Expelled tick fields
+    if ($field_key === 'expelled_yes') {
+        return ($app['expelled_answer'] ?? 'No') === 'Yes' ? '✓' : '';
+    }
+    if ($field_key === 'expelled_no') {
+        return ($app['expelled_answer'] ?? 'No') === 'No' ? '✓' : '';
+    }
+
+    // Current date
+    if ($field_key === 'current_date') {
+        return date('d/m/Y');
+    }
+
+    // Academic qualification fields: qual_{n}_{column}
+    if (preg_match('/^qual_([1-5])_(.+)$/', $field_key, $m)) {
+        $idx = (int)$m[1] - 1; // 0-based
+        $col = $m[2];
+        $col_map = [
+            'exam_name' => 'exam_name',
+            'session'   => 'session',
+            'group'     => 'group_name',
+            'board'     => 'board_university',
+            'year'      => 'year_of_passing',
+            'grade'     => 'division_grade',
+            'marks'     => 'total_marks_cgpa',
+        ];
+        $db_col = $col_map[$col] ?? $col;
+        return (string)($acad_records[$idx][$db_col] ?? '');
+    }
+
+    // Photo: return stored filename (print.php handles rendering)
+    if ($field_key === 'photo') {
+        return (string)($app['photo'] ?? '');
+    }
+
     switch ($field_key) {
         case 'department':
             return (string)($app['dept_name'] ?? '');

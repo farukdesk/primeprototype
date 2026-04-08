@@ -13,6 +13,18 @@ if (!is_super_admin() && !adm_can_edit()) {
 // ── AJAX handlers ─────────────────────────────────────────────────────────────
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
+if ($action === 'save_settings' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    csrf_check();
+    $next_num = trim($_POST['next_form_number'] ?? '');
+    if ($next_num !== '' && ctype_digit($next_num) && (int)$next_num >= 1) {
+        adm_save_setting('next_form_number', (string)(int)$next_num);
+        flash_set('success', 'Settings saved successfully.');
+    } else {
+        flash_set('error', 'Form number must be a positive integer.');
+    }
+    redirect(APP_URL . '/admissions/settings.php?tab=general');
+}
+
 if ($action === 'save_mapping' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');
     if (!csrf_verify()) {
@@ -105,14 +117,15 @@ if ($action === 'upload_template' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // ── Page data ─────────────────────────────────────────────────────────────────
-$tpl1       = adm_get_template(1);
-$tpl2       = adm_get_template(2);
-$map1       = adm_get_mappings(1);
-$map2       = adm_get_mappings(2);
-$all_fields = adm_get_all_fields();
-$active_tab = $_GET['tab'] ?? 'templates';
-$map_page   = (int)($_GET['map_page'] ?? 1);
+$tpl1            = adm_get_template(1);
+$tpl2            = adm_get_template(2);
+$map1            = adm_get_mappings(1);
+$map2            = adm_get_mappings(2);
+$all_fields      = adm_get_all_fields();
+$active_tab      = $_GET['tab'] ?? 'general';
+$map_page        = (int)($_GET['map_page'] ?? 1);
 if (!in_array($map_page, [1, 2], true)) $map_page = 1;
+$next_form_number = adm_get_setting('next_form_number', '1');
 
 $tpl_base_url = UPLOAD_URL . '/' . ADM_TPL_SUBDIR . '/';
 
@@ -136,6 +149,11 @@ require_once __DIR__ . '/../includes/header.php';
 <!-- Tabs -->
 <ul class="nav nav-tabs mb-4">
     <li class="nav-item">
+        <a class="nav-link <?= $active_tab === 'general' ? 'active' : '' ?>" href="?tab=general">
+            <i class="fas fa-sliders-h me-1"></i> General
+        </a>
+    </li>
+    <li class="nav-item">
         <a class="nav-link <?= $active_tab === 'templates' ? 'active' : '' ?>" href="?tab=templates">
             <i class="fas fa-image me-1"></i> Templates
         </a>
@@ -147,7 +165,41 @@ require_once __DIR__ . '/../includes/header.php';
     </li>
 </ul>
 
-<?php if ($active_tab === 'templates'): ?>
+<?php if ($active_tab === 'general'): ?>
+<!-- ══════════════════════════════════════════════════════════
+     Tab A: General Settings
+══════════════════════════════════════════════════════════ -->
+<div class="row justify-content-center">
+    <div class="col-12 col-md-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white fw-semibold">
+                <i class="fas fa-sliders-h me-2 text-primary"></i>General Settings
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="action" value="save_settings">
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">Next Form Number</label>
+                        <input type="number" name="next_form_number" class="form-control"
+                               value="<?= h($next_form_number) ?>" min="1" step="1" required>
+                        <div class="form-text">
+                            The number that will be assigned to the <strong>next</strong> new application.
+                            After each application is created, this counter increments automatically.
+                            (e.g. enter <code>32433</code> and the next form will be numbered <code>32433</code>,
+                            the one after that <code>32434</code>, and so on – no prefix.)
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-1"></i> Save Settings
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<?php elseif ($active_tab === 'templates'): ?>
 <!-- ══════════════════════════════════════════════════════════
      Tab A: Template Upload
 ══════════════════════════════════════════════════════════ -->

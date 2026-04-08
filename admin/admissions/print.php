@@ -137,16 +137,25 @@ foreach ($all_fields as $f) {
             <img class="tpl-bg" src="<?= $img_url ?>" alt="Page <?= $page_num ?> template">
             <?php endif; ?>
 
-            <?php foreach ($map as $field_key => $mapping):
-                $value = adm_field_value($app, $field_key);
-                if ($value === '' && $field_key !== 'expelled_answer') continue;
+            <?php
+            // Build 0-based indexed academic records for qual_ field resolution
+            $acad_indexed = array_values($acad_records);
+            foreach ($map as $field_key => $mapping):
+                $value     = adm_field_value($app, $field_key, $acad_indexed);
                 $font_size = (int)($mapping['font_size'] ?? 10);
-                $x = (float)$mapping['x_percent'];
-                $y = (float)$mapping['y_percent'];
+                $x         = (float)$mapping['x_percent'];
+                $y         = (float)$mapping['y_percent'];
             ?>
+            <?php if ($field_key === 'photo' && $value !== ''): ?>
+            <img src="<?= UPLOAD_URL . '/' . ADM_PHOTO_SUBDIR . '/' . h($value) ?>"
+                 class="field-overlay"
+                 style="left:<?= $x ?>%;top:<?= $y ?>%;width:80px;height:100px;object-fit:cover;border:1px solid #ccc;pointer-events:none;"
+                 alt="Photo">
+            <?php elseif ($field_key !== 'photo' && $value !== ''): ?>
             <div class="field-overlay" style="left:<?= $x ?>%;top:<?= $y ?>%;font-size:<?= $font_size ?>pt">
                 <?= h($value) ?>
             </div>
+            <?php endif; ?>
             <?php endforeach; ?>
         </div>
     </div>
