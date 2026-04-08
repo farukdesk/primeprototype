@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_access('admissions');
 require_once __DIR__ . '/helpers.php';
+require_once __DIR__ . '/form-sale-helpers.php';
 
 if (!adm_can_manage()) {
     flash_set('error', 'You do not have permission to create applications.');
@@ -82,6 +83,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($student_name === '') $errors[] = 'Student name is required.';
 
+    // Form sale link
+    $form_sale_id = (int)($_POST['form_sale_id'] ?? 0) ?: null;
+    if ($form_sale_id) {
+        $sale_check = db()->prepare(
+            'SELECT id, status FROM adm_form_sales WHERE id = ? AND status = ?'
+        );
+        $sale_check->execute([$form_sale_id, 'pending']);
+        if (!$sale_check->fetch()) {
+            $errors[] = 'The selected form sale is no longer pending or does not exist.';
+            $form_sale_id = null;
+        }
+    }
+
     // Academic records
     $acad_rows = [];
     $exam_names = $_POST['exam_name'] ?? [];
@@ -150,6 +164,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ]);
         $app_id = (int)db()->lastInsertId();
 
+        // Mark linked form sale as used
+        if ($form_sale_id) {
+            db()->prepare(
+                'UPDATE adm_form_sales SET status = ?, application_id = ? WHERE id = ?'
+            )->execute(['used', $app_id, $form_sale_id]);
+        }
+
         // Insert academic records
         if ($acad_rows) {
             $ins = db()->prepare(
@@ -197,6 +218,38 @@ require_once __DIR__ . '/../includes/header.php';
     <div class="row g-4">
         <!-- Left column -->
         <div class="col-12 col-xl-8">
+
+            <!-- Section 0: Form Sale Lookup -->
+            <div class="card border-0 shadow-sm mb-4" style="border-left:4px solid #ffc107 !important">
+                <div class="card-header bg-white fw-semibold"><i class="fas fa-receipt me-2 text-warning"></i>Link Form Sale (Optional)</div>
+                <div class="card-body">
+                    <div class="row g-3 align-items-end">
+                        <div class="col-12 col-md-5">
+                            <label class="form-label">Form Sale Number</label>
+                            <div class="input-group">
+                                <input type="text" id="fs_number_input" class="form-control"
+                                       placeholder="Enter form sale number…"
+                                       value="<?= h($_POST['fs_number_lookup'] ?? '') ?>">
+                                <button type="button" class="btn btn-warning text-dark" id="fsFetchBtn">
+                                    <i class="fas fa-search me-1"></i>Look Up
+                                </button>
+                            </div>
+                            <div id="fs_lookup_msg" class="form-text"></div>
+                        </div>
+                        <div class="col-12 col-md-7">
+                            <div id="fs_found_info" class="alert alert-success py-2 mb-0 small" style="display:none">
+                                <i class="fas fa-check-circle me-1"></i>
+                                Form found: <strong id="fs_found_name"></strong> |
+                                <span id="fs_found_mobile"></span> |
+                                <span id="fs_found_email"></span>
+                                <br><span class="text-muted">Fields below will be pre-filled. Clear the form number to unlink.</span>
+                            </div>
+                        </div>
+                    </div>
+                    <input type="hidden" name="form_sale_id" id="form_sale_id_input" value="<?= h($_POST['form_sale_id'] ?? '') ?>">
+                    <input type="hidden" name="fs_number_lookup" id="fs_number_lookup_hidden" value="">
+                </div>
+            </div>
 
             <!-- Section 1: Application Info -->
             <div class="card border-0 shadow-sm mb-4">
@@ -677,6 +730,55 @@ function toggleExpelled() {
     var yes = document.getElementById('expelled_yes').checked;
     document.getElementById('expelled_detail_wrap').style.display = yes ? '' : 'none';
 }
+
+// ── Form Sale Lookup ─────────────────────────────────────────────────────────
+document.getElementById('fsFetchBtn').addEventListener('click', function() {
+    var num = document.getElementById('fs_number_input').value.trim();
+    if (!num) {
+        clearFsLink();
+        return;
+    }
+    fetch('<?= APP_URL ?>/admissions/form-sale-lookup.php?q=' + encodeURIComponent(num))
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var msg = document.getElementById('fs_lookup_msg');
+            if (data.ok) {
+                document.getElementById('form_sale_id_input').value = data.form_sale_id;
+                document.getElementById('fs_found_name').textContent   = data.buyer_name;
+                document.getElementById('fs_found_mobile').textContent = data.buyer_mobile;
+                document.getElementById('fs_found_email').textContent  = data.buyer_email || '';
+                document.getElementById('fs_found_info').style.display = '';
+                msg.innerHTML = '';
+
+                // Auto-fill main form fields
+                var nameInput = document.querySelector('[name="student_name"]');
+                if (nameInput && nameInput.value === '') nameInput.value = data.buyer_name;
+
+                var mobileInput = document.querySelector('[name="present_contact"]');
+                if (mobileInput && mobileInput.value === '') mobileInput.value = data.buyer_mobile;
+
+                var emailInput = document.querySelector('[name="present_email"]');
+                if (emailInput && emailInput.value === '' && data.buyer_email) emailInput.value = data.buyer_email;
+
+            } else {
+                clearFsLink();
+                msg.innerHTML = '<span class="text-danger"><i class="fas fa-exclamation-circle me-1"></i>' + data.error + '</span>';
+            }
+        })
+        .catch(function() {
+            clearFsLink();
+        });
+});
+
+function clearFsLink() {
+    document.getElementById('form_sale_id_input').value = '';
+    document.getElementById('fs_found_info').style.display = 'none';
+}
+
+// Allow pressing Enter in the lookup input to trigger search
+document.getElementById('fs_number_input').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); document.getElementById('fsFetchBtn').click(); }
+});
 </script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>

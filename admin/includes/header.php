@@ -608,7 +608,7 @@ $user       = auth_user();
         <ul class="nav flex-column grp-items">
             <li class="nav-item">
                 <a href="<?= APP_URL ?>/admissions/index.php"
-                   class="<?= (strpos($current_path, '/admissions/') !== false && strpos($current_path, '/create') === false && strpos($current_path, '/settings') === false) ? 'active' : '' ?>">
+                   class="<?= (strpos($current_path, '/admissions/') !== false && strpos($current_path, '/create') === false && strpos($current_path, '/settings') === false && strpos($current_path, '/form-sale') === false) ? 'active' : '' ?>">
                     <i class="fas fa-list"></i> All Applications
                 </a>
             </li>
@@ -620,6 +620,12 @@ $user       = auth_user();
                 </a>
             </li>
             <?php endif; ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/admissions/form-sale-index.php"
+                   class="<?= strpos($current_path, '/admissions/form-sale') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-receipt"></i> Form Sale
+                </a>
+            </li>
             <?php if (is_super_admin() || can_access('admissions', 'can_edit')): ?>
             <li class="nav-item">
                 <a href="<?= APP_URL ?>/admissions/settings.php"
