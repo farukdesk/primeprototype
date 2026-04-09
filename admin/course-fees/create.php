@@ -18,8 +18,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $program_id    = (int)($_POST['program_id']    ?? 0) ?: null;
     $degree_type   = $_POST['degree_type']          ?? 'bachelor';
     $credit_fee    = (int)($_POST['credit_fee']    ?? 0);
-    $total_credits = trim($_POST['total_credits']  ?? '') !== '' ? (int)$_POST['total_credits'] : null;
+    $total_credits = trim($_POST['total_credits']  ?? '') !== '' ? (float)$_POST['total_credits'] : null;
     $duration      = trim($_POST['duration_years'] ?? '') !== '' ? (float)$_POST['duration_years'] : null;
+    $num_semesters = trim($_POST['num_semesters']  ?? '') !== '' ? (int)$_POST['num_semesters'] : null;
     $is_active     = isset($_POST['is_active']) ? 1 : 0;
     $sort_order    = (int)($_POST['sort_order']    ?? 0);
 
@@ -37,9 +38,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $user = auth_user();
 
         $db->prepare(
-            'INSERT INTO cf_programs (dept_id, program_id, degree_type, credit_fee, total_credits, duration_years, is_active, sort_order, created_by)
-             VALUES (?,?,?,?,?,?,?,?,?)'
-        )->execute([$dept_id, $program_id, $degree_type, $credit_fee, $total_credits, $duration, $is_active, $sort_order, $user['id']]);
+            'INSERT INTO cf_programs (dept_id, program_id, degree_type, credit_fee, total_credits, duration_years, num_semesters, is_active, sort_order, created_by)
+             VALUES (?,?,?,?,?,?,?,?,?,?)'
+        )->execute([$dept_id, $program_id, $degree_type, $credit_fee, $total_credits, $duration, $num_semesters, $is_active, $sort_order, $user['id']]);
 
         $new_id = (int)$db->lastInsertId();
 
@@ -132,14 +133,20 @@ require_once __DIR__ . '/../includes/header.php';
                         </div>
                         <div class="col-md-4">
                             <label class="form-label fw-semibold">Total Credits</label>
-                            <input type="number" name="total_credits" class="form-control" min="0" max="999"
-                                   value="<?= h(old('total_credits')) ?>" placeholder="e.g. 136">
-                            <div class="form-text">Optional, shown on public page.</div>
+                            <input type="number" name="total_credits" class="form-control" min="0" max="999" step="0.25"
+                                   value="<?= h(old('total_credits')) ?>" placeholder="e.g. 160.5">
+                            <div class="form-text">Optional, supports decimals (e.g. 160.5).</div>
                         </div>
                         <div class="col-md-4">
                             <label class="form-label fw-semibold">Duration (years)</label>
                             <input type="number" name="duration_years" class="form-control" min="0" max="10" step="0.5"
                                    value="<?= h(old('duration_years')) ?>" placeholder="e.g. 4">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Number of Semesters</label>
+                            <input type="number" name="num_semesters" class="form-control" min="1" max="24"
+                                   value="<?= h(old('num_semesters')) ?>" placeholder="e.g. 8 or 12">
+                            <div class="form-text">Used to calculate total per-semester costs.</div>
                         </div>
                     </div>
                 </div>
