@@ -965,6 +965,7 @@ foreach ($map2 as $key => $m) $all_mapped[$key] = isset($all_mapped[$key]) ? 'bo
 </form>
 
 <?php endif; ?>
+<script>
 // ── CSRF token ────────────────────────────────────────────────────────────────
 var csrfToken = '<?= csrf_token() ?>';
 var mapPage   = <?= $map_page ?>;
