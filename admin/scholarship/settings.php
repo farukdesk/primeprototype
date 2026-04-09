@@ -19,7 +19,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $max_combined_gpa = trim($_POST['max_combined_gpa'] ?? '');
 
     if ($gpa_label === '') $errors[] = 'GPA label is required.';
-    if (!is_numeric($max_combined_gpa) || (float)$max_combined_gpa <= 0) $errors[] = 'Max combined GPA must be a positive number.';
+    if (!is_numeric($max_combined_gpa) || (float)$max_combined_gpa <= 0) $errors[] = 'Max combined GPA must be a positive number greater than 0.';
 
     if (empty($errors)) {
         $db->prepare(

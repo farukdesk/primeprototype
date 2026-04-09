@@ -229,7 +229,7 @@ require_once __DIR__ . '/../includes/header.php';
                     </div>
                     <div class="form-check form-switch">
                         <input class="form-check-input" type="checkbox" name="is_active" id="is_active" value="1"
-                               <?= ($_SERVER['REQUEST_METHOD'] !== 'POST' || old('is_active') === '1') ? 'checked' : '' ?>>
+                               <?= old('is_active', '1') === '1' ? 'checked' : '' ?>>
                         <label class="form-check-label fw-semibold" for="is_active">Active</label>
                     </div>
                 </div>

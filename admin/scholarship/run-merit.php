@@ -62,7 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $res_stmt->execute([$stu['id'], $results_semester]);
             $result_row = $res_stmt->fetch();
 
-            if (!$result_row || $result_row['cgpa'] === null || $result_row['cgpa'] === '') {
+            if (!$result_row || $result_row['cgpa'] === null) {
                 $no_result++;
                 continue;
             }
@@ -219,7 +219,7 @@ require_once __DIR__ . '/../includes/header.php';
                 </button>
                 <?php if ($result_summary && !$confirmed): ?>
                 <button type="submit" name="action" value="confirm" class="btn btn-success btn-lg"
-                        onclick="return confirm('Apply merit scholarships to all eligible students? This cannot be undone.')">
+                        onclick="return confirm('Apply merit scholarships to all eligible students? Awards will be created for matching students.')">
                     <i class="fas fa-check me-1"></i> Confirm & Apply (<?= (int)$result_summary['awarded'] ?> awards)
                 </button>
                 <?php endif; ?>

@@ -147,7 +147,6 @@ require_once __DIR__ . '/../includes/header.php';
 
 <form method="post" novalidate>
     <?= csrf_field() ?>
-    <input type="hidden" name="deleted_tier_ids[]" id="deleted-tier-ids-placeholder" value="" disabled>
     <div class="row g-4">
         <div class="col-lg-8">
             <div class="card border-0 shadow-sm mb-4">

@@ -75,7 +75,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $dup_stmt->execute([$student_id, $semester, $policy['type']]);
         if ((int)$dup_stmt->fetchColumn() > 0 && !$force) {
             $duplicate_warning = true;
-            $errors[] = 'This student already has an active ' . $policy['type'] . ' award for semester <strong>' . h($semester) . '</strong>. Check "Allow duplicate" to override.';
+            $errors[] = 'This student already has an active ' . $policy['type'] . ' award for semester <strong>' . h($semester) . '</strong>. Check "Allow duplicate award for this semester" to override.';
         }
     }
 
