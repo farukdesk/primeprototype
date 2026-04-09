@@ -50,7 +50,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         foreach ($fee_names as $idx => $fname) {
             $fname  = trim($fname);
             $amount = (int)($fee_amounts[$idx] ?? 0);
-            $ftype  = in_array($fee_types[$idx] ?? '', ['one_time','per_semester'], true)
+            $ftype  = in_array($fee_types[$idx] ?? '', ['one_time','per_semester','monthly'], true)
                       ? $fee_types[$idx] : 'one_time';
             $fsort  = (int)($fee_orders[$idx] ?? $idx);
             if ($fname !== '') {
@@ -182,6 +182,7 @@ require_once __DIR__ . '/../includes/header.php';
                                         <select name="fee_type[]" class="form-select form-select-sm">
                                             <option value="one_time"     <?= ($old_types[$ri] ?? '') === 'one_time'     ? 'selected' : '' ?>>One-Time</option>
                                             <option value="per_semester" <?= ($old_types[$ri] ?? '') === 'per_semester' ? 'selected' : '' ?>>Per Semester</option>
+                                            <option value="monthly"      <?= ($old_types[$ri] ?? '') === 'monthly'      ? 'selected' : '' ?>>Monthly (÷ months)</option>
                                         </select>
                                     </td>
                                     <td><input type="number" name="fee_sort[]" class="form-control form-control-sm" value="<?= h($old_sorts[$ri] ?? $ri) ?>" min="0" style="width:70px;"></td>
@@ -193,14 +194,14 @@ require_once __DIR__ . '/../includes/header.php';
                                 <tr class="fee-row">
                                     <td class="px-3"><input type="text" name="fee_name[]" class="form-control form-control-sm" value="Registration Fee" placeholder="Fee name"></td>
                                     <td><input type="number" name="fee_amount[]" class="form-control form-control-sm" value="5000" min="0"></td>
-                                    <td><select name="fee_type[]" class="form-select form-select-sm"><option value="one_time">One-Time</option><option value="per_semester">Per Semester</option></select></td>
+                                    <td><select name="fee_type[]" class="form-select form-select-sm"><option value="one_time">One-Time</option><option value="per_semester">Per Semester</option><option value="monthly">Monthly (÷ months)</option></select></td>
                                     <td><input type="number" name="fee_sort[]" class="form-control form-control-sm" value="0" min="0" style="width:70px;"></td>
                                     <td><button type="button" class="btn btn-sm btn-outline-danger remove-fee-row"><i class="fas fa-times"></i></button></td>
                                 </tr>
                                 <tr class="fee-row">
                                     <td class="px-3"><input type="text" name="fee_name[]" class="form-control form-control-sm" value="Student Activity Fee" placeholder="Fee name"></td>
                                     <td><input type="number" name="fee_amount[]" class="form-control form-control-sm" value="1500" min="0"></td>
-                                    <td><select name="fee_type[]" class="form-select form-select-sm"><option value="one_time">One-Time</option><option value="per_semester" selected>Per Semester</option></select></td>
+                                    <td><select name="fee_type[]" class="form-select form-select-sm"><option value="one_time">One-Time</option><option value="per_semester">Per Semester</option><option value="monthly">Monthly (÷ months)</option></select></td>
                                     <td><input type="number" name="fee_sort[]" class="form-control form-control-sm" value="1" min="0" style="width:70px;"></td>
                                     <td><button type="button" class="btn btn-sm btn-outline-danger remove-fee-row"><i class="fas fa-times"></i></button></td>
                                 </tr>
@@ -276,7 +277,7 @@ document.getElementById('add-fee-row').addEventListener('click', function () {
     tr.className = 'fee-row';
     tr.innerHTML = `<td class="px-3"><input type="text" name="fee_name[]" class="form-control form-control-sm" placeholder="Fee name"></td>
         <td><input type="number" name="fee_amount[]" class="form-control form-control-sm" value="0" min="0"></td>
-        <td><select name="fee_type[]" class="form-select form-select-sm"><option value="one_time">One-Time</option><option value="per_semester">Per Semester</option></select></td>
+        <td><select name="fee_type[]" class="form-select form-select-sm"><option value="one_time">One-Time</option><option value="per_semester">Per Semester</option><option value="monthly">Monthly (÷ months)</option></select></td>
         <td><input type="number" name="fee_sort[]" class="form-control form-control-sm" value="${rowIdx}" min="0" style="width:70px;"></td>
         <td><button type="button" class="btn btn-sm btn-outline-danger remove-fee-row"><i class="fas fa-times"></i></button></td>`;
     tbody.appendChild(tr);

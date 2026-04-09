@@ -55,6 +55,7 @@ function cf_fee_type_label(string $type): string
     return match ($type) {
         'one_time'     => 'One-Time',
         'per_semester' => 'Per Semester',
+        'monthly'      => 'Monthly (÷ by program months)',
         default        => ucfirst($type),
     };
 }

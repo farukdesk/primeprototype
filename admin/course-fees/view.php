@@ -18,13 +18,18 @@ $currency   = $settings['currency'] ?? 'BDT';
 // ── Calculate totals ──────────────────────────────────────────────────────────
 $one_time_total    = 0;
 $per_semester_total = 0;
+$monthly_total      = 0;
 foreach ($fixed_fees as $f) {
     if ($f['fee_type'] === 'one_time') {
         $one_time_total += (int)$f['amount'];
+    } elseif ($f['fee_type'] === 'monthly') {
+        $monthly_total  += (int)$f['amount'];
     } else {
         $per_semester_total += (int)$f['amount'];
     }
 }
+$duration_months = $prog['duration_years'] ? (int)round((float)$prog['duration_years'] * 12) : 0;
+$monthly_installment = ($duration_months > 0) ? (int)round($monthly_total / $duration_months) : 0;
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -78,8 +83,13 @@ require_once __DIR__ . '/../includes/header.php';
                         <h2 class="mb-0 fw-bold"><?= h($prog['program_name'] ?: ($prog['dept_name'] ?: '—')) ?></h2>
                     </div>
                     <div class="col-auto text-end">
+                        <?php if ($monthly_installment > 0): ?>
+                        <div class="small opacity-75">Monthly Installment</div>
+                        <div style="font-size:2rem;font-weight:900;"><?= cf_money($monthly_installment, $currency) ?></div>
+                        <?php elseif ((int)$prog['credit_fee'] > 0): ?>
                         <div class="small opacity-75">Per Credit Hour</div>
                         <div style="font-size:2rem;font-weight:900;"><?= cf_money((int)$prog['credit_fee'], $currency) ?></div>
+                        <?php endif; ?>
                     </div>
                 </div>
             </div>
@@ -110,6 +120,8 @@ require_once __DIR__ . '/../includes/header.php';
                         <td>
                             <?php if ($f['fee_type'] === 'one_time'): ?>
                                 <span class="badge bg-secondary">One-Time</span>
+                            <?php elseif ($f['fee_type'] === 'monthly'): ?>
+                                <span class="badge bg-success">Monthly (÷ months)</span>
                             <?php else: ?>
                                 <span class="badge bg-info text-dark">Per Semester</span>
                             <?php endif; ?>
@@ -118,13 +130,28 @@ require_once __DIR__ . '/../includes/header.php';
                     <?php endforeach; ?>
                     </tbody>
                     <tfoot class="table-light fw-semibold">
+                        <?php if ($monthly_total > 0): ?>
                         <tr>
-                            <td class="px-4">One-Time Total</td>
-                            <td colspan="2"><?= cf_money($one_time_total, $currency) ?></td>
+                            <td class="px-4">Monthly Fees Total</td>
+                            <td><?= cf_money($monthly_total, $currency) ?></td>
+                            <td class="text-muted small">
+                                <?php if ($monthly_installment > 0): ?>
+                                    ÷ <?= $duration_months ?> months = <?= cf_money($monthly_installment, $currency) ?>/month
+                                <?php else: ?>
+                                    Set duration to compute monthly installment
+                                <?php endif; ?>
+                            </td>
                         </tr>
+                        <?php endif; ?>
+                        <?php if ($per_semester_total > 0): ?>
                         <tr>
                             <td class="px-4">Per-Semester Total</td>
                             <td colspan="2"><?= cf_money($per_semester_total, $currency) ?></td>
+                        </tr>
+                        <?php endif; ?>
+                        <tr>
+                            <td class="px-4">One-Time Total</td>
+                            <td colspan="2"><?= cf_money($one_time_total, $currency) ?></td>
                         </tr>
                     </tfoot>
                 </table>
