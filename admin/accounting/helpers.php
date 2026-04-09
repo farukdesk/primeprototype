@@ -625,7 +625,7 @@ function acc_ledger_entries(int $account_id, ?string $date_from = null, ?string 
     if ($date_to)   { $where .= ' AND v.voucher_date <= ?'; $params[] = $date_to;   }
 
     $stmt = db()->prepare(
-        "SELECT v.voucher_date, v.voucher_number, v.voucher_type, v.narration,
+        "SELECT v.id AS voucher_id, v.voucher_date, v.voucher_number, v.voucher_type, v.narration,
                 vi.description, vi.debit_amount, vi.credit_amount
          FROM acc_voucher_items vi
          JOIN acc_vouchers v ON v.id = vi.voucher_id

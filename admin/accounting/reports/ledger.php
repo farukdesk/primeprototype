@@ -109,11 +109,8 @@ require_once __DIR__ . '/../../includes/header.php';
                     <tr>
                         <td class="text-muted small"><?= date('d M Y', strtotime($entry['voucher_date'])) ?></td>
                         <td>
-                            <a href="<?= APP_URL ?>/accounting/voucher-view.php?id=<?php
-                                $stmt = db()->prepare('SELECT id FROM acc_vouchers WHERE voucher_number = ?');
-                                $stmt->execute([$entry['voucher_number']]);
-                                echo (int)$stmt->fetchColumn();
-                            ?>" class="text-decoration-none small fw-semibold"><?= h($entry['voucher_number']) ?></a>
+                            <a href="<?= APP_URL ?>/accounting/voucher-view.php?id=<?= (int)$entry['voucher_id'] ?>"
+                               class="text-decoration-none small fw-semibold"><?= h($entry['voucher_number']) ?></a>
                         </td>
                         <td><?= acc_voucher_type_badge($entry['voucher_type']) ?></td>
                         <td class="small"><?= h($entry['description'] ?? $entry['narration'] ?? '–') ?></td>

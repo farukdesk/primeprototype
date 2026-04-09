@@ -17,9 +17,9 @@ if ($account['is_system']) {
 }
 
 // Check if account has voucher items
-$used = (int)db()->prepare(
-    'SELECT COUNT(*) FROM acc_voucher_items WHERE account_id = ?'
-)->execute([$id]) ? db()->query("SELECT COUNT(*) FROM acc_voucher_items WHERE account_id = $id")->fetchColumn() : 0;
+$check_stmt = db()->prepare('SELECT COUNT(*) FROM acc_voucher_items WHERE account_id = ?');
+$check_stmt->execute([$id]);
+$used = (int)$check_stmt->fetchColumn();
 
 if ($used > 0) {
     flash_set('error', 'Cannot delete account "' . $account['name'] . '" — it has ' . $used . ' transaction(s). Deactivate it instead.');
