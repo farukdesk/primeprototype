@@ -24,7 +24,7 @@ $stmt->execute([$q, 'pending']);
 $row = $stmt->fetch();
 
 if (!$row) {
-    echo json_encode(['ok' => false, 'error' => 'No pending form sale found for this number.']);
+    echo json_encode(['ok' => false, 'error' => 'No form waiting for admission found for this number.']);
     exit;
 }
 

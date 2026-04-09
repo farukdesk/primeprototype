@@ -12,7 +12,12 @@ $f_status = $_GET['status']      ?? '';
 $page     = max(1, (int)($_GET['page'] ?? 1));
 $per_page = 20;
 
-$valid_statuses = ['pending', 'used', 'cancelled'];
+$valid_statuses        = ['pending', 'used', 'cancelled'];
+$status_labels         = ['pending' => 'Waiting for Admission', 'used' => 'Used', 'cancelled' => 'Cancelled'];
+// Default to showing pending (waiting for admission) forms when no filter is applied
+if ($f_status === '' && $search === '') {
+    $f_status = 'pending';
+}
 
 $where  = [];
 $params = [];
@@ -84,7 +89,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <select name="status" class="form-select form-select-sm">
                     <option value="">All Statuses</option>
                     <?php foreach ($valid_statuses as $st): ?>
-                    <option value="<?= h($st) ?>" <?= $f_status === $st ? 'selected' : '' ?>><?= ucfirst(h($st)) ?></option>
+                    <option value="<?= h($st) ?>" <?= $f_status === $st ? 'selected' : '' ?>><?= h($status_labels[$st] ?? ucfirst($st)) ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>

@@ -91,7 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         );
         $sale_check->execute([$form_sale_id, 'pending']);
         if (!$sale_check->fetch()) {
-            $errors[] = 'The selected form sale is no longer pending or does not exist.';
+            $errors[] = 'The selected form sale is no longer waiting for admission or does not exist.';
             $form_sale_id = null;
         }
     }

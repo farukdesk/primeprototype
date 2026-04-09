@@ -312,6 +312,29 @@ $form_price      = adm_fs_get_setting('form_price', '500');
 $next_fs_number  = adm_fs_get_setting('next_fs_number', '1');
 $fs_tpl_base_url = UPLOAD_URL . '/' . ADM_FS_TPL_SUBDIR . '/';
 
+// Student ID tab data
+$sid_programs = db()->query(
+    'SELECT p.id, p.program_name, d.name AS dept_name,
+            s.university_code, s.year_code, s.semester_code,
+            s.faculty_code, s.subject_code, s.type_of_program,
+            s.next_serial, s.serial_digits
+     FROM dept_academic_programs p
+     LEFT JOIN dept_departments d ON d.id = p.dept_id
+     LEFT JOIN adm_student_id_settings s ON s.program_id = p.id
+     WHERE p.is_active = 1
+     ORDER BY d.name ASC, p.program_name ASC'
+)->fetchAll();
+
+// Notifications tab data
+$notif_sms_enabled    = adm_get_setting('sms_enabled', '0');
+$notif_sms_api_key    = adm_get_setting('sms_api_key', '');
+$notif_sms_sender_id  = adm_get_setting('sms_sender_id', '');
+$notif_sms_template   = adm_get_setting('sms_template_form_sale', '');
+$notif_email_enabled  = adm_get_setting('email_enabled', '0');
+$notif_email_tpl      = db()->prepare('SELECT subject, body_html FROM email_templates WHERE action = ?');
+$notif_email_tpl->execute(['form_sale_notification']);
+$notif_email_tpl      = $notif_email_tpl->fetch() ?: ['subject' => '', 'body_html' => ''];
+
 $page_title = 'Admissions Settings';
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -354,6 +377,16 @@ require_once __DIR__ . '/../includes/header.php';
     <li class="nav-item">
         <a class="nav-link <?= $active_tab === 'invoice_mapping' ? 'active' : '' ?>" href="?tab=invoice_mapping">
             <i class="fas fa-receipt me-1"></i> Invoice Field Mapping
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link <?= $active_tab === 'student_id' ? 'active' : '' ?>" href="?tab=student_id">
+            <i class="fas fa-id-card me-1"></i> Student ID
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link <?= $active_tab === 'notifications' ? 'active' : '' ?>" href="?tab=notifications">
+            <i class="fas fa-bell me-1"></i> Notifications
         </a>
     </li>
 </ul>
@@ -718,7 +751,220 @@ foreach ($map2 as $key => $m) $all_mapped[$key] = isset($all_mapped[$key]) ? 'bo
 
 <?php endif; ?>
 
-<script>
+<?php if ($active_tab === 'student_id'): ?>
+<!-- ══════════════════════════════════════════════════════════
+     Tab F: Student ID Settings
+══════════════════════════════════════════════════════════ -->
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-white fw-semibold">
+        <i class="fas fa-id-card me-2 text-primary"></i>Student ID Settings
+        <span class="text-muted fw-normal small ms-2">Configure the ID code components for each academic program</span>
+    </div>
+    <div class="card-body p-0">
+        <form method="post">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="save_student_id_settings">
+
+            <div class="alert alert-info m-3 mb-0 small">
+                <i class="fas fa-info-circle me-1"></i>
+                Student ID format: <strong>University Code + Year Code + Semester Code + Faculty Code + Subject Code + Type of Program + Serial (3 digits)</strong><br>
+                Example: <strong>028</strong> + <strong>26</strong> + <strong>2</strong> + <strong>05</strong> + <strong>10</strong> + <strong>1</strong> + <strong>001</strong> = <code>02826205101001</code>
+            </div>
+
+            <?php if (empty($sid_programs)): ?>
+            <div class="p-4 text-center text-muted">
+                <i class="fas fa-graduation-cap fa-3x mb-3 d-block"></i>
+                <p>No active academic programs found. Please add programs in the Departments module first.</p>
+            </div>
+            <?php else: ?>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 small">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-3">Program</th>
+                            <th>Department</th>
+                            <th style="width:90px">Univ. Code</th>
+                            <th style="width:70px">Year</th>
+                            <th style="width:70px">Semester</th>
+                            <th style="width:70px">Faculty</th>
+                            <th style="width:70px">Subject</th>
+                            <th style="width:70px">Type</th>
+                            <th style="width:80px">Next Serial</th>
+                            <th style="width:120px">Preview ID</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <?php foreach ($sid_programs as $prog): ?>
+                    <tr>
+                        <td class="ps-3 fw-semibold">
+                            <?= h($prog['program_name']) ?>
+                            <input type="hidden" name="program_id[]" value="<?= (int)$prog['id'] ?>">
+                        </td>
+                        <td class="text-muted"><?= h($prog['dept_name'] ?? '—') ?></td>
+                        <td>
+                            <input type="text" name="university_code[]" class="form-control form-control-sm sid-field"
+                                   value="<?= h($prog['university_code'] ?? '028') ?>"
+                                   maxlength="10" placeholder="028" data-field="univ_code">
+                        </td>
+                        <td>
+                            <input type="text" name="year_code[]" class="form-control form-control-sm sid-field"
+                                   value="<?= h($prog['year_code'] ?? '26') ?>"
+                                   maxlength="4" placeholder="26" data-field="year_code">
+                        </td>
+                        <td>
+                            <input type="text" name="semester_code[]" class="form-control form-control-sm sid-field"
+                                   value="<?= h($prog['semester_code'] ?? '2') ?>"
+                                   maxlength="4" placeholder="2" data-field="sem_code">
+                        </td>
+                        <td>
+                            <input type="text" name="faculty_code[]" class="form-control form-control-sm sid-field"
+                                   value="<?= h($prog['faculty_code'] ?? '') ?>"
+                                   maxlength="4" placeholder="05" data-field="fac_code">
+                        </td>
+                        <td>
+                            <input type="text" name="subject_code[]" class="form-control form-control-sm sid-field"
+                                   value="<?= h($prog['subject_code'] ?? '') ?>"
+                                   maxlength="4" placeholder="10" data-field="subj_code">
+                        </td>
+                        <td>
+                            <input type="text" name="type_of_program[]" class="form-control form-control-sm sid-field"
+                                   value="<?= h($prog['type_of_program'] ?? '1') ?>"
+                                   maxlength="4" placeholder="1" data-field="type_prog">
+                        </td>
+                        <td>
+                            <?php $max_serial = (int)str_repeat('9', max(1, (int)($prog['serial_digits'] ?? 3))); ?>
+                            <input type="number" name="next_serial[]" class="form-control form-control-sm sid-field"
+                                   value="<?= (int)($prog['next_serial'] ?? 1) ?>"
+                                   min="1" max="<?= $max_serial ?>" data-field="next_serial">
+                        </td>
+                        <td>
+                            <?php
+                            $digits = max(1, (int)($prog['serial_digits'] ?? 3));
+                            if ($prog['university_code'] !== null) {
+                                echo '<code class="sid-preview">'
+                                    . h($prog['university_code'] . $prog['year_code'] . $prog['semester_code']
+                                        . $prog['faculty_code'] . $prog['subject_code'] . $prog['type_of_program']
+                                        . str_pad((string)($prog['next_serial'] ?? 1), $digits, '0', STR_PAD_LEFT))
+                                    . '</code>';
+                            } else {
+                                echo '<span class="text-muted">—</span>';
+                            }
+                            ?>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+            <div class="p-3">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save me-1"></i> Save Student ID Settings
+                </button>
+            </div>
+            <?php endif; ?>
+        </form>
+    </div>
+</div>
+
+<?php elseif ($active_tab === 'notifications'): ?>
+<!-- ══════════════════════════════════════════════════════════
+     Tab G: Notification Settings
+══════════════════════════════════════════════════════════ -->
+<form method="post">
+    <?= csrf_field() ?>
+    <input type="hidden" name="action" value="save_notification_settings">
+
+<div class="row g-4">
+
+    <!-- SMS -->
+    <div class="col-12 col-lg-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white fw-semibold">
+                <i class="fas fa-sms me-2 text-success"></i>SMS Notifications (FastSMS BD)
+            </div>
+            <div class="card-body">
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" id="smsEnabled" name="sms_enabled" value="1"
+                           <?= $notif_sms_enabled === '1' ? 'checked' : '' ?>>
+                    <label class="form-check-label fw-semibold" for="smsEnabled">Enable SMS Notifications</label>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">API Key</label>
+                    <input type="text" name="sms_api_key" class="form-control"
+                           value="<?= h($notif_sms_api_key) ?>" placeholder="FastSMS BD API key">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Sender ID</label>
+                    <input type="text" name="sms_sender_id" class="form-control"
+                           value="<?= h($notif_sms_sender_id) ?>" placeholder="e.g. 8809640910958">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">SMS Template (Form Sale)</label>
+                    <textarea name="sms_template_form_sale" class="form-control font-monospace" rows="4"
+                              placeholder="Dear {{buyer_name}}, your admission form has been issued..."><?= h($notif_sms_template) ?></textarea>
+                    <div class="form-text">
+                        Available variables:
+                        <code>{{form_number}}</code> <code>{{buyer_name}}</code>
+                        <code>{{buyer_mobile}}</code> <code>{{form_price}}</code>
+                        <code>{{sold_date}}</code> <code>{{app_name}}</code>
+                    </div>
+                </div>
+
+                <div class="border rounded p-3 bg-light small">
+                    <div class="fw-semibold mb-1"><i class="fas fa-link me-1"></i>API Details</div>
+                    <div class="text-muted mb-1">URL: <code>https://smsapi.fastsmsbd.com/smsapiv3</code></div>
+                    <div class="text-muted mb-1">Portal: <a href="https://sms.fastsmsbd.com/" target="_blank">sms.fastsmsbd.com</a></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Email -->
+    <div class="col-12 col-lg-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white fw-semibold">
+                <i class="fas fa-envelope me-2 text-primary"></i>Email Notifications
+            </div>
+            <div class="card-body">
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" id="emailEnabled" name="email_enabled" value="1"
+                           <?= $notif_email_enabled === '1' ? 'checked' : '' ?>>
+                    <label class="form-check-label fw-semibold" for="emailEnabled">Enable Email Notifications</label>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Email Subject (Form Sale)</label>
+                    <input type="text" name="email_subject" class="form-control"
+                           value="<?= h($notif_email_tpl['subject']) ?>"
+                           placeholder="Your Admission Form – No. {{form_number}}">
+                    <div class="form-text">Supports <code>{{form_number}}</code>, <code>{{app_name}}</code>, etc.</div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Email Body HTML (Form Sale)</label>
+                    <textarea name="email_body" class="form-control font-monospace" rows="10"
+                              placeholder="HTML email body…"><?= h($notif_email_tpl['body_html']) ?></textarea>
+                    <div class="form-text">
+                        Available variables:
+                        <code>{{form_number}}</code> <code>{{buyer_name}}</code>
+                        <code>{{buyer_mobile}}</code> <code>{{form_price}}</code>
+                        <code>{{sold_date}}</code> <code>{{app_name}}</code> <code>{{logo_url}}</code>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<div class="mt-4">
+    <button type="submit" class="btn btn-primary">
+        <i class="fas fa-save me-1"></i> Save Notification Settings
+    </button>
+</div>
+</form>
+
+<?php endif; ?>
 // ── CSRF token ────────────────────────────────────────────────────────────────
 var csrfToken = '<?= csrf_token() ?>';
 var mapPage   = <?= $map_page ?>;
