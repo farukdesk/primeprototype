@@ -179,11 +179,11 @@ require_once __DIR__ . '/../includes/header.php';
                                     <td class="px-3"><input type="text" name="fee_name[]" class="form-control form-control-sm" value="<?= h($old_names[$ri] ?? '') ?>" placeholder="e.g. Library Fee"></td>
                                     <td><input type="number" name="fee_amount[]" class="form-control form-control-sm" value="<?= h($old_amounts[$ri] ?? 0) ?>" min="0"></td>
                                     <td>
-                                         <select name="fee_type[]" class="form-select form-select-sm">
+                                        <select name="fee_type[]" class="form-select form-select-sm">
                                             <option value="one_time"     <?= ($old_types[$ri] ?? '') === 'one_time'     ? 'selected' : '' ?>>One-Time</option>
                                             <option value="per_semester" <?= ($old_types[$ri] ?? '') === 'per_semester' ? 'selected' : '' ?>>Per Semester</option>
                                             <option value="monthly"      <?= ($old_types[$ri] ?? '') === 'monthly'      ? 'selected' : '' ?>>Monthly (÷ months)</option>
-                                         </select>
+                                        </select>
                                     </td>
                                     <td><input type="number" name="fee_sort[]" class="form-control form-control-sm" value="<?= h($old_sorts[$ri] ?? $ri) ?>" min="0" style="width:70px;"></td>
                                     <td><button type="button" class="btn btn-sm btn-outline-danger remove-fee-row"><i class="fas fa-times"></i></button></td>
