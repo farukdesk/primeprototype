@@ -755,7 +755,7 @@ foreach ($programs as $p) {
                         <button class="cf-deg-pill" data-deg="bachelor">Bachelor</button>
                         <button class="cf-deg-pill" data-deg="master">Master</button>
                         <button class="cf-deg-pill" data-deg="diploma">Diploma</button>
-                        <button class="cf-deg-pill" data-deg="certificate">Cert.</button>
+                        <button class="cf-deg-pill" data-deg="certificate">Certificate</button>
                      </div>
 
                      <!-- Department -->
@@ -1006,27 +1006,27 @@ foreach ($programs as $p) {
          </div>
          <div class="row justify-content-center">
             <div class="col-lg-8 fade-in-up delay-1">
-               <div class="cf-faq-item" onclick="cfToggleFaq(this)">
+               <div class="cf-faq-item" role="button" tabindex="0" onclick="cfToggleFaq(this)" onkeydown="if(event.key==='Enter'||event.key===' '){cfToggleFaq(this);event.preventDefault();}">
                   <div class="cf-faq-q">When are admission fees paid?<i class="fas fa-chevron-down cf-faq-icon"></i></div>
                   <div class="cf-faq-a">Admission fees (one-time fees) are paid once when you first enrol at Prime University. They cover registration, library membership, student ID, and other one-time costs and are non-refundable after enrolment is confirmed.</div>
                </div>
-               <div class="cf-faq-item" onclick="cfToggleFaq(this)">
+               <div class="cf-faq-item" role="button" tabindex="0" onclick="cfToggleFaq(this)" onkeydown="if(event.key==='Enter'||event.key===' '){cfToggleFaq(this);event.preventDefault();}">
                   <div class="cf-faq-q">Can I pay per-semester fees in instalments?<i class="fas fa-chevron-down cf-faq-icon"></i></div>
                   <div class="cf-faq-a">Per-semester fees are typically due at the beginning of each semester. The university may offer a structured payment plan in some circumstances. Please contact the Accounts Office to discuss your options.</div>
                </div>
-               <div class="cf-faq-item" onclick="cfToggleFaq(this)">
+               <div class="cf-faq-item" role="button" tabindex="0" onclick="cfToggleFaq(this)" onkeydown="if(event.key==='Enter'||event.key===' '){cfToggleFaq(this);event.preventDefault();}">
                   <div class="cf-faq-q">Are scholarships or waivers available?<i class="fas fa-chevron-down cf-faq-icon"></i></div>
                   <div class="cf-faq-a">Yes! Prime University offers merit-based and need-based scholarships. Use the Safety Net waiver calculator above to see how a scholarship would affect your total cost. Visit the Scholarships &amp; Waivers page or contact the Admissions Office for eligibility details.</div>
                </div>
-               <div class="cf-faq-item" onclick="cfToggleFaq(this)">
+               <div class="cf-faq-item" role="button" tabindex="0" onclick="cfToggleFaq(this)" onkeydown="if(event.key==='Enter'||event.key===' '){cfToggleFaq(this);event.preventDefault();}">
                   <div class="cf-faq-q">What does the per-semester fee include?<i class="fas fa-chevron-down cf-faq-icon"></i></div>
                   <div class="cf-faq-a">Per-semester fees typically cover tuition, examination fees, lab fees (where applicable), and other academic service charges. The exact breakdown is shown in the Regular Program Cost section for each programme.</div>
                </div>
-               <div class="cf-faq-item" onclick="cfToggleFaq(this)">
+               <div class="cf-faq-item" role="button" tabindex="0" onclick="cfToggleFaq(this)" onkeydown="if(event.key==='Enter'||event.key===' '){cfToggleFaq(this);event.preventDefault();}">
                   <div class="cf-faq-q">Is the calculator estimate guaranteed?<i class="fas fa-chevron-down cf-faq-icon"></i></div>
                   <div class="cf-faq-a">The calculator provides estimates based on current published fee structures. Fees are subject to change. Always confirm the latest figures with the Accounts or Admissions Office before making financial decisions.</div>
                </div>
-               <div class="cf-faq-item" onclick="cfToggleFaq(this)">
+               <div class="cf-faq-item" role="button" tabindex="0" onclick="cfToggleFaq(this)" onkeydown="if(event.key==='Enter'||event.key===' '){cfToggleFaq(this);event.preventDefault();}">
                   <div class="cf-faq-q">How do I contact the accounts office for fee queries?<i class="fas fa-chevron-down cf-faq-icon"></i></div>
                   <div class="cf-faq-a">You can reach the Accounts Office by email at <a href="mailto:info@primeuniversity.ac.bd">info@primeuniversity.ac.bd</a>, by phone at <a href="tel:01969955566">01969-955566</a>, or by visiting the campus during office hours (Sunday–Thursday, 9am–5pm).</div>
                </div>
@@ -1181,6 +1181,7 @@ foreach ($programs as $p) {
       var months       = prog.duration ? Math.round(prog.duration * 12) : 0;
       var semesters    = prog.num_semesters || 0;
       var monthsPerSem = (semesters > 0 && months > 0) ? months / semesters : 6;
+      if (monthsPerSem <= 0) monthsPerSem = 6;
 
       var oneTimeFees = prog.fixed_fees.filter(function(f) { return f.type === 'one_time'; });
       var perSemFees  = prog.fixed_fees.filter(function(f) { return f.type === 'per_semester'; });
@@ -1275,9 +1276,11 @@ foreach ($programs as $p) {
       elForecastLabel.textContent = Math.round(durationYears) + '-Year';
       var fRows = '';
       if (semesters > 0 && perSemFees.length > 0) {
+         var semCount = 0;
          for (var yr = 1; yr <= Math.ceil(durationYears); yr++) {
-            var semsThisYear = Math.min(Math.round(semsPerYear), semesters - (yr - 1) * Math.round(semsPerYear));
+            var semsThisYear = Math.min(Math.round(semsPerYear), semesters - semCount);
             if (semsThisYear <= 0) break;
+            semCount += semsThisYear;
             var yrCost = semsThisYear * perSemPerSem;
             if (yr === 1) yrCost += oneTimeTotal;
             fRows += '<div class="cf-forecast-year-row">' +
@@ -1464,6 +1467,9 @@ foreach ($programs as $p) {
          if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(text).then(function() {
                elCopyBtn.innerHTML = '<i class="fas fa-check me-1"></i>Copied!';
+               setTimeout(function() { elCopyBtn.innerHTML = '<i class="fas fa-copy me-1"></i>Copy Summary'; }, 2200);
+            }).catch(function() {
+               elCopyBtn.innerHTML = '<i class="fas fa-times me-1"></i>Copy failed';
                setTimeout(function() { elCopyBtn.innerHTML = '<i class="fas fa-copy me-1"></i>Copy Summary'; }, 2200);
             });
          }
