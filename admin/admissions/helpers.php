@@ -128,6 +128,130 @@ function adm_save_setting(string $key, string $value): void
     )->execute([$key, $value]);
 }
 
+// ── Student ID helpers ────────────────────────────────────────────────────────
+
+/**
+ * Fetch student-ID settings for a given program.
+ * Returns false if no settings row exists for that program.
+ */
+function adm_sid_get(int $program_id): array|false
+{
+    $stmt = db()->prepare(
+        'SELECT * FROM adm_student_id_settings WHERE program_id = ? LIMIT 1'
+    );
+    $stmt->execute([$program_id]);
+    return $stmt->fetch() ?: false;
+}
+
+/**
+ * Generate a student ID for the given program and increment the serial counter.
+ * Returns an empty string if no settings exist for the program.
+ */
+function adm_sid_generate(int $program_id): string
+{
+    $db = db();
+    $db->beginTransaction();
+    try {
+        $stmt = $db->prepare(
+            'SELECT * FROM adm_student_id_settings WHERE program_id = ? FOR UPDATE'
+        );
+        $stmt->execute([$program_id]);
+        $settings = $stmt->fetch();
+        if (!$settings) {
+            $db->rollBack();
+            return '';
+        }
+        $serial = (int)$settings['next_serial'];
+        $digits = max(1, (int)$settings['serial_digits']);
+        $db->prepare(
+            'UPDATE adm_student_id_settings SET next_serial = next_serial + 1 WHERE program_id = ?'
+        )->execute([$program_id]);
+        $db->commit();
+    } catch (\Throwable $e) {
+        $db->rollBack();
+        throw $e;
+    }
+
+    return $settings['university_code']
+         . $settings['year_code']
+         . $settings['semester_code']
+         . $settings['faculty_code']
+         . $settings['subject_code']
+         . $settings['type_of_program']
+         . str_pad((string)$serial, $digits, '0', STR_PAD_LEFT);
+}
+
+/**
+ * Preview a student ID from settings without incrementing the serial.
+ */
+function adm_sid_preview(array $settings): string
+{
+    $digits = max(1, (int)$settings['serial_digits']);
+    return $settings['university_code']
+         . $settings['year_code']
+         . $settings['semester_code']
+         . $settings['faculty_code']
+         . $settings['subject_code']
+         . $settings['type_of_program']
+         . str_pad((string)$settings['next_serial'], $digits, '0', STR_PAD_LEFT);
+}
+
+// ── SMS helper ────────────────────────────────────────────────────────────────
+
+/**
+ * Send an SMS via the FastSMS BD API.
+ * Uses sms_api_key and sms_sender_id from admissions_settings.
+ * Returns true on success, false on failure or if SMS is disabled.
+ */
+function adm_send_sms(string $mobile, string $message): bool
+{
+    if (adm_get_setting('sms_enabled', '0') !== '1') {
+        return false;
+    }
+    $api_key   = adm_get_setting('sms_api_key', '');
+    $sender_id = adm_get_setting('sms_sender_id', '');
+    if ($api_key === '' || $sender_id === '' || $mobile === '') {
+        return false;
+    }
+
+    // Normalize to Bangladesh international format (880…)
+    $mobile = preg_replace('/\D/', '', $mobile);
+    if (str_starts_with($mobile, '0')) {
+        $mobile = '880' . substr($mobile, 1);
+    }
+
+    $url = 'https://smsapi.fastsmsbd.com/smsapiv3?' . http_build_query([
+        'apikey'  => $api_key,
+        'sender'  => $sender_id,
+        'msisdn'  => $mobile,
+        'smstext' => $message,
+    ]);
+
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+    $response = curl_exec($ch);
+    $errno    = curl_errno($ch);
+    curl_close($ch);
+
+    return ($errno === 0 && $response !== false);
+}
+
+/**
+ * Replace {{variable}} placeholders in a notification template string.
+ */
+function adm_render_template_string(string $template, array $vars): string
+{
+    $search  = [];
+    $replace = [];
+    foreach ($vars as $key => $val) {
+        $search[]  = '{{' . $key . '}}';
+        $replace[] = (string)$val;
+    }
+    return str_replace($search, $replace, $template);
+}
+
 // ── Application number generator ─────────────────────────────────────────────
 
 function adm_generate_number(): string

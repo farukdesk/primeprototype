@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_access('admissions');
 require_once __DIR__ . '/form-sale-helpers.php';
+require_once __DIR__ . '/../includes/mailer.php';
 
 if (!adm_can_manage()) {
     flash_set('error', 'You do not have permission to sell forms.');
@@ -48,6 +49,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $sale_id = (int)db()->lastInsertId();
 
         log_change('admissions', 'CREATE', $sale_id, 'Form Sale ' . $form_number);
+
+        // ── Notifications ─────────────────────────────────────────────────────
+        $notif_vars = [
+            'form_number'  => $form_number,
+            'buyer_name'   => $buyer_name,
+            'buyer_mobile' => $buyer_mobile,
+            'form_price'   => number_format((float)$form_price, 2),
+            'sold_date'    => date('d/m/Y'),
+            'app_name'     => APP_NAME,
+        ];
+
+        // SMS notification
+        if ($buyer_mobile !== '') {
+            $sms_tpl = adm_get_setting('sms_template_form_sale', '');
+            if ($sms_tpl !== '') {
+                adm_send_sms($buyer_mobile, adm_render_template_string($sms_tpl, $notif_vars));
+            }
+        }
+
+        // Email notification
+        if ($buyer_email !== null && $buyer_email !== '') {
+            send_template_email('form_sale_notification', $buyer_email, $buyer_name, $notif_vars);
+        }
+
         flash_set('success', 'Form ' . h($form_number) . ' sold successfully. <a href="' . h(APP_URL . '/admissions/form-sale-print.php?id=' . $sale_id) . '" target="_blank" class="alert-link">Print Invoice</a>');
         redirect(APP_URL . '/admissions/form-sale-index.php');
     }

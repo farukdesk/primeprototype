@@ -220,6 +220,77 @@ if ($action === 'upload_template' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     redirect(APP_URL . '/admissions/settings.php?tab=templates');
 }
 
+// ── Student ID settings save ──────────────────────────────────────────────────
+if ($action === 'save_student_id_settings' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    csrf_check();
+    $program_ids      = $_POST['program_id']      ?? [];
+    $univ_codes       = $_POST['university_code'] ?? [];
+    $year_codes       = $_POST['year_code']       ?? [];
+    $sem_codes        = $_POST['semester_code']   ?? [];
+    $fac_codes        = $_POST['faculty_code']    ?? [];
+    $subj_codes       = $_POST['subject_code']    ?? [];
+    $type_progs       = $_POST['type_of_program'] ?? [];
+    $next_serials     = $_POST['next_serial']     ?? [];
+
+    $stmt = db()->prepare(
+        'INSERT INTO adm_student_id_settings
+             (program_id, university_code, year_code, semester_code, faculty_code, subject_code, type_of_program, next_serial, serial_digits)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 3)
+         ON DUPLICATE KEY UPDATE
+             university_code  = VALUES(university_code),
+             year_code        = VALUES(year_code),
+             semester_code    = VALUES(semester_code),
+             faculty_code     = VALUES(faculty_code),
+             subject_code     = VALUES(subject_code),
+             type_of_program  = VALUES(type_of_program),
+             next_serial      = VALUES(next_serial)'
+    );
+
+    foreach ($program_ids as $i => $pid) {
+        $pid    = (int)$pid;
+        $serial = max(1, (int)($next_serials[$i] ?? 1));
+        if ($pid < 1) continue;
+        $stmt->execute([
+            $pid,
+            substr(trim($univ_codes[$i] ?? '028'), 0, 10),
+            substr(trim($year_codes[$i]  ?? '26'),  0, 4),
+            substr(trim($sem_codes[$i]   ?? '2'),   0, 4),
+            substr(trim($fac_codes[$i]   ?? ''),    0, 4),
+            substr(trim($subj_codes[$i]  ?? ''),    0, 4),
+            substr(trim($type_progs[$i]  ?? '1'),   0, 4),
+            $serial,
+        ]);
+    }
+
+    log_change('admissions', 'UPDATE', null, 'Student ID Settings');
+    flash_set('success', 'Student ID settings saved.');
+    redirect(APP_URL . '/admissions/settings.php?tab=student_id');
+}
+
+// ── Notification settings save ────────────────────────────────────────────────
+if ($action === 'save_notification_settings' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    csrf_check();
+
+    adm_save_setting('sms_enabled',            isset($_POST['sms_enabled']) ? '1' : '0');
+    adm_save_setting('sms_api_key',            trim($_POST['sms_api_key']   ?? ''));
+    adm_save_setting('sms_sender_id',          trim($_POST['sms_sender_id'] ?? ''));
+    adm_save_setting('sms_template_form_sale', trim($_POST['sms_template_form_sale'] ?? ''));
+    adm_save_setting('email_enabled',          isset($_POST['email_enabled']) ? '1' : '0');
+
+    // Persist email template body & subject
+    $email_subject = trim($_POST['email_subject'] ?? '');
+    $email_body    = trim($_POST['email_body']    ?? '');
+    if ($email_subject !== '' && $email_body !== '') {
+        db()->prepare(
+            'UPDATE email_templates SET subject = ?, body_html = ? WHERE action = ?'
+        )->execute([$email_subject, $email_body, 'form_sale_notification']);
+    }
+
+    log_change('admissions', 'UPDATE', null, 'Notification Settings');
+    flash_set('success', 'Notification settings saved.');
+    redirect(APP_URL . '/admissions/settings.php?tab=notifications');
+}
+
 // ── Page data ─────────────────────────────────────────────────────────────────
 $tpl1            = adm_get_template(1);
 $tpl2            = adm_get_template(2);
