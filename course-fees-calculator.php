@@ -57,8 +57,9 @@ foreach ($programs as $p) {
         'label'         => ($p['program_name'] ?: ($p['dept_name'] ?: 'Programme #' . $p['id'])),
         'dept'          => $p['dept_name'] ?? '',
         'degree'        => $p['degree_type'],
-        'total_credits' => $p['total_credits'] ? (int)$p['total_credits'] : null,
+        'total_credits' => $p['total_credits'] ? (float)$p['total_credits'] : null,
         'duration'      => $p['duration_years'] ? (float)$p['duration_years'] : null,
+        'num_semesters' => $p['num_semesters'] ? (int)$p['num_semesters'] : null,
         'fixed_fees'    => array_map(fn($f) => [
             'name'   => $f['fee_name'],
             'amount' => (int)$f['amount'],
@@ -241,34 +242,7 @@ foreach ($programs as $p) {
    }
    .cf-credit-unit { font-size: .9rem; font-weight: 600; color: #6b7280; margin-left: 4px; }
 
-   /* Waiver selector */
-   .cf-waiver-options {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
-      gap: 8px;
-   }
-   .cf-waiver-option {
-      border: 2px solid #e2e8f0;
-      border-radius: 10px;
-      padding: 10px 6px;
-      text-align: center;
-      cursor: pointer;
-      font-size: .85rem;
-      font-weight: 700;
-      color: #374151;
-      transition: border-color .2s, background .2s, color .2s, transform .2s;
-      user-select: none;
-   }
-   .cf-waiver-option:hover { border-color: var(--pu-blue); background: rgba(37,99,235,.04); transform: translateY(-2px); }
-   .cf-waiver-option.active {
-      border-color: var(--pu-blue);
-      background: var(--pu-blue);
-      color: #fff;
-      transform: translateY(-2px);
-   }
-   .cf-waiver-option .pct { font-size: 1.1rem; display: block; line-height: 1; }
-
-   /* Results panel */
+    /* Results panel */
    .cf-result-panel {
       background: linear-gradient(160deg, #f0f7ff 0%, #ffffff 100%);
       border-radius: 16px;
@@ -280,22 +254,13 @@ foreach ($programs as $p) {
    .cf-result-row {
       display: flex;
       justify-content: space-between;
-      align-items: center;
-      padding: 10px 0;
+      align-items: flex-start;
+      padding: 8px 0;
       border-bottom: 1px solid #e5e7eb;
       font-size: .92rem;
-      gap: 8px;
+      gap: 12px;
    }
    .cf-result-row:last-child { border-bottom: none; }
-   .cf-result-row.total {
-      font-size: 1.1rem;
-      font-weight: 900;
-      color: var(--pu-navy);
-      border-top: 2px solid var(--pu-blue);
-      margin-top: 8px;
-      padding-top: 14px;
-      border-bottom: none;
-   }
    .cf-result-val { font-weight: 700; color: var(--pu-navy); white-space: nowrap; }
    .cf-result-val.discount { color: var(--pu-green); }
 
@@ -462,15 +427,15 @@ foreach ($programs as $p) {
                   <span>Calculator</span>
                </h1>
                <p class="cf-hero-sub mb-5">
-                  <?= fh($settings['page_subtitle'] ?? 'Estimate your tuition and fees at Prime University — transparent, real-time, and personalised.') ?>
+                  <?= fh($settings['page_subtitle'] ?? 'See the complete fee breakdown for any programme — transparent, real-time, and easy to understand.') ?>
                </p>
                <a href="#calculator" class="btn btn-warning fw-bold px-5 py-3 rounded-pill me-3"
                   style="font-size:1rem;color:var(--pu-navy);">
                   <i class="fas fa-calculator me-2"></i>Calculate Now
                </a>
-               <a href="/scholarships-waivers.php" class="btn btn-outline-light fw-semibold px-4 py-3 rounded-pill"
+               <a href="/apply-now.php" class="btn btn-outline-light fw-semibold px-4 py-3 rounded-pill"
                   style="font-size:.95rem;">
-                  <i class="fas fa-graduation-cap me-2"></i>Scholarships
+                  <i class="fas fa-paper-plane me-2"></i>Apply Now
                </a>
             </div>
 
@@ -510,10 +475,10 @@ foreach ($programs as $p) {
          <div class="row g-4">
             <?php
             $steps = [
-               ['n'=>'1','icon'=>'fas fa-graduation-cap','color'=>'#2563eb','bg'=>'#dbeafe','title'=>'Select Programme','desc'=>'Choose your department and target programme from the dropdown list.'],
-               ['n'=>'2','icon'=>'fas fa-percentage','color'=>'#7c3aed','bg'=>'#ede9fe','title'=>'Apply Scholarship','desc'=>'Select your scholarship or waiver percentage to see the discounted monthly payment.'],
-               ['n'=>'3','icon'=>'fas fa-calendar-alt','color'=>'#059669','bg'=>'#d1fae5','title'=>'View Monthly Payment','desc'=>'Tuition and programme fees divided by total months give your monthly installment.'],
-               ['n'=>'4','icon'=>'fas fa-file-invoice-dollar','color'=>'#d97706','bg'=>'#fef3c7','title'=>'See One-Time Fees','desc'=>'Admission and Registration fees are listed separately — paid once at enrolment.'],
+               ['n'=>'1','icon'=>'fas fa-building','color'=>'#2563eb','bg'=>'#dbeafe','title'=>'Select Department','desc'=>'Choose your department from the dropdown to see available programmes.'],
+               ['n'=>'2','icon'=>'fas fa-graduation-cap','color'=>'#7c3aed','bg'=>'#ede9fe','title'=>'Select Programme','desc'=>'Pick your target programme to load the full fee structure instantly.'],
+               ['n'=>'3','icon'=>'fas fa-file-invoice-dollar','color'=>'#059669','bg'=>'#d1fae5','title'=>'View Admission Fees','desc'=>'See one-time fees paid at admission — registration, library, and more.'],
+               ['n'=>'4','icon'=>'fas fa-calculator','color'=>'#d97706','bg'=>'#fef3c7','title'=>'See Total Cost','desc'=>'Full breakdown: per-semester fees × total semesters, monthly installment, and grand total.'],
             ];
             foreach ($steps as $i => $s):
             ?>
@@ -539,7 +504,7 @@ foreach ($programs as $p) {
             </p>
             <h2 class="section-title" style="color:var(--pu-navy);">Calculate Your Fees</h2>
             <p class="mx-auto" style="max-width:540px;color:#6b7280;font-size:.95rem;">
-               Get an instant estimate of your monthly fees. Select a programme and apply any scholarship to personalise.
+               Select your department and programme to see the complete fee breakdown instantly.
             </p>
          </div>
 
@@ -550,16 +515,28 @@ foreach ($programs as $p) {
          </div>
          <?php else: ?>
 
+         <?php
+         // Build unique dept list for the department dropdown
+         $dept_list = [];
+         foreach ($programs as $p) {
+             $dept = $p['dept_name'] ?: 'Other';
+             if (!in_array($dept, $dept_list, true)) {
+                 $dept_list[] = $dept;
+             }
+         }
+         sort($dept_list);
+         ?>
+
          <div class="row g-5 align-items-start">
             <!-- ── Inputs ── -->
-            <div class="col-lg-7">
+            <div class="col-lg-5">
                <div class="cf-card card fade-in-up">
                   <div class="cf-card-header">
                      <h3 class="mb-1 fw-bold" style="font-size:1.3rem;">
                         <i class="fas fa-sliders-h me-2" style="color:var(--pu-gold)"></i>
-                        Customise Your Estimate
+                        Select Your Programme
                      </h3>
-                     <p class="mb-0" style="font-size:.88rem;opacity:.75;">Fill in the fields below and the breakdown updates instantly.</p>
+                     <p class="mb-0" style="font-size:.88rem;opacity:.75;">Choose your department and programme — fees load instantly.</p>
                   </div>
                   <div class="cf-card-body">
                      <!-- Progress dots -->
@@ -568,31 +545,36 @@ foreach ($programs as $p) {
                         <div class="cf-step-dot"></div>
                      </div>
 
-                     <!-- Step 1: Programme -->
+                     <!-- Step 1: Department -->
                      <div class="mb-4">
                         <label class="fw-bold mb-2" style="color:var(--pu-navy);font-size:.95rem;">
                            <span class="badge me-2" style="background:var(--pu-blue);border-radius:50%;width:24px;height:24px;font-size:.7rem;line-height:24px;padding:0;display:inline-flex;align-items:center;justify-content:center;">1</span>
+                           Select Department
+                        </label>
+                        <div class="cf-select-wrap">
+                           <select id="deptSelect" class="form-select">
+                              <option value="">— Choose a department —</option>
+                              <?php foreach ($dept_list as $dept): ?>
+                              <option value="<?= fh($dept) ?>"><?= fh($dept) ?></option>
+                              <?php endforeach; ?>
+                           </select>
+                        </div>
+                     </div>
+
+                     <!-- Step 2: Programme (filtered) -->
+                     <div class="mb-4" id="programWrap" style="display:none;">
+                        <label class="fw-bold mb-2" style="color:var(--pu-navy);font-size:.95rem;">
+                           <span class="badge me-2" style="background:var(--pu-purple);border-radius:50%;width:24px;height:24px;font-size:.7rem;line-height:24px;padding:0;display:inline-flex;align-items:center;justify-content:center;">2</span>
                            Select Programme
                         </label>
                         <div class="cf-select-wrap">
                            <select id="programSelect" class="form-select">
                               <option value="">— Choose a programme —</option>
-                              <?php
-                              $grouped = [];
-                              foreach ($programs as $p) {
-                                  $grp = $p['dept_name'] ?: 'Other';
-                                  $grouped[$grp][] = $p;
-                              }
-                              foreach ($grouped as $grp => $rows):
-                              ?>
-                              <optgroup label="<?= fh($grp) ?>">
-                                 <?php foreach ($rows as $p): ?>
-                                 <option value="<?= $p['id'] ?>">
-                                    <?= fh($p['program_name'] ?: $p['dept_name']) ?>
-                                    (<?= ucfirst($p['degree_type']) ?>)
-                                 </option>
-                                 <?php endforeach; ?>
-                              </optgroup>
+                              <?php foreach ($programs as $p): ?>
+                              <option value="<?= $p['id'] ?>" data-dept="<?= fh($p['dept_name'] ?: 'Other') ?>">
+                                 <?= fh($p['program_name'] ?: $p['dept_name']) ?>
+                                 (<?= ucfirst($p['degree_type']) ?>)
+                              </option>
                               <?php endforeach; ?>
                            </select>
                         </div>
@@ -601,58 +583,57 @@ foreach ($programs as $p) {
                               <span class="badge bg-primary" id="meta-degree"></span>
                               <span class="badge bg-secondary" id="meta-credits"></span>
                               <span class="badge bg-info text-dark" id="meta-duration"></span>
+                              <span class="badge bg-success" id="meta-semesters"></span>
                            </div>
                         </div>
                      </div>
 
-                     <!-- Step 2: Waiver -->
-                     <div class="mb-2">
-                        <label class="fw-bold mb-3" style="color:var(--pu-navy);font-size:.95rem;">
-                           <span class="badge me-2" style="background:var(--pu-purple);border-radius:50%;width:24px;height:24px;font-size:.7rem;line-height:24px;padding:0;display:inline-flex;align-items:center;justify-content:center;">2</span>
-                           Scholarship / Waiver
-                        </label>
-                        <div class="cf-waiver-options" id="waiverOptions">
-                           <?php foreach ([0,10,15,20,25,33,50,100] as $pct): ?>
-                           <div class="cf-waiver-option <?= $pct === 0 ? 'active' : '' ?>"
-                                data-waiver="<?= $pct ?>">
-                              <span class="pct"><?= $pct ?>%</span>
-                              <span style="font-size:.7rem;font-weight:500;display:block;margin-top:2px;opacity:.75;">
-                                 <?php if ($pct === 0) echo 'None'; elseif ($pct === 100) echo 'Full'; else echo 'Waiver'; ?>
-                              </span>
-                           </div>
-                           <?php endforeach; ?>
-                        </div>
-                        <div class="mt-2">
-                           <label class="small fw-semibold" style="color:#6b7280;">Or enter custom %:</label>
-                           <div class="d-flex align-items-center gap-2 mt-1">
-                              <input type="number" id="customWaiver" class="form-control form-control-sm"
-                                     style="width:90px;border-radius:8px;" min="0" max="100" value="0">
-                              <span class="small text-muted">%</span>
-                           </div>
-                        </div>
+                     <!-- Quick Guide -->
+                     <div class="p-3 rounded-3" style="background:#f8fafc;border:1.5px solid #e5e7eb;">
+                        <p class="fw-bold mb-2" style="font-size:.85rem;color:var(--pu-navy);">
+                           <i class="fas fa-lightbulb me-1 text-warning"></i>How fees are calculated
+                        </p>
+                        <ul class="mb-0 ps-3" style="font-size:.82rem;color:#6b7280;line-height:1.8;">
+                           <li><strong>At Admission:</strong> one-time fees paid when you enrol</li>
+                           <li><strong>Per Semester:</strong> charged every semester (× total semesters)</li>
+                           <li><strong>Monthly:</strong> total fee ÷ programme months</li>
+                        </ul>
                      </div>
                   </div>
                </div>
             </div>
 
             <!-- ── Results ── -->
-            <div class="col-lg-5 fade-in-up delay-2">
+            <div class="col-lg-7 fade-in-up delay-2">
                <div class="cf-result-panel" id="resultPanel">
-                  <div class="text-center mb-3" id="resultEmpty">
-                     <i class="fas fa-calculator" style="font-size:3rem;color:#cbd5e1;"></i>
-                     <p class="mt-2 text-muted">Select a programme to see your estimate.</p>
+                  <div class="text-center py-5" id="resultEmpty">
+                     <i class="fas fa-hand-point-left" style="font-size:2.5rem;color:#cbd5e1;"></i>
+                     <p class="mt-3 text-muted fw-semibold">Select a department &amp; programme to see the full fee breakdown.</p>
                   </div>
                   <div id="resultContent" class="d-none">
-                     <div class="text-center mb-4">
-                        <p class="small text-muted fw-semibold mb-1">MONTHLY INSTALLMENT</p>
-                        <div>
-                           <span class="cf-amount-currency"><?= fh($currency) ?></span>
-                           <span class="cf-amount-big" id="totalAmount">0</span>
-                        </div>
-                        <p class="small text-muted mt-1 mb-0" id="savedMsg"></p>
+                     <!-- Programme header -->
+                     <div class="mb-4 pb-3" style="border-bottom:2px solid #e5e7eb;">
+                        <h5 class="fw-bold mb-1" style="color:var(--pu-navy);" id="res-prog-name"></h5>
+                        <div class="d-flex gap-2 flex-wrap" id="res-prog-badges"></div>
                      </div>
 
+                     <!-- Breakdown sections -->
                      <div id="breakdownRows"></div>
+
+                     <!-- Grand Total highlighted box -->
+                     <div id="grandTotalBox" class="mt-4 p-3 rounded-3 d-none"
+                          style="background:linear-gradient(135deg,#1a2e5a,#2563eb);color:#fff;">
+                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                           <div>
+                              <div style="font-size:.8rem;opacity:.8;font-weight:600;letter-spacing:.05em;">TOTAL PROGRAMME COST</div>
+                              <div style="font-size:1.75rem;font-weight:900;line-height:1.1;" id="grandTotalAmt"></div>
+                           </div>
+                           <div class="text-end">
+                              <div style="font-size:.75rem;opacity:.75;">Monthly Installment</div>
+                              <div style="font-size:1.1rem;font-weight:800;" id="monthlyInstAmt"></div>
+                           </div>
+                        </div>
+                     </div>
 
                      <div class="mt-4 d-grid gap-2">
                         <a href="/apply-now.php" class="btn btn-primary fw-bold py-3 rounded-pill">
@@ -663,18 +644,6 @@ foreach ($programs as $p) {
                         </button>
                      </div>
                   </div>
-               </div>
-
-               <!-- Quick Info -->
-               <div class="mt-4 p-3 rounded-3" style="background:#f8fafc;border:1.5px solid #e5e7eb;">
-                  <p class="fw-bold mb-2" style="font-size:.88rem;color:var(--pu-navy);">
-                     <i class="fas fa-lightbulb me-1 text-warning"></i>Quick Guide
-                  </p>
-                  <ul class="mb-0 ps-3" style="font-size:.82rem;color:#6b7280;line-height:1.7;">
-                     <li>Monthly fees = total programme fee &divide; programme months</li>
-                     <li>Admission &amp; Registration fees are paid once at enrolment</li>
-                     <li>Scholarship reduces your monthly installment</li>
-                  </ul>
                </div>
             </div>
          </div>
@@ -726,29 +695,39 @@ foreach ($programs as $p) {
 
    // ── State ─────────────────────────────────────────────────────────────────
    var state = {
-      programId : null,
-      waiver    : 0
+      dept      : '',
+      programId : null
    };
 
    // ── Element refs ─────────────────────────────────────────────────────────
+   var elDeptSelect   = document.getElementById('deptSelect');
+   var elProgramWrap  = document.getElementById('programWrap');
    var elSelect       = document.getElementById('programSelect');
-   var elWaiverOpts   = document.querySelectorAll('.cf-waiver-option');
-   var elCustomWaiver = document.getElementById('customWaiver');
    var elResultPanel  = document.getElementById('resultPanel');
    var elResultEmpty  = document.getElementById('resultEmpty');
    var elResultCont   = document.getElementById('resultContent');
-   var elTotalAmount  = document.getElementById('totalAmount');
    var elBreakdown    = document.getElementById('breakdownRows');
-   var elSavedMsg     = document.getElementById('savedMsg');
    var elProgMeta     = document.getElementById('prog-meta');
    var elMetaDegree   = document.getElementById('meta-degree');
    var elMetaCredits  = document.getElementById('meta-credits');
    var elMetaDuration = document.getElementById('meta-duration');
+   var elMetaSem      = document.getElementById('meta-semesters');
+   var elResProgName  = document.getElementById('res-prog-name');
+   var elResProgBadges= document.getElementById('res-prog-badges');
+   var elGrandTotalBox= document.getElementById('grandTotalBox');
+   var elGrandTotalAmt= document.getElementById('grandTotalAmt');
+   var elMonthlyInst  = document.getElementById('monthlyInstAmt');
    var elDots         = document.querySelectorAll('.cf-step-dot');
 
    // ── Helpers ───────────────────────────────────────────────────────────────
    function fmt(n) {
-      return CF_CURRENCY + ' ' + n.toLocaleString('en-BD');
+      return CF_CURRENCY + ' ' + Math.round(n).toLocaleString('en-BD');
+   }
+
+   function fmtExact(n) {
+      // Show decimals only when needed
+      var rounded = Math.round(n * 100) / 100;
+      return CF_CURRENCY + ' ' + rounded.toLocaleString('en-BD', {minimumFractionDigits: 0, maximumFractionDigits: 2});
    }
 
    function getProgram() {
@@ -756,30 +735,31 @@ foreach ($programs as $p) {
    }
 
    function updateDots() {
-      var filled;
-      if (!state.programId) {
-         filled = 0;
-      } else if (state.waiver > 0) {
-         filled = 2;
-      } else {
-         filled = 1;
-      }
+      var filled = !state.dept ? 0 : (!state.programId ? 1 : 2);
       elDots.forEach(function(d, i) {
          d.classList.toggle('done', i < filled);
       });
    }
 
-   // Animated count-up
-   function animateCount(el, from, to, dur) {
-      var start = null;
-      var step = function(ts) {
-         if (!start) start = ts;
-         var progress = Math.min((ts - start) / dur, 1);
-         var ease = 1 - Math.pow(1 - progress, 3);
-         el.textContent = Math.round(from + (to - from) * ease).toLocaleString('en-BD');
-         if (progress < 1) requestAnimationFrame(step);
-      };
-      requestAnimationFrame(step);
+   function sectionHeader(title, subtitle, bgColor, textColor) {
+      return '<div class="d-flex justify-content-between align-items-center px-3 py-2 mb-2 rounded-3" style="background:' + bgColor + ';">' +
+         '<span class="fw-bold" style="color:' + textColor + ';font-size:.9rem;">' + title + '</span>' +
+         (subtitle ? '<span style="font-size:.75rem;color:' + textColor + ';opacity:.75;">' + subtitle + '</span>' : '') +
+         '</div>';
+   }
+
+   function feeRow(label, note, val) {
+      return '<div class="cf-result-row">' +
+         '<span>' + label + (note ? '<br><small class="text-muted">' + note + '</small>' : '') + '</span>' +
+         '<span class="cf-result-val">' + val + '</span>' +
+         '</div>';
+   }
+
+   function totalRow(label, val, color) {
+      return '<div class="cf-result-row" style="font-weight:800;color:' + (color || 'var(--pu-navy)') + ';border-top:2px solid ' + (color || '#e5e7eb') + ';margin-top:4px;padding-top:10px;">' +
+         '<span>' + label + '</span>' +
+         '<span>' + val + '</span>' +
+         '</div>';
    }
 
    // ── Calculate & render ────────────────────────────────────────────────────
@@ -792,97 +772,104 @@ foreach ($programs as $p) {
          return;
       }
 
-      var months = prog.duration ? Math.round(prog.duration * 12) : 0;
+      var months     = prog.duration ? Math.round(prog.duration * 12) : 0;
+      var semesters  = prog.num_semesters || 0;
 
       // Separate fees by type
-      var monthlyFees  = prog.fixed_fees.filter(function(f) { return f.type === 'monthly'; });
-      var oneTimeFees  = prog.fixed_fees.filter(function(f) { return f.type === 'one_time'; });
-      var perSemFees   = prog.fixed_fees.filter(function(f) { return f.type === 'per_semester'; });
+      var oneTimeFees = prog.fixed_fees.filter(function(f) { return f.type === 'one_time'; });
+      var perSemFees  = prog.fixed_fees.filter(function(f) { return f.type === 'per_semester'; });
+      var monthlyFees = prog.fixed_fees.filter(function(f) { return f.type === 'monthly'; });
 
-      // Total of all monthly-type fees
-      var totalMonthlyBase = monthlyFees.reduce(function(s, f) { return s + f.amount; }, 0);
+      // Totals
+      var oneTimeTotal    = oneTimeFees.reduce(function(s, f) { return s + f.amount; }, 0);
+      var perSemPerSem    = perSemFees.reduce(function(s, f) { return s + f.amount; }, 0);
+      var perSemFullTotal = semesters > 0 ? perSemPerSem * semesters : 0;
+      var monthlyBase     = monthlyFees.reduce(function(s, f) { return s + f.amount; }, 0);
+      var monthlyPerMonth = months > 0 ? monthlyBase / months : monthlyBase;
 
-      // Monthly installment = total divided by programme months
-      var monthlyInstallment = (months > 0) ? Math.round(totalMonthlyBase / months) : totalMonthlyBase;
+      var grandTotal = oneTimeTotal + perSemFullTotal + monthlyBase;
 
-      // Scholarship applies to monthly installment only
-      var waiverAmt    = Math.round(monthlyInstallment * state.waiver / 100);
-      var netMonthly   = monthlyInstallment - waiverAmt;
-
-      // One-time fees total
-      var oneTimeTotal  = oneTimeFees.reduce(function(s, f) { return s + f.amount; }, 0);
-      var perSemTotal   = perSemFees.reduce(function(s, f) { return s + f.amount; }, 0);
-
-      // Build rows HTML
       var rows = '';
 
-      // Monthly installment section
-      if (monthlyFees.length > 0) {
-         rows += '<div class="cf-result-row" style="background:#f0f7ff;border-radius:8px;margin-bottom:4px;padding:10px 12px;">' +
-            '<span class="fw-bold" style="color:var(--pu-navy);">Monthly Fees Breakdown</span>' +
-            (months > 0 ? '<span class="badge bg-info text-dark ms-1" style="font-size:.65rem;">' + months + ' months</span>' : '') +
-            '</div>';
-         monthlyFees.forEach(function(f) {
-            var perMonth = (months > 0) ? Math.round(f.amount / months) : f.amount;
-            rows += rowHtml(
-               f.name,
-               '<span class="text-muted small">(' + fmt(f.amount) + ' ÷ ' + (months || '?') + ')</span>',
-               fmt(perMonth) + '/mo',
-               false
-            );
-         });
-         if (waiverAmt > 0) {
-            rows += rowHtml('Scholarship (' + state.waiver + '% off)', '', '− ' + fmt(waiverAmt) + '/mo', true);
-         }
-         rows += '<div class="cf-result-row" style="font-weight:800;color:var(--pu-blue);border-top:2px solid var(--pu-blue);margin-top:4px;padding-top:10px;">' +
-            '<span>Monthly Installment</span>' +
-            '<span>' + fmt(netMonthly) + '/mo</span>' +
-            '</div>';
-      }
-
-      // Per-semester fees section
-      if (perSemFees.length > 0) {
-         rows += '<div class="cf-result-row mt-3" style="background:#f8fafc;border-radius:8px;padding:8px 12px;">' +
-            '<span class="fw-bold" style="color:var(--pu-navy);">Per-Semester Fees</span>' +
-            '</div>';
-         perSemFees.forEach(function(f) {
-            rows += rowHtml(f.name, '<span class="badge bg-info text-dark ms-1" style="font-size:.65rem;">Per Sem</span>', fmt(f.amount), false);
-         });
-      }
-
-      // One-time fees section
+      // ── Section 1: At Admission (One-Time) ──────────────────────────────────
       if (oneTimeFees.length > 0) {
-         rows += '<div class="cf-result-row mt-3" style="background:#fff7ed;border-radius:8px;padding:8px 12px;">' +
-            '<span class="fw-bold" style="color:#92400e;">One-Time Fees <small style="font-weight:400;font-size:.75rem;">(paid at admission)</small></span>' +
-            '</div>';
+         rows += sectionHeader('🎓 At Admission — Paid Once', 'Pay this when you enrol', '#fff7ed', '#92400e');
          oneTimeFees.forEach(function(f) {
-            rows += rowHtml(f.name, '<span class="badge bg-secondary ms-1" style="font-size:.65rem;">One-Time</span>', fmt(f.amount), false);
+            rows += feeRow(f.name, null, fmt(f.amount));
          });
          if (oneTimeFees.length > 1) {
-            rows += '<div class="cf-result-row" style="font-weight:700;">' +
-               '<span>One-Time Total</span><span>' + fmt(oneTimeTotal) + '</span>' +
-               '</div>';
+            rows += totalRow('Total at Admission', fmt(oneTimeTotal), '#92400e');
+         } else {
+            rows += '<div class="mb-3"></div>';
          }
       }
 
-      // Display the monthly installment as the main "big" figure
-      var displayTotal = netMonthly;
-      var prevTotal = parseInt(elTotalAmount.textContent.replace(/,/g,'')) || 0;
+      // ── Section 2: Per-Semester Fees ────────────────────────────────────────
+      if (perSemFees.length > 0) {
+         var semNote = semesters > 0 ? semesters + ' semesters total' : 'per semester';
+         rows += sectionHeader('📅 Per-Semester Fees', semNote, '#f0fdf4', '#166534');
+         perSemFees.forEach(function(f) {
+            var totalForFee = semesters > 0 ? fmt(f.amount * semesters) : '';
+            rows += feeRow(
+               f.name,
+               semesters > 0 ? fmt(f.amount) + '/sem × ' + semesters + ' = ' + fmt(f.amount * semesters) : fmt(f.amount) + ' per semester',
+               fmt(f.amount) + '/sem'
+            );
+         });
+         if (perSemFees.length > 1 || semesters > 0) {
+            var perSemSubtitle = semesters > 0
+               ? fmt(perSemPerSem) + '/sem × ' + semesters + ' semesters'
+               : fmt(perSemPerSem) + '/semester';
+            rows += totalRow(
+               semesters > 0 ? 'Total Per-Semester Cost' : 'Per-Semester Total',
+               semesters > 0 ? fmt(perSemFullTotal) : fmt(perSemPerSem),
+               '#166534'
+            );
+         } else {
+            rows += '<div class="mb-3"></div>';
+         }
+      }
+
+      // ── Section 3: Monthly Installment ──────────────────────────────────────
+      if (monthlyFees.length > 0) {
+         var moNote = months > 0 ? months + ' months' : '';
+         rows += sectionHeader('💳 Regular Fees (Monthly)', moNote, '#eff6ff', '#1e40af');
+         monthlyFees.forEach(function(f) {
+            var perMo = months > 0 ? f.amount / months : f.amount;
+            rows += feeRow(
+               f.name,
+               months > 0 ? 'Total ' + fmt(f.amount) + ' ÷ ' + months + ' months' : null,
+               fmtExact(perMo) + '/mo'
+            );
+         });
+         rows += totalRow(
+            'Monthly Installment',
+            fmtExact(monthlyPerMonth) + '/month',
+            '#1e40af'
+         );
+         rows += '<div class="mb-3"></div>';
+      }
+
+      // ── Update programme header ──────────────────────────────────────────────
+      elResProgName.textContent = prog.label + ' (' + prog.degree.charAt(0).toUpperCase() + prog.degree.slice(1) + ')';
+      var badges = '';
+      if (prog.total_credits) badges += '<span class="badge bg-secondary">' + prog.total_credits + ' credits</span> ';
+      if (prog.duration)      badges += '<span class="badge bg-info text-dark">' + prog.duration + ' years</span> ';
+      if (semesters)          badges += '<span class="badge bg-success">' + semesters + ' semesters</span>';
+      elResProgBadges.innerHTML = badges;
+
+      // ── Grand Total box ──────────────────────────────────────────────────────
+      if (grandTotal > 0) {
+         elGrandTotalBox.classList.remove('d-none');
+         elGrandTotalAmt.textContent = fmt(grandTotal);
+         elMonthlyInst.textContent   = monthlyFees.length > 0 ? fmtExact(monthlyPerMonth) + '/month' : '—';
+      } else {
+         elGrandTotalBox.classList.add('d-none');
+      }
+
       elBreakdown.innerHTML = rows;
       elResultEmpty.classList.add('d-none');
       elResultCont.classList.remove('d-none');
-
-      animateCount(elTotalAmount, prevTotal, displayTotal, 500);
-
-      if (waiverAmt > 0) {
-         elSavedMsg.textContent = 'Saving ' + fmt(waiverAmt) + '/month with scholarship';
-         elSavedMsg.style.color = '#059669';
-      } else if (oneTimeTotal > 0) {
-         elSavedMsg.textContent = 'Plus ' + fmt(oneTimeTotal) + ' one-time at admission';
-         elSavedMsg.style.color = '#6b7280';
-      } else {
-         elSavedMsg.textContent = '';
-      }
 
       // Pulse panel
       elResultPanel.classList.remove('recalculating');
@@ -892,14 +879,33 @@ foreach ($programs as $p) {
       updateDots();
    }
 
-   function rowHtml(label, sublabel, val, isDiscount) {
-      return '<div class="cf-result-row">' +
-         '<span>' + label + (sublabel ? ' ' + sublabel : '') + '</span>' +
-         '<span class="cf-result-val' + (isDiscount ? ' discount' : '') + '">' + val + '</span>' +
-      '</div>';
-   }
-
    // ── Event listeners ───────────────────────────────────────────────────────
+
+   // Department → filter programme options
+   elDeptSelect.addEventListener('change', function() {
+      state.dept      = this.value;
+      state.programId = null;
+
+      var opts = elSelect.querySelectorAll('option');
+      opts.forEach(function(opt) {
+         if (!opt.value) { opt.style.display = ''; return; }
+         opt.style.display = (!state.dept || opt.dataset.dept === state.dept) ? '' : 'none';
+      });
+      elSelect.value = '';
+      elProgMeta.classList.add('d-none');
+
+      if (state.dept) {
+         elProgramWrap.style.display = '';
+      } else {
+         elProgramWrap.style.display = 'none';
+      }
+
+      elResultEmpty.classList.remove('d-none');
+      elResultCont.classList.add('d-none');
+      updateDots();
+   });
+
+   // Programme selected
    elSelect.addEventListener('change', function() {
       var id = parseInt(this.value);
       state.programId = isNaN(id) ? null : id;
@@ -907,33 +913,16 @@ foreach ($programs as $p) {
       var prog = getProgram();
       if (prog) {
          elProgMeta.classList.remove('d-none');
-         elMetaDegree.textContent = prog.degree.charAt(0).toUpperCase() + prog.degree.slice(1);
-         elMetaCredits.textContent = prog.total_credits ? prog.total_credits + ' total credits' : '';
-         elMetaDuration.textContent = prog.duration ? prog.duration + ' years' : '';
-         if (!prog.total_credits) elMetaCredits.style.display = 'none'; else elMetaCredits.style.display = '';
-         if (!prog.duration)      elMetaDuration.style.display = 'none'; else elMetaDuration.style.display = '';
+         elMetaDegree.textContent  = prog.degree.charAt(0).toUpperCase() + prog.degree.slice(1);
+         elMetaCredits.textContent = prog.total_credits ? prog.total_credits + ' credits' : '';
+         elMetaDuration.textContent= prog.duration ? prog.duration + ' yrs' : '';
+         elMetaSem.textContent     = prog.num_semesters ? prog.num_semesters + ' semesters' : '';
+         elMetaCredits.style.display  = prog.total_credits  ? '' : 'none';
+         elMetaDuration.style.display = prog.duration       ? '' : 'none';
+         elMetaSem.style.display      = prog.num_semesters  ? '' : 'none';
       } else {
          elProgMeta.classList.add('d-none');
       }
-      calculate();
-   });
-
-   elWaiverOpts.forEach(function(opt) {
-      opt.addEventListener('click', function() {
-         elWaiverOpts.forEach(function(o) { o.classList.remove('active'); });
-         this.classList.add('active');
-         state.waiver = parseInt(this.dataset.waiver);
-         elCustomWaiver.value = state.waiver;
-         calculate();
-      });
-   });
-
-   elCustomWaiver.addEventListener('input', function() {
-      var v = Math.min(100, Math.max(0, parseInt(this.value) || 0));
-      state.waiver = v;
-      elWaiverOpts.forEach(function(o) {
-         o.classList.toggle('active', parseInt(o.dataset.waiver) === v);
-      });
       calculate();
    });
 
