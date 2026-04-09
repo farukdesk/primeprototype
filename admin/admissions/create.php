@@ -41,8 +41,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $student_name           = trim($_POST['student_name']           ?? '');
     $father_name            = trim($_POST['father_name']            ?? '');
     $mother_name            = trim($_POST['mother_name']            ?? '');
-    $status                 = in_array($_POST['status'] ?? '', ['draft','submitted','approved','rejected'], true)
-                              ? $_POST['status'] : 'draft';
+    $status                 = in_array($_POST['status'] ?? '', ['ready_for_admission','draft','cancelled'], true)
+                              ? $_POST['status'] : 'ready_for_admission';
     $dept_id                = (int)($_POST['dept_id']    ?? 0) ?: null;
     $program_id             = (int)($_POST['program_id'] ?? 0) ?: null;
     $year                   = trim($_POST['year'] ?? '') ?: null;
@@ -93,15 +93,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($student_name === '') $errors[] = 'Student name is required.';
 
     // Form sale link
-    $form_sale_id = (int)($_POST['form_sale_id'] ?? 0) ?: null;
+    $form_sale_id     = (int)($_POST['form_sale_id'] ?? 0) ?: null;
+    $sale_form_number = null;
     if ($form_sale_id) {
         $sale_check = db()->prepare(
-            'SELECT id, status FROM adm_form_sales WHERE id = ? AND status = ?'
+            'SELECT id, form_number, status FROM adm_form_sales WHERE id = ? AND status = ?'
         );
         $sale_check->execute([$form_sale_id, 'pending']);
-        if (!$sale_check->fetch()) {
+        $sale_row = $sale_check->fetch();
+        if (!$sale_row) {
             $errors[] = 'The selected form sale is no longer waiting for admission or does not exist.';
             $form_sale_id = null;
+        } else {
+            $sale_form_number = $sale_row['form_number'];
         }
     }
 
@@ -138,7 +142,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (empty($errors)) {
-        $app_number = adm_generate_number();
+        $app_number = $sale_form_number ?? adm_generate_number();
 
         db()->prepare(
             'INSERT INTO admissions_applications
@@ -231,7 +235,7 @@ require_once __DIR__ . '/../includes/header.php';
             <!-- Section 0: Form Sale Lookup -->
             <div class="card border-0 shadow-sm mb-4" style="border-left:4px solid #ffc107 !important">
                 <div class="card-header bg-white fw-semibold d-flex align-items-center justify-content-between">
-                    <span><i class="fas fa-receipt me-2 text-warning"></i>Link Form Sale (Optional)</span>
+                    <span><i class="fas fa-receipt me-2 text-warning"></i>Link Form Sale <small class="text-muted fw-normal">(sets Application Number)</small></span>
                     <span class="badge bg-warning text-dark"><?= count($pending_forms) ?> Waiting</span>
                 </div>
                 <div class="card-body pb-0">
@@ -255,7 +259,7 @@ require_once __DIR__ . '/../includes/header.php';
                             <input type="text" id="fs_search_input" class="form-control"
                                    placeholder="Search by form no, name, mobile or email…">
                         </div>
-                        <div class="form-text text-muted">Click a row below to link it to this application.</div>
+                        <div class="form-text text-muted">Click a row below to link it — the form number becomes the Application Number.</div>
                     </div>
                 </div>
 
@@ -308,14 +312,23 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="card-body">
                     <div class="row g-3">
                         <div class="col-12 col-md-6">
-                            <label class="form-label">Application Number</label>
-                            <input type="text" class="form-control bg-light" value="(auto-generated)" readonly disabled>
+                            <label class="form-label">Application Number <span class="text-muted fw-normal small">(= Form Number)</span></label>
+                            <input type="text" id="app_number_preview" class="form-control bg-light fw-semibold"
+                                   value="<?= h($_POST['fs_number_lookup'] ?? '') ?>"
+                                   placeholder="← Select a form sale above"
+                                   readonly>
+                            <div class="form-text"><i class="fas fa-info-circle me-1 text-primary"></i>Populated from the linked form sale. Auto-generated if none linked.</div>
                         </div>
                         <div class="col-12 col-md-6">
                             <label class="form-label">Status</label>
+                            <?php $status_options = [
+                                'ready_for_admission' => 'Ready for Admission',
+                                'draft'               => 'Draft',
+                                'cancelled'           => 'Cancelled',
+                            ]; ?>
                             <select name="status" class="form-select">
-                                <?php foreach (['draft','submitted','approved','rejected'] as $st): ?>
-                                <option value="<?= $st ?>" <?= (($_POST['status'] ?? 'draft') === $st) ? 'selected' : '' ?>><?= ucfirst($st) ?></option>
+                                <?php foreach ($status_options as $sv => $sl): ?>
+                                <option value="<?= $sv ?>" <?= (($_POST['status'] ?? 'ready_for_admission') === $sv) ? 'selected' : '' ?>><?= h($sl) ?></option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
@@ -834,6 +847,10 @@ function toggleExpelled() {
         idInput.value = r.dataset.id;
         document.getElementById('fs_number_lookup_hidden').value = r.dataset.formNumber;
 
+        // Update Application Number preview
+        var appNumField = document.getElementById('app_number_preview');
+        if (appNumField) appNumField.value = r.dataset.formNumber;
+
         // Show linked info bar
         document.getElementById('fs_found_number').textContent  = r.dataset.formNumber;
         document.getElementById('fs_found_name').textContent    = r.dataset.name;
@@ -860,6 +877,8 @@ function toggleExpelled() {
             document.getElementById('fs_number_lookup_hidden').value = '';
             foundInfo.style.display = 'none';
             rows.forEach(function(r) { r.classList.remove('table-warning'); });
+            var appNumField = document.getElementById('app_number_preview');
+            if (appNumField) appNumField.value = '';
         });
     }
 })();

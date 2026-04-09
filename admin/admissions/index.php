@@ -13,7 +13,12 @@ $f_dept   = (int)($_GET['dept']  ?? 0);
 $page     = max(1, (int)($_GET['page'] ?? 1));
 $per_page = 20;
 
-$valid_statuses = ['draft', 'submitted', 'approved', 'rejected'];
+$valid_statuses = ['ready_for_admission', 'draft', 'cancelled'];
+$status_labels  = [
+    'ready_for_admission' => 'Ready for Admission',
+    'draft'               => 'Draft',
+    'cancelled'           => 'Cancelled',
+];
 
 $where  = [];
 $params = [];
@@ -98,7 +103,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <select name="status" class="form-select form-select-sm">
                     <option value="">All Statuses</option>
                     <?php foreach ($valid_statuses as $st): ?>
-                    <option value="<?= h($st) ?>" <?= $f_status === $st ? 'selected' : '' ?>><?= ucfirst(h($st)) ?></option>
+                    <option value="<?= h($st) ?>" <?= $f_status === $st ? 'selected' : '' ?>><?= h($status_labels[$st] ?? ucfirst(str_replace('_', ' ', $st))) ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
