@@ -266,6 +266,7 @@ $user       = auth_user();
                        || strpos($current_path, '/modules/') !== false || strpos($current_path, '/access/') !== false
                        || strpos($current_path, '/email-templates/') !== false || strpos($current_path, '/change-log/') !== false;
     $is_internal_active = strpos($current_path, '/file-manager/') !== false || strpos($current_path, '/notice-signing/') !== false || strpos($current_path, '/my-signature/') !== false;
+    $is_accounting_active = strpos($current_path, '/accounting/') !== false;
     ?>
 
     <!-- Dashboard -->
@@ -837,6 +838,117 @@ $user       = auth_user();
                     <i class="fas fa-external-link-alt"></i> Public Page
                 </a>
             </li>
+        </ul>
+    </div>
+    <?php endif; ?>
+
+    <!-- ── Accounting ── -->
+    <?php if (is_super_admin() || can_access('accounting') || can_access('accounting-coa') || can_access('accounting-reports')): ?>
+    <button class="nav-group-toggle <?= $is_accounting_active ? '' : 'collapsed' ?>"
+            data-bs-toggle="collapse" data-bs-target="#grp-accounting"
+            aria-expanded="<?= $is_accounting_active ? 'true' : 'false' ?>">
+        <i class="fas fa-coins grp-icon" style="color:#f59e0b"></i>
+        Accounting
+        <i class="fas fa-chevron-down toggle-icon"></i>
+    </button>
+    <div class="collapse <?= $is_accounting_active ? 'show' : '' ?>" id="grp-accounting">
+        <ul class="nav flex-column grp-items">
+            <?php if (is_super_admin() || can_access('accounting')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/accounting/index.php"
+                   class="<?= (strpos($current_path, '/accounting/') !== false && strpos($current_path, '/collect-payment') === false && strpos($current_path, '/add-expense') === false && strpos($current_path, '/transfer-money') === false && strpos($current_path, '/voucher') === false && strpos($current_path, '/chart-of-accounts') === false && strpos($current_path, '/reports/') === false && strpos($current_path, '/settings') === false) ? 'active' : '' ?>">
+                    <i class="fas fa-tachometer-alt"></i> Overview
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('accounting', 'can_create')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/accounting/collect-payment.php"
+                   class="<?= strpos($current_path, '/accounting/collect-payment') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-hand-holding-usd text-success"></i> Collect Payment
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/accounting/add-expense.php"
+                   class="<?= strpos($current_path, '/accounting/add-expense') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-receipt text-danger"></i> Add Expense
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/accounting/transfer-money.php"
+                   class="<?= strpos($current_path, '/accounting/transfer-money') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-exchange-alt text-info"></i> Transfer Money
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('accounting')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/accounting/vouchers.php"
+                   class="<?= strpos($current_path, '/accounting/voucher') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-file-invoice"></i> All Vouchers
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('accounting-coa')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/accounting/chart-of-accounts.php"
+                   class="<?= strpos($current_path, '/accounting/chart-of-accounts') !== false || strpos($current_path, '/accounting/account-') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-sitemap"></i> Chart of Accounts
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('accounting-reports')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/accounting/reports/trial-balance.php"
+                   class="<?= strpos($current_path, '/accounting/reports/trial-balance') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-balance-scale"></i> Trial Balance
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/accounting/reports/income-statement.php"
+                   class="<?= strpos($current_path, '/accounting/reports/income-statement') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-chart-bar"></i> Income Statement
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/accounting/reports/balance-sheet.php"
+                   class="<?= strpos($current_path, '/accounting/reports/balance-sheet') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-building"></i> Balance Sheet
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/accounting/reports/cash-flow.php"
+                   class="<?= strpos($current_path, '/accounting/reports/cash-flow') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-water"></i> Cash Flow
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/accounting/reports/ledger.php"
+                   class="<?= strpos($current_path, '/accounting/reports/ledger') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-book"></i> Ledger
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/accounting/reports/cash-book.php"
+                   class="<?= strpos($current_path, '/accounting/reports/cash-book') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-money-bill-wave"></i> Cash Book
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/accounting/reports/bank-book.php"
+                   class="<?= strpos($current_path, '/accounting/reports/bank-book') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-university"></i> Bank Book
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin()): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/accounting/settings.php"
+                   class="<?= strpos($current_path, '/accounting/settings') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-cog"></i> Settings
+                </a>
+            </li>
+            <?php endif; ?>
         </ul>
     </div>
     <?php endif; ?>
