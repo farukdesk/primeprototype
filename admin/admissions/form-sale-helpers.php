@@ -132,7 +132,7 @@ function adm_fs_get(int $id): array
 function adm_fs_status_badge(string $status): string
 {
     $map = [
-        'pending'   => ['bg-warning text-dark', 'Pending'],
+        'pending'   => ['bg-warning text-dark', 'Waiting for Admission'],
         'used'      => ['bg-success',            'Used'],
         'cancelled' => ['bg-secondary',          'Cancelled'],
     ];
