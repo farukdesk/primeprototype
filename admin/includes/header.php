@@ -267,6 +267,7 @@ $user       = auth_user();
                        || strpos($current_path, '/email-templates/') !== false || strpos($current_path, '/change-log/') !== false;
     $is_internal_active = strpos($current_path, '/file-manager/') !== false || strpos($current_path, '/notice-signing/') !== false || strpos($current_path, '/my-signature/') !== false;
     $is_accounting_active = strpos($current_path, '/accounting/') !== false;
+    $is_scholarship_active = strpos($current_path, '/scholarship/') !== false;
     ?>
 
     <!-- Dashboard -->
@@ -945,6 +946,53 @@ $user       = auth_user();
             <li class="nav-item">
                 <a href="<?= APP_URL ?>/accounting/settings.php"
                    class="<?= strpos($current_path, '/accounting/settings') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-cog"></i> Settings
+                </a>
+            </li>
+            <?php endif; ?>
+        </ul>
+    </div>
+    <?php endif; ?>
+
+    <!-- ── Scholarship ── -->
+    <?php if (is_super_admin() || can_access('scholarship') || can_access('scholarship-policies')): ?>
+    <button class="nav-group-toggle <?= $is_scholarship_active ? '' : 'collapsed' ?>"
+            data-bs-toggle="collapse" data-bs-target="#grp-scholarship"
+            aria-expanded="<?= $is_scholarship_active ? 'true' : 'false' ?>">
+        <i class="fas fa-graduation-cap grp-icon" style="color:#10b981"></i>
+        Scholarship
+        <i class="fas fa-chevron-down toggle-icon"></i>
+    </button>
+    <div class="collapse <?= $is_scholarship_active ? 'show' : '' ?>" id="grp-scholarship">
+        <ul class="nav flex-column grp-items">
+            <?php if (is_super_admin() || can_access('scholarship')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/scholarship/index.php"
+                   class="<?= (strpos($current_path, '/scholarship/') !== false && strpos($current_path, '/policies') === false && strpos($current_path, '/policy-') === false && strpos($current_path, '/run-merit') === false && strpos($current_path, '/settings') === false) ? 'active' : '' ?>">
+                    <i class="fas fa-trophy"></i> Awards
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('scholarship-policies')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/scholarship/policies.php"
+                   class="<?= (strpos($current_path, '/scholarship/policies') !== false || strpos($current_path, '/scholarship/policy-') !== false) ? 'active' : '' ?>">
+                    <i class="fas fa-file-alt"></i> Policies
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('scholarship')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/scholarship/run-merit.php"
+                   class="<?= strpos($current_path, '/scholarship/run-merit') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-play-circle"></i> Run Merit
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin()): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/scholarship/settings.php"
+                   class="<?= strpos($current_path, '/scholarship/settings') !== false ? 'active' : '' ?>">
                     <i class="fas fa-cog"></i> Settings
                 </a>
             </li>
