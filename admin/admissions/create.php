@@ -13,6 +13,15 @@ $page_title = 'New Application';
 $user       = auth_user();
 $errors     = [];
 
+// ── Pending form sales for the link section ───────────────────────────────────
+$pending_forms = db()->query(
+    'SELECT id, form_number, buyer_name, buyer_mobile, buyer_email, sold_at
+     FROM adm_form_sales
+     WHERE status = \'pending\'
+     ORDER BY sold_at DESC
+     LIMIT 200'
+)->fetchAll();
+
 // ── Departments & programs ────────────────────────────────────────────────────
 $departments = db()->query(
     'SELECT id, name FROM dept_departments WHERE is_active = 1 ORDER BY name ASC'
@@ -221,34 +230,76 @@ require_once __DIR__ . '/../includes/header.php';
 
             <!-- Section 0: Form Sale Lookup -->
             <div class="card border-0 shadow-sm mb-4" style="border-left:4px solid #ffc107 !important">
-                <div class="card-header bg-white fw-semibold"><i class="fas fa-receipt me-2 text-warning"></i>Link Form Sale (Optional)</div>
-                <div class="card-body">
-                    <div class="row g-3 align-items-end">
-                        <div class="col-12 col-md-5">
-                            <label class="form-label">Form Sale Number</label>
-                            <div class="input-group">
-                                <input type="text" id="fs_number_input" class="form-control"
-                                       placeholder="Enter form sale number…"
-                                       value="<?= h($_POST['fs_number_lookup'] ?? '') ?>">
-                                <button type="button" class="btn btn-warning text-dark" id="fsFetchBtn">
-                                    <i class="fas fa-search me-1"></i>Look Up
-                                </button>
-                            </div>
-                            <div id="fs_lookup_msg" class="form-text"></div>
-                        </div>
-                        <div class="col-12 col-md-7">
-                            <div id="fs_found_info" class="alert alert-success py-2 mb-0 small" style="display:none">
-                                <i class="fas fa-check-circle me-1"></i>
-                                Form found: <strong id="fs_found_name"></strong> |
-                                <span id="fs_found_mobile"></span> |
-                                <span id="fs_found_email"></span>
-                                <br><span class="text-muted">Fields below will be pre-filled. Clear the form number to unlink.</span>
-                            </div>
-                        </div>
-                    </div>
-                    <input type="hidden" name="form_sale_id" id="form_sale_id_input" value="<?= h($_POST['form_sale_id'] ?? '') ?>">
-                    <input type="hidden" name="fs_number_lookup" id="fs_number_lookup_hidden" value="">
+                <div class="card-header bg-white fw-semibold d-flex align-items-center justify-content-between">
+                    <span><i class="fas fa-receipt me-2 text-warning"></i>Link Form Sale (Optional)</span>
+                    <span class="badge bg-warning text-dark"><?= count($pending_forms) ?> Waiting</span>
                 </div>
+                <div class="card-body pb-0">
+                    <!-- Selected form info -->
+                    <div id="fs_found_info" class="alert alert-success py-2 mb-3 small d-flex align-items-center justify-content-between" style="display:none !important">
+                        <span>
+                            <i class="fas fa-check-circle me-1"></i>
+                            Linked: <strong id="fs_found_number"></strong> — <strong id="fs_found_name"></strong> |
+                            <span id="fs_found_mobile"></span> |
+                            <span id="fs_found_email"></span>
+                        </span>
+                        <button type="button" class="btn btn-sm btn-outline-danger ms-3" id="fsClearBtn">
+                            <i class="fas fa-times me-1"></i>Unlink
+                        </button>
+                    </div>
+
+                    <!-- Search -->
+                    <div class="mb-3">
+                        <div class="input-group">
+                            <span class="input-group-text bg-light"><i class="fas fa-search text-muted"></i></span>
+                            <input type="text" id="fs_search_input" class="form-control"
+                                   placeholder="Search by form no, name, mobile or email…">
+                        </div>
+                        <div class="form-text text-muted">Click a row below to link it to this application.</div>
+                    </div>
+                </div>
+
+                <!-- Pending forms table -->
+                <div class="table-responsive" style="max-height:260px; overflow-y:auto;">
+                    <table class="table table-hover table-sm align-middle mb-0" id="fsPendingTable">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th class="ps-3">Form No</th>
+                                <th>Name</th>
+                                <th>Mobile</th>
+                                <th>Email</th>
+                                <th>Sold At</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        <?php if (empty($pending_forms)): ?>
+                            <tr id="fsNoResults"><td colspan="5" class="text-center text-muted py-3">No forms waiting for admission.</td></tr>
+                        <?php else: ?>
+                            <?php foreach ($pending_forms as $pf): ?>
+                            <tr class="fs-pending-row" style="cursor:pointer"
+                                data-id="<?= (int)$pf['id'] ?>"
+                                data-form-number="<?= h($pf['form_number']) ?>"
+                                data-name="<?= h($pf['buyer_name']) ?>"
+                                data-mobile="<?= h($pf['buyer_mobile']) ?>"
+                                data-email="<?= h($pf['buyer_email'] ?? '') ?>">
+                                <td class="ps-3 fw-semibold text-warning"><?= h($pf['form_number']) ?></td>
+                                <td><?= h($pf['buyer_name']) ?></td>
+                                <td class="text-muted small"><?= h($pf['buyer_mobile']) ?></td>
+                                <td class="text-muted small"><?= $pf['buyer_email'] ? h($pf['buyer_email']) : '—' ?></td>
+                                <td class="text-muted small"><?= h(date('d M Y', strtotime($pf['sold_at']))) ?></td>
+                            </tr>
+                            <?php endforeach; ?>
+                            <tr id="fsNoResults" style="display:none"><td colspan="5" class="text-center text-muted py-3">No matching forms found.</td></tr>
+                        <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="card-footer bg-white py-2 small text-muted">
+                    Showing pending (waiting for admission) forms only.
+                </div>
+
+                <input type="hidden" name="form_sale_id" id="form_sale_id_input" value="<?= h($_POST['form_sale_id'] ?? '') ?>">
+                <input type="hidden" name="fs_number_lookup" id="fs_number_lookup_hidden" value="">
             </div>
 
             <!-- Section 1: Application Info -->
@@ -731,54 +782,87 @@ function toggleExpelled() {
     document.getElementById('expelled_detail_wrap').style.display = yes ? '' : 'none';
 }
 
-// ── Form Sale Lookup ─────────────────────────────────────────────────────────
-document.getElementById('fsFetchBtn').addEventListener('click', function() {
-    var num = document.getElementById('fs_number_input').value.trim();
-    if (!num) {
-        clearFsLink();
-        return;
-    }
-    fetch('<?= APP_URL ?>/admissions/form-sale-lookup.php?q=' + encodeURIComponent(num))
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            var msg = document.getElementById('fs_lookup_msg');
-            if (data.ok) {
-                document.getElementById('form_sale_id_input').value = data.form_sale_id;
-                document.getElementById('fs_found_name').textContent   = data.buyer_name;
-                document.getElementById('fs_found_mobile').textContent = data.buyer_mobile;
-                document.getElementById('fs_found_email').textContent  = data.buyer_email || '';
-                document.getElementById('fs_found_info').style.display = '';
-                msg.innerHTML = '';
+// ── Form Sale Pending List ────────────────────────────────────────────────────
+(function () {
+    var rows       = document.querySelectorAll('.fs-pending-row');
+    var searchBox  = document.getElementById('fs_search_input');
+    var noResults  = document.getElementById('fsNoResults');
+    var foundInfo  = document.getElementById('fs_found_info');
+    var clearBtn   = document.getElementById('fsClearBtn');
+    var idInput    = document.getElementById('form_sale_id_input');
+    var selectedId = idInput ? idInput.value : '';
 
-                // Auto-fill main form fields
-                var nameInput = document.querySelector('[name="student_name"]');
-                if (nameInput && nameInput.value === '') nameInput.value = data.buyer_name;
-
-                var mobileInput = document.querySelector('[name="present_contact"]');
-                if (mobileInput && mobileInput.value === '') mobileInput.value = data.buyer_mobile;
-
-                var emailInput = document.querySelector('[name="present_email"]');
-                if (emailInput && emailInput.value === '' && data.buyer_email) emailInput.value = data.buyer_email;
-
-            } else {
-                clearFsLink();
-                msg.innerHTML = '<span class="text-danger"><i class="fas fa-exclamation-circle me-1"></i>' + data.error + '</span>';
+    // Restore selection highlight on page reload (e.g. after validation error)
+    if (selectedId) {
+        rows.forEach(function(r) {
+            if (String(r.dataset.id) === String(selectedId)) {
+                selectRow(r, false);
             }
-        })
-        .catch(function() {
-            clearFsLink();
         });
-});
+    }
 
-function clearFsLink() {
-    document.getElementById('form_sale_id_input').value = '';
-    document.getElementById('fs_found_info').style.display = 'none';
-}
+    // Search / filter
+    if (searchBox) {
+        searchBox.addEventListener('input', function () {
+            var q = searchBox.value.trim().toLowerCase();
+            var visible = 0;
+            rows.forEach(function (r) {
+                var match = !q
+                    || r.dataset.formNumber.toLowerCase().indexOf(q) >= 0
+                    || r.dataset.name.toLowerCase().indexOf(q) >= 0
+                    || r.dataset.mobile.toLowerCase().indexOf(q) >= 0
+                    || r.dataset.email.toLowerCase().indexOf(q) >= 0;
+                r.style.display = match ? '' : 'none';
+                if (match) visible++;
+            });
+            if (noResults) noResults.style.display = visible === 0 ? '' : 'none';
+        });
+    }
 
-// Allow pressing Enter in the lookup input to trigger search
-document.getElementById('fs_number_input').addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') { e.preventDefault(); document.getElementById('fsFetchBtn').click(); }
-});
+    // Row click → select
+    rows.forEach(function (r) {
+        r.addEventListener('click', function () {
+            selectRow(r, true);
+        });
+    });
+
+    function selectRow(r, autoFill) {
+        // Highlight row
+        rows.forEach(function(rr) { rr.classList.remove('table-warning'); });
+        r.classList.add('table-warning');
+
+        idInput.value = r.dataset.id;
+        document.getElementById('fs_number_lookup_hidden').value = r.dataset.formNumber;
+
+        // Show linked info bar
+        document.getElementById('fs_found_number').textContent  = r.dataset.formNumber;
+        document.getElementById('fs_found_name').textContent    = r.dataset.name;
+        document.getElementById('fs_found_mobile').textContent  = r.dataset.mobile;
+        document.getElementById('fs_found_email').textContent   = r.dataset.email;
+        foundInfo.style.removeProperty('display');
+        foundInfo.style.display = '';
+
+        // Auto-fill main form fields (only if empty)
+        if (autoFill) {
+            var nameInput   = document.querySelector('[name="student_name"]');
+            var mobileInput = document.querySelector('[name="present_contact"]');
+            var emailInput  = document.querySelector('[name="present_email"]');
+            if (nameInput   && nameInput.value   === '') nameInput.value   = r.dataset.name;
+            if (mobileInput && mobileInput.value === '') mobileInput.value = r.dataset.mobile;
+            if (emailInput  && emailInput.value  === '' && r.dataset.email) emailInput.value = r.dataset.email;
+        }
+    }
+
+    // Unlink button
+    if (clearBtn) {
+        clearBtn.addEventListener('click', function () {
+            idInput.value = '';
+            document.getElementById('fs_number_lookup_hidden').value = '';
+            foundInfo.style.display = 'none';
+            rows.forEach(function(r) { r.classList.remove('table-warning'); });
+        });
+    }
+})();
 </script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
