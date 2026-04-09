@@ -35,7 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $student_name           = trim($_POST['student_name']           ?? '');
     $father_name            = trim($_POST['father_name']            ?? '');
     $mother_name            = trim($_POST['mother_name']            ?? '');
-    $status                 = in_array($_POST['status'] ?? '', ['draft','submitted','approved','rejected'], true)
+    $status                 = in_array($_POST['status'] ?? '', ['ready_for_admission','draft','cancelled'], true)
                               ? $_POST['status'] : 'draft';
     $dept_id                = (int)($_POST['dept_id']    ?? 0) ?: null;
     $program_id             = (int)($_POST['program_id'] ?? 0) ?: null;
@@ -232,8 +232,12 @@ require_once __DIR__ . '/../includes/header.php';
                         <div class="col-12 col-md-6">
                             <label class="form-label">Status</label>
                             <select name="status" class="form-select">
-                                <?php foreach (['draft','submitted','approved','rejected'] as $st): ?>
-                                <option value="<?= $st ?>" <?= ($app['status'] === $st) ? 'selected' : '' ?>><?= ucfirst($st) ?></option>
+                                <?php foreach ([
+                                    'ready_for_admission' => 'Ready for Admission',
+                                    'draft'               => 'Draft',
+                                    'cancelled'           => 'Cancelled',
+                                ] as $sv => $sl): ?>
+                                <option value="<?= $sv ?>" <?= ($app['status'] === $sv) ? 'selected' : '' ?>><?= h($sl) ?></option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
