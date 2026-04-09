@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS `cf_programs` (
   `credit_fee`      INT UNSIGNED  NOT NULL DEFAULT 0  COMMENT 'Tuition fee per credit hour (BDT)',
   `total_credits`   SMALLINT UNSIGNED DEFAULT NULL    COMMENT 'Total program credits (for display)',
   `duration_years`  DECIMAL(4,1)  DEFAULT NULL        COMMENT 'e.g. 4.0 years',
+  `num_semesters`   SMALLINT UNSIGNED DEFAULT NULL    COMMENT 'Total number of semesters (used to compute per-semester totals)',
   `is_active`       TINYINT(1)    NOT NULL DEFAULT 1,
   `sort_order`      SMALLINT      NOT NULL DEFAULT 0,
   `created_by`      INT UNSIGNED  DEFAULT NULL,
@@ -39,8 +40,8 @@ CREATE TABLE IF NOT EXISTS `cf_fixed_fees` (
   `cf_program_id`  INT UNSIGNED  NOT NULL,
   `fee_name`       VARCHAR(200)  NOT NULL,
   `amount`         INT UNSIGNED  NOT NULL DEFAULT 0,
-  `fee_type`       ENUM('one_time','per_semester') NOT NULL DEFAULT 'one_time'
-                     COMMENT 'one_time = paid once; per_semester = paid every semester',
+  `fee_type`       ENUM('one_time','per_semester','monthly') NOT NULL DEFAULT 'one_time'
+                     COMMENT 'one_time = paid once; per_semester = paid every semester; monthly = shown as monthly instalment',
   `sort_order`     SMALLINT      NOT NULL DEFAULT 0,
   `created_at`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
