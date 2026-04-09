@@ -52,22 +52,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $user = auth_user();
 
-        foreach ($students as $stu) {
-            $res_stmt = $db->prepare(
-                'SELECT cgpa FROM student_results
-                 WHERE student_id = ? AND semester = ?
-                 ORDER BY id DESC
-                 LIMIT 1'
+        // Fetch all CGPA values for the results semester in one query, keyed by student_id
+        $cgpa_map = [];
+        if ($total > 0) {
+            $cgpa_rows = $db->prepare(
+                'SELECT student_id, MAX(id) AS last_id
+                 FROM student_results
+                 WHERE semester = ?
+                 GROUP BY student_id'
             );
-            $res_stmt->execute([$stu['id'], $results_semester]);
-            $result_row = $res_stmt->fetch();
+            $cgpa_rows->execute([$results_semester]);
+            $last_ids = array_column($cgpa_rows->fetchAll(), 'last_id');
+            if (!empty($last_ids)) {
+                $placeholders = implode(',', array_fill(0, count($last_ids), '?'));
+                $rows = $db->prepare("SELECT id, student_id, cgpa FROM student_results WHERE id IN ($placeholders)");
+                $rows->execute($last_ids);
+                foreach ($rows->fetchAll() as $row) {
+                    $cgpa_map[(int)$row['student_id']] = $row['cgpa'];
+                }
+            }
+        }
 
-            if (!$result_row || $result_row['cgpa'] === null) {
+        // Fetch all existing active awards for this policy + award semester in one query
+        $existing_awards = [];
+        $ex_stmt = $db->prepare(
+            'SELECT student_id FROM sc_awards WHERE policy_id = ? AND semester = ? AND status = \'active\''
+        );
+        $ex_stmt->execute([$policy_id, $award_semester]);
+        foreach ($ex_stmt->fetchAll() as $row) {
+            $existing_awards[(int)$row['student_id']] = true;
+        }
+
+        $ins_stmt = $db->prepare(
+            'INSERT INTO sc_awards (student_id, policy_id, tier_id, semester, gpa_used, discount_percent, status, awarded_by)
+             VALUES (?,?,?,?,?,?,\'active\',?)'
+        );
+
+        foreach ($students as $stu) {
+            $sid = (int)$stu['id'];
+
+            if (!isset($cgpa_map[$sid]) || $cgpa_map[$sid] === null) {
                 $no_result++;
                 continue;
             }
 
-            $cgpa = (float)$result_row['cgpa'];
+            $cgpa = (float)$cgpa_map[$sid];
             $tier = sc_find_tier($cgpa, $tiers);
             if (!$tier) {
                 $no_tier++;
@@ -83,11 +112,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 continue;
             }
 
-            $dup_stmt = $db->prepare(
-                'SELECT COUNT(*) FROM sc_awards WHERE student_id = ? AND policy_id = ? AND semester = ? AND status = \'active\''
-            );
-            $dup_stmt->execute([$stu['id'], $policy_id, $award_semester]);
-            if ((int)$dup_stmt->fetchColumn() > 0) {
+            if (isset($existing_awards[$sid])) {
                 $skipped++;
                 if ($action === 'preview') {
                     $preview_rows[] = [
@@ -102,11 +127,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             if ($action === 'confirm') {
-                $db->prepare(
-                    'INSERT INTO sc_awards (student_id, policy_id, tier_id, semester, gpa_used, discount_percent, status, awarded_by)
-                     VALUES (?,?,?,?,?,?,\'active\',?)'
-                )->execute([
-                    $stu['id'],
+                $ins_stmt->execute([
+                    $sid,
                     $policy_id,
                     $tier['id'],
                     $award_semester,
@@ -114,6 +136,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $tier['discount_percent'],
                     $user['id'],
                 ]);
+                $existing_awards[$sid] = true;
                 $awarded++;
             } else {
                 $awarded++;
