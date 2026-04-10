@@ -1,0 +1,1488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Course Fee Calculator - Summer 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --p: #4f46e5; --p-dark: #4338ca; --p-light: #eef2ff;
+  --p-ring: rgba(79,70,229,0.18); --v: #7c3aed;
+  --teal: #0d9488; --green: #059669;
+  --warn-bg: #fffbeb; --warn-bd: #fde68a; --warn-text: #92400e;
+  --info-bg: #eff6ff; --info-bd: #bfdbfe; --info-text: #1e40af; --info-head: #1d4ed8;
+  --bg: #f1f5f9; --surface: #ffffff; --bd: #e2e8f0;
+  --text: #0f172a; --text2: #475569; --text3: #94a3b8;
+  --r: 16px; --r-sm: 10px; --r-xs: 6px;
+  --sh-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --sh: 0 4px 20px rgba(0,0,0,0.08);
+  --sh-lg: 0 20px 60px rgba(0,0,0,0.12);
+  --sh-p: 0 4px 14px rgba(79,70,229,0.35);
+  --sh-g: 0 4px 14px rgba(5,150,105,0.35);
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+.hidden{display:none!important}
+html{scroll-behavior:smooth}
+body{font-family:Inter,Segoe UI,system-ui,sans-serif;background:var(--bg);min-height:100vh;color:var(--text);font-size:15px;line-height:1.6;padding:24px 16px 48px}
+.app{max-width:800px;margin:0 auto}
+.header{background:linear-gradient(135deg,#4f46e5 0%,#7c3aed 100%);color:white;text-align:center;padding:44px 32px 36px;border-radius:var(--r) var(--r) 0 0;position:relative;overflow:hidden}
+.header::before{content:'';position:absolute;top:-60px;right:-60px;width:260px;height:260px;background:rgba(255,255,255,.06);border-radius:50%;pointer-events:none}
+.header::after{content:'';position:absolute;bottom:-80px;left:-40px;width:220px;height:220px;background:rgba(255,255,255,.05);border-radius:50%;pointer-events:none}
+.header-icon{font-size:52px;display:block;margin-bottom:12px;position:relative;z-index:1;animation:float 3s ease-in-out infinite}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+.header h1{font-size:clamp(22px,5vw,30px);font-weight:800;letter-spacing:-.5px;margin-bottom:8px;position:relative;z-index:1}
+.header-sub{font-size:14px;opacity:.85;font-weight:500;position:relative;z-index:1;margin-bottom:12px}
+.badge-pill{display:inline-block;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.3);border-radius:100px;padding:4px 16px;font-size:13px;font-weight:600;position:relative;z-index:1}
+.progress-bar{background:var(--surface);border-bottom:1px solid var(--bd);padding:14px 24px;display:flex;align-items:center;justify-content:center}
+.ps{display:flex;align-items:center;gap:8px;padding:6px 14px;border-radius:100px;opacity:.4;transition:all .3s;white-space:nowrap}
+.ps.active{opacity:1;background:var(--p-light)}
+.ps.done{opacity:.7}
+.ps-num{width:26px;height:26px;min-width:26px;border-radius:50%;background:var(--bd);color:var(--text3);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;transition:all .3s}
+.ps.active .ps-num{background:var(--p);color:white;box-shadow:var(--sh-p)}
+.ps.done .ps-num{background:var(--green);color:white}
+.ps-label{font-size:12.5px;font-weight:600;color:var(--text2)}
+.ps.active .ps-label{color:var(--p)}
+.ps-conn{flex:1;max-width:44px;height:2px;background:var(--bd);margin:0 4px}
+.content{background:var(--surface);border-radius:0 0 var(--r) var(--r);padding:28px 24px 36px;box-shadow:var(--sh-lg)}
+.panel{background:var(--surface);border:1.5px solid var(--bd);border-radius:var(--r-sm);padding:22px 20px;margin-bottom:18px}
+.panel:last-child{margin-bottom:0}
+.panel-reveal{animation:reveal .4s cubic-bezier(.22,1,.36,1)}
+@keyframes reveal{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+.panel-head{display:flex;align-items:flex-start;gap:12px;margin-bottom:18px}
+.step-dot{width:30px;height:30px;min-width:30px;border-radius:50%;background:linear-gradient(135deg,var(--p),var(--v));color:white;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(79,70,229,.3);flex-shrink:0;margin-top:2px}
+.step-dot.green{background:linear-gradient(135deg,var(--green),var(--teal));box-shadow:0 2px 8px rgba(5,150,105,.3)}
+.panel-title{font-size:16px;font-weight:700;color:var(--text);letter-spacing:-.2px}
+.panel-sub{font-size:12.5px;color:var(--text3);margin-top:2px}
+.degree-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.deg-card{border:2px solid var(--bd);border-radius:var(--r-sm);padding:18px 14px;cursor:pointer;text-align:center;transition:all .22s;user-select:none;background:#fcfcfd}
+.deg-card:hover{border-color:#a5b4fc;background:var(--p-light);transform:translateY(-3px);box-shadow:var(--sh)}
+.deg-card.selected{border-color:var(--p);background:var(--p-light);box-shadow:0 0 0 4px var(--p-ring);transform:translateY(-2px)}
+.deg-icon{font-size:30px;display:block;margin-bottom:8px}
+.deg-name{font-size:13.5px;font-weight:700;color:var(--text);line-height:1.3;margin-bottom:5px}
+.deg-card.selected .deg-name{color:var(--p)}
+.deg-desc{font-size:11.5px;color:var(--text3);font-weight:500}
+.divider{border:none;border-top:1px solid var(--bd);margin:20px 0}
+.fg{margin-bottom:16px}
+.fg:last-of-type{margin-bottom:0}
+.fg label{display:block;font-size:13.5px;font-weight:600;color:var(--text);margin-bottom:6px}
+.fg label .req{color:#ef4444;margin-left:3px}
+.fg input[type=number],.fg select{width:100%;padding:11px 14px;border:1.5px solid var(--bd);border-radius:var(--r-sm);font-size:15px;font-family:inherit;color:var(--text);background:var(--surface);transition:border-color .2s,box-shadow .2s;-webkit-appearance:none;appearance:none;outline:none}
+.fg select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:40px;cursor:pointer}
+.fg input[type=number]:focus,.fg select:focus{border-color:var(--p);box-shadow:0 0 0 3px var(--p-ring)}
+.fg .hint{font-size:12px;color:var(--text3);margin-top:5px;line-height:1.5}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:13px 22px;border:none;border-radius:var(--r-sm);font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;transition:all .2s;letter-spacing:.1px}
+.btn-w{width:100%}
+.btn-lg{padding:15px 26px;font-size:16px}
+.btn-primary{background:linear-gradient(135deg,var(--p),var(--v));color:white;box-shadow:var(--sh-p)}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(79,70,229,.4)}
+.btn-primary:active{transform:translateY(0);opacity:.9}
+.btn-success{background:linear-gradient(135deg,var(--green),var(--teal));color:white;box-shadow:var(--sh-g)}
+.btn-success:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(5,150,105,.4)}
+.btn-success:active{transform:translateY(0);opacity:.9}
+.cta-box{background:linear-gradient(135deg,#f0f4ff,#faf5ff);border:1.5px solid rgba(79,70,229,.2);border-radius:var(--r-sm);padding:28px 24px;text-align:center;margin-top:4px}
+.cta-icon{font-size:40px;display:block;margin-bottom:10px}
+.cta-box h3{font-size:18px;font-weight:700;margin-bottom:8px}
+.cta-box p{font-size:13.5px;color:var(--text2);margin-bottom:18px;line-height:1.6}
+.forecast-panel{background:linear-gradient(135deg,#faf5ff,#f0f4ff);border:1.5px solid rgba(124,58,237,.2);border-radius:var(--r-sm);padding:22px 20px}
+.rc{border:1.5px solid var(--bd);border-top:4px solid var(--p);border-radius:var(--r-sm);padding:20px 18px;margin-bottom:16px;background:var(--surface);box-shadow:var(--sh-sm)}
+.rc:last-child{margin-bottom:0}
+.rc.green{border-top-color:var(--green)}
+.rc.orange{border-top-color:#f59e0b}
+.rc.violet{border-top-color:var(--v)}
+.rc-title{font-size:13.5px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.7px;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--bd)}
+.rr{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:8px 0;border-bottom:1px solid var(--bd);font-size:14px}
+.rr:last-child{border-bottom:none}
+.rl{color:var(--text2);flex:1}
+.rv{font-weight:600;color:var(--text);text-align:right;white-space:nowrap}
+.rr.total{border-top:2px solid var(--p);border-bottom:none;padding-top:12px;margin-top:6px;font-weight:700;font-size:15px}
+.rr.total .rl,.rr.total .rv{color:var(--p);font-weight:700}
+.rr.highlight{background:var(--warn-bg);border:1.5px solid var(--warn-bd);border-radius:var(--r-xs);padding:9px 12px;margin:6px 0}
+.rr.highlight .rl,.rr.highlight .rv{color:var(--warn-text)}
+.rr.indent{padding-left:14px}
+.rr.indent .rl{font-size:13px;color:var(--text3)}
+.sum-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px}
+.sum-tile{background:var(--p-light);border:1.5px solid rgba(79,70,229,.15);border-radius:var(--r-sm);padding:14px 10px;text-align:center}
+.sum-tile .tl{font-size:10.5px;text-transform:uppercase;letter-spacing:.7px;font-weight:600;color:var(--text3);margin-bottom:5px}
+.sum-tile .tv{font-size:17px;font-weight:800;color:var(--p);overflow-wrap:break-word}
+.info-box{background:var(--info-bg);border:1px solid var(--info-bd);border-left:4px solid #3b82f6;padding:14px 16px;border-radius:var(--r-sm);margin-top:12px}
+.info-box h4{font-size:13.5px;font-weight:700;color:var(--info-head);margin-bottom:8px}
+.info-box p{font-size:13px;color:var(--info-text);line-height:1.65;margin-bottom:6px}
+.info-box p:last-child{margin-bottom:0}
+@media(max-width:600px){body{padding:0}.app{max-width:100%}.header{border-radius:0;padding:36px 20px 30px}.progress-bar{padding:12px 16px}.ps-label{display:none}.ps{padding:6px 10px}.content{border-radius:0;padding:20px 16px 32px;box-shadow:none}.panel,.rc{padding:18px 14px}.rr{flex-wrap:wrap;gap:2px}.rl{width:100%;font-size:13px}.rv{width:100%;text-align:left}.rr.highlight .rl,.rr.highlight .rv{width:100%}.sum-grid{grid-template-columns:repeat(2,1fr)}.degree-grid{grid-template-columns:1fr;gap:10px}.form-row{grid-template-columns:1fr}.cta-box{padding:22px 16px}}
+@media(max-width:380px){.sum-tile .tv{font-size:14px}}
+@media(min-width:601px) and (max-width:768px){body{padding:12px}}
+</style>
+</head>
+<body>
+<div class="app">
+<div class="header">
+  <span class="header-icon">&#127979;</span>
+  <h1>Course Fee Calculator</h1>
+  <p class="header-sub">Estimate your total program cost, scholarships &amp; monthly payments</p>
+  <span class="badge-pill" id="badgePill">Summer 2026</span>
+</div>
+<div class="progress-bar">
+  <div class="ps active" id="ps1"><div class="ps-num">1</div><div class="ps-label">Degree &amp; GPA</div></div>
+  <div class="ps-conn"></div>
+  <div class="ps" id="ps2"><div class="ps-num">2</div><div class="ps-label">Program Preview</div></div>
+  <div class="ps-conn"></div>
+  <div class="ps" id="ps3"><div class="ps-num">3</div><div class="ps-label">Full Forecast</div></div>
+</div>
+<div class="content">
+  <div class="panel" id="inputPanel">
+    <div class="panel-head">
+      <div class="step-dot">1</div>
+      <div><div class="panel-title">Select Your Degree Type</div><div class="panel-sub">Choose the program category you want to enroll in</div></div>
+    </div>
+    <div class="degree-grid">
+      <div class="deg-card" id="dc-regular" onclick="selectDegree('regular-bachelor')">
+        <span class="deg-icon">&#128218;</span>
+        <div class="deg-name">Regular Bachelor</div>
+        <div class="deg-desc">BBA &middot; CSE &middot; EEE &middot; LLB &amp; more<br>4-Year Program</div>
+      </div>
+      <div class="deg-card" id="dc-diploma" onclick="selectDegree('bachelor-from-diploma')">
+        <span class="deg-icon">&#128295;</span>
+        <div class="deg-name">Bachelor from Diploma</div>
+        <div class="deg-desc">CSE &middot; EEE &middot; CE (Diploma entry)<br>4-Year Program</div>
+      </div>
+      <div class="deg-card" id="dc-masters" onclick="selectDegree('masters')">
+        <span class="deg-icon">&#127963;</span>
+        <div class="deg-name">Masters</div>
+        <div class="deg-desc">MBA &middot; MA English &middot; LLM &amp; more<br>1&ndash;2 Year Programs</div>
+      </div>
+    </div>
+    <div id="step2Area" class="hidden">
+      <hr class="divider">
+      <div class="panel-head">
+        <div class="step-dot">2</div>
+        <div><div class="panel-title">Select Subject &amp; Enter GPA</div><div class="panel-sub" id="step2Sub">Choose your program and enter your academic GPA</div></div>
+      </div>
+      <div class="fg">
+        <label for="subject">Subject / Program <span class="req">*</span></label>
+        <select id="subject" onchange="handleSubjectChange()"><option value="">-- Select your program --</option></select>
+      </div>
+      <div class="fg hidden" id="combinedGPAGroup">
+        <label for="combinedGPA">Combined SSC + HSC GPA (out of 10.0) <span class="req">*</span></label>
+        <input type="number" id="combinedGPA" min="0" max="10" step="0.01" placeholder="e.g., 8.50">
+        <div class="hint">Total GPA from SSC and HSC combined (0.00 &ndash; 10.00). Determines your 1st semester scholarship.</div>
+      </div>
+      <div class="fg hidden" id="diplomaGPAGroup">
+        <label for="diplomaCombinedGPA">SSC GPA + Diploma CGPA Combined (out of 10.0) <span class="req">*</span></label>
+        <input type="number" id="diplomaCombinedGPA" min="0" max="10" step="0.01" placeholder="e.g., 7.50">
+        <div class="hint">Add your SSC GPA (out of 5.0) and Diploma CGPA (out of 4.0) together (0.00 &ndash; 10.00). Determines your 1st semester scholarship.</div>
+      </div>
+      <button class="btn btn-primary btn-w" id="previewBtn" onclick="showPreview()" style="margin-top:8px;">&#128202; Show Program Preview &rarr;</button>
+    </div>
+  </div>
+  <div id="previewResults" class="hidden panel-reveal"></div>
+  <div id="forecastCTA" class="hidden cta-box panel-reveal">
+    <span class="cta-icon">&#128302;</span>
+    <h3>Calculate Total 4-Year Forecast</h3>
+    <p>Enter your expected semester GPA to see full scholarship projections, total program cost, and monthly payment estimates.</p>
+    <button class="btn btn-success btn-lg" onclick="showForecastInputs()">&#128200; Calculate Total Forecast &rarr;</button>
+  </div>
+  <div id="forecastInputSection" class="hidden forecast-panel panel-reveal" style="margin-top:18px;">
+    <div class="panel-head">
+      <div class="step-dot green">3</div>
+      <div><div class="panel-title">4-Year Forecast Inputs</div><div class="panel-sub">Tell us your expected academic performance</div></div>
+    </div>
+    <div class="fg">
+      <label for="expectedGPA">Expected Semester GPA (out of 4.0) <span class="req">*</span></label>
+      <input type="number" id="expectedGPA" min="0" max="4" step="0.01" placeholder="e.g., 3.70" oninput="checkAttendanceVisibility()">
+      <div class="hint">Your projected average GPA per semester &mdash; determines merit scholarship from semester 2 onwards.</div>
+    </div>
+    <div class="fg hidden" id="attendanceGroup">
+      <label for="attendance" id="attendanceLabel">Will you maintain 70%+ attendance? <span class="req">*</span></label>
+      <select id="attendance">
+        <option value="">-- Select --</option>
+        <option value="yes" id="attendanceYes">Yes, I will maintain the required attendance</option>
+        <option value="no" id="attendanceNo">No, I may not meet the attendance requirement</option>
+      </select>
+      <div class="hint" id="attendanceHint">This affects Safety Net scholarship eligibility.</div>
+    </div>
+    <button class="btn btn-success btn-w btn-lg" onclick="calculateForecast()" style="margin-top:10px;">&#128302; Generate Full Forecast &rarr;</button>
+  </div>
+  <div id="forecastResults" class="hidden panel-reveal" style="margin-top:4px;"></div>
+</div>
+</div>
+
+<script>
+// Subject data for each degree type
+const DEGREE_SUBJECTS = {
+    'regular-bachelor': [
+        { value: 'bba', name: 'BBA - Bachelor of Business Administration' },
+        { value: 'ba-bangla', name: 'Bachelor of Arts in Bangla' },
+        { value: 'ba-english', name: 'Bachelor of Arts in English' },
+        { value: 'eee', name: 'Bachelor of Science in Electrical and Electronic Engineering (EEE)' },
+        { value: 'ce', name: 'Bachelor of Science in Civil Engineering (CE)' },
+        { value: 'cse', name: 'Bachelor of Science in Computer Science and Engineering (CSE)' },
+        { value: 'llb', name: 'Bachelor of Laws (LL.B. Hons.)' },
+        { value: 'fdae', name: 'Bachelor of Science in Fashion Design and Apparel Engineering' }
+    ],
+    'bachelor-from-diploma': [
+        { value: 'cse-diploma', name: 'BSc in Computer Science and Engineering (CSE - from Diploma)' },
+        { value: 'eee-diploma', name: 'BSc in Electrical and Electronic Engineering (EEE - from Diploma)' },
+        { value: 'ce-diploma', name: 'BSc in Civil Engineering (CE - from Diploma)' }
+    ],
+    'masters': [
+        { value: 'mba-regular', name: 'Master of Business Administration (MBA) - Regular - 1 Year' },
+        { value: 'emba', name: 'Master of Business Administration (E-MBA) - 1.5 Years' },
+        { value: 'mba-3year', name: 'Master of Business Administration (MBA) for 3 Years Degree' },
+        { value: 'ma-bangla-regular', name: 'Master of Arts in Bangla (MA) - Regular - 1 Year' },
+        { value: 'ma-bangla-2year', name: 'Master of Arts in Bangla (MA) - 2 Year' },
+        { value: 'ma-english-regular', name: 'Master of Arts in English (MA) - Regular - 1 Year' },
+        { value: 'ma-english-2year', name: 'Master of Arts in English (MA) - 2 Year' },
+        { value: 'llm-regular', name: 'Master of Laws (LLM) Regular - 1 Year' },
+        { value: 'llm-2year', name: 'Master of Laws (LLM) Preli & Final - 2 Year' },
+        { value: 'bed', name: 'Bachelor of Education (B.Ed)' },
+        { value: 'med', name: 'Master of Education (M.Ed)' }
+    ]
+};
+
+// Backend Constants (Fixed Data)
+const CONSTANTS = {
+    'bba': {
+        TOTAL_CREDITS: 135,
+        DURATION_YEARS: 4,
+        TOTAL_SEMESTERS: 12,
+        TOTAL_MONTHS: 48,
+        STANDARD_TUITION_FULL: 270000,
+        TUITION_PER_SEMESTER: 22500,
+        ADMISSION_FEES: 12000,
+        FIXED_INSTITUTIONAL_FEES: 198000,
+        ENGLISH_COURSE_FEE: 10000,
+        SAFETY_NET_CAP: 140000,
+        SAFETY_NET_PER_SEMESTER: 11666.67
+    },
+    'ba-bangla': {
+        TOTAL_CREDITS: 141,
+        DURATION_YEARS: 4,
+        TOTAL_SEMESTERS: 12,
+        TOTAL_MONTHS: 48,
+        STANDARD_TUITION_FULL: 125000,
+        TUITION_PER_SEMESTER: 10416.67,
+        ADMISSION_FEES: 12000,
+        FIXED_INSTITUTIONAL_FEES: 78000,
+        ENGLISH_COURSE_FEE: 10000,
+        SAFETY_NET_CAP: 60000,  // Safety net for BA Bangla
+        SAFETY_NET_PER_SEMESTER: 5000
+    },
+    'ba-english': {
+        TOTAL_CREDITS: 147,
+        DURATION_YEARS: 4,
+        TOTAL_SEMESTERS: 12,
+        TOTAL_MONTHS: 48,
+        STANDARD_TUITION_FULL: 224000,
+        TUITION_PER_SEMESTER: 18666.67,
+        ADMISSION_FEES: 12000,
+        FIXED_INSTITUTIONAL_FEES: 144000,
+        ENGLISH_COURSE_FEE: 10000,
+        SAFETY_NET_CAP: 114000,  // Safety net for BA English
+        SAFETY_NET_PER_SEMESTER: 9500
+    },
+    'eee': {
+        TOTAL_CREDITS: 158.5,
+        DURATION_YEARS: 4,
+        TOTAL_SEMESTERS: 12,
+        TOTAL_MONTHS: 48,
+        STANDARD_TUITION_FULL: 317000,
+        TUITION_PER_SEMESTER: 26416.67,
+        ADMISSION_FEES: 12000,
+        FIXED_INSTITUTIONAL_FEES: 201000,
+        ENGLISH_COURSE_FEE: 10000,
+        SAFETY_NET_CAP: 167000,  // Safety net for EEE
+        SAFETY_NET_PER_SEMESTER: 13916.67
+    },
+    'cse': {
+        TOTAL_CREDITS: 160.5,
+        DURATION_YEARS: 4,
+        TOTAL_SEMESTERS: 12,
+        TOTAL_MONTHS: 48,
+        STANDARD_TUITION_FULL: 321000,
+        TUITION_PER_SEMESTER: 26750,
+        ADMISSION_FEES: 12000,
+        FIXED_INSTITUTIONAL_FEES: 197000,
+        ENGLISH_COURSE_FEE: 10000,
+        SAFETY_NET_CAP: 171000,  // Safety net for CSE
+        SAFETY_NET_PER_SEMESTER: 14250
+    },
+    'ce': {
+        TOTAL_CREDITS: 158.5,
+        DURATION_YEARS: 4,
+        TOTAL_SEMESTERS: 12,
+        TOTAL_MONTHS: 48,
+        STANDARD_TUITION_FULL: 317000,
+        TUITION_PER_SEMESTER: 26416.67,
+        ADMISSION_FEES: 12000,
+        FIXED_INSTITUTIONAL_FEES: 201000,
+        ENGLISH_COURSE_FEE: 10000,
+        SAFETY_NET_CAP: 167000,  // Safety net for CE
+        SAFETY_NET_PER_SEMESTER: 13916.67
+    },
+    'llb': {
+        TOTAL_CREDITS: 152,
+        DURATION_YEARS: 4,
+        TOTAL_SEMESTERS: 8,
+        TOTAL_MONTHS: 48,
+        STANDARD_TUITION_FULL: 400000,
+        TUITION_PER_SEMESTER: 50000,
+        ADMISSION_FEES: 11000,
+        FIXED_INSTITUTIONAL_FEES: 222000,
+        ENGLISH_COURSE_FEE: 10000,
+        SAFETY_NET_CAP: 130000,
+        SAFETY_NET_PER_SEMESTER: 18571.43
+    },
+    'fdae': {
+        TOTAL_CREDITS: 144,
+        DURATION_YEARS: 4,
+        TOTAL_SEMESTERS: 12,
+        TOTAL_MONTHS: 48,
+        STANDARD_TUITION_FULL: 288000,
+        TUITION_PER_SEMESTER: 24000,
+        ADMISSION_FEES: 11000,
+        FIXED_INSTITUTIONAL_FEES: 180000,
+        ENGLISH_COURSE_FEE: 10000,
+        SAFETY_NET_CAP: 138000,
+        SAFETY_NET_PER_SEMESTER: 11500
+    },
+    'cse-diploma': {
+        TOTAL_CREDITS: 160.5,
+        DURATION_YEARS: 4,
+        TOTAL_SEMESTERS: 12,
+        TOTAL_MONTHS: 48,
+        STANDARD_TUITION_FULL: 300000,
+        TUITION_PER_SEMESTER: 25000,
+        ADMISSION_FEES: 12000,
+        FIXED_INSTITUTIONAL_FEES: 128000,
+        ENGLISH_COURSE_FEE: 0,
+        SAFETY_NET_CAP: 100000,
+        SAFETY_NET_PER_SEMESTER: 8333.33
+    },
+    'eee-diploma': {
+        TOTAL_CREDITS: 158.5,
+        DURATION_YEARS: 4,
+        TOTAL_SEMESTERS: 12,
+        TOTAL_MONTHS: 48,
+        STANDARD_TUITION_FULL: 300000,
+        TUITION_PER_SEMESTER: 25000,
+        ADMISSION_FEES: 12000,
+        FIXED_INSTITUTIONAL_FEES: 128000,
+        ENGLISH_COURSE_FEE: 0,
+        SAFETY_NET_CAP: 100000,
+        SAFETY_NET_PER_SEMESTER: 8333.33
+    },
+    'ce-diploma': {
+        TOTAL_CREDITS: 158.5,
+        DURATION_YEARS: 4,
+        TOTAL_SEMESTERS: 12,
+        TOTAL_MONTHS: 48,
+        STANDARD_TUITION_FULL: 300000,
+        TUITION_PER_SEMESTER: 25000,
+        ADMISSION_FEES: 12000,
+        FIXED_INSTITUTIONAL_FEES: 128000,
+        ENGLISH_COURSE_FEE: 0,
+        SAFETY_NET_CAP: 100000,
+        SAFETY_NET_PER_SEMESTER: 8333.33
+    },
+    'mba-regular': {
+        TOTAL_CREDITS: 39,
+        DURATION_YEARS: 1,
+        TOTAL_SEMESTERS: 3,
+        TOTAL_MONTHS: 12,
+        TUITION_FULL: 78000,
+        ADMISSION_FEE: 10000,
+        REGISTRATION_FEE: 3000,
+        INSTITUTIONAL_FEES: 29000,
+        CAMPAIGN_WAIVER: 18000,
+        TOTAL_PROGRAM_COST: 120000,
+        TOTAL_AFTER_WAIVER: 102000,
+        MONTHLY_FIXED: 7417
+    },
+    'emba': {
+        TOTAL_CREDITS: 51,
+        DURATION_YEARS: 2,
+        TOTAL_SEMESTERS: 4,
+        TOTAL_MONTHS: 18,
+        TUITION_FULL: 102000,
+        ADMISSION_FEE: 10000,
+        REGISTRATION_FEE: 4000,
+        INSTITUTIONAL_FEES: 34000,
+        CAMPAIGN_WAIVER: 25000,
+        TOTAL_PROGRAM_COST: 150000,
+        TOTAL_AFTER_WAIVER: 125000,
+        MONTHLY_FIXED: 6937.50
+    },
+    'mba-3year': {
+        TOTAL_CREDITS: 69,
+        DURATION_YEARS: 2,
+        TOTAL_SEMESTERS: 6,
+        TOTAL_MONTHS: 24,
+        TUITION_FULL: 138000,
+        ADMISSION_FEE: 10000,
+        REGISTRATION_FEE: 6000,
+        INSTITUTIONAL_FEES: 36000,
+        CAMPAIGN_WAIVER: 30000,
+        TOTAL_PROGRAM_COST: 190000,
+        TOTAL_AFTER_WAIVER: 160000,
+        MONTHLY_FIXED: 6000
+    },
+    'ma-bangla-regular': {
+        TOTAL_CREDITS: 42,
+        DURATION_YEARS: 1,
+        TOTAL_SEMESTERS: 3,
+        TOTAL_MONTHS: 12,
+        TUITION_FULL: 21000,
+        ADMISSION_FEE: 10000,
+        REGISTRATION_FEE: 1500,
+        INSTITUTIONAL_FEES: 4500,
+        TOTAL_PROGRAM_COST: 37000,
+        MONTHLY_FIXED: 2125
+    },
+    'ma-bangla-2year': {
+        TOTAL_CREDITS: 69,
+        DURATION_YEARS: 2,
+        TOTAL_SEMESTERS: 6,
+        TOTAL_MONTHS: 24,
+        TUITION_FULL: 34500,
+        ADMISSION_FEE: 10000,
+        REGISTRATION_FEE: 3000,
+        INSTITUTIONAL_FEES: 12500,
+        TOTAL_PROGRAM_COST: 60000,
+        MONTHLY_FIXED: 1959
+    },
+    'ma-english-regular': {
+        TOTAL_CREDITS: 42,
+        DURATION_YEARS: 1,
+        TOTAL_SEMESTERS: 3,
+        TOTAL_MONTHS: 12,
+        TUITION_FULL: 42000,
+        ADMISSION_FEE: 10000,
+        REGISTRATION_FEE: 3000,
+        INSTITUTIONAL_FEES: 35000,
+        TOTAL_PROGRAM_COST: 90000,
+        EXTERNAL_WAIVER: 10000,
+        EXTERNAL_FINAL: 80000,
+        EXTERNAL_MONTHLY: 5583,
+        INTERNAL_WAIVER: 20000,
+        INTERNAL_FINAL: 70000,
+        INTERNAL_MONTHLY: 4750
+    },
+    'ma-english-2year': {
+        TOTAL_CREDITS: 75,
+        DURATION_YEARS: 2,
+        TOTAL_SEMESTERS: 6,
+        TOTAL_MONTHS: 24,
+        TUITION_FULL: 75000,
+        ADMISSION_FEE: 10000,
+        REGISTRATION_FEE: 6000,
+        INSTITUTIONAL_FEES: 59000,
+        CAMPAIGN_WAIVER: 40000,
+        TOTAL_PROGRAM_COST: 150000,
+        TOTAL_AFTER_WAIVER: 110000,
+        MONTHLY_FIXED: 3917
+    },
+    'llm-regular': {
+        TOTAL_CREDITS: 34,
+        DURATION_YEARS: 1,
+        TOTAL_SEMESTERS: 2,
+        TOTAL_MONTHS: 12,
+        TUITION_FULL: 44200,
+        ADMISSION_FEE: 10000,
+        REGISTRATION_FEE: 2000,
+        INSTITUTIONAL_FEES: 33800,
+        TOTAL_PROGRAM_COST: 90000,
+        EXTERNAL_WAIVER: 10000,
+        EXTERNAL_FINAL: 80000,
+        EXTERNAL_MONTHLY: 5667,
+        INTERNAL_WAIVER: 20000,
+        INTERNAL_FINAL: 70000,
+        INTERNAL_MONTHLY: 4833
+    },
+    'llm-2year': {
+        TOTAL_CREDITS: 66,
+        DURATION_YEARS: 2,
+        TOTAL_SEMESTERS: 4,
+        TOTAL_MONTHS: 24,
+        TUITION_FULL: 74250,
+        ADMISSION_FEE: 10000,
+        REGISTRATION_FEE: 4000,
+        INSTITUTIONAL_FEES: 31750,
+        CAMPAIGN_WAIVER: 25000,
+        TOTAL_PROGRAM_COST: 120000,
+        TOTAL_AFTER_WAIVER: 95000,
+        MONTHLY_FIXED: 3375
+    },
+    'bed': {
+        TOTAL_CREDITS: 36,
+        DURATION_YEARS: 1,
+        TOTAL_SEMESTERS: 3,
+        TOTAL_MONTHS: 12,
+        TUITION_FULL: 28800,
+        ADMISSION_FEE: 10000,
+        REGISTRATION_FEE: 3000,
+        INSTITUTIONAL_FEES: 8200,
+        CAMPAIGN_WAIVER: 10000,
+        TOTAL_PROGRAM_COST: 50000,
+        TOTAL_AFTER_WAIVER: 40000,
+        MONTHLY_FIXED: 2250
+    },
+    'med': {
+        TOTAL_CREDITS: 36,
+        DURATION_YEARS: 1,
+        TOTAL_SEMESTERS: 3,
+        TOTAL_MONTHS: 12,
+        TUITION_FULL: 28800,
+        ADMISSION_FEE: 10000,
+        REGISTRATION_FEE: 3000,
+        INSTITUTIONAL_FEES: 8200,
+        CAMPAIGN_WAIVER: 10000,
+        TOTAL_PROGRAM_COST: 50000,
+        TOTAL_AFTER_WAIVER: 40000,
+        MONTHLY_FIXED: 2250
+    }
+};
+
+// Program-wise admission requirements
+const ADMISSION_REQUIREMENTS = {
+    'bba': {
+        title: 'BBA – Admission Requirements',
+        requirements: [
+            'SSC &amp; HSC: Minimum GPA 2.5 in both or equivalent',
+            'O/A Levels: 5 subjects in \'O\' Level and 2 subjects in \'A\' Level',
+            'Required Grades: Minimum 4 \'B\' grades and 3 \'C\' grades across both levels'
+        ]
+    },
+    'ba-bangla': {
+        title: 'BA in Bangla – Admission Requirements',
+        requirements: [
+            'SSC and HSC (or equivalent) passed from any recognized board',
+            'Minimum GPA 2.0 in both SSC and HSC (without optional subject)'
+        ]
+    },
+    'ba-english': {
+        title: 'BA in English – Admission Requirements',
+        requirements: [
+            'SSC and HSC (or equivalent) passed from any recognized board',
+            'Minimum GPA 2.0 in both SSC and HSC (without optional subject)',
+            'Strong English language background preferred'
+        ]
+    },
+    'eee': {
+        title: 'BSc in EEE – Admission Requirements',
+        requirements: [
+            'SSC and HSC (Science group) passed from any recognized board',
+            'Minimum GPA 2.5 in both SSC and HSC (without optional subject)',
+            'Physics and Mathematics in HSC are required'
+        ]
+    },
+    'cse': {
+        title: 'BSc in CSE – Admission Requirements',
+        requirements: [
+            'SSC and HSC (Science group) passed from any recognized board',
+            'Minimum GPA 2.5 in both SSC and HSC (without optional subject)',
+            'Mathematics in HSC is required'
+        ]
+    },
+    'ce': {
+        title: 'BSc in CE – Admission Requirements',
+        requirements: [
+            'SSC and HSC (Science group) passed from any recognized board',
+            'Minimum GPA 2.5 in both SSC and HSC (without optional subject)',
+            'Physics and Mathematics in HSC are required'
+        ]
+    },
+    'cse-diploma': {
+        title: 'BSc in CSE (from Diploma) – Admission Requirements',
+        requirements: [
+            'Diploma in Computer Science & Engineering (CSE) or related field from a polytechnic institute',
+            'Minimum CGPA 2.0 in Diploma (4-year program)',
+            'SSC or equivalent passed'
+        ]
+    },
+    'eee-diploma': {
+        title: 'BSc in EEE (from Diploma) – Admission Requirements',
+        requirements: [
+            'Diploma in Electrical & Electronic Engineering (EEE) or related field from a polytechnic institute',
+            'Minimum CGPA 2.0 in Diploma (4-year program)',
+            'SSC or equivalent passed'
+        ]
+    },
+    'ce-diploma': {
+        title: 'BSc in CE (from Diploma) – Admission Requirements',
+        requirements: [
+            'Diploma in Civil Engineering (CE) or related field from a polytechnic institute',
+            'Minimum CGPA 2.0 in Diploma (4-year program)',
+            'SSC or equivalent passed'
+        ]
+    },
+    'mba-regular': {
+        title: 'MBA Regular – Admission Requirements',
+        requirements: [
+            'SSC &amp; HSC: Total GPA points must be 5.0',
+            '4-year BBA degree from a recognized university with minimum CGPA 2.0'
+        ]
+    },
+    'emba': {
+        title: 'E-MBA – Admission Requirements',
+        requirements: [
+            'SSC &amp; HSC: Total GPA points must be 5.0',
+            'Hons/Master\'s degree from any recognized university with minimum CGPA 2.0'
+        ]
+    },
+    'mba-3year': {
+        title: 'MBA (for 3-Year Degree) – Admission Requirements',
+        requirements: [
+            '3-year Bachelor degree (Pass/Honors) from a recognized university',
+            'Minimum CGPA 2.0 in Bachelor (or 2nd division/class)',
+            'Suitable for graduates holding a 3-year degree without a 1-year Masters'
+        ]
+    },
+    'ma-bangla-regular': {
+        title: 'MA in Bangla (Regular) – Admission Requirements',
+        requirements: [
+            'SSC &amp; HSC: Total GPA points must be 5.0',
+            'BA Hons in Bangla from any recognized university',
+            'Minimum CGPA 2.0 in Bachelor (or 2nd division/class)'
+        ]
+    },
+    'ma-bangla-2year': {
+        title: 'MA in Bangla (2 Year) – Admission Requirements',
+        requirements: [
+            'SSC &amp; HSC: Total GPA points must be 5.0',
+            'BA Hons in Bangla from any recognized university',
+            'Minimum CGPA 2.0 in Bachelor (or 2nd division/class)'
+        ]
+    },
+    'llb': {
+        title: 'LL.B. (Hons.) – Admission Requirements',
+        requirements: [
+            'SSC and HSC (or equivalent) passed from any recognized board',
+            'Minimum GPA 2.0 in both SSC and HSC (without optional subject)',
+            'Any group (Science, Humanities, or Commerce) is eligible'
+        ]
+    },
+    'fdae': {
+        title: 'BSc in Fashion Design and Apparel Engineering – Admission Requirements',
+        requirements: [
+            'SSC and HSC (or equivalent) passed from any recognized board',
+            'Minimum GPA 2.5 in both SSC and HSC (without optional subject)',
+            'Interest in design and textile engineering is preferred'
+        ]
+    },
+    'ma-english-regular': {
+        title: 'MA in English (Regular) – Admission Requirements',
+        requirements: [
+            'Bachelor degree (4-year or 3-year with 1-year masters) in English from a recognized university',
+            'Minimum CGPA 2.25 in Bachelor (or 2nd division/class)',
+            'Strong English language background required'
+        ]
+    },
+    'ma-english-2year': {
+        title: 'MA in English (2 Year) – Admission Requirements',
+        requirements: [
+            'Bachelor degree (3-year) in English from a recognized university',
+            'Minimum CGPA 2.0 in Bachelor (or 2nd division/class)',
+            'Suitable for graduates holding a 3-year degree in English'
+        ]
+    },
+    'llm-regular': {
+        title: 'LLM Regular – Admission Requirements',
+        requirements: [
+            'LL.B. (Hons.) 4-year degree or LL.B. (Pass) with LL.M. Prelim from a recognized university',
+            'Minimum CGPA 2.25 in LL.B. (or 2nd division/class)',
+            'Law background required'
+        ]
+    },
+    'llm-2year': {
+        title: 'LLM Preli & Final (2 Year) – Admission Requirements',
+        requirements: [
+            '2-year LL.B. (Pass) degree from any recognized university',
+            'Minimum CGPA 2.0 in LL.B. (or 2nd division/class)',
+            'Suitable for graduates holding a 2-year LL.B. Pass degree'
+        ]
+    },
+    'bed': {
+        title: 'Bachelor of Education (B.Ed) – Admission Requirements',
+        requirements: [
+            'Bachelor degree (3-year or 4-year) from a recognized university',
+            'Minimum CGPA 2.0 in Bachelor (or 2nd division/class)',
+            'Candidates aspiring to a career in teaching are preferred'
+        ]
+    },
+    'med': {
+        title: 'Master of Education (M.Ed) – Admission Requirements',
+        requirements: [
+            'B.Ed or equivalent degree from a recognized university',
+            'Minimum CGPA 2.0 in B.Ed (or 2nd division/class)',
+            'Teaching experience preferred but not mandatory'
+        ]
+    }
+};
+
+function getFixedMonthlyNonTuition(subject) {
+    const constants = CONSTANTS[subject];
+    return (constants.FIXED_INSTITUTIONAL_FEES + constants.ENGLISH_COURSE_FEE) / constants.TOTAL_MONTHS;
+}
+
+/**
+ * Show subject selection based on degree type
+ */
+function showSubjectSelection() {
+    const degreeType = document.getElementById('degreeType').value;
+    const subjectSection = document.getElementById('subjectSection');
+    const subjectSelect = document.getElementById('subject');
+    const calculatorSection = document.getElementById('calculatorSection');
+    const results = document.getElementById('results');
+    
+    // Hide calculator and results when degree type changes
+    calculatorSection.classList.add('hidden');
+    results.classList.remove('show');
+    
+    if (degreeType === '') {
+        subjectSection.classList.add('hidden');
+        return;
+    }
+    
+    // Populate subject dropdown
+    subjectSelect.innerHTML = '<option value="">-- Select Subject --</option>';
+    const subjects = DEGREE_SUBJECTS[degreeType] || [];
+    
+    if (subjects.length === 0) {
+        subjectSelect.innerHTML = '<option value="">Coming Soon - Subjects will be added</option>';
+        subjectSelect.disabled = true;
+        subjectSection.classList.remove('hidden');
+        return;
+    }
+    
+    subjectSelect.disabled = false;
+    subjects.forEach(subject => {
+        const option = document.createElement('option');
+        option.value = subject.value;
+        option.textContent = subject.name;
+        subjectSelect.appendChild(option);
+    });
+    
+    subjectSection.classList.remove('hidden');
+}
+
+/**
+ * Show calculator form when subject is selected
+ */
+function showCalculatorForm() {
+    const degreeType = document.getElementById('degreeType').value;
+    const subject = document.getElementById('subject').value;
+    const calculatorSection = document.getElementById('calculatorSection');
+    const headerSubtitle = document.getElementById('headerSubtitle');
+    const results = document.getElementById('results');
+    
+    // Hide results when subject changes
+    results.classList.remove('show');
+    
+    if (subject === '') {
+        calculatorSection.classList.add('hidden');
+        return;
+    }
+    
+    // Update header subtitle
+    const degreeTypeText = document.getElementById('degreeType').selectedOptions[0].text;
+    const subjectText = document.getElementById('subject').selectedOptions[0].text;
+    headerSubtitle.textContent = `${degreeTypeText} - ${subjectText} - Summer 2026`;
+    
+    const isDiploma = subject === 'cse-diploma' || subject === 'eee-diploma' || subject === 'ce-diploma';
+    const isMasters = subject === 'mba-regular' || subject === 'emba' || subject === 'mba-3year' || subject === 'ma-bangla-regular' || subject === 'ma-bangla-2year' || subject === 'ma-english-regular' || subject === 'ma-english-2year' || subject === 'llm-regular' || subject === 'llm-2year' || subject === 'bed' || subject === 'med';
+    
+    // Show/hide GPA inputs based on program type
+    const combinedGPAGroup = document.getElementById('combinedGPAGroup');
+    const sscGPAGroup = document.getElementById('sscGPAGroup');
+    const diplomaCGPAGroup = document.getElementById('diplomaCGPAGroup');
+    const expectedGPAGroup = document.getElementById('expectedGPAGroup');
+    const attendanceFormGroup = document.getElementById('attendanceFormGroup');
+    
+    if (isMasters) {
+        // Masters: no GPA inputs needed
+        combinedGPAGroup.classList.add('hidden');
+        sscGPAGroup.classList.add('hidden');
+        diplomaCGPAGroup.classList.add('hidden');
+        expectedGPAGroup.classList.add('hidden');
+        attendanceFormGroup.style.display = 'none';
+    } else if (isDiploma) {
+        // Diploma: show SSC GPA and Diploma CGPA, hide combined GPA
+        combinedGPAGroup.classList.add('hidden');
+        sscGPAGroup.classList.remove('hidden');
+        diplomaCGPAGroup.classList.remove('hidden');
+        expectedGPAGroup.classList.remove('hidden');
+    } else {
+        // Regular Bachelor: show combined GPA, hide diploma inputs
+        combinedGPAGroup.classList.remove('hidden');
+        sscGPAGroup.classList.add('hidden');
+        diplomaCGPAGroup.classList.add('hidden');
+        expectedGPAGroup.classList.remove('hidden');
+    }
+    
+    // Update attendance requirement based on subject
+    updateAttendanceRequirement(subject);
+    
+    // Check if attendance question should be shown
+    checkAttendanceVisibility();
+    
+    // Show calculator section
+    calculatorSection.classList.remove('hidden');
+    
+    // Smooth scroll to calculator section
+    calculatorSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/**
+ * Update attendance requirement text based on subject
+ */
+function updateAttendanceRequirement(subject) {
+    const attendanceLabel = document.getElementById('attendanceLabel');
+    const attendanceYes = document.getElementById('attendanceYes');
+    const attendanceNo = document.getElementById('attendanceNo');
+    
+    if (subject === 'bba' || subject === 'eee' || subject === 'cse' || subject === 'ce' || subject === 'fdae') {
+        // BBA, EEE, CSE, CE and FDAE require 70% attendance
+        attendanceLabel.textContent = 'Did you (or will you) maintain at least 70% attendance in the previous semester?';
+        attendanceYes.textContent = 'Yes, I maintained/will maintain 70%+ attendance';
+        attendanceNo.textContent = 'No, I may not maintain 70% attendance';
+    } else if (subject === 'ba-bangla' || subject === 'ba-english' || subject === 'llb') {
+        // BA Bangla, BA English and LLB require 60% attendance
+        attendanceLabel.textContent = 'Did you (or will you) maintain at least 60% attendance in the previous semester?';
+        attendanceYes.textContent = 'Yes, I maintained/will maintain 60%+ attendance';
+        attendanceNo.textContent = 'No, I may not maintain 60% attendance';
+    } else if (subject === 'cse-diploma' || subject === 'eee-diploma' || subject === 'ce-diploma') {
+        // Diploma programs require 50% attendance
+        attendanceLabel.textContent = 'Did you (or will you) maintain at least 50% attendance in the previous semester?';
+        attendanceYes.textContent = 'Yes, I maintained/will maintain 50%+ attendance';
+        attendanceNo.textContent = 'No, I may not maintain 50% attendance';
+    }
+}
+
+/**
+ * Check if attendance question should be shown based on expected GPA and subject
+ * Shows only if Expected GPA falls below the minimum for merit scholarship
+ */
+function checkAttendanceVisibility() {
+    const subject = document.getElementById('subject').value;
+    const expectedGPAInput = document.getElementById('expectedGPA');
+    const attendanceFormGroup = document.getElementById('attendanceFormGroup');
+    const attendanceSelect = document.getElementById('attendance');
+    
+    const isMasters = subject === 'mba-regular' || subject === 'emba' || subject === 'mba-3year' || subject === 'ma-bangla-regular' || subject === 'ma-bangla-2year' || subject === 'ma-english-regular' || subject === 'ma-english-2year' || subject === 'llm-regular' || subject === 'llm-2year' || subject === 'bed' || subject === 'med';
+    
+    // Masters or no subject selected: hide attendance
+    if (!subject || isMasters) {
+        attendanceFormGroup.style.display = 'none';
+        attendanceSelect.removeAttribute('required');
+        return;
+    }
+    
+    const expectedGPA = parseFloat(expectedGPAInput.value);
+    
+    // If no GPA entered yet, hide attendance
+    if (isNaN(expectedGPA)) {
+        attendanceFormGroup.style.display = 'none';
+        attendanceSelect.removeAttribute('required');
+        return;
+    }
+    
+    let shouldShow = false;
+    
+    // Determine minimum merit scholarship GPA for each subject
+    if (subject === 'bba' || subject === 'ba-english' || subject === 'eee' || subject === 'cse' || subject === 'ce' || subject === 'llb' || subject === 'fdae') {
+        // Merit scholarship starts at 3.0 GPA (40-55% waiver depending on program)
+        shouldShow = expectedGPA < 3.0;
+    } else if (subject === 'ba-bangla') {
+        // BA-Bangla: Merit scholarship starts at 2.8 GPA (72% waiver)
+        shouldShow = expectedGPA < 2.8;
+    } else if (subject === 'cse-diploma' || subject === 'eee-diploma' || subject === 'ce-diploma') {
+        // Diploma programs: Safety net applies below GPA 2.50
+        shouldShow = expectedGPA < 2.50;
+    }
+    
+    if (shouldShow) {
+        attendanceFormGroup.style.display = 'block';
+        attendanceSelect.setAttribute('required', 'required');
+        
+        // Update the hint text based on subject
+        const attendanceHint = document.getElementById('attendanceHint');
+        let threshold, attendanceRate;
+        if (subject === 'ba-bangla') {
+            threshold = '2.8';
+            attendanceRate = '60';
+        } else if (subject === 'cse-diploma' || subject === 'eee-diploma' || subject === 'ce-diploma') {
+            threshold = '2.50';
+            attendanceRate = '50';
+        } else if (subject === 'ba-english' || subject === 'llb') {
+            threshold = '3.0';
+            attendanceRate = '60';
+        } else {
+            threshold = '3.0';
+            attendanceRate = '70';
+        }
+        attendanceHint.textContent = `⚠️ Safety Net eligibility is assessed each semester based on your attendance in the previous semester. If your semester GPA falls below ${threshold} but you maintained ${attendanceRate}%+ attendance in the previous semester, the Safety Net scholarship applies from the next semester onward — capping your remaining tuition at the program's Safety Net limit.`;
+    } else {
+        attendanceFormGroup.style.display = 'none';
+        attendanceSelect.removeAttribute('required');
+        // Reset selection when hidden
+        attendanceSelect.value = '';
+    }
+}
+
+/**
+ * Calculate Initial Waiver for 1st Semester based on Combined SSC + HSC GPA
+ */
+function calculateInitialWaiver(gpa, subject) {
+    // Diploma programs: based on combined SSC GPA + Diploma CGPA (out of 10)
+    if (subject === 'cse-diploma' || subject === 'eee-diploma' || subject === 'ce-diploma') {
+        if (gpa >= 8.0) return 100;
+        if (gpa >= 5.01) return 80;
+        if (gpa >= 0 && gpa <= 5.0) return 50;
+        return 0;
+    }
+    // Regular programs: BBA, BA Bangla, BA English, EEE, CE, CSE all have the same structure
+    if (gpa === 10.0) return 100;
+    if (gpa >= 8.0 && gpa < 10.0) return 80;
+    if (gpa >= 7.0 && gpa < 8.0) return 70;
+    if (gpa >= 6.0 && gpa < 7.0) return 60;
+    if (gpa >= 5.0 && gpa < 6.0) return 50;
+    return 0;
+}
+
+/**
+ * Calculate Merit Waiver for Semesters 2-12 based on Expected Semester GPA
+ */
+function calculateMeritWaiver(gpa, subject) {
+    if (subject === 'bba' || subject === 'eee' || subject === 'cse' || subject === 'ce' || subject === 'fdae') {
+        // BBA, EEE, CSE, CE and FDAE Merit Waiver structure
+        if (gpa >= 3.9 && gpa <= 4.0) return 100;
+        if (gpa >= 3.8 && gpa < 3.9) return 80;
+        if (gpa >= 3.7 && gpa < 3.8) return 70;
+        if (gpa >= 3.5 && gpa < 3.7) return 60;
+        if (gpa >= 3.0 && gpa < 3.5) return 55;
+        return 0;
+    } else if (subject === 'llb') {
+        // LLB Merit Waiver structure
+        if (gpa >= 3.9 && gpa <= 4.0) return 100;
+        if (gpa >= 3.8 && gpa < 3.9) return 80;
+        if (gpa >= 3.7 && gpa < 3.8) return 60;
+        if (gpa >= 3.5 && gpa < 3.7) return 50;
+        if (gpa >= 3.0 && gpa < 3.5) return 40;
+        return 0;
+    } else if (subject === 'ba-bangla') {
+        // BA Bangla Merit Waiver structure
+        if (gpa === 4.0) return 100;
+        if (gpa >= 2.8 && gpa < 4.0) return 72;
+        return 0;
+    } else if (subject === 'ba-english') {
+        // BA English Merit Waiver structure
+        if (gpa >= 3.9 && gpa <= 4.0) return 100;
+        if (gpa >= 3.8 && gpa < 3.9) return 80;
+        if (gpa >= 3.7 && gpa < 3.8) return 70;
+        if (gpa >= 3.5 && gpa < 3.7) return 60;
+        if (gpa >= 3.0 && gpa < 3.5) return 55;
+        return 0;
+    } else if (subject === 'cse-diploma') {
+        // CSE Diploma merit waiver (C tier: 3.50-3.79)
+        if (gpa >= 3.9 && gpa <= 4.0) return 100;
+        if (gpa >= 3.8 && gpa < 3.9) return 90;
+        if (gpa >= 3.5 && gpa < 3.8) return 85;
+        if (gpa >= 3.0 && gpa < 3.5) return 80;
+        if (gpa >= 2.5 && gpa < 3.0) return 75;
+        return 0;
+    } else if (subject === 'eee-diploma' || subject === 'ce-diploma') {
+        // EEE Diploma and CE Diploma merit waiver (C tier: 3.70-3.79)
+        if (gpa >= 3.9 && gpa <= 4.0) return 100;
+        if (gpa >= 3.8 && gpa < 3.9) return 90;
+        if (gpa >= 3.7 && gpa < 3.8) return 85;
+        if (gpa >= 3.5 && gpa < 3.7) return 80;
+        if (gpa >= 3.0 && gpa < 3.5) return 75;
+        return 0;
+    }
+    return 0;
+}
+
+
+
+/**
+ * Calculate total tuition with waivers and safety net
+ */
+function calculateTotalTuition(combinedGPA, expectedGPA, maintainsAttendance, subject) {
+    const constants = CONSTANTS[subject];
+    
+    // Calculate 1st semester tuition with initial waiver
+    const initialWaiverPercent = calculateInitialWaiver(combinedGPA, subject);
+    const firstSemTuition = constants.TUITION_PER_SEMESTER * (1 - initialWaiverPercent / 100);
+
+    // Calculate remaining semesters (2-N) with merit waiver
+    const meritWaiverPercent = calculateMeritWaiver(expectedGPA, subject);
+    const remainingSemTuition = constants.TUITION_PER_SEMESTER * (1 - meritWaiverPercent / 100);
+    const remainingSemestersTotal = remainingSemTuition * (constants.TOTAL_SEMESTERS - 1);
+
+    // Total tuition before safety net
+    let totalTuition = firstSemTuition + remainingSemestersTotal;
+    let cappedRemainingSemesters = remainingSemestersTotal;
+
+    // Apply Safety Net if applicable
+    let safetyNetApplied = false;
+    if ((subject === 'bba' || subject === 'eee' || subject === 'cse' || subject === 'ce' || subject === 'fdae') && expectedGPA < 3.0 && maintainsAttendance) {
+        // BBA, EEE, CSE, CE and FDAE require 70% attendance for safety net
+        if (totalTuition > constants.SAFETY_NET_CAP) {
+            cappedRemainingSemesters = constants.SAFETY_NET_CAP - firstSemTuition;
+            totalTuition = firstSemTuition + cappedRemainingSemesters;
+            safetyNetApplied = true;
+        }
+    } else if (subject === 'ba-bangla' && expectedGPA < 2.8 && maintainsAttendance) {
+        // BA Bangla requires 60% attendance for safety net
+        if (totalTuition > constants.SAFETY_NET_CAP) {
+            cappedRemainingSemesters = constants.SAFETY_NET_CAP - firstSemTuition;
+            totalTuition = firstSemTuition + cappedRemainingSemesters;
+            safetyNetApplied = true;
+        }
+    } else if ((subject === 'ba-english' || subject === 'llb') && expectedGPA < 3.0 && maintainsAttendance) {
+        // BA English and LLB require 60% attendance for safety net
+        if (totalTuition > constants.SAFETY_NET_CAP) {
+            cappedRemainingSemesters = constants.SAFETY_NET_CAP - firstSemTuition;
+            totalTuition = firstSemTuition + cappedRemainingSemesters;
+            safetyNetApplied = true;
+        }
+    } else if ((subject === 'cse-diploma' || subject === 'eee-diploma' || subject === 'ce-diploma') && expectedGPA < 2.50 && maintainsAttendance) {
+        // Diploma programs require 50% attendance for safety net
+        if (totalTuition > constants.SAFETY_NET_CAP) {
+            cappedRemainingSemesters = constants.SAFETY_NET_CAP - firstSemTuition;
+            totalTuition = firstSemTuition + cappedRemainingSemesters;
+            safetyNetApplied = true;
+        }
+    }
+
+    return {
+        firstSemesterTuition: firstSemTuition,
+        initialWaiverPercent: initialWaiverPercent,
+        remainingSemestersTuition: safetyNetApplied ? cappedRemainingSemesters : remainingSemestersTotal,
+        meritWaiverPercent: meritWaiverPercent,
+        totalTuition: totalTuition,
+        safetyNetApplied: safetyNetApplied
+    };
+}
+
+// ===== HELPERS =====
+var MASTERS_LIST = ['mba-regular','emba','mba-3year','ma-bangla-regular','ma-bangla-2year','ma-english-regular','ma-english-2year','llm-regular','llm-2year','bed','med'];
+var DIPLOMA_LIST = ['cse-diploma','eee-diploma','ce-diploma'];
+function isMasters(s) { return MASTERS_LIST.indexOf(s) !== -1; }
+function isDiploma(s)  { return DIPLOMA_LIST.indexOf(s)  !== -1; }
+
+function fmtBDT(n) {
+    return n.toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 }) + ' BDT';
+}
+
+// ===== PROGRESS =====
+function setProgress(step) {
+    ['ps1','ps2','ps3'].forEach(function(id, i) {
+        var el = document.getElementById(id);
+        el.classList.remove('active','done');
+        if (i + 1 === step)     el.classList.add('active');
+        else if (i + 1 < step)  el.classList.add('done');
+    });
+}
+
+// ===== UX FUNCTIONS =====
+function selectDegree(type) {
+    document.querySelectorAll('.deg-card').forEach(function(c) { c.classList.remove('selected'); });
+    var map = { 'regular-bachelor':'dc-regular', 'bachelor-from-diploma':'dc-diploma', 'masters':'dc-masters' };
+    document.getElementById(map[type]).classList.add('selected');
+
+    var sel = document.getElementById('subject');
+    sel.innerHTML = '<option value="">-- Select your program --</option>';
+    (DEGREE_SUBJECTS[type] || []).forEach(function(s) {
+        var o = document.createElement('option');
+        o.value = s.value; o.textContent = s.name;
+        sel.appendChild(o);
+    });
+
+    var subs = {
+        'regular-bachelor':      'Choose your bachelor program and enter Combined SSC + HSC GPA',
+        'bachelor-from-diploma': 'Choose your program and enter combined SSC + Diploma CGPA (out of 10)',
+        'masters':               'Choose your masters program - no GPA entry required'
+    };
+    document.getElementById('step2Sub').textContent = subs[type];
+
+    document.getElementById('combinedGPAGroup').classList.add('hidden');
+    document.getElementById('diplomaGPAGroup').classList.add('hidden');
+    document.getElementById('step2Area').classList.remove('hidden');
+    hideResults();
+
+    setTimeout(function() {
+        document.getElementById('step2Area').scrollIntoView({ behavior:'smooth', block:'nearest' });
+    }, 120);
+}
+
+function handleSubjectChange() {
+    var sub = document.getElementById('subject').value;
+    document.getElementById('combinedGPAGroup').classList.add('hidden');
+    document.getElementById('diplomaGPAGroup').classList.add('hidden');
+
+    if (sub && !isMasters(sub) && !isDiploma(sub)) {
+        document.getElementById('combinedGPAGroup').classList.remove('hidden');
+    } else if (isDiploma(sub)) {
+        document.getElementById('diplomaGPAGroup').classList.remove('hidden');
+    }
+
+    var btn = document.getElementById('previewBtn');
+    if (isMasters(sub)) {
+        btn.innerHTML = '&#128202; Show Fee Breakdown &rarr;';
+    } else {
+        btn.innerHTML = '&#128202; Show Program Preview &rarr;';
+    }
+
+    hideResults();
+}
+
+function hideResults() {
+    document.getElementById('previewResults').classList.add('hidden');
+    document.getElementById('forecastCTA').classList.add('hidden');
+    document.getElementById('forecastInputSection').classList.add('hidden');
+    document.getElementById('forecastResults').classList.add('hidden');
+    setProgress(1);
+}
+
+function showPreview() {
+    var sub = document.getElementById('subject').value;
+    if (!sub) { alert('Please select a subject/program first.'); return; }
+
+    var combinedGPA = 0;
+    if (!isMasters(sub)) {
+        if (isDiploma(sub)) {
+            combinedGPA = parseFloat(document.getElementById('diplomaCombinedGPA').value);
+            if (isNaN(combinedGPA) || combinedGPA < 0 || combinedGPA > 10) { alert('Please enter a valid combined SSC + Diploma CGPA (0.00 - 10.00).'); return; }
+        } else {
+            combinedGPA = parseFloat(document.getElementById('combinedGPA').value);
+            if (isNaN(combinedGPA) || combinedGPA < 0 || combinedGPA > 10) { alert('Please enter a valid Combined GPA (0.00 - 10.00).'); return; }
+        }
+    }
+
+    var prevDiv = document.getElementById('previewResults');
+
+    if (isMasters(sub)) {
+        prevDiv.innerHTML = generateMastersHTML(sub);
+        prevDiv.classList.remove('hidden');
+        document.getElementById('forecastCTA').classList.add('hidden');
+        document.getElementById('forecastInputSection').classList.add('hidden');
+        document.getElementById('forecastResults').classList.add('hidden');
+        setProgress(3);
+    } else {
+        prevDiv.innerHTML = generatePreviewHTML(combinedGPA, sub);
+        prevDiv.classList.remove('hidden');
+        document.getElementById('forecastCTA').classList.remove('hidden');
+        document.getElementById('forecastInputSection').classList.add('hidden');
+        document.getElementById('forecastResults').classList.add('hidden');
+        setProgress(2);
+    }
+
+    var subLabel = document.getElementById('subject').selectedOptions[0].text;
+    var shortLabel = subLabel.replace(/[(][^)]*[)]/g, '').trim().split('-')[0].trim();
+    document.getElementById('badgePill').textContent = shortLabel + ' - Summer 2026';
+
+    setTimeout(function() { prevDiv.scrollIntoView({ behavior:'smooth', block:'start' }); }, 120);
+}
+
+function showForecastInputs() {
+    var sec = document.getElementById('forecastInputSection');
+    sec.classList.remove('hidden');
+    document.getElementById('forecastResults').classList.add('hidden');
+    document.getElementById('expectedGPA').value = '';
+    document.getElementById('attendanceGroup').classList.add('hidden');
+    document.getElementById('attendance').value = '';
+    setTimeout(function() { sec.scrollIntoView({ behavior:'smooth', block:'start' }); }, 120);
+}
+
+function checkAttendanceVisibility() {
+    var sub = document.getElementById('subject').value;
+    var gpa = parseFloat(document.getElementById('expectedGPA').value);
+    var grp = document.getElementById('attendanceGroup');
+    var sel = document.getElementById('attendance');
+
+    if (isNaN(gpa) || !sub) { grp.classList.add('hidden'); sel.removeAttribute('required'); return; }
+
+    var show = false;
+    if      (['bba','ba-english','eee','cse','ce','fdae','llb'].indexOf(sub) !== -1) show = gpa < 3.0;
+    else if (sub === 'ba-bangla')  show = gpa < 2.8;
+    else if (isDiploma(sub))       show = gpa < 2.50;
+
+    if (show) {
+        var rate = '70', thresh = '3.0';
+        if (sub === 'ba-bangla')                                    { rate = '60'; thresh = '2.8';  }
+        else if (isDiploma(sub))                                    { rate = '50'; thresh = '2.50'; }
+        else if (['ba-english','llb'].indexOf(sub) !== -1)          { rate = '60'; thresh = '3.0';  }
+
+        document.getElementById('attendanceLabel').textContent =
+            'Did you (or will you) maintain at least ' + rate + '% attendance in the previous semester?';
+        document.getElementById('attendanceYes').textContent = 'Yes, I maintained/will maintain ' + rate + '%+ attendance';
+        document.getElementById('attendanceNo').textContent  = 'No, I may not maintain ' + rate + '% attendance';
+        document.getElementById('attendanceHint').textContent =
+            'Safety Net: If your GPA falls below ' + thresh + ' but you maintained ' + rate + '%+ attendance in the previous semester, ' +
+            'the Safety Net scholarship applies from the next semester, capping your remaining tuition.';
+        grp.classList.remove('hidden');
+        sel.setAttribute('required','required');
+    } else {
+        grp.classList.add('hidden');
+        sel.removeAttribute('required');
+        sel.value = '';
+    }
+}
+
+function calculateForecast() {
+    var sub    = document.getElementById('subject').value;
+    var attGrp = document.getElementById('attendanceGroup');
+    var attVal = document.getElementById('attendance').value;
+    var expGPA = parseFloat(document.getElementById('expectedGPA').value);
+
+    if (isNaN(expGPA) || expGPA < 0 || expGPA > 4) { alert('Please enter a valid Expected Semester GPA (0.00 - 4.00).'); return; }
+    if (!attGrp.classList.contains('hidden') && !attVal) { alert('Please select your attendance status.'); return; }
+
+    var maintainsAtt = attGrp.classList.contains('hidden') ? true : attVal === 'yes';
+    var combinedGPA = 0;
+
+    if (isDiploma(sub)) {
+        combinedGPA = parseFloat(document.getElementById('diplomaCombinedGPA').value) || 0;
+    } else {
+        combinedGPA = parseFloat(document.getElementById('combinedGPA').value) || 0;
+    }
+
+    var bd   = calculateTotalTuition(combinedGPA, expGPA, maintainsAtt, sub);
+    var fDiv = document.getElementById('forecastResults');
+    fDiv.innerHTML = generateForecastHTML(combinedGPA, expGPA, maintainsAtt, bd, sub);
+    fDiv.classList.remove('hidden');
+    setProgress(3);
+    setTimeout(function() { fDiv.scrollIntoView({ behavior:'smooth', block:'start' }); }, 120);
+}
+
+// ===== HTML GENERATION: PREVIEW (sections 1-4) =====
+function generatePreviewHTML(combinedGPA, subject) {
+    var c        = CONSTANTS[subject];
+    var dp       = isDiploma(subject);
+    var initPct  = calculateInitialWaiver(combinedGPA, subject);
+    var firstSem = c.TUITION_PER_SEMESTER * (1 - initPct / 100);
+
+    var firstSemMonths         = Math.round(c.TOTAL_MONTHS / c.TOTAL_SEMESTERS);
+    var firstSemTuitionMonthly = firstSem / firstSemMonths;
+    var fixedMonthly           = getFixedMonthlyNonTuition(subject);
+    var totalMonthlyFirst      = fixedMonthly + firstSemTuitionMonthly;
+
+    var initLabel = dp
+        ? ('SSC+Diploma GPA ' + combinedGPA.toFixed(2))
+        : ('SSC+HSC GPA ' + combinedGPA.toFixed(2));
+
+    var admReq = ADMISSION_REQUIREMENTS[subject];
+    var admHtml = admReq ? (
+        '<div style="margin-top:16px;"><div style="font-size:13px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Admission Requirements</div>' +
+        '<ul style="margin-left:18px;line-height:1.9;font-size:13.5px;color:#475569;">' +
+        admReq.requirements.map(function(r) { return '<li>' + r + '</li>'; }).join('') +
+        '</ul></div>'
+    ) : '';
+
+    var schHtml = initPct > 0 ? (
+        '<div class="rr highlight"><span class="rl">Scholarship (' + initLabel + ' - ' + initPct + '% off):</span>' +
+        '<span class="rv"><strong>- ' + fmtBDT(c.TUITION_PER_SEMESTER * initPct / 100) + '</strong></span></div>' +
+        '<div class="rr"><span class="rl">Tuition after Scholarship (1st Semester):</span><span class="rv">' + fmtBDT(firstSem) + '</span></div>'
+    ) : '';
+
+    return '' +
+    '<div class="rc panel-reveal">' +
+    '<div class="rc-title">Program Overview</div>' +
+    '<div class="sum-grid">' +
+    '<div class="sum-tile"><div class="tl">Total Credits</div><div class="tv">' + c.TOTAL_CREDITS + '</div></div>' +
+    '<div class="sum-tile"><div class="tl">Total Semesters</div><div class="tv">' + c.TOTAL_SEMESTERS + '</div></div>' +
+    '<div class="sum-tile"><div class="tl">Duration</div><div class="tv">' + c.DURATION_YEARS + ' Yrs</div></div>' +
+    '<div class="sum-tile"><div class="tl">Total Months</div><div class="tv">' + c.TOTAL_MONTHS + '</div></div>' +
+    '</div>' + admHtml + '</div>' +
+
+    '<div class="rc panel-reveal">' +
+    '<div class="rc-title">Regular Program Cost</div>' +
+    '<div class="rr"><span class="rl">Tuition Fees (Regular):</span><span class="rv">' + fmtBDT(c.STANDARD_TUITION_FULL) + '</span></div>' +
+    '<div class="rr"><span class="rl">Administrative Fees:</span><span class="rv">' + fmtBDT(c.FIXED_INSTITUTIONAL_FEES) + '</span></div>' +
+    (c.ENGLISH_COURSE_FEE > 0 ? '<div class="rr"><span class="rl">English Course:</span><span class="rv">' + fmtBDT(c.ENGLISH_COURSE_FEE) + '</span></div>' : '') +
+    '<div class="rr"><span class="rl">Admission Fee (One-time):</span><span class="rv">' + fmtBDT(10000) + '</span></div>' +
+    '<div class="rr"><span class="rl">Registration Fees (' + c.TOTAL_SEMESTERS + ' Semesters x 1,000):</span><span class="rv">' + fmtBDT(c.TOTAL_SEMESTERS * 1000) + '</span></div>' +
+    '<div class="rr"><span class="rl">Admission Form + ID Card (Extra):</span><span class="rv">' + fmtBDT(1000) + '</span></div>' +
+    '<div class="rr total"><span class="rl">Total Regular Program Cost:</span><span class="rv">' + fmtBDT(c.STANDARD_TUITION_FULL + c.FIXED_INSTITUTIONAL_FEES + c.ENGLISH_COURSE_FEE + 10000 + c.TOTAL_SEMESTERS * 1000) + '</span></div>' +
+    '<div class="info-box" style="margin-top:10px;"><p>Admission Form + ID Card (1,000 BDT) is <strong>not included</strong> in the Total Regular Program Cost above. Payable separately at admission.</p></div>' +
+    '</div>' +
+
+    '<div class="rc orange panel-reveal">' +
+    '<div class="rc-title">Admission Day Payment</div>' +
+    '<div class="rr indent"><span class="rl">Admission Fee:</span><span class="rv">' + fmtBDT(10000) + '</span></div>' +
+    '<div class="rr indent"><span class="rl">Registration Fee (1st Semester):</span><span class="rv">' + fmtBDT(1000) + '</span></div>' +
+    '<div class="rr indent"><span class="rl">Admission Form + ID Card:</span><span class="rv">' + fmtBDT(1000) + '</span></div>' +
+    '<div class="rr total"><span class="rl">Total Admission Day Payment:</span><span class="rv">' + fmtBDT(c.ADMISSION_FEES) + '</span></div>' +
+    '</div>' +
+
+    '<div class="rc green panel-reveal">' +
+    '<div class="rc-title">1st Semester Monthly Breakdown</div>' +
+    '<div class="rr"><span class="rl">Regular Tuition (1st Semester):</span><span class="rv">' + fmtBDT(c.TUITION_PER_SEMESTER) + '</span></div>' +
+    schHtml +
+    '<div class="rr"><span class="rl">Tuition per Month (1st Semester, divided by ' + firstSemMonths + ' months):</span><span class="rv">' + fmtBDT(firstSemTuitionMonthly) + '</span></div>' +
+    '<div class="rr"><span class="rl">Monthly Administrative Cost:</span><span class="rv">' + fmtBDT(fixedMonthly) + '</span></div>' +
+    '<div class="rr total"><span class="rl">Total Monthly (1st Semester - ' + firstSemMonths + ' months):</span><span class="rv">' + fmtBDT(totalMonthlyFirst) + '</span></div>' +
+    '</div>';
+}
+
+// ===== HTML GENERATION: FULL FORECAST =====
+function generateForecastHTML(combinedGPA, expectedGPA, maintainsAttendance, bd, subject) {
+    var c  = CONSTANTS[subject];
+    var dp = isDiploma(subject);
+
+    var totalReg           = c.TOTAL_SEMESTERS * 1000;
+    var totalInstitutional = c.FIXED_INSTITUTIONAL_FEES + c.ENGLISH_COURSE_FEE;
+    var grandTotal         = 10000 + totalReg + (dp ? 0 : 1000) + totalInstitutional + bd.totalTuition;
+    var firstSemMonths     = Math.round(c.TOTAL_MONTHS / c.TOTAL_SEMESTERS);
+    var remainingMonths    = c.TOTAL_MONTHS - firstSemMonths;
+    var monthlyAvg         = totalInstitutional / c.TOTAL_MONTHS
+                           + (bd.totalTuition - bd.firstSemesterTuition) / remainingMonths;
+
+    var attRate = '70', safetyThresh = '3.0';
+    if (subject === 'ba-bangla')                                    { attRate = '60'; safetyThresh = '2.8';  }
+    else if (dp)                                                    { attRate = '50'; safetyThresh = '2.50'; }
+    else if (['ba-english','llb'].indexOf(subject) !== -1)          { attRate = '60'; safetyThresh = '3.0';  }
+
+    var tuitionRows = '';
+    if (bd.safetyNetApplied) {
+        tuitionRows =
+            '<div class="rr highlight"><span class="rl">Safety Net Applied (Prev-Sem Attendance >= ' + attRate + '%, GPA < ' + safetyThresh + ') - Tuition capped from 2nd semester at:</span>' +
+            '<span class="rv">' + fmtBDT(c.SAFETY_NET_CAP) + '</span></div>';
+    } else {
+        tuitionRows =
+            '<div class="rr indent"><span class="rl">1st Semester (' + bd.initialWaiverPercent + '% scholarship):</span><span class="rv">' + fmtBDT(bd.firstSemesterTuition) + '</span></div>' +
+            '<div class="rr indent"><span class="rl">Remaining ' + (c.TOTAL_SEMESTERS - 1) + ' Semesters (' + bd.meritWaiverPercent + '% scholarship):</span><span class="rv">' + fmtBDT(bd.remainingSemestersTuition) + '</span></div>';
+    }
+
+    var summaryGPAHtml = dp
+        ? '<div class="sum-tile"><div class="tl">SSC+Diploma GPA</div><div class="tv">' + combinedGPA.toFixed(2) + '</div></div>'
+        : '<div class="sum-tile"><div class="tl">Combined GPA</div><div class="tv">' + combinedGPA.toFixed(2) + '</div></div>';
+
+    return '' +
+    '<div class="rc violet panel-reveal">' +
+    '<div class="rc-title">Total ' + c.DURATION_YEARS + '-Year Forecast</div>' +
+    '<div class="rr"><span class="rl">Admission Fee (One-time):</span><span class="rv">' + fmtBDT(10000) + '</span></div>' +
+    '<div class="rr"><span class="rl">Registration Fees (' + c.TOTAL_SEMESTERS + ' x 1,000):</span><span class="rv">' + fmtBDT(totalReg) + '</span></div>' +
+    (!dp ? '<div class="rr"><span class="rl">Admission Form + ID Card (Extra):</span><span class="rv">' + fmtBDT(1000) + '</span></div>' : '') +
+    '<div class="rr"><span class="rl">Total Administrative Fees:</span><span class="rv">' + fmtBDT(totalInstitutional) + '</span></div>' +
+    '<div class="rr indent"><span class="rl">Fixed Institutional Fees:</span><span class="rv">' + fmtBDT(c.FIXED_INSTITUTIONAL_FEES) + '</span></div>' +
+    (c.ENGLISH_COURSE_FEE > 0 ? '<div class="rr indent"><span class="rl">English Course Fee:</span><span class="rv">' + fmtBDT(c.ENGLISH_COURSE_FEE) + '</span></div>' : '') +
+    '<div class="rr"><span class="rl">Regular Tuition (All ' + c.TOTAL_SEMESTERS + ' Semesters):</span><span class="rv">' + fmtBDT(c.STANDARD_TUITION_FULL) + '</span></div>' +
+    (bd.initialWaiverPercent > 0 ? '<div class="rr indent"><span class="rl">' + (dp ? 'SSC + Diploma' : 'SSC + HSC') + ' Scholarship (1st Sem, ' + bd.initialWaiverPercent + '%):</span><span class="rv">- ' + fmtBDT(c.TUITION_PER_SEMESTER * bd.initialWaiverPercent / 100) + '</span></div>' : '') +
+    (bd.meritWaiverPercent  > 0 ? '<div class="rr indent"><span class="rl">Merit Scholarship (Sems 2-' + c.TOTAL_SEMESTERS + ', ' + bd.meritWaiverPercent + '%):</span><span class="rv">- ' + fmtBDT(c.TUITION_PER_SEMESTER * bd.meritWaiverPercent / 100 * (c.TOTAL_SEMESTERS - 1)) + '</span></div>' : '') +
+    '<div class="rr"><span class="rl">Payable Tuition (After Scholarships):</span><span class="rv">' + fmtBDT(bd.totalTuition) + '</span></div>' +
+    tuitionRows +
+    '<div class="rr total"><span class="rl">GRAND TOTAL (' + c.DURATION_YEARS + ' Years, approx.):</span><span class="rv">approx. ' + fmtBDT(grandTotal) + '</span></div>' +
+    '<div class="rr"><span class="rl">Approx. Average Monthly Payment:</span><span class="rv">approx. ' + fmtBDT(monthlyAvg) + '</span></div>' +
+    '<div class="info-box" style="margin-top:16px;"><h4>Important Note</h4>' +
+    '<p><strong>One-time Admission Fees, Registration Fees, and Admission Form + ID Card are included in the Grand Total but not in the Approx. Average Monthly Payment.</strong></p>' +
+    '<p>The Approx. Average Monthly Payment is calculated over the remaining <strong>' + remainingMonths + ' months</strong> (total ' + c.TOTAL_MONTHS + ' months minus the 1st semester of ' + firstSemMonths + ' months).</p>' +
+    '</div></div>' +
+
+    '<div class="rc panel-reveal"><div class="rc-title">Your Summary</div>' +
+    '<div class="sum-grid">' + summaryGPAHtml +
+    '<div class="sum-tile"><div class="tl">Expected GPA</div><div class="tv">' + expectedGPA.toFixed(2) + '</div></div>' +
+    '<div class="sum-tile"><div class="tl">1st Sem Scholarship</div><div class="tv">' + bd.initialWaiverPercent + '%</div></div>' +
+    '<div class="sum-tile"><div class="tl">Merit Scholarship</div><div class="tv">' + bd.meritWaiverPercent + '%</div></div>' +
+    '<div class="sum-tile"><div class="tl">' + attRate + '% Attendance</div><div class="tv">' + (maintainsAttendance ? 'Yes' : 'No') + '</div></div>' +
+    '<div class="sum-tile"><div class="tl">Safety Net</div><div class="tv">' + (bd.safetyNetApplied ? 'Applied' : 'N/A') + '</div></div>' +
+    '</div></div>' +
+
+    '<div class="info-box panel-reveal" style="margin-top:4px;"><h4>Key Definitions</h4>' +
+    '<p><strong>Administrative Fees:</strong> Cover operational costs including staff salaries, utilities, maintenance, library resources, and administrative services.</p>' +
+    '<p><strong>' + (dp ? 'SSC + Diploma CGPA Based Scholarship (1st Semester):' : 'SSC + HSC Result Based Scholarship (1st Semester):') + '</strong> ' +
+    (dp ? 'Awarded in the 1st semester based on SSC GPA and Diploma CGPA. Fixed for the 1st semester and not renewable.' : 'Awarded in the 1st semester based on combined SSC+HSC GPA. Fixed for the 1st semester and not renewable.') + '</p>' +
+    '<p><strong>Merit Scholarship (Sems 2-' + c.TOTAL_SEMESTERS + '):</strong> Merit-based scholarship from the 2nd semester, calculated from the previous semester GPA. Minimum qualifying GPA: <strong>' + safetyThresh + '</strong>. Valid for one semester only and must be re-earned each semester.</p>' +
+    '<p><strong>Safety Net (Attendance-based):</strong> If semester GPA falls below ' + safetyThresh + ' but the student maintained >= ' + attRate + '% attendance in the previous semester, total tuition is capped at <strong>' + fmtBDT(c.SAFETY_NET_CAP) + '</strong> for the entire program (applies from 2nd semester onward).</p>' +
+    '</div>';
+}
+
+// ===== HTML GENERATION: MASTERS =====
+function generateMastersHTML(subject) {
+    var c = CONSTANTS[subject];
+    var nameMap = {
+        'mba-regular':        ['MBA Regular - 1 Year',         '1 Year (3 Semesters)'],
+        'emba':               ['E-MBA - 1.5 Years',            '1.5 Years (4 Semesters)'],
+        'mba-3year':          ['MBA for 3-Year Degree Holders','2 Years (6 Semesters)'],
+        'ma-bangla-regular':  ['MA in Bangla - Regular',       '1 Year (3 Semesters)'],
+        'ma-bangla-2year':    ['MA in Bangla - 2 Year',        '2 Years (6 Semesters)'],
+        'ma-english-regular': ['MA in English - Regular',      '1 Year (3 Semesters)'],
+        'ma-english-2year':   ['MA in English - 2 Year',       '2 Years (6 Semesters)'],
+        'llm-regular':        ['LLM Regular - 1 Year',         '1 Year (2 Semesters)'],
+        'llm-2year':          ['LLM Preli and Final - 2 Year', '2 Years (4 Semesters)'],
+        'bed':                ['Bachelor of Education (B.Ed)', '1 Year (3 Semesters)'],
+        'med':                ['Master of Education (M.Ed)',   '1 Year (3 Semesters)']
+    };
+    var nm      = nameMap[subject] || ['Masters Program', c.DURATION_YEARS + ' Year(s)'];
+    var progName= nm[0], durText = nm[1];
+    var dual    = subject === 'ma-english-regular' || subject === 'llm-regular';
+
+    var admReq  = ADMISSION_REQUIREMENTS[subject];
+    var admHtml = admReq ? (
+        '<div class="rc panel-reveal"><div class="rc-title">Admission Requirements</div>' +
+        '<ul style="margin:4px 0 0 18px;line-height:1.9;font-size:13.5px;color:#475569;">' +
+        admReq.requirements.map(function(r) { return '<li>' + r + '</li>'; }).join('') +
+        '</ul></div>'
+    ) : '';
+
+    var campaignHtml;
+    if (dual) {
+        campaignHtml =
+            '<div class="rc green panel-reveal"><div class="rc-title">Summer Admission Campaign</div>' +
+            '<div class="rr"><span class="rl">Regular Program Cost:</span><span class="rv">' + fmtBDT(c.TOTAL_PROGRAM_COST) + '</span></div>' +
+            '<div style="margin:10px 0 6px;font-weight:600;font-size:13.5px;color:#475569;">Option A: External Student Discount</div>' +
+            '<div class="rr highlight"><span class="rl">External Waiver:</span><span class="rv"><strong>- ' + fmtBDT(c.EXTERNAL_WAIVER) + '</strong></span></div>' +
+            '<div class="rr"><span class="rl">Final Payable:</span><span class="rv">' + fmtBDT(c.EXTERNAL_FINAL) + '</span></div>' +
+            '<div class="rr"><span class="rl">Monthly:</span><span class="rv">' + fmtBDT(c.EXTERNAL_MONTHLY) + '</span></div>' +
+            '<div style="margin:10px 0 6px;font-weight:600;font-size:13.5px;color:#475569;">Option B: Internal (Alumni) Discount</div>' +
+            '<div class="rr highlight"><span class="rl">Alumni Loyalty Waiver:</span><span class="rv"><strong>- ' + fmtBDT(c.INTERNAL_WAIVER) + '</strong></span></div>' +
+            '<div class="rr total"><span class="rl">Final Payable:</span><span class="rv">' + fmtBDT(c.INTERNAL_FINAL) + '</span></div>' +
+            '<div class="rr"><span class="rl">Monthly:</span><span class="rv">' + fmtBDT(c.INTERNAL_MONTHLY) + '</span></div>' +
+            '</div>';
+    } else if (c.CAMPAIGN_WAIVER === undefined) {
+        campaignHtml =
+            '<div class="rc green panel-reveal"><div class="rc-title">Program Fee Summary</div>' +
+            '<div class="rr total"><span class="rl">Total Program Cost:</span><span class="rv">' + fmtBDT(c.TOTAL_PROGRAM_COST) + '</span></div>' +
+            '<div class="rr"><span class="rl">Monthly Fixed Fees:</span><span class="rv">' + fmtBDT(c.MONTHLY_FIXED) + '</span></div>' +
+            '</div>';
+    } else {
+        campaignHtml =
+            '<div class="rc green panel-reveal"><div class="rc-title">Summer Admission Campaign</div>' +
+            '<div class="rr"><span class="rl">Regular Program Cost:</span><span class="rv">' + fmtBDT(c.TOTAL_PROGRAM_COST) + '</span></div>' +
+            '<div class="rr highlight"><span class="rl">Summer Campaign Fixed Waiver:</span><span class="rv"><strong>- ' + fmtBDT(c.CAMPAIGN_WAIVER) + '</strong></span></div>' +
+            '<div class="rr total"><span class="rl">Total After Waiver:</span><span class="rv">' + fmtBDT(c.TOTAL_AFTER_WAIVER) + '</span></div>' +
+            '<div class="rr"><span class="rl">Monthly Fixed Fees:</span><span class="rv">' + fmtBDT(c.MONTHLY_FIXED) + '</span></div>' +
+            '</div>';
+    }
+
+    var noWaiver  = c.CAMPAIGN_WAIVER === undefined;
+    var fourthTileLabel = dual ? 'From (After Waiver)' : (noWaiver ? 'Monthly Fixed Fees' : 'After Waiver');
+    var fourthTileValue = dual ? fmtBDT(c.INTERNAL_FINAL) : (noWaiver ? fmtBDT(c.MONTHLY_FIXED) : fmtBDT(c.TOTAL_AFTER_WAIVER));
+
+    return '' +
+    '<div class="rc panel-reveal">' +
+    '<div class="rc-title">Program Overview - ' + progName + '</div>' +
+    '<div class="sum-grid">' +
+    '<div class="sum-tile"><div class="tl">Total Credits</div><div class="tv">' + c.TOTAL_CREDITS + '</div></div>' +
+    '<div class="sum-tile"><div class="tl">Duration</div><div class="tv">' + durText + '</div></div>' +
+    '<div class="sum-tile"><div class="tl">Program Cost</div><div class="tv">' + fmtBDT(c.TOTAL_PROGRAM_COST) + '</div></div>' +
+    '<div class="sum-tile"><div class="tl">' + fourthTileLabel + '</div><div class="tv">' + fourthTileValue + '</div></div>' +
+    '</div></div>' +
+    '<div class="rc panel-reveal"><div class="rc-title">Regular Program Cost</div>' +
+    '<div class="rr"><span class="rl">Tuition Fee:</span><span class="rv">' + fmtBDT(c.TUITION_FULL) + '</span></div>' +
+    '<div class="rr"><span class="rl">Admission Fee:</span><span class="rv">' + fmtBDT(c.ADMISSION_FEE) + '</span></div>' +
+    '<div class="rr"><span class="rl">Registration Fee (' + c.TOTAL_SEMESTERS + ' Semesters):</span><span class="rv">' + fmtBDT(c.REGISTRATION_FEE) + '</span></div>' +
+    '<div class="rr"><span class="rl">Institutional Fees:</span><span class="rv">' + fmtBDT(c.INSTITUTIONAL_FEES) + '</span></div>' +
+    '<div class="rr total"><span class="rl">Regular Program Cost:</span><span class="rv">' + fmtBDT(c.TOTAL_PROGRAM_COST) + '</span></div>' +
+    '</div>' +
+    campaignHtml + admHtml;
+}
+
+</script>
+</body>
+</html>
