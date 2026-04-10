@@ -95,7 +95,7 @@ require_once __DIR__ . '/../includes/header.php';
         <a href="<?= APP_URL ?>/course-fees/settings.php" class="btn btn-outline-secondary btn-sm">
             <i class="fas fa-cog me-1"></i> Settings
         </a>
-        <a href="<?= PUBLIC_URL ?? '/' ?>course-fees-calculator.php" target="_blank" class="btn btn-outline-primary btn-sm">
+        <a href="<?= SITE_URL ?>/course-fees-calculator.php" target="_blank" class="btn btn-outline-primary btn-sm">
             <i class="fas fa-external-link-alt me-1"></i> Public Page
         </a>
     </div>

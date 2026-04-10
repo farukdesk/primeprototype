@@ -12,19 +12,27 @@ DROP TABLE IF EXISTS `cf_settings`;
 
 -- 1. Global settings
 CREATE TABLE `cf_settings` (
-  `id`            TINYINT UNSIGNED NOT NULL DEFAULT 1 PRIMARY KEY,
-  `page_title`    VARCHAR(300)     NOT NULL DEFAULT 'Course Fee Calculator',
-  `session_label` VARCHAR(100)     NOT NULL DEFAULT 'Summer 2026'
-                  COMMENT 'Semester label shown on the public calculator, e.g. "Summer 2026"',
-  `disclaimer`    TEXT             DEFAULT NULL,
-  `is_published`  TINYINT(1)       NOT NULL DEFAULT 1,
-  `updated_at`    DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  `id`                   TINYINT UNSIGNED NOT NULL DEFAULT 1 PRIMARY KEY,
+  `page_title`           VARCHAR(300)     NOT NULL DEFAULT 'Course Fee Calculator',
+  `session_label`        VARCHAR(100)     NOT NULL DEFAULT 'Summer 2026'
+                         COMMENT 'Semester label shown on the public calculator, e.g. "Summer 2026"',
+  `disclaimer`           TEXT             DEFAULT NULL,
+  `is_published`         TINYINT(1)       NOT NULL DEFAULT 1,
+  `admission_fee_base`   INT UNSIGNED     NOT NULL DEFAULT 10000
+                         COMMENT 'Standard one-time admission fee component (BDT)',
+  `reg_fee_per_semester` INT UNSIGNED     NOT NULL DEFAULT 1000
+                         COMMENT 'Registration fee charged per semester (BDT)',
+  `form_id_fee`          INT UNSIGNED     NOT NULL DEFAULT 1000
+                         COMMENT 'Admission form + ID card one-time fee (BDT)',
+  `updated_at`           DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT IGNORE INTO `cf_settings` (`id`,`page_title`,`session_label`,`disclaimer`,`is_published`) VALUES
+INSERT IGNORE INTO `cf_settings`
+  (`id`,`page_title`,`session_label`,`disclaimer`,`is_published`,`admission_fee_base`,`reg_fee_per_semester`,`form_id_fee`)
+VALUES
 (1, 'Course Fee Calculator', 'Summer 2026',
  'Fee estimates provided here are for general informational purposes only and are subject to change without prior notice. Actual fees may vary based on the programme, semester, and university policy. Please contact the Accounts Office for the most up-to-date fee schedule.',
- 1);
+ 1, 10000, 1000, 1000);
 
 -- 2. Degree type categories
 CREATE TABLE `cf_degree_types` (
