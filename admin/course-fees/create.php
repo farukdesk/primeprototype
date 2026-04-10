@@ -4,81 +4,125 @@ require_once __DIR__ . '/helpers.php';
 
 require_access('course-fees', 'can_create');
 
-$page_title = 'Add Fee Structure';
+$page_title = 'Add Program – Course Fees';
 $errors     = [];
 $db         = db();
 
-$depts = $db->query('SELECT id, name FROM dept_departments WHERE is_active = 1 ORDER BY name')->fetchAll();
-$progs = $db->query('SELECT id, dept_id, program_name FROM dept_academic_programs ORDER BY program_name')->fetchAll();
+$degree_types = cf_get_degree_types();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
-    $dept_id       = (int)($_POST['dept_id']       ?? 0) ?: null;
-    $program_id    = (int)($_POST['program_id']    ?? 0) ?: null;
-    $degree_type   = $_POST['degree_type']          ?? 'bachelor';
-    $credit_fee    = (int)($_POST['credit_fee']    ?? 0);
-    $total_credits = trim($_POST['total_credits']  ?? '') !== '' ? (float)$_POST['total_credits'] : null;
-    $duration      = trim($_POST['duration_years'] ?? '') !== '' ? (float)$_POST['duration_years'] : null;
-    $num_semesters = trim($_POST['num_semesters']  ?? '') !== '' ? (int)$_POST['num_semesters'] : null;
-    $is_active     = isset($_POST['is_active']) ? 1 : 0;
-    $sort_order    = (int)($_POST['sort_order']    ?? 0);
+    $degree_type_id  = (int)($_POST['degree_type_id'] ?? 0);
+    $program_slug    = trim($_POST['program_slug']    ?? '');
+    $program_name    = trim($_POST['program_name']    ?? '');
+    $sort_order      = (int)($_POST['sort_order']     ?? 0);
+    $is_active       = isset($_POST['is_active']) ? 1 : 0;
 
-    // Fixed fees
-    $fee_names   = $_POST['fee_name']   ?? [];
-    $fee_amounts = $_POST['fee_amount'] ?? [];
-    $fee_types   = $_POST['fee_type']   ?? [];
-    $fee_orders  = $_POST['fee_sort']   ?? [];
+    // Common
+    $total_credits   = $_POST['total_credits']   !== '' ? (float)$_POST['total_credits']   : null;
+    $duration_years  = $_POST['duration_years']  !== '' ? (float)$_POST['duration_years']  : null;
+    $total_semesters = $_POST['total_semesters'] !== '' ? (int)$_POST['total_semesters']   : null;
+    $total_months    = $_POST['total_months']    !== '' ? (int)$_POST['total_months']       : null;
 
-    $valid_degrees = ['bachelor','master','diploma','certificate'];
-    if (!in_array($degree_type, $valid_degrees, true)) $errors[] = 'Invalid degree type.';
-    if ($credit_fee < 0) $errors[] = 'Credit fee must be zero or positive.';
+    // Bachelor / Diploma
+    $std_tuition     = $_POST['standard_tuition_full']    !== '' ? (int)$_POST['standard_tuition_full']    : null;
+    $tps             = $_POST['tuition_per_semester']     !== '' ? (float)$_POST['tuition_per_semester']   : null;
+    $adm_fees        = $_POST['admission_fees']           !== '' ? (int)$_POST['admission_fees']           : null;
+    $fix_inst        = $_POST['fixed_institutional_fees'] !== '' ? (int)$_POST['fixed_institutional_fees'] : null;
+    $eng_fee         = (int)($_POST['english_course_fee'] ?? 0);
+    $sn_cap          = $_POST['safety_net_cap']           !== '' ? (int)$_POST['safety_net_cap']           : null;
+    $sn_per          = $_POST['safety_net_per_semester']  !== '' ? (float)$_POST['safety_net_per_semester']: null;
+    $att_req         = (int)($_POST['attendance_requirement']   ?? 70);
+    $sn_gpa          = (float)($_POST['safety_net_gpa_threshold'] ?? 3.00);
+    $sch_type        = $_POST['scholarship_type'] ?? 'regular_bachelor';
+    $init_tiers      = trim($_POST['initial_waiver_tiers'] ?? '');
+    $merit_tiers     = trim($_POST['merit_waiver_tiers']   ?? '');
+
+    // Masters
+    $tuf             = $_POST['tuition_full']         !== '' ? (int)$_POST['tuition_full']         : null;
+    $adm_m           = $_POST['admission_fee_m']      !== '' ? (int)$_POST['admission_fee_m']       : null;
+    $reg_fee         = $_POST['registration_fee']     !== '' ? (int)$_POST['registration_fee']      : null;
+    $inst_fees       = $_POST['institutional_fees']   !== '' ? (int)$_POST['institutional_fees']    : null;
+    $camp_waiver     = $_POST['campaign_waiver']      !== '' ? (int)$_POST['campaign_waiver']       : null;
+    $tot_cost        = $_POST['total_program_cost']   !== '' ? (int)$_POST['total_program_cost']    : null;
+    $tot_waiver      = $_POST['total_after_waiver']   !== '' ? (int)$_POST['total_after_waiver']    : null;
+    $monthly_fix     = $_POST['monthly_fixed']        !== '' ? (float)$_POST['monthly_fixed']       : null;
+    $ext_waiver      = $_POST['external_waiver']      !== '' ? (int)$_POST['external_waiver']       : null;
+    $ext_final       = $_POST['external_final']       !== '' ? (int)$_POST['external_final']        : null;
+    $ext_monthly     = $_POST['external_monthly']     !== '' ? (float)$_POST['external_monthly']    : null;
+    $int_waiver      = $_POST['internal_waiver']      !== '' ? (int)$_POST['internal_waiver']       : null;
+    $int_final       = $_POST['internal_final']       !== '' ? (int)$_POST['internal_final']        : null;
+    $int_monthly     = $_POST['internal_monthly']     !== '' ? (float)$_POST['internal_monthly']    : null;
+
+    // Validate
+    if ($degree_type_id <= 0) $errors[] = 'Degree type is required.';
+    if ($program_slug === '')  $errors[] = 'Program slug is required.';
+    elseif (!preg_match('/^[a-z0-9\-]+$/', $program_slug)) $errors[] = 'Slug must be lowercase letters, numbers, and hyphens only.';
+    if ($program_name === '')  $errors[] = 'Program name is required.';
+
+    // Validate JSON tiers
+    foreach (['initial_waiver_tiers' => $init_tiers, 'merit_waiver_tiers' => $merit_tiers] as $field => $json) {
+        if ($json !== '') {
+            json_decode($json);
+            if (json_last_error() !== JSON_ERROR_NONE) $errors[] = ucwords(str_replace('_', ' ', $field)) . ' must be valid JSON.';
+        }
+    }
+
+    // Check slug uniqueness
+    if (empty($errors)) {
+        $exists = $db->prepare('SELECT id FROM cf_programs WHERE program_slug=?');
+        $exists->execute([$program_slug]);
+        if ($exists->fetchColumn()) $errors[] = 'A program with this slug already exists.';
+    }
 
     if (empty($errors)) {
-        $user = auth_user();
-
         $db->prepare(
-            'INSERT INTO cf_programs (dept_id, program_id, degree_type, credit_fee, total_credits, duration_years, num_semesters, is_active, sort_order, created_by)
-             VALUES (?,?,?,?,?,?,?,?,?,?)'
-        )->execute([$dept_id, $program_id, $degree_type, $credit_fee, $total_credits, $duration, $num_semesters, $is_active, $sort_order, $user['id']]);
+            'INSERT INTO cf_programs
+             (degree_type_id, program_slug, program_name, sort_order, is_active,
+              total_credits, duration_years, total_semesters, total_months,
+              standard_tuition_full, tuition_per_semester, admission_fees,
+              fixed_institutional_fees, english_course_fee, safety_net_cap, safety_net_per_semester,
+              attendance_requirement, safety_net_gpa_threshold, scholarship_type,
+              initial_waiver_tiers, merit_waiver_tiers,
+              tuition_full, admission_fee_m, registration_fee, institutional_fees,
+              campaign_waiver, total_program_cost, total_after_waiver, monthly_fixed,
+              external_waiver, external_final, external_monthly,
+              internal_waiver, internal_final, internal_monthly)
+             VALUES
+             (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+        )->execute([
+            $degree_type_id, $program_slug, $program_name, $sort_order, $is_active,
+            $total_credits, $duration_years, $total_semesters, $total_months,
+            $std_tuition, $tps, $adm_fees, $fix_inst, $eng_fee, $sn_cap, $sn_per,
+            $att_req, $sn_gpa, $sch_type,
+            $init_tiers ?: null, $merit_tiers ?: null,
+            $tuf, $adm_m, $reg_fee, $inst_fees, $camp_waiver, $tot_cost, $tot_waiver, $monthly_fix,
+            $ext_waiver, $ext_final, $ext_monthly, $int_waiver, $int_final, $int_monthly,
+        ]);
 
         $new_id = (int)$db->lastInsertId();
+        log_change('course-fees', 'CREATE', $new_id, $program_name, null, null, null, 'Program created.');
 
-        // Insert fixed fees
-        $ins = $db->prepare(
-            'INSERT INTO cf_fixed_fees (cf_program_id, fee_name, amount, fee_type, sort_order) VALUES (?,?,?,?,?)'
-        );
-        foreach ($fee_names as $idx => $fname) {
-            $fname  = trim($fname);
-            $amount = (int)($fee_amounts[$idx] ?? 0);
-            $ftype  = in_array($fee_types[$idx] ?? '', ['one_time','per_semester','monthly'], true)
-                      ? $fee_types[$idx] : 'one_time';
-            $fsort  = (int)($fee_orders[$idx] ?? $idx);
-            if ($fname !== '') {
-                $ins->execute([$new_id, $fname, $amount, $ftype, $fsort]);
-            }
-        }
-
-        $label = cf_program_label(cf_get_program($new_id) ?: ['id' => $new_id, 'program_name' => '', 'dept_name' => '', 'degree_type' => $degree_type]);
-        log_change('course-fees', 'CREATE', $new_id, $label, null, null, null, "Fee structure created.");
-
-        flash_set('success', 'Fee structure created successfully.');
+        flash_set('success', 'Program "' . $program_name . '" created successfully.');
         redirect(APP_URL . '/course-fees/view.php?id=' . $new_id);
     }
 
     save_old($_POST);
 }
 
+$old = fn(string $k, mixed $d = '') => old($k, $d);
+
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <div>
-        <h1 class="h3 mb-0"><i class="fas fa-plus-circle me-2 text-success"></i>Add Fee Structure</h1>
+        <h1 class="h3 mb-0"><i class="fas fa-plus-circle me-2 text-success"></i>Add Program</h1>
         <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small">
             <li class="breadcrumb-item"><a href="<?= APP_URL ?>/index.php">Dashboard</a></li>
             <li class="breadcrumb-item"><a href="<?= APP_URL ?>/course-fees/index.php">Course Fees</a></li>
-            <li class="breadcrumb-item active">Add</li>
+            <li class="breadcrumb-item active">Add Program</li>
         </ol></nav>
     </div>
     <a href="<?= APP_URL ?>/course-fees/index.php" class="btn btn-outline-secondary btn-sm">
@@ -94,209 +138,286 @@ require_once __DIR__ . '/../includes/header.php';
 
 <form method="post" novalidate id="cf-form">
     <?= csrf_field() ?>
-    <div class="row g-4">
 
-        <!-- Main -->
+    <div class="row g-4">
         <div class="col-lg-8">
+
+            <!-- Basic Info -->
             <div class="card border-0 shadow-sm mb-4">
-                <div class="card-header bg-primary text-white fw-semibold py-3">
-                    <i class="fas fa-graduation-cap me-2"></i>Programme Details
+                <div class="card-header fw-semibold py-3">
+                    <i class="fas fa-info-circle me-2 text-primary"></i>Basic Information
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Degree Type <span class="text-danger">*</span></label>
+                        <select name="degree_type_id" id="degreeTypeSelect" class="form-select" required
+                                onchange="toggleDegreeFields()">
+                            <option value="">— Select degree type —</option>
+                            <?php foreach ($degree_types as $dt): ?>
+                            <option value="<?= $dt['id'] ?>"
+                                    data-slug="<?= h($dt['slug']) ?>"
+                                <?= (int)($old('degree_type_id', 0)) === (int)$dt['id'] ? 'selected' : '' ?>>
+                                <?= h($dt['icon'] . ' ' . $dt['name']) ?>
+                            </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Program Name <span class="text-danger">*</span></label>
+                        <input type="text" name="program_name" value="<?= h($old('program_name')) ?>"
+                               class="form-control" placeholder="e.g. BBA - Bachelor of Business Administration" required>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Program Slug <span class="text-danger">*</span></label>
+                            <input type="text" name="program_slug" id="slugField" value="<?= h($old('program_slug')) ?>"
+                                   class="form-control" placeholder="e.g. bba" pattern="[a-z0-9\-]+" required>
+                            <div class="form-text">Lowercase letters, numbers, hyphens. Must be unique.</div>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Sort Order</label>
+                            <input type="number" name="sort_order" value="<?= (int)$old('sort_order', 0) ?>"
+                                   class="form-control" min="0">
+                        </div>
+                        <div class="col-md-3 d-flex align-items-end">
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" name="is_active" id="isActive"
+                                       value="1" <?= old('is_active', '1') ? 'checked' : '' ?>>
+                                <label class="form-check-label fw-semibold" for="isActive">Active</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Common Constants -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header fw-semibold py-3">
+                    <i class="fas fa-graduation-cap me-2 text-info"></i>Program Constants
                 </div>
                 <div class="card-body">
                     <div class="row g-3">
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold">Department</label>
-                            <select name="dept_id" id="dept_id" class="form-select">
-                                <option value="">— Select Department —</option>
-                                <?php foreach ($depts as $d): ?>
-                                <option value="<?= $d['id'] ?>" <?= old('dept_id') == $d['id'] ? 'selected' : '' ?>><?= h($d['name']) ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold">Programme</label>
-                            <select name="program_id" id="program_id" class="form-select">
-                                <option value="">— Select Programme —</option>
-                                <?php foreach ($progs as $p): ?>
-                                <option value="<?= $p['id'] ?>" data-dept="<?= $p['dept_id'] ?>"
-                                    <?= old('program_id') == $p['id'] ? 'selected' : '' ?>><?= h($p['program_name']) ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label fw-semibold">Degree Type <span class="text-danger">*</span></label>
-                            <select name="degree_type" class="form-select" required>
-                                <?php foreach (['bachelor'=>'Bachelor','master'=>'Master','diploma'=>'Diploma','certificate'=>'Certificate'] as $v => $l): ?>
-                                <option value="<?= $v ?>" <?= old('degree_type', 'bachelor') === $v ? 'selected' : '' ?>><?= $l ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <label class="form-label fw-semibold">Total Credits</label>
-                            <input type="number" name="total_credits" class="form-control" min="0" max="999" step="0.25"
-                                   value="<?= h(old('total_credits')) ?>" placeholder="e.g. 160.5">
-                            <div class="form-text">Optional, supports decimals (e.g. 160.5).</div>
+                            <input type="number" name="total_credits" value="<?= h($old('total_credits')) ?>"
+                                   class="form-control" step="0.5" min="0">
                         </div>
-                        <div class="col-md-4">
-                            <label class="form-label fw-semibold">Duration (years)</label>
-                            <input type="number" name="duration_years" class="form-control" min="0" max="10" step="0.5"
-                                   value="<?= h(old('duration_years')) ?>" placeholder="e.g. 4">
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Duration (Years)</label>
+                            <input type="number" name="duration_years" value="<?= h($old('duration_years')) ?>"
+                                   class="form-control" step="0.5" min="0">
                         </div>
-                        <div class="col-md-4">
-                            <label class="form-label fw-semibold">Number of Semesters</label>
-                            <input type="number" name="num_semesters" class="form-control" min="1" max="24"
-                                   value="<?= h(old('num_semesters')) ?>" placeholder="e.g. 8 or 12">
-                            <div class="form-text">Used to calculate total per-semester costs.</div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Total Semesters</label>
+                            <input type="number" name="total_semesters" value="<?= h($old('total_semesters')) ?>"
+                                   class="form-control" min="1">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Total Months</label>
+                            <input type="number" name="total_months" value="<?= h($old('total_months')) ?>"
+                                   class="form-control" min="1">
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Fixed Fees -->
-            <div class="card border-0 shadow-sm mb-4">
-                <div class="card-header fw-semibold py-3 d-flex justify-content-between align-items-center">
-                    <span><i class="fas fa-list-ul me-2 text-info"></i>Additional / Fixed Fees</span>
-                    <button type="button" class="btn btn-sm btn-outline-info" id="add-fee-row">
-                        <i class="fas fa-plus me-1"></i> Add Fee
-                    </button>
+            <!-- Bachelor / Diploma Section -->
+            <div id="bachelorSection" class="card border-0 shadow-sm mb-4 d-none">
+                <div class="card-header fw-semibold py-3 bg-primary bg-opacity-10">
+                    <i class="fas fa-book me-2 text-primary"></i>Bachelor / Diploma Fee Constants
                 </div>
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table mb-0" id="fees-table">
-                            <thead class="table-light">
-                                <tr>
-                                    <th class="px-3">Fee Name</th>
-                                    <th>Amount (BDT)</th>
-                                    <th>Type</th>
-                                    <th>Order</th>
-                                    <th></th>
-                                </tr>
-                            </thead>
-                            <tbody id="fees-body">
-                                <?php
-                                $old_names   = old_array('fee_name');
-                                $old_amounts = old_array('fee_amount');
-                                $old_types   = old_array('fee_type');
-                                $old_sorts   = old_array('fee_sort');
-                                $old_rows    = count($old_names) > 0 ? count($old_names) : 0;
-                                ?>
-                                <?php if ($old_rows > 0): ?>
-                                <?php for ($ri = 0; $ri < $old_rows; $ri++): ?>
-                                <tr class="fee-row">
-                                    <td class="px-3"><input type="text" name="fee_name[]" class="form-control form-control-sm" value="<?= h($old_names[$ri] ?? '') ?>" placeholder="e.g. Library Fee"></td>
-                                    <td><input type="number" name="fee_amount[]" class="form-control form-control-sm" value="<?= h($old_amounts[$ri] ?? 0) ?>" min="0"></td>
-                                    <td>
-                                        <select name="fee_type[]" class="form-select form-select-sm">
-                                            <option value="one_time"     <?= ($old_types[$ri] ?? '') === 'one_time'     ? 'selected' : '' ?>>One-Time</option>
-                                            <option value="per_semester" <?= ($old_types[$ri] ?? '') === 'per_semester' ? 'selected' : '' ?>>Per Semester</option>
-                                            <option value="monthly"      <?= ($old_types[$ri] ?? '') === 'monthly'      ? 'selected' : '' ?>>Monthly (÷ months)</option>
-                                        </select>
-                                    </td>
-                                    <td><input type="number" name="fee_sort[]" class="form-control form-control-sm" value="<?= h($old_sorts[$ri] ?? $ri) ?>" min="0" style="width:70px;"></td>
-                                    <td><button type="button" class="btn btn-sm btn-outline-danger remove-fee-row"><i class="fas fa-times"></i></button></td>
-                                </tr>
-                                <?php endfor; ?>
-                                <?php else: ?>
-                                <!-- Default two rows -->
-                                <tr class="fee-row">
-                                    <td class="px-3"><input type="text" name="fee_name[]" class="form-control form-control-sm" value="Registration Fee" placeholder="Fee name"></td>
-                                    <td><input type="number" name="fee_amount[]" class="form-control form-control-sm" value="5000" min="0"></td>
-                                    <td><select name="fee_type[]" class="form-select form-select-sm"><option value="one_time">One-Time</option><option value="per_semester">Per Semester</option><option value="monthly">Monthly (÷ months)</option></select></td>
-                                    <td><input type="number" name="fee_sort[]" class="form-control form-control-sm" value="0" min="0" style="width:70px;"></td>
-                                    <td><button type="button" class="btn btn-sm btn-outline-danger remove-fee-row"><i class="fas fa-times"></i></button></td>
-                                </tr>
-                                <tr class="fee-row">
-                                    <td class="px-3"><input type="text" name="fee_name[]" class="form-control form-control-sm" value="Student Activity Fee" placeholder="Fee name"></td>
-                                    <td><input type="number" name="fee_amount[]" class="form-control form-control-sm" value="1500" min="0"></td>
-                                    <td><select name="fee_type[]" class="form-select form-select-sm"><option value="one_time">One-Time</option><option value="per_semester">Per Semester</option><option value="monthly">Monthly (÷ months)</option></select></td>
-                                    <td><input type="number" name="fee_sort[]" class="form-control form-control-sm" value="1" min="0" style="width:70px;"></td>
-                                    <td><button type="button" class="btn btn-sm btn-outline-danger remove-fee-row"><i class="fas fa-times"></i></button></td>
-                                </tr>
-                                <?php endif; ?>
-                            </tbody>
-                        </table>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Standard Tuition (Full)</label>
+                            <input type="number" name="standard_tuition_full" value="<?= h($old('standard_tuition_full')) ?>"
+                                   class="form-control" min="0">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Tuition Per Semester</label>
+                            <input type="number" name="tuition_per_semester" value="<?= h($old('tuition_per_semester')) ?>"
+                                   class="form-control" step="0.01" min="0">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Admission Fees (Day Total)</label>
+                            <input type="number" name="admission_fees" value="<?= h($old('admission_fees')) ?>"
+                                   class="form-control" min="0">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Fixed Institutional Fees</label>
+                            <input type="number" name="fixed_institutional_fees" value="<?= h($old('fixed_institutional_fees')) ?>"
+                                   class="form-control" min="0">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">English Course Fee</label>
+                            <input type="number" name="english_course_fee" value="<?= h($old('english_course_fee', 0)) ?>"
+                                   class="form-control" min="0">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Safety Net Cap</label>
+                            <input type="number" name="safety_net_cap" value="<?= h($old('safety_net_cap')) ?>"
+                                   class="form-control" min="0">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Safety Net Per Semester</label>
+                            <input type="number" name="safety_net_per_semester" value="<?= h($old('safety_net_per_semester')) ?>"
+                                   class="form-control" step="0.01" min="0">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Attendance Requirement (%)</label>
+                            <select name="attendance_requirement" class="form-select">
+                                <option value="70" <?= $old('attendance_requirement', 70) == 70 ? 'selected' : '' ?>>70%</option>
+                                <option value="60" <?= $old('attendance_requirement', 70) == 60 ? 'selected' : '' ?>>60%</option>
+                                <option value="50" <?= $old('attendance_requirement', 70) == 50 ? 'selected' : '' ?>>50%</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Safety Net GPA Threshold</label>
+                            <input type="number" name="safety_net_gpa_threshold" value="<?= h($old('safety_net_gpa_threshold', 3.00)) ?>"
+                                   class="form-control" step="0.01" min="0" max="4">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Scholarship Type</label>
+                            <select name="scholarship_type" class="form-select">
+                                <option value="regular_bachelor" <?= $old('scholarship_type') === 'regular_bachelor' ? 'selected' : '' ?>>Regular Bachelor</option>
+                                <option value="ba_bangla"        <?= $old('scholarship_type') === 'ba_bangla'        ? 'selected' : '' ?>>BA Bangla</option>
+                                <option value="llb"              <?= $old('scholarship_type') === 'llb'              ? 'selected' : '' ?>>LLB / BA English</option>
+                                <option value="diploma"          <?= $old('scholarship_type') === 'diploma'          ? 'selected' : '' ?>>Diploma</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Initial Waiver Tiers (JSON)</label>
+                            <textarea name="initial_waiver_tiers" class="form-control font-monospace" rows="3"
+                                      placeholder='[{"min":0,"max":4.99,"pct":0},{"min":5,"max":9.99,"pct":50},{"min":10,"max":10,"pct":100}]'><?= h($old('initial_waiver_tiers')) ?></textarea>
+                            <div class="form-text">Array of objects with <code>min</code>, <code>max</code>, <code>pct</code> keys. GPA-based initial scholarship tiers.</div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Merit Waiver Tiers (JSON)</label>
+                            <textarea name="merit_waiver_tiers" class="form-control font-monospace" rows="3"
+                                      placeholder='[{"min":3.9,"max":4.0,"pct":100},{"min":3.0,"max":3.49,"pct":55},{"min":0,"max":2.99,"pct":0}]'><?= h($old('merit_waiver_tiers')) ?></textarea>
+                            <div class="form-text">Semester GPA–based merit scholarship tiers (semesters 2–N).</div>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Sidebar -->
+            <!-- Masters Section -->
+            <div id="mastersSection" class="card border-0 shadow-sm mb-4 d-none">
+                <div class="card-header fw-semibold py-3 bg-success bg-opacity-10">
+                    <i class="fas fa-university me-2 text-success"></i>Masters Fee Constants
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Tuition Full</label>
+                            <input type="number" name="tuition_full" value="<?= h($old('tuition_full')) ?>"
+                                   class="form-control" min="0">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Admission Fee</label>
+                            <input type="number" name="admission_fee_m" value="<?= h($old('admission_fee_m')) ?>"
+                                   class="form-control" min="0">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Registration Fee</label>
+                            <input type="number" name="registration_fee" value="<?= h($old('registration_fee')) ?>"
+                                   class="form-control" min="0">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Institutional Fees</label>
+                            <input type="number" name="institutional_fees" value="<?= h($old('institutional_fees')) ?>"
+                                   class="form-control" min="0">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Campaign Waiver</label>
+                            <input type="number" name="campaign_waiver" value="<?= h($old('campaign_waiver')) ?>"
+                                   class="form-control" min="0">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Total Program Cost</label>
+                            <input type="number" name="total_program_cost" value="<?= h($old('total_program_cost')) ?>"
+                                   class="form-control" min="0">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Total After Waiver</label>
+                            <input type="number" name="total_after_waiver" value="<?= h($old('total_after_waiver')) ?>"
+                                   class="form-control" min="0">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Monthly Fixed</label>
+                            <input type="number" name="monthly_fixed" value="<?= h($old('monthly_fixed')) ?>"
+                                   class="form-control" step="0.01" min="0">
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="fw-semibold mb-3 text-muted small text-uppercase">Dual-Track (Optional – e.g. MA English, LLM)</div>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">External Waiver</label>
+                            <input type="number" name="external_waiver" value="<?= h($old('external_waiver')) ?>"
+                                   class="form-control" min="0">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">External Final Cost</label>
+                            <input type="number" name="external_final" value="<?= h($old('external_final')) ?>"
+                                   class="form-control" min="0">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">External Monthly</label>
+                            <input type="number" name="external_monthly" value="<?= h($old('external_monthly')) ?>"
+                                   class="form-control" step="0.01" min="0">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Internal Waiver</label>
+                            <input type="number" name="internal_waiver" value="<?= h($old('internal_waiver')) ?>"
+                                   class="form-control" min="0">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Internal Final Cost</label>
+                            <input type="number" name="internal_final" value="<?= h($old('internal_final')) ?>"
+                                   class="form-control" min="0">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Internal Monthly</label>
+                            <input type="number" name="internal_monthly" value="<?= h($old('internal_monthly')) ?>"
+                                   class="form-control" step="0.01" min="0">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div><!-- /col-lg-8 -->
+
         <div class="col-lg-4">
-            <div class="card border-0 shadow-sm mb-4">
-                <div class="card-header fw-semibold py-3"><i class="fas fa-money-bill-wave me-2 text-success"></i>Fee per Credit Hour</div>
+            <div class="card border-0 shadow-sm sticky-top" style="top:80px">
                 <div class="card-body">
-                    <label class="form-label fw-semibold">Credit Hour Fee (BDT) <span class="text-danger">*</span></label>
-                    <div class="input-group">
-                        <span class="input-group-text">BDT</span>
-                        <input type="number" name="credit_fee" class="form-control form-control-lg fw-bold"
-                               value="<?= h(old('credit_fee', 0)) ?>" min="0" required>
-                    </div>
-                    <div class="form-text">Tuition fee charged per credit hour.</div>
+                    <button type="submit" class="btn btn-success w-100 mb-2">
+                        <i class="fas fa-save me-1"></i> Save Program
+                    </button>
+                    <a href="<?= APP_URL ?>/course-fees/index.php" class="btn btn-outline-secondary w-100">
+                        Cancel
+                    </a>
                 </div>
-            </div>
-
-            <div class="card border-0 shadow-sm mb-4">
-                <div class="card-header fw-semibold py-3"><i class="fas fa-cog me-2"></i>Options</div>
-                <div class="card-body">
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Sort Order</label>
-                        <input type="number" name="sort_order" class="form-control" value="<?= h(old('sort_order', 0)) ?>" min="0">
-                        <div class="form-text">Lower numbers appear first on the public page.</div>
-                    </div>
-                    <div class="form-check form-switch">
-                        <?php
-                        $is_post      = $_SERVER['REQUEST_METHOD'] === 'POST';
-                        $active_checked = $is_post ? (old('is_active', '') === '1') : true;
-                        ?>
-                        <input class="form-check-input" type="checkbox" name="is_active" id="is_active" value="1"
-                               <?= $active_checked ? 'checked' : '' ?>>
-                        <label class="form-check-label fw-semibold" for="is_active">Active (visible on public page)</label>
-                    </div>
-                </div>
-            </div>
-
-            <div class="d-grid gap-2">
-                <button type="submit" class="btn btn-success btn-lg">
-                    <i class="fas fa-save me-1"></i> Save Fee Structure
-                </button>
-                <a href="<?= APP_URL ?>/course-fees/index.php" class="btn btn-outline-secondary">Cancel</a>
             </div>
         </div>
     </div>
 </form>
 
 <script>
-// Filter programmes by department
-document.getElementById('dept_id').addEventListener('change', function () {
-    var deptId = this.value;
-    document.querySelectorAll('#program_id option').forEach(function (opt) {
-        if (!opt.value) { opt.style.display = ''; return; }
-        opt.style.display = (!deptId || opt.dataset.dept === deptId) ? '' : 'none';
-    });
-    document.getElementById('program_id').value = '';
-});
-
-// Add fee row
-var rowIdx = <?= $old_rows ?: 2 ?>;
-document.getElementById('add-fee-row').addEventListener('click', function () {
-    var tbody = document.getElementById('fees-body');
-    var tr = document.createElement('tr');
-    tr.className = 'fee-row';
-    tr.innerHTML = `<td class="px-3"><input type="text" name="fee_name[]" class="form-control form-control-sm" placeholder="Fee name"></td>
-        <td><input type="number" name="fee_amount[]" class="form-control form-control-sm" value="0" min="0"></td>
-        <td><select name="fee_type[]" class="form-select form-select-sm"><option value="one_time">One-Time</option><option value="per_semester">Per Semester</option><option value="monthly">Monthly (÷ months)</option></select></td>
-        <td><input type="number" name="fee_sort[]" class="form-control form-control-sm" value="${rowIdx}" min="0" style="width:70px;"></td>
-        <td><button type="button" class="btn btn-sm btn-outline-danger remove-fee-row"><i class="fas fa-times"></i></button></td>`;
-    tbody.appendChild(tr);
-    rowIdx++;
-});
-
-// Remove fee row
-document.addEventListener('click', function (e) {
-    if (e.target.closest('.remove-fee-row')) {
-        e.target.closest('tr').remove();
+function toggleDegreeFields() {
+    var sel  = document.getElementById('degreeTypeSelect');
+    var slug = sel.options[sel.selectedIndex]?.dataset?.slug || '';
+    var bSec = document.getElementById('bachelorSection');
+    var mSec = document.getElementById('mastersSection');
+    bSec.classList.add('d-none');
+    mSec.classList.add('d-none');
+    if (slug === 'masters') {
+        mSec.classList.remove('d-none');
+    } else if (slug === 'regular-bachelor' || slug === 'bachelor-from-diploma') {
+        bSec.classList.remove('d-none');
     }
-});
+}
+toggleDegreeFields();
 </script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>

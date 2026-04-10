@@ -1,123 +1,71 @@
 <?php
 /**
- * Course Fees Calculator – Shared Helpers
+ * Course Fees Calculator v4 – Shared Helpers
  */
 
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../change-log/helpers.php';
 
 // ── Permission helpers ────────────────────────────────────────────────────────
-
-function cf_can_edit(): bool
-{
-    return is_super_admin() || can_access('course-fees', 'can_edit');
-}
-
-function cf_can_create(): bool
-{
-    return is_super_admin() || can_access('course-fees', 'can_create');
-}
-
-function cf_can_delete(): bool
-{
-    return is_super_admin() || can_access('course-fees', 'can_delete');
-}
-
-// ── Degree type label ─────────────────────────────────────────────────────────
-
-function cf_degree_label(string $type): string
-{
-    return match ($type) {
-        'bachelor'    => 'Bachelor',
-        'master'      => 'Master',
-        'diploma'     => 'Diploma',
-        'certificate' => 'Certificate',
-        default       => ucfirst($type),
-    };
-}
-
-function cf_degree_badge(string $type): string
-{
-    $cls = match ($type) {
-        'bachelor'    => 'bg-primary',
-        'master'      => 'bg-success',
-        'diploma'     => 'bg-warning text-dark',
-        'certificate' => 'bg-info text-dark',
-        default       => 'bg-secondary',
-    };
-    return '<span class="badge ' . $cls . '">' . h(cf_degree_label($type)) . '</span>';
-}
-
-// ── Fee type label ────────────────────────────────────────────────────────────
-
-function cf_fee_type_label(string $type): string
-{
-    return match ($type) {
-        'one_time'     => 'One-Time',
-        'per_semester' => 'Per Semester',
-        'monthly'      => 'Monthly (÷ by program months)',
-        default        => ucfirst($type),
-    };
-}
+function cf_can_edit(): bool   { return is_super_admin() || can_access('course-fees', 'can_edit'); }
+function cf_can_create(): bool { return is_super_admin() || can_access('course-fees', 'can_create'); }
+function cf_can_delete(): bool { return is_super_admin() || can_access('course-fees', 'can_delete'); }
 
 // ── Money format ──────────────────────────────────────────────────────────────
-
-function cf_money(int $amount, string $currency = 'BDT'): string
-{
-    return $currency . ' ' . number_format($amount);
+function cf_money(float $n): string {
+    return number_format($n) . ' BDT';
 }
 
-// ── Get global settings ───────────────────────────────────────────────────────
-
-function cf_get_settings(): array
-{
+// ── Global settings ───────────────────────────────────────────────────────────
+function cf_get_settings(): array {
     static $s = null;
     if ($s === null) {
-        $s = db()->query('SELECT * FROM cf_settings WHERE id = 1')->fetch() ?: [];
+        $s = db()->query('SELECT * FROM cf_settings WHERE id=1')->fetch() ?: [];
     }
     return $s;
 }
 
-// ── Get program with its dept / program name ──────────────────────────────────
+// ── Degree types ─────────────────────────────────────────────────────────────
+function cf_get_degree_types(): array {
+    return db()->query('SELECT * FROM cf_degree_types ORDER BY sort_order')->fetchAll();
+}
 
-function cf_get_program(int $id): array|false
-{
+// ── Single program by ID ──────────────────────────────────────────────────────
+function cf_get_program(int $id): array|false {
     $stmt = db()->prepare(
-        'SELECT p.*,
-                d.name         AS dept_name,
-                ap.program_name
+        'SELECT p.*, dt.slug AS degree_type_slug, dt.name AS degree_type_name
          FROM cf_programs p
-         LEFT JOIN dept_departments     d  ON d.id  = p.dept_id
-         LEFT JOIN dept_academic_programs ap ON ap.id = p.program_id
+         JOIN cf_degree_types dt ON dt.id = p.degree_type_id
          WHERE p.id = ?'
     );
     $stmt->execute([$id]);
     return $stmt->fetch();
 }
 
-// ── Get fixed fees for a program ──────────────────────────────────────────────
-
-function cf_get_fixed_fees(int $cf_program_id): array
-{
+// ── Admission requirements for a program ─────────────────────────────────────
+function cf_get_requirements(int $program_id): array {
     $stmt = db()->prepare(
-        'SELECT * FROM cf_fixed_fees WHERE cf_program_id = ? ORDER BY sort_order, id'
+        'SELECT * FROM cf_admission_requirements WHERE program_id=? ORDER BY sort_order, id'
     );
-    $stmt->execute([$cf_program_id]);
+    $stmt->execute([$program_id]);
     return $stmt->fetchAll();
 }
 
-// ── Build a display label for a program row ───────────────────────────────────
+// ── Is a program a masters degree? ───────────────────────────────────────────
+function cf_is_masters(array $prog): bool {
+    return ($prog['degree_type_slug'] ?? '') === 'masters';
+}
 
-function cf_program_label(array $row): string
-{
-    $parts = [];
-    if (!empty($row['program_name'])) {
-        $parts[] = $row['program_name'];
-    } elseif (!empty($row['dept_name'])) {
-        $parts[] = $row['dept_name'];
-    } else {
-        $parts[] = 'Programme #' . $row['id'];
-    }
-    $parts[] = '(' . cf_degree_label($row['degree_type']) . ')';
-    return implode(' ', $parts);
+function cf_is_diploma(array $prog): bool {
+    return ($prog['degree_type_slug'] ?? '') === 'bachelor-from-diploma';
+}
+
+// ── Category badge ────────────────────────────────────────────────────────────
+function cf_type_badge(array $prog): string {
+    $cls = match($prog['degree_type_slug'] ?? '') {
+        'masters'               => 'bg-success',
+        'bachelor-from-diploma' => 'bg-warning text-dark',
+        default                 => 'bg-primary',
+    };
+    return '<span class="badge ' . $cls . '">' . h($prog['degree_type_name']) . '</span>';
 }
