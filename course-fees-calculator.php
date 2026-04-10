@@ -486,8 +486,7 @@ foreach ($programs as $prog) {
             <!-- Forecast CTA -->
             <div id="forecastCTA" class="hidden cta-box panel-reveal">
                 <span class="cta-icon">&#128302;</span>
-                <h3>Calculate Total <?= fh((string)round((float)($degree_types[0]['description'] ?? 4))) ?>-Year Forecast</h3>
-                <h3 style="display:none" id="forecastCtaTitle">Calculate Total Forecast</h3>
+                <h3 id="forecastCtaTitle">Calculate Total Program Forecast</h3>
                 <p>Enter your expected semester GPA to see full scholarship projections, total program cost, and monthly payment estimates.</p>
                 <button class="btn btn-success btn-lg" onclick="showForecastInputs()">
                     &#128200; Calculate Total Forecast &rarr;
@@ -747,6 +746,10 @@ function showPreview() {
         prevDiv.innerHTML = generatePreviewHTML(combinedGPA, sub);
         prevDiv.classList.remove('hidden');
         document.getElementById('forecastCTA').classList.remove('hidden');
+        var titleEl = document.getElementById('forecastCtaTitle');
+        if (titleEl && CONSTANTS[sub]) {
+            titleEl.textContent = 'Calculate Total ' + CONSTANTS[sub].DURATION_YEARS + '-Year Forecast';
+        }
         document.getElementById('forecastInputSection').classList.add('hidden');
         document.getElementById('forecastResults').classList.add('hidden');
         setProgress(2);

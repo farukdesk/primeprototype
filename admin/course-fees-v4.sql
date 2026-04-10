@@ -331,7 +331,7 @@ VALUES
 -- Seed admission requirements
 -- BBA
 INSERT IGNORE INTO `cf_admission_requirements` (`program_id`,`requirement_text`,`sort_order`)
-SELECT id, 'SSC &amp; HSC: Minimum GPA 2.5 in both or equivalent', 1 FROM cf_programs WHERE program_slug='bba';
+SELECT id, 'SSC & HSC: Minimum GPA 2.5 in both or equivalent', 1 FROM cf_programs WHERE program_slug='bba';
 INSERT IGNORE INTO `cf_admission_requirements` (`program_id`,`requirement_text`,`sort_order`)
 SELECT id, 'O/A Levels: 5 subjects in \'O\' Level and 2 subjects in \'A\' Level', 2 FROM cf_programs WHERE program_slug='bba';
 INSERT IGNORE INTO `cf_admission_requirements` (`program_id`,`requirement_text`,`sort_order`)
@@ -363,7 +363,7 @@ SELECT id, 'SSC or equivalent passed', 3 FROM cf_programs WHERE program_slug IN 
 
 -- Masters
 INSERT IGNORE INTO `cf_admission_requirements` (`program_id`,`requirement_text`,`sort_order`)
-SELECT id, 'SSC &amp; HSC: Total GPA points must be 5.0', 1 FROM cf_programs WHERE program_slug IN ('mba-regular','emba');
+SELECT id, 'SSC & HSC: Total GPA points must be 5.0', 1 FROM cf_programs WHERE program_slug IN ('mba-regular','emba');
 INSERT IGNORE INTO `cf_admission_requirements` (`program_id`,`requirement_text`,`sort_order`)
 SELECT id, '4-year BBA degree from a recognised university with minimum CGPA 2.0', 2 FROM cf_programs WHERE program_slug='mba-regular';
 INSERT IGNORE INTO `cf_admission_requirements` (`program_id`,`requirement_text`,`sort_order`)
