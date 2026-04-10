@@ -5,30 +5,23 @@ require_once __DIR__ . '/helpers.php';
 require_access('course-fees');
 
 $page_title = 'Course Fees Calculator';
-
 $db = db();
 
 // ── Filters ───────────────────────────────────────────────────────────────────
-$search      = trim($_GET['q']      ?? '');
-$f_dept      = (int)($_GET['dept']  ?? 0);
-$f_degree    = $_GET['degree']      ?? '';
-$f_status    = $_GET['status']      ?? '';
+$search     = trim($_GET['q']      ?? '');
+$f_type     = trim($_GET['type']   ?? '');
+$f_status   = trim($_GET['status'] ?? '');
 
 $where  = ['1=1'];
 $params = [];
 
 if ($search !== '') {
-    $where[]  = '(d.name LIKE ? OR ap.program_name LIKE ?)';
-    $params[] = "%$search%";
+    $where[]  = 'p.program_name LIKE ?';
     $params[] = "%$search%";
 }
-if ($f_dept > 0) {
-    $where[]  = 'p.dept_id = ?';
-    $params[] = $f_dept;
-}
-if (in_array($f_degree, ['bachelor','master','diploma','certificate'], true)) {
-    $where[]  = 'p.degree_type = ?';
-    $params[] = $f_degree;
+if ($f_type !== '') {
+    $where[]  = 'dt.slug = ?';
+    $params[] = $f_type;
 }
 if ($f_status === 'active') {
     $where[] = 'p.is_active = 1';
@@ -39,13 +32,12 @@ if ($f_status === 'active') {
 $where_sql = implode(' AND ', $where);
 
 // ── Pagination ────────────────────────────────────────────────────────────────
-$per_page = 20;
+$per_page = 25;
 $page     = max(1, (int)($_GET['page'] ?? 1));
 
 $cnt_stmt = $db->prepare(
     "SELECT COUNT(*) FROM cf_programs p
-     LEFT JOIN dept_departments d      ON d.id  = p.dept_id
-     LEFT JOIN dept_academic_programs ap ON ap.id = p.program_id
+     JOIN cf_degree_types dt ON dt.id = p.degree_type_id
      WHERE $where_sql"
 );
 $cnt_stmt->execute($params);
@@ -55,15 +47,11 @@ $page  = min($page, $pages);
 $off   = ($page - 1) * $per_page;
 
 $stmt = $db->prepare(
-    "SELECT p.*,
-            d.name           AS dept_name,
-            ap.program_name,
-            (SELECT COUNT(*) FROM cf_fixed_fees f WHERE f.cf_program_id = p.id) AS fee_count
+    "SELECT p.*, dt.slug AS degree_type_slug, dt.name AS degree_type_name
      FROM cf_programs p
-     LEFT JOIN dept_departments d      ON d.id  = p.dept_id
-     LEFT JOIN dept_academic_programs ap ON ap.id = p.program_id
+     JOIN cf_degree_types dt ON dt.id = p.degree_type_id
      WHERE $where_sql
-     ORDER BY p.sort_order, d.name, ap.program_name, p.id
+     ORDER BY dt.sort_order, p.sort_order, p.id
      LIMIT $per_page OFFSET $off"
 );
 $stmt->execute($params);
@@ -72,15 +60,20 @@ $programs = $stmt->fetchAll();
 // ── Stats ─────────────────────────────────────────────────────────────────────
 $stats = $db->query(
     "SELECT COUNT(*) AS total,
-            SUM(is_active=1) AS active_count,
-            SUM(is_active=0) AS inactive_count
-     FROM cf_programs"
+            SUM(p.is_active=1) AS active_count,
+            SUM(p.is_active=0) AS inactive_count
+     FROM cf_programs p"
 )->fetch();
 
-// ── Filter data ───────────────────────────────────────────────────────────────
-$depts = $db->query('SELECT id, name FROM dept_departments ORDER BY name')->fetchAll();
+$degree_types = cf_get_degree_types();
+$settings     = cf_get_settings();
 
-$settings = cf_get_settings();
+// ── Build pagination URL ──────────────────────────────────────────────────────
+function cf_paginate_url(int $p): string {
+    $q = $_GET;
+    $q['page'] = $p;
+    return '?' . http_build_query($q);
+}
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -94,16 +87,17 @@ require_once __DIR__ . '/../includes/header.php';
         </ol></nav>
     </div>
     <div class="d-flex gap-2 flex-wrap">
-        <?php if (is_super_admin()): ?>
+        <?php if (cf_can_create()): ?>
+        <a href="<?= APP_URL ?>/course-fees/create.php" class="btn btn-success btn-sm">
+            <i class="fas fa-plus me-1"></i> Add Program
+        </a>
+        <?php endif; ?>
         <a href="<?= APP_URL ?>/course-fees/settings.php" class="btn btn-outline-secondary btn-sm">
             <i class="fas fa-cog me-1"></i> Settings
         </a>
-        <?php endif; ?>
-        <?php if (cf_can_create()): ?>
-        <a href="<?= APP_URL ?>/course-fees/create.php" class="btn btn-primary btn-sm">
-            <i class="fas fa-plus me-1"></i> Add Fee Structure
+        <a href="<?= SITE_URL ?>/course-fees-calculator.php" target="_blank" class="btn btn-outline-primary btn-sm">
+            <i class="fas fa-external-link-alt me-1"></i> Public Page
         </a>
-        <?php endif; ?>
     </div>
 </div>
 
@@ -112,61 +106,52 @@ require_once __DIR__ . '/../includes/header.php';
 <!-- Stats -->
 <div class="row g-3 mb-4">
     <div class="col-6 col-md-3">
-        <div class="card border-0 shadow-sm text-center p-3">
-            <div class="h2 fw-bold text-primary mb-0"><?= (int)$stats['total'] ?></div>
-            <div class="small text-muted">Total Programmes</div>
+        <div class="card border-0 shadow-sm text-center py-3">
+            <div class="fs-2 fw-bold text-primary"><?= (int)$stats['total'] ?></div>
+            <div class="small text-muted">Total Programs</div>
         </div>
     </div>
     <div class="col-6 col-md-3">
-        <div class="card border-0 shadow-sm text-center p-3">
-            <div class="h2 fw-bold text-success mb-0"><?= (int)$stats['active_count'] ?></div>
+        <div class="card border-0 shadow-sm text-center py-3">
+            <div class="fs-2 fw-bold text-success"><?= (int)$stats['active_count'] ?></div>
             <div class="small text-muted">Active</div>
         </div>
     </div>
     <div class="col-6 col-md-3">
-        <div class="card border-0 shadow-sm text-center p-3">
-            <div class="h2 fw-bold text-secondary mb-0"><?= (int)$stats['inactive_count'] ?></div>
+        <div class="card border-0 shadow-sm text-center py-3">
+            <div class="fs-2 fw-bold text-secondary"><?= (int)$stats['inactive_count'] ?></div>
             <div class="small text-muted">Inactive</div>
         </div>
     </div>
     <div class="col-6 col-md-3">
-        <div class="card border-0 shadow-sm text-center p-3">
-            <div class="h2 fw-bold mb-0" style="color:<?= ($settings['is_published'] ?? 1) ? '#22c55e' : '#94a3b8' ?>">
-                <?= ($settings['is_published'] ?? 1) ? 'Live' : 'Hidden' ?>
-            </div>
-            <div class="small text-muted">Public Page</div>
+        <div class="card border-0 shadow-sm text-center py-3">
+            <div class="fs-2 fw-bold text-info"><?= h($settings['session_label'] ?? '—') ?></div>
+            <div class="small text-muted">Current Session</div>
         </div>
     </div>
 </div>
 
 <!-- Filters -->
 <div class="card border-0 shadow-sm mb-4">
-    <div class="card-body">
+    <div class="card-body py-3">
         <form method="get" class="row g-2 align-items-end">
-            <div class="col-md-4">
+            <div class="col-12 col-md-4">
                 <label class="form-label small fw-semibold mb-1">Search</label>
-                <input type="text" name="q" class="form-control form-control-sm" placeholder="Department or programme…" value="<?= h($search) ?>">
+                <input type="text" name="q" value="<?= h($search) ?>" placeholder="Program name…"
+                       class="form-control form-control-sm">
             </div>
-            <div class="col-md-3">
-                <label class="form-label small fw-semibold mb-1">Department</label>
-                <select name="dept" class="form-select form-select-sm">
-                    <option value="">All Departments</option>
-                    <?php foreach ($depts as $d): ?>
-                    <option value="<?= $d['id'] ?>" <?= $f_dept == $d['id'] ? 'selected' : '' ?>><?= h($d['name']) ?></option>
+            <div class="col-6 col-md-3">
+                <label class="form-label small fw-semibold mb-1">Degree Type</label>
+                <select name="type" class="form-select form-select-sm">
+                    <option value="">All Types</option>
+                    <?php foreach ($degree_types as $dt): ?>
+                    <option value="<?= h($dt['slug']) ?>" <?= $f_type === $dt['slug'] ? 'selected' : '' ?>>
+                        <?= h($dt['name']) ?>
+                    </option>
                     <?php endforeach; ?>
                 </select>
             </div>
-            <div class="col-md-2">
-                <label class="form-label small fw-semibold mb-1">Degree</label>
-                <select name="degree" class="form-select form-select-sm">
-                    <option value="">All</option>
-                    <option value="bachelor"    <?= $f_degree === 'bachelor'    ? 'selected' : '' ?>>Bachelor</option>
-                    <option value="master"      <?= $f_degree === 'master'      ? 'selected' : '' ?>>Master</option>
-                    <option value="diploma"     <?= $f_degree === 'diploma'     ? 'selected' : '' ?>>Diploma</option>
-                    <option value="certificate" <?= $f_degree === 'certificate' ? 'selected' : '' ?>>Certificate</option>
-                </select>
-            </div>
-            <div class="col-md-2">
+            <div class="col-6 col-md-2">
                 <label class="form-label small fw-semibold mb-1">Status</label>
                 <select name="status" class="form-select form-select-sm">
                     <option value="">All</option>
@@ -174,93 +159,110 @@ require_once __DIR__ . '/../includes/header.php';
                     <option value="inactive" <?= $f_status === 'inactive' ? 'selected' : '' ?>>Inactive</option>
                 </select>
             </div>
-            <div class="col-md-1 d-flex gap-1">
-                <button class="btn btn-primary btn-sm w-100"><i class="fas fa-search"></i></button>
-                <a href="<?= APP_URL ?>/course-fees/index.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-times"></i></a>
+            <div class="col-12 col-md-3 d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-sm flex-fill">
+                    <i class="fas fa-search me-1"></i> Filter
+                </button>
+                <a href="<?= APP_URL ?>/course-fees/index.php" class="btn btn-outline-secondary btn-sm">
+                    <i class="fas fa-times"></i>
+                </a>
             </div>
         </form>
     </div>
 </div>
 
-<!-- Table -->
+<!-- Programs Table -->
 <div class="card border-0 shadow-sm">
-    <div class="card-body p-0">
-        <div class="table-responsive">
-            <table class="table table-hover mb-0">
-                <thead class="table-light">
-                    <tr>
-                        <th class="px-4" style="width:40px;">#</th>
-                        <th>Programme</th>
-                        <th>Department</th>
-                        <th>Degree</th>
-                        <th>Credit Fee</th>
-                        <th>Credits</th>
-                        <th>Extra Fees</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                <?php if (empty($programs)): ?>
-                    <tr><td colspan="9" class="text-center text-muted py-5">
-                        <i class="fas fa-calculator fa-2x mb-2 d-block opacity-25"></i>
-                        No fee structures found. <a href="<?= APP_URL ?>/course-fees/create.php">Add one now</a>.
-                    </td></tr>
-                <?php else: ?>
-                    <?php foreach ($programs as $i => $p): ?>
-                    <tr>
-                        <td class="px-4"><?= $off + $i + 1 ?></td>
-                        <td>
-                            <strong><?= h($p['program_name'] ?: ($p['dept_name'] ?: '—')) ?></strong>
-                        </td>
-                        <td><?= h($p['dept_name'] ?: '—') ?></td>
-                        <td><?= cf_degree_badge($p['degree_type']) ?></td>
-                        <td class="fw-semibold"><?= cf_money((int)$p['credit_fee'], $settings['currency'] ?? 'BDT') ?></td>
-                        <td><?= $p['total_credits'] ? (int)$p['total_credits'] . ' cr' : '—' ?></td>
-                        <td>
-                            <?php if ((int)$p['fee_count'] > 0): ?>
-                            <span class="badge bg-info text-dark"><?= (int)$p['fee_count'] ?> fees</span>
-                            <?php else: ?>
-                            <span class="text-muted small">—</span>
-                            <?php endif; ?>
-                        </td>
-                        <td>
-                            <?php if ($p['is_active']): ?>
-                                <span class="badge bg-success">Active</span>
-                            <?php else: ?>
-                                <span class="badge bg-secondary">Inactive</span>
-                            <?php endif; ?>
-                        </td>
-                        <td>
-                            <a href="<?= APP_URL ?>/course-fees/view.php?id=<?= $p['id'] ?>"
-                               class="btn btn-sm btn-outline-secondary" title="View"><i class="fas fa-eye"></i></a>
+    <div class="card-header d-flex justify-content-between align-items-center py-3">
+        <span class="fw-semibold">
+            Programs
+            <?php if ($total > 0): ?>
+            <span class="badge bg-secondary ms-1"><?= $total ?></span>
+            <?php endif; ?>
+        </span>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th class="ps-3" style="width:40px">#</th>
+                    <th>Program Name</th>
+                    <th>Type</th>
+                    <th>Slug</th>
+                    <th class="text-center">Credits</th>
+                    <th class="text-center">Semesters</th>
+                    <th class="text-center">Status</th>
+                    <th class="text-end pe-3">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+            <?php if (empty($programs)): ?>
+                <tr><td colspan="8" class="text-center py-4 text-muted">No programs found.</td></tr>
+            <?php else: ?>
+                <?php foreach ($programs as $prog): ?>
+                <tr>
+                    <td class="ps-3 text-muted small"><?= (int)$prog['id'] ?></td>
+                    <td>
+                        <div class="fw-semibold"><?= h($prog['program_name']) ?></div>
+                        <div class="small text-muted"><?= h($prog['program_slug']) ?></div>
+                    </td>
+                    <td><?= cf_type_badge($prog) ?></td>
+                    <td><code class="small"><?= h($prog['program_slug']) ?></code></td>
+                    <td class="text-center"><?= $prog['total_credits'] ?? '—' ?></td>
+                    <td class="text-center"><?= $prog['total_semesters'] ?? '—' ?></td>
+                    <td class="text-center">
+                        <?php if ($prog['is_active']): ?>
+                            <span class="badge bg-success-subtle text-success border border-success-subtle">Active</span>
+                        <?php else: ?>
+                            <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">Inactive</span>
+                        <?php endif; ?>
+                    </td>
+                    <td class="text-end pe-3">
+                        <div class="d-flex gap-1 justify-content-end">
+                            <a href="<?= APP_URL ?>/course-fees/view.php?id=<?= $prog['id'] ?>"
+                               class="btn btn-sm btn-outline-info" title="View">
+                                <i class="fas fa-eye"></i>
+                            </a>
                             <?php if (cf_can_edit()): ?>
-                            <a href="<?= APP_URL ?>/course-fees/edit.php?id=<?= $p['id'] ?>"
-                               class="btn btn-sm btn-outline-primary" title="Edit"><i class="fas fa-pencil"></i></a>
+                            <a href="<?= APP_URL ?>/course-fees/edit.php?id=<?= $prog['id'] ?>"
+                               class="btn btn-sm btn-outline-primary" title="Edit">
+                                <i class="fas fa-pencil"></i>
+                            </a>
                             <?php endif; ?>
                             <?php if (cf_can_delete()): ?>
-                            <a href="<?= APP_URL ?>/course-fees/delete.php?id=<?= $p['id'] ?>"
+                            <a href="<?= APP_URL ?>/course-fees/delete.php?id=<?= $prog['id'] ?>"
                                class="btn btn-sm btn-outline-danger" title="Delete"
-                               onclick="return confirm('Delete this fee structure?')"><i class="fas fa-trash"></i></a>
+                               onclick="return confirm('Delete &quot;<?= h(addslashes($prog['program_name'])) ?>&quot;? This cannot be undone.')">
+                                <i class="fas fa-trash"></i>
+                            </a>
                             <?php endif; ?>
-                        </td>
-                    </tr>
-                    <?php endforeach; ?>
-                <?php endif; ?>
-                </tbody>
-            </table>
-        </div>
+                        </div>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+            <?php endif; ?>
+            </tbody>
+        </table>
     </div>
+
     <?php if ($pages > 1): ?>
-    <div class="card-footer bg-transparent d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div class="card-footer d-flex justify-content-between align-items-center py-2">
         <small class="text-muted">Showing <?= $off + 1 ?>–<?= min($off + $per_page, $total) ?> of <?= $total ?></small>
-        <nav><ul class="pagination pagination-sm mb-0">
-            <?php for ($pg = 1; $pg <= $pages; $pg++): ?>
-            <li class="page-item <?= $pg === $page ? 'active' : '' ?>">
-                <a class="page-link" href="?<?= http_build_query(array_merge($_GET, ['page' => $pg])) ?>"><?= $pg ?></a>
-            </li>
-            <?php endfor; ?>
-        </ul></nav>
+        <nav>
+            <ul class="pagination pagination-sm mb-0">
+                <?php if ($page > 1): ?>
+                <li class="page-item"><a class="page-link" href="<?= cf_paginate_url($page - 1) ?>">‹</a></li>
+                <?php endif; ?>
+                <?php for ($i = max(1, $page - 2); $i <= min($pages, $page + 2); $i++): ?>
+                <li class="page-item <?= $i === $page ? 'active' : '' ?>">
+                    <a class="page-link" href="<?= cf_paginate_url($i) ?>"><?= $i ?></a>
+                </li>
+                <?php endfor; ?>
+                <?php if ($page < $pages): ?>
+                <li class="page-item"><a class="page-link" href="<?= cf_paginate_url($page + 1) ?>">›</a></li>
+                <?php endif; ?>
+            </ul>
+        </nav>
     </div>
     <?php endif; ?>
 </div>
