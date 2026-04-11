@@ -38,6 +38,17 @@ if ($raw_message !== '') {
 $vc_photo_url = !empty($s['vc_photo'])
     ? ADMIN_UPLOAD_URL . '/office-of-vc/' . $s['vc_photo']
     : '';
+
+/* ── Load Former VCs ─────────────────────────────────────────────────────── */
+$former_vcs = [];
+try {
+    $db = front_db();
+    if ($db) {
+        $former_vcs = $db->query(
+            "SELECT * FROM vc_former_vcs WHERE is_active = 1 ORDER BY sort_order ASC, id ASC"
+        )->fetchAll();
+    }
+} catch (Throwable $e) {}
 ?>
 <!doctype html>
 <html class="no-js" lang="en">
@@ -400,6 +411,61 @@ $vc_photo_url = !empty($s['vc_photo'])
   .vc-fact-item { border-right: none; border-bottom: 1px solid rgba(255,255,255,.10); }
   .vc-fact-item:last-child { border-bottom: none; }
 }
+
+/* ── Former VCs ────────────────────────────────────────────────────────────── */
+.vc-former-section {
+  background: var(--vc-white);
+  padding: 80px 0;
+  position: relative;
+}
+.vc-former-section::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: linear-gradient(90deg, var(--vc-gold), var(--vc-navy), var(--vc-blue));
+}
+.fvc-card {
+  background: var(--vc-white);
+  border-radius: 18px;
+  box-shadow: var(--vc-shadow);
+  overflow: hidden;
+  border: 1px solid rgba(0,33,71,.06);
+  transition: box-shadow var(--vc-trans), transform var(--vc-trans);
+  height: 100%;
+}
+.fvc-card:hover { box-shadow: var(--vc-shadow-h); transform: translateY(-4px); }
+.fvc-card-accent {
+  height: 4px;
+  background: linear-gradient(90deg, var(--vc-navy), var(--vc-blue));
+}
+.fvc-card-body { padding: 28px 28px 24px; }
+@media (max-width: 575.98px) { .fvc-card-body { padding: 20px; } }
+.fvc-photo {
+  width: 88px; height: 88px; border-radius: 50%; object-fit: cover;
+  border: 3px solid #fff; box-shadow: 0 4px 16px rgba(0,33,71,.15);
+  display: block; margin: 0 auto 16px;
+}
+.fvc-photo-placeholder {
+  width: 88px; height: 88px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--vc-navy), var(--vc-blue));
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 16px rgba(0,33,71,.15);
+  margin: 0 auto 16px;
+}
+.fvc-photo-placeholder i { color: rgba(255,255,255,.75); font-size: 2rem; }
+.fvc-tenure-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: rgba(0,33,71,.08); color: var(--vc-navy);
+  font-size: .72rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+  padding: 4px 12px; border-radius: 50px; margin-bottom: 8px;
+}
+.fvc-name { font-size: 1.05rem; font-weight: 700; color: var(--vc-navy); margin-bottom: 4px; }
+.fvc-title { font-size: .82rem; color: var(--vc-muted); }
+.fvc-bio {
+  font-size: .86rem; color: var(--vc-text); line-height: 1.7;
+  margin-top: 12px; padding-top: 12px;
+  border-top: 1px solid #f1f5f9;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
 </style>
 
 </head>
@@ -687,6 +753,65 @@ $vc_photo_url = !empty($s['vc_photo'])
                             </div>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+<?php endif; ?>
+
+<!-- ══════════════ FORMER VICE CHANCELLORS ══════════════ -->
+<?php if (!empty($former_vcs)): ?>
+<section class="vc-former-section">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-xl-10 col-lg-11">
+                <!-- Section header -->
+                <div class="mb-5 vc-fade">
+                    <div class="vc-section-tag">
+                        <span class="dot-sm"></span>
+                        Historical Leadership
+                    </div>
+                    <h2 class="vc-section-title">Former Vice Chancellors</h2>
+                    <div class="vc-divider"></div>
+                </div>
+                <!-- Cards grid -->
+                <div class="row g-4">
+                    <?php foreach ($former_vcs as $i => $fvc): ?>
+                    <?php
+                        $fvc_photo_url = !empty($fvc['photo'])
+                            ? ADMIN_UPLOAD_URL . '/office-of-vc/' . $fvc['photo']
+                            : '';
+                        $delay_class = 'vc-fade-delay-' . (($i % 4) + 1);
+                    ?>
+                    <div class="col-sm-6 col-lg-4">
+                        <div class="fvc-card vc-fade <?= $delay_class ?>">
+                            <div class="fvc-card-accent"></div>
+                            <div class="fvc-card-body text-center">
+                                <?php if ($fvc_photo_url): ?>
+                                <img src="<?= fh($fvc_photo_url) ?>"
+                                     alt="<?= fh($fvc['name']) ?>"
+                                     class="fvc-photo">
+                                <?php else: ?>
+                                <div class="fvc-photo-placeholder">
+                                    <i class="fas fa-user-tie"></i>
+                                </div>
+                                <?php endif; ?>
+                                <?php if (!empty($fvc['tenure'])): ?>
+                                <div class="fvc-tenure-badge">
+                                    <i class="fas fa-calendar-alt" style="font-size:.65rem;"></i>
+                                    <?= fh($fvc['tenure']) ?>
+                                </div>
+                                <?php endif; ?>
+                                <div class="fvc-name"><?= fh($fvc['name']) ?></div>
+                                <div class="fvc-title"><?= fh($fvc['title']) ?></div>
+                                <?php if (!empty($fvc['bio'])): ?>
+                                <div class="fvc-bio"><?= fh($fvc['bio']) ?></div>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                    <?php endforeach; ?>
                 </div>
             </div>
         </div>
