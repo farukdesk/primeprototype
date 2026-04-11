@@ -229,6 +229,10 @@ try {
    /* Lightbox overrides */
    .mfp-bottom-bar { padding-top: 6px; }
    .mfp-title { font-size: .9rem; color: #fff; }
+   /* Raise mfp above Bootstrap modal backdrop (1050) and modal (1055) */
+   .mfp-bg   { z-index: 1060 !important; }
+   .mfp-wrap { z-index: 1061 !important; }
+   .mfp-arrow, .mfp-close { z-index: 1063 !important; }
 
    /* ─── Album Modal – override global main.css rules ─── */
    #albumModal.modal { overflow-y: auto; }
@@ -668,9 +672,11 @@ try {
             callbacks: {
                beforeOpen: function () {
                   $albumModal.css('visibility', 'hidden');
+                  $('.modal-backdrop').css('visibility', 'hidden');
                },
                afterClose: function () {
                   $albumModal.css('visibility', '');
+                  $('.modal-backdrop').css('visibility', '');
                },
             },
          });
