@@ -98,7 +98,7 @@ require_once __DIR__ . '/../includes/header.php';
                             <?php if (can_access('office-of-vc', 'can_delete')): ?>
                             <form method="POST" action="<?= APP_URL ?>/office-of-vc/former-vc-delete.php"
                                   class="d-inline"
-                                  onsubmit="return confirm('Remove <?= h(addslashes($vc['name'])) ?>?')">
+                                  onsubmit="return confirm('Remove ' + <?= json_encode($vc['name']) ?> + '?')">
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="id" value="<?= $vc['id'] ?>">
                                 <button type="submit" class="btn btn-sm btn-outline-danger" style="border-radius:6px;">

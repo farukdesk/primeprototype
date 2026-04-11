@@ -797,7 +797,7 @@ try {
                                     <i class="fas fa-user-tie"></i>
                                 </div>
                                 <?php endif; ?>
-                                <?php if ($fvc['tenure'] !== ''): ?>
+                                <?php if (!empty($fvc['tenure'])): ?>
                                 <div class="fvc-tenure-badge">
                                     <i class="fas fa-calendar-alt" style="font-size:.65rem;"></i>
                                     <?= fh($fvc['tenure']) ?>
