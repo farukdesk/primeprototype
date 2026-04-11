@@ -32,7 +32,7 @@ $approved_photos = $approved->fetchAll();
 
 // ── Photos (pending) ──────────────────────────────────────────────────────────
 $pending = $db->prepare(
-    'SELECT gp.*, u.name AS uploader_name
+    'SELECT gp.*, u.full_name AS uploader_name
      FROM gallery_photos gp
      LEFT JOIN users u ON u.id = gp.uploaded_by
      WHERE gp.album_id = ? AND gp.status = "pending"

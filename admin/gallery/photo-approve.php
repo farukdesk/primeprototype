@@ -44,7 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $page_title = 'Pending Photo Approvals';
 
 $st = $db->query(
-    "SELECT gp.*, a.title AS album_title, u.name AS uploader_name
+    "SELECT gp.*, a.title AS album_title, u.full_name AS uploader_name
      FROM gallery_photos gp
      JOIN gallery_albums a ON a.id = gp.album_id
      LEFT JOIN users u ON u.id = gp.uploaded_by
