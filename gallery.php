@@ -247,22 +247,38 @@ try {
    #albumModal .modal-body {
       padding: 20px !important;
    }
+   /* Fix: modal title must be white over the purple gradient header */
+   #albumModal .modal-header h5 { color: #fff !important; }
+
+   /* Fix: metadata line – flex layout with balanced icon/text spacing */
+   #albumModalMeta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px 14px;
+      margin-top: 6px;
+      color: rgba(255,255,255,.85);
+      font-size: .82rem;
+   }
+   #albumModalMeta .meta-sep { color: rgba(255,255,255,.35); user-select: none; }
+
    /* Custom close button (immune to the global .btn-close absolute positioning) */
    .pu-modal-close {
       position: static !important;
       flex-shrink: 0;
       width: 36px; height: 36px;
       border-radius: 50%;
-      background: rgba(255,255,255,.18);
-      border: 1.5px solid rgba(255,255,255,.35);
+      background: rgba(255,255,255,.28);
+      border: 2px solid rgba(255,255,255,.7);
       color: #fff;
       display: flex; align-items: center; justify-content: center;
       cursor: pointer;
-      transition: background .2s;
+      transition: background .2s, border-color .2s;
       margin-left: auto;
       font-size: .9rem;
+      font-weight: 700;
    }
-   .pu-modal-close:hover { background: rgba(255,255,255,.35); }
+   .pu-modal-close:hover { background: rgba(255,255,255,.5); border-color: #fff; }
    /* Album photo thumbnails */
    .album-modal-thumb {
       width: 100%;
@@ -461,8 +477,8 @@ try {
             <div class="modal-content border-0 shadow-lg" style="border-radius:20px;overflow:hidden;">
                <div class="modal-header border-0 pb-0" style="background:linear-gradient(135deg,#1e1b4b,#4f46e5);color:#fff;">
                   <div>
-                     <h5 class="modal-title fw-bold" id="albumModalTitle"></h5>
-                     <div class="small opacity-75" id="albumModalMeta"></div>
+                     <h5 class="modal-title fw-bold mb-0" id="albumModalTitle"></h5>
+                     <div id="albumModalMeta"></div>
                   </div>
                   <button type="button" class="pu-modal-close" data-bs-dismiss="modal" aria-label="Close">
                      <i class="fas fa-times"></i>
@@ -643,10 +659,20 @@ try {
          $('#albumModalBody').html(html);
 
          // Re-init magnific for modal links
+         // Hide the Bootstrap album modal while the lightbox is open; restore on close
+         var $albumModal = $('#albumModal');
          $('.modal-gal-link').magnificPopup({
             type: 'image',
             gallery: { enabled: true },
             image: { titleSrc: 'title' },
+            callbacks: {
+               beforeOpen: function () {
+                  $albumModal.css('visibility', 'hidden');
+               },
+               afterClose: function () {
+                  $albumModal.css('visibility', '');
+               },
+            },
          });
       };
 
