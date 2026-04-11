@@ -42,7 +42,7 @@ $contacts_q = db()->prepare(
     'SELECT c.*,
             l.first_name, l.last_name, l.lead_number,
             (SELECT COUNT(*) FROM lead_fb_messages m WHERE m.contact_id = c.id) AS msg_count,
-            (SELECT COUNT(*) FROM lead_fb_messages m WHERE m.contact_id = c.id AND m.direction = "in") AS unread_count
+            (SELECT COUNT(*) FROM lead_fb_messages m WHERE m.contact_id = c.id AND m.direction = "in") AS incoming_count
      FROM lead_fb_contacts c
      LEFT JOIN leads l ON l.id = c.lead_id
      ' . $where_sql . '

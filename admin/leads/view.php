@@ -210,9 +210,6 @@ if ($fb_contact) {
     $fb_messages = $fm->fetchAll();
 }
 
-// ── Handle POST: send Facebook reply ─────────────────────────────────────────
-// (already inside the main POST block; we add a separate check here)
-
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
