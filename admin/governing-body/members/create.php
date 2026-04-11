@@ -37,15 +37,18 @@ function gb_upload_photo(array $file): string|false
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
-    $full_name   = trim($_POST['full_name']   ?? '');
-    $designation = trim($_POST['designation'] ?? '');
-    $department  = trim($_POST['department']  ?? '');
-    $section     = trim($_POST['section']     ?? 'member');
-    $bio         = trim($_POST['bio']         ?? '');
-    $email       = trim($_POST['email']       ?? '');
-    $phone       = trim($_POST['phone']       ?? '');
-    $is_featured = isset($_POST['is_featured']) ? 1 : 0;
-    $sort_order  = (int)($_POST['sort_order'] ?? 0);
+    $full_name      = trim($_POST['full_name']      ?? '');
+    $designation    = trim($_POST['designation']    ?? '');
+    $department     = trim($_POST['department']     ?? '');
+    $section        = trim($_POST['section']        ?? 'member');
+    $bio            = trim($_POST['bio']            ?? '');
+    $email          = trim($_POST['email']          ?? '');
+    $phone          = trim($_POST['phone']          ?? '');
+    $is_featured    = isset($_POST['is_featured'])    ? 1 : 0;
+    $sort_order     = (int)($_POST['sort_order']    ?? 0);
+    $glance_officer = isset($_POST['glance_officer']) ? 1 : 0;
+    $glance_msg_tab = trim($_POST['glance_msg_tab'] ?? '');
+    $glance_message = trim($_POST['glance_message'] ?? '');
 
     if ($full_name === '') $errors[] = 'Full name is required.';
     if ($section   === '') $section  = 'member';
@@ -63,12 +66,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($errors)) {
         db()->prepare(
             'INSERT INTO governing_body_members
-             (page_type, section, full_name, designation, department, bio, photo, email, phone, is_featured, sort_order)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?)'
+             (page_type, section, full_name, designation, department, bio, photo, email, phone,
+              is_featured, sort_order, glance_officer, glance_msg_tab, glance_message)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
         )->execute([
             $page_type, $section, $full_name,
             $designation ?: null, $department ?: null, $bio ?: null, $photo,
             $email ?: null, $phone ?: null, $is_featured, $sort_order,
+            $glance_officer, $glance_msg_tab ?: null, $glance_message ?: null,
         ]);
 
         flash_set('success', 'Member <strong>' . h($full_name) . '</strong> added.');
@@ -195,6 +200,38 @@ require_once __DIR__ . '/../../includes/header.php';
 
         </div>
     </div>
+
+    <?php if ($page_type === 'board-of-trustees'): ?>
+    <div class="card mb-4" style="border-radius:12px;border:2px solid #e0e7ef;">
+        <div class="card-header py-3 px-4" style="background:rgba(0,33,71,.04);">
+            <h6 class="mb-0 fw-semibold"><i class="fas fa-eye me-2" style="color:#002147;"></i>PU At a Glance – Page Appearance</h6>
+            <div class="form-text mt-1">Choose how this member appears on the <em>PU At a Glance</em> public page.</div>
+        </div>
+        <div class="card-body p-4">
+            <div class="form-check form-switch mb-4">
+                <input class="form-check-input" type="checkbox" id="glance_officer" name="glance_officer"
+                       value="1" <?= !empty($_POST['glance_officer']) ? 'checked' : '' ?>>
+                <label class="form-check-label fw-medium" for="glance_officer">
+                    Show as <strong>Key Administrative Officer</strong>
+                    <span style="font-size:.8rem;color:#64748b;display:block;">Adds this person to the "Key Administrative Officers" section on PU At a Glance.</span>
+                </label>
+            </div>
+            <hr>
+            <div class="mb-3">
+                <label class="form-label fw-medium">Words from Our Leadership – Tab Label</label>
+                <input type="text" name="glance_msg_tab" class="form-control" maxlength="120"
+                       value="<?= h($_POST['glance_msg_tab'] ?? '') ?>"
+                       placeholder="e.g. Message from Chairman">
+                <div class="form-text">If filled, this person will appear as a tab in the "Words from Our Leadership" section. Leave blank to exclude.</div>
+            </div>
+            <div class="mb-1">
+                <label class="form-label fw-medium">Leadership Message Body</label>
+                <textarea name="glance_message" class="form-control" rows="6"
+                          placeholder="Type the message here. Separate paragraphs with a blank line."><?= h($_POST['glance_message'] ?? '') ?></textarea>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
 
     <div class="d-flex gap-2">
         <button type="submit" class="btn btn-primary" style="border-radius:10px;">

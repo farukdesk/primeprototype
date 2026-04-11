@@ -25,11 +25,20 @@ try {
         } catch (Throwable $e) {}
 
         try {
-            $_leaders = $db->query('SELECT * FROM glance_leaders WHERE is_active=1 ORDER BY sort_order, id')->fetchAll();
+            $_leaders = $db->query(
+                "SELECT * FROM governing_body_members
+                 WHERE page_type='board-of-trustees' AND glance_officer=1
+                 ORDER BY sort_order, id"
+            )->fetchAll();
         } catch (Throwable $e) {}
 
         try {
-            $_messages = $db->query('SELECT * FROM glance_messages WHERE is_active=1 ORDER BY sort_order, id')->fetchAll();
+            $_messages = $db->query(
+                "SELECT * FROM governing_body_members
+                 WHERE page_type='board-of-trustees'
+                   AND glance_msg_tab IS NOT NULL AND glance_msg_tab != ''
+                 ORDER BY sort_order, id"
+            )->fetchAll();
         } catch (Throwable $e) {}
 
         try {
@@ -578,12 +587,12 @@ $cta_btn2_url = gs_url($_settings, 'cta_btn2_url', '/contact.php');
         <div class="leader-card">
           <div class="leader-card-top">
             <?php if ($l['photo']): ?>
-              <img src="<?= fh(ADMIN_UPLOAD_URL . '/glance/' . basename($l['photo'])) ?>" alt="<?= fh($l['name']) ?>" class="leader-avatar" style="display:block;">
+              <img src="<?= fh(ADMIN_UPLOAD_URL . '/governing-body/' . basename($l['photo'])) ?>" alt="<?= fh($l['full_name']) ?>" class="leader-avatar" style="display:block;">
             <?php else: ?>
               <div class="leader-avatar"><i class="fas fa-user-tie"></i></div>
             <?php endif; ?>
-            <h4><?= fh($l['name']) ?></h4>
-            <span class="role-tag"><?= fh($l['role']) ?></span>
+            <h4><?= fh($l['full_name']) ?></h4>
+            <span class="role-tag"><?= fh($l['designation'] ?? '') ?></span>
           </div>
           <?php if ($l['bio']): ?>
           <div class="leader-card-body">
@@ -611,7 +620,7 @@ $cta_btn2_url = gs_url($_settings, 'cta_btn2_url', '/contact.php');
       <?php foreach ($_messages as $i => $msg): ?>
       <button class="msg-tab-btn <?= $i === 0 ? 'active' : '' ?>" data-tab="msg-<?= $i ?>">
         <i class="<?= $i === 0 ? 'fas fa-star' : 'fas fa-university' ?> me-2" style="color:<?= $i === 0 ? 'var(--pu-gold)' : 'var(--pu-blue)' ?>;"></i>
-        <?= fh($msg['tab_label']) ?>
+        <?= fh($msg['glance_msg_tab']) ?>
       </button>
       <?php endforeach; ?>
     </div>
@@ -621,20 +630,21 @@ $cta_btn2_url = gs_url($_settings, 'cta_btn2_url', '/contact.php');
         <div class="msg-person-side">
           <div class="msg-person-avatar">
             <?php if ($msg['photo']): ?>
-              <img src="<?= fh(ADMIN_UPLOAD_URL . '/glance/' . basename($msg['photo'])) ?>" alt="<?= fh($msg['person_name']) ?>">
+              <img src="<?= fh(ADMIN_UPLOAD_URL . '/governing-body/' . basename($msg['photo'])) ?>" alt="<?= fh($msg['full_name']) ?>">
             <?php else: ?>
               <i class="fas fa-<?= $i === 0 ? 'user-tie' : 'graduation-cap' ?>"></i>
             <?php endif; ?>
           </div>
-          <h5><?= fh($msg['person_name']) ?></h5>
-          <span><?= fh($msg['person_role']) ?></span>
+          <h5><?= fh($msg['full_name']) ?></h5>
+          <span><?= fh($msg['designation'] ?? '') ?></span>
         </div>
         <div class="msg-content-side">
           <div class="quote-icon"><i class="fas fa-quote-left"></i></div>
           <?php
-          $paragraphs = array_filter(explode("\n\n", str_replace("\r\n", "\n", $msg['body'])));
+          $body = $msg['glance_message'] ?? '';
+          $paragraphs = array_filter(explode("\n\n", str_replace("\r\n", "\n", $body)));
           if (count($paragraphs) <= 1) {
-              $paragraphs = array_filter(explode("\n", $msg['body']));
+              $paragraphs = array_filter(explode("\n", $body));
           }
           foreach ($paragraphs as $para):
               $para = trim($para);
@@ -646,8 +656,8 @@ $cta_btn2_url = gs_url($_settings, 'cta_btn2_url', '/contact.php');
           endforeach;
           ?>
           <div class="msg-signature">
-            <div class="sig-name"><?= fh($msg['person_name']) ?></div>
-            <div class="sig-role"><?= fh($msg['person_role']) ?></div>
+            <div class="sig-name"><?= fh($msg['full_name']) ?></div>
+            <div class="sig-role"><?= fh($msg['designation'] ?? '') ?></div>
           </div>
         </div>
       </div>
