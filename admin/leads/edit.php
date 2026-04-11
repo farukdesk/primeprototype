@@ -52,7 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $preferred_semester = trim($_POST['preferred_semester'] ?? '');
     $new_status   = in_array($_POST['status'] ?? '', ['fresh', 'unable_to_reach', 'converted'], true)
                     ? $_POST['status'] : $lead['status'];
-    $source       = in_array($_POST['source'] ?? '', ['online', 'campus_visit', 'agent', 'f2f_marketing'], true)
+    $source       = in_array($_POST['source'] ?? '', ['online', 'campus_visit', 'agent', 'f2f_marketing', 'facebook'], true)
                     ? $_POST['source'] : $lead['source'];
     $assigned_to  = (int)($_POST['assigned_to'] ?? 0) ?: null;
 
@@ -237,7 +237,7 @@ $v = function(string $field) use ($lead, $old): string {
                     <div class="mb-3">
                         <label class="form-label">Lead Source</label>
                         <select name="source" class="form-select">
-                            <?php foreach (['online' => 'Online', 'campus_visit' => 'Campus Visit', 'agent' => 'Agent', 'f2f_marketing' => 'F2F Marketing'] as $sv => $sl): ?>
+                            <?php foreach (['online' => 'Online', 'campus_visit' => 'Campus Visit', 'agent' => 'Agent', 'f2f_marketing' => 'F2F Marketing', 'facebook' => 'Facebook'] as $sv => $sl): ?>
                             <option value="<?= $sv ?>" <?= $v('source') === $sv ? 'selected' : '' ?>><?= $sl ?></option>
                             <?php endforeach; ?>
                         </select>
