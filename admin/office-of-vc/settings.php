@@ -4,7 +4,8 @@ require_access('office-of-vc', 'can_edit');
 
 $page_title = 'Office of VC – Settings';
 $errors     = [];
-$active_tab = in_array($_GET['tab'] ?? '', ['page','vc','ps','message']) ? ($_GET['tab'] ?? 'page') : 'page';
+$requested_tab = $_GET['tab'] ?? '';
+$active_tab = in_array($requested_tab, ['page','vc','ps','message']) ? $requested_tab : 'page';
 
 // ── Load current settings ────────────────────────────────────────────────────
 $s = [];
