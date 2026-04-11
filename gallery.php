@@ -634,7 +634,7 @@ try {
             const safeTitle   = $('<div>').text(p.caption || p.album_title).html();
             html += '<div class="col-6 col-md-4 col-lg-3">'
                + '<a href="' + p.src + '" class="modal-gal-link album-modal-link" title="' + safeTitle + '">'
-               + '<img src="' + p.src + '" loading="lazy" class="album-modal-thumb" alt="' + safeCaption + '">'
+               + '<img src="' + p.src + '" loading="lazy" class="album-modal-thumb" alt="' + (safeCaption || safeTitle) + '">'
                + (p.caption ? '<div class="small text-muted mt-1 px-1" style="font-size:.74rem;">' + safeCaption + '</div>' : '')
                + '</a></div>';
          });
