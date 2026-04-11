@@ -258,6 +258,7 @@ $user       = auth_user();
     $is_comms_active    = strpos($current_path, '/contact/') !== false || strpos($current_path, '/support-tickets/') !== false || strpos($current_path, '/knowledge-base/') !== false || strpos($current_path, '/broadcast/') !== false;
     $is_leads_active    = strpos($current_path, '/leads/') !== false;
     $is_admissions_active = strpos($current_path, '/admissions/') !== false;
+    $is_gallery_active       = strpos($current_path, '/gallery/') !== false;
     $is_jobs_active          = strpos($current_path, '/jobs/') !== false;
     $is_library_active       = strpos($current_path, '/library/') !== false;
     $is_course_fees_active   = strpos($current_path, '/course-fees/') !== false;
@@ -561,6 +562,59 @@ $user       = auth_user();
                 </a>
             </li>
             <?php endif; ?>
+        </ul>
+    </div>
+    <?php endif; ?>
+
+    <!-- ── Gallery ── -->
+    <?php if (is_super_admin() || can_access('gallery')): ?>
+    <?php
+    try {
+        $_gal_pending = (int)db()->query("SELECT COUNT(*) FROM gallery_photos WHERE status='pending'")->fetchColumn();
+    } catch (Throwable $_gpe) { $_gal_pending = 0; }
+    ?>
+    <button class="nav-group-toggle <?= $is_gallery_active ? '' : 'collapsed' ?>"
+            data-bs-toggle="collapse" data-bs-target="#grp-gallery"
+            aria-expanded="<?= $is_gallery_active ? 'true' : 'false' ?>">
+        <i class="fas fa-images grp-icon" style="color:#a78bfa"></i>
+        Gallery
+        <?php if ($_gal_pending > 0): ?>
+        <span class="badge bg-warning text-dark ms-1" style="font-size:.6rem;"><?= $_gal_pending ?></span>
+        <?php endif; ?>
+        <i class="fas fa-chevron-down toggle-icon"></i>
+    </button>
+    <div class="collapse <?= $is_gallery_active ? 'show' : '' ?>" id="grp-gallery">
+        <ul class="nav flex-column grp-items">
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/gallery/index.php"
+                   class="<?= (strpos($current_path, '/gallery/') !== false && strpos($current_path, '/create') === false && strpos($current_path, '/photo-approve') === false) ? 'active' : '' ?>">
+                    <i class="fas fa-th"></i> All Albums
+                </a>
+            </li>
+            <?php if (is_super_admin() || can_access('gallery', 'can_create')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/gallery/create.php"
+                   class="<?= strpos($current_path, '/gallery/create') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-plus"></i> New Album
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('gallery', 'can_edit')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/gallery/photo-approve.php"
+                   class="<?= strpos($current_path, '/gallery/photo-approve') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-clock"></i> Pending Approvals
+                    <?php if ($_gal_pending > 0): ?>
+                    <span class="badge bg-warning text-dark ms-auto" style="font-size:.6rem;"><?= $_gal_pending ?></span>
+                    <?php endif; ?>
+                </a>
+            </li>
+            <?php endif; ?>
+            <li class="nav-item">
+                <a href="<?= SITE_URL ?>/gallery.php" target="_blank">
+                    <i class="fas fa-external-link-alt"></i> Public Page
+                </a>
+            </li>
         </ul>
     </div>
     <?php endif; ?>
