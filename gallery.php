@@ -230,6 +230,52 @@ try {
    .mfp-bottom-bar { padding-top: 6px; }
    .mfp-title { font-size: .9rem; color: #fff; }
 
+   /* ─── Album Modal – override global main.css rules ─── */
+   #albumModal.modal { overflow-y: auto; }
+   #albumModal .modal-dialog {
+      width: auto !important;
+      max-width: 960px !important;
+      margin: 1.75rem auto !important;
+   }
+   @media (max-width: 767px) {
+      #albumModal .modal-dialog { max-width: calc(100% - 1rem) !important; margin: 0.5rem auto !important; }
+   }
+   #albumModal .modal-header {
+      padding: 18px 22px !important;
+      align-items: flex-start;
+   }
+   #albumModal .modal-body {
+      padding: 20px !important;
+   }
+   /* Custom close button (immune to the global .btn-close absolute positioning) */
+   .pu-modal-close {
+      position: static !important;
+      flex-shrink: 0;
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      background: rgba(255,255,255,.18);
+      border: 1.5px solid rgba(255,255,255,.35);
+      color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      transition: background .2s;
+      margin-left: auto;
+      font-size: .9rem;
+   }
+   .pu-modal-close:hover { background: rgba(255,255,255,.35); }
+   /* Album photo thumbnails */
+   .album-modal-thumb {
+      width: 100%;
+      height: 160px;
+      object-fit: cover;
+      border-radius: 10px;
+      display: block;
+      transition: transform .3s;
+   }
+   @media (max-width: 575px) { .album-modal-thumb { height: 120px; } }
+   .album-modal-link { display: block; }
+   .album-modal-link:hover .album-modal-thumb { transform: scale(1.04); }
+
    /* Stats strip */
    .pu-gal-stats {
       background: linear-gradient(135deg, #7c3aed, #4f46e5);
@@ -418,7 +464,9 @@ try {
                      <h5 class="modal-title fw-bold" id="albumModalTitle"></h5>
                      <div class="small opacity-75" id="albumModalMeta"></div>
                   </div>
-                  <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                  <button type="button" class="pu-modal-close" data-bs-dismiss="modal" aria-label="Close">
+                     <i class="fas fa-times"></i>
+                  </button>
                </div>
                <div class="modal-body p-3" id="albumModalBody">
                   <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
@@ -582,11 +630,12 @@ try {
 
          let html = '<div class="row g-2">';
          filtered.forEach(function (p, i) {
+            const safeCaption = $('<div>').text(p.caption || '').html();
+            const safeTitle   = $('<div>').text(p.caption || p.album_title).html();
             html += '<div class="col-6 col-md-4 col-lg-3">'
-               + '<a href="' + p.src + '" class="modal-gal-link" title="' + (p.caption || p.album_title) + '">'
-               + '<img src="' + p.src + '" loading="lazy" style="width:100%;height:130px;object-fit:cover;border-radius:10px;transition:transform .3s;" '
-               + 'onmouseover="this.style.transform=\'scale(1.04)\'" onmouseout="this.style.transform=\'scale(1)\'">'
-               + (p.caption ? '<div class="small text-muted mt-1 px-1" style="font-size:.74rem;">' + $('<div>').text(p.caption).html() + '</div>' : '')
+               + '<a href="' + p.src + '" class="modal-gal-link album-modal-link" title="' + safeTitle + '">'
+               + '<img src="' + p.src + '" loading="lazy" class="album-modal-thumb" alt="' + (safeCaption || safeTitle) + '">'
+               + (p.caption ? '<div class="small text-muted mt-1 px-1" style="font-size:.74rem;">' + safeCaption + '</div>' : '')
                + '</a></div>';
          });
          html += '</div>';
