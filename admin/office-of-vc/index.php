@@ -174,6 +174,47 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
     </div>
 
+    <!-- Former Vice Chancellors -->
+    <?php
+    $fvc_count = 0;
+    try {
+        $fvc_count = (int)db()->query('SELECT COUNT(*) FROM vc_former_vcs')->fetchColumn();
+    } catch (Throwable $e) {}
+    ?>
+    <div class="col-xl-6 col-lg-6">
+        <div class="card h-100" style="border-top:4px solid #7c3aed;border-radius:12px;">
+            <div class="card-body p-4">
+                <div class="d-flex align-items-start gap-3">
+                    <div style="width:56px;height:56px;border-radius:12px;background:linear-gradient(135deg,#7c3aed,#a855f7);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                        <i class="fas fa-user-graduate" style="color:#fff;font-size:1.3rem;"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <h6 class="mb-1 fw-semibold" style="color:#7c3aed;">Former Vice Chancellors</h6>
+                        <div style="font-size:.82rem;color:#64748b;">
+                            <?= $fvc_count ?> record<?= $fvc_count !== 1 ? 's' : '' ?> on file
+                        </div>
+                        <div class="mt-2">
+                            <span class="badge" style="background:#ede9fe;color:#5b21b6;font-size:.73rem;border-radius:20px;">
+                                Historical Records
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <hr style="border-color:#f1f5f9;margin:16px 0 12px;">
+                <a href="<?= APP_URL ?>/office-of-vc/former-vc-index.php"
+                   class="btn btn-sm btn-outline-secondary me-2" style="border-radius:8px;font-size:.8rem;">
+                    <i class="fas fa-list me-1"></i> Manage
+                </a>
+                <?php if (can_access('office-of-vc', 'can_create')): ?>
+                <a href="<?= APP_URL ?>/office-of-vc/former-vc-create.php"
+                   class="btn btn-sm btn-outline-secondary" style="border-radius:8px;font-size:.8rem;">
+                    <i class="fas fa-plus me-1"></i> Add
+                </a>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+
 </div>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
