@@ -116,9 +116,17 @@ require_once __DIR__ . '/../includes/header.php';
         <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small"><li class="breadcrumb-item"><a href="<?= APP_URL ?>">Dashboard</a></li><li class="breadcrumb-item active">Leads</li></ol></nav>
     </div>
     <?php if (leads_can_create()): ?>
-    <a href="<?= APP_URL ?>/leads/create.php" class="btn btn-primary btn-sm">
-        <i class="fas fa-plus me-1"></i> Add Lead
-    </a>
+    <div class="d-flex gap-2">
+        <a href="<?= APP_URL ?>/leads/fb-settings.php" class="btn btn-outline-secondary btn-sm" title="Facebook Messenger Settings">
+            <i class="fab fa-facebook-messenger me-1"></i> FB Settings
+        </a>
+        <a href="<?= APP_URL ?>/leads/fb-inbox.php" class="btn btn-outline-primary btn-sm">
+            <i class="fab fa-facebook-messenger me-1"></i> FB Inbox
+        </a>
+        <a href="<?= APP_URL ?>/leads/create.php" class="btn btn-primary btn-sm">
+            <i class="fas fa-plus me-1"></i> Add Lead
+        </a>
+    </div>
     <?php endif; ?>
 </div>
 
@@ -186,7 +194,7 @@ require_once __DIR__ . '/../includes/header.php';
         <div class="d-flex flex-wrap gap-2 align-items-center">
             <span class="text-muted small fw-semibold me-1">Source:</span>
             <?php
-            $sources = ['' => 'All', 'online' => 'Online', 'campus_visit' => 'Campus Visit', 'agent' => 'Agent', 'f2f_marketing' => 'F2F Marketing'];
+            $sources = ['' => 'All', 'online' => 'Online', 'campus_visit' => 'Campus Visit', 'agent' => 'Agent', 'f2f_marketing' => 'F2F Marketing', 'facebook' => 'Facebook'];
             foreach ($sources as $sv => $sl):
                 $q = http_build_query(array_filter(array_merge(
                     ['search' => $search, 'status' => $f_status, 'dept' => $f_dept ?: '', 'semester' => $f_sem, 'degree' => $f_degree, 'user_id' => $f_user ?: ''],

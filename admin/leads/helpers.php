@@ -67,6 +67,9 @@ function leads_status_badge(string $status): string
 
 function leads_source_badge(string $source): string
 {
+    if ($source === 'facebook') {
+        return '<span class="badge" style="background:#1877F2"><i class="fab fa-facebook-messenger me-1"></i>Facebook</span>';
+    }
     $map = [
         'online'         => ['bg-info text-dark',  'Online'],
         'campus_visit'   => ['bg-secondary',        'Campus Visit'],
@@ -103,6 +106,7 @@ function leads_source_label(string $source): string
         'campus_visit'  => 'Campus Visit',
         'agent'         => 'Agent',
         'f2f_marketing' => 'F2F Marketing',
+        'facebook'      => 'Facebook',
     ];
     return $map[$source] ?? ucfirst(str_replace('_', ' ', $source));
 }
@@ -140,6 +144,80 @@ function leads_log(
         $new_value !== null ? (string)$new_value : null,
         $description,
     ]);
+}
+
+// ── Facebook Messenger helpers ────────────────────────────────────────────────
+
+function leads_fb_setting(string $key): string
+{
+    try {
+        $stmt = db()->prepare('SELECT `value` FROM lead_fb_settings WHERE `key` = ?');
+        $stmt->execute([$key]);
+        return (string)($stmt->fetchColumn() ?: '');
+    } catch (Exception $e) {
+        return '';
+    }
+}
+
+function leads_fb_setting_set(string $key, string $value): void
+{
+    db()->prepare(
+        'INSERT INTO lead_fb_settings (`key`, `value`) VALUES (?,?)
+         ON DUPLICATE KEY UPDATE `value`=?, updated_at=NOW()'
+    )->execute([$key, $value, $value]);
+}
+
+/**
+ * Send a text message to a Facebook user via the Send API.
+ * Returns true on success, false on failure.
+ */
+function leads_fb_send(string $psid, string $text): bool
+{
+    $token = leads_fb_setting('page_access_token');
+    if ($token === '') return false;
+
+    $payload = json_encode([
+        'recipient'      => ['id' => $psid],
+        'message'        => ['text' => $text],
+        'messaging_type' => 'RESPONSE',
+    ]);
+
+    $ch = curl_init('https://graph.facebook.com/v19.0/me/messages?access_token=' . urlencode($token));
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => $payload,
+        CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 10,
+    ]);
+    $resp = curl_exec($ch);
+    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($code === 200) {
+        $body = json_decode($resp, true);
+        return !empty($body['message_id']);
+    }
+    return false;
+}
+
+function leads_fb_get_contact_by_psid(string $psid): ?array
+{
+    $stmt = db()->prepare('SELECT * FROM lead_fb_contacts WHERE psid = ?');
+    $stmt->execute([$psid]);
+    return $stmt->fetch() ?: null;
+}
+
+function leads_fb_get_contact_by_lead(int $lead_id): ?array
+{
+    $stmt = db()->prepare('SELECT * FROM lead_fb_contacts WHERE lead_id = ?');
+    $stmt->execute([$lead_id]);
+    return $stmt->fetch() ?: null;
+}
+
+function leads_fb_source_badge(): string
+{
+    return '<span class="badge" style="background:#1877F2"><i class="fab fa-facebook-messenger me-1"></i>Facebook</span>';
 }
 
 // ── Fetch helpers ─────────────────────────────────────────────────────────────

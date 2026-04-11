@@ -117,6 +117,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         redirect(APP_URL . '/leads/view.php?id=' . $id . '#appointments');
     }
+
+    // ── Send Facebook reply ───────────────────────────────────────────────
+    if ($action === 'send_fb_reply' && $is_staff) {
+        $reply_text  = trim($_POST['fb_reply'] ?? '');
+        $contact_id  = (int)($_POST['fb_contact_id'] ?? 0);
+        if ($reply_text === '' || $contact_id <= 0) {
+            flash_set('error', 'Message cannot be empty.');
+            redirect(APP_URL . '/leads/view.php?id=' . $id . '#facebook');
+        }
+        $cstmt = db()->prepare('SELECT * FROM lead_fb_contacts WHERE id = ? AND lead_id = ?');
+        $cstmt->execute([$contact_id, $id]);
+        $fc = $cstmt->fetch();
+        if (!$fc) {
+            flash_set('error', 'Facebook contact not found for this lead.');
+            redirect(APP_URL . '/leads/view.php?id=' . $id . '#facebook');
+        }
+        $sent = leads_fb_send($fc['psid'], $reply_text);
+        if ($sent) {
+            db()->prepare(
+                'INSERT INTO lead_fb_messages (contact_id, direction, message_text, sent_by)
+                 VALUES (?,?,?,?)'
+            )->execute([$contact_id, 'out', $reply_text, $user['id']]);
+            db()->prepare('UPDATE lead_fb_contacts SET last_message_at=NOW() WHERE id=?')
+                ->execute([$contact_id]);
+            leads_log($id, 'fb_message_sent', null, null, null,
+                'Facebook reply sent by ' . $user['full_name'] . ': ' . mb_substr($reply_text, 0, 100));
+            flash_set('success', 'Message sent via Facebook Messenger.');
+        } else {
+            flash_set('error', 'Failed to send message. Check Facebook credentials in FB Settings.');
+        }
+        redirect(APP_URL . '/leads/view.php?id=' . $id . '#facebook');
+    }
 }
 
 // ── Fetch related data ────────────────────────────────────────────────────────
@@ -163,6 +195,20 @@ $staff_users = db()->query(
 )->fetchAll();
 
 $available_users = array_filter($staff_users, fn($u) => !in_array($u['id'], $assigned_ids));
+
+// ── Facebook contact & messages ───────────────────────────────────────────────
+$fb_contact = leads_fb_get_contact_by_lead($id);
+$fb_messages = [];
+if ($fb_contact) {
+    $fm = db()->prepare(
+        'SELECT m.*, u.full_name AS sender_name
+         FROM lead_fb_messages m
+         LEFT JOIN users u ON u.id = m.sent_by
+         WHERE m.contact_id = ? ORDER BY m.created_at ASC'
+    );
+    $fm->execute([$fb_contact['id']]);
+    $fb_messages = $fm->fetchAll();
+}
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -354,6 +400,97 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
         </div>
 
+        <!-- Facebook Messages -->
+        <div class="card border-0 shadow-sm mb-4" id="facebook">
+            <div class="card-header bg-white fw-semibold d-flex justify-content-between align-items-center">
+                <span><i class="fab fa-facebook-messenger me-2" style="color:#1877F2"></i>Facebook Messenger</span>
+                <?php if ($fb_contact): ?>
+                <span class="badge bg-secondary"><?= count($fb_messages) ?> messages</span>
+                <?php else: ?>
+                <a href="<?= APP_URL ?>/leads/fb-inbox.php" class="btn btn-sm btn-outline-primary"><i class="fab fa-facebook-messenger me-1"></i> FB Inbox</a>
+                <?php endif; ?>
+            </div>
+            <div class="card-body">
+                <?php if (!$fb_contact): ?>
+                <p class="text-muted small mb-2">No Facebook contact linked to this lead.</p>
+                <p class="text-muted small mb-0">
+                    When someone messages your Facebook page, they appear in the
+                    <a href="<?= APP_URL ?>/leads/fb-inbox.php">FB Inbox</a>.
+                    Open the conversation there and use <strong>Link to Lead</strong> to connect it here.
+                </p>
+                <?php else: ?>
+                <!-- Contact info bar -->
+                <div class="d-flex align-items-center gap-3 mb-3 p-2 rounded" style="background:#f0f2f5">
+                    <?php if ($fb_contact['fb_picture']): ?>
+                    <img src="<?= h($fb_contact['fb_picture']) ?>" class="rounded-circle" width="40" height="40" alt="FB Profile" style="object-fit:cover">
+                    <?php else: ?>
+                    <div class="rounded-circle d-flex align-items-center justify-content-center" style="width:40px;height:40px;background:#1877F2">
+                        <i class="fab fa-facebook-messenger text-white"></i>
+                    </div>
+                    <?php endif; ?>
+                    <div>
+                        <div class="fw-semibold small"><?= h($fb_contact['fb_name'] ?? 'Facebook User') ?></div>
+                        <div class="text-muted" style="font-size:.72rem">PSID: <?= h($fb_contact['psid']) ?></div>
+                        <?php if ($fb_contact['last_message_at']): ?>
+                        <div class="text-muted" style="font-size:.72rem">Last message: <?= date('d M Y, h:i A', strtotime($fb_contact['last_message_at'])) ?></div>
+                        <?php endif; ?>
+                    </div>
+                    <div class="ms-auto">
+                        <a href="<?= APP_URL ?>/leads/fb-conversation.php?contact_id=<?= $fb_contact['id'] ?>" class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-expand-alt me-1"></i> Full View
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Message thread (last 20) -->
+                <?php if ($fb_messages): ?>
+                <div class="fb-thread mb-3" style="max-height:320px;overflow-y:auto;display:flex;flex-direction:column;gap:8px">
+                    <?php foreach (array_slice($fb_messages, -20) as $fbm): ?>
+                    <?php $is_out = $fbm['direction'] === 'out'; ?>
+                    <div class="d-flex <?= $is_out ? 'justify-content-end' : 'justify-content-start' ?>">
+                        <div class="px-3 py-2 rounded-3 small" style="max-width:75%;<?= $is_out ? 'background:#1877F2;color:#fff' : 'background:#f0f2f5;color:#000' ?>">
+                            <?php if ($fbm['message_text']): ?>
+                            <?= nl2br(h($fbm['message_text'])) ?>
+                            <?php endif; ?>
+                            <?php if ($fbm['attachment_type']): ?>
+                            <div class="mt-1">
+                                <?php if ($fbm['attachment_type'] === 'image' && $fbm['attachment_url']): ?>
+                                <a href="<?= h($fbm['attachment_url']) ?>" target="_blank"><img src="<?= h($fbm['attachment_url']) ?>" style="max-width:200px;border-radius:4px" alt="image"></a>
+                                <?php else: ?>
+                                <span class="badge bg-secondary">[<?= h($fbm['attachment_type']) ?> attachment]</span>
+                                <?php if ($fbm['attachment_url']): ?><a href="<?= h($fbm['attachment_url']) ?>" target="_blank" class="ms-1 <?= $is_out ? 'text-white' : 'text-primary' ?>">View</a><?php endif; ?>
+                                <?php endif; ?>
+                            </div>
+                            <?php endif; ?>
+                            <div style="font-size:.68rem;opacity:.75;margin-top:4px;text-align:<?= $is_out ? 'right' : 'left' ?>">
+                                <?= $is_out ? h($fbm['sender_name'] ?? 'Staff') . ' · ' : '' ?><?= date('d M, h:i A', strtotime($fbm['created_at'])) ?>
+                            </div>
+                        </div>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+                <?php else: ?>
+                <p class="text-muted small mb-3">No messages yet.</p>
+                <?php endif; ?>
+
+                <!-- Reply form -->
+                <?php if ($is_staff): ?>
+                <form method="post">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="action" value="send_fb_reply">
+                    <input type="hidden" name="fb_contact_id" value="<?= $fb_contact['id'] ?>">
+                    <div class="input-group">
+                        <textarea name="fb_reply" class="form-control form-control-sm" rows="2" placeholder="Type your reply…" required></textarea>
+                        <button type="submit" class="btn btn-primary btn-sm" style="background:#1877F2;border-color:#1877F2">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </form>
+                <?php endif; ?>
+                <?php endif; ?>
+            </div>
+        </div>
+
         <!-- History -->
         <div class="card border-0 shadow-sm mb-4" id="history">
             <div class="card-header bg-white fw-semibold d-flex justify-content-between">
@@ -377,6 +514,8 @@ require_once __DIR__ . '/../includes/header.php';
                                     'note_added'           => 'fas fa-sticky-note text-warning',
                                     'appointment_set'      => 'fas fa-calendar-plus text-info',
                                     'appointment_updated'  => 'fas fa-calendar-check text-primary',
+                                    'fb_message_received'  => 'fab fa-facebook-messenger text-primary',
+                                    'fb_message_sent'      => 'fab fa-facebook-messenger text-success',
                                 ];
                                 $icon = $icons[$h_item['action']] ?? 'fas fa-circle text-muted';
                                 ?>
