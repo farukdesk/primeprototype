@@ -242,9 +242,9 @@ require_once __DIR__ . '/../../includes/header.php';
 
     <?php if ($page_type === 'board-of-trustees'): ?>
     <?php
-    $glance_officer_val  = isset($_POST['glance_officer'])  ? (bool)$_POST['glance_officer']  : (bool)($member['glance_officer'] ?? 0);
-    $glance_msg_tab_val  = $_POST['glance_msg_tab']  ?? ($member['glance_msg_tab']  ?? '');
-    $glance_message_val  = $_POST['glance_message']  ?? ($member['glance_message']  ?? '');
+    $glance_officer_val = isset($_POST['glance_officer']) ? (bool)$_POST['glance_officer'] : (bool)($member['glance_officer'] ?? 0);
+    $glance_msg_tab_val = $_POST['glance_msg_tab'] ?? ($member['glance_msg_tab'] ?? '');
+    $glance_message_val = $_POST['glance_message'] ?? ($member['glance_message'] ?? '');
     ?>
     <div class="card mb-4" style="border-radius:12px;border:2px solid #e0e7ef;">
         <div class="card-header py-3 px-4" style="background:rgba(0,33,71,.04);">
