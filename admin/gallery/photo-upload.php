@@ -34,8 +34,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $user = auth_user();
         // Determine the initial status: super admin / edit perm => approved, else pending
         $initial_status = gallery_can_edit() ? 'approved' : 'pending';
-        $max_sort = (int)$db->prepare('SELECT COALESCE(MAX(sort_order),0) FROM gallery_photos WHERE album_id = ?')
-                              ->execute([$album_id]) ? $db->query("SELECT COALESCE(MAX(sort_order),0) FROM gallery_photos WHERE album_id = $album_id")->fetchColumn() : 0;
+        $sort_st = $db->prepare('SELECT COALESCE(MAX(sort_order),0) FROM gallery_photos WHERE album_id = ?');
+        $sort_st->execute([$album_id]);
+        $max_sort = (int)$sort_st->fetchColumn();
 
         $count = count($files['name']);
         $sort  = (int)$max_sort + 1;

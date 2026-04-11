@@ -42,7 +42,7 @@ try {
              ORDER BY a.sort_order ASC, a.event_date DESC, a.created_at DESC"
         )->fetchAll();
 
-        // All approved photos for the masonry wall (limit 200 for perf)
+        // All approved photos for the masonry wall (limit 400 for perf)
         $photos = $db->query(
             "SELECT gp.*, a.title AS album_title, a.dept_id, a.program_id
              FROM gallery_photos gp
