@@ -194,6 +194,8 @@ function gs_url(array $s, string $key, string $default = '#'): string {
 .leader-card { background:#fff; border-radius:20px; overflow:hidden; box-shadow:var(--pu-shadow); transition:transform var(--pu-trans), box-shadow var(--pu-trans); height:100%; position:relative; }
 .leader-card::before { content:''; position:absolute; top:0; left:0; right:0; height:4px; background:linear-gradient(90deg, var(--pu-navy), var(--pu-gold)); }
 .leader-card:hover { transform:translateY(-8px); box-shadow:var(--pu-shadow-hover); }
+.leader-card-link { display:block; text-decoration:none; height:100%; }
+.leader-card-link:hover .leader-card { transform:translateY(-8px); box-shadow:var(--pu-shadow-hover); }
 .leader-card-top { background:linear-gradient(135deg, var(--pu-navy) 0%, #1a4faf 100%); padding:36px 28px 0; display:flex; flex-direction:column; align-items:center; text-align:center; }
 .leader-avatar { width:100px; height:100px; border-radius:50%; border:4px solid var(--pu-gold); object-fit:cover; background:rgba(255,255,255,.1); display:flex; align-items:center; justify-content:center; font-size:2.5rem; color:rgba(255,255,255,.9); box-shadow:0 4px 24px rgba(0,0,0,.25); margin-bottom:16px; }
 .leader-card-top h4 { font-size:1.05rem; font-weight:800; color:#fff; margin-bottom:4px; }
@@ -584,6 +586,8 @@ $cta_btn2_url = gs_url($_settings, 'cta_btn2_url', '/contact.php');
     <div class="row g-4 justify-content-center">
       <?php foreach ($_leaders as $i => $l): ?>
       <div class="col-lg-4 col-md-6" data-gr data-d="<?= min($i + 1, 6) ?>">
+        <?php $card_link = !empty($l['glance_link']) ? fh($l['glance_link']) : ''; ?>
+        <?php if ($card_link): ?><a href="<?= $card_link ?>" class="leader-card-link"><?php endif; ?>
         <div class="leader-card">
           <div class="leader-card-top">
             <?php if ($l['photo']): ?>
@@ -600,6 +604,7 @@ $cta_btn2_url = gs_url($_settings, 'cta_btn2_url', '/contact.php');
           </div>
           <?php endif; ?>
         </div>
+        <?php if ($card_link): ?></a><?php endif; ?>
       </div>
       <?php endforeach; ?>
     </div>
