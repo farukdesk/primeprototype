@@ -25,6 +25,8 @@ $s += [
     'assistant_title'   => 'Assistant Adviser (Legal & Estate)',
     'assistant_email_1' => 'adv.yasin@primeuniversity.ac.bd',
     'assistant_phone'   => '01705-502190',
+    'message_title'     => 'Message from the Adviser',
+    'message_body'      => "The Law & Legal Affairs office of Prime University is committed to upholding the highest standards of legal governance. Our office provides expert legal counsel to university management, ensures full compliance with the laws of Bangladesh and UGC regulations, and safeguards the institution's legal interests.\n\nWe handle all legal matters — from contract review and dispute resolution to estate management and regulatory compliance — with professionalism and integrity. Our goal is to provide timely, practical, and effective legal support to every stakeholder of Prime University.\n\nI invite faculty, staff, and students to reach out whenever legal guidance or assistance is required. My office stands ready to serve.",
 ];
 
 /* ── Redirect if unpublished ─────────────────────────────────────────────── */
@@ -52,7 +54,7 @@ $adviser_photo_url   = !empty($s['adviser_photo'])
 $assistant_photo_url = !empty($s['assistant_photo'])
     ? ADMIN_UPLOAD_URL . '/law-legal/' . $s['assistant_photo'] : '';
 
-/* ── Load staff, notices, services ──────────────────────────────────────── */
+/* ── Load staff, notices, services (each in own try/catch) ───────────────── */
 $staff    = [];
 $notices  = [];
 $services = [];
@@ -62,14 +64,36 @@ try {
         $staff = $db->query(
             'SELECT * FROM ll_staff WHERE is_active = 1 ORDER BY sort_order ASC, name ASC'
         )->fetchAll();
+    }
+} catch (Throwable $e) {}
+try {
+    $db = front_db();
+    if ($db) {
         $notices = $db->query(
             'SELECT * FROM ll_notices WHERE is_active = 1 ORDER BY notice_date DESC, sort_order ASC, id DESC LIMIT 12'
         )->fetchAll();
+    }
+} catch (Throwable $e) {}
+try {
+    $db = front_db();
+    if ($db) {
         $services = $db->query(
             'SELECT * FROM ll_services WHERE is_active = 1 ORDER BY sort_order ASC, id ASC'
         )->fetchAll();
     }
 } catch (Throwable $e) {}
+
+/* ── Fallback default services (shown when DB table is empty / not migrated) */
+if (empty($services)) {
+    $services = [
+        ['icon' => 'fas fa-balance-scale', 'title' => 'Legal Consultation',    'description' => 'Expert legal advice on university administration, contracts, and institutional obligations.'],
+        ['icon' => 'fas fa-file-contract', 'title' => 'Contract Review',        'description' => 'Review, drafting, and vetting of all contracts, agreements, MOUs, and other legal documents.'],
+        ['icon' => 'fas fa-building',      'title' => 'Estate Management',      'description' => 'Oversight and management of university property, land records, lease agreements, and real estate affairs.'],
+        ['icon' => 'fas fa-handshake',     'title' => 'Dispute Resolution',     'description' => 'Handling legal disputes, arbitrations, and liaising with courts and regulatory bodies.'],
+        ['icon' => 'fas fa-shield-alt',    'title' => 'Regulatory Compliance',  'description' => 'Ensuring university policies and operations comply with UGC regulations and national laws.'],
+        ['icon' => 'fas fa-folder-open',   'title' => 'Legal Documentation',    'description' => 'Preparation and maintenance of affidavits, power of attorney, notarized documents, and official records.'],
+    ];
+}
 ?>
 <!doctype html>
 <html class="no-js" lang="en">
