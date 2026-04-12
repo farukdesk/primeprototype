@@ -263,8 +263,11 @@ $user       = auth_user();
     $is_library_active       = strpos($current_path, '/library/') !== false;
     $is_course_fees_active   = strpos($current_path, '/course-fees/') !== false;
     $is_governing_body_active = strpos($current_path, '/governing-body/') !== false;
-    $is_office_of_vc_active       = strpos($current_path, '/office-of-vc/') !== false;
-    $is_office_of_chairman_active = strpos($current_path, '/office-of-chairman/') !== false;
+    $is_office_of_vc_active         = strpos($current_path, '/office-of-vc/') !== false;
+    $is_office_of_chairman_active   = strpos($current_path, '/office-of-chairman/') !== false;
+    $is_office_of_pro_vc_active     = strpos($current_path, '/office-of-pro-vc/') !== false;
+    $is_office_of_treasurer_active  = strpos($current_path, '/office-of-treasurer/') !== false;
+    $is_office_of_registrar_active  = strpos($current_path, '/office-of-registrar/') !== false;
     $is_admin_active    = strpos($current_path, '/users/') !== false || strpos($current_path, '/user-groups/') !== false
                        || strpos($current_path, '/modules/') !== false || strpos($current_path, '/access/') !== false
                        || strpos($current_path, '/email-templates/') !== false || strpos($current_path, '/change-log/') !== false;
@@ -505,6 +508,42 @@ $user       = auth_user();
             <a href="<?= APP_URL ?>/office-of-chairman/index.php"
                class="<?= $is_office_of_chairman_active ? 'active' : '' ?>">
                 <i class="fas fa-gavel"></i> Office of Chairman
+            </a>
+        </li>
+    </ul>
+    <?php endif; ?>
+
+    <!-- ── Office of Pro Vice Chancellor ── -->
+    <?php if (is_super_admin() || can_access('office-of-pro-vc')): ?>
+    <ul class="nav flex-column mt-2">
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/office-of-pro-vc/index.php"
+               class="<?= $is_office_of_pro_vc_active ? 'active' : '' ?>">
+                <i class="fas fa-user-graduate"></i> Office of Pro VC
+            </a>
+        </li>
+    </ul>
+    <?php endif; ?>
+
+    <!-- ── Office of Treasurer ── -->
+    <?php if (is_super_admin() || can_access('office-of-treasurer')): ?>
+    <ul class="nav flex-column mt-2">
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/office-of-treasurer/index.php"
+               class="<?= $is_office_of_treasurer_active ? 'active' : '' ?>">
+                <i class="fas fa-coins"></i> Office of Treasurer
+            </a>
+        </li>
+    </ul>
+    <?php endif; ?>
+
+    <!-- ── Office of Registrar ── -->
+    <?php if (is_super_admin() || can_access('office-of-registrar')): ?>
+    <ul class="nav flex-column mt-2">
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/office-of-registrar/index.php"
+               class="<?= $is_office_of_registrar_active ? 'active' : '' ?>">
+                <i class="fas fa-stamp"></i> Office of Registrar
             </a>
         </li>
     </ul>
