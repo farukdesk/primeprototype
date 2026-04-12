@@ -7,6 +7,7 @@ $errors     = [];
 $requested_tab = $_GET['tab'] ?? '';
 $active_tab = in_array($requested_tab, ['page','vc','ps','message']) ? $requested_tab : 'page';
 
+
 // ── Load current settings ────────────────────────────────────────────────────
 $s = [];
 try {
@@ -85,7 +86,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Delete old photo
                 if ($vc_photo) {
                     $old = UPLOAD_DIR . '/office-of-vc/' . $vc_photo;
-                    if (file_exists($old)) @unlink($old);
+                    if (is_file($old)) @unlink($old);
                 }
                 $vc_photo = $result;
             }
@@ -113,12 +114,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($ps_name === '') $errors[] = 'PS name is required.';
 
+        // Handle PS photo upload
+        $ps_photo = $s['ps_photo'] ?? '';
+        if (!empty($_FILES['ps_photo']['name'])) {
+            $result = vc_upload_photo($_FILES['ps_photo']);
+            if ($result === false) {
+                $errors[] = 'PS Photo: invalid file. Allowed: JPG, PNG, GIF, WebP.';
+            } else {
+                if ($ps_photo) {
+                    $old = UPLOAD_DIR . '/office-of-vc/' . $ps_photo;
+                    if (is_file($old)) @unlink($old);
+                }
+                $ps_photo = $result;
+            }
+        }
+        // Remove PS photo if requested
+        if (isset($_POST['remove_ps_photo']) && $_POST['remove_ps_photo'] === '1') {
+            if ($ps_photo) {
+                $old = UPLOAD_DIR . '/office-of-vc/' . $ps_photo;
+                if (is_file($old)) @unlink($old);
+            }
+            $ps_photo = '';
+        }
+
         if (empty($errors)) {
             vc_save('ps_name',    $ps_name);
             vc_save('ps_title',   $ps_title);
             vc_save('ps_email_1', $ps_email_1);
             vc_save('ps_email_2', $ps_email_2);
             vc_save('ps_phone',   $ps_phone);
+            vc_save('ps_photo',   $ps_photo);
             flash_set('success', 'PS profile saved.');
             redirect(APP_URL . '/office-of-vc/settings.php?tab=ps');
         }
@@ -332,7 +357,7 @@ require_once __DIR__ . '/../includes/header.php';
 <?php elseif ($active_tab === 'ps'): ?>
 <div class="row justify-content-center">
 <div class="col-lg-8">
-<form method="POST" novalidate>
+<form method="POST" enctype="multipart/form-data" novalidate>
     <?= csrf_field() ?>
     <input type="hidden" name="tab" value="ps">
 
@@ -341,6 +366,38 @@ require_once __DIR__ . '/../includes/header.php';
             <h6 class="mb-0 fw-semibold"><i class="fas fa-id-badge me-2 text-muted"></i>Personal Secretary (PS) Profile</h6>
         </div>
         <div class="card-body p-4">
+
+            <!-- PS Photo -->
+            <div class="mb-4">
+                <label class="form-label fw-medium">Profile Photo</label>
+                <div class="d-flex align-items-center gap-3 mb-2">
+                    <?php if (!empty($s['ps_photo'])): ?>
+                    <img src="<?= UPLOAD_URL ?>/office-of-vc/<?= h($s['ps_photo']) ?>"
+                         id="ps-photo-preview"
+                         style="width:80px;height:80px;border-radius:50%;object-fit:cover;object-position:top center;border:3px solid #e8eaf0;" alt="">
+                    <?php else: ?>
+                    <div id="ps-photo-preview-placeholder"
+                         style="width:80px;height:80px;border-radius:50%;background:#f1f5f9;display:flex;align-items:center;justify-content:center;border:2px dashed #cbd5e1;">
+                        <i class="fas fa-id-badge" style="color:#94a3b8;font-size:1.6rem;"></i>
+                    </div>
+                    <?php endif; ?>
+                    <div>
+                        <input type="file" name="ps_photo" id="ps_photo" class="form-control mb-2"
+                               accept="image/jpeg,image/png,image/gif,image/webp"
+                               style="max-width:280px;">
+                        <div class="form-text mb-2">JPG, PNG, GIF, WebP. Recommended: square, min 300×300px.</div>
+                        <?php if (!empty($s['ps_photo'])): ?>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="remove_ps_photo"
+                                   name="remove_ps_photo" value="1">
+                            <label class="form-check-label text-danger" for="remove_ps_photo"
+                                   style="font-size:.83rem;">Remove current photo</label>
+                        </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+
             <div class="row g-3">
                 <div class="col-md-8">
                     <label class="form-label fw-medium">Full Name <span class="text-danger">*</span></label>
@@ -419,7 +476,7 @@ require_once __DIR__ . '/../includes/header.php';
 <?php endif; ?>
 
 <script>
-// Live photo preview
+// Live photo preview – VC
 document.getElementById('vc_photo')?.addEventListener('change', function () {
     const file = this.files[0];
     if (!file) return;
@@ -429,8 +486,27 @@ document.getElementById('vc_photo')?.addEventListener('change', function () {
         if (!img) {
             img = document.createElement('img');
             img.id = 'vc-photo-preview';
-            img.style.cssText = 'width:80px;height:80px;border-radius:50%;object-fit:cover;border:3px solid #e8eaf0;';
+            img.style.cssText = 'width:80px;height:80px;border-radius:50%;object-fit:cover;object-position:top center;border:3px solid #e8eaf0;';
             const placeholder = document.getElementById('vc-photo-preview-placeholder');
+            if (placeholder) placeholder.replaceWith(img);
+        }
+        img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+});
+
+// Live photo preview – PS
+document.getElementById('ps_photo')?.addEventListener('change', function () {
+    const file = this.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function (e) {
+        let img = document.getElementById('ps-photo-preview');
+        if (!img) {
+            img = document.createElement('img');
+            img.id = 'ps-photo-preview';
+            img.style.cssText = 'width:80px;height:80px;border-radius:50%;object-fit:cover;object-position:top center;border:3px solid #e8eaf0;';
+            const placeholder = document.getElementById('ps-photo-preview-placeholder');
             if (placeholder) placeholder.replaceWith(img);
         }
         img.src = e.target.result;
