@@ -51,6 +51,19 @@ $page_icons = [
 $hero_icon = $page_icons[$page_type] ?? 'fas fa-university';
 
 $total_members = count($members);
+
+// Count members per page_type for conditional nav display
+$nav_counts = [];
+try {
+    if (isset($db) && $db) {
+        $cnt_st = $db->query(
+            "SELECT page_type, COUNT(*) AS cnt FROM governing_body_members GROUP BY page_type"
+        );
+        foreach ($cnt_st->fetchAll() as $row) {
+            $nav_counts[$row['page_type']] = (int)$row['cnt'];
+        }
+    }
+} catch (Throwable $e) {}
 ?>
 <!doctype html>
 <html class="no-js" lang="en">
@@ -196,6 +209,7 @@ $total_members = count($members);
       .gb-featured-img {
          width: 160px; height: 160px;
          object-fit: cover;
+         object-position: top center;
          border-radius: 50%;
          border: 5px solid #FFB81C;
          box-shadow: 0 8px 25px rgba(0,33,71,.2);
@@ -203,6 +217,7 @@ $total_members = count($members);
       .gb-member-img {
          width: 120px; height: 120px;
          object-fit: cover;
+         object-position: top center;
          border-radius: 50%;
          border: 4px solid #F8FAFC;
          box-shadow: 0 4px 15px rgba(0,33,71,.12);
@@ -312,24 +327,32 @@ $total_members = count($members);
             </p>
             <?php endif; ?>
 
-            <!-- Quick navigation -->
+            <!-- Quick navigation (only show tabs with at least one member, always show the current tab) -->
             <div class="d-flex flex-wrap gap-2 justify-content-center mt-4">
+               <?php if (($nav_counts['board-of-trustees'] ?? 0) > 0 || $page_type === 'board-of-trustees'): ?>
                <a href="<?= fh(SITE_URL) ?>/board-of-trustees.php"
                   class="gb-nav-pill <?= $page_type === 'board-of-trustees' ? 'active' : '' ?>">
                   <i class="fas fa-landmark me-1"></i> Board of Trustees
                </a>
+               <?php endif; ?>
+               <?php if (($nav_counts['pu-syndicates'] ?? 0) > 0 || $page_type === 'pu-syndicates'): ?>
                <a href="<?= fh(SITE_URL) ?>/pu-syndicates.php"
                   class="gb-nav-pill <?= $page_type === 'pu-syndicates' ? 'active' : '' ?>">
                   <i class="fas fa-balance-scale me-1"></i> PU Syndicates
                </a>
+               <?php endif; ?>
+               <?php if (($nav_counts['deans'] ?? 0) > 0 || $page_type === 'deans'): ?>
                <a href="<?= fh(SITE_URL) ?>/deans.php"
                   class="gb-nav-pill <?= $page_type === 'deans' ? 'active' : '' ?>">
                   <i class="fas fa-user-tie me-1"></i> Deans
                </a>
+               <?php endif; ?>
+               <?php if (($nav_counts['head-of-departments'] ?? 0) > 0 || $page_type === 'head-of-departments'): ?>
                <a href="<?= fh(SITE_URL) ?>/head-of-departments.php"
                   class="gb-nav-pill <?= $page_type === 'head-of-departments' ? 'active' : '' ?>">
                   <i class="fas fa-chalkboard-teacher me-1"></i> Head of Departments
                </a>
+               <?php endif; ?>
             </div>
 
          </div>
@@ -410,15 +433,17 @@ $total_members = count($members);
    <section style="background:<?= $bg_color ?>;padding:<?= $is_first_sec ? '60px 0 80px' : '20px 0 80px' ?>;">
       <div class="container">
 
-         <!-- Section heading -->
+         <?php if ($is_first_sec): ?>
+         <!-- Section heading (first section only; subsequent sections are labelled by the divider above) -->
          <div class="row justify-content-center">
             <div class="col-12 text-center mb-50">
                <span class="it-section-subtitle" style="color:#D21034;">
                   <i class="<?= $hero_icon ?> me-1"></i><?= fh($sec_label) ?>
                </span>
-               <h4 class="it-section-title" style="color:#002147;"><?= $hero_title ?> – <?= fh($sec_label) ?></h4>
+               <h4 class="it-section-title" style="color:#002147;"><?= $hero_title ?></h4>
             </div>
          </div>
+         <?php endif; ?>
 
          <?php if ($has_one_featured): ?>
          <!-- Single featured member: centred large card -->
