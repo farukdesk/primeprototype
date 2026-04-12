@@ -776,7 +776,7 @@ if (empty($services)) {
                     <div class="col-md-6 col-lg-4">
                         <div class="ll-service-card ll-fade <?= $dc ?>">
                             <div class="ll-service-icon">
-                                <i class="<?= h($svc['icon']) ?>"></i>
+                                <i class="<?= fh($svc['icon']) ?>"></i>
                             </div>
                             <div class="ll-service-title"><?= fh($svc['title']) ?></div>
                             <?php if (!empty($svc['description'])): ?>
