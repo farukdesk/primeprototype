@@ -11,14 +11,12 @@ try { $stats      = $db->query('SELECT * FROM glance_stats     ORDER BY sort_ord
 try { $highlights = $db->query('SELECT * FROM glance_highlights ORDER BY sort_order, id')->fetchAll(); } catch (Throwable $e) { $highlights = []; }
 try { $milestones = $db->query('SELECT * FROM glance_milestones ORDER BY sort_order, id')->fetchAll(); } catch (Throwable $e) { $milestones = []; }
 
-// Officers and messages sourced from Board of Trustees members
+// Key Administrative Officers from dedicated table
 try {
-    $bot_officers = $db->query(
-        "SELECT * FROM governing_body_members
-         WHERE page_type='board-of-trustees' AND glance_officer=1
-         ORDER BY sort_order, id"
+    $officers = $db->query(
+        'SELECT * FROM glance_officers ORDER BY sort_order, id'
     )->fetchAll();
-} catch (Throwable $e) { $bot_officers = []; }
+} catch (Throwable $e) { $officers = []; }
 
 try {
     $bot_messages = $db->query(
@@ -92,12 +90,12 @@ require_once __DIR__ . '/../../includes/header.php';
                 </div>
                 <div>
                     <div class="fw-semibold" style="font-size:.9rem;">Key Officers</div>
-                    <small class="text-muted"><?= count($bot_officers) ?> selected</small>
+                    <small class="text-muted"><?= count($officers) ?> officers</small>
                 </div>
             </div>
             <div class="card-footer bg-transparent border-top-0 pt-0 pb-3 px-3">
-                <a href="<?= APP_URL ?>/governing-body/members/index.php?page_type=board-of-trustees" class="btn btn-sm btn-primary w-100" style="border-radius:8px;">
-                    <i class="fas fa-edit me-1"></i> Manage
+                <a href="<?= APP_URL ?>/cms/glance/officers-create.php" class="btn btn-sm btn-primary w-100" style="border-radius:8px;">
+                    <i class="fas fa-plus me-1"></i> Add Officer
                 </a>
             </div>
         </div>
@@ -180,11 +178,10 @@ require_once __DIR__ . '/../../includes/header.php';
     <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between">
         <div>
             <h6 class="mb-0 fw-semibold"><i class="fas fa-user-tie me-2 text-muted"></i>Key Administrative Officers</h6>
-            <div class="form-text mt-1">Sourced from Board of Trustees. Toggle "Show as Key Administrative Officer" on any member to include them here.</div>
         </div>
-        <a href="<?= APP_URL ?>/governing-body/members/index.php?page_type=board-of-trustees"
+        <a href="<?= APP_URL ?>/cms/glance/officers-create.php"
            class="btn btn-sm btn-primary" style="border-radius:8px;">
-            <i class="fas fa-edit me-1"></i> Manage Members
+            <i class="fas fa-plus me-1"></i> Add Officer
         </a>
     </div>
     <div class="card-body p-0">
@@ -197,36 +194,40 @@ require_once __DIR__ . '/../../includes/header.php';
                         <th>Name</th>
                         <th>Designation</th>
                         <th>Order</th>
+                        <th>Active</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
-                <?php if (empty($bot_officers)): ?>
-                    <tr><td colspan="6" class="text-center text-muted py-4">
-                        No officers selected yet.
-                        <a href="<?= APP_URL ?>/governing-body/members/index.php?page_type=board-of-trustees">
-                            Go to Board of Trustees members and enable "Show as Key Administrative Officer".</a>
+                <?php if (empty($officers)): ?>
+                    <tr><td colspan="7" class="text-center text-muted py-4">
+                        No officers yet. <a href="<?= APP_URL ?>/cms/glance/officers-create.php">Add one.</a>
                     </td></tr>
                 <?php else: ?>
-                    <?php foreach ($bot_officers as $i => $l): ?>
+                    <?php foreach ($officers as $i => $o): ?>
                     <tr>
                         <td class="px-4"><?= $i + 1 ?></td>
                         <td>
-                            <?php if ($l['photo']): ?>
-                                <img src="<?= UPLOAD_URL ?>/governing-body/<?= h($l['photo']) ?>" alt=""
+                            <?php if ($o['photo']): ?>
+                                <img src="<?= h(glance_img_url($o['photo'])) ?>" alt=""
                                      style="width:36px;height:36px;border-radius:50%;object-fit:cover;">
                             <?php else: ?>
                                 <span class="badge bg-light text-muted border">No photo</span>
                             <?php endif; ?>
                         </td>
-                        <td><strong><?= h($l['full_name']) ?></strong></td>
-                        <td><?= h($l['designation'] ?? '') ?></td>
-                        <td><?= (int)$l['sort_order'] ?></td>
+                        <td><strong><?= h($o['full_name']) ?></strong></td>
+                        <td><?= h($o['designation']) ?></td>
+                        <td><?= (int)$o['sort_order'] ?></td>
+                        <td><?= $o['is_active'] ? '<span class="badge bg-success">Yes</span>' : '<span class="badge bg-secondary">No</span>' ?></td>
                         <td>
-                            <a href="<?= APP_URL ?>/governing-body/members/edit.php?id=<?= $l['id'] ?>&page_type=board-of-trustees"
-                               class="btn btn-sm btn-outline-primary" style="border-radius:7px;">
-                                <i class="fas fa-edit"></i>
-                            </a>
+                            <div class="d-flex gap-1">
+                                <a href="<?= APP_URL ?>/cms/glance/officers-edit.php?id=<?= $o['id'] ?>" class="btn btn-sm btn-outline-primary" style="border-radius:7px;"><i class="fas fa-edit"></i></a>
+                                <form method="POST" action="<?= APP_URL ?>/cms/glance/officers-delete.php" onsubmit="return confirm('Delete this officer?');">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="id" value="<?= $o['id'] ?>">
+                                    <button class="btn btn-sm btn-outline-danger" style="border-radius:7px;"><i class="fas fa-trash"></i></button>
+                                </form>
+                            </div>
                         </td>
                     </tr>
                     <?php endforeach; ?>
