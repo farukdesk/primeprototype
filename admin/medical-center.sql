@@ -94,6 +94,7 @@ INSERT IGNORE INTO mc_settings (`key`, `value`) VALUES
 ('emergency_note', 'For emergency, call 999 or proceed to nearest hospital immediately.'),
 ('appointment_enabled', '1');
 
+-- day_of_week: 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday
 INSERT IGNORE INTO mc_schedules (day_of_week, start_time, end_time, max_slots, is_available) VALUES
 (0, '09:00:00', '17:00:00', 10, 0),
 (1, '09:00:00', '17:00:00', 20, 1),
