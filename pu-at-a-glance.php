@@ -26,9 +26,7 @@ try {
 
         try {
             $_leaders = $db->query(
-                "SELECT * FROM governing_body_members
-                 WHERE page_type='board-of-trustees' AND glance_officer=1
-                 ORDER BY sort_order, id"
+                'SELECT * FROM glance_officers WHERE is_active=1 ORDER BY sort_order, id'
             )->fetchAll();
         } catch (Throwable $e) {}
 
@@ -591,7 +589,7 @@ $cta_btn2_url = gs_url($_settings, 'cta_btn2_url', '/contact.php');
         <div class="leader-card">
           <div class="leader-card-top">
             <?php if ($l['photo']): ?>
-              <img src="<?= fh(ADMIN_UPLOAD_URL . '/governing-body/' . basename($l['photo'])) ?>" alt="<?= fh($l['full_name']) ?>" class="leader-avatar" style="display:block;">
+              <img src="<?= fh(ADMIN_UPLOAD_URL . '/glance/' . basename($l['photo'])) ?>" alt="<?= fh($l['full_name']) ?>" class="leader-avatar" style="display:block;">
             <?php else: ?>
               <div class="leader-avatar"><i class="fas fa-user-tie"></i></div>
             <?php endif; ?>
