@@ -274,6 +274,7 @@ $user       = auth_user();
     $is_internal_active = strpos($current_path, '/file-manager/') !== false || strpos($current_path, '/notice-signing/') !== false || strpos($current_path, '/my-signature/') !== false;
     $is_accounting_active = strpos($current_path, '/accounting/') !== false;
     $is_scholarship_active = strpos($current_path, '/scholarship/') !== false;
+    $is_medical_active = strpos($current_path, '/medical-center/') !== false;
     ?>
 
     <!-- Dashboard -->
@@ -1112,6 +1113,53 @@ $user       = auth_user();
             <li class="nav-item">
                 <a href="<?= APP_URL ?>/scholarship/settings.php"
                    class="<?= strpos($current_path, '/scholarship/settings') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-cog"></i> Settings
+                </a>
+            </li>
+            <?php endif; ?>
+        </ul>
+    </div>
+    <?php endif; ?>
+
+    <!-- ── Medical Center ── -->
+    <?php if (is_super_admin() || can_access('medical-center')): ?>
+    <button class="nav-group-toggle <?= $is_medical_active ? '' : 'collapsed' ?>"
+            data-bs-toggle="collapse" data-bs-target="#grp-medical"
+            aria-expanded="<?= $is_medical_active ? 'true' : 'false' ?>">
+        <i class="fas fa-hospital grp-icon" style="color:#20b2aa"></i>
+        <span>Medical Center</span>
+        <i class="fas fa-chevron-down toggle-icon ms-auto"></i>
+    </button>
+    <div class="collapse <?= $is_medical_active ? 'show' : '' ?>" id="grp-medical">
+        <ul class="nav flex-column grp-items">
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/medical-center/index.php"
+                   class="<?= ($is_medical_active && strpos($current_path, 'appointment') === false && strpos($current_path, 'prescription') === false && strpos($current_path, 'medicine') === false && strpos($current_path, 'settings') === false) ? 'active' : '' ?>">
+                    <i class="fas fa-tachometer-alt"></i> Dashboard
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/medical-center/appointments.php"
+                   class="<?= strpos($current_path, '/medical-center/appointment') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-calendar-check"></i> Appointments
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/medical-center/prescriptions.php"
+                   class="<?= strpos($current_path, '/medical-center/prescription') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-file-medical"></i> Prescriptions
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/medical-center/medicines.php"
+                   class="<?= strpos($current_path, '/medical-center/medicine') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-pills"></i> Medicine Stock
+                </a>
+            </li>
+            <?php if (is_super_admin() || can_access('medical-center', 'can_edit')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/medical-center/settings.php"
+                   class="<?= strpos($current_path, '/medical-center/settings') !== false ? 'active' : '' ?>">
                     <i class="fas fa-cog"></i> Settings
                 </a>
             </li>
