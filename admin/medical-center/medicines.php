@@ -40,8 +40,8 @@ $pages  = max(1, (int)ceil($total / $per_page));
 $page   = min($page, $pages);
 $offset = ($page - 1) * $per_page;
 
-$stmt = $db->prepare("SELECT * FROM mc_medicines WHERE $where_sql ORDER BY name LIMIT $per_page OFFSET $offset");
-$stmt->execute($params);
+$stmt = $db->prepare("SELECT * FROM mc_medicines WHERE $where_sql ORDER BY name LIMIT ? OFFSET ?");
+$stmt->execute(array_merge($params, [$per_page, $offset]));
 $medicines = $stmt->fetchAll();
 
 $categories = $db->query("SELECT DISTINCT category FROM mc_medicines WHERE category IS NOT NULL AND category != '' AND is_active = 1 ORDER BY category")->fetchAll(\PDO::FETCH_COLUMN);

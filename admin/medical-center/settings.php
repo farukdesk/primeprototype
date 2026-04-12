@@ -23,8 +23,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                  'contact_phone','contact_email','emergency_note'];
         foreach ($keys as $k) {
             $val = trim($_POST[$k] ?? '');
-            $stmt = $db->prepare('INSERT INTO mc_settings (`key`, `value`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)');
-            $stmt->execute([$k, $val]);
+            $stmt = $db->prepare('INSERT INTO mc_settings (`key`, `value`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `value` = ?');
+            $stmt->execute([$k, $val, $val]);
         }
         log_change('medical-center', 'UPDATE', null, 'Settings', 'general', null, null, 'General settings updated');
         flash_set('success', 'General settings saved.');
@@ -54,8 +54,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     } elseif ($tab === 'appointment') {
         $enabled = isset($_POST['appointment_enabled']) ? '1' : '0';
-        $db->prepare('INSERT INTO mc_settings (`key`, `value`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)')
-           ->execute(['appointment_enabled', $enabled]);
+        $db->prepare('INSERT INTO mc_settings (`key`, `value`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `value` = ?')
+           ->execute(['appointment_enabled', $enabled, $enabled]);
         log_change('medical-center', 'UPDATE', null, 'Appointment Settings', null, null, null, 'Appointment settings updated');
         flash_set('success', 'Appointment settings saved.');
         redirect(APP_URL . '/medical-center/settings.php?tab=appointment');

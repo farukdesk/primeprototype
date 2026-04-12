@@ -45,8 +45,8 @@ $pages = max(1, (int)ceil($total / $per_page));
 $page  = min($page, $pages);
 $offset = ($page - 1) * $per_page;
 
-$stmt = $db->prepare("SELECT * FROM mc_appointments WHERE $where_sql ORDER BY created_at DESC LIMIT $per_page OFFSET $offset");
-$stmt->execute($params);
+$stmt = $db->prepare("SELECT * FROM mc_appointments WHERE $where_sql ORDER BY created_at DESC LIMIT ? OFFSET ?");
+$stmt->execute(array_merge($params, [$per_page, $offset]));
 $appointments = $stmt->fetchAll();
 
 require_once __DIR__ . '/../includes/header.php';
