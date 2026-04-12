@@ -15,6 +15,18 @@ function lls(array $s, string $key, string $default = ''): string {
     return isset($s[$key]) && $s[$key] !== '' ? $s[$key] : $default;
 }
 
+/* ── Seeded defaults (shown when DB migration has not been run yet) ────────── */
+$s += [
+    'adviser_name'      => 'Md. Ashraf Ali',
+    'adviser_title'     => 'Adviser',
+    'adviser_bio'       => 'Advocate, District & Session Judge Court, Dhaka.',
+    'adviser_email_1'   => 'md.aliashraf45@gmail.com',
+    'assistant_name'    => 'Md. Yasin',
+    'assistant_title'   => 'Assistant Adviser (Legal & Estate)',
+    'assistant_email_1' => 'adv.yasin@primeuniversity.ac.bd',
+    'assistant_phone'   => '01705-502190',
+];
+
 /* ── Redirect if unpublished ─────────────────────────────────────────────── */
 if (lls($s, 'is_published', '1') !== '1') {
     header('Location: /index.php');
