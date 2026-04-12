@@ -679,7 +679,7 @@ try {
                                         </div>
                                     </div>
                                     <div class="ll-profile-name"><?= fh(lls($s,'assistant_name','Md. Yasin')) ?></div>
-                                    <div class="ll-profile-title" style="color:var(--ll-blue);"><?= fh(lls($s,'assistant_title','Assistant Advisor (Legal & Estate)')) ?></div>
+                                    <div class="ll-profile-title" style="color:var(--ll-blue);"><?= fh(lls($s,'assistant_title','Assistant Adviser (Legal & Estate)')) ?></div>
                                     <?php if (lls($s,'assistant_bio','') !== ''): ?>
                                     <div class="ll-profile-sub"><?= fh(lls($s,'assistant_bio','')) ?></div>
                                     <?php endif; ?>

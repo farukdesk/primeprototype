@@ -34,7 +34,7 @@ INSERT INTO `ll_settings` (`setting_key`, `setting_val`) VALUES
 
 -- Assistant Adviser profile
 ('assistant_name',    'Md. Yasin'),
-('assistant_title',   'Assistant Advisor (Legal & Estate)'),
+('assistant_title',   'Assistant Adviser (Legal & Estate)'),
 ('assistant_email_1', 'adv.yasin@primeuniversity.ac.bd'),
 ('assistant_email_2', ''),
 ('assistant_phone',   '01705-502190'),

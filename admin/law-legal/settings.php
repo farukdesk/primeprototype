@@ -323,7 +323,7 @@ require_once __DIR__ . '/../includes/header.php';
     <input type="hidden" name="tab" value="assistant">
     <div class="card mb-4" style="border-radius:12px;">
         <div class="card-header py-3 px-4">
-            <h6 class="mb-0 fw-semibold"><i class="fas fa-user me-2 text-muted"></i>Assistant Adviser Profile</h6>
+            <h6 class="mb-0 fw-semibold"><i class="fas fa-user me-2 text-muted"></i>Assistant Adviser Profile (Legal &amp; Estate)</h6>
         </div>
         <div class="card-body p-4">
             <!-- Photo -->
@@ -356,7 +356,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="col-md-4">
                     <label class="form-label fw-medium">Title / Designation</label>
                     <input type="text" name="assistant_title" class="form-control" maxlength="200"
-                           value="<?= h(ll_s($s, 'assistant_title', 'Assistant Advisor (Legal & Estate)')) ?>">
+                           value="<?= h(ll_s($s, 'assistant_title', 'Assistant Adviser (Legal & Estate)')) ?>">
                 </div>
                 <div class="col-md-6">
                     <label class="form-label fw-medium">Primary Email</label>
