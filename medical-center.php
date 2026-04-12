@@ -254,6 +254,7 @@ if ($form_success) unset($_SESSION['apt_token']);
 <body>
 
 <?php include __DIR__ . '/includes/header-top.php'; ?>
+<?php include __DIR__ . '/includes/nav-menu.php'; ?>
 
 <!-- ── HERO ────────────────────────────────────────────────────────── -->
 <section class="mc-hero">
@@ -641,7 +642,6 @@ if ($form_success) unset($_SESSION['apt_token']);
 
 <?php include __DIR__ . '/includes/footer.php'; ?>
 
-<script src="/assets/js/vendor/jquery.min.js"></script>
-<script src="/assets/js/bootstrap.bundle.min.js"></script>
+<?php include __DIR__ . '/includes/scripts.php'; ?>
 </body>
 </html>

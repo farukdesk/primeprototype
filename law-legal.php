@@ -184,9 +184,9 @@ try {
 
 /* ── Scroll-fade utility ─────────────────────────────────────────────────── */
 .ll-fade {
-  opacity:0;transform:translateY(28px);
   transition:opacity .65s ease,transform .65s ease;
 }
+.ll-fade.ll-hidden { opacity:0;transform:translateY(28px); }
 .ll-fade.visible { opacity:1;transform:translateY(0); }
 .ll-fade-d1 { transition-delay:.1s; }
 .ll-fade-d2 { transition-delay:.2s; }
@@ -1001,9 +1001,12 @@ try {
 (function () {
     var els = document.querySelectorAll('.ll-fade');
     if (!els.length) return;
+    // Apply initial hidden state via JS (progressive enhancement — visible without JS)
+    els.forEach(function (el) { el.classList.add('ll-hidden'); });
     var io = new IntersectionObserver(function (entries) {
         entries.forEach(function (entry) {
             if (entry.isIntersecting) {
+                entry.target.classList.remove('ll-hidden');
                 entry.target.classList.add('visible');
                 io.unobserve(entry.target);
             }
