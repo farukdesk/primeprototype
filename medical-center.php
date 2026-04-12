@@ -115,7 +115,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $appointment_enabled) {
                     $form_success = true;
                     $_SESSION['pub_csrf'] = bin2hex(random_bytes(16));
                     $csrf_token           = $_SESSION['pub_csrf'];
-                    $form_data = array_map(fn() => '', $form_data);
+                    $form_data = array_fill_keys(array_keys($form_data), '');
                     $form_data['patient_type'] = 'student';
                     $_SESSION['apt_token'] = $token;
                 }

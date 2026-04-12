@@ -154,7 +154,7 @@ require_once __DIR__ . '/../includes/header.php';
             <!-- Footer -->
             <div class="rx-footer d-flex justify-content-between align-items-end">
                 <div>
-                    <div class="small text-muted">Rx #<?= $rx['id'] ?> · Generated <?= date('d M Y H:i') ?></div>
+                    <div class="small text-muted">Rx #<?= $rx['id'] ?> · Created <?= date('d M Y H:i', strtotime($rx['created_at'])) ?></div>
                 </div>
                 <div class="text-end">
                     <div style="border-top:1px solid #333; padding-top:4px; min-width:150px; text-align:center;">

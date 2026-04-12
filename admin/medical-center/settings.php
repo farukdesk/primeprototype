@@ -198,9 +198,10 @@ require_once __DIR__ . '/../includes/header.php';
                     <tbody>
                         <?php for ($dow = 0; $dow <= 6; $dow++): ?>
                         <?php $s = $sched_by_dow[$dow] ?? ['start_time'=>'09:00:00','end_time'=>'17:00:00','max_slots'=>10,'is_available'=>0]; ?>
-                        <input type="hidden" name="day_of_week[]" value="<?= $dow ?>">
                         <tr>
-                            <td class="fw-semibold"><?= mc_day_name($dow) ?></td>
+                            <td class="fw-semibold">
+                                <input type="hidden" name="day_of_week[]" value="<?= $dow ?>">
+                                <?= mc_day_name($dow) ?></td>
                             <td>
                                 <input type="time" name="start_time[]" class="form-control form-control-sm" style="width:130px"
                                        value="<?= h(substr($s['start_time'], 0, 5)) ?>">
