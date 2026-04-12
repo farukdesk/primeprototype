@@ -284,7 +284,8 @@ require_once __DIR__ . '/../includes/header.php';
                     <?php if (!empty($s['ch_photo'])): ?>
                     <img src="<?= UPLOAD_URL ?>/office-of-chairman/<?= h($s['ch_photo']) ?>"
                          id="ch-photo-preview"
-                         style="width:80px;height:80px;border-radius:50%;object-fit:cover;border:3px solid #e8eaf0;" alt="">
+                         style="width:80px;height:80px;border-radius:50%;object-fit:cover;border:3px solid #e8eaf0;"
+                         alt="Chairman Profile Photo">
                     <?php else: ?>
                     <div id="ch-photo-preview-placeholder"
                          style="width:80px;height:80px;border-radius:50%;background:#f1f5f9;display:flex;align-items:center;justify-content:center;border:2px dashed #cbd5e1;">
@@ -365,7 +366,8 @@ require_once __DIR__ . '/../includes/header.php';
                     <?php if (!empty($s['ps_photo'])): ?>
                     <img src="<?= UPLOAD_URL ?>/office-of-chairman/<?= h($s['ps_photo']) ?>"
                          id="ps-photo-preview"
-                         style="width:80px;height:80px;border-radius:50%;object-fit:cover;object-position:top center;border:3px solid #e8eaf0;" alt="">
+                         style="width:80px;height:80px;border-radius:50%;object-fit:cover;object-position:top center;border:3px solid #e8eaf0;"
+                         alt="PS Profile Photo">
                     <?php else: ?>
                     <div id="ps-photo-preview-placeholder"
                          style="width:80px;height:80px;border-radius:50%;background:#f1f5f9;display:flex;align-items:center;justify-content:center;border:2px dashed #cbd5e1;">

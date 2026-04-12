@@ -60,7 +60,8 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="d-flex align-items-start gap-3">
                     <?php if ($ch_photo): ?>
                     <img src="<?= UPLOAD_URL ?>/office-of-chairman/<?= h($ch_photo) ?>"
-                         style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid #e8eaf0;flex-shrink:0;" alt="">
+                         style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid #e8eaf0;flex-shrink:0;"
+                         alt="<?= h($ch_name) ?> – Chairman Photo">
                     <?php else: ?>
                     <div style="width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#002147,#1a4faf);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
                         <i class="fas fa-gavel" style="color:#fff;font-size:1.3rem;"></i>
