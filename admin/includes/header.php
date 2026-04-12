@@ -263,7 +263,8 @@ $user       = auth_user();
     $is_library_active       = strpos($current_path, '/library/') !== false;
     $is_course_fees_active   = strpos($current_path, '/course-fees/') !== false;
     $is_governing_body_active = strpos($current_path, '/governing-body/') !== false;
-    $is_office_of_vc_active   = strpos($current_path, '/office-of-vc/') !== false;
+    $is_office_of_vc_active       = strpos($current_path, '/office-of-vc/') !== false;
+    $is_office_of_chairman_active = strpos($current_path, '/office-of-chairman/') !== false;
     $is_admin_active    = strpos($current_path, '/users/') !== false || strpos($current_path, '/user-groups/') !== false
                        || strpos($current_path, '/modules/') !== false || strpos($current_path, '/access/') !== false
                        || strpos($current_path, '/email-templates/') !== false || strpos($current_path, '/change-log/') !== false;
@@ -492,6 +493,18 @@ $user       = auth_user();
             <a href="<?= APP_URL ?>/office-of-vc/index.php"
                class="<?= $is_office_of_vc_active ? 'active' : '' ?>">
                 <i class="fas fa-user-tie"></i> Office of Vice Chancellor
+            </a>
+        </li>
+    </ul>
+    <?php endif; ?>
+
+    <!-- ── Office of Chairman ── -->
+    <?php if (is_super_admin() || can_access('office-of-chairman')): ?>
+    <ul class="nav flex-column mt-2">
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/office-of-chairman/index.php"
+               class="<?= $is_office_of_chairman_active ? 'active' : '' ?>">
+                <i class="fas fa-gavel"></i> Office of Chairman
             </a>
         </li>
     </ul>
