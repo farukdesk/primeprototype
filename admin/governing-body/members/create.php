@@ -47,6 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $is_featured    = isset($_POST['is_featured'])    ? 1 : 0;
     $sort_order     = (int)($_POST['sort_order']    ?? 0);
     $glance_officer = isset($_POST['glance_officer']) ? 1 : 0;
+    $glance_link    = trim($_POST['glance_link']    ?? '');
     $glance_msg_tab = trim($_POST['glance_msg_tab'] ?? '');
     $glance_message = trim($_POST['glance_message'] ?? '');
 
@@ -67,13 +68,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         db()->prepare(
             'INSERT INTO governing_body_members
              (page_type, section, full_name, designation, department, bio, photo, email, phone,
-              is_featured, sort_order, glance_officer, glance_msg_tab, glance_message)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+              is_featured, sort_order, glance_officer, glance_link, glance_msg_tab, glance_message)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
         )->execute([
             $page_type, $section, $full_name,
             $designation ?: null, $department ?: null, $bio ?: null, $photo,
             $email ?: null, $phone ?: null, $is_featured, $sort_order,
-            $glance_officer, $glance_msg_tab ?: null, $glance_message ?: null,
+            $glance_officer, $glance_link ?: null, $glance_msg_tab ?: null, $glance_message ?: null,
         ]);
 
         flash_set('success', 'Member <strong>' . h($full_name) . '</strong> added.');
@@ -215,6 +216,13 @@ require_once __DIR__ . '/../../includes/header.php';
                     Show as <strong>Key Administrative Officer</strong>
                     <span style="font-size:.8rem;color:#64748b;display:block;">Adds this person to the "Key Administrative Officers" section on PU At a Glance.</span>
                 </label>
+            </div>
+            <div class="mb-4">
+                <label class="form-label fw-medium" for="glance_link">Officer Page Link <span style="font-size:.8rem;color:#64748b;">(optional)</span></label>
+                <input type="text" id="glance_link" name="glance_link" class="form-control" maxlength="255"
+                       value="<?= h($_POST['glance_link'] ?? '') ?>"
+                       placeholder="e.g. /office-of-pro-vc.php or /office-of-registrar.php">
+                <div class="form-text">If filled, the officer card will link to this URL. Leave blank for no link.</div>
             </div>
             <hr>
             <div class="mb-3">
