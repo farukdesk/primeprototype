@@ -39,6 +39,10 @@ $vc_photo_url = !empty($s['vc_photo'])
     ? ADMIN_UPLOAD_URL . '/office-of-vc/' . $s['vc_photo']
     : '';
 
+$ps_photo_url = !empty($s['ps_photo'])
+    ? ADMIN_UPLOAD_URL . '/office-of-vc/' . $s['ps_photo']
+    : '';
+
 /* ── Load Former VCs ─────────────────────────────────────────────────────── */
 $former_vcs = [];
 try {
@@ -177,6 +181,7 @@ try {
 }
 .vc-photo-wrap img {
   width: 160px; height: 160px; border-radius: 50%; object-fit: cover;
+  object-position: top center;
   border: 5px solid #fff; box-shadow: 0 8px 32px rgba(0,33,71,.18);
   display: block;
 }
@@ -317,6 +322,7 @@ try {
 }
 .vc-msg-sig-photo {
   width: 54px; height: 54px; border-radius: 50%; object-fit: cover;
+  object-position: top center;
   border: 2px solid rgba(255,184,28,.4); flex-shrink: 0;
 }
 .vc-msg-sig-placeholder {
@@ -330,7 +336,7 @@ try {
 
 /* ── PS Card ───────────────────────────────────────────────────────────────── */
 .vc-ps-section {
-  background: var(--vc-light);
+  background: var(--vc-white);
   padding: 70px 0;
 }
 .vc-ps-card {
@@ -346,8 +352,14 @@ try {
 }
 .vc-ps-card-body { padding: 32px 36px; }
 @media (max-width: 575.98px) { .vc-ps-card-body { padding: 24px 20px; } }
+.vc-ps-photo {
+  width: 80px; height: 80px; border-radius: 50%; object-fit: cover;
+  object-position: top center;
+  border: 3px solid #fff; box-shadow: 0 4px 18px rgba(0,33,71,.15);
+  flex-shrink: 0;
+}
 .vc-ps-avatar {
-  width: 72px; height: 72px; border-radius: 50%; flex-shrink: 0;
+  width: 80px; height: 80px; border-radius: 50%; flex-shrink: 0;
   background: linear-gradient(135deg, var(--vc-blue), #3b82f6);
   display: flex; align-items: center; justify-content: center;
   box-shadow: 0 4px 16px rgba(26,79,175,.25);
@@ -414,7 +426,7 @@ try {
 
 /* ── Former VCs ────────────────────────────────────────────────────────────── */
 .vc-former-section {
-  background: var(--vc-white);
+  background: var(--vc-light);
   padding: 80px 0;
   position: relative;
 }
@@ -425,45 +437,50 @@ try {
 }
 .fvc-card {
   background: var(--vc-white);
-  border-radius: 18px;
+  border-radius: 20px;
   box-shadow: var(--vc-shadow);
   overflow: hidden;
   border: 1px solid rgba(0,33,71,.06);
   transition: box-shadow var(--vc-trans), transform var(--vc-trans);
   height: 100%;
+  display: flex; flex-direction: column;
 }
-.fvc-card:hover { box-shadow: var(--vc-shadow-h); transform: translateY(-4px); }
+.fvc-card:hover { box-shadow: var(--vc-shadow-h); transform: translateY(-6px); }
 .fvc-card-accent {
-  height: 4px;
+  height: 5px;
   background: linear-gradient(90deg, var(--vc-navy), var(--vc-blue));
 }
-.fvc-card-body { padding: 28px 28px 24px; }
-@media (max-width: 575.98px) { .fvc-card-body { padding: 20px; } }
+.fvc-card-body { padding: 32px 28px 28px; flex: 1; display: flex; flex-direction: column; align-items: center; }
+@media (max-width: 575.98px) { .fvc-card-body { padding: 24px 18px 20px; } }
+.fvc-photo-wrap {
+  position: relative; display: inline-block; margin-bottom: 18px;
+}
 .fvc-photo {
-  width: 88px; height: 88px; border-radius: 50%; object-fit: cover;
-  border: 3px solid #fff; box-shadow: 0 4px 16px rgba(0,33,71,.15);
-  display: block; margin: 0 auto 16px;
+  width: 110px; height: 110px; border-radius: 50%; object-fit: cover;
+  object-position: top center;
+  border: 4px solid #fff; box-shadow: 0 6px 22px rgba(0,33,71,.18);
+  display: block;
 }
 .fvc-photo-placeholder {
-  width: 88px; height: 88px; border-radius: 50%;
+  width: 110px; height: 110px; border-radius: 50%;
   background: linear-gradient(135deg, var(--vc-navy), var(--vc-blue));
   display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 4px 16px rgba(0,33,71,.15);
-  margin: 0 auto 16px;
+  box-shadow: 0 6px 22px rgba(0,33,71,.18);
+  border: 4px solid #fff;
 }
-.fvc-photo-placeholder i { color: rgba(255,255,255,.75); font-size: 2rem; }
+.fvc-photo-placeholder i { color: rgba(255,255,255,.75); font-size: 2.4rem; }
 .fvc-tenure-badge {
   display: inline-flex; align-items: center; gap: 6px;
   background: rgba(0,33,71,.08); color: var(--vc-navy);
   font-size: .72rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
-  padding: 4px 12px; border-radius: 50px; margin-bottom: 8px;
+  padding: 4px 14px; border-radius: 50px; margin-bottom: 10px;
 }
-.fvc-name { font-size: 1.05rem; font-weight: 700; color: var(--vc-navy); margin-bottom: 4px; }
-.fvc-title { font-size: .82rem; color: var(--vc-muted); }
+.fvc-name { font-size: 1.08rem; font-weight: 800; color: var(--vc-navy); margin-bottom: 5px; text-align: center; }
+.fvc-title { font-size: .82rem; color: var(--vc-muted); text-align: center; }
 .fvc-bio {
-  font-size: .86rem; color: var(--vc-text); line-height: 1.7;
-  margin-top: 12px; padding-top: 12px;
-  border-top: 1px solid #f1f5f9;
+  font-size: .87rem; color: var(--vc-text); line-height: 1.75;
+  margin-top: 14px; padding-top: 14px;
+  border-top: 1px solid #f1f5f9; text-align: center;
   display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
 }
 </style>
@@ -718,9 +735,15 @@ try {
                             <div class="vc-ps-card-accent"></div>
                             <div class="vc-ps-card-body">
                                 <div class="d-flex align-items-center gap-4 mb-4">
+                                    <?php if ($ps_photo_url): ?>
+                                    <img src="<?= fh($ps_photo_url) ?>"
+                                         alt="<?= fh(vs($s,'ps_name','')) ?>"
+                                         class="vc-ps-photo">
+                                    <?php else: ?>
                                     <div class="vc-ps-avatar">
                                         <i class="fas fa-user"></i>
                                     </div>
+                                    <?php endif; ?>
                                     <div>
                                         <div class="vc-ps-name"><?= fh(vs($s,'ps_name','')) ?></div>
                                         <div class="vc-ps-designation"><?= fh(vs($s,'ps_title','PS to Vice Chancellor')) ?></div>
@@ -776,7 +799,7 @@ try {
                     <div class="vc-divider"></div>
                 </div>
                 <!-- Cards grid -->
-                <div class="row g-4">
+                <div class="row g-4 justify-content-center">
                     <?php foreach ($former_vcs as $i => $fvc): ?>
                     <?php
                         $fvc_photo_url = !empty($fvc['photo'])
@@ -784,19 +807,21 @@ try {
                             : '';
                         $delay_class = 'vc-fade-delay-' . (($i % 4) + 1);
                     ?>
-                    <div class="col-sm-6 col-lg-4">
+                    <div class="col-sm-6 col-md-4 col-lg-3">
                         <div class="fvc-card vc-fade <?= $delay_class ?>">
                             <div class="fvc-card-accent"></div>
-                            <div class="fvc-card-body text-center">
-                                <?php if ($fvc_photo_url): ?>
-                                <img src="<?= fh($fvc_photo_url) ?>"
-                                     alt="<?= fh($fvc['name']) ?>"
-                                     class="fvc-photo">
-                                <?php else: ?>
-                                <div class="fvc-photo-placeholder">
-                                    <i class="fas fa-user-tie"></i>
+                            <div class="fvc-card-body">
+                                <div class="fvc-photo-wrap">
+                                    <?php if ($fvc_photo_url): ?>
+                                    <img src="<?= fh($fvc_photo_url) ?>"
+                                         alt="<?= fh($fvc['name']) ?>"
+                                         class="fvc-photo">
+                                    <?php else: ?>
+                                    <div class="fvc-photo-placeholder">
+                                        <i class="fas fa-user-tie"></i>
+                                    </div>
+                                    <?php endif; ?>
                                 </div>
-                                <?php endif; ?>
                                 <?php if (!empty($fvc['tenure'])): ?>
                                 <div class="fvc-tenure-badge">
                                     <i class="fas fa-calendar-alt" style="font-size:.65rem;"></i>
