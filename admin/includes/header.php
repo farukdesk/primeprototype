@@ -268,6 +268,7 @@ $user       = auth_user();
     $is_office_of_pro_vc_active     = strpos($current_path, '/office-of-pro-vc/') !== false;
     $is_office_of_treasurer_active  = strpos($current_path, '/office-of-treasurer/') !== false;
     $is_office_of_registrar_active  = strpos($current_path, '/office-of-registrar/') !== false;
+    $is_office_of_coe_active        = strpos($current_path, '/office-of-coe/') !== false;
     $is_law_legal_active            = strpos($current_path, '/law-legal/') !== false;
     $is_admin_active    = strpos($current_path, '/users/') !== false || strpos($current_path, '/user-groups/') !== false
                        || strpos($current_path, '/modules/') !== false || strpos($current_path, '/access/') !== false
@@ -546,6 +547,18 @@ $user       = auth_user();
             <a href="<?= APP_URL ?>/office-of-registrar/index.php"
                class="<?= $is_office_of_registrar_active ? 'active' : '' ?>">
                 <i class="fas fa-stamp"></i> Office of Registrar
+            </a>
+        </li>
+    </ul>
+    <?php endif; ?>
+
+    <!-- ── Office of Controller of Examinations ── -->
+    <?php if (is_super_admin() || can_access('office-of-coe')): ?>
+    <ul class="nav flex-column mt-2">
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/office-of-coe/index.php"
+               class="<?= $is_office_of_coe_active ? 'active' : '' ?>">
+                <i class="fas fa-scroll"></i> Controller of Examinations
             </a>
         </li>
     </ul>
