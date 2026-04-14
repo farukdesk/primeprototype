@@ -271,6 +271,7 @@ $user       = auth_user();
     $is_office_of_coe_active        = strpos($current_path, '/office-of-coe/') !== false;
     $is_office_of_it_active              = strpos($current_path, '/office-of-it/') !== false;
     $is_office_of_accounts_audit_active  = strpos($current_path, '/office-of-accounts-audit/') !== false;
+    $is_office_of_estate_store_active    = strpos($current_path, '/office-of-estate-store/') !== false;
     $is_students_affairs_active          = strpos($current_path, '/students-affairs/') !== false;
     $is_office_of_crhp_active            = strpos($current_path, '/office-of-crhp/') !== false;
     $is_office_of_proctor_active         = strpos($current_path, '/office-of-proctor/') !== false;
@@ -588,6 +589,18 @@ $user       = auth_user();
             <a href="<?= APP_URL ?>/office-of-accounts-audit/index.php"
                class="<?= $is_office_of_accounts_audit_active ? 'active' : '' ?>">
                 <i class="fas fa-file-invoice-dollar"></i> Office of Accounts &amp; Audit
+            </a>
+        </li>
+    </ul>
+    <?php endif; ?>
+
+    <!-- ── Office of the Estate & Store ── -->
+    <?php if (is_super_admin() || can_access('office-of-estate-store')): ?>
+    <ul class="nav flex-column mt-2">
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/office-of-estate-store/index.php"
+               class="<?= $is_office_of_estate_store_active ? 'active' : '' ?>">
+                <i class="fas fa-building"></i> Office of the Estate &amp; Store
             </a>
         </li>
     </ul>
