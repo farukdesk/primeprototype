@@ -38,7 +38,7 @@ if (!$program) {
 
 // 301 redirect to canonical clean URL (/program/{id}/{slug})
 $_prog_clean_path = '/program/' . $id . '/' . make_slug($program['program_name']);
-$_req_path        = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
+$_req_path        = rtrim(parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH), '/');
 if ($_req_path !== $_prog_clean_path) {
     header('Location: ' . SITE_URL . $_prog_clean_path, true, 301);
     exit;

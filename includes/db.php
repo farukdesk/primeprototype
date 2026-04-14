@@ -33,10 +33,12 @@ function fh(mixed $val): string {
 
 /**
  * Convert a string to a URL-friendly slug.
- * Lowercases, collapses non-alphanumeric chars to hyphens, and trims leading/trailing hyphens.
+ * Lowercases (mb-safe), strips non-ASCII characters, collapses non-alphanumeric
+ * chars to hyphens, and trims leading/trailing hyphens.
  */
 function make_slug(string $text): string {
-    $slug = strtolower($text);
+    $slug = mb_strtolower($text, 'UTF-8');
+    $slug = preg_replace('/[^\x00-\x7F]+/', '', $slug); // strip non-ASCII
     $slug = preg_replace('/[^a-z0-9]+/', '-', $slug);
     return trim($slug, '-');
 }
