@@ -161,7 +161,7 @@ $head_photo_url = !empty($s['head_photo']) ? ADMIN_UPLOAD_URL . '/office-of-esta
         <div class="breadcrumb-nav">
             <a href="/index.php">Home</a><span class="sep">/</span>
             <a href="#">About</a><span class="sep">/</span>
-            <span style="color:rgba(255,255,255,.85);"><?= fh(ess($s,'hero_title','Office of the Estate &amp; Store')) ?></span>
+            <span style="color:rgba(255,255,255,.85);"><?= fh(ess($s,'hero_title','Office of the Estate & Store')) ?></span>
         </div>
         <div class="es-hero-tag"><span class="dot"></span>Prime University · Bangladesh</div>
         <h1><?php $w=explode(' ',ess($s,'hero_title','Office of the Estate & Store'));$l=array_pop($w);echo fh(implode(' ',$w)).' <span class="accent">'.fh($l).'</span>'; ?></h1>
