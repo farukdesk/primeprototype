@@ -271,6 +271,7 @@ $user       = auth_user();
     $is_office_of_coe_active        = strpos($current_path, '/office-of-coe/') !== false;
     $is_office_of_it_active              = strpos($current_path, '/office-of-it/') !== false;
     $is_office_of_accounts_audit_active  = strpos($current_path, '/office-of-accounts-audit/') !== false;
+    $is_office_of_proctor_active         = strpos($current_path, '/office-of-proctor/') !== false;
     $is_law_legal_active            = strpos($current_path, '/law-legal/') !== false;
     $is_admin_active    = strpos($current_path, '/users/') !== false || strpos($current_path, '/user-groups/') !== false
                        || strpos($current_path, '/modules/') !== false || strpos($current_path, '/access/') !== false
@@ -585,6 +586,18 @@ $user       = auth_user();
             <a href="<?= APP_URL ?>/office-of-accounts-audit/index.php"
                class="<?= $is_office_of_accounts_audit_active ? 'active' : '' ?>">
                 <i class="fas fa-file-invoice-dollar"></i> Office of Accounts &amp; Audit
+            </a>
+        </li>
+    </ul>
+    <?php endif; ?>
+
+    <!-- ── Office of the Proctor ── -->
+    <?php if (is_super_admin() || can_access('office-of-proctor')): ?>
+    <ul class="nav flex-column mt-2">
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/office-of-proctor/index.php"
+               class="<?= $is_office_of_proctor_active ? 'active' : '' ?>">
+                <i class="fas fa-user-shield"></i> Office of the Proctor
             </a>
         </li>
     </ul>
