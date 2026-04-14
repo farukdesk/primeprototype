@@ -271,6 +271,8 @@ $user       = auth_user();
     $is_office_of_coe_active        = strpos($current_path, '/office-of-coe/') !== false;
     $is_office_of_it_active              = strpos($current_path, '/office-of-it/') !== false;
     $is_office_of_accounts_audit_active  = strpos($current_path, '/office-of-accounts-audit/') !== false;
+    $is_students_affairs_active          = strpos($current_path, '/students-affairs/') !== false;
+    $is_office_of_crhp_active            = strpos($current_path, '/office-of-crhp/') !== false;
     $is_office_of_proctor_active         = strpos($current_path, '/office-of-proctor/') !== false;
     $is_law_legal_active            = strpos($current_path, '/law-legal/') !== false;
     $is_admin_active    = strpos($current_path, '/users/') !== false || strpos($current_path, '/user-groups/') !== false
@@ -586,6 +588,30 @@ $user       = auth_user();
             <a href="<?= APP_URL ?>/office-of-accounts-audit/index.php"
                class="<?= $is_office_of_accounts_audit_active ? 'active' : '' ?>">
                 <i class="fas fa-file-invoice-dollar"></i> Office of Accounts &amp; Audit
+            </a>
+        </li>
+    </ul>
+    <?php endif; ?>
+
+    <!-- ── Students' Affairs ── -->
+    <?php if (is_super_admin() || can_access('students-affairs')): ?>
+    <ul class="nav flex-column mt-2">
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/students-affairs/index.php"
+               class="<?= $is_students_affairs_active ? 'active' : '' ?>">
+                <i class="fas fa-user-graduate"></i> Students&#039; Affairs
+            </a>
+        </li>
+    </ul>
+    <?php endif; ?>
+
+    <!-- ── Office of the CRHP ── -->
+    <?php if (is_super_admin() || can_access('office-of-crhp')): ?>
+    <ul class="nav flex-column mt-2">
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/office-of-crhp/index.php"
+               class="<?= $is_office_of_crhp_active ? 'active' : '' ?>">
+                <i class="fas fa-flask"></i> Office of the CRHP
             </a>
         </li>
     </ul>
