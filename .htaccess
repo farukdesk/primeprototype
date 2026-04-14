@@ -2,7 +2,47 @@ Options -Indexes
 RewriteEngine On
 RewriteBase /
 
-# Skip rewriting for existing files and directories
+# ── Section A: 301 Redirects – old .php?param=x URLs → clean URLs ─────────────
+# Clubs
+RewriteCond %{QUERY_STRING} (?:^|&)slug=([^&]+)
+RewriteRule ^club-detail\.php$                        /club/%1? [R=301,L]
+
+RewriteCond %{QUERY_STRING} (?:^|&)slug=([^&]+)
+RewriteRule ^club-event-detail\.php$                  /club-event/%1? [R=301,L]
+
+# Department sub-pages
+RewriteCond %{QUERY_STRING} (?:^|&)slug=([^&]+)
+RewriteRule ^department-faculty\.php$                 /department/%1/faculty? [R=301,L]
+
+RewriteCond %{QUERY_STRING} (?:^|&)slug=([^&]+)
+RewriteRule ^department-facilities\.php$              /department/%1/facilities? [R=301,L]
+
+RewriteCond %{QUERY_STRING} (?:^|&)slug=([^&]+)
+RewriteRule ^department-academic-programs\.php$       /department/%1/academic-programs? [R=301,L]
+
+RewriteCond %{QUERY_STRING} (?:^|&)slug=([^&]+)
+RewriteRule ^department-routine\.php$                 /department/%1/routine? [R=301,L]
+
+RewriteCond %{QUERY_STRING} (?:^|&)slug=([^&]+)
+RewriteRule ^department-clubs\.php$                   /department/%1/clubs? [R=301,L]
+
+RewriteCond %{QUERY_STRING} (?:^|&)slug=([^&]+)
+RewriteRule ^department-prime-pride\.php$             /department/%1/prime-pride? [R=301,L]
+
+RewriteCond %{QUERY_STRING} (?:^|&)slug=([^&]+)
+RewriteRule ^department-notice\.php$                  /department/%1/notice? [R=301,L]
+
+RewriteCond %{QUERY_STRING} (?:^|&)slug=([^&]+)
+RewriteRule ^department\.php$                         /department/%1? [R=301,L]
+
+# Generic: redirect any root-level name.php (no query string) to /name
+# Excludes index.php (homepage) and fb-webhook.php (external API endpoint)
+RewriteCond %{QUERY_STRING} ^$
+RewriteCond %{REQUEST_FILENAME} !index\.php$
+RewriteCond %{REQUEST_FILENAME} !fb-webhook\.php$
+RewriteRule ^([a-z][a-z0-9-]*)\.php$                 /$1 [R=301,L]
+
+# ── Skip rewriting for existing files and directories ─────────────────────────
 RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^ - [L]
@@ -31,3 +71,14 @@ RewriteRule ^profile/([^/]+)/?$                       profile-page.php?slug=$1 [
 
 # ── Faculty profile ───────────────────────────────────────────────────────────
 RewriteRule ^faculty/([^/]+)/?$                       faculty-profile.php?id=$1 [L,QSA]
+
+# ── Section B: Clubs & Academic Programs ──────────────────────────────────────
+RewriteRule ^club/([^/]+)/?$                          club-detail.php?slug=$1 [L,QSA]
+RewriteRule ^club-event/([^/]+)/?$                    club-event-detail.php?slug=$1 [L,QSA]
+
+# Program URL with optional slug segment (slug is decorative; only id is used)
+RewriteRule ^program/([0-9]+)/([^/]+)/?$              academic-program-detail.php?id=$1 [L,QSA]
+RewriteRule ^program/([0-9]+)/?$                      academic-program-detail.php?id=$1 [L,QSA]
+
+# ── Section C: Generic fallback – /name → name.php ────────────────────────────
+RewriteRule ^([a-z][a-z0-9-]*)/?$                     $1.php [L,QSA]

@@ -195,7 +195,7 @@ function degree_badge_color(string $type): string {
                               <i class="fas fa-download"></i> Download Brochure
                            </a>
                            <?php endif; ?>
-                           <a href="<?= fh(SITE_URL) ?>/academic-program-detail.php?id=<?= (int)$prog['id'] ?>"
+                           <a href="<?= fh(SITE_URL) ?>/program/<?= (int)$prog['id'] ?>/<?= make_slug($prog['program_name']) ?>"
                               class="d-inline-flex align-items-center gap-2"
                               style="background:#FFB81C; color:#002147; padding:8px 18px; border-radius:25px; font-size:13px; font-weight:600; text-decoration:none;">
                               <i class="fas fa-arrow-right"></i> View Full Details

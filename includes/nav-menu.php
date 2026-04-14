@@ -132,7 +132,7 @@ $_svg_arrow = '<svg width="16" height="15" viewBox="0 0 16 15" fill="none" xmlns
          </div>
          <div class="col-xxl-2 col-xl-2 col-lg-2 col-md-7 col-6">
             <div class="it-header-right-action d-flex justify-content-end align-items-center">
-               <a href="https://primeuniversity.ac.bd/apply-now.php" class="it-btn-yellow border-radius-100 d-none d-md-flex">
+               <a href="https://primeuniversity.ac.bd/apply-now" class="it-btn-yellow border-radius-100 d-none d-md-flex">
                   <span>
                      <span class="text-1">Apply Now</span>
                      <span class="text-2">Apply Now</span>

@@ -2,7 +2,7 @@
 require_once __DIR__ . '/includes/config.php';
 
 $slug = trim($_GET['slug'] ?? '');
-if ($slug === '') { header('Location: /clubs.php'); exit; }
+if ($slug === '') { header('Location: /clubs'); exit; }
 
 $event      = null;
 $club       = null;
@@ -30,7 +30,7 @@ try {
     }
 } catch (Throwable $e) { /* silently */ }
 
-if (!$event) { header('Location: /clubs.php'); exit; }
+if (!$event) { header('Location: /clubs'); exit; }
 
 // ── Computed flags ────────────────────────────────────────────────────────────
 $deadline_passed  = $event['registration_deadline'] && $event['registration_deadline'] < date('Y-m-d');
@@ -201,8 +201,8 @@ $page_title = fh($event['title']) . ' – ' . fh($event['club_name']) . ' – Pr
       <div class="container hero-content">
          <nav class="breadcrumb-nav mb-3">
             <a href="/">Home</a><span class="sep">/</span>
-            <a href="/clubs.php">Clubs</a><span class="sep">/</span>
-            <a href="/club-detail.php?slug=<?= fh($event['club_slug']) ?>"><?= fh($event['club_name']) ?></a><span class="sep">/</span>
+            <a href="/clubs">Clubs</a><span class="sep">/</span>
+            <a href="/club/<?= fh($event['club_slug']) ?>"><?= fh($event['club_name']) ?></a><span class="sep">/</span>
             <span><?= fh($event['title']) ?></span>
          </nav>
          <h1><?= fh($event['title']) ?></h1>
@@ -288,7 +288,7 @@ $page_title = fh($event['title']) . ' – ' . fh($event['club_name']) . ' – Pr
                            <?php if ($event['club_logo']): ?>
                            <img src="<?= ADMIN_UPLOAD_URL ?>/clubs/logos/<?= fh($event['club_logo']) ?>" alt="" class="rounded-circle me-2" style="width:24px;height:24px;object-fit:cover;">
                            <?php endif; ?>
-                           <a href="/club-detail.php?slug=<?= fh($event['club_slug']) ?>"><?= fh($event['club_name']) ?></a>
+                           <a href="/club/<?= fh($event['club_slug']) ?>"><?= fh($event['club_name']) ?></a>
                         </div>
                      </div>
                   </div>
@@ -305,7 +305,7 @@ $page_title = fh($event['title']) . ' – ' . fh($event['club_name']) . ' – Pr
                <div class="pu-success-icon"><i class="fas fa-check"></i></div>
                <h4 class="fw-bold text-success mb-2">Registration Successful!</h4>
                <p class="text-muted mb-4">Your registration is pending approval. You will be notified once it is reviewed.</p>
-               <a href="/club-detail.php?slug=<?= fh($event['club_slug']) ?>" class="btn btn-outline-success rounded-pill px-4">Back to Club</a>
+               <a href="/club/<?= fh($event['club_slug']) ?>" class="btn btn-outline-success rounded-pill px-4">Back to Club</a>
             </div>
 
             <?php elseif (!$registration_open): ?>
@@ -313,7 +313,7 @@ $page_title = fh($event['title']) . ' – ' . fh($event['club_name']) . ' – Pr
                <i class="fas fa-lock fa-2x text-muted mb-3 d-block"></i>
                <h5 class="fw-bold text-muted mb-2"><?= $is_full ? 'Event is Full' : 'Registration Closed' ?></h5>
                <p class="text-muted small"><?= $is_full ? 'All seats have been taken for this event.' : 'The registration deadline has passed.' ?></p>
-               <a href="/club-detail.php?slug=<?= fh($event['club_slug']) ?>" class="btn btn-outline-secondary rounded-pill mt-2">Back to Club</a>
+               <a href="/club/<?= fh($event['club_slug']) ?>" class="btn btn-outline-secondary rounded-pill mt-2">Back to Club</a>
             </div>
 
             <?php else: ?>

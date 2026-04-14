@@ -32,6 +32,16 @@ function fh(mixed $val): string {
 }
 
 /**
+ * Convert a string to a URL-friendly slug.
+ * Lowercases, collapses non-alphanumeric chars to hyphens, and trims leading/trailing hyphens.
+ */
+function make_slug(string $text): string {
+    $slug = strtolower($text);
+    $slug = preg_replace('/[^a-z0-9]+/', '-', $slug);
+    return trim($slug, '-');
+}
+
+/**
  * Strip all characters except digits and leading + from a phone number,
  * returning a tel: href-safe string.
  */

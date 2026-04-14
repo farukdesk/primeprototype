@@ -166,7 +166,7 @@ try {
       <div class="pu-no-results">
          <i class="fas fa-search"></i>
          <p class="fs-5">No clubs found matching your search.</p>
-         <a href="/clubs.php" class="btn btn-outline-secondary mt-2">Clear Filters</a>
+         <a href="/clubs" class="btn btn-outline-secondary mt-2">Clear Filters</a>
       </div>
       <?php else: ?>
       <div class="row g-4" id="clubsGrid">
@@ -201,7 +201,7 @@ try {
                      <span><i class="fas fa-calendar"></i><?= $c['upcoming_events'] ?> Upcoming</span>
                      <?php endif; ?>
                   </div>
-                  <a href="/club-detail.php?slug=<?= fh($c['slug']) ?>" class="btn-detail">View Club →</a>
+                  <a href="/club/<?= fh($c['slug']) ?>" class="btn-detail">View Club →</a>
                </div>
             </div>
          </div>

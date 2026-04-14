@@ -20,7 +20,7 @@ try {
 } catch (Throwable $e) {}
 
 if (!$notice) {
-    header('Location: ' . SITE_URL . '/notice-board.php');
+    header('Location: ' . SITE_URL . '/notice-board');
     exit;
 }
 
@@ -161,7 +161,7 @@ if (!empty($notice['published_at'])) {
                   <div class="it-breadcrumb-list">
                      <ul>
                         <li><a href="<?= fh(SITE_URL) ?>/index.php">Home</a></li>
-                        <li><a href="<?= fh(SITE_URL) ?>/notice-board.php">Notice Board</a></li>
+                        <li><a href="<?= fh(SITE_URL) ?>/notice-board">Notice Board</a></li>
                         <li><span><?= fh(mb_strimwidth($notice['title'], 0, 60, '…')) ?></span></li>
                      </ul>
                   </div>
@@ -227,7 +227,7 @@ if (!empty($notice['published_at'])) {
                   </div><!-- .postbox-content-box -->
 
                   <div class="postbox-nav-box mt-60 pt-40" style="border-top:1px solid #e8e8e8;">
-                     <a href="<?= fh(SITE_URL) ?>/notice-board.php" class="it-btn-yellow border-radius-100">
+                     <a href="<?= fh(SITE_URL) ?>/notice-board" class="it-btn-yellow border-radius-100">
                         <span>
                            <span class="text-1">← Back to Notice Board</span>
                            <span class="text-2">← Back to Notice Board</span>

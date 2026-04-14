@@ -2,7 +2,7 @@
 require_once __DIR__ . '/includes/config.php';
 
 $slug = trim($_GET['slug'] ?? '');
-if ($slug === '') { header('Location: /clubs.php'); exit; }
+if ($slug === '') { header('Location: /clubs'); exit; }
 
 $club   = null;
 $members    = [];
@@ -44,7 +44,7 @@ try {
     }
 } catch (Throwable $e) { /* silently fall through */ }
 
-if (!$club) { header('Location: /clubs.php'); exit; }
+if (!$club) { header('Location: /clubs'); exit; }
 
 $page_title = fh($club['name']) . ' – Prime University';
 ?>
@@ -150,7 +150,7 @@ $page_title = fh($club['name']) . ' – Prime University';
       <div class="container hero-content">
          <nav class="breadcrumb-nav mb-4">
             <a href="/">Home</a><span class="sep">/</span>
-            <a href="/clubs.php">Clubs</a><span class="sep">/</span>
+            <a href="/clubs">Clubs</a><span class="sep">/</span>
             <span><?= fh($club['name']) ?></span>
          </nav>
          <div class="d-flex align-items-center gap-4 flex-wrap">
@@ -263,7 +263,7 @@ $page_title = fh($club['name']) . ' – Prime University';
                         <?php if ($ev['venue']): ?><p class="small text-muted mb-2"><i class="fas fa-map-marker-alt me-1 text-success"></i><?= fh($ev['venue']) ?></p><?php endif; ?>
                         <?php if ($ev['description']): ?><p class="small text-muted mb-3" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden"><?= fh($ev['description']) ?></p><?php endif; ?>
                         <?php if ($can_register): ?>
-                        <a href="/club-event-detail.php?slug=<?= fh($ev['slug']) ?>" class="btn-register">Register Now</a>
+                        <a href="/club-event/<?= fh($ev['slug']) ?>" class="btn-register">Register Now</a>
                         <?php elseif ($is_full): ?>
                         <span class="btn-closed">Full</span>
                         <?php elseif ($deadline_passed): ?>
