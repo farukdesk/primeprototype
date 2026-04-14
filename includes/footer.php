@@ -14,7 +14,7 @@ $hs = get_header_settings();
 $about_text          = $fs['about_text']          ?? 'Empowering future leaders through quality education, research and vibrant campus life since 1993.';
 $cta_text            = $fs['cta_text']            ?? 'Contact Us';
 $cta_url             = $fs['cta_url']             ?? 'contact.php';
-$apply_now_url       = 'https://primeuniversity.ac.bd/apply-now.php';
+$apply_now_url       = 'https://primeuniversity.ac.bd/apply-now';
 if (strcasecmp(trim((string)$cta_text), 'Apply Now') === 0) {
     $cta_url = $apply_now_url;
 }

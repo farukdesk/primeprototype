@@ -2,7 +2,7 @@
 if (session_status() === PHP_SESSION_NONE) session_start();
 
 require_once __DIR__ . '/includes/config.php';
-$_apply_now_url = 'https://primeuniversity.ac.bd/apply-now.php';
+$_apply_now_url = 'https://primeuniversity.ac.bd/apply-now';
 
 $id      = (int)($_GET['id'] ?? 0);
 $program = null;
@@ -33,6 +33,14 @@ if ($id > 0) {
 
 if (!$program) {
     header('Location: index.php');
+    exit;
+}
+
+// 301 redirect to canonical clean URL (/program/{id}/{slug})
+$_prog_clean_path = '/program/' . $id . '/' . make_slug($program['program_name']);
+$_req_path        = rtrim(parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH), '/');
+if ($_req_path !== $_prog_clean_path) {
+    header('Location: ' . SITE_URL . $_prog_clean_path, true, 301);
     exit;
 }
 
@@ -307,7 +315,7 @@ function ap_safe_date(mixed $val): string {
                   <ol class="breadcrumb" style="background:transparent; padding:0; margin:0; flex-wrap:wrap;">
                      <li class="breadcrumb-item"><a href="<?= fh(SITE_URL) ?>/index.php" style="color:#FFB81C;">Home</a></li>
                      <li class="breadcrumb-item"><a href="<?= fh(SITE_URL) ?>/department/<?= urlencode($slug) ?>" style="color:#9CB3CC;"><?= $dept_name ?></a></li>
-                     <li class="breadcrumb-item"><a href="<?= fh(SITE_URL) ?>/department-academic-programs.php?slug=<?= urlencode($slug) ?>" style="color:#9CB3CC;">Academic Programs</a></li>
+                     <li class="breadcrumb-item"><a href="<?= fh(SITE_URL) ?>/department/<?= urlencode($slug) ?>/academic-programs" style="color:#9CB3CC;">Academic Programs</a></li>
                      <li class="breadcrumb-item active" style="color:#FFFFFF;"><?= fh($program['program_name']) ?></li>
                   </ol>
                </nav>
@@ -582,7 +590,7 @@ function ap_safe_date(mixed $val): string {
 
                <!-- Back link -->
                <div style="padding-top:8px;">
-                  <a href="<?= fh(SITE_URL) ?>/department-academic-programs.php?slug=<?= urlencode($slug) ?>"
+                  <a href="<?= fh(SITE_URL) ?>/department/<?= urlencode($slug) ?>/academic-programs"
                      style="color:#002147; font-size:14px; font-weight:600; text-decoration:none;">
                      <i class="fas fa-arrow-left me-2"></i>Back to All Academic Programs
                   </a>
@@ -598,11 +606,11 @@ function ap_safe_date(mixed $val): string {
                   <div style="background:linear-gradient(135deg,#002147,#003366); border-radius:12px; padding:24px; margin-bottom:20px; text-align:center;">
                      <div style="font-size:13px; color:#9CB3CC; margin-bottom:6px; text-transform:uppercase; letter-spacing:.06em;">Ready to join?</div>
                      <div style="font-size:20px; font-weight:800; color:#fff; margin-bottom:16px;">Apply Now</div>
-                     <a href="https://primeuniversity.ac.bd/apply-now.php" class="ap-apply-btn">
+                     <a href="https://primeuniversity.ac.bd/apply-now" class="ap-apply-btn">
                         <i class="fas fa-paper-plane me-2"></i>Start Application
                      </a>
                      <div style="margin-top:14px;">
-                        <a href="<?= fh(SITE_URL) ?>/contact.php" style="color:#9CB3CC; font-size:13px; text-decoration:none;">
+                        <a href="<?= fh(SITE_URL) ?>/contact" style="color:#9CB3CC; font-size:13px; text-decoration:none;">
                            <i class="fas fa-question-circle me-1"></i>Have questions? Contact us
                         </a>
                      </div>

@@ -14,7 +14,7 @@ $_contact_cfg  = [];
 $_campus_items = [];
 $_alumni       = [];
 $_notices      = [];
-$_apply_now_url = 'https://primeuniversity.ac.bd/apply-now.php';
+$_apply_now_url = 'https://primeuniversity.ac.bd/apply-now';
 
 $db = null;
 try { $db = front_db(); } catch (Throwable $e) {}
@@ -300,7 +300,7 @@ if (empty($_features)) {
                </ul>
                <div class="d-flex flex-wrap gap-3">
                   <a href="<?= fh($_apply_now_url) ?>" class="pu-btn pu-btn-primary"><i class="fas fa-paper-plane"></i> Apply Now</a>
-                  <a href="<?= fh($_about['contact_url'] ?? 'contact.php') ?>" class="pu-btn pu-btn-outline"><i class="fas fa-phone-alt"></i> Contact Us</a>
+                  <a href="<?= fh($_about['contact_url'] ?? 'contact') ?>" class="pu-btn pu-btn-outline"><i class="fas fa-phone-alt"></i> Contact Us</a>
                </div>
             </div>
          </div>
@@ -365,7 +365,7 @@ if (empty($_features)) {
             <p class="pu-admission-text"><?= fh($_admission['description'] ?? 'Applications are now open. Secure your place in one of our prestigious programmes.') ?></p>
             <div class="d-flex flex-wrap gap-3">
                <a href="<?= fh($_apply_now_url) ?>" class="pu-btn pu-btn-primary"><i class="fas fa-paper-plane"></i> <?= fh($_admission['btn1_text'] ?? 'Apply Now') ?></a>
-               <a href="<?= fh($_admission['btn2_url'] ?? 'scholarships-waivers.php') ?>" class="pu-btn pu-btn-outline-white"><i class="fas fa-award"></i> <?= fh($_admission['btn2_text'] ?? 'Scholarships') ?></a>
+               <a href="<?= fh($_admission['btn2_url'] ?? 'scholarships-waivers') ?>" class="pu-btn pu-btn-outline-white"><i class="fas fa-award"></i> <?= fh($_admission['btn2_text'] ?? 'Scholarships') ?></a>
             </div>
          </div>
          <div class="col-lg-5 wow itfadeRight" data-wow-duration=".9s" data-wow-delay=".3s">
@@ -466,7 +466,7 @@ if (empty($_features)) {
             <p class="pu-section-sub wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".25s">Stay informed with the latest institutional announcements and updates.</p>
          </div>
          <div class="col-lg-auto wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".3s">
-            <a href="notice-board.php" class="pu-view-all">All Notices <i class="fas fa-arrow-right"></i></a>
+            <a href="notice-board" class="pu-view-all">All Notices <i class="fas fa-arrow-right"></i></a>
          </div>
       </div>
       <?php
@@ -516,7 +516,7 @@ if (empty($_features)) {
                if ($nf_excerpt): ?>
                <p class="pu-notice-featured-excerpt"><?= fh($nf_excerpt) ?></p>
                <?php endif; ?>
-               <a href="<?= !empty($nb_featured['slug']) ? SITE_URL . '/notice/' . urlencode($nb_featured['slug']) : 'notice-board.php' ?>" class="pu-notice-readmore">
+               <a href="<?= !empty($nb_featured['slug']) ? SITE_URL . '/notice/' . urlencode($nb_featured['slug']) : 'notice-board' ?>" class="pu-notice-readmore">
                   Read Full Notice <i class="fas fa-arrow-right"></i>
                </a>
             </div>
@@ -766,8 +766,8 @@ if (empty($_features)) {
          <?php endfor; ?>
       </div>
       <div class="text-center mt-5 wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".5s">
-         <a href="<?= fh($_contact_cfg['btn1_url'] ?? 'contact.php') ?>" class="pu-btn pu-btn-primary me-3"><i class="fas fa-envelope"></i> <?= fh($_contact_cfg['btn1_text'] ?? 'Send a Message') ?></a>
-         <a href="<?= fh($_contact_cfg['btn2_url'] ?? 'admission.php') ?>" class="pu-btn pu-btn-outline"><i class="fas fa-paper-plane"></i> <?= fh($_contact_cfg['btn2_text'] ?? 'Apply Online') ?></a>
+         <a href="<?= fh($_contact_cfg['btn1_url'] ?? 'contact') ?>" class="pu-btn pu-btn-primary me-3"><i class="fas fa-envelope"></i> <?= fh($_contact_cfg['btn1_text'] ?? 'Send a Message') ?></a>
+         <a href="<?= fh($_contact_cfg['btn2_url'] ?? 'admission') ?>" class="pu-btn pu-btn-outline"><i class="fas fa-paper-plane"></i> <?= fh($_contact_cfg['btn2_text'] ?? 'Apply Online') ?></a>
       </div>
    </div>
 </section>

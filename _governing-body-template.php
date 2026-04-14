@@ -330,25 +330,25 @@ try {
             <!-- Quick navigation (only show tabs with at least one member, always show the current tab) -->
             <div class="d-flex flex-wrap gap-2 justify-content-center mt-4">
                <?php if (($nav_counts['board-of-trustees'] ?? 0) > 0 || $page_type === 'board-of-trustees'): ?>
-               <a href="<?= fh(SITE_URL) ?>/board-of-trustees.php"
+               <a href="<?= fh(SITE_URL) ?>/board-of-trustees"
                   class="gb-nav-pill <?= $page_type === 'board-of-trustees' ? 'active' : '' ?>">
                   <i class="fas fa-landmark me-1"></i> Board of Trustees
                </a>
                <?php endif; ?>
                <?php if (($nav_counts['pu-syndicates'] ?? 0) > 0 || $page_type === 'pu-syndicates'): ?>
-               <a href="<?= fh(SITE_URL) ?>/pu-syndicates.php"
+               <a href="<?= fh(SITE_URL) ?>/pu-syndicates"
                   class="gb-nav-pill <?= $page_type === 'pu-syndicates' ? 'active' : '' ?>">
                   <i class="fas fa-balance-scale me-1"></i> PU Syndicates
                </a>
                <?php endif; ?>
                <?php if (($nav_counts['deans'] ?? 0) > 0 || $page_type === 'deans'): ?>
-               <a href="<?= fh(SITE_URL) ?>/deans.php"
+               <a href="<?= fh(SITE_URL) ?>/deans"
                   class="gb-nav-pill <?= $page_type === 'deans' ? 'active' : '' ?>">
                   <i class="fas fa-user-tie me-1"></i> Deans
                </a>
                <?php endif; ?>
                <?php if (($nav_counts['head-of-departments'] ?? 0) > 0 || $page_type === 'head-of-departments'): ?>
-               <a href="<?= fh(SITE_URL) ?>/head-of-departments.php"
+               <a href="<?= fh(SITE_URL) ?>/head-of-departments"
                   class="gb-nav-pill <?= $page_type === 'head-of-departments' ? 'active' : '' ?>">
                   <i class="fas fa-chalkboard-teacher me-1"></i> Head of Departments
                </a>

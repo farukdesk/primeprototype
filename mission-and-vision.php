@@ -686,10 +686,10 @@ $page_title = 'Mission & Vision – Prime University';
             <h2>Ready to Be Part of Our Story?</h2>
             <p>Join thousands of graduates who have built successful careers and contributed to society through the quality education at Prime University.</p>
             <div class="mv-cta-btns">
-               <a href="<?= fh(SITE_URL) ?>/apply-now.php" class="btn-gold">
+               <a href="<?= fh(SITE_URL) ?>/apply-now" class="btn-gold">
                   <i class="fas fa-pen-nib"></i> Apply Now
                </a>
-               <a href="<?= fh(SITE_URL) ?>/contact.php" class="btn-outline">
+               <a href="<?= fh(SITE_URL) ?>/contact" class="btn-outline">
                   <i class="fas fa-envelope"></i> Contact Us
                </a>
             </div>
