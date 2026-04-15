@@ -280,6 +280,7 @@ $user       = auth_user();
                        || strpos($current_path, '/modules/') !== false || strpos($current_path, '/access/') !== false
                        || strpos($current_path, '/email-templates/') !== false || strpos($current_path, '/change-log/') !== false;
     $is_internal_active = strpos($current_path, '/file-manager/') !== false || strpos($current_path, '/notice-signing/') !== false || strpos($current_path, '/my-signature/') !== false;
+    $is_seo_active      = strpos($current_path, '/seo/') !== false;
     $is_accounting_active = strpos($current_path, '/accounting/') !== false;
     $is_scholarship_active = strpos($current_path, '/scholarship/') !== false;
     $is_medical_active = strpos($current_path, '/medical-center/') !== false;
@@ -1268,6 +1269,51 @@ $user       = auth_user();
                 </a>
             </li>
             <?php endif; ?>
+        </ul>
+    </div>
+    <?php endif; ?>
+
+    <!-- ── SEO Manager ── -->
+    <?php if (is_super_admin() || can_access('seo')): ?>
+    <button class="nav-group-toggle <?= $is_seo_active ? '' : 'collapsed' ?>"
+            data-bs-toggle="collapse" data-bs-target="#grp-seo"
+            aria-expanded="<?= $is_seo_active ? 'true' : 'false' ?>">
+        <i class="fas fa-search-plus grp-icon" style="color:#10b981"></i>
+        SEO Manager
+        <i class="fas fa-chevron-down toggle-icon"></i>
+    </button>
+    <div class="collapse <?= $is_seo_active ? 'show' : '' ?>" id="grp-seo">
+        <ul class="nav flex-column grp-items">
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/seo/index.php"
+                   class="<?= (strpos($current_path, '/seo/index') !== false) ? 'active' : '' ?>">
+                    <i class="fas fa-list-alt"></i> All Pages
+                </a>
+            </li>
+            <?php if (is_super_admin() || can_access('seo-settings', 'can_edit')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/seo/settings.php"
+                   class="<?= strpos($current_path, '/seo/settings') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-cog"></i> Settings
+                </a>
+            </li>
+            <?php endif; ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/seo/sitemap-preview.php"
+                   class="<?= strpos($current_path, '/seo/sitemap-preview') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-sitemap"></i> Sitemap Preview
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= SITE_URL ?>/sitemap.php" target="_blank">
+                    <i class="fas fa-external-link-alt"></i> Live Sitemap
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= SITE_URL ?>/robots.php" target="_blank">
+                    <i class="fas fa-robot"></i> Robots.txt
+                </a>
+            </li>
         </ul>
     </div>
     <?php endif; ?>

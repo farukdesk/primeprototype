@@ -1,7 +1,6 @@
 <?php
 require_once __DIR__ . '/includes/config.php';
-
-// ── Fetch article by slug ──────────────────────────────────────────────────
+require_once __DIR__ . '/includes/seo.php';
 $slug    = trim($_GET['slug'] ?? '');
 $article = null;
 
@@ -38,11 +37,17 @@ if ($article && !empty($article['published_at'])) {
 <head>
    <meta charset="utf-8">
    <meta http-equiv="x-ua-compatible" content="ie=edge">
-   <title><?= fh($page_title) ?> – Prime University</title>
-   <meta name="description" content="">
    <meta name="viewport" content="width=device-width, initial-scale=1">
-
    <link rel="shortcut icon" type="image/x-icon" href="/assets/img/logo/favicon.png">
+<?php
+$_news_img = !empty($article['featured_image']) ? ADMIN_UPLOAD_URL . '/news/' . $article['featured_image'] : null;
+$_news_desc = !empty($article['content']) ? mb_substr(strip_tags($article['content']), 0, 160) : null;
+render_seo_meta(
+    '/news-detail.php?slug=' . urlencode($slug),
+    $page_title,
+    $_news_desc,
+    $_news_img
+); ?>
 
    <!-- CSS Here -->
    <link rel="stylesheet" href="/assets/css/bootstrap.min.css">

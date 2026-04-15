@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/includes/config.php';
+require_once __DIR__ . '/includes/seo.php';
 
 /* ── Data fetching ─────────────────────────────────────────────────────────── */
 $_stats        = [];
@@ -147,10 +148,9 @@ if (empty($_features)) {
 <head>
    <meta charset="utf-8">
    <meta http-equiv="x-ua-compatible" content="ie=edge">
-   <title>Prime University – Empowering Future Leaders</title>
-   <meta name="description" content="Prime University Bangladesh – Quality higher education with expert faculty, modern facilities and industry-focused programs.">
    <meta name="viewport" content="width=device-width, initial-scale=1">
    <link rel="shortcut icon" type="image/x-icon" href="/assets/img/logo/favicon.png">
+<?php render_seo_meta('/index.php', 'Home', 'Prime University Bangladesh – Quality higher education with expert faculty, modern facilities and industry-focused programs.'); ?>
    <link rel="stylesheet" href="/assets/css/bootstrap.min.css">
    <link rel="stylesheet" href="/assets/css/font-awesome-pro.css">
    <link rel="stylesheet" href="/assets/css/swiper-bundle.min.css">
