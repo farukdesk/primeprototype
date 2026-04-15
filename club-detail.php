@@ -1,6 +1,8 @@
 <?php
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/seo.php';
+
+$slug = trim($_GET['slug'] ?? '');
 if ($slug === '') { header('Location: /clubs'); exit; }
 
 $club   = null;
