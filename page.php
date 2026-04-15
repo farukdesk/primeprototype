@@ -4,6 +4,7 @@
  * URL: /page.php?slug=page-slug
  */
 require_once __DIR__ . '/includes/config.php';
+require_once __DIR__ . '/includes/seo.php';
 
 $slug = trim($_GET['slug'] ?? '');
 if ($slug === '') { header('Location: index.php'); exit; }
@@ -29,10 +30,9 @@ $page_title = fh($pg['title']);
 <head>
    <meta charset="utf-8">
    <meta http-equiv="x-ua-compatible" content="ie=edge">
-   <title><?= $page_title ?> – Prime University</title>
-   <meta name="description" content="<?= fh($pg['meta_description'] ?? '') ?>">
    <meta name="viewport" content="width=device-width, initial-scale=1">
    <link rel="shortcut icon" type="image/x-icon" href="/assets/img/logo/favicon.png">
+<?php render_seo_meta('/page.php?slug=' . urlencode($pg['slug']), $pg['title'], $pg['meta_description'] ?? null); ?>
    <link rel="stylesheet" href="/assets/css/bootstrap.min.css">
    <link rel="stylesheet" href="/assets/css/font-awesome-pro.css">
    <link rel="stylesheet" href="/assets/css/swiper-bundle.min.css">

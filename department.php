@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/includes/config.php';
+require_once __DIR__ . '/includes/seo.php';
 
 $slug = trim($_GET['slug'] ?? '');
 if ($slug === '') {
@@ -74,10 +75,9 @@ if ($dept_cta_text !== '' && strcasecmp($dept_cta_text, 'Apply Now') === 0) {
 <head>
    <meta charset="utf-8">
    <meta http-equiv="x-ua-compatible" content="ie=edge">
-   <title><?= $page_title ?> – Prime University</title>
-   <meta name="description" content="<?= fh($dept['hero_description'] ?? '') ?>">
    <meta name="viewport" content="width=device-width, initial-scale=1">
    <link rel="shortcut icon" type="image/x-icon" href="/assets/img/logo/favicon.png">
+<?php render_seo_meta('/department.php?slug=' . urlencode($dept['slug']), $dept['name'], $dept['hero_description'] ?? null); ?>
    <link rel="stylesheet" href="/assets/css/bootstrap.min.css">
    <link rel="stylesheet" href="/assets/css/font-awesome-pro.css">
    <link rel="stylesheet" href="/assets/css/swiper-bundle.min.css">

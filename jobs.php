@@ -1,7 +1,6 @@
 <?php
 require_once __DIR__ . '/includes/config.php';
-
-$page_title = 'Career Opportunities – Prime University';
+require_once __DIR__ . '/includes/seo.php';
 
 $jobs = [];
 try {
@@ -41,11 +40,9 @@ $locations   = array_keys($locations);
 <head>
    <meta charset="utf-8">
    <meta http-equiv="x-ua-compatible" content="ie=edge">
-   <title><?= fh($page_title) ?></title>
-   <meta name="description" content="Explore career opportunities at Prime University.">
    <meta name="viewport" content="width=device-width, initial-scale=1">
-
    <link rel="shortcut icon" type="image/x-icon" href="/assets/img/logo/favicon.png">
+<?php render_seo_meta('/jobs.php', 'Career Opportunities', 'Explore career opportunities at Prime University.'); ?>
 
    <!-- CSS Here -->
    <link rel="stylesheet" href="/assets/css/bootstrap.min.css">

@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/includes/config.php';
+require_once __DIR__ . '/includes/seo.php';
 
 $page_title = 'Contact Us – Prime University';
 
@@ -55,10 +56,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
    <meta charset="utf-8">
    <meta http-equiv="x-ua-compatible" content="ie=edge">
-   <title><?= fh($page_title) ?></title>
-   <meta name="description" content="Get in touch with Prime University. We&rsquo;re here to answer your questions about admissions, programs, and campus life.">
    <meta name="viewport" content="width=device-width, initial-scale=1">
-
+<?php render_seo_meta('/contact.php', 'Contact Us', "Get in touch with Prime University. We're here to answer your questions about admissions, programs, and campus life."); ?>
 
    <link rel="stylesheet" href="/assets/css/bootstrap.min.css">
    <link rel="stylesheet" href="/assets/css/font-awesome-pro.css">

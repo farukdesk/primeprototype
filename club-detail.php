@@ -1,7 +1,6 @@
 <?php
 require_once __DIR__ . '/includes/config.php';
-
-$slug = trim($_GET['slug'] ?? '');
+require_once __DIR__ . '/includes/seo.php';
 if ($slug === '') { header('Location: /clubs'); exit; }
 
 $club   = null;
@@ -53,10 +52,12 @@ $page_title = fh($club['name']) . ' – Prime University';
 <head>
    <meta charset="utf-8">
    <meta http-equiv="x-ua-compatible" content="ie=edge">
-   <title><?= $page_title ?></title>
-   <meta name="description" content="<?= fh(mb_substr(strip_tags($club['goal'] ?? 'Learn about ' . $club['name']), 0, 160)) ?>">
    <meta name="viewport" content="width=device-width, initial-scale=1">
    <link rel="shortcut icon" type="image/x-icon" href="/assets/img/logo/favicon.png">
+<?php
+$_club_desc = mb_substr(strip_tags($club['goal'] ?? 'Learn about ' . $club['name']), 0, 160);
+$_club_img  = !empty($club['cover_image']) ? ADMIN_UPLOAD_URL . '/clubs/covers/' . $club['cover_image'] : null;
+render_seo_meta('/club-detail.php?slug=' . urlencode($slug), $club['name'], $_club_desc, $_club_img); ?>
    <link rel="stylesheet" href="/assets/css/bootstrap.min.css">
    <link rel="stylesheet" href="/assets/css/font-awesome-pro.css">
    <link rel="stylesheet" href="/assets/css/swiper-bundle.min.css">

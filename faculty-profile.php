@@ -1,7 +1,6 @@
 <?php
 require_once __DIR__ . '/includes/config.php';
-
-$user_id = (int)($_GET['id'] ?? 0);
+require_once __DIR__ . '/includes/seo.php';
 if (!$user_id) { header('Location: index.php'); exit; }
 
 $db       = front_db();
@@ -57,10 +56,14 @@ $cv_url = !empty($profile['cv_file']) ? ADMIN_UPLOAD_URL . '/faculty-profiles/' 
 <head>
    <meta charset="utf-8">
    <meta http-equiv="x-ua-compatible" content="ie=edge">
-   <title><?= fh($name) ?><?= $designation ? ' – ' . fh($designation) : '' ?> – Prime University</title>
-   <meta name="description" content="Faculty profile of <?= fh($name) ?> at Prime University.">
    <meta name="viewport" content="width=device-width, initial-scale=1">
    <link rel="shortcut icon" type="image/x-icon" href="/assets/img/logo/favicon.png">
+<?php
+$_fp_title = $name . ($designation ? ' – ' . $designation : '');
+$_fp_desc  = 'Faculty profile of ' . $name . ($dept_name ? ' from ' . $dept_name : '') . ' at Prime University.';
+$_fp_slug  = !empty($profile['slug']) ? $profile['slug'] : null;
+$_fp_url   = $_fp_slug ? '/faculty-profile.php?slug=' . urlencode($_fp_slug) : '/faculty-profile.php?id=' . $user_id;
+render_seo_meta($_fp_url, $_fp_title, $_fp_desc, $photo_url); ?>
    <link rel="stylesheet" href="/assets/css/bootstrap.min.css">
    <link rel="stylesheet" href="/assets/css/font-awesome-pro.css">
    <link rel="stylesheet" href="/assets/css/swiper-bundle.min.css">
