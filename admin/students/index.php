@@ -115,7 +115,10 @@ require_once __DIR__ . '/../includes/header.php';
         </ol>
     </nav>
     <?php if (sm_can_create()): ?>
-    <div class="d-flex gap-2">
+    <div class="d-flex gap-2 flex-wrap">
+        <a href="<?= APP_URL ?>/students/smart-upload.php" class="btn btn-outline-success" style="border-radius:10px;font-size:.875rem;">
+            <i class="fas fa-magic me-1"></i> Smart PDF Upload
+        </a>
         <a href="<?= APP_URL ?>/students/bulk-upload.php" class="btn btn-outline-primary" style="border-radius:10px;font-size:.875rem;">
             <i class="fas fa-file-archive me-1"></i> Bulk Upload Files
         </a>
