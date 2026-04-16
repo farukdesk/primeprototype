@@ -5,8 +5,12 @@
  * Accepts one or more PDF files (printed or handwritten).
  * For each file the script:
  *  1. Validates the file is a genuine PDF.
- *  2. Extracts embedded text using a pure-PHP parser (handles FlateDecode
- *     compressed streams, plain BT/ET text blocks, and hex strings).
+ *  2. Extracts text from the PDF using a two-pass approach (see
+ *     spu_extract_pdf_text):
+ *       Pass 1 – pure-PHP parser (FlateDecode, BT/ET, hex strings).
+ *       Pass 2 – pdftotext fallback for searchable scanned PDFs that have an
+ *                OCR text layer; covers all pages including "For Office Use
+ *                Only" / "Regis./ID No" sections on later pages.
  *  3. Scans the extracted text for digit sequences that match a student_id
  *     in the `students` table.
  *  4a. Exactly one match  → saves the file to student_files automatically,
@@ -14,10 +18,9 @@
  *  4b. No text / no match → saves the file to student_pdf_pending so the
  *      admin can assign it manually via pending-assign.php.
  *
- * Handwritten / scanned PDFs typically contain no extractable text and will
- * therefore land in the pending queue.  Install pdftotext (poppler-utils) or
- * Tesseract OCR on the server and pipe the result through spu_extract_pdf_text()
- * to extend coverage.
+ * Truly image-only PDFs (no text layer at all) still land in the pending
+ * queue.  Install poppler-utils (pdftotext) on the server to extend coverage
+ * to searchable scanned PDFs:  sudo apt-get install poppler-utils
  *
  * SQL prerequisite: run admin/students-smart-upload.sql once.
  */
@@ -41,10 +44,64 @@ if (!is_dir($pending_dir)) {
     mkdir($pending_dir, 0755, true);
 }
 
-// ── Pure-PHP PDF text extractor ───────────────────────────────────────────────
+// ── PDF text extractor (two-pass) ─────────────────────────────────────────────
 
 /**
- * Extract all readable text from a PDF file without any external command.
+ * Extract all readable text from a PDF file.
+ *
+ * Pass 1 – pure-PHP parser (no dependencies):
+ *   Iterates every "stream … endstream" block in the raw bytes across all
+ *   pages, decompresses FlateDecode streams, and parses BT … ET text operators.
+ *   Sufficient for digitally-created PDFs.
+ *
+ * Pass 2 – pdftotext fallback (poppler-utils, optional):
+ *   When Pass 1 yields no text the function tries pdftotext, which can decode
+ *   additional encodings (LZW, ASCII85, JBIG2) and, crucially, can read the
+ *   invisible OCR text layer that modern scanner software embeds in
+ *   "searchable PDF" files.  pdftotext processes *all pages* by default, so
+ *   student IDs that appear only on page 2 or 3 (e.g. "For Office Use Only"
+ *   or "Regis./ID No") are included in the output.
+ *
+ *   Install: sudo apt-get install poppler-utils   (or equivalent)
+ *   If pdftotext is not found the PDF lands in the manual-assignment queue.
+ *
+ * @param string $filepath Absolute path to the PDF file.
+ * @return string All readable text, space-separated.
+ */
+function spu_extract_pdf_text(string $filepath): string
+{
+    // Pass 1: pure-PHP extraction (fast, no shell required).
+    $text = spu_extract_pdf_text_php($filepath);
+    if ($text !== '') {
+        return $text;
+    }
+
+    // Pass 2: pdftotext (handles searchable scanned PDFs with an OCR layer).
+    if (function_exists('shell_exec') && spu_command_exists('pdftotext')) {
+        $out = shell_exec('pdftotext -layout ' . escapeshellarg($filepath) . ' - 2>/dev/null');
+        if (is_string($out) && trim($out) !== '') {
+            return $out;
+        }
+    }
+
+    return '';
+}
+
+/**
+ * Returns true when $cmd is found somewhere on the system PATH.
+ * Guards the shell_exec call against environments where the function is
+ * disabled (open_basedir, disable_functions, etc.).
+ *
+ * @param string $cmd Command name without arguments, e.g. "pdftotext".
+ */
+function spu_command_exists(string $cmd): bool
+{
+    $out = shell_exec('which ' . escapeshellarg($cmd) . ' 2>/dev/null');
+    return is_string($out) && trim($out) !== '';
+}
+
+/**
+ * Pure-PHP pass: extract text from every content stream in the PDF.
  *
  * Technique:
  *   • Finds every "stream … endstream" block in the raw PDF bytes.
@@ -54,13 +111,11 @@ if (!is_dir($pending_dir)) {
  *   • Also collects <hexadecimal> strings and decodes them.
  *
  * Limitations: does not handle LZWDecode, ASCII85Decode, or encryption.
- * For encrypted / image-only PDFs the function returns an empty string and
- * the file lands in the manual-assignment queue.
  *
  * @param string $filepath Absolute path to the PDF file.
- * @return string All readable text, space-separated.
+ * @return string All readable text, space-separated; empty string if nothing found.
  */
-function spu_extract_pdf_text(string $filepath): string
+function spu_extract_pdf_text_php(string $filepath): string
 {
     // Read in 512 KB chunks; collect only enough bytes to extract text
     // without loading the full file into memory at once.
