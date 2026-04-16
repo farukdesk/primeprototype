@@ -267,17 +267,22 @@ function spu_unescape_pdf_string(string $s): string
 }
 
 /**
- * Extract digit sequences that could be student IDs (5–20 digits).
+ * Extract digit sequences that could be student IDs (exactly 12 digits).
+ *
+ * Student IDs are always 12 digits.  11-digit sequences are also captured
+ * because pdftotext / the PHP parser sometimes drops the leading zero of a
+ * 12-digit ID (e.g. "088028051782" → "88028051782").  spu_match_students
+ * resolves that mismatch on the database side via TRIM(LEADING '0' …).
  *
  * Also handles common OCR look-alike substitutions found in scanned PDFs:
  *   O / o  →  0   (letter O mistaken for zero)
  *   I / l  →  1   (letter I or lowercase L mistaken for one)
  *
- * Additionally scans a "collapsed" version of the text where spaces and
+ * Additionally scans a "collapsed" version of the text where whitespace and
  * hyphens between adjacent digits are removed.  This catches IDs that are
- * printed (or re-laid-out after a PDF margin operation) as digit groups,
- * e.g. "2401 0508 0001" or "2401-0508-0001", which would otherwise be split
- * into short fragments below the 5-digit minimum.
+ * printed (or re-laid-out by pdftotext -layout) as digit groups,
+ * e.g. "0880 2805 1782" or "0880-2805-1782", which would otherwise be split
+ * into short fragments and never reassemble to the full 12 digits.
  *
  * @param string $text Extracted PDF text.
  * @return string[]    Unique digit sequences ordered longest-first.
@@ -291,16 +296,20 @@ function spu_find_id_candidates(string $text): array
     $ids = [];
 
     // Collect digit sequences from both the original text and a version with
-    // inter-digit spaces/hyphens stripped so grouped IDs are reassembled.
+    // inter-digit whitespace/hyphens stripped so grouped IDs are reassembled.
+    // Use \s to also catch tabs and newlines inserted by pdftotext -layout.
     $sources = [$text];
-    $collapsed = preg_replace('/(?<=\d)[ \-]+(?=\d)/', '', $text);
+    $collapsed = preg_replace('/(?<=\d)[\s\-]+(?=\d)/', '', $text);
     if ($collapsed !== $text) {
         $sources[] = $collapsed;
     }
 
     foreach ($sources as $src) {
-        // Standard pure-digit sequences.
-        if (preg_match_all('/\b(\d{5,20})\b/', $src, $m)) {
+        // Primary: 12-digit sequences (exact student ID length).
+        // Also accept 11-digit sequences: the scanner or pdftotext sometimes
+        // drops the leading zero of a 12-digit ID (e.g. "088028051782" →
+        // "88028051782").  spu_match_students handles the mismatch on the DB side.
+        if (preg_match_all('/\b(\d{11,12})\b/', $src, $m)) {
             foreach ($m[1] as $id) {
                 $ids[] = $id;
             }
@@ -308,7 +317,7 @@ function spu_find_id_candidates(string $text): array
 
         // OCR-normalised sequences: sequences of digits plus commonly confused
         // letters are normalised (O→0, I→1, l→1) and added as extra candidates.
-        if (preg_match_all('/\b([0-9OoIl]{5,20})\b/', $src, $m)) {
+        if (preg_match_all('/\b([0-9OoIl]{11,12})\b/', $src, $m)) {
             foreach ($m[1] as $raw) {
                 if (ctype_digit($raw)) {
                     continue; // already captured above
@@ -321,13 +330,12 @@ function spu_find_id_candidates(string $text): array
         }
     }
 
-    // Also add leading-zero-stripped variants so that an ID stored without a
-    // leading zero (e.g. "8084848") matches a PDF that prints "08084848", and
-    // vice versa (handled on the DB side in spu_match_students).
+    // Also add leading-zero-stripped variants of 12-digit candidates so that
+    // TRIM(LEADING '0' FROM student_id) matching works in both directions.
     $stripped = [];
     foreach ($ids as $id) {
         $s = ltrim($id, '0');
-        if ($s !== '' && $s !== $id && strlen($s) >= 5) {
+        if ($s !== '' && $s !== $id && strlen($s) >= 11) {
             $stripped[] = $s;
         }
     }
@@ -345,8 +353,9 @@ function spu_find_id_candidates(string $text): array
  * Matching is performed in two ways:
  *  1. Exact string match  – handles all student_id formats.
  *  2. Numeric (UNSIGNED) match – handles leading-zero mismatches where the
- *     database stores "8084848" but the PDF printed "08084848" (or vice versa).
- *     Only applied when the candidate is a pure-digit string.
+ *     database stores "088028051782" but the PDF printed "88028051782" (or
+ *     vice versa).  Only applied when the candidate is a pure-digit string
+ *     of 11 or more digits (student IDs are always 12 digits).
  *
  * @param string[] $candidates
  * @return array[]  Rows from `students` keyed by student_id string (lower).
@@ -363,9 +372,11 @@ function spu_match_students(array $candidates): array
 
     // Numeric candidates: pure-digit strings with leading zeros stripped.
     // Uses ltrim instead of int cast to avoid overflow on long sequences.
+    // Only consider candidates of 11+ digits (student IDs are always 12 digits;
+    // an 11-digit candidate may be a 12-digit ID with its leading zero dropped).
     $numeric = array_values(array_unique(array_filter(
         array_map(fn($c) => ctype_digit($c) ? (ltrim($c, '0') ?: '0') : null, $candidates),
-        fn($v) => $v !== null && strlen($v) >= 5
+        fn($v) => $v !== null && strlen($v) >= 11
     )));
     $params = $exact;
     $where  = "student_id IN ($phs1)";
