@@ -140,11 +140,20 @@ function spu_parse_content_stream(string $content): string
                 }
             }
             // TJ arrays:  [(text)(text)] TJ
+            // Each sub-string is emitted with a trailing space, AND the full
+            // concatenation is also emitted so that IDs split across
+            // kerning/spacing segments are still detectable.
             if (preg_match_all('/\[([^\]]*)\]\s*TJ/s', $bt, $m)) {
                 foreach ($m[1] as $arr) {
                     if (preg_match_all('/\(([^)]*)\)/', $arr, $sub)) {
+                        $concat = '';
                         foreach ($sub[1] as $s) {
-                            $text .= spu_unescape_pdf_string($s) . ' ';
+                            $piece   = spu_unescape_pdf_string($s);
+                            $text   .= $piece . ' ';
+                            $concat .= $piece;
+                        }
+                        if (count($sub[1]) > 1) {
+                            $text .= $concat . ' ';
                         }
                     }
                 }
@@ -205,6 +214,10 @@ function spu_unescape_pdf_string(string $s): string
 /**
  * Extract digit sequences that could be student IDs (5–20 digits).
  *
+ * Also handles common OCR look-alike substitutions found in scanned PDFs:
+ *   O / o  →  0   (letter O mistaken for zero)
+ *   I / l  →  1   (letter I or lowercase L mistaken for one)
+ *
  * @param string $text Extracted PDF text.
  * @return string[]    Unique digit sequences ordered longest-first.
  */
@@ -213,10 +226,31 @@ function spu_find_id_candidates(string $text): array
     if ($text === '') {
         return [];
     }
-    if (!preg_match_all('/\b(\d{5,20})\b/', $text, $m)) {
-        return [];
+
+    $ids = [];
+
+    // Standard pure-digit sequences.
+    if (preg_match_all('/\b(\d{5,20})\b/', $text, $m)) {
+        foreach ($m[1] as $id) {
+            $ids[] = $id;
+        }
     }
-    $ids = array_unique($m[1]);
+
+    // OCR-normalised sequences: sequences of digits plus commonly confused
+    // letters are normalised (O→0, I→1, l→1) and added as extra candidates.
+    if (preg_match_all('/\b([0-9OoIl]{5,20})\b/', $text, $m)) {
+        foreach ($m[1] as $raw) {
+            if (ctype_digit($raw)) {
+                continue; // already captured above
+            }
+            $norm = strtr($raw, ['O' => '0', 'o' => '0', 'I' => '1', 'l' => '1']);
+            if (ctype_digit($norm)) {
+                $ids[] = $norm;
+            }
+        }
+    }
+
+    $ids = array_unique($ids);
     // Longest sequences first (more specific IDs).
     usort($ids, fn($a, $b) => strlen($b) - strlen($a));
     return $ids;
