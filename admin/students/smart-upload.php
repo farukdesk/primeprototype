@@ -218,6 +218,12 @@ function spu_unescape_pdf_string(string $s): string
  *   O / o  →  0   (letter O mistaken for zero)
  *   I / l  →  1   (letter I or lowercase L mistaken for one)
  *
+ * Additionally scans a "collapsed" version of the text where spaces and
+ * hyphens between adjacent digits are removed.  This catches IDs that are
+ * printed (or re-laid-out after a PDF margin operation) as digit groups,
+ * e.g. "2401 0508 0001" or "2401-0508-0001", which would otherwise be split
+ * into short fragments below the 5-digit minimum.
+ *
  * @param string $text Extracted PDF text.
  * @return string[]    Unique digit sequences ordered longest-first.
  */
@@ -229,26 +235,48 @@ function spu_find_id_candidates(string $text): array
 
     $ids = [];
 
-    // Standard pure-digit sequences.
-    if (preg_match_all('/\b(\d{5,20})\b/', $text, $m)) {
-        foreach ($m[1] as $id) {
-            $ids[] = $id;
+    // Collect digit sequences from both the original text and a version with
+    // inter-digit spaces/hyphens stripped so grouped IDs are reassembled.
+    $sources = [$text];
+    $collapsed = preg_replace('/(?<=\d)[ \-]+(?=\d)/', '', $text);
+    if ($collapsed !== $text) {
+        $sources[] = $collapsed;
+    }
+
+    foreach ($sources as $src) {
+        // Standard pure-digit sequences.
+        if (preg_match_all('/\b(\d{5,20})\b/', $src, $m)) {
+            foreach ($m[1] as $id) {
+                $ids[] = $id;
+            }
+        }
+
+        // OCR-normalised sequences: sequences of digits plus commonly confused
+        // letters are normalised (O→0, I→1, l→1) and added as extra candidates.
+        if (preg_match_all('/\b([0-9OoIl]{5,20})\b/', $src, $m)) {
+            foreach ($m[1] as $raw) {
+                if (ctype_digit($raw)) {
+                    continue; // already captured above
+                }
+                $norm = strtr($raw, ['O' => '0', 'o' => '0', 'I' => '1', 'l' => '1']);
+                if (ctype_digit($norm)) {
+                    $ids[] = $norm;
+                }
+            }
         }
     }
 
-    // OCR-normalised sequences: sequences of digits plus commonly confused
-    // letters are normalised (O→0, I→1, l→1) and added as extra candidates.
-    if (preg_match_all('/\b([0-9OoIl]{5,20})\b/', $text, $m)) {
-        foreach ($m[1] as $raw) {
-            if (ctype_digit($raw)) {
-                continue; // already captured above
-            }
-            $norm = strtr($raw, ['O' => '0', 'o' => '0', 'I' => '1', 'l' => '1']);
-            if (ctype_digit($norm)) {
-                $ids[] = $norm;
-            }
+    // Also add leading-zero-stripped variants so that an ID stored without a
+    // leading zero (e.g. "8084848") matches a PDF that prints "08084848", and
+    // vice versa (handled on the DB side in spu_match_students).
+    $stripped = [];
+    foreach ($ids as $id) {
+        $s = ltrim($id, '0');
+        if ($s !== '' && $s !== $id && strlen($s) >= 5) {
+            $stripped[] = $s;
         }
     }
+    $ids = array_merge($ids, $stripped);
 
     $ids = array_unique($ids);
     // Longest sequences first (more specific IDs).
@@ -259,6 +287,12 @@ function spu_find_id_candidates(string $text): array
 /**
  * Given a list of candidate digit strings, return the students that match.
  *
+ * Matching is performed in two ways:
+ *  1. Exact string match  – handles all student_id formats.
+ *  2. Numeric (UNSIGNED) match – handles leading-zero mismatches where the
+ *     database stores "8084848" but the PDF printed "08084848" (or vice versa).
+ *     Only applied when the candidate is a pure-digit string.
+ *
  * @param string[] $candidates
  * @return array[]  Rows from `students` keyed by student_id string (lower).
  */
@@ -267,13 +301,33 @@ function spu_match_students(array $candidates): array
     if (empty($candidates)) {
         return [];
     }
-    $phs  = implode(',', array_fill(0, count($candidates), '?'));
+
+    // Exact-string candidates (all).
+    $exact = array_values($candidates);
+    $phs1  = implode(',', array_fill(0, count($exact), '?'));
+
+    // Numeric candidates: pure-digit strings with leading zeros stripped.
+    // Uses ltrim instead of int cast to avoid overflow on long sequences.
+    $numeric = array_values(array_unique(array_filter(
+        array_map(fn($c) => ctype_digit($c) ? (ltrim($c, '0') ?: '0') : null, $candidates),
+        fn($v) => $v !== null && strlen($v) >= 5
+    )));
+    $params = $exact;
+    $where  = "student_id IN ($phs1)";
+    if (!empty($numeric)) {
+        $phs2   = implode(',', array_fill(0, count($numeric), '?'));
+        // Only test numeric match against digit-only stored IDs to avoid false
+        // positives from alphanumeric IDs (e.g. "CSE-101") being treated as numbers.
+        $where .= " OR (student_id REGEXP '^[0-9]+$' AND TRIM(LEADING '0' FROM student_id) IN ($phs2))";
+        $params = array_merge($params, $numeric);
+    }
+
     $stmt = db()->prepare(
         "SELECT id, student_id, full_name, dept_id
          FROM students
-         WHERE student_id IN ($phs)"
+         WHERE $where"
     );
-    $stmt->execute(array_values($candidates));
+    $stmt->execute($params);
     $rows = $stmt->fetchAll();
     $map  = [];
     foreach ($rows as $r) {
