@@ -377,6 +377,7 @@ require_once __DIR__ . '/../includes/header.php';
                             <?= h($s['course_code'] ?? $s['course_title']) ?>
                         </th>
                         <?php endforeach; ?>
+                        <th style="width:60px;" class="text-center">Print</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -401,6 +402,14 @@ require_once __DIR__ . '/../includes/header.php';
                         <?php endif; ?>
                     </td>
                     <?php endforeach; ?>
+                    <td class="text-center">
+                        <a href="<?= APP_URL ?>/results/print-student.php?exam_id=<?= $id ?>&student_sid=<?= urlencode($sid) ?>"
+                           target="_blank"
+                           title="Print individual result for <?= h($name) ?>"
+                           style="color:#002147;">
+                            <i class="fas fa-print"></i>
+                        </a>
+                    </td>
                 </tr>
                 <?php endforeach; ?>
                 </tbody>

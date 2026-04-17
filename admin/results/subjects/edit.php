@@ -101,9 +101,11 @@ require_once __DIR__ . '/../../includes/header.php';
                     <div class="row g-3 mb-3">
                         <div class="col-md-6">
                             <label class="form-label fw-medium">Course Code</label>
-                            <input type="text" name="course_code" class="form-control"
+                            <input type="text" name="course_code" id="inp_course_code"
+                                   class="form-control"
                                    value="<?= old('course_code', $subject['course_code'] ?? '') ?>"
-                                   maxlength="50">
+                                   maxlength="50" autocomplete="off">
+                            <div id="code_lookup_hint" class="form-text text-success" style="display:none;"></div>
                         </div>
                         <div class="col-md-3">
                             <label class="form-label fw-medium">Credits</label>
@@ -129,5 +131,64 @@ require_once __DIR__ . '/../../includes/header.php';
         </div>
     </div>
 </div>
+
+<script>
+(function () {
+    var codeInput  = document.getElementById('inp_course_code');
+    var titleInput = document.querySelector('input[name="course_title"]');
+    var hintEl     = document.getElementById('code_lookup_hint');
+    var lookupTimer = null;
+
+    if (!codeInput || !hintEl) return;
+
+    // Use event delegation on the hint element so we never stack listeners
+    hintEl.addEventListener('click', function (e) {
+        var link = e.target.closest('#apply_title_link');
+        if (!link) return;
+        e.preventDefault();
+        titleInput.value = link.dataset.title;
+        hintEl.style.display = 'none';
+    });
+
+    codeInput.addEventListener('blur', function () {
+        var code = this.value.trim();
+        if (!code) { hintEl.style.display = 'none'; return; }
+
+        clearTimeout(lookupTimer);
+        lookupTimer = setTimeout(function () {
+            fetch('<?= APP_URL ?>/results/get-course-title.php?code=' + encodeURIComponent(code))
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (data.found) {
+                        var current = titleInput.value.trim();
+                        // Only suggest if the title differs from the current value
+                        if (current === data.title) { hintEl.style.display = 'none'; return; }
+                        hintEl.innerHTML = 'Registered title for <strong>' + escHtml(data.code) + '</strong>: '
+                            + '<strong>' + escHtml(data.title) + '</strong>. '
+                            + '<a href="#" id="apply_title_link" data-title="' + escAttr(data.title) + '">Use this title?</a>';
+                        hintEl.style.display = 'block';
+                    } else {
+                        hintEl.style.display = 'none';
+                    }
+                })
+                .catch(function () { hintEl.style.display = 'none'; });
+        }, 300);
+    });
+
+    codeInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); this.blur(); }
+    });
+
+    function escHtml(str) {
+        var d = document.createElement('div');
+        d.textContent = str;
+        return d.innerHTML;
+    }
+
+    function escAttr(str) {
+        return str.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+})();
+</script>
 
 <?php require_once __DIR__ . '/../../includes/footer.php'; ?>

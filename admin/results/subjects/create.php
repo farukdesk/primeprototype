@@ -140,7 +140,9 @@ require_once __DIR__ . '/../../includes/header.php';
                             <label class="form-label fw-medium">Course Code</label>
                             <input type="text" name="course_code" id="inp_course_code"
                                    class="form-control" value="<?= old('course_code') ?>"
-                                   maxlength="50" placeholder="e.g. BEL-111">
+                                   maxlength="50" placeholder="e.g. BEL-111"
+                                   autocomplete="off">
+                            <div id="code_lookup_hint" class="form-text text-success" style="display:none;"></div>
                         </div>
                         <div class="col-md-3">
                             <label class="form-label fw-medium">Credits</label>
@@ -170,16 +172,74 @@ require_once __DIR__ . '/../../includes/header.php';
     </div>
 </div>
 
-<?php if (!empty($curriculum_courses)): ?>
 <script>
-document.getElementById('cc_picker').addEventListener('change', function () {
-    var opt = this.options[this.selectedIndex];
-    document.getElementById('inp_curriculum_id').value  = this.value;
-    document.getElementById('inp_course_code').value    = opt.dataset.code  || '';
-    document.getElementById('inp_course_title').value   = opt.dataset.name  || '';
-    document.getElementById('inp_credits').value        = opt.dataset.credit || '';
-});
+(function () {
+    var codeInput  = document.getElementById('inp_course_code');
+    var titleInput = document.getElementById('inp_course_title');
+    var hintEl     = document.getElementById('code_lookup_hint');
+    var lookupTimer = null;
+
+    <?php if (!empty($curriculum_courses)): ?>
+    document.getElementById('cc_picker').addEventListener('change', function () {
+        var opt = this.options[this.selectedIndex];
+        document.getElementById('inp_curriculum_id').value = this.value;
+        codeInput.value  = opt.dataset.code   || '';
+        titleInput.value = opt.dataset.name   || '';
+        document.getElementById('inp_credits').value = opt.dataset.credit || '';
+        hintEl.style.display = 'none';
+    });
+    <?php endif; ?>
+
+    if (!codeInput) return;
+
+    // Use event delegation on the hint element so we never stack listeners
+    hintEl.addEventListener('click', function (e) {
+        var link = e.target.closest('#apply_title_link');
+        if (!link) return;
+        e.preventDefault();
+        titleInput.value = link.dataset.title;
+        hintEl.style.display = 'none';
+    });
+
+    codeInput.addEventListener('blur', function () {
+        var code = this.value.trim();
+        if (!code) { hintEl.style.display = 'none'; return; }
+        // Only look up when the title is currently empty
+        if (titleInput.value.trim() !== '') return;
+
+        clearTimeout(lookupTimer);
+        lookupTimer = setTimeout(function () {
+            fetch('<?= APP_URL ?>/results/get-course-title.php?code=' + encodeURIComponent(code))
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (data.found) {
+                        hintEl.innerHTML = 'Found title for <strong>' + escHtml(data.code) + '</strong>: '
+                            + '<strong>' + escHtml(data.title) + '</strong>. '
+                            + '<a href="#" id="apply_title_link" data-title="' + escAttr(data.title) + '">Use this title?</a>';
+                        hintEl.style.display = 'block';
+                    } else {
+                        hintEl.style.display = 'none';
+                    }
+                })
+                .catch(function () { hintEl.style.display = 'none'; });
+        }, 300);
+    });
+
+    // Also trigger on Enter key in the code field
+    codeInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); this.blur(); }
+    });
+
+    function escHtml(str) {
+        var d = document.createElement('div');
+        d.textContent = str;
+        return d.innerHTML;
+    }
+
+    function escAttr(str) {
+        return str.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+})();
 </script>
-<?php endif; ?>
 
 <?php require_once __DIR__ . '/../../includes/footer.php'; ?>
