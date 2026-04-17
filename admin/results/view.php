@@ -31,6 +31,10 @@ require_once __DIR__ . '/../includes/header.php';
             <i class="fas fa-print me-1"></i> Print
         </a>
         <?php if (rm_is_staff()): ?>
+        <a href="<?= APP_URL ?>/results/bulk-upload.php?exam_id=<?= $id ?>"
+           class="btn btn-success btn-sm" style="border-radius:10px;">
+            <i class="fas fa-magic me-1"></i> Smart Bulk Upload
+        </a>
         <a href="<?= APP_URL ?>/results/edit.php?id=<?= $id ?>"
            class="btn btn-outline-primary btn-sm" style="border-radius:10px;">
             <i class="fas fa-edit me-1"></i> Edit Exam
