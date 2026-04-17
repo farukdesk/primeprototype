@@ -27,6 +27,11 @@ function rm_can_delete(): bool
     return is_super_admin() || can_access('results', 'can_delete');
 }
 
+// ── Grade validation constants ────────────────────────────────────────────────
+
+const RM_MARKS_MIN = 0;
+const RM_MARKS_MAX = 100;
+
 // ── Grading scale ─────────────────────────────────────────────────────────────
 
 /**
@@ -143,10 +148,32 @@ function rm_get_exam_students(int $exam_id): array
 
 // ── Semester / batch list helpers ─────────────────────────────────────────────
 
+/**
+ * Returns the 12 academic semester labels (shared with course-curriculum).
+ */
+function rm_academic_semester_labels(): array
+{
+    return [
+        1  => '1st Year 1st Semester',
+        2  => '1st Year 2nd Semester',
+        3  => '1st Year 3rd Semester',
+        4  => '2nd Year 1st Semester',
+        5  => '2nd Year 2nd Semester',
+        6  => '2nd Year 3rd Semester',
+        7  => '3rd Year 1st Semester',
+        8  => '3rd Year 2nd Semester',
+        9  => '3rd Year 3rd Semester',
+        10 => '4th Year 1st Semester',
+        11 => '4th Year 2nd Semester',
+        12 => '4th Year 3rd Semester',
+    ];
+}
+
 function rm_semester_list(): array
 {
     $list = [];
-    for ($y = 2002; $y <= 2030; $y++) {
+    $end_year = (int)date('Y') + 10;
+    for ($y = 2002; $y <= $end_year; $y++) {
         $list[] = 'Summer-' . $y;
         $list[] = 'Fall-'   . $y;
         $list[] = 'Spring-' . $y;

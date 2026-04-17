@@ -74,12 +74,7 @@ foreach ($all_cc as $cc) {
     $by_sem[(int)$cc['semester']][] = $cc;
 }
 
-$sem_labels = [
-    1=>'1st Year 1st Semester', 2=>'1st Year 2nd Semester', 3=>'1st Year 3rd Semester',
-    4=>'2nd Year 1st Semester', 5=>'2nd Year 2nd Semester', 6=>'2nd Year 3rd Semester',
-    7=>'3rd Year 1st Semester', 8=>'3rd Year 2nd Semester', 9=>'3rd Year 3rd Semester',
-    10=>'4th Year 1st Semester', 11=>'4th Year 2nd Semester', 12=>'4th Year 3rd Semester',
-];
+$sem_labels = rm_academic_semester_labels();
 
 require_once __DIR__ . '/../../includes/header.php';
 ?>

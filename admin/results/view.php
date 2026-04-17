@@ -411,9 +411,13 @@ require_once __DIR__ . '/../includes/header.php';
 <script>
 (function () {
     var gradeScale = <?= json_encode(array_map(
-        fn($r) => ['min' => $r[0], 'max' => $r[1] === PHP_INT_MAX ? 10000 : $r[1], 'letter' => $r[2], 'point' => $r[3]],
+        fn($r) => ['min' => $r[0], 'max' => $r[1] === PHP_INT_MAX ? PHP_INT_MAX : $r[1], 'letter' => $r[2], 'point' => $r[3]],
         rm_grading_scale()
-    )) ?>;
+    )) ?>.map(function (r) {
+        // PHP_INT_MAX (9007199254740991) → Infinity for JS comparisons
+        r.max = (r.max >= Number.MAX_SAFE_INTEGER) ? Infinity : r.max;
+        return r;
+    });
 
     function computeGrade(marks) {
         for (var i = 0; i < gradeScale.length; i++) {

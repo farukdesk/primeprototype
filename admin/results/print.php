@@ -108,8 +108,13 @@ $page_title = h($exam['exam_title']);
         </thead>
         <tbody>
         <?php foreach (rm_grading_scale() as [$min, $max, $letter, $point]):
-            $range = ($max === PHP_INT_MAX) ? '80% and above' : $min . '% to less than ' . $max . '%';
-            if ($min === 0) $range = 'Less than 40%';
+            if ($max === PHP_INT_MAX) {
+                $range = $min . '% and above';
+            } elseif ($min === 0) {
+                $range = 'Less than ' . $max . '%';
+            } else {
+                $range = $min . '% to less than ' . $max . '%';
+            }
         ?>
         <tr>
             <td><?= $range ?></td>

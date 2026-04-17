@@ -67,8 +67,8 @@ foreach ($marks_post as $subject_id => $marks_raw) {
     }
 
     $marks = (float)$marks_raw;
-    if ($marks < 0) $marks = 0;
-    if ($marks > 100) $marks = 100;
+    if ($marks < RM_MARKS_MIN) $marks = RM_MARKS_MIN;
+    if ($marks > RM_MARKS_MAX) $marks = RM_MARKS_MAX;
 
     $grade = rm_compute_grade($marks);
 
