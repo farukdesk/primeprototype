@@ -181,6 +181,12 @@ function ocr_parse(string $raw): array
     $text = preg_replace('/\r\n|\r/', "\n", $raw) ?? $raw;
 
     // ── Pre-process dense OCR text (no newlines between entries) ──────────────
+
+    // Strip "GP" column-header artifact that OCR sometimes prepends to the first
+    // course code in a table (the "GP" header of the grade-point column bleeds
+    // into the adjacent code cell, e.g. "GPBEL-111E" → "BEL-111E").
+    $text = preg_replace('/(?<!\w)GP(?=[A-Z]{2,6}-\d{3})/', '', $text) ?? $text;
+
     // Insert newline before each course-code token so the line-based
     // Format-A parser can work even when the scanner strips all line breaks.
     $text = preg_replace(
@@ -263,6 +269,11 @@ function ocr_parse(string $raw): array
                 $line = trim($line);
                 if (!$line) continue;
 
+                // Strip leading serial/row number that OCR copies from the "#" column
+                // (e.g. "1 BEL-111…" or "41. MKT-417…").  Only strip when the number
+                // is followed by whitespace and then an uppercase letter (course code start).
+                $line = preg_replace('/^\d+\s*\.?\s+(?=[A-Z])/', '', $line) ?? $line;
+
                 // Skip known metadata / column-header lines
                 if (preg_match(
                     '/^(?:Course\s*Code|Grade\s*GP|CGPA|Total\s*Credits?|Foundation|Core|Accounting|Finance|Major|Final|SL\.|#\s)/i',
@@ -290,12 +301,27 @@ function ocr_parse(string $raw): array
                 // Use authoritative grade point from the map
                 $gp = $GP[$letter];
 
-                // Extract course code at start
+                // Extract course code at start.
+                // The "GP" artifact is already stripped in the pre-processing step above,
+                // but as a second safety net we allow an optional "GP" prefix here too.
                 $code  = null;
                 $title = $line_x;
-                if (preg_match('/^([A-Z]{2,6}-\d{3}[A-Z]?)\s*/', $line_x, $cdm)) {
+                if (preg_match('/^(?:GP)?([A-Z]{2,6}-\d{3}[A-Z]?)\s*/', $line_x, $cdm)) {
                     $code  = $cdm[1];
                     $title = trim(substr($line_x, strlen($cdm[0])));
+
+                    // Restore the first letter of the title when OCR merged the code and
+                    // title without a separator.  In this university's naming convention
+                    // the course-code suffix letter equals the first letter of the course
+                    // title (e.g. BNG-112B + "angla Language" → "Bangla Language").
+                    // When OCR concatenates them the title loses its opening character;
+                    // we detect this by the title starting with a lowercase letter.
+                    if ($title !== '' && isset($title[0]) && ctype_lower($title[0])) {
+                        $last_char = substr($code, -1);
+                        if (ctype_upper($last_char)) {
+                            $title = $last_char . $title;
+                        }
+                    }
                 }
 
                 if (!$code && strlen(trim($title)) < 2) continue;
@@ -312,6 +338,17 @@ function ocr_parse(string $raw): array
         if (empty($grades)) {
             $warnings[] = "No grades detected for $student_name (ID: $student_sid)";
             continue;
+        }
+
+        // Calculate CGPA from grade points when it was not present in the OCR text.
+        // This is a simple unweighted average; credit-weighted CGPA can be computed
+        // server-side once grades are saved.
+        if ($cgpa === null && count($grades) > 0) {
+            $gp_sum = 0.0;
+            foreach ($grades as $g) {
+                $gp_sum += (float)($g['gp'] ?? 0);
+            }
+            $cgpa = round($gp_sum / count($grades), 2);
         }
 
         $students[] = [

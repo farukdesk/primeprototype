@@ -438,12 +438,20 @@ Foundation: BEL-111 (A), BNG-112 (B+), CSE-113 (B+), …"
                 '</tr>';
         }).join('');
 
+        var cgpaRow = (s.cgpa != null)
+            ? '<tr class="table-light">' +
+              '<td class="ps-3" style="width:35px;"></td>' +
+              '<td colspan="3" class="fw-semibold text-end pe-3 text-muted small">CGPA</td>' +
+              '<td class="text-center fw-bold">' + s.cgpa.toFixed(2) + '</td>' +
+              '</tr>'
+            : '';
+
         return '<div class="card mb-2" style="border-radius:10px;">' +
             '<div class="card-header py-2 px-3 d-flex align-items-center gap-2 flex-wrap">' +
             '<input type="checkbox" class="form-check-input stu-check" data-idx="' + idx + '" checked style="cursor:pointer;">' +
             '<div class="fw-semibold">' + esc(s.name) + '</div>' +
             '<code class="text-primary small">' + esc(s.sid) + '</code>' +
-            (s.cgpa !== null && s.cgpa !== undefined
+            (s.cgpa != null
                 ? '<span class="badge bg-info text-dark ms-1">CGPA: ' + s.cgpa.toFixed(2) + '</span>'
                 : '') +
             '<span class="badge bg-secondary ms-1">' + (s.grades || []).length + ' grades</span>' +
@@ -459,7 +467,7 @@ Foundation: BEL-111 (A), BNG-112 (B+), CSE-113 (B+), …"
             '<th class="text-center" style="width:70px;">Grade</th>' +
             '<th class="text-center" style="width:60px;">GP</th>' +
             '</tr></thead>' +
-            '<tbody>' + gradeRows + '</tbody>' +
+            '<tbody>' + gradeRows + cgpaRow + '</tbody>' +
             '</table></div></div></div>';
     }
 
