@@ -83,14 +83,23 @@ function spu_extract_pdf_text(string $filepath): string
 {
     // Pass 1: pure-PHP extraction (fast, no shell required).
     $text = spu_extract_pdf_text_php($filepath);
-    if ($text !== '') {
+
+    // Only return the PHP-extracted text immediately when it already contains
+    // long digit sequences (≥10 consecutive digits) that could be student IDs.
+    // Some scanners embed a text layer using custom/non-standard font encoding,
+    // causing the PHP parser to extract garbled characters (e.g. "a=•H•Hl")
+    // instead of the actual digit content.  In that case we must still try
+    // pdftotext, which resolves font encoding via ToUnicode CMaps and glyph
+    // metrics that the pure-PHP parser cannot decode.
+    if ($text !== '' && preg_match('/\d{10,}/', $text)) {
         return $text;
     }
 
-    // Pass 2: pdftotext (handles searchable scanned PDFs with an OCR layer).
-    // Run both -layout and plain modes; combine both outputs so that IDs in
-    // narrow table columns (e.g. Result Tabulation "ID No." column) are still
-    // found even when -layout inserts extra spaces inside digit sequences.
+    // Pass 2: pdftotext (handles searchable scanned PDFs with an OCR layer,
+    // and correctly decodes custom/embedded font encodings that confuse the
+    // PHP parser).  Run both -layout and plain modes; combine both outputs so
+    // that IDs in narrow table columns (e.g. Result Tabulation "ID No." column)
+    // are still found even when -layout inserts extra spaces inside digit sequences.
     if (function_exists('shell_exec') && spu_command_exists('pdftotext')) {
         $combined = '';
 
@@ -109,7 +118,12 @@ function spu_extract_pdf_text(string $filepath): string
         }
     }
 
-    return '';
+    // Return whatever PHP extracted (possibly garbled due to custom font encoding,
+    // or empty if the PDF has no text layer at all).  The caller treats non-empty
+    // text that produces no digit candidates as a "garbled encoding" case and
+    // reports it accordingly; the image-OCR fallback (Pass 3) is still triggered
+    // whenever no matching student is found, regardless of this return value.
+    return $text;
 }
 
 /**
@@ -802,11 +816,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $user['id'],
                     ]);
 
+                    $no_id_candidates = empty($candidates);
                     $reason = count($matched_students) > 1
                         ? 'Ambiguous: ' . count($matched_students) . ' student IDs found – enable "Result Tabulation mode" or assign manually.'
                         : ($extracted_text === ''
                             ? 'No text extracted from PDF (possibly scanned/handwritten) – please assign manually.'
-                            : 'No matching student ID found in PDF text – please assign manually.');
+                            : ($no_id_candidates
+                                ? 'No digit sequences found in PDF text (possibly garbled font encoding or image-only scan) – please assign manually.'
+                                : 'No matching student ID found in PDF text – please assign manually.'));
 
                     $pending_saved[] = [
                         'original_name'    => $orig_name,
