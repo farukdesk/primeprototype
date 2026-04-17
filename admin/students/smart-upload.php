@@ -897,7 +897,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <li>Upload one or more PDF files — file names do <strong>not</strong> need to be correct.</li>
                         <li>The system reads each PDF and searches the content for a Student ID.</li>
                         <li>Files where a unique Student ID is found are <strong>automatically saved</strong> and renamed to <code>&lt;StudentID&gt;.pdf</code>.</li>
-                        <li>For tabulation sheets containing <strong>multiple student IDs</strong>, enable <strong>Result Tabulation mode</strong> to attach one uploaded PDF to all matched students.</li>
+                        <li>For Result Tabulation sheets containing <strong>multiple student IDs</strong>, enable <strong>Result Tabulation mode</strong> to attach one uploaded PDF to all matched students.</li>
                         <li>In Result Tabulation mode, each student gets auto labels like <code>Result Tabulation Page 1</code>, <code>Result Tabulation Page 2</code>, etc.</li>
                         <li>Files where no ID is found (e.g. handwritten / scanned PDFs without OCR text) are placed in the <strong>pending queue</strong> for manual assignment.</li>
                     </ol>
@@ -935,7 +935,7 @@ require_once __DIR__ . '/../includes/header.php';
                             Result Tabulation mode (assign each PDF to all matched student IDs)
                         </label>
                         <div class="form-text">
-                            Use this for tabulation sheets that contain many student IDs. The uploaded filename can be random.
+                            Use this for Result Tabulation sheets that contain many student IDs. The uploaded filename can be random.
                         </div>
                     </div>
 
