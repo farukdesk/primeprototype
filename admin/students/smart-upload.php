@@ -13,9 +13,10 @@
  *                Only" / "Regis./ID No" sections on later pages.
  *  3. Scans the extracted text for digit sequences that match a student_id
  *     in the `students` table.
- *  4a. Exactly one match  → saves the file to student_files automatically,
- *      renaming the stored file to <student_id>.pdf.
- *  4b. No text / no match → saves the file to student_pdf_pending so the
+ *  4a. Exactly one match  → saves the file to student_files automatically.
+ *  4b. (Optional) Result Tabulation mode + multiple matches → attaches one
+ *      uploaded PDF to all matched students without duplicating the file.
+ *  4c. No text / no match → saves the file to student_pdf_pending so the
  *      admin can assign it manually via pending-assign.php.
  *
  * Truly image-only PDFs (no text layer at all) still land in the pending
@@ -402,6 +403,27 @@ function spu_match_students(array $candidates): array
     return $map;
 }
 
+/**
+ * Generate next "Result Tabulation Page N" label for a student.
+ */
+function spu_next_tabulation_label(int $student_pk): string
+{
+    $stmt = db()->prepare(
+        "SELECT file_name
+         FROM student_files
+         WHERE student_id = ?
+           AND file_name LIKE 'Result Tabulation Page %'"
+    );
+    $stmt->execute([$student_pk]);
+    $max_page = 0;
+    foreach ($stmt->fetchAll() as $row) {
+        if (preg_match('/^Result Tabulation Page\s+(\d+)$/i', (string)$row['file_name'], $m)) {
+            $max_page = max($max_page, (int)$m[1]);
+        }
+    }
+    return 'Result Tabulation Page ' . ($max_page + 1);
+}
+
 // ── Processing ────────────────────────────────────────────────────────────────
 
 $results        = null;  // null = not yet run
@@ -420,6 +442,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $file_label  = trim($_POST['file_label']  ?? 'Student Document');
     $description = trim($_POST['description'] ?? '');
+    $assign_all_matches = isset($_POST['assign_all_matches']);
     if ($file_label === '') {
         $file_label = 'Student Document';
     }
@@ -538,17 +561,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stu_pk  = (int)$stu['id'];
                     $sid_raw = $stu['student_id'];
 
-                    // Canonical original name: <student_id>.pdf
-                    $canonical_orig = $sid_raw . '.pdf';
+                    // In tabulation mode keep the uploaded filename; otherwise
+                    // use canonical <student_id>.pdf naming.
+                    $canonical_orig = $assign_all_matches ? $orig_name : ($sid_raw . '.pdf');
 
-                    // Duplicate check
-                    $dup_key = $stu_pk . ':' . $canonical_orig;
-                    if (isset($existing_files[$dup_key])) {
-                        $errors[] = [
-                            'name'   => $orig_name,
-                            'reason' => 'File already attached to student ' . $sid_raw . ' (duplicate skipped).',
-                        ];
-                        continue;
+                    $entry_label = $assign_all_matches
+                        ? spu_next_tabulation_label($stu_pk)
+                        : $file_label;
+
+                    if (!$assign_all_matches) {
+                        // Duplicate check (normal mode).
+                        $dup_key = $stu_pk . ':' . $canonical_orig;
+                        if (isset($existing_files[$dup_key])) {
+                            $errors[] = [
+                                'name'   => $orig_name,
+                                'reason' => 'File already attached to student ' . $sid_raw . ' (duplicate skipped).',
+                            ];
+                            continue;
+                        }
                     }
 
                     $dest_path = $files_dir . '/' . $stored_name;
@@ -559,7 +589,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     $insert_file_stmt->execute([
                         $stu_pk,
-                        $file_label,
+                        $entry_label,
                         $description ?: null,
                         $stored_name,
                         $canonical_orig,
@@ -568,7 +598,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $user['id'],
                     ]);
 
-                    $existing_files[$dup_key] = true;
+                    if (!$assign_all_matches) {
+                        $existing_files[$dup_key] = true;
+                    }
 
                     $imported[] = [
                         'original_name' => $orig_name,
@@ -576,6 +608,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'student_name'  => $stu['full_name'],
                         'stored_as'     => $canonical_orig,
                     ];
+
+                } elseif ($assign_all_matches && count($matched_students) > 1) {
+                    // ── Bulk tabulation path (one file → many students) ─────
+                    $dest_path = $files_dir . '/' . $stored_name;
+                    if (!move_uploaded_file($file['tmp_name'], $dest_path)) {
+                        $errors[] = ['name' => $orig_name, 'reason' => 'Failed to move file to storage.'];
+                        continue;
+                    }
+
+                    $attached_count = 0;
+                    foreach ($matched_students as $stu) {
+                        $stu_pk  = (int)$stu['id'];
+                        $sid_raw = $stu['student_id'];
+                        $canonical_orig = $orig_name;
+                        $entry_label = spu_next_tabulation_label($stu_pk);
+
+                        $insert_file_stmt->execute([
+                            $stu_pk,
+                            $entry_label,
+                            $description ?: null,
+                            $stored_name,
+                            $canonical_orig,
+                            'application/pdf',
+                            $file['size'],
+                            $user['id'],
+                        ]);
+
+                        $attached_count++;
+
+                        $imported[] = [
+                            'original_name' => $orig_name,
+                            'student_id'    => $sid_raw,
+                            'student_name'  => $stu['full_name'],
+                            'stored_as'     => $canonical_orig,
+                        ];
+                    }
+
+                    if ($attached_count === 0) {
+                        if (is_file($dest_path)) {
+                            @unlink($dest_path);
+                        }
+                        $errors[] = [
+                            'name'   => $orig_name,
+                            'reason' => 'Could not attach this tabulation file to any matched student.',
+                        ];
+                    }
 
                 } else {
                     // ── Pending path (no match or ambiguous) ────────────────
@@ -600,7 +678,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ]);
 
                     $reason = count($matched_students) > 1
-                        ? 'Ambiguous: ' . count($matched_students) . ' student IDs found – please assign manually.'
+                        ? 'Ambiguous: ' . count($matched_students) . ' student IDs found – enable "Result Tabulation mode" or assign manually.'
                         : ($extracted_text === ''
                             ? 'No text extracted from PDF (possibly scanned/handwritten) – please assign manually.'
                             : 'No matching student ID found in PDF text – please assign manually.');
@@ -832,6 +910,8 @@ require_once __DIR__ . '/../includes/header.php';
                         <li>Upload one or more PDF files — file names do <strong>not</strong> need to be correct.</li>
                         <li>The system reads each PDF and searches the content for a Student ID.</li>
                         <li>Files where a unique Student ID is found are <strong>automatically saved</strong> and renamed to <code>&lt;StudentID&gt;.pdf</code>.</li>
+                        <li>For tabulation sheets containing <strong>multiple student IDs</strong>, enable <strong>Result Tabulation mode</strong> to attach one uploaded PDF to all matched students.</li>
+                        <li>In Result Tabulation mode, each student gets auto labels like <code>Result Tabulation Page 1</code>, <code>Page 2</code>, etc.</li>
                         <li>Files where no ID is found (e.g. handwritten / scanned PDFs without OCR text) are placed in the <strong>pending queue</strong> for manual assignment.</li>
                     </ol>
                     <div class="mt-2">
@@ -851,7 +931,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <input type="text" class="form-control" id="file_label" name="file_label"
                                value="Student Document" required
                                placeholder="e.g. Admission Form, ID Copy, Exam Script">
-                        <div class="form-text">Applied to every imported file as its label in the student record.</div>
+                        <div class="form-text">Applied to imported files in normal mode. In Result Tabulation mode, labels are auto-generated per student (Page 1, Page 2, ...).</div>
                     </div>
 
                     <div class="mb-3">
@@ -860,6 +940,16 @@ require_once __DIR__ . '/../includes/header.php';
                         </label>
                         <input type="text" class="form-control" id="description" name="description"
                                placeholder="e.g. Scanned originals – Summer 2025">
+                    </div>
+
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" value="1" id="assign_all_matches" name="assign_all_matches">
+                        <label class="form-check-label fw-semibold" for="assign_all_matches">
+                            Result Tabulation mode (assign each PDF to all matched student IDs)
+                        </label>
+                        <div class="form-text">
+                            Use this for tabulation sheets that contain many student IDs. The uploaded filename can be random.
+                        </div>
                     </div>
 
                     <div class="mb-4">

@@ -18,12 +18,18 @@ if ($student['photo']) {
     if (is_file($p)) @unlink($p);
 }
 
-// Remove all associated files
-$files_stmt = db()->prepare('SELECT stored_name FROM student_files WHERE student_id = ?');
+// Remove only unshared associated files.
+$files_stmt = db()->prepare('SELECT DISTINCT stored_name FROM student_files WHERE student_id = ?');
 $files_stmt->execute([$id]);
 foreach ($files_stmt->fetchAll() as $f) {
-    $fp = UPLOAD_DIR . '/students/files/' . $f['stored_name'];
-    if (is_file($fp)) @unlink($fp);
+    $ref_stmt = db()->prepare(
+        'SELECT COUNT(*) FROM student_files WHERE stored_name = ? AND student_id <> ?'
+    );
+    $ref_stmt->execute([$f['stored_name'], $id]);
+    if ((int)$ref_stmt->fetchColumn() === 0) {
+        $fp = UPLOAD_DIR . '/students/files/' . $f['stored_name'];
+        if (is_file($fp)) @unlink($fp);
+    }
 }
 
 $label = $student['full_name'] . ' (' . $student['student_id'] . ')';
