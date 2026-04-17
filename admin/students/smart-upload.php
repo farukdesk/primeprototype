@@ -5,12 +5,14 @@
  * Accepts one or more PDF files (printed or handwritten).
  * For each file the script:
  *  1. Validates the file is a genuine PDF.
- *  2. Extracts text from the PDF using a two-pass approach (see
+ *  2. Extracts text from the PDF using a three-pass approach (see
  *     spu_extract_pdf_text):
  *       Pass 1 – pure-PHP parser (FlateDecode, BT/ET, hex strings).
  *       Pass 2 – pdftotext fallback for searchable scanned PDFs that have an
  *                OCR text layer; covers all pages including "For Office Use
  *                Only" / "Regis./ID No" sections on later pages.
+ *       Pass 3 – optional image OCR fallback (pdftoppm + tesseract) for
+ *                scanned/image-only PDFs with no embedded text layer.
  *  3. Scans the extracted text for digit sequences that match a student_id
  *     in the `students` table.
  *  4a. Exactly one match  → saves the file to student_files automatically.
@@ -20,8 +22,8 @@
  *      admin can assign it manually via pending-assign.php.
  *
  * Truly image-only PDFs (no text layer at all) still land in the pending
- * queue.  Install poppler-utils (pdftotext) on the server to extend coverage
- * to searchable scanned PDFs:  sudo apt-get install poppler-utils
+ * queue unless OCR tools are installed. Install poppler-utils + tesseract:
+ *   sudo apt-get install poppler-utils tesseract-ocr
  *
  * SQL prerequisite: run admin/students-smart-upload.sql once.
  */
@@ -86,6 +88,84 @@ function spu_extract_pdf_text(string $filepath): string
     }
 
     return '';
+}
+
+/**
+ * Pass 3 fallback: OCR image-based PDFs (no text layer) using
+ * pdftoppm + tesseract when both commands are available.
+ *
+ * @param string $filepath Absolute path to the PDF file.
+ * @return string OCR text from up to first 5 pages; empty string on failure.
+ */
+function spu_extract_pdf_text_ocr(string $filepath): string
+{
+    if (!function_exists('shell_exec')
+        || !function_exists('exec')
+        || !spu_command_exists('pdftoppm')
+        || !spu_command_exists('tesseract')
+    ) {
+        return '';
+    }
+
+    $tmp_dir = '';
+    for ($attempt = 0; $attempt < 3; $attempt++) {
+        $candidate = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR)
+            . DIRECTORY_SEPARATOR . 'spu-ocr-' . bin2hex(random_bytes(16));
+        if (mkdir($candidate, 0700)) {
+            $tmp_dir = $candidate;
+            break;
+        }
+    }
+    if ($tmp_dir === '') {
+        error_log('Smart upload OCR: failed to create temp directory after retries.');
+        return '';
+    }
+
+    $text = '';
+    try {
+        $prefix = $tmp_dir . DIRECTORY_SEPARATOR . 'page';
+        // Scan only early pages to keep upload latency bounded.
+        // Most tabulation/student-info sheets keep ID columns on page 1–2.
+        $render_cmd = 'pdftoppm -f 1 -l ' . SPU_OCR_MAX_PAGES . ' -r ' . SPU_OCR_DPI . ' -gray -png '
+            . escapeshellarg($filepath) . ' ' . escapeshellarg($prefix) . ' 2>/dev/null';
+        $render_out = [];
+        $render_rc  = 0;
+        exec($render_cmd, $render_out, $render_rc);
+        if ($render_rc !== 0) {
+            error_log('Smart upload OCR: pdftoppm failed with exit code ' . $render_rc);
+        }
+
+        $images = glob($tmp_dir . DIRECTORY_SEPARATOR . 'page-*.png') ?: [];
+        sort($images, SORT_NATURAL);
+
+        foreach ($images as $img) {
+            $ocr_cmd = 'tesseract '
+                . escapeshellarg($img)
+                . ' stdout -l eng --psm 6 2>/dev/null';
+            $ocr_out = [];
+            $ocr_rc  = 0;
+            exec($ocr_cmd, $ocr_out, $ocr_rc);
+            if ($ocr_rc !== 0) {
+                error_log('Smart upload OCR: tesseract failed with exit code ' . $ocr_rc);
+                continue;
+            }
+            $out_text = trim(implode("\n", $ocr_out));
+            if ($out_text !== '') {
+                $text .= $out_text . "\n";
+            }
+        }
+    } finally {
+        foreach (glob($tmp_dir . DIRECTORY_SEPARATOR . '*') ?: [] as $f) {
+            if (is_file($f) && !unlink($f)) {
+                error_log('Smart upload OCR: failed to remove temp file ' . $f);
+            }
+        }
+        if (!rmdir($tmp_dir)) {
+            error_log('Smart upload OCR: failed to remove temp directory ' . $tmp_dir);
+        }
+    }
+
+    return trim($text);
 }
 
 /**
@@ -436,6 +516,8 @@ const SPU_MAX_FILES          = 30;
 const SPU_MAX_PER_FILE       = 20 * 1024 * 1024; // 20 MB
 const SPU_MAX_CANDIDATE_STORE   = 20; // stored in DB per PDF
 const SPU_MAX_CANDIDATE_DISPLAY = 10; // shown in UI per PDF
+const SPU_OCR_MAX_PAGES      = 5;
+const SPU_OCR_DPI            = 220;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
@@ -548,6 +630,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $extracted_text = spu_extract_pdf_text($file['tmp_name']);
                 $candidates     = spu_find_id_candidates($extracted_text);
                 $matched_rows   = spu_match_students($candidates);
+
+                // If no student is matched, try OCR fallback for scanned PDFs.
+                if (empty($matched_rows)) {
+                    $ocr_text = spu_extract_pdf_text_ocr($file['tmp_name']);
+                    if ($ocr_text !== '') {
+                        $ocr_candidates = spu_find_id_candidates($ocr_text);
+                        $merged_candidates = array_values(array_unique(array_merge($candidates, $ocr_candidates)));
+                        $combined_text = trim($extracted_text . "\n" . $ocr_text);
+                        // Keep longer numeric sequences first (more specific IDs).
+                        usort($merged_candidates, fn($a, $b) => strlen($b) - strlen($a));
+                        $ocr_matched_rows = spu_match_students($merged_candidates);
+                        if (!empty($ocr_matched_rows)) {
+                            $extracted_text = $combined_text;
+                            $candidates     = $merged_candidates;
+                            $matched_rows   = $ocr_matched_rows;
+                        }
+                    }
+                }
 
                 // Determine unique student matches.
                 $matched_students = array_values($matched_rows);
