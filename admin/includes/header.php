@@ -689,6 +689,20 @@ $user       = auth_user();
                     <i class="fas fa-user-graduate"></i> Students
                 </a>
             </li>
+            <?php if (is_super_admin() || can_access('students', 'can_create')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/students/smart-upload.php"
+                   class="<?= strpos($current_path, '/students/smart-upload') !== false ? 'active' : '' ?>" style="padding-left:2rem;">
+                    <i class="fas fa-magic"></i> Smart PDF Upload
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/students/bulk-upload.php"
+                   class="<?= strpos($current_path, '/students/bulk-upload') !== false ? 'active' : '' ?>" style="padding-left:2rem;">
+                    <i class="fas fa-file-archive"></i> Bulk Upload
+                </a>
+            </li>
+            <?php endif; ?>
             <?php endif; ?>
             <?php if (is_super_admin() || can_access('course-curriculum')): ?>
             <li class="nav-item">
