@@ -100,46 +100,69 @@ function spu_extract_pdf_text(string $filepath): string
 function spu_extract_pdf_text_ocr(string $filepath): string
 {
     if (!function_exists('shell_exec')
+        || !function_exists('exec')
         || !spu_command_exists('pdftoppm')
         || !spu_command_exists('tesseract')
     ) {
         return '';
     }
 
-    $tmp_dir = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR)
-        . DIRECTORY_SEPARATOR . 'spu-ocr-' . bin2hex(random_bytes(8));
-    if (!@mkdir($tmp_dir, 0700, true)) {
+    $tmp_dir = '';
+    for ($attempt = 0; $attempt < 3; $attempt++) {
+        $candidate = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR)
+            . DIRECTORY_SEPARATOR . 'spu-ocr-' . bin2hex(random_bytes(16));
+        if (mkdir($candidate, 0700)) {
+            $tmp_dir = $candidate;
+            break;
+        }
+    }
+    if ($tmp_dir === '') {
+        error_log('Smart upload OCR: failed to create temp directory after retries.');
         return '';
     }
 
     $text = '';
     try {
         $prefix = $tmp_dir . DIRECTORY_SEPARATOR . 'page';
-        // Limit OCR cost by scanning up to the first 5 pages.
-        shell_exec(
-            'pdftoppm -f 1 -l 5 -r 220 -gray -png '
-            . escapeshellarg($filepath) . ' ' . escapeshellarg($prefix)
-            . ' 2>/dev/null'
-        );
+        // Scan only early pages to keep upload latency bounded.
+        // Most tabulation/student-info sheets keep ID columns on page 1–2.
+        $render_cmd = 'pdftoppm -f 1 -l ' . SPU_OCR_MAX_PAGES . ' -r ' . SPU_OCR_DPI . ' -gray -png '
+            . escapeshellarg($filepath) . ' ' . escapeshellarg($prefix) . ' 2>/dev/null';
+        $render_out = [];
+        $render_rc  = 0;
+        exec($render_cmd, $render_out, $render_rc);
+        if ($render_rc !== 0) {
+            error_log('Smart upload OCR: pdftoppm failed with exit code ' . $render_rc);
+        }
 
         $images = glob($tmp_dir . DIRECTORY_SEPARATOR . 'page-*.png') ?: [];
         sort($images, SORT_NATURAL);
 
         foreach ($images as $img) {
-            $out = shell_exec(
-                'tesseract '
+            $ocr_cmd = 'tesseract '
                 . escapeshellarg($img)
-                . ' stdout -l eng --psm 6 2>/dev/null'
-            );
-            if (is_string($out) && trim($out) !== '') {
-                $text .= $out . "\n";
+                . ' stdout -l eng --psm 6 2>/dev/null';
+            $ocr_out = [];
+            $ocr_rc  = 0;
+            exec($ocr_cmd, $ocr_out, $ocr_rc);
+            if ($ocr_rc !== 0) {
+                error_log('Smart upload OCR: tesseract failed with exit code ' . $ocr_rc);
+                continue;
+            }
+            $out_text = trim(implode("\n", $ocr_out));
+            if ($out_text !== '') {
+                $text .= $out_text . "\n";
             }
         }
     } finally {
         foreach (glob($tmp_dir . DIRECTORY_SEPARATOR . '*') ?: [] as $f) {
-            @unlink($f);
+            if (is_file($f) && !unlink($f)) {
+                error_log('Smart upload OCR: failed to remove temp file ' . $f);
+            }
         }
-        @rmdir($tmp_dir);
+        if (!rmdir($tmp_dir)) {
+            error_log('Smart upload OCR: failed to remove temp directory ' . $tmp_dir);
+        }
     }
 
     return trim($text);
@@ -493,6 +516,8 @@ const SPU_MAX_FILES          = 30;
 const SPU_MAX_PER_FILE       = 20 * 1024 * 1024; // 20 MB
 const SPU_MAX_CANDIDATE_STORE   = 20; // stored in DB per PDF
 const SPU_MAX_CANDIDATE_DISPLAY = 10; // shown in UI per PDF
+const SPU_OCR_MAX_PAGES      = 5;
+const SPU_OCR_DPI            = 220;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
@@ -610,12 +635,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (empty($matched_rows)) {
                     $ocr_text = spu_extract_pdf_text_ocr($file['tmp_name']);
                     if ($ocr_text !== '') {
+                        $ocr_candidates = spu_find_id_candidates($ocr_text);
+                        $merged_candidates = array_values(array_unique(array_merge($candidates, $ocr_candidates)));
                         $combined_text = trim($extracted_text . "\n" . $ocr_text);
-                        $ocr_candidates = spu_find_id_candidates($combined_text);
-                        $ocr_matched_rows = spu_match_students($ocr_candidates);
+                        // Keep longer numeric sequences first (more specific IDs).
+                        usort($merged_candidates, fn($a, $b) => strlen($b) - strlen($a));
+                        $ocr_matched_rows = spu_match_students($merged_candidates);
                         if (!empty($ocr_matched_rows)) {
                             $extracted_text = $combined_text;
-                            $candidates     = $ocr_candidates;
+                            $candidates     = $merged_candidates;
                             $matched_rows   = $ocr_matched_rows;
                         }
                     }
