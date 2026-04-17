@@ -65,6 +65,14 @@ if (!is_dir($pending_dir)) {
  *   student IDs that appear only on page 2 or 3 (e.g. "For Office Use Only"
  *   or "Regis./ID No") are included in the output.
  *
+ *   Two modes are tried:
+ *     (a) pdftotext -layout – preserves column layout; can misplace digits in
+ *         very narrow table cells of Result Tabulation sheets.
+ *     (b) pdftotext (plain) – raw reading order; more reliable for extracting
+ *         unbroken digit sequences from table cells.
+ *   Both outputs are concatenated so that digit sequences missed by one mode
+ *   can still be found by spu_find_id_candidates.
+ *
  *   Install: sudo apt-get install poppler-utils   (or equivalent)
  *   If pdftotext is not found the PDF lands in the manual-assignment queue.
  *
@@ -80,10 +88,24 @@ function spu_extract_pdf_text(string $filepath): string
     }
 
     // Pass 2: pdftotext (handles searchable scanned PDFs with an OCR layer).
+    // Run both -layout and plain modes; combine both outputs so that IDs in
+    // narrow table columns (e.g. Result Tabulation "ID No." column) are still
+    // found even when -layout inserts extra spaces inside digit sequences.
     if (function_exists('shell_exec') && spu_command_exists('pdftotext')) {
-        $out = shell_exec('pdftotext -layout ' . escapeshellarg($filepath) . ' - 2>/dev/null');
-        if (is_string($out) && trim($out) !== '') {
-            return $out;
+        $combined = '';
+
+        $layout_out = shell_exec('pdftotext -layout ' . escapeshellarg($filepath) . ' - 2>/dev/null');
+        if (is_string($layout_out) && trim($layout_out) !== '') {
+            $combined .= $layout_out;
+        }
+
+        $plain_out = shell_exec('pdftotext ' . escapeshellarg($filepath) . ' - 2>/dev/null');
+        if (is_string($plain_out) && trim($plain_out) !== '') {
+            $combined .= "\n" . $plain_out;
+        }
+
+        if (trim($combined) !== '') {
+            return $combined;
         }
     }
 
@@ -94,10 +116,14 @@ function spu_extract_pdf_text(string $filepath): string
  * Pass 3 fallback: OCR image-based PDFs (no text layer) using
  * pdftoppm + tesseract when both commands are available.
  *
- * @param string $filepath Absolute path to the PDF file.
- * @return string OCR text from up to first 5 pages; empty string on failure.
+ * @param string $filepath  Absolute path to the PDF file.
+ * @param int    $max_pages Maximum number of pages to OCR.
+ *                          Pass 0 to process every page in the document
+ *                          (used for Result Tabulation mode where student IDs
+ *                          may appear on any page).
+ * @return string OCR text from processed pages; empty string on failure.
  */
-function spu_extract_pdf_text_ocr(string $filepath): string
+function spu_extract_pdf_text_ocr(string $filepath, int $max_pages = SPU_OCR_MAX_PAGES): string
 {
     if (!function_exists('shell_exec')
         || !function_exists('exec')
@@ -124,9 +150,10 @@ function spu_extract_pdf_text_ocr(string $filepath): string
     $text = '';
     try {
         $prefix = $tmp_dir . DIRECTORY_SEPARATOR . 'page';
-        // Scan only early pages to keep upload latency bounded.
-        // Most tabulation/student-info sheets keep ID columns on page 1–2.
-        $render_cmd = 'pdftoppm -f 1 -l ' . SPU_OCR_MAX_PAGES . ' -r ' . SPU_OCR_DPI . ' -gray -png '
+        // When $max_pages is 0 (tabulation mode), process the entire document
+        // so that student IDs on every page are captured.
+        $page_limit_flag = $max_pages > 0 ? '-l ' . $max_pages . ' ' : '';
+        $render_cmd = 'pdftoppm -f 1 ' . $page_limit_flag . '-r ' . SPU_OCR_DPI . ' -gray -png '
             . escapeshellarg($filepath) . ' ' . escapeshellarg($prefix) . ' 2>/dev/null';
         $render_out = [];
         $render_rc  = 0;
@@ -139,9 +166,12 @@ function spu_extract_pdf_text_ocr(string $filepath): string
         sort($images, SORT_NATURAL);
 
         foreach ($images as $img) {
+            // --psm 3: fully automatic page segmentation without OSD.
+            // This handles multi-column table layouts (e.g. Result Tabulation
+            // sheets) better than --psm 6 which assumes a single text block.
             $ocr_cmd = 'tesseract '
                 . escapeshellarg($img)
-                . ' stdout -l eng --psm 6 2>/dev/null';
+                . ' stdout -l eng --psm 3 2>/dev/null';
             $ocr_out = [];
             $ocr_rc  = 0;
             exec($ocr_cmd, $ocr_out, $ocr_rc);
@@ -397,13 +427,17 @@ function spu_find_id_candidates(string $text): array
         }
 
         // OCR-normalised sequences: sequences of digits plus commonly confused
-        // letters are normalised (O→0, I→1, l→1) and added as extra candidates.
-        if (preg_match_all('/\b([0-9OoIl]{11,12})\b/', $src, $m)) {
+        // letters are normalised and added as extra candidates.
+        //   O / o  →  0   (letter O / zero)
+        //   I / l  →  1   (letter I / lowercase L / one)
+        //   S      →  5   (letter S / five — common in printed tabulation OCR)
+        //   B      →  8   (letter B / eight — common in scanned digit confusion)
+        if (preg_match_all('/\b([0-9OoIlSB]{11,12})\b/', $src, $m)) {
             foreach ($m[1] as $raw) {
                 if (ctype_digit($raw)) {
                     continue; // already captured above
                 }
-                $norm = strtr($raw, ['O' => '0', 'o' => '0', 'I' => '1', 'l' => '1']);
+                $norm = strtr($raw, ['O' => '0', 'o' => '0', 'I' => '1', 'l' => '1', 'S' => '5', 'B' => '8']);
                 if (ctype_digit($norm)) {
                     $ids[] = $norm;
                 }
@@ -632,8 +666,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $matched_rows   = spu_match_students($candidates);
 
                 // If no student is matched, try OCR fallback for scanned PDFs.
+                // In Result Tabulation mode, process all pages (pass 0) so
+                // that student IDs on every page of the tabulation sheet are
+                // captured, not just the first SPU_OCR_MAX_PAGES pages.
                 if (empty($matched_rows)) {
-                    $ocr_text = spu_extract_pdf_text_ocr($file['tmp_name']);
+                    $ocr_max_pages = $assign_all_matches ? 0 : SPU_OCR_MAX_PAGES;
+                    $ocr_text = spu_extract_pdf_text_ocr($file['tmp_name'], $ocr_max_pages);
                     if ($ocr_text !== '') {
                         $ocr_candidates = spu_find_id_candidates($ocr_text);
                         $merged_candidates = array_values(array_unique(array_merge($candidates, $ocr_candidates)));
