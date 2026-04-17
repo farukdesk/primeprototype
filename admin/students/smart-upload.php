@@ -5,12 +5,14 @@
  * Accepts one or more PDF files (printed or handwritten).
  * For each file the script:
  *  1. Validates the file is a genuine PDF.
- *  2. Extracts text from the PDF using a two-pass approach (see
+ *  2. Extracts text from the PDF using a three-pass approach (see
  *     spu_extract_pdf_text):
  *       Pass 1 – pure-PHP parser (FlateDecode, BT/ET, hex strings).
  *       Pass 2 – pdftotext fallback for searchable scanned PDFs that have an
  *                OCR text layer; covers all pages including "For Office Use
  *                Only" / "Regis./ID No" sections on later pages.
+ *       Pass 3 – optional image OCR fallback (pdftoppm + tesseract) for
+ *                scanned/image-only PDFs with no embedded text layer.
  *  3. Scans the extracted text for digit sequences that match a student_id
  *     in the `students` table.
  *  4a. Exactly one match  → saves the file to student_files automatically.
@@ -20,8 +22,8 @@
  *      admin can assign it manually via pending-assign.php.
  *
  * Truly image-only PDFs (no text layer at all) still land in the pending
- * queue.  Install poppler-utils (pdftotext) on the server to extend coverage
- * to searchable scanned PDFs:  sudo apt-get install poppler-utils
+ * queue unless OCR tools are installed. Install poppler-utils + tesseract:
+ *   sudo apt-get install poppler-utils tesseract-ocr
  *
  * SQL prerequisite: run admin/students-smart-upload.sql once.
  */
@@ -86,6 +88,61 @@ function spu_extract_pdf_text(string $filepath): string
     }
 
     return '';
+}
+
+/**
+ * Pass 3 fallback: OCR image-based PDFs (no text layer) using
+ * pdftoppm + tesseract when both commands are available.
+ *
+ * @param string $filepath Absolute path to the PDF file.
+ * @return string OCR text from up to first 5 pages; empty string on failure.
+ */
+function spu_extract_pdf_text_ocr(string $filepath): string
+{
+    if (!function_exists('shell_exec')
+        || !spu_command_exists('pdftoppm')
+        || !spu_command_exists('tesseract')
+    ) {
+        return '';
+    }
+
+    $tmp_dir = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR)
+        . DIRECTORY_SEPARATOR . 'spu-ocr-' . bin2hex(random_bytes(8));
+    if (!@mkdir($tmp_dir, 0700, true)) {
+        return '';
+    }
+
+    $text = '';
+    try {
+        $prefix = $tmp_dir . DIRECTORY_SEPARATOR . 'page';
+        // Limit OCR cost by scanning up to the first 5 pages.
+        shell_exec(
+            'pdftoppm -f 1 -l 5 -r 220 -gray -png '
+            . escapeshellarg($filepath) . ' ' . escapeshellarg($prefix)
+            . ' 2>/dev/null'
+        );
+
+        $images = glob($tmp_dir . DIRECTORY_SEPARATOR . 'page-*.png') ?: [];
+        sort($images, SORT_NATURAL);
+
+        foreach ($images as $img) {
+            $out = shell_exec(
+                'tesseract '
+                . escapeshellarg($img)
+                . ' stdout -l eng --psm 6 2>/dev/null'
+            );
+            if (is_string($out) && trim($out) !== '') {
+                $text .= $out . "\n";
+            }
+        }
+    } finally {
+        foreach (glob($tmp_dir . DIRECTORY_SEPARATOR . '*') ?: [] as $f) {
+            @unlink($f);
+        }
+        @rmdir($tmp_dir);
+    }
+
+    return trim($text);
 }
 
 /**
@@ -548,6 +605,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $extracted_text = spu_extract_pdf_text($file['tmp_name']);
                 $candidates     = spu_find_id_candidates($extracted_text);
                 $matched_rows   = spu_match_students($candidates);
+
+                // If no student is matched, try OCR fallback for scanned PDFs.
+                if (empty($matched_rows)) {
+                    $ocr_text = spu_extract_pdf_text_ocr($file['tmp_name']);
+                    if ($ocr_text !== '') {
+                        $combined_text = trim($extracted_text . "\n" . $ocr_text);
+                        $ocr_candidates = spu_find_id_candidates($combined_text);
+                        $ocr_matched_rows = spu_match_students($ocr_candidates);
+                        if (!empty($ocr_matched_rows)) {
+                            $extracted_text = $combined_text;
+                            $candidates     = $ocr_candidates;
+                            $matched_rows   = $ocr_matched_rows;
+                        }
+                    }
+                }
 
                 // Determine unique student matches.
                 $matched_students = array_values($matched_rows);
