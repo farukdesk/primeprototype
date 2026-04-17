@@ -199,6 +199,10 @@ require_once __DIR__ . '/../includes/header.php';
                                     <i class="fas fa-print"></i>
                                 </a>
                                 <?php if (rm_is_staff()): ?>
+                                <a href="<?= APP_URL ?>/results/bulk-upload.php?exam_id=<?= $ex['id'] ?>"
+                                   class="btn btn-sm btn-outline-success" title="Smart Bulk Upload" style="border-radius:7px;">
+                                    <i class="fas fa-magic"></i>
+                                </a>
                                 <a href="<?= APP_URL ?>/results/edit.php?id=<?= $ex['id'] ?>"
                                    class="btn btn-sm btn-outline-primary" title="Edit" style="border-radius:7px;">
                                     <i class="fas fa-edit"></i>
