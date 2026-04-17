@@ -254,7 +254,7 @@ $user       = auth_user();
     <?php
     $current_path = $_SERVER['PHP_SELF'];
     $is_website_active  = strpos($current_path, '/cms/') !== false || strpos($current_path, '/homepage/') !== false || strpos($current_path, '/pages/') !== false || strpos($current_path, '/policy-procedure/') !== false;
-    $is_academic_active = strpos($current_path, '/departments/') !== false || strpos($current_path, '/faculty-profiles/') !== false || strpos($current_path, '/students/') !== false || strpos($current_path, '/course-curriculum/') !== false || strpos($current_path, '/clubs/') !== false || strpos($current_path, '/staff-profiles/') !== false;
+    $is_academic_active = strpos($current_path, '/departments/') !== false || strpos($current_path, '/faculty-profiles/') !== false || strpos($current_path, '/students/') !== false || strpos($current_path, '/course-curriculum/') !== false || strpos($current_path, '/clubs/') !== false || strpos($current_path, '/staff-profiles/') !== false || strpos($current_path, '/results/') !== false;
     $is_comms_active    = strpos($current_path, '/contact/') !== false || strpos($current_path, '/support-tickets/') !== false || strpos($current_path, '/knowledge-base/') !== false || strpos($current_path, '/broadcast/') !== false;
     $is_leads_active    = strpos($current_path, '/leads/') !== false;
     $is_admissions_active = strpos($current_path, '/admissions/') !== false;
@@ -656,7 +656,7 @@ $user       = auth_user();
     <?php endif; ?>
 
     <!-- ── Academic ── -->
-    <?php if (is_super_admin() || can_access('departments') || can_access('students') || can_access('course-curriculum') || can_access('clubs') || can_access('staff-departments')): ?>
+    <?php if (is_super_admin() || can_access('departments') || can_access('students') || can_access('course-curriculum') || can_access('clubs') || can_access('staff-departments') || can_access('results')): ?>
     <button class="nav-group-toggle <?= $is_academic_active ? '' : 'collapsed' ?>"
             data-bs-toggle="collapse" data-bs-target="#grp-academic"
             aria-expanded="<?= $is_academic_active ? 'true' : 'false' ?>">
@@ -695,6 +695,14 @@ $user       = auth_user();
                 <a href="<?= APP_URL ?>/course-curriculum/index.php"
                    class="<?= strpos($current_path, '/course-curriculum/') !== false ? 'active' : '' ?>">
                     <i class="fas fa-book-open"></i> Course Curriculum
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('results')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/results/index.php"
+                   class="<?= strpos($current_path, '/results/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-chart-bar"></i> Results
                 </a>
             </li>
             <?php endif; ?>
