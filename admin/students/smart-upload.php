@@ -417,7 +417,7 @@ function spu_next_tabulation_label(int $student_pk): string
     $stmt->execute([$student_pk]);
     $max_page = 0;
     foreach ($stmt->fetchAll() as $row) {
-        if (preg_match('/^Result Tabulation Page\s+(\d+)$/i', (string)$row['file_name'], $m)) {
+        if (preg_match('/^Result Tabulation Page\s+(\d+)$/', (string)$row['file_name'], $m)) {
             $max_page = max($max_page, (int)$m[1]);
         }
     }
@@ -617,7 +617,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         continue;
                     }
 
-                    $attached_count = 0;
                     foreach ($matched_students as $stu) {
                         $stu_pk  = (int)$stu['id'];
                         $sid_raw = $stu['student_id'];
@@ -635,23 +634,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $user['id'],
                         ]);
 
-                        $attached_count++;
-
                         $imported[] = [
                             'original_name' => $orig_name,
                             'student_id'    => $sid_raw,
                             'student_name'  => $stu['full_name'],
                             'stored_as'     => $canonical_orig,
-                        ];
-                    }
-
-                    if ($attached_count === 0) {
-                        if (is_file($dest_path)) {
-                            @unlink($dest_path);
-                        }
-                        $errors[] = [
-                            'name'   => $orig_name,
-                            'reason' => 'Could not attach this tabulation file to any matched student.',
                         ];
                     }
 
@@ -911,7 +898,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <li>The system reads each PDF and searches the content for a Student ID.</li>
                         <li>Files where a unique Student ID is found are <strong>automatically saved</strong> and renamed to <code>&lt;StudentID&gt;.pdf</code>.</li>
                         <li>For tabulation sheets containing <strong>multiple student IDs</strong>, enable <strong>Result Tabulation mode</strong> to attach one uploaded PDF to all matched students.</li>
-                        <li>In Result Tabulation mode, each student gets auto labels like <code>Result Tabulation Page 1</code>, <code>Page 2</code>, etc.</li>
+                        <li>In Result Tabulation mode, each student gets auto labels like <code>Result Tabulation Page 1</code>, <code>Result Tabulation Page 2</code>, etc.</li>
                         <li>Files where no ID is found (e.g. handwritten / scanned PDFs without OCR text) are placed in the <strong>pending queue</strong> for manual assignment.</li>
                     </ol>
                     <div class="mt-2">
@@ -931,7 +918,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <input type="text" class="form-control" id="file_label" name="file_label"
                                value="Student Document" required
                                placeholder="e.g. Admission Form, ID Copy, Exam Script">
-                        <div class="form-text">Applied to imported files in normal mode. In Result Tabulation mode, labels are auto-generated per student (Page 1, Page 2, ...).</div>
+                        <div class="form-text">Applied to imported files in normal mode. In Result Tabulation mode, labels are auto-generated per student (<code>Result Tabulation Page 1</code>, <code>Result Tabulation Page 2</code>, ...).</div>
                     </div>
 
                     <div class="mb-3">
