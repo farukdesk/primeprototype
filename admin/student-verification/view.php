@@ -147,7 +147,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $headers .= 'Reply-To: ' . $from_email . "\r\n";
         $headers .= 'X-Mailer: PHP/' . PHP_VERSION;
 
-        $sent = mail($to_email, $subject, $body, $headers, '-f' . $from_email);
+        $sent = mail($to_email, $subject, $body, $headers, '-f' . escapeshellarg($from_email));
 
         if ($sent) {
             db()->prepare('UPDATE student_verifications SET email_sent=1, email_sent_at=NOW(), verifier_email=? WHERE id=?')

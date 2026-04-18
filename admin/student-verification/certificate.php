@@ -147,7 +147,7 @@ $ref_no    = 'PU-VER-' . str_pad($id, 6, '0', STR_PAD_LEFT);
 <div class="cert-wrap">
     <!-- Header -->
     <div class="header">
-        <img src="<?= APP_URL ?>/../assets/img/logo/logo-black.png" alt="Prime University"
+        <img src="<?= defined('LOGO_URL') ? LOGO_URL : SITE_URL . '/assets/img/logo/logo-black.png' ?>" alt="Prime University"
              onerror="this.style.display='none'">
         <div class="header-text">
             <h1>Prime University Bangladesh</h1>

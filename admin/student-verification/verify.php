@@ -7,25 +7,21 @@ require_once __DIR__ . '/../change-log/helpers.php';
 $page_title = 'New Student Verification';
 $user       = auth_user();
 
-// ── Helper: upload verified PDF copy ─────────────────────────────────────────
-function sv_upload_pdf(array $file): string|false
+// ── Helper: match admission / tabulation files from a list of student files ───
+function sv_find_files(array $files): array
 {
-    if ($file['error'] !== UPLOAD_ERR_OK) return false;
-    if ($file['size'] > 20 * 1024 * 1024) return false;
-
-    $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-    if ($ext !== 'pdf') return false;
-
-    $finfo = new finfo(FILEINFO_MIME_TYPE);
-    $mime  = $finfo->file($file['tmp_name']);
-    if ($mime !== 'application/pdf') return false;
-
-    $dir = UPLOAD_DIR . '/student-verification';
-    if (!is_dir($dir)) mkdir($dir, 0755, true);
-
-    $stored = bin2hex(random_bytes(12)) . '.pdf';
-    if (!move_uploaded_file($file['tmp_name'], $dir . '/' . $stored)) return false;
-    return $stored;
+    $adm = null;
+    $tab = null;
+    foreach ($files as $f) {
+        $fn = strtolower($f['file_name'] ?? '');
+        if ($adm === null && str_contains($fn, 'admission')) {
+            $adm = $f;
+        }
+        if ($tab === null && (str_contains($fn, 'tabulation') || str_contains($fn, 'final result'))) {
+            $tab = $f;
+        }
+    }
+    return [$adm, $tab];
 }
 
 // ── Handle student search (AJAX or GET) ──────────────────────────────────────
@@ -112,15 +108,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             "SELECT id, file_name FROM student_files WHERE student_id = ? ORDER BY created_at DESC"
         );
         $f_stmt->execute([$s_id]);
-        foreach ($f_stmt->fetchAll() as $f) {
-            $fn = strtolower($f['file_name']);
-            if ($adm_file_id === null && (str_contains($fn, 'admission') || str_contains($fn, 'admission form'))) {
-                $adm_file_id = (int)$f['id'];
-            }
-            if ($tab_file_id === null && (str_contains($fn, 'tabulation') || str_contains($fn, 'final result'))) {
-                $tab_file_id = (int)$f['id'];
-            }
-        }
+        [$adm_file, $tab_file] = sv_find_files($f_stmt->fetchAll());
+        $adm_file_id = $adm_file ? (int)$adm_file['id'] : null;
+        $tab_file_id = $tab_file ? (int)$tab_file['id'] : null;
 
         $overall = ($cert_ok && $admission_ok && $tabulation_ok) ? 'Verified' : 'Failed';
 
@@ -413,18 +403,7 @@ require_once __DIR__ . '/../includes/header.php';
 // Helper to render student info card
 function sv_render_student_card(array $s, array $files = []): void
 {
-    // Find relevant files
-    $adm_file = null;
-    $tab_file = null;
-    foreach ($files as $f) {
-        $fn = strtolower($f['file_name']);
-        if ($adm_file === null && (str_contains($fn, 'admission'))) {
-            $adm_file = $f;
-        }
-        if ($tab_file === null && (str_contains($fn, 'tabulation') || str_contains($fn, 'final result'))) {
-            $tab_file = $f;
-        }
-    }
+    [$adm_file, $tab_file] = sv_find_files($files);
     ?>
     <div class="p-3 rounded-3 border" style="background:#f8f9ff;">
         <div class="d-flex align-items-center gap-3 flex-wrap">
@@ -444,7 +423,7 @@ function sv_render_student_card(array $s, array $files = []): void
         <hr class="my-2">
         <div class="d-flex gap-3 flex-wrap" style="font-size:.82rem;">
             <?php if ($adm_file): ?>
-            <a href="<?= APP_URL ?>/../admin/uploads/students/files/<?= h($adm_file['stored_name']) ?>"
+            <a href="<?= UPLOAD_URL ?>/students/files/<?= h($adm_file['stored_name']) ?>"
                target="_blank" class="text-primary text-decoration-none">
                 <i class="fas fa-file-alt me-1"></i><?= h($adm_file['file_name']) ?>
             </a>
@@ -452,7 +431,7 @@ function sv_render_student_card(array $s, array $files = []): void
             <span class="text-muted"><i class="fas fa-file-alt me-1"></i>Admission Form: <em>not uploaded</em></span>
             <?php endif; ?>
             <?php if ($tab_file): ?>
-            <a href="<?= APP_URL ?>/../admin/uploads/students/files/<?= h($tab_file['stored_name']) ?>"
+            <a href="<?= UPLOAD_URL ?>/students/files/<?= h($tab_file['stored_name']) ?>"
                target="_blank" class="text-danger text-decoration-none ms-3">
                 <i class="fas fa-file-pdf me-1"></i><?= h($tab_file['file_name']) ?>
             </a>
@@ -550,14 +529,7 @@ function sv_render_student_card(array $s, array $files = []): void
     (function() {
         const admArea = document.getElementById('admission_file_area');
         const tabArea = document.getElementById('tabulation_file_area');
-        <?php
-        $adm_f = null; $tab_f = null;
-        foreach ($pre_files as $f) {
-            $fn = strtolower($f['file_name']);
-            if (!$adm_f && str_contains($fn, 'admission')) $adm_f = $f;
-            if (!$tab_f && (str_contains($fn, 'tabulation') || str_contains($fn, 'final result'))) $tab_f = $f;
-        }
-        ?>
+        <?php [$adm_f, $tab_f] = sv_find_files($pre_files); ?>
         <?php if ($adm_f): ?>
         admArea.innerHTML = `<div class="alert alert-info py-2 px-3 mb-0" style="font-size:.85rem;">
             <i class="fas fa-file-alt me-1"></i>
@@ -605,13 +577,7 @@ if (isset($_GET['ajax_student_card'])) {
         sv_render_student_card($sc, $sf);
         $card_html = ob_get_clean();
 
-        // Also build JS to populate file areas
-        $adm_f = null; $tab_f = null;
-        foreach ($sf as $f) {
-            $fn = strtolower($f['file_name']);
-            if (!$adm_f && str_contains($fn, 'admission')) $adm_f = $f;
-            if (!$tab_f && (str_contains($fn, 'tabulation') || str_contains($fn, 'final result'))) $tab_f = $f;
-        }
+        [$adm_f, $tab_f] = sv_find_files($sf);
 
         $adm_html = $adm_f
             ? '<div class="alert alert-info py-2 px-3 mb-0" style="font-size:.85rem;"><i class="fas fa-file-alt me-1"></i>Admission Form on file: <a href="' . UPLOAD_URL . '/students/files/' . h($adm_f['stored_name']) . '" target="_blank" class="alert-link">' . h($adm_f['file_name']) . ' (' . h($adm_f['original_name']) . ')</a> <span class="text-muted ms-2">&mdash; open in new tab to review</span></div>'
