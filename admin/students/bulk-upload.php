@@ -125,12 +125,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (strtolower(pathinfo($entry, PATHINFO_EXTENSION)) !== 'pdf') continue;
 
                     // ── Parse path: ignore leading batch/dept folders ──────────
-                    // We only care about the filename (which IS the student ID).
-                    // Student IDs are matched case-insensitively; the filename
-                    // may be upper- or lower-case and will still be matched.
-                    $original_name = basename($entry);   // e.g. "25010101.pdf"
-                    $sid_raw       = pathinfo($original_name, PATHINFO_FILENAME); // "25010101"
-                    $sid_key       = strtolower(trim($sid_raw));
+                    // The filename (without extension) is one or more comma-separated
+                    // student IDs, e.g. "25010101,25010102,25010103.pdf".
+                    $original_name  = basename($entry);           // "25010101,25010102.pdf"
+                    $filename_base  = pathinfo($original_name, PATHINFO_FILENAME); // "25010101,25010102"
+
+                    // Split on commas; trim whitespace; discard empty tokens
+                    $sid_raws = array_values(array_filter(
+                        array_map('trim', explode(',', $filename_base))
+                    ));
+
+                    if (empty($sid_raws)) {
+                        $errors[] = ['path' => $entry, 'reason' => 'Could not derive any student ID from the filename.'];
+                        continue;
+                    }
 
                     // Parse batch and dept from path parts for description context
                     $parts     = explode('/', $entry);
@@ -143,51 +151,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $dept_str = $parts[0];
                     }
 
-                    // ── Match student; auto-create a stub if not found ────────
-                    if (!isset($student_map[$sid_key])) {
-                        if (!$fallback_dept) {
-                            $errors[] = ['path' => $entry, 'reason' => 'No department exists in the database; cannot auto-create student.'];
-                            continue;
-                        }
-                        try {
-                            $create_student_stmt->execute([
-                                $sid_raw,
-                                (int)$fallback_dept,
-                                $sid_raw,   // full_name = student_id as placeholder
-                                $user['id'],
-                            ]);
-                            $new_stu_pk = (int)db()->lastInsertId();
-                        } catch (PDOException $e) {
-                            $errors[] = ['path' => $entry, 'reason' => 'Failed to auto-create student: ' . $e->getMessage()];
-                            continue;
-                        }
-                        $student_map[$sid_key] = [
-                            'id'         => $new_stu_pk,
-                            'student_id' => $sid_raw,
-                            'full_name'  => $sid_raw,
-                            'dept_id'    => (int)$fallback_dept,
-                        ];
-                        $auto_created[] = [
-                            'path'       => $entry,
-                            'student_id' => $sid_raw,
-                        ];
-                    }
-
-                    $student = $student_map[$sid_key];
-                    $stu_pk  = (int)$student['id'];
-
-                    // ── Duplicate check ────────────────────────────────────────
-                    $dup_key = $stu_pk . ':' . $original_name;
-                    if (isset($existing_files[$dup_key])) {
-                        $skipped_dup[] = [
-                            'path'       => $entry,
-                            'student_id' => $sid_raw,
-                            'name'       => $student['full_name'],
-                        ];
-                        continue;
-                    }
-
-                    // ── Extract to a temp file ────────────────────────────────
+                    // ── Read & validate the PDF exactly once per ZIP entry ─────
                     $raw_content = $zip->getFromIndex($i);
                     if ($raw_content === false) {
                         $errors[] = ['path' => $entry, 'reason' => 'Could not read file from ZIP.'];
@@ -200,8 +164,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         continue;
                     }
 
-                    $file_size   = strlen($raw_content);
+                    $file_size = strlen($raw_content);
 
+                    // ── Write physical file to disk exactly once ───────────────
+                    // The same stored file is referenced by every student ID in
+                    // the comma-separated filename, saving disk space.
                     $stored_name = bin2hex(random_bytes(12)) . '.pdf';
                     $dest_path   = $dest_dir . '/' . $stored_name;
 
@@ -214,26 +181,85 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $desc_parts = array_filter([$description, $batch_str, $dept_str]);
                     $auto_desc  = implode(' – ', $desc_parts) ?: null;
 
-                    // ── Insert DB row ──────────────────────────────────────────
-                    $insert_stmt->execute([
-                        $stu_pk,
-                        $file_label,
-                        $auto_desc,
-                        $stored_name,
-                        $original_name,
-                        'application/pdf',
-                        $file_size,
-                        $user['id'],
-                    ]);
+                    // ── Process each student ID listed in the filename ─────────
+                    $any_inserted = false;
+                    foreach ($sid_raws as $sid_raw) {
+                        $sid_key = strtolower($sid_raw);
 
-                    // Mark so we won't import duplicate within the same ZIP
-                    $existing_files[$dup_key] = true;
+                        // Match student; auto-create a stub if not found
+                        if (!isset($student_map[$sid_key])) {
+                            if (!$fallback_dept) {
+                                $errors[] = ['path' => $entry, 'reason' => "Student ID \"{$sid_raw}\": no department exists in the database; cannot auto-create student."];
+                                continue;
+                            }
+                            try {
+                                $create_student_stmt->execute([
+                                    $sid_raw,
+                                    (int)$fallback_dept,
+                                    $sid_raw,   // full_name = student_id as placeholder
+                                    $user['id'],
+                                ]);
+                                $new_stu_pk = (int)db()->lastInsertId();
+                            } catch (PDOException $e) {
+                                $errors[] = ['path' => $entry, 'reason' => "Student ID \"{$sid_raw}\": failed to auto-create student: " . $e->getMessage()];
+                                continue;
+                            }
+                            $student_map[$sid_key] = [
+                                'id'         => $new_stu_pk,
+                                'student_id' => $sid_raw,
+                                'full_name'  => $sid_raw,
+                                'dept_id'    => (int)$fallback_dept,
+                            ];
+                            $auto_created[] = [
+                                'path'       => $entry,
+                                'student_id' => $sid_raw,
+                            ];
+                        }
 
-                    $imported[] = [
-                        'path'       => $entry,
-                        'student_id' => $sid_raw,
-                        'name'       => $student['full_name'],
-                    ];
+                        $student = $student_map[$sid_key];
+                        $stu_pk  = (int)$student['id'];
+
+                        // Duplicate check (per-student)
+                        $dup_key = $stu_pk . ':' . $original_name;
+                        if (isset($existing_files[$dup_key])) {
+                            $skipped_dup[] = [
+                                'path'       => $entry,
+                                'student_id' => $sid_raw,
+                                'name'       => $student['full_name'],
+                            ];
+                            continue;
+                        }
+
+                        // Insert DB row — all student IDs point to the same stored file
+                        $insert_stmt->execute([
+                            $stu_pk,
+                            $file_label,
+                            $auto_desc,
+                            $stored_name,
+                            $original_name,
+                            'application/pdf',
+                            $file_size,
+                            $user['id'],
+                        ]);
+
+                        // Mark so we won't import duplicate within the same ZIP
+                        $existing_files[$dup_key] = true;
+                        $any_inserted = true;
+
+                        $imported[] = [
+                            'path'       => $entry,
+                            'student_id' => $sid_raw,
+                            'name'       => $student['full_name'],
+                        ];
+                    }
+
+                    // If every student ID was a duplicate and the file was never
+                    // used, remove the written file to avoid orphaned files.
+                    if (!$any_inserted && is_file($dest_path)) {
+                        if (!unlink($dest_path)) {
+                            error_log("bulk-upload: could not delete unused file {$dest_path}");
+                        }
+                    }
                 }
 
                 $zip->close();
@@ -430,12 +456,13 @@ require_once __DIR__ . '/../includes/header.php';
 1st Batch/
 ├── BBA/
 │   ├── 25010101.pdf
-│   └── 25010102.pdf
+│   ├── 25010102.pdf
+│   └── 25010101,25010102,25010103.pdf   ← shared file
 ├── CSE/
 │   └── 25020101.pdf
 ├── MBA/
 └── MCA/</pre>
-                    <p class="mb-0 mt-2 small">Each PDF's <strong>filename</strong> (without <code>.pdf</code>) must match a <strong>Student ID</strong> in the database. Matching is <strong>case-insensitive</strong>. If no matching student is found, a <strong>stub student record</strong> is automatically created: Student ID and Name are set to the filename, Department is set to the first available department, and Semester is set to "Unknown" — please fill in the remaining details afterwards. If the same file is uploaded again it will be <strong>skipped</strong> to avoid duplicates.</p>
+                    <p class="mb-0 mt-2 small">Each PDF's <strong>filename</strong> (without <code>.pdf</code>) must be one or more <strong>comma-separated Student IDs</strong>, e.g. <code>25010101,25010102.pdf</code>. The <strong>same file</strong> will appear in every listed student's file list. Matching is <strong>case-insensitive</strong>. If no matching student is found a <strong>stub student record</strong> is automatically created (Student ID and Name set to the filename, Department set to the first available department, Semester set to "Unknown") — please fill in the remaining details afterwards. If the same file is uploaded again for the same student it will be <strong>skipped</strong> to avoid duplicates.</p>
                 </div>
 
                 <form method="post" enctype="multipart/form-data" id="bulk-upload-form">
@@ -466,7 +493,7 @@ require_once __DIR__ . '/../includes/header.php';
                         </label>
                         <input type="file" class="form-control" id="zip_file" name="zip_file"
                                accept=".zip,application/zip" required>
-                        <div class="form-text">Maximum upload size is limited by your server's <code>upload_max_filesize</code> setting.</div>
+                        <div class="form-text">Maximum upload size: 2048 MB (configured for large ZIP files).</div>
                     </div>
 
                     <div class="d-flex gap-2">
