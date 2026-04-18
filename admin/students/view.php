@@ -118,7 +118,13 @@ require_once __DIR__ . '/../includes/header.php';
             <li class="breadcrumb-item active"><?= h($student['full_name']) ?></li>
         </ol>
     </nav>
-    <div class="d-flex gap-2">
+    <div class="d-flex gap-2 flex-wrap">
+        <?php if (is_super_admin() || can_access('student-verification', 'can_create')): ?>
+        <a href="<?= APP_URL ?>/student-verification/verify.php?student_id=<?= $id ?>"
+           class="btn btn-outline-success btn-sm" style="border-radius:8px;">
+            <i class="fas fa-shield-alt me-1"></i> Verify
+        </a>
+        <?php endif; ?>
         <?php if ($is_staff): ?>
         <a href="<?= APP_URL ?>/students/edit.php?id=<?= $id ?>"
            class="btn btn-outline-primary btn-sm" style="border-radius:8px;">
