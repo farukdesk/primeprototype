@@ -2,14 +2,17 @@
 /**
  * Student Files – Bulk ZIP Upload
  *
- * Expects a ZIP whose internal structure is:
- *   <BatchName>/<DeptName>/<student_id>.pdf
+ * Accepts a ZIP of PDFs plus an optional CSV mapping file.
  *
- * For every PDF found the script:
- *  1. Derives the student_id from the filename (minus extension).
- *  2. Looks up the matching row in `students`.
- *  3. Copies the extracted PDF into admin/uploads/students/files/.
- *  4. Inserts a row into `student_files`.
+ * CSV mapping (columns: New_Filename, All_IDs_In_File):
+ *   New_Filename       – exact PDF filename as it appears inside the ZIP
+ *                        (e.g. "report.pdf" or "Batch1/CSE/report.pdf")
+ *   All_IDs_In_File    – comma-separated student IDs that should receive the file
+ *
+ * When a CSV is supplied the script resolves student IDs from the CSV instead
+ * of from the PDF filename.  If no CSV is supplied the PDF filename itself
+ * (without extension) is treated as one or more comma-separated student IDs –
+ * the previous behaviour is fully preserved.
  */
 
 require_once __DIR__ . '/../includes/auth.php';
@@ -35,6 +38,7 @@ $results        = null;  // null = not yet run
 $imported       = [];
 $auto_created   = [];   // PDFs whose student_id was not in DB → new stub student created
 $skipped_dup    = [];   // PDFs already attached to the student (same original_name)
+$skipped_no_map = [];   // PDFs present in ZIP but not found in the CSV mapping
 $errors         = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -64,10 +68,90 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($zip_ext !== 'zip' || !in_array($zip_mime, $valid_zip_mimes, true)) {
             flash_set('error', 'Only ZIP files are accepted.');
         } else {
-            $zip = new ZipArchive();
-            if ($zip->open($tmp_zip) !== true) {
-                flash_set('error', 'Could not open the ZIP file. It may be corrupt.');
-            } else {
+            // ── Optional CSV mapping file ──────────────────────────────────
+            // Build a map: lowercase(New_Filename) => [student_id, ...]
+            // If no CSV is uploaded the map is null and IDs come from filenames.
+            $csv_map = null;   // null = use filename mode
+            $csv_parse_error = null;
+
+            $csv_uploaded = !empty($_FILES['csv_map']['name'])
+                            && $_FILES['csv_map']['error'] === UPLOAD_ERR_OK;
+
+            if ($csv_uploaded) {
+                $csv_ext = strtolower(pathinfo($_FILES['csv_map']['name'], PATHINFO_EXTENSION));
+                if ($csv_ext !== 'csv') {
+                    $csv_parse_error = 'The mapping file must be a .csv file.';
+                } else {
+                    $csv_handle = fopen($_FILES['csv_map']['tmp_name'], 'r');
+                    if ($csv_handle === false) {
+                        $csv_parse_error = 'Could not open the CSV mapping file.';
+                    } else {
+                        // Read header row; find the required column indices
+                        $header = fgetcsv($csv_handle);
+                        if ($header === false || $header === null) {
+                            $csv_parse_error = 'The CSV file appears to be empty.';
+                        } else {
+                            // Normalise header names: trim + lower-case + collapse spaces
+                            $norm = function (string $s): string {
+                                return strtolower(trim(preg_replace('/\s+/', '_', $s)));
+                            };
+                            $header_norm = array_map($norm, $header);
+                            $col_file = array_search('new_filename',    $header_norm, true);
+                            $col_ids  = array_search('all_ids_in_file', $header_norm, true);
+
+                            if ($col_file === false || $col_ids === false) {
+                                $csv_parse_error = 'CSV must contain columns "New_Filename" and "All_IDs_In_File".';
+                            } else {
+                                $csv_map = [];
+                                $row_num = 1;
+                                while (($row = fgetcsv($csv_handle)) !== false) {
+                                    $row_num++;
+                                    $filename_val = trim($row[$col_file] ?? '');
+                                    $ids_val      = trim($row[$col_ids]  ?? '');
+                                    if ($filename_val === '') continue; // skip blank rows
+
+                                    $sid_list = array_values(array_filter(
+                                        array_map('trim', explode(',', $ids_val))
+                                    ));
+                                    if (empty($sid_list)) {
+                                        $errors[] = [
+                                            'path'   => "CSV row {$row_num}",
+                                            'reason' => "New_Filename \"{$filename_val}\" has no student IDs in All_IDs_In_File.",
+                                        ];
+                                        continue;
+                                    }
+                                    // Store under the normalised value as given in the CSV.
+                                    // Also store under just the bare filename so that a CSV entry
+                                    // like "Batch1/CSE/report.pdf" still matches "report.pdf"
+                                    // inside the ZIP (and vice-versa).
+                                    $csv_map[strtolower($filename_val)] = $sid_list;
+                                    $bare_key = strtolower(basename($filename_val));
+                                    if ($bare_key !== strtolower($filename_val)) {
+                                        // Only add the bare-filename alias if it is different; if two
+                                        // CSV rows share the same bare filename the last one wins.
+                                        $csv_map[$bare_key] = $sid_list;
+                                    }
+                                }
+                                fclose($csv_handle);
+                            }
+                        }
+                        if ($csv_parse_error !== null && isset($csv_handle) && is_resource($csv_handle)) {
+                            fclose($csv_handle);
+                        }
+                    }
+                }
+
+                if ($csv_parse_error !== null) {
+                    flash_set('error', 'CSV mapping error: ' . $csv_parse_error);
+                    $csv_map = null; // prevent processing
+                }
+            }
+
+            if ($csv_parse_error === null) {
+                $zip = new ZipArchive();
+                if ($zip->open($tmp_zip) !== true) {
+                    flash_set('error', 'Could not open the ZIP file. It may be corrupt.');
+                } else {
                 // ── Pre-load all student IDs to avoid N+1 queries ──────────────
                 $all_students_stmt = db()->query(
                     "SELECT id, student_id, full_name, dept_id FROM students"
@@ -124,13 +208,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (substr($entry, -1) === '/') continue;
                     if (strtolower(pathinfo($entry, PATHINFO_EXTENSION)) !== 'pdf') continue;
 
-                    // ── Parse path: ignore leading batch/dept folders ──────────
-                    // We only care about the filename (which IS the student ID).
-                    // Student IDs are matched case-insensitively; the filename
-                    // may be upper- or lower-case and will still be matched.
-                    $original_name = basename($entry);   // e.g. "25010101.pdf"
-                    $sid_raw       = pathinfo($original_name, PATHINFO_FILENAME); // "25010101"
-                    $sid_key       = strtolower(trim($sid_raw));
+                    $original_name = basename($entry);
+
+                    // ── Resolve student IDs ────────────────────────────────────
+                    // Priority 1: CSV mapping  (New_Filename → All_IDs_In_File)
+                    // Priority 2: Filename itself (comma-separated IDs)
+                    if ($csv_map !== null) {
+                        // Try bare filename first, then the full relative path
+                        $map_key_bare = strtolower($original_name);
+                        $map_key_full = strtolower($entry);
+                        if (isset($csv_map[$map_key_bare])) {
+                            $sid_raws = $csv_map[$map_key_bare];
+                        } elseif (isset($csv_map[$map_key_full])) {
+                            $sid_raws = $csv_map[$map_key_full];
+                        } else {
+                            $skipped_no_map[] = ['path' => $entry, 'reason' => 'File not found in CSV mapping. Skipped.'];
+                            continue;
+                        }
+                    } else {
+                        // Filename mode: parse comma-separated IDs from the filename
+                        $filename_base = pathinfo($original_name, PATHINFO_FILENAME);
+                        $sid_raws = array_values(array_filter(
+                            array_map('trim', explode(',', $filename_base))
+                        ));
+
+                        if (empty($sid_raws)) {
+                            $errors[] = ['path' => $entry, 'reason' => 'Could not derive any student ID from the filename. When no CSV mapping is provided the filename (without .pdf) must contain one or more comma-separated student IDs.'];
+                            continue;
+                        }
+                    }
 
                     // Parse batch and dept from path parts for description context
                     $parts     = explode('/', $entry);
@@ -143,51 +249,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $dept_str = $parts[0];
                     }
 
-                    // ── Match student; auto-create a stub if not found ────────
-                    if (!isset($student_map[$sid_key])) {
-                        if (!$fallback_dept) {
-                            $errors[] = ['path' => $entry, 'reason' => 'No department exists in the database; cannot auto-create student.'];
-                            continue;
-                        }
-                        try {
-                            $create_student_stmt->execute([
-                                $sid_raw,
-                                (int)$fallback_dept,
-                                $sid_raw,   // full_name = student_id as placeholder
-                                $user['id'],
-                            ]);
-                            $new_stu_pk = (int)db()->lastInsertId();
-                        } catch (PDOException $e) {
-                            $errors[] = ['path' => $entry, 'reason' => 'Failed to auto-create student: ' . $e->getMessage()];
-                            continue;
-                        }
-                        $student_map[$sid_key] = [
-                            'id'         => $new_stu_pk,
-                            'student_id' => $sid_raw,
-                            'full_name'  => $sid_raw,
-                            'dept_id'    => (int)$fallback_dept,
-                        ];
-                        $auto_created[] = [
-                            'path'       => $entry,
-                            'student_id' => $sid_raw,
-                        ];
-                    }
-
-                    $student = $student_map[$sid_key];
-                    $stu_pk  = (int)$student['id'];
-
-                    // ── Duplicate check ────────────────────────────────────────
-                    $dup_key = $stu_pk . ':' . $original_name;
-                    if (isset($existing_files[$dup_key])) {
-                        $skipped_dup[] = [
-                            'path'       => $entry,
-                            'student_id' => $sid_raw,
-                            'name'       => $student['full_name'],
-                        ];
-                        continue;
-                    }
-
-                    // ── Extract to a temp file ────────────────────────────────
+                    // ── Read & validate the PDF exactly once per ZIP entry ─────
                     $raw_content = $zip->getFromIndex($i);
                     if ($raw_content === false) {
                         $errors[] = ['path' => $entry, 'reason' => 'Could not read file from ZIP.'];
@@ -200,8 +262,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         continue;
                     }
 
-                    $file_size   = strlen($raw_content);
+                    $file_size = strlen($raw_content);
 
+                    // ── Write physical file to disk exactly once ───────────────
+                    // The same stored file is referenced by every student ID in
+                    // the comma-separated filename, saving disk space.
                     $stored_name = bin2hex(random_bytes(12)) . '.pdf';
                     $dest_path   = $dest_dir . '/' . $stored_name;
 
@@ -214,33 +279,93 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $desc_parts = array_filter([$description, $batch_str, $dept_str]);
                     $auto_desc  = implode(' – ', $desc_parts) ?: null;
 
-                    // ── Insert DB row ──────────────────────────────────────────
-                    $insert_stmt->execute([
-                        $stu_pk,
-                        $file_label,
-                        $auto_desc,
-                        $stored_name,
-                        $original_name,
-                        'application/pdf',
-                        $file_size,
-                        $user['id'],
-                    ]);
+                    // ── Process each student ID listed in the filename ─────────
+                    $any_inserted = false;
+                    foreach ($sid_raws as $sid_raw) {
+                        $sid_key = strtolower($sid_raw);
 
-                    // Mark so we won't import duplicate within the same ZIP
-                    $existing_files[$dup_key] = true;
+                        // Match student; auto-create a stub if not found
+                        if (!isset($student_map[$sid_key])) {
+                            if (!$fallback_dept) {
+                                $errors[] = ['path' => $entry, 'reason' => "Student ID \"{$sid_raw}\": no department exists in the database; cannot auto-create student."];
+                                continue;
+                            }
+                            try {
+                                $create_student_stmt->execute([
+                                    $sid_raw,
+                                    (int)$fallback_dept,
+                                    $sid_raw,   // full_name = student_id as placeholder
+                                    $user['id'],
+                                ]);
+                                $new_stu_pk = (int)db()->lastInsertId();
+                            } catch (PDOException $e) {
+                                $errors[] = ['path' => $entry, 'reason' => "Student ID \"{$sid_raw}\": failed to auto-create student: " . $e->getMessage()];
+                                continue;
+                            }
+                            $student_map[$sid_key] = [
+                                'id'         => $new_stu_pk,
+                                'student_id' => $sid_raw,
+                                'full_name'  => $sid_raw,
+                                'dept_id'    => (int)$fallback_dept,
+                            ];
+                            $auto_created[] = [
+                                'path'       => $entry,
+                                'student_id' => $sid_raw,
+                            ];
+                        }
 
-                    $imported[] = [
-                        'path'       => $entry,
-                        'student_id' => $sid_raw,
-                        'name'       => $student['full_name'],
-                    ];
+                        $student = $student_map[$sid_key];
+                        $stu_pk  = (int)$student['id'];
+
+                        // Duplicate check (per-student)
+                        $dup_key = $stu_pk . ':' . $original_name;
+                        if (isset($existing_files[$dup_key])) {
+                            $skipped_dup[] = [
+                                'path'       => $entry,
+                                'student_id' => $sid_raw,
+                                'name'       => $student['full_name'],
+                            ];
+                            continue;
+                        }
+
+                        // Insert DB row — all student IDs point to the same stored file
+                        $insert_stmt->execute([
+                            $stu_pk,
+                            $file_label,
+                            $auto_desc,
+                            $stored_name,
+                            $original_name,
+                            'application/pdf',
+                            $file_size,
+                            $user['id'],
+                        ]);
+
+                        // Mark so we won't import duplicate within the same ZIP
+                        $existing_files[$dup_key] = true;
+                        $any_inserted = true;
+
+                        $imported[] = [
+                            'path'       => $entry,
+                            'student_id' => $sid_raw,
+                            'name'       => $student['full_name'],
+                        ];
+                    }
+
+                    // If every student ID was a duplicate and the file was never
+                    // used, remove the written file to avoid orphaned files.
+                    if (!$any_inserted && is_file($dest_path)) {
+                        if (!unlink($dest_path)) {
+                            error_log("bulk-upload: could not delete unused file {$stored_name}");
+                        }
+                    }
                 }
 
                 $zip->close();
                 $results = true;
-            }
-        }
-    }
+                }   // end if ($zip->open)
+            }   // end if ($csv_parse_error === null)
+        }   // end if ZIP MIME ok
+    }   // end if ZIP uploaded
 }
 
 require_once __DIR__ . '/../includes/header.php';
@@ -289,6 +414,17 @@ require_once __DIR__ . '/../includes/header.php';
                     <div class="stat-lbl">Already Exists</div>
                 </div>
                 <i class="fas fa-copy" style="font-size:2rem;opacity:.4"></i>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card" style="background:linear-gradient(135deg,#6c757d,#495057);">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="stat-val"><?= count($skipped_no_map) ?></div>
+                    <div class="stat-lbl">No CSV Mapping</div>
+                </div>
+                <i class="fas fa-unlink" style="font-size:2rem;opacity:.4"></i>
             </div>
         </div>
     </div>
@@ -380,6 +516,30 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 <?php endif; ?>
 
+<?php if (!empty($skipped_no_map)): ?>
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-secondary text-white py-2">
+        <i class="fas fa-unlink me-1"></i> Not Found in CSV Mapping – Skipped (<?= count($skipped_no_map) ?>)
+        <small class="d-block mt-1" style="font-weight:400">These PDF files exist in the ZIP but have no matching row in the uploaded CSV mapping file. Add them to the CSV and re-upload to import them.</small>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+                <thead class="table-light"><tr><th>#</th><th>File in ZIP</th></tr></thead>
+                <tbody>
+                <?php foreach ($skipped_no_map as $k => $r): ?>
+                    <tr>
+                        <td class="text-muted"><?= $k + 1 ?></td>
+                        <td class="text-muted small"><?= h($r['path']) ?></td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
+
 <?php if (!empty($errors)): ?>
 <div class="card shadow-sm mb-4">
     <div class="card-header bg-danger text-white py-2">
@@ -425,17 +585,29 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="card-body">
 
                 <div class="alert alert-info" role="alert">
-                    <strong><i class="fas fa-info-circle me-1"></i> Expected ZIP structure:</strong>
-                    <pre class="mb-0 mt-2" style="font-size:.85rem;background:transparent;border:none;padding:0">
-1st Batch/
-├── BBA/
-│   ├── 25010101.pdf
-│   └── 25010102.pdf
-├── CSE/
-│   └── 25020101.pdf
-├── MBA/
-└── MCA/</pre>
-                    <p class="mb-0 mt-2 small">Each PDF's <strong>filename</strong> (without <code>.pdf</code>) must match a <strong>Student ID</strong> in the database. Matching is <strong>case-insensitive</strong>. If no matching student is found, a <strong>stub student record</strong> is automatically created: Student ID and Name are set to the filename, Department is set to the first available department, and Semester is set to "Unknown" — please fill in the remaining details afterwards. If the same file is uploaded again it will be <strong>skipped</strong> to avoid duplicates.</p>
+                    <strong><i class="fas fa-info-circle me-1"></i> Two ways to map PDFs to students:</strong>
+
+                    <div class="mt-2">
+                        <strong>Option A – CSV Mapping file <span class="badge bg-primary" style="font-size:.75rem;">Recommended</span></strong><br>
+                        <span class="small">Upload a <code>.csv</code> file alongside the ZIP. The CSV must contain two columns:</span>
+                        <ul class="mb-1 mt-1 small">
+                            <li><code>New_Filename</code> – the PDF filename exactly as it appears inside the ZIP (e.g. <code>report.pdf</code> or <code>Batch1/CSE/report.pdf</code>)</li>
+                            <li><code>All_IDs_In_File</code> – comma-separated student IDs that should receive the file, e.g. <code>25010101,25010102,25010103</code></li>
+                        </ul>
+                        <span class="small text-muted">When a CSV is provided the PDF filename can be anything — only the CSV mapping is used to resolve student IDs.</span>
+                    </div>
+
+                    <div class="mt-2">
+                        <strong>Option B – Filename-based (no CSV)</strong><br>
+                        <span class="small">Name each PDF after the student ID(s), e.g. <code>25010101.pdf</code> or <code>25010101,25010102.pdf</code> for a shared file. Sub-folder names (batch, department) are ignored.</span>
+                    </div>
+
+                    <pre class="mb-0 mt-2" style="font-size:.82rem;background:transparent;border:none;padding:0">Example CSV:
+New_Filename,All_IDs_In_File
+report.pdf,"25010101,25010102,25010103"
+transcript.pdf,25020101</pre>
+
+                    <p class="mb-0 mt-2 small">If no matching student is found a <strong>stub record</strong> is auto-created. If the same file is already linked to a student it will be <strong>skipped</strong>.</p>
                 </div>
 
                 <form method="post" enctype="multipart/form-data" id="bulk-upload-form">
@@ -460,13 +632,25 @@ require_once __DIR__ . '/../includes/header.php';
                         <div class="form-text">Appended to the auto-generated "Batch – Dept" description.</div>
                     </div>
 
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold" for="csv_map">
+                            CSV Mapping File <span class="text-muted fw-normal">(optional)</span>
+                        </label>
+                        <input type="file" class="form-control" id="csv_map" name="csv_map"
+                               accept=".csv,text/csv">
+                        <div class="form-text">
+                            Columns required: <code>New_Filename</code> and <code>All_IDs_In_File</code>.
+                            If not provided, student IDs are read from the PDF filenames directly.
+                        </div>
+                    </div>
+
                     <div class="mb-4">
                         <label class="form-label fw-semibold" for="zip_file">
                             ZIP File <span class="text-danger">*</span>
                         </label>
                         <input type="file" class="form-control" id="zip_file" name="zip_file"
                                accept=".zip,application/zip" required>
-                        <div class="form-text">Maximum upload size is limited by your server's <code>upload_max_filesize</code> setting.</div>
+                        <div class="form-text">Maximum upload size: 2048 MB (configured for large ZIP files).</div>
                     </div>
 
                     <div class="d-flex gap-2">
