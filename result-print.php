@@ -251,17 +251,18 @@ $photo_url = rp_photo_url($student['photo']);
         .doc-header {
             padding: 28px 40px 22px;
             display: flex;
-            align-items: flex-start;
-            gap: 22px;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            gap: 10px;
             border-bottom: 2px solid #e8edf5;
             position: relative;
         }
         .doc-header-logo {
             width: 80px;
             height: auto;
-            flex-shrink: 0;
         }
-        .doc-header-info { flex: 1; }
+        .doc-header-info { width: 100%; }
         .doc-header-info .uni-name {
             font-size: 17pt;
             font-weight: 800;
@@ -281,12 +282,11 @@ $photo_url = rp_photo_url($student['photo']);
         .doc-header-info .uni-contact {
             font-size: 8.5pt;
             color: #4b5563;
-            line-height: 1.8;
+            line-height: 2;
             margin: 0;
         }
-        .doc-header-info .uni-contact span {
-            display: inline-block;
-            margin-right: 14px;
+        .doc-header-info .uni-contact .contact-line {
+            display: block;
         }
         .doc-header-info .uni-contact i { margin-right: 4px; color: #2563eb; }
         .doc-header-watermark {
@@ -551,54 +551,27 @@ $photo_url = rp_photo_url($student['photo']);
         }
         .seal-date strong { display: block; color: #1a2e5a; font-size: 9pt; }
 
-        /* ── Signature area ───────────────────────────────────────────────── */
-        .sig-area {
-            display: flex;
-            justify-content: space-between;
-            gap: 20px;
-            margin-top: 28px;
-            padding-top: 20px;
-            border-top: 1.5px dashed #cbd5e1;
-        }
-        .sig-block { text-align: center; flex: 1; }
-        .sig-line {
-            border-bottom: 1.5px solid #9ca3af;
-            height: 44px;
-            margin-bottom: 8px;
-        }
-        .sig-label {
-            font-size: 8pt;
-            color: #6b7280;
-            line-height: 1.5;
-        }
-        .sig-label strong {
-            display: block;
-            color: #1a2e5a;
-            font-size: 9pt;
-            margin-bottom: 1px;
-        }
-
         /* ── Footer ───────────────────────────────────────────────────────── */
         .doc-footer {
             background: #f8fafc;
             border-top: 1.5px solid #e8edf5;
             padding: 14px 40px;
             display: flex;
+            flex-direction: column;
             align-items: center;
-            justify-content: space-between;
-            flex-wrap: wrap;
-            gap: 6px;
+            text-align: center;
+            gap: 4px;
         }
         .doc-footer .footer-note {
             font-size: 7.5pt;
             color: #9ca3af;
-            line-height: 1.6;
+            line-height: 1.8;
         }
         .doc-footer .footer-ref {
             font-size: 7.5pt;
             color: #9ca3af;
             font-family: 'Courier New', monospace;
-            text-align: right;
+            text-align: center;
         }
 
         /* ── Print overrides ─────────────────────────────────────────────── */
@@ -654,11 +627,11 @@ $photo_url = rp_photo_url($student['photo']);
              onerror="this.style.display='none'">
         <div class="doc-header-info">
             <div class="uni-name">Prime University</div>
-            <div class="uni-tagline">Bangladesh — Affiliated with UGC</div>
+            <div class="uni-tagline">Bangladesh — UGC Approved</div>
             <div class="uni-contact">
-                <span>&#128205; 114/116 Mazar Road, Mirpur-1, Dhaka 1216, Bangladesh</span><br>
-                <span>&#128222; PABX: +88-02-41002432 &nbsp;|&nbsp; +88-02-41002435 &nbsp;|&nbsp; 01969-955566</span><br>
-                <span>&#127760; www.primeuniversity.ac.bd</span>
+                <span class="contact-line">&#128205; 114/116 Mazar Road, Mirpur-1, Dhaka 1216, Bangladesh</span>
+                <span class="contact-line">&#128222; PABX: +88-02-41002432 &nbsp;|&nbsp; +88-02-41002435 &nbsp;|&nbsp; 01969-955566</span>
+                <span class="contact-line">&#127760; www.primeuniversity.ac.bd</span>
             </div>
         </div>
         <div class="doc-header-watermark">PU</div>
@@ -793,44 +766,18 @@ $photo_url = rp_photo_url($student['photo']);
             </div>
         </div>
 
-        <!-- Signature area -->
-        <div class="sig-area">
-            <div class="sig-block">
-                <div class="sig-line"></div>
-                <div class="sig-label">
-                    <strong>Controller of Examinations</strong>
-                    Prime University Bangladesh
-                </div>
-            </div>
-            <div class="sig-block">
-                <div class="sig-line"></div>
-                <div class="sig-label">
-                    <strong>Registrar</strong>
-                    Prime University Bangladesh
-                </div>
-            </div>
-            <div class="sig-block">
-                <div class="sig-line"></div>
-                <div class="sig-label">
-                    <strong>Vice-Chancellor</strong>
-                    Prime University Bangladesh
-                </div>
-            </div>
-        </div>
-
     </div>
     <!-- Body end -->
 
     <!-- Footer -->
     <div class="doc-footer">
         <div class="footer-note">
-            114/116 Mazar Road, Mirpur-1, Dhaka 1216, Bangladesh &nbsp;|&nbsp;
-            PABX: +88-02-41002432 / +88-02-41002435 &nbsp;|&nbsp; 01969-955566<br>
+            &#128205; 114/116 Mazar Road, Mirpur-1, Dhaka 1216, Bangladesh &nbsp;|&nbsp;
+            PABX: +88-02-41002432 &nbsp;/&nbsp; +88-02-41002435 &nbsp;|&nbsp; 01969-955566<br>
             This is a computer-generated document. For certified copies contact verification@primeuniversity.ac.bd
         </div>
         <div class="footer-ref">
-            <?= fh($ref_no) ?><br>
-            Generated: <?= fh($print_date) ?>
+            <?= fh($ref_no) ?> &nbsp;|&nbsp; Generated: <?= fh($print_date) ?>
         </div>
     </div>
 
