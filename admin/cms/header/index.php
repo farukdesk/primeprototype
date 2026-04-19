@@ -23,8 +23,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $fields = [
         'phone', 'email',
-        'student_portal_url', 'student_portal_text',
-        'find_result_url',    'find_result_text',
+        'student_portal_url',    'student_portal_text',
+        'find_result_url',       'find_result_text',
+        'current_result_url',    'current_result_text',
         'facebook_url', 'twitter_url', 'instagram_url', 'linkedin_url',
     ];
 
@@ -164,16 +165,29 @@ require_once __DIR__ . '/../../includes/header.php';
                 </div>
             </div>
 
-            <div class="row g-3 mb-4">
+            <div class="row g-3 mb-3">
                 <div class="col-md-6">
-                    <label class="form-label fw-medium">Find Result – Text</label>
+                    <label class="form-label fw-medium">Certificate Verification – Text</label>
                     <input type="text" name="find_result_text" class="form-control"
-                           value="<?= h($settings['find_result_text'] ?? 'Find Result') ?>" maxlength="60">
+                           value="<?= h($settings['find_result_text'] ?? 'Certificate Verification') ?>" maxlength="60">
                 </div>
                 <div class="col-md-6">
-                    <label class="form-label fw-medium">Find Result – URL</label>
+                    <label class="form-label fw-medium">Certificate Verification – URL</label>
                     <input type="text" name="find_result_url" class="form-control"
                            value="<?= h($settings['find_result_url'] ?? '#') ?>" placeholder="https://" maxlength="500">
+                </div>
+            </div>
+
+            <div class="row g-3 mb-4">
+                <div class="col-md-6">
+                    <label class="form-label fw-medium">Current Student Results – Text</label>
+                    <input type="text" name="current_result_text" class="form-control"
+                           value="<?= h($settings['current_result_text'] ?? 'Current Student Results') ?>" maxlength="60">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-medium">Current Student Results – URL</label>
+                    <input type="text" name="current_result_url" class="form-control"
+                           value="<?= h($settings['current_result_url'] ?? '#') ?>" placeholder="https://" maxlength="500">
                 </div>
             </div>
 
