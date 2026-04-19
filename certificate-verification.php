@@ -16,7 +16,7 @@ $csrf_token = $_SESSION['pub_csrf'] ?? ($_SESSION['pub_csrf'] = bin2hex(random_b
 $form_errors   = [];
 $submitted      = false;
 $student        = null;
-$result_info    = null; // ['ending_semester', 'publish_date']
+$result_info    = null; // ['ending_semester', 'publish_date', 'final_cgpa']
 
 $fd = [
     'verifier_type'   => '',
@@ -140,14 +140,80 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 $result_info = [
                                     'ending_semester' => $parts ? implode(' ', $parts) : null,
                                     'publish_date'    => $sr_row['recorded_date'] ? date('d M Y', strtotime($sr_row['recorded_date'])) : null,
+                                    'final_cgpa'      => null,
                                 ];
                             }
                         } else {
                             $result_info = [
                                 'ending_semester' => $exam_row['completion_semester'] ?? null,
                                 'publish_date'    => $exam_row['updated_at'] ? date('d M Y', strtotime($exam_row['updated_at'])) : null,
+                                'final_cgpa'      => null,
                             ];
                         }
+
+                        // Compute Final CGPA across all published result_exams
+                        try {
+                            $cgpa_stmt = $db->prepare(
+                                'SELECT ROUND(
+                                     SUM(rg.grade_point * COALESCE(rs.credits, 3)) /
+                                     NULLIF(SUM(COALESCE(rs.credits, 3)), 0), 2
+                                 ) AS cgpa
+                                 FROM   result_grades   rg
+                                 JOIN   result_exams    re ON re.id = rg.exam_id
+                                 JOIN   result_subjects rs ON rs.id = rg.subject_id
+                                 WHERE  rg.student_sid     = ?
+                                   AND  re.is_published    = 1
+                                   AND  rg.grade_point     IS NOT NULL
+                                   AND  COALESCE(rs.credits, 3) > 0'
+                            );
+                            $cgpa_stmt->execute([$student['student_id']]);
+                            $cgpa_val = $cgpa_stmt->fetchColumn();
+                            if ($cgpa_val !== null && $cgpa_val !== false) {
+                                if ($result_info === null) {
+                                    $result_info = ['ending_semester' => null, 'publish_date' => null, 'final_cgpa' => null];
+                                }
+                                $result_info['final_cgpa'] = number_format((float)$cgpa_val, 2);
+                            }
+                        } catch (Throwable $cgpa_ex) {
+                            // CGPA query failed silently; leave as null
+                        }
+                    }
+
+                    // Save verifier details to the log
+                    try {
+                        // Note: HTTP_X_FORWARDED_FOR may be spoofed; stored for informational purposes only.
+                        $verifier_ip = $_SERVER['HTTP_X_FORWARDED_FOR']
+                            ?? $_SERVER['HTTP_X_REAL_IP']
+                            ?? $_SERVER['REMOTE_ADDR']
+                            ?? null;
+                        // Use only the first IP if comma-separated
+                        if ($verifier_ip) {
+                            $verifier_ip = trim(explode(',', $verifier_ip)[0]);
+                        }
+
+                        $log_stmt = $db->prepare(
+                            'INSERT INTO cert_verification_log
+                               (queried_student_id, student_id, student_found,
+                                verifier_type, verifier_name, verifier_email, verifier_phone,
+                                company_name, company_address, verifier_designation,
+                                ip_address)
+                             VALUES (?,?,?,?,?,?,?,?,?,?,?)'
+                        );
+                        $log_stmt->execute([
+                            $fd['student_id'],
+                            $student ? (int)$student['id'] : null,
+                            $student ? 1 : 0,
+                            $fd['verifier_type'],
+                            $fd['verifier_type'] === 'company' ? $fd['co_your_name']    : $fd['st_name'],
+                            $fd['verifier_type'] === 'company' ? $fd['co_email']         : $fd['st_email'],
+                            $fd['verifier_type'] === 'company' ? $fd['co_phone']         : $fd['st_phone'],
+                            $fd['verifier_type'] === 'company' ? $fd['co_company_name']  : null,
+                            $fd['verifier_type'] === 'company' ? $fd['co_address']       : null,
+                            $fd['verifier_type'] === 'company' ? $fd['co_designation']   : null,
+                            $verifier_ip,
+                        ]);
+                    } catch (Throwable $log_ex) {
+                        // Log silently; do not surface to the user
                     }
 
                     // Refresh CSRF token after successful lookup
@@ -915,6 +981,17 @@ function cert_photo_url(?string $photo): string
                               $pub_date = $result_info['publish_date'] ?? null;
                               echo $pub_date ? fh($pub_date) : '—';
                               ?>
+                           </div>
+                        </div>
+                        <div class="cv-info-item">
+                           <div class="label">Final CGPA</div>
+                           <div class="value">
+                              <?php
+                              $final_cgpa = $result_info['final_cgpa'] ?? null;
+                              if ($final_cgpa !== null): ?>
+                              <strong style="color:#002147;font-size:1.05em;"><?= fh($final_cgpa) ?></strong>
+                              <span style="color:#6b7280;font-size:.85em;">&nbsp;/ 4.00</span>
+                              <?php else: echo '—'; endif; ?>
                            </div>
                         </div>
                      </div>
