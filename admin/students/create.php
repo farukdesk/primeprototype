@@ -401,19 +401,9 @@ require_once __DIR__ . '/../includes/header.php';
 }
 .section-nav a:hover { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
 
-/* ── Form helpers ────────────────────────────────────────────────────────────── */
-.form-label { font-size: .82rem; font-weight: 600; color: #374151; margin-bottom: 5px; }
-.form-control, .form-select {
-    font-size: .875rem; border-radius: 8px !important; border-color: #d1d5db;
-}
-.form-control:focus, .form-select:focus {
-    border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.15);
-}
-.form-control[readonly] { background: #f1f5f9; color: #64748b; }
-.input-group-text { font-size: .8rem; background: #f8fafc; border-color: #d1d5db; color: #64748b; }
-
-/* ── Alert ───────────────────────────────────────────────────────────────────── */
-.alert-danger { border-left: 4px solid #dc2626; background: #fef2f2; color: #991b1b; border-radius: 10px; }
+/* ── Misc helpers ────────────────────────────────────────────────────────────── */
+.form-check-label-sm { font-size: .83rem; }
+.taka-prefix { font-size: .72rem; }
 </style>
 
 <!-- ── Page Header ──────────────────────────────────────────────────────────── -->
@@ -474,12 +464,12 @@ require_once __DIR__ . '/../includes/header.php';
                     <div class="form-check">
                         <input class="form-check-input" type="radio" name="student_id_mode" id="sid_manual"
                                value="manual" <?= (old('student_id_mode','manual') === 'manual') ? 'checked' : '' ?>>
-                        <label class="form-check-label" for="sid_manual" style="font-size:.83rem;">Enter manually</label>
+                        <label class="form-check-label form-check-label-sm" for="sid_manual">Enter manually</label>
                     </div>
                     <div class="form-check">
                         <input class="form-check-input" type="radio" name="student_id_mode" id="sid_auto"
                                value="auto" <?= (old('student_id_mode','manual') === 'auto') ? 'checked' : '' ?>>
-                        <label class="form-check-label" for="sid_auto" style="font-size:.83rem;">Auto-generate</label>
+                        <label class="form-check-label form-check-label-sm" for="sid_auto">Auto-generate</label>
                     </div>
                 </div>
                 <div id="sid_manual_wrap">
@@ -491,7 +481,7 @@ require_once __DIR__ . '/../includes/header.php';
                            value="<?= old('student_id') ?>">
                     <div class="form-text">Format: YY + Semester(01/02/03) + DeptID(2) + ProgID(2) + Seq(4)</div>
                 </div>
-                <div id="sid_auto_note" class="d-none alert alert-info py-2 mb-0 mt-2" style="font-size:.82rem;">
+                <div id="sid_auto_note" class="alert alert-info py-2 mb-0 mt-2" style="font-size:.82rem;display:none;">
                     <i class="fas fa-magic me-1"></i>
                     ID will be auto-generated from department, program &amp; admitted semester.
                 </div>
@@ -873,42 +863,42 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="col-6 col-md-2">
                 <label class="form-label">Form Fee</label>
                 <div class="input-group">
-                    <span class="input-group-text" style="font-size:.72rem;">৳</span>
+                    <span class="input-group-text taka-prefix">৳</span>
                     <input type="number" class="form-control" name="form_fee" value="<?= old('form_fee') ?>" min="0" placeholder="0">
                 </div>
             </div>
             <div class="col-6 col-md-2">
                 <label class="form-label">Reg. Fee</label>
                 <div class="input-group">
-                    <span class="input-group-text" style="font-size:.72rem;">৳</span>
+                    <span class="input-group-text taka-prefix">৳</span>
                     <input type="number" class="form-control" name="regi_fee" value="<?= old('regi_fee') ?>" min="0" placeholder="0">
                 </div>
             </div>
             <div class="col-6 col-md-2">
                 <label class="form-label">Tuition Fee</label>
                 <div class="input-group">
-                    <span class="input-group-text" style="font-size:.72rem;">৳</span>
+                    <span class="input-group-text taka-prefix">৳</span>
                     <input type="number" class="form-control" name="tuition_fee" value="<?= old('tuition_fee') ?>" min="0" placeholder="0">
                 </div>
             </div>
             <div class="col-6 col-md-2">
                 <label class="form-label">Misc Fee</label>
                 <div class="input-group">
-                    <span class="input-group-text" style="font-size:.72rem;">৳</span>
+                    <span class="input-group-text taka-prefix">৳</span>
                     <input type="text" class="form-control" name="misc_fee" value="<?= old('misc_fee') ?>" maxlength="50" placeholder="0">
                 </div>
             </div>
             <div class="col-6 col-md-2">
                 <label class="form-label">Project Fee</label>
                 <div class="input-group">
-                    <span class="input-group-text" style="font-size:.72rem;">৳</span>
+                    <span class="input-group-text taka-prefix">৳</span>
                     <input type="number" class="form-control" name="project_fee" value="<?= old('project_fee') ?>" min="0" placeholder="0">
                 </div>
             </div>
             <div class="col-6 col-md-2">
                 <label class="form-label">Total Fee</label>
                 <div class="input-group">
-                    <span class="input-group-text" style="font-size:.72rem;">৳</span>
+                    <span class="input-group-text taka-prefix">৳</span>
                     <input type="number" class="form-control" name="total_fee" value="<?= old('total_fee') ?>" min="0" placeholder="0">
                 </div>
             </div>
@@ -924,21 +914,21 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="col-6 col-md-2">
                 <label class="form-label">Waiver Amount</label>
                 <div class="input-group">
-                    <span class="input-group-text" style="font-size:.72rem;">৳</span>
+                    <span class="input-group-text taka-prefix">৳</span>
                     <input type="number" class="form-control" name="waiver_amount" value="<?= old('waiver_amount') ?>" min="0" placeholder="0">
                 </div>
             </div>
             <div class="col-6 col-md-3">
                 <label class="form-label">Total Payable</label>
                 <div class="input-group">
-                    <span class="input-group-text" style="font-size:.72rem;">৳</span>
+                    <span class="input-group-text taka-prefix">৳</span>
                     <input type="text" class="form-control" name="total_payable" value="<?= old('total_payable') ?>" maxlength="50" placeholder="0">
                 </div>
             </div>
             <div class="col-6 col-md-3">
                 <label class="form-label">Monthly Installment</label>
                 <div class="input-group">
-                    <span class="input-group-text" style="font-size:.72rem;">৳</span>
+                    <span class="input-group-text taka-prefix">৳</span>
                     <input type="text" class="form-control" name="monthly_installment" value="<?= old('monthly_installment') ?>" maxlength="50" placeholder="0">
                 </div>
             </div>
@@ -1123,8 +1113,7 @@ function filterThanasByDistrict(districtId) {
 function updateSidMode() {
     var mode = document.querySelector('input[name="student_id_mode"]:checked').value;
     document.getElementById('sid_manual_wrap').style.display = mode === 'manual' ? '' : 'none';
-    var autoNote = document.getElementById('sid_auto_note');
-    autoNote.classList.toggle('d-none', mode !== 'auto');
+    document.getElementById('sid_auto_note').style.display   = mode === 'auto'   ? '' : 'none';
 }
 document.querySelectorAll('input[name="student_id_mode"]').forEach(function(r) {
     r.addEventListener('change', updateSidMode);
