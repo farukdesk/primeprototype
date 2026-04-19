@@ -177,6 +177,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         } catch (Throwable $cgpa_ex) {
                             // CGPA query failed silently; leave as null
                         }
+
+                        // Fallback: if CGPA still not resolved, read it from
+                        // student_results (the Academic Results table in the student module)
+                        if ($result_info === null || $result_info['final_cgpa'] === null) {
+                            try {
+                                $sr_cgpa_stmt = $db->prepare(
+                                    'SELECT MAX(CAST(cgpa AS DECIMAL(5,2))) AS final_cgpa
+                                     FROM   student_results
+                                     WHERE  student_id = ?
+                                       AND  cgpa IS NOT NULL
+                                       AND  TRIM(cgpa) != \'\''
+                                );
+                                $sr_cgpa_stmt->execute([$student['id']]);
+                                $sr_cgpa = $sr_cgpa_stmt->fetchColumn();
+                                if ($sr_cgpa !== null && (float)$sr_cgpa > 0) {
+                                    if ($result_info === null) {
+                                        $result_info = ['ending_semester' => null, 'publish_date' => null, 'final_cgpa' => null];
+                                    }
+                                    $result_info['final_cgpa'] = number_format((float)$sr_cgpa, 2);
+                                }
+                            } catch (Throwable $sr_cgpa_ex) {
+                                // Silent fallback; leave as null
+                            }
+                        }
                     }
 
                     // Save verifier details to the log
