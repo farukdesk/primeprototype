@@ -644,7 +644,6 @@ $photo_url = rp_photo_url($student['photo']);
              class="doc-header-logo"
              onerror="this.style.display='none'">
         <div class="doc-header-info">
-            <div class="uni-name">Prime University</div>
             <div class="uni-tagline">Bangladesh — UGC Approved</div>
             <div class="uni-contact">
                 <span class="contact-line">&#128205; 114/116 Mazar Road, Mirpur-1, Dhaka 1216, Bangladesh</span>
