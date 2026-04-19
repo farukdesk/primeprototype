@@ -891,8 +891,8 @@ function filterThanasByDistrict(districtId) {
     var thanaList  = document.getElementById('thana_list');
     var thanaInput = document.getElementById('thana_search');
     var thanaVal   = document.getElementById('thana_id');
-    thanaInput.value = districtId ? '' : '';
     thanaInput.placeholder = districtId ? 'Search thana…' : 'Select district first…';
+    thanaInput.value = '';
     thanaVal.value = '';
     Array.from(thanaList.querySelectorAll('.ss-item')).forEach(function(item) {
         var d = item.dataset.district;
