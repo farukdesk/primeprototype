@@ -280,67 +280,196 @@ require_once __DIR__ . '/../includes/header.php';
 ?>
 
 <style>
+/* ── Searchable Select ──────────────────────────────────────────────────────── */
 .searchable-select-wrap { position: relative; }
 .searchable-select-wrap .ss-list {
     position: absolute; top: 100%; left: 0; right: 0;
     max-height: 220px; overflow-y: auto;
     background: #fff; border: 1px solid #dee2e6; border-top: 0;
-    border-radius: 0 0 6px 6px; z-index: 1050; display: none;
+    border-radius: 0 0 8px 8px; z-index: 1050; display: none;
+    box-shadow: 0 4px 12px rgba(0,0,0,.08);
 }
 .searchable-select-wrap .ss-list.open { display: block; }
 .searchable-select-wrap .ss-list .ss-item {
-    padding: 7px 12px; cursor: pointer; font-size: .875rem;
+    padding: 8px 14px; cursor: pointer; font-size: .875rem;
+    transition: background .12s;
 }
 .searchable-select-wrap .ss-list .ss-item:hover,
-.searchable-select-wrap .ss-list .ss-item.active { background: #f0f4ff; }
-.qual-row { background: #fafafa; border: 1px solid #e8eaf0; border-radius: 10px; padding: 16px; }
+.searchable-select-wrap .ss-list .ss-item.active { background: #eef2ff; color: #3730a3; }
+
+/* ── Section Cards ──────────────────────────────────────────────────────────── */
+.form-section { border: none; border-radius: 14px; box-shadow: 0 2px 12px rgba(0,0,0,.06); margin-bottom: 1.5rem; overflow: visible; }
+.form-section .card-header {
+    border-radius: 14px 14px 0 0 !important;
+    padding: 14px 24px;
+    border-bottom: 1px solid rgba(0,0,0,.07);
+    display: flex; align-items: center; gap: 12px;
+}
+.form-section .card-header .section-icon {
+    width: 36px; height: 36px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: .95rem; flex-shrink: 0;
+}
+.form-section .card-header .section-title { font-size: .95rem; font-weight: 600; margin: 0; color: #1e293b; }
+.form-section .card-header .section-badge {
+    margin-left: auto; font-size: .7rem; padding: 3px 9px; border-radius: 20px; font-weight: 600;
+}
+.form-section .card-body { padding: 24px; }
+
+/* Section accent colours */
+.sec-enrollment .card-header  { background: #eff6ff; }
+.sec-enrollment .section-icon { background: #dbeafe; color: #2563eb; }
+.sec-personal   .card-header  { background: #f0fdf4; }
+.sec-personal   .section-icon { background: #dcfce7; color: #16a34a; }
+.sec-parents    .card-header  { background: #faf5ff; }
+.sec-parents    .section-icon { background: #ede9fe; color: #7c3aed; }
+.sec-fees       .card-header  { background: #fffbeb; }
+.sec-fees       .section-icon { background: #fef3c7; color: #d97706; }
+.sec-quals      .card-header  { background: #ecfeff; }
+.sec-quals      .section-icon { background: #cffafe; color: #0891b2; }
+
+/* ── Parent sub-sections ────────────────────────────────────────────────────── */
+.parent-sub { background: #fafafa; border: 1px solid #e8eaf0; border-radius: 10px; padding: 18px 20px; }
+.parent-sub-header { font-size: .8rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 14px; display: flex; align-items: center; gap: 7px; }
+
+/* ── Photo upload area ──────────────────────────────────────────────────────── */
+.photo-upload-area {
+    border: 2px dashed #cbd5e1; border-radius: 12px; padding: 20px 16px;
+    text-align: center; cursor: pointer; transition: border-color .2s, background .2s;
+    background: #f8fafc;
+}
+.photo-upload-area:hover { border-color: #4f8ef7; background: #eff6ff; }
+.photo-upload-area input[type=file] { display: none; }
+.photo-preview {
+    width: 100px; height: 120px; border-radius: 8px; object-fit: cover;
+    border: 2px solid #e2e8f0; display: none; margin: 0 auto 10px;
+}
+.photo-preview.has-image { display: block; }
+.photo-placeholder { font-size: 2.5rem; color: #94a3b8; margin-bottom: 6px; }
+
+/* ── Fee grid ───────────────────────────────────────────────────────────────── */
+.fee-input-group { position: relative; }
+.fee-input-group .fee-prefix {
+    position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+    font-size: .75rem; font-weight: 600; color: #64748b; pointer-events: none;
+}
+.fee-input-group input { padding-left: 36px; }
+
+/* ── Qualification rows ──────────────────────────────────────────────────────── */
+.qual-row {
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 18px;
+    position: relative; transition: box-shadow .15s;
+}
+.qual-row:hover { box-shadow: 0 2px 10px rgba(0,0,0,.06); }
+.qual-row-num {
+    position: absolute; top: -10px; left: 16px;
+    background: #0891b2; color: #fff; font-size: .7rem; font-weight: 700;
+    padding: 2px 10px; border-radius: 20px;
+}
+
+/* ── Page header ─────────────────────────────────────────────────────────────── */
+.page-header-bar {
+    background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%);
+    border-radius: 16px; padding: 24px 28px; margin-bottom: 24px;
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+}
+.page-header-bar .page-title { color: #fff; font-size: 1.35rem; font-weight: 700; margin: 0; }
+.page-header-bar .page-subtitle { color: rgba(255,255,255,.7); font-size: .82rem; margin: 3px 0 0; }
+.page-header-bar .breadcrumb { background: none; margin: 0; padding: 0; }
+.page-header-bar .breadcrumb-item a { color: rgba(255,255,255,.65); text-decoration: none; font-size: .82rem; }
+.page-header-bar .breadcrumb-item a:hover { color: #fff; }
+.page-header-bar .breadcrumb-item.active { color: rgba(255,255,255,.9); font-size: .82rem; }
+.page-header-bar .breadcrumb-item + .breadcrumb-item::before { color: rgba(255,255,255,.4); }
+
+/* ── Sticky action bar ───────────────────────────────────────────────────────── */
+.sticky-action-bar {
+    position: sticky; bottom: 0; z-index: 100;
+    background: #fff; border-top: 1px solid #e2e8f0;
+    padding: 14px 24px; margin: 0 -24px;
+    display: flex; align-items: center; gap: 12px;
+    box-shadow: 0 -4px 16px rgba(0,0,0,.08);
+}
+
+/* ── Section anchor nav ──────────────────────────────────────────────────────── */
+.section-nav {
+    display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 20px;
+}
+.section-nav a {
+    font-size: .78rem; font-weight: 500; padding: 5px 14px; border-radius: 20px;
+    text-decoration: none; border: 1px solid #e2e8f0; color: #475569;
+    background: #fff; transition: all .15s;
+}
+.section-nav a:hover { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
+
+/* ── Misc helpers ────────────────────────────────────────────────────────────── */
+.form-check-label-sm { font-size: .83rem; }
+.taka-prefix { font-size: .72rem; }
 </style>
 
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <nav aria-label="breadcrumb">
-        <ol class="breadcrumb mb-0">
-            <li class="breadcrumb-item"><a href="<?= APP_URL ?>/index.php">Dashboard</a></li>
-            <li class="breadcrumb-item"><a href="<?= APP_URL ?>/students/index.php">Students</a></li>
-            <li class="breadcrumb-item active">Add Student</li>
-        </ol>
-    </nav>
+<!-- ── Page Header ──────────────────────────────────────────────────────────── -->
+<div class="page-header-bar">
+    <div>
+        <h1 class="page-title"><i class="fas fa-user-plus me-2"></i>Add New Student</h1>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mt-1">
+                <li class="breadcrumb-item"><a href="<?= APP_URL ?>/index.php">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="<?= APP_URL ?>/students/index.php">Students</a></li>
+                <li class="breadcrumb-item active">Add Student</li>
+            </ol>
+        </nav>
+    </div>
+    <a href="<?= APP_URL ?>/students/index.php" class="btn btn-sm btn-light" style="border-radius:8px;">
+        <i class="fas fa-arrow-left me-1"></i> Back to List
+    </a>
+</div>
+
+<!-- ── Section quick-nav ────────────────────────────────────────────────────── -->
+<div class="section-nav">
+    <a href="#sec-enrollment"><i class="fas fa-id-badge me-1"></i>Enrollment</a>
+    <a href="#sec-personal"><i class="fas fa-user me-1"></i>Personal</a>
+    <a href="#sec-parents"><i class="fas fa-users me-1"></i>Parents</a>
+    <a href="#sec-fees"><i class="fas fa-money-bill-wave me-1"></i>Fees</a>
+    <a href="#sec-quals"><i class="fas fa-graduation-cap me-1"></i>Qualifications</a>
 </div>
 
 <?php if (!empty($errors)): ?>
-<div class="alert alert-danger">
+<div class="alert alert-danger mb-4">
+    <div class="fw-semibold mb-1"><i class="fas fa-exclamation-circle me-1"></i>Please fix the following errors:</div>
     <ul class="mb-0 ps-3">
         <?php foreach ($errors as $e): ?><li><?= $e ?></li><?php endforeach; ?>
     </ul>
 </div>
 <?php endif; ?>
 
-<form method="POST" action="" enctype="multipart/form-data">
+<form method="POST" action="" enctype="multipart/form-data" id="student-create-form">
 <?= csrf_field() ?>
 
 <!-- ══════════════════════════════════════════════════════════
      SECTION 1 – ENROLLMENT INFO
 ═══════════════════════════════════════════════════════════ -->
-<div class="card mb-4">
-    <div class="card-header py-3 px-4">
-        <h6 class="mb-0 fw-semibold"><i class="fas fa-id-badge me-2 text-muted"></i>Enrollment Information</h6>
+<div class="card form-section sec-enrollment" id="sec-enrollment">
+    <div class="card-header">
+        <div class="section-icon"><i class="fas fa-id-badge"></i></div>
+        <span class="section-title">Enrollment Information</span>
+        <span class="section-badge badge bg-primary bg-opacity-10 text-primary">Required</span>
     </div>
-    <div class="card-body px-4 py-3">
-        <!-- Student ID -->
+    <div class="card-body">
         <div class="row g-3 mb-3">
+            <!-- Student ID -->
             <div class="col-12 col-md-6">
-                <label class="form-label fw-semibold">Student ID <span class="text-danger">*</span>
+                <label class="form-label">Student ID <span class="text-danger">*</span>
                     <small class="text-muted fw-normal">(12 digits)</small>
                 </label>
-                <div class="d-flex gap-2 mb-1">
+                <div class="d-flex gap-3 mb-2">
                     <div class="form-check">
                         <input class="form-check-input" type="radio" name="student_id_mode" id="sid_manual"
                                value="manual" <?= (old('student_id_mode','manual') === 'manual') ? 'checked' : '' ?>>
-                        <label class="form-check-label" for="sid_manual">Enter manually</label>
+                        <label class="form-check-label form-check-label-sm" for="sid_manual">Enter manually</label>
                     </div>
                     <div class="form-check">
                         <input class="form-check-input" type="radio" name="student_id_mode" id="sid_auto"
                                value="auto" <?= (old('student_id_mode','manual') === 'auto') ? 'checked' : '' ?>>
-                        <label class="form-check-label" for="sid_auto">Auto-generate</label>
+                        <label class="form-check-label form-check-label-sm" for="sid_auto">Auto-generate</label>
                     </div>
                 </div>
                 <div id="sid_manual_wrap">
@@ -352,13 +481,14 @@ require_once __DIR__ . '/../includes/header.php';
                            value="<?= old('student_id') ?>">
                     <div class="form-text">Format: YY + Semester(01/02/03) + DeptID(2) + ProgID(2) + Seq(4)</div>
                 </div>
-                <div id="sid_auto_note" class="alert alert-info py-2 mb-0 mt-1" style="display:none;font-size:.85rem;">
+                <div id="sid_auto_note" class="alert alert-info py-2 mb-0 mt-2" style="font-size:.82rem;display:none;">
                     <i class="fas fa-magic me-1"></i>
-                    ID will be auto-generated based on department, program and admitted semester.
+                    ID will be auto-generated from department, program &amp; admitted semester.
                 </div>
             </div>
+            <!-- Status -->
             <div class="col-12 col-md-3">
-                <label class="form-label fw-semibold">Status</label>
+                <label class="form-label">Enrollment Status</label>
                 <select name="status" class="form-select">
                     <?php foreach (['Active','Inactive','Graduated','Dropped'] as $s): ?>
                     <option value="<?= $s ?>" <?= old('status','Active') === $s ? 'selected' : '' ?>><?= $s ?></option>
@@ -370,18 +500,15 @@ require_once __DIR__ . '/../includes/header.php';
         <div class="row g-3">
             <!-- Department -->
             <div class="col-12 col-md-4">
-                <label class="form-label fw-semibold">Department <span class="text-danger">*</span></label>
+                <label class="form-label">Department <span class="text-danger">*</span></label>
                 <div class="searchable-select-wrap">
                     <input type="text" class="form-control ss-trigger" id="dept_search"
-                           placeholder="Search department…"
-                           autocomplete="off"
-                           data-target="dept_id">
+                           placeholder="Search department…" autocomplete="off" data-target="dept_id">
                     <input type="hidden" name="dept_id" id="dept_id" value="<?= old('dept_id') ?>">
                     <div class="ss-list" id="dept_list">
                         <?php foreach ($departments as $d): ?>
                         <div class="ss-item" data-value="<?= $d['id'] ?>" data-label="<?= h($d['name']) ?>"
-                             data-code="<?= h($d['code']) ?>"
-                             data-faculty="<?= h($d['faculty_label']) ?>">
+                             data-code="<?= h($d['code']) ?>" data-faculty="<?= h($d['faculty_label']) ?>">
                             <?= h($d['name']) ?> <small class="text-muted">(<?= h($d['code']) ?>)</small>
                         </div>
                         <?php endforeach; ?>
@@ -390,27 +517,26 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
             <!-- Faculty (auto-populated) -->
             <div class="col-12 col-md-4">
-                <label class="form-label fw-semibold">Faculty</label>
-                <input type="text" class="form-control" id="faculty_display"
-                       value="<?= old('faculty_label') ?>" readonly
-                       placeholder="Auto-filled from department" style="background:#f8f9fa;">
+                <label class="form-label">Faculty <small class="text-muted fw-normal">— auto-filled</small></label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-building"></i></span>
+                    <input type="text" class="form-control" id="faculty_display"
+                           value="<?= old('faculty_label') ?>" readonly placeholder="Auto-filled from department">
+                </div>
                 <input type="hidden" name="faculty_label" id="faculty_label" value="<?= old('faculty_label') ?>">
             </div>
             <!-- Program -->
             <div class="col-12 col-md-4">
-                <label class="form-label fw-semibold">Academic Program</label>
+                <label class="form-label">Academic Program</label>
                 <div class="searchable-select-wrap">
                     <input type="text" class="form-control ss-trigger" id="prog_search"
-                           placeholder="Search program…"
-                           autocomplete="off"
-                           data-target="program_id">
+                           placeholder="Search program…" autocomplete="off" data-target="program_id">
                     <input type="hidden" name="program_id" id="program_id" value="<?= old('program_id') ?>">
                     <div class="ss-list" id="prog_list">
                         <div class="ss-item" data-value="" data-label="" data-type="">— None —</div>
                         <?php foreach ($all_programs as $p): ?>
                         <div class="ss-item" data-value="<?= $p['id'] ?>" data-label="<?= h($p['program_name']) ?>"
-                             data-dept="<?= $p['dept_id'] ?>"
-                             data-type="<?= h($p['program_type'] ?? '') ?>">
+                             data-dept="<?= $p['dept_id'] ?>" data-type="<?= h($p['program_type'] ?? '') ?>">
                             <?= h($p['program_name']) ?>
                         </div>
                         <?php endforeach; ?>
@@ -419,20 +545,20 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
             <!-- Program Type (auto-populated) -->
             <div class="col-12 col-md-3">
-                <label class="form-label fw-semibold">Program Type</label>
-                <input type="text" class="form-control" id="program_type_display"
-                       value="<?= old('program_type') ?>" readonly
-                       placeholder="Auto-detected from program" style="background:#f8f9fa;">
+                <label class="form-label">Program Type <small class="text-muted fw-normal">— auto-detected</small></label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-layer-group"></i></span>
+                    <input type="text" class="form-control" id="program_type_display"
+                           value="<?= old('program_type') ?>" readonly placeholder="Auto-detected">
+                </div>
                 <input type="hidden" name="program_type" id="program_type" value="<?= old('program_type') ?>">
             </div>
             <!-- Admitted Semester -->
             <div class="col-12 col-md-4">
-                <label class="form-label fw-semibold">Admitted Semester <span class="text-danger">*</span></label>
+                <label class="form-label">Admitted Semester <span class="text-danger">*</span></label>
                 <div class="searchable-select-wrap">
                     <input type="text" class="form-control ss-trigger" id="sem_search"
-                           placeholder="Search semester…"
-                           autocomplete="off"
-                           data-target="admitted_semester">
+                           placeholder="Search semester…" autocomplete="off" data-target="admitted_semester">
                     <input type="hidden" name="admitted_semester" id="admitted_semester" value="<?= old('admitted_semester') ?>">
                     <div class="ss-list" id="sem_list">
                         <?php foreach ($semesters as $sem): ?>
@@ -441,18 +567,13 @@ require_once __DIR__ . '/../includes/header.php';
                     </div>
                 </div>
             </div>
-        </div>
-        <div class="row g-3 mt-1">
-            <!-- Batch (searchable from DB) -->
+            <!-- Batch -->
             <div class="col-12 col-md-3">
-                <label class="form-label fw-semibold">Batch</label>
+                <label class="form-label">Batch</label>
                 <div class="searchable-select-wrap">
                     <input type="text" class="form-control ss-trigger" id="batch_search"
-                           placeholder="Search batch…"
-                           autocomplete="off"
-                           data-target="batch_id">
+                           placeholder="Search batch…" autocomplete="off" data-target="batch_id">
                     <input type="hidden" name="batch_id" id="batch_id" value="<?= old('batch_id') ?>">
-                    <!-- Also keep text field for manual entry -->
                     <input type="hidden" name="batch" id="batch_text" value="<?= old('batch') ?>">
                     <div class="ss-list" id="batch_list">
                         <div class="ss-item" data-value="" data-label="">— None —</div>
@@ -465,13 +586,14 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
             </div>
             <!-- Year -->
-            <div class="col-12 col-md-2">
-                <label class="form-label fw-semibold">Year</label>
+            <div class="col-6 col-md-2">
+                <label class="form-label">Year</label>
                 <input type="text" class="form-control" name="year"
-                       value="<?= old('year', date('Y')) ?>" maxlength="10" placeholder="e.g. <?= date('Y') ?>">
+                       value="<?= old('year', date('Y')) ?>" maxlength="10" placeholder="<?= date('Y') ?>">
             </div>
-            <div class="col-12 col-md-4">
-                <label class="form-label fw-semibold">Shift</label>
+            <!-- Shift -->
+            <div class="col-6 col-md-3">
+                <label class="form-label">Shift</label>
                 <select name="shift" class="form-select">
                     <option value="">— Select —</option>
                     <?php foreach (['Day','Evening','Morning'] as $sh): ?>
@@ -479,75 +601,104 @@ require_once __DIR__ . '/../includes/header.php';
                     <?php endforeach; ?>
                 </select>
             </div>
+        </div>
     </div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════
-     SECTION 2 – PERSONAL INFORMATION
+     SECTION 2 – PERSONAL INFORMATION + PHOTO
 ═══════════════════════════════════════════════════════════ -->
-<div class="card mb-4">
-    <div class="card-header py-3 px-4">
-        <h6 class="mb-0 fw-semibold"><i class="fas fa-user me-2 text-muted"></i>Personal Information</h6>
+<div class="card form-section sec-personal" id="sec-personal">
+    <div class="card-header">
+        <div class="section-icon"><i class="fas fa-user"></i></div>
+        <span class="section-title">Personal Information</span>
     </div>
-    <div class="card-body px-4 py-3">
+    <div class="card-body">
         <div class="row g-3">
-            <div class="col-12 col-md-4">
-                <label class="form-label fw-semibold">Full Name <span class="text-danger">*</span></label>
-                <input type="text" class="form-control" name="full_name" value="<?= old('full_name') ?>" required maxlength="200">
+            <!-- Photo upload (right column on md+) -->
+            <div class="col-12 col-md-2 d-flex flex-column align-items-center">
+                <label class="form-label w-100 text-center">Photo</label>
+                <div class="photo-upload-area w-100" id="photo_drop_area" title="Click to upload photo">
+                    <img src="" alt="Preview" class="photo-preview" id="photo_preview">
+                    <div id="photo_placeholder">
+                        <div class="photo-placeholder"><i class="fas fa-camera"></i></div>
+                        <div style="font-size:.78rem;color:#64748b;">Click to upload</div>
+                        <div style="font-size:.72rem;color:#94a3b8;margin-top:3px;">JPG, PNG, GIF, WEBP · max 5 MB</div>
+                    </div>
+                    <input type="file" name="photo" id="photo_input" accept="image/jpeg,image/png,image/gif,image/webp">
+                </div>
             </div>
-            <div class="col-12 col-md-4">
-                <label class="form-label fw-semibold">Email</label>
-                <input type="email" class="form-control" name="email" value="<?= old('email') ?>" maxlength="200">
+            <!-- Personal fields -->
+            <div class="col-12 col-md-10">
+                <div class="row g-3">
+                    <div class="col-12 col-md-4">
+                        <label class="form-label">Full Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="full_name" value="<?= old('full_name') ?>" required maxlength="200" placeholder="Student's full name">
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <label class="form-label">Email Address</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="fas fa-envelope"></i></span>
+                            <input type="email" class="form-control" name="email" value="<?= old('email') ?>" maxlength="200" placeholder="student@example.com">
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <label class="form-label">Phone Number</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="fas fa-phone"></i></span>
+                            <input type="text" class="form-control" name="phone" value="<?= old('phone') ?>" maxlength="30" placeholder="01XXXXXXXXX">
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <label class="form-label">Gender</label>
+                        <select name="sex" class="form-select">
+                            <option value="">— Select —</option>
+                            <?php foreach (['Male','Female','Other'] as $sx): ?>
+                            <option value="<?= $sx ?>" <?= old('sex') === $sx ? 'selected' : '' ?>><?= $sx ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label">Date of Birth</label>
+                        <input type="date" class="form-control" name="dob" value="<?= old('dob') ?>">
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <label class="form-label">Blood Group</label>
+                        <select name="blood_group" class="form-select">
+                            <option value="">— —</option>
+                            <?php foreach (['A+','A-','B+','B-','AB+','AB-','O+','O-'] as $bg): ?>
+                            <option value="<?= $bg ?>" <?= old('blood_group') === $bg ? 'selected' : '' ?>><?= $bg ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label">Place of Birth</label>
+                        <input type="text" class="form-control" name="place_of_birth" value="<?= old('place_of_birth') ?>" maxlength="200">
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <label class="form-label">Religion</label>
+                        <input type="text" class="form-control" name="religion" value="<?= old('religion') ?>" maxlength="100">
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label">Nationality</label>
+                        <input type="text" class="form-control" name="nationality" value="<?= old('nationality','Bangladeshi') ?>" maxlength="100">
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label">Country</label>
+                        <input type="text" class="form-control" name="country" value="<?= old('country','Bangladesh') ?>" maxlength="100">
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <label class="form-label">NID Number</label>
+                        <input type="text" class="form-control" name="nid" value="<?= old('nid') ?>" maxlength="50" placeholder="National ID">
+                    </div>
+                </div>
             </div>
-            <div class="col-12 col-md-4">
-                <label class="form-label fw-semibold">Phone</label>
-                <input type="text" class="form-control" name="phone" value="<?= old('phone') ?>" maxlength="30">
-            </div>
-            <div class="col-12 col-md-3">
-                <label class="form-label fw-semibold">Sex</label>
-                <select name="sex" class="form-select">
-                    <option value="">— Select —</option>
-                    <?php foreach (['Male','Female','Other'] as $sx): ?>
-                    <option value="<?= $sx ?>" <?= old('sex') === $sx ? 'selected' : '' ?>><?= $sx ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="col-12 col-md-3">
-                <label class="form-label fw-semibold">Religion</label>
-                <input type="text" class="form-control" name="religion" value="<?= old('religion') ?>" maxlength="100">
-            </div>
-            <div class="col-12 col-md-3">
-                <label class="form-label fw-semibold">Nationality</label>
-                <input type="text" class="form-control" name="nationality" value="<?= old('nationality','Bangladeshi') ?>" maxlength="100">
-            </div>
-            <div class="col-12 col-md-3">
-                <label class="form-label fw-semibold">Country</label>
-                <input type="text" class="form-control" name="country" value="<?= old('country','Bangladesh') ?>" maxlength="100">
-            </div>
-            <div class="col-12 col-md-3">
-                <label class="form-label fw-semibold">Place of Birth</label>
-                <input type="text" class="form-control" name="place_of_birth" value="<?= old('place_of_birth') ?>" maxlength="200">
-            </div>
-            <div class="col-12 col-md-3">
-                <label class="form-label fw-semibold">Date of Birth</label>
-                <input type="date" class="form-control" name="dob" value="<?= old('dob') ?>">
-            </div>
-            <div class="col-12 col-md-2">
-                <label class="form-label fw-semibold">Blood Group</label>
-                <select name="blood_group" class="form-select">
-                    <option value="">— —</option>
-                    <?php foreach (['A+','A-','B+','B-','AB+','AB-','O+','O-'] as $bg): ?>
-                    <option value="<?= $bg ?>" <?= old('blood_group') === $bg ? 'selected' : '' ?>><?= $bg ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="col-12 col-md-4">
-                <label class="form-label fw-semibold">NID Number</label>
-                <input type="text" class="form-control" name="nid" value="<?= old('nid') ?>" maxlength="50">
-            </div>
+
+            <!-- Address block -->
+            <div class="col-12"><hr class="my-1" style="border-color:#e8eaf0;"></div>
             <!-- District (searchable) -->
             <div class="col-12 col-md-4">
-                <label class="form-label fw-semibold">District</label>
+                <label class="form-label">District</label>
                 <div class="searchable-select-wrap">
                     <input type="text" class="form-control ss-trigger" id="district_search"
                            placeholder="Search district…" autocomplete="off" data-target="district_id">
@@ -574,7 +725,7 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
             <!-- Thana (searchable, filtered by district) -->
             <div class="col-12 col-md-4">
-                <label class="form-label fw-semibold">Thana / Upazila</label>
+                <label class="form-label">Thana / Upazila</label>
                 <div class="searchable-select-wrap">
                     <input type="text" class="form-control ss-trigger" id="thana_search"
                            placeholder="Select district first…" autocomplete="off" data-target="thana_id">
@@ -591,212 +742,270 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
             </div>
             <div class="col-12 col-md-6">
-                <label class="form-label fw-semibold">Present Address</label>
-                <textarea class="form-control" name="present_address" rows="2"><?= old('present_address') ?></textarea>
+                <label class="form-label">Present Address</label>
+                <textarea class="form-control" name="present_address" rows="2" placeholder="House, Road, Area…"><?= old('present_address') ?></textarea>
             </div>
             <div class="col-12 col-md-6">
-                <label class="form-label fw-semibold">Permanent Address</label>
-                <textarea class="form-control" name="permanent_address" rows="2"><?= old('permanent_address') ?></textarea>
+                <label class="form-label">Permanent Address</label>
+                <textarea class="form-control" name="permanent_address" rows="2" placeholder="Village/Town, Thana, District…"><?= old('permanent_address') ?></textarea>
             </div>
         </div>
     </div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════
-     SECTION 3 – FATHER'S INFO
+     SECTION 3 – PARENTS / GUARDIAN
 ═══════════════════════════════════════════════════════════ -->
-<div class="card mb-4">
-    <div class="card-header py-3 px-4">
-        <h6 class="mb-0 fw-semibold"><i class="fas fa-male me-2 text-muted"></i>Father's Information</h6>
+<div class="card form-section sec-parents" id="sec-parents">
+    <div class="card-header">
+        <div class="section-icon"><i class="fas fa-users"></i></div>
+        <span class="section-title">Parents / Guardian Information</span>
     </div>
-    <div class="card-body px-4 py-3">
-        <div class="row g-3">
-            <div class="col-12 col-md-3">
-                <label class="form-label fw-semibold">Father's Name</label>
-                <input type="text" class="form-control" name="father_name" value="<?= old('father_name') ?>" maxlength="200">
+    <div class="card-body">
+        <div class="row g-4">
+            <!-- Father -->
+            <div class="col-12 col-lg-6">
+                <div class="parent-sub">
+                    <div class="parent-sub-header" style="color:#2563eb;">
+                        <i class="fas fa-male"></i> Father's Information
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label">Full Name</label>
+                            <input type="text" class="form-control" name="father_name" value="<?= old('father_name') ?>" maxlength="200" placeholder="Father's full name">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">Phone Number</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-phone"></i></span>
+                                <input type="text" class="form-control" name="father_phone" value="<?= old('father_phone') ?>" maxlength="30">
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">Yearly Income</label>
+                            <div class="input-group">
+                                <span class="input-group-text">BDT</span>
+                                <input type="number" class="form-control" name="father_yearly_income" value="<?= old('father_yearly_income') ?>" min="0" step="0.01" placeholder="0">
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Occupation</label>
+                            <input type="text" class="form-control" name="father_occupation" value="<?= old('father_occupation') ?>" maxlength="200">
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="col-12 col-md-3">
-                <label class="form-label fw-semibold">Phone Number</label>
-                <input type="text" class="form-control" name="father_phone" value="<?= old('father_phone') ?>" maxlength="30">
-            </div>
-            <div class="col-12 col-md-3">
-                <label class="form-label fw-semibold">Occupation</label>
-                <input type="text" class="form-control" name="father_occupation" value="<?= old('father_occupation') ?>" maxlength="200">
-            </div>
-            <div class="col-12 col-md-3">
-                <label class="form-label fw-semibold">Yearly Income (BDT)</label>
-                <input type="number" class="form-control" name="father_yearly_income"
-                       value="<?= old('father_yearly_income') ?>" min="0" step="0.01">
+            <!-- Mother -->
+            <div class="col-12 col-lg-6">
+                <div class="parent-sub">
+                    <div class="parent-sub-header" style="color:#db2777;">
+                        <i class="fas fa-female"></i> Mother's Information
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label">Full Name</label>
+                            <input type="text" class="form-control" name="mother_name" value="<?= old('mother_name') ?>" maxlength="200" placeholder="Mother's full name">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">Phone Number</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-phone"></i></span>
+                                <input type="text" class="form-control" name="mother_phone" value="<?= old('mother_phone') ?>" maxlength="30">
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">Yearly Income</label>
+                            <div class="input-group">
+                                <span class="input-group-text">BDT</span>
+                                <input type="number" class="form-control" name="mother_yearly_income" value="<?= old('mother_yearly_income') ?>" min="0" step="0.01" placeholder="0">
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Occupation</label>
+                            <input type="text" class="form-control" name="mother_occupation" value="<?= old('mother_occupation') ?>" maxlength="200">
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════
-     SECTION 4 – MOTHER'S INFO
+     SECTION 4 – QUOTA & FEE INFORMATION
 ═══════════════════════════════════════════════════════════ -->
-<div class="card mb-4">
-    <div class="card-header py-3 px-4">
-        <h6 class="mb-0 fw-semibold"><i class="fas fa-female me-2 text-muted"></i>Mother's Information</h6>
+<div class="card form-section sec-fees" id="sec-fees">
+    <div class="card-header">
+        <div class="section-icon"><i class="fas fa-money-bill-wave"></i></div>
+        <span class="section-title">Quota &amp; Fee Information</span>
     </div>
-    <div class="card-body px-4 py-3">
-        <div class="row g-3">
-            <div class="col-12 col-md-3">
-                <label class="form-label fw-semibold">Mother's Name</label>
-                <input type="text" class="form-control" name="mother_name" value="<?= old('mother_name') ?>" maxlength="200">
-            </div>
-            <div class="col-12 col-md-3">
-                <label class="form-label fw-semibold">Phone Number</label>
-                <input type="text" class="form-control" name="mother_phone" value="<?= old('mother_phone') ?>" maxlength="30">
-            </div>
-            <div class="col-12 col-md-3">
-                <label class="form-label fw-semibold">Occupation</label>
-                <input type="text" class="form-control" name="mother_occupation" value="<?= old('mother_occupation') ?>" maxlength="200">
-            </div>
-            <div class="col-12 col-md-3">
-                <label class="form-label fw-semibold">Yearly Income (BDT)</label>
-                <input type="number" class="form-control" name="mother_yearly_income"
-                       value="<?= old('mother_yearly_income') ?>" min="0" step="0.01">
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- ══════════════════════════════════════════════════════════
-     SECTION 5 – PHOTO
-═══════════════════════════════════════════════════════════ -->
-<div class="card mb-4">
-    <div class="card-header py-3 px-4">
-        <h6 class="mb-0 fw-semibold"><i class="fas fa-camera me-2 text-muted"></i>Photo</h6>
-    </div>
-    <div class="card-body px-4 py-3">
-        <div class="row g-3">
-            <div class="col-12 col-md-4">
-                <label class="form-label fw-semibold">Upload Photo</label>
-                <input type="file" class="form-control" name="photo" accept="image/jpeg,image/png,image/gif,image/webp">
-                <div class="form-text">JPG, PNG, GIF or WEBP — max 5 MB</div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- ══════════════════════════════════════════════════════════
-     SECTION 5b – QUOTA & FEE INFORMATION
-═══════════════════════════════════════════════════════════ -->
-<div class="card mb-4">
-    <div class="card-header py-3 px-4">
-        <h6 class="mb-0 fw-semibold"><i class="fas fa-money-bill-wave me-2 text-muted"></i>Quota &amp; Fee Information</h6>
-    </div>
-    <div class="card-body px-4 py-3">
-        <div class="row g-3 mb-3">
-            <div class="col-auto">
+    <div class="card-body">
+        <!-- Quota toggles -->
+        <div class="mb-4 p-3" style="background:#fffbeb;border-radius:10px;border:1px solid #fde68a;">
+            <div class="fw-semibold mb-2" style="font-size:.82rem;color:#92400e;">SPECIAL QUOTA</div>
+            <div class="d-flex gap-4 flex-wrap">
                 <div class="form-check form-switch">
                     <input class="form-check-input" type="checkbox" name="poor_meritorious" id="poor_meritorious"
                            value="1" <?= old('poor_meritorious') ? 'checked' : '' ?>>
-                    <label class="form-check-label" for="poor_meritorious">Poor / Meritorious Quota</label>
+                    <label class="form-check-label" for="poor_meritorious" style="font-size:.875rem;">Poor / Meritorious Quota</label>
                 </div>
-            </div>
-            <div class="col-auto">
                 <div class="form-check form-switch">
                     <input class="form-check-input" type="checkbox" name="freedom_fighter_quota" id="freedom_fighter_quota"
                            value="1" <?= old('freedom_fighter_quota') ? 'checked' : '' ?>>
-                    <label class="form-check-label" for="freedom_fighter_quota">Freedom Fighter Family Quota</label>
+                    <label class="form-check-label" for="freedom_fighter_quota" style="font-size:.875rem;">Freedom Fighter Family Quota</label>
                 </div>
             </div>
         </div>
+
+        <!-- Fee fields grid -->
         <div class="row g-3">
+            <div class="col-12"><div class="fw-semibold mb-1" style="font-size:.82rem;color:#92400e;text-transform:uppercase;letter-spacing:.05em;">Fee Breakdown</div></div>
             <div class="col-6 col-md-2">
-                <label class="form-label fw-semibold">Waiver %</label>
-                <input type="text" class="form-control" name="waiver_percent" value="<?= old('waiver_percent') ?>" maxlength="10" placeholder="e.g. 25">
+                <label class="form-label">Form Fee</label>
+                <div class="input-group">
+                    <span class="input-group-text taka-prefix">৳</span>
+                    <input type="number" class="form-control" name="form_fee" value="<?= old('form_fee') ?>" min="0" placeholder="0">
+                </div>
             </div>
             <div class="col-6 col-md-2">
-                <label class="form-label fw-semibold">Waiver Amount</label>
-                <input type="number" class="form-control" name="waiver_amount" value="<?= old('waiver_amount') ?>" min="0">
+                <label class="form-label">Reg. Fee</label>
+                <div class="input-group">
+                    <span class="input-group-text taka-prefix">৳</span>
+                    <input type="number" class="form-control" name="regi_fee" value="<?= old('regi_fee') ?>" min="0" placeholder="0">
+                </div>
             </div>
             <div class="col-6 col-md-2">
-                <label class="form-label fw-semibold">Form Fee</label>
-                <input type="number" class="form-control" name="form_fee" value="<?= old('form_fee') ?>" min="0">
+                <label class="form-label">Tuition Fee</label>
+                <div class="input-group">
+                    <span class="input-group-text taka-prefix">৳</span>
+                    <input type="number" class="form-control" name="tuition_fee" value="<?= old('tuition_fee') ?>" min="0" placeholder="0">
+                </div>
             </div>
             <div class="col-6 col-md-2">
-                <label class="form-label fw-semibold">Regi. Fee</label>
-                <input type="number" class="form-control" name="regi_fee" value="<?= old('regi_fee') ?>" min="0">
+                <label class="form-label">Misc Fee</label>
+                <div class="input-group">
+                    <span class="input-group-text taka-prefix">৳</span>
+                    <input type="text" class="form-control" name="misc_fee" value="<?= old('misc_fee') ?>" maxlength="50" placeholder="0">
+                </div>
             </div>
             <div class="col-6 col-md-2">
-                <label class="form-label fw-semibold">Tuition Fee</label>
-                <input type="number" class="form-control" name="tuition_fee" value="<?= old('tuition_fee') ?>" min="0">
+                <label class="form-label">Project Fee</label>
+                <div class="input-group">
+                    <span class="input-group-text taka-prefix">৳</span>
+                    <input type="number" class="form-control" name="project_fee" value="<?= old('project_fee') ?>" min="0" placeholder="0">
+                </div>
             </div>
             <div class="col-6 col-md-2">
-                <label class="form-label fw-semibold">Misc Fee</label>
-                <input type="text" class="form-control" name="misc_fee" value="<?= old('misc_fee') ?>" maxlength="50">
+                <label class="form-label">Total Fee</label>
+                <div class="input-group">
+                    <span class="input-group-text taka-prefix">৳</span>
+                    <input type="number" class="form-control" name="total_fee" value="<?= old('total_fee') ?>" min="0" placeholder="0">
+                </div>
+            </div>
+
+            <div class="col-12"><hr class="my-1" style="border-color:#e8eaf0;"><div class="fw-semibold mb-1 mt-1" style="font-size:.82rem;color:#92400e;text-transform:uppercase;letter-spacing:.05em;">Waiver &amp; Payable</div></div>
+            <div class="col-6 col-md-2">
+                <label class="form-label">Waiver %</label>
+                <div class="input-group">
+                    <input type="text" class="form-control" name="waiver_percent" value="<?= old('waiver_percent') ?>" maxlength="10" placeholder="e.g. 25">
+                    <span class="input-group-text">%</span>
+                </div>
             </div>
             <div class="col-6 col-md-2">
-                <label class="form-label fw-semibold">Project Fee</label>
-                <input type="number" class="form-control" name="project_fee" value="<?= old('project_fee') ?>" min="0">
-            </div>
-            <div class="col-6 col-md-2">
-                <label class="form-label fw-semibold">Total Fee</label>
-                <input type="number" class="form-control" name="total_fee" value="<?= old('total_fee') ?>" min="0">
+                <label class="form-label">Waiver Amount</label>
+                <div class="input-group">
+                    <span class="input-group-text taka-prefix">৳</span>
+                    <input type="number" class="form-control" name="waiver_amount" value="<?= old('waiver_amount') ?>" min="0" placeholder="0">
+                </div>
             </div>
             <div class="col-6 col-md-3">
-                <label class="form-label fw-semibold">Total Payable</label>
-                <input type="text" class="form-control" name="total_payable" value="<?= old('total_payable') ?>" maxlength="50">
+                <label class="form-label">Total Payable</label>
+                <div class="input-group">
+                    <span class="input-group-text taka-prefix">৳</span>
+                    <input type="text" class="form-control" name="total_payable" value="<?= old('total_payable') ?>" maxlength="50" placeholder="0">
+                </div>
             </div>
             <div class="col-6 col-md-3">
-                <label class="form-label fw-semibold">Monthly Installment</label>
-                <input type="text" class="form-control" name="monthly_installment" value="<?= old('monthly_installment') ?>" maxlength="50">
+                <label class="form-label">Monthly Installment</label>
+                <div class="input-group">
+                    <span class="input-group-text taka-prefix">৳</span>
+                    <input type="text" class="form-control" name="monthly_installment" value="<?= old('monthly_installment') ?>" maxlength="50" placeholder="0">
+                </div>
             </div>
             <div class="col-12 col-md-4">
-                <label class="form-label fw-semibold">Ref / Receipt Number</label>
-                <input type="text" class="form-control" name="ref_number" value="<?= old('ref_number') ?>" maxlength="100">
+                <label class="form-label">Ref / Receipt Number</label>
+                <input type="text" class="form-control" name="ref_number" value="<?= old('ref_number') ?>" maxlength="100" placeholder="Receipt or reference number">
             </div>
         </div>
     </div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════
-     SECTION 6 – ACADEMIC QUALIFICATIONS
+     SECTION 5 – ACADEMIC QUALIFICATIONS
 ═══════════════════════════════════════════════════════════ -->
-<div class="card mb-4">
-    <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between">
-        <h6 class="mb-0 fw-semibold"><i class="fas fa-graduation-cap me-2 text-muted"></i>Academic Qualifications</h6>
-        <button type="button" class="btn btn-sm btn-outline-primary" id="add_qual_btn" style="border-radius:8px;">
+<div class="card form-section sec-quals" id="sec-quals">
+    <div class="card-header">
+        <div class="section-icon"><i class="fas fa-graduation-cap"></i></div>
+        <span class="section-title">Academic Qualifications</span>
+        <button type="button" class="btn btn-sm ms-auto" id="add_qual_btn"
+                style="background:#cffafe;color:#0e7490;border:1px solid #a5f3fc;border-radius:8px;font-size:.8rem;">
             <i class="fas fa-plus me-1"></i> Add Row
         </button>
     </div>
-    <div class="card-body px-4 py-3">
+    <div class="card-body">
         <div id="qual_container">
             <!-- Row 0 (default) -->
             <div class="qual-row mb-3" id="qual_row_0">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <strong style="font-size:.85rem;">Qualification #1</strong>
-                </div>
+                <div class="qual-row-num">Qualification #1</div>
                 <?= sm_qual_row_html(0, [], $exam_titles, $boards, $groups) ?>
             </div>
         </div>
-        <small class="text-muted">Click <strong>+ Add Row</strong> to add more qualifications.</small>
+        <p class="text-muted mb-0" style="font-size:.8rem;"><i class="fas fa-info-circle me-1"></i>Click <strong>+ Add Row</strong> to add more qualifications (SSC, HSC, Bachelor, etc.).</p>
     </div>
 </div>
 
-<!-- Submit -->
-<div class="d-flex gap-3 mb-5">
-    <button type="submit" class="btn btn-primary px-4" style="border-radius:10px;">
-        <i class="fas fa-save me-1"></i> Save Student
+<!-- ══ Sticky action bar ═══════════════════════════════════════════════════════ -->
+<div class="sticky-action-bar">
+    <button type="submit" class="btn btn-primary px-5" style="border-radius:9px;font-weight:600;">
+        <i class="fas fa-save me-2"></i>Save Student
     </button>
-    <a href="<?= APP_URL ?>/students/index.php" class="btn btn-outline-secondary px-4" style="border-radius:10px;">
-        Cancel
+    <a href="<?= APP_URL ?>/students/index.php" class="btn btn-outline-secondary px-4" style="border-radius:9px;">
+        <i class="fas fa-times me-1"></i>Cancel
     </a>
+    <span class="ms-auto text-muted" style="font-size:.78rem;"><i class="fas fa-asterisk text-danger me-1" style="font-size:.6rem;"></i>Required fields</span>
 </div>
 
 </form>
 
 <script>
 // ── Reference data for JS ─────────────────────────────────────────────────────
-var DEPT_MAP = <?= json_encode($dept_map, JSON_UNESCAPED_UNICODE) ?>;
-var PROG_MAP = <?= json_encode($prog_map, JSON_UNESCAPED_UNICODE) ?>;
-var EXAM_DATA = <?= json_encode(array_values($exam_titles), JSON_UNESCAPED_UNICODE) ?>;
-var BOARD_DATA = <?= json_encode(array_values($boards), JSON_UNESCAPED_UNICODE) ?>;
-var GROUP_DATA = <?= json_encode(array_values($groups), JSON_UNESCAPED_UNICODE) ?>;
-var THANA_MAP = <?= json_encode($thana_map, JSON_UNESCAPED_UNICODE) ?>;
+var DEPT_MAP  = <?= json_encode($dept_map,  JSON_UNESCAPED_UNICODE) ?>;
+var PROG_MAP  = <?= json_encode($prog_map,  JSON_UNESCAPED_UNICODE) ?>;
+var EXAM_DATA  = <?= json_encode(array_values($exam_titles), JSON_UNESCAPED_UNICODE) ?>;
+var BOARD_DATA = <?= json_encode(array_values($boards),      JSON_UNESCAPED_UNICODE) ?>;
+var GROUP_DATA = <?= json_encode(array_values($groups),      JSON_UNESCAPED_UNICODE) ?>;
+var THANA_MAP  = <?= json_encode($thana_map, JSON_UNESCAPED_UNICODE) ?>;
+
+// ── Photo preview ─────────────────────────────────────────────────────────────
+(function() {
+    var area    = document.getElementById('photo_drop_area');
+    var input   = document.getElementById('photo_input');
+    var preview = document.getElementById('photo_preview');
+    var placeholder = document.getElementById('photo_placeholder');
+
+    area.addEventListener('click', function() { input.click(); });
+    input.addEventListener('change', function() {
+        var file = this.files[0];
+        if (!file) return;
+        var reader = new FileReader();
+        reader.onload = function(e) {
+            preview.src = e.target.result;
+            preview.classList.add('has-image');
+            placeholder.style.display = 'none';
+        };
+        reader.readAsDataURL(file);
+    });
+})();
 
 // ── Searchable select widget ──────────────────────────────────────────────────
 function initSearchableSelect(wrap) {
@@ -993,10 +1202,10 @@ document.getElementById('add_qual_btn').addEventListener('click', function() {
     var listStyle = 'position:absolute;top:100%;left:0;right:0;max-height:180px;overflow-y:auto;background:#fff;border:1px solid #dee2e6;border-top:0;border-radius:0 0 6px 6px;z-index:1060;display:none;';
 
     row.innerHTML =
-        '<div class="d-flex justify-content-between align-items-center mb-2">'
-        + '<strong style="font-size:.85rem;">Qualification #' + (idx + 1) + '</strong>'
-        + '<button type="button" class="btn btn-sm btn-outline-danger" style="border-radius:7px;" '
-        + 'onclick="this.closest(\'.qual-row\').remove()"><i class="fas fa-times"></i></button></div>'
+        '<div class="qual-row-num">Qualification #' + (idx + 1) + '</div>'
+        + '<div class="d-flex justify-content-end mb-2">'
+        + '<button type="button" class="btn btn-sm btn-outline-danger" style="border-radius:7px;font-size:.75rem;" '
+        + 'onclick="this.closest(\'.qual-row\').remove()"><i class="fas fa-times me-1"></i>Remove</button></div>'
         + '<input type="hidden" name="qual[' + idx + '][id]" value="0">'
         + '<div class="row g-2">'
         // Exam Title
