@@ -8,16 +8,30 @@ $user       = auth_user();
 $errors     = [];
 clear_old();
 
-// Load departments and all programs
-$departments = db()->query(
-    'SELECT id, name, code FROM dept_departments WHERE is_active = 1 ORDER BY name ASC'
-)->fetchAll();
+// Load reference data
+$departments  = sm_dept_data();
+$all_programs = sm_program_data();
+$semesters    = sm_semester_list();
+$batches      = sm_batches();
+$exam_titles  = sm_exam_titles();
+$boards       = sm_boards();
+$groups       = sm_academic_groups();
+$districts    = sm_bd_districts();
+$thanas       = sm_bd_thanas();
 
-$all_programs = db()->query(
-    'SELECT id, dept_id, program_name FROM dept_academic_programs WHERE is_active = 1 ORDER BY program_name ASC'
-)->fetchAll();
-
-$semesters = sm_semester_list();
+// Build lookup maps for JS
+$dept_map    = [];
+foreach ($departments as $d) {
+    $dept_map[$d['id']] = ['faculty_label' => $d['faculty_label']];
+}
+$prog_map    = [];
+foreach ($all_programs as $p) {
+    $prog_map[$p['id']] = ['program_type' => $p['program_type'] ?? '', 'dept_id' => $p['dept_id']];
+}
+$thana_map = [];
+foreach ($thanas as $t) {
+    $thana_map[$t['district_id']][] = ['id' => $t['id'], 'name' => $t['name']];
+}
 
 // ── Handle POST ───────────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -43,6 +57,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $present_address      = trim($_POST['present_address']      ?? '');
     $permanent_address    = trim($_POST['permanent_address']    ?? '');
     $nationality          = trim($_POST['nationality']          ?? '');
+    $country              = trim($_POST['country']              ?? 'Bangladesh');
+    $district_id          = (int)($_POST['district_id']         ?? 0);
+    $thana_id             = (int)($_POST['thana_id']            ?? 0);
     $email                = trim($_POST['email']                ?? '');
     $phone                = trim($_POST['phone']                ?? '');
     $place_of_birth       = trim($_POST['place_of_birth']       ?? '');
@@ -52,6 +69,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $blood_group          = trim($_POST['blood_group']          ?? '');
     $nid                  = trim($_POST['nid']                  ?? '');
     $batch                = trim($_POST['batch']                ?? '');
+    $batch_id             = (int)($_POST['batch_id']            ?? 0);
+    $year                 = trim($_POST['year']                 ?? '');
     $shift                = trim($_POST['shift']                ?? '');
     $poor_meritorious     = isset($_POST['poor_meritorious'])     ? 1 : 0;
     $freedom_fighter      = isset($_POST['freedom_fighter_quota']) ? 1 : 0;
@@ -67,20 +86,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $monthly_installment  = trim($_POST['monthly_installment']  ?? '');
     $ref_number           = trim($_POST['ref_number']           ?? '');
 
+    // Derive faculty_label from selected department
+    $dept_faculty_label = null;
+    foreach ($departments as $d) {
+        if ((int)$d['id'] === $dept_id) {
+            $dept_faculty_label = $d['faculty_label'] ?: null;
+            break;
+        }
+    }
+
     // Qualifications
     $qual_rows = [];
     if (!empty($_POST['qual'])) {
         foreach ($_POST['qual'] as $idx => $q) {
             $row = [
-                'exam_name'            => trim($q['exam_name']            ?? ''),
-                'session'              => trim($q['session']              ?? ''),
-                'group_name'           => trim($q['group_name']           ?? ''),
-                'board_university'     => trim($q['board_university']     ?? ''),
-                'passing_year'         => trim($q['passing_year']         ?? ''),
-                'division_class_grade' => trim($q['division_class_grade'] ?? ''),
-                'obtained_marks_gpa'   => trim($q['obtained_marks_gpa']   ?? ''),
+                'exam_title_id'        => (int)($q['exam_title_id']       ?? 0) ?: null,
+                'exam_name'            => trim($q['exam_name']             ?? ''),
+                'session'              => trim($q['session']               ?? ''),
+                'group_id'             => (int)($q['group_id']             ?? 0) ?: null,
+                'group_name'           => trim($q['group_name']            ?? ''),
+                'board_id'             => (int)($q['board_id']             ?? 0) ?: null,
+                'board_university'     => trim($q['board_university']      ?? ''),
+                'passing_year'         => trim($q['passing_year']          ?? ''),
+                'division_class_grade' => trim($q['division_class_grade']  ?? ''),
+                'obtained_marks_gpa'   => trim($q['obtained_marks_gpa']    ?? ''),
             ];
-            if (array_filter($row)) {
+            // Keep row if any meaningful field is filled
+            $check = array_filter([
+                $row['exam_title_id'], $row['exam_name'], $row['session'],
+                $row['board_id'], $row['board_university'], $row['group_id'], $row['group_name'],
+                $row['passing_year'], $row['division_class_grade'], $row['obtained_marks_gpa'],
+            ]);
+            if ($check) {
                 $qual_rows[] = $row;
             }
         }
@@ -139,23 +176,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo = db();
         $pdo->prepare(
             'INSERT INTO students
-               (student_id, dept_id, program_id, admitted_semester, batch, shift,
+               (student_id, dept_id, program_id, admitted_semester, batch, batch_id, year, shift,
                 full_name, father_name, father_phone, father_occupation, father_yearly_income,
                 mother_name, mother_phone, mother_occupation, mother_yearly_income,
-                present_address, permanent_address, nationality, email, phone,
+                present_address, permanent_address, nationality, country,
+                district_id, thana_id, faculty_label,
+                email, phone,
                 dob, blood_group, nid,
                 place_of_birth, sex, religion, photo,
                 poor_meritorious, freedom_fighter_quota,
                 waiver_percent, form_fee, regi_fee, tuition_fee, misc_fee,
                 project_fee, total_fee, waiver_amount, total_payable, monthly_installment,
                 ref_number, status, created_by)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
         )->execute([
             $student_id,
             $dept_id,
             $program_id ?: null,
             $admitted_sem,
             $batch          ?: null,
+            $batch_id       ?: null,
+            $year           ?: null,
             $shift          ?: null,
             $full_name,
             $father_name          ?: null,
@@ -169,6 +210,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $present_address      ?: null,
             $permanent_address    ?: null,
             $nationality          ?: null,
+            $country              ?: 'Bangladesh',
+            $district_id          ?: null,
+            $thana_id             ?: null,
+            $dept_faculty_label,
             $email                ?: null,
             $phone                ?: null,
             $dob                  !== '' ? $dob : null,
@@ -200,14 +245,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         foreach ($qual_rows as $qi => $q) {
             $pdo->prepare(
                 'INSERT INTO student_academic_qualifications
-                   (student_id, exam_name, session, group_name, board_university,
+                   (student_id, exam_title_id, exam_name, session, group_id, group_name,
+                    board_id, board_university,
                     passing_year, division_class_grade, obtained_marks_gpa, sort_order)
-                 VALUES (?,?,?,?,?,?,?,?,?)'
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
             )->execute([
                 $new_id,
+                $q['exam_title_id'],
                 $q['exam_name']            ?: null,
                 $q['session']              ?: null,
+                $q['group_id'],
                 $q['group_name']           ?: null,
+                $q['board_id'],
                 $q['board_university']     ?: null,
                 $q['passing_year']         ?: null,
                 $q['division_class_grade'] ?: null,
@@ -331,16 +380,25 @@ require_once __DIR__ . '/../includes/header.php';
                     <div class="ss-list" id="dept_list">
                         <?php foreach ($departments as $d): ?>
                         <div class="ss-item" data-value="<?= $d['id'] ?>" data-label="<?= h($d['name']) ?>"
-                             data-code="<?= h($d['code']) ?>">
+                             data-code="<?= h($d['code']) ?>"
+                             data-faculty="<?= h($d['faculty_label']) ?>">
                             <?= h($d['name']) ?> <small class="text-muted">(<?= h($d['code']) ?>)</small>
                         </div>
                         <?php endforeach; ?>
                     </div>
                 </div>
             </div>
+            <!-- Faculty (auto-populated) -->
+            <div class="col-12 col-md-4">
+                <label class="form-label fw-semibold">Faculty</label>
+                <input type="text" class="form-control" id="faculty_display"
+                       value="<?= old('faculty_label') ?>" readonly
+                       placeholder="Auto-filled from department" style="background:#f8f9fa;">
+                <input type="hidden" name="faculty_label" id="faculty_label" value="<?= old('faculty_label') ?>">
+            </div>
             <!-- Program -->
             <div class="col-12 col-md-4">
-                <label class="form-label fw-semibold">Program</label>
+                <label class="form-label fw-semibold">Academic Program</label>
                 <div class="searchable-select-wrap">
                     <input type="text" class="form-control ss-trigger" id="prog_search"
                            placeholder="Search program…"
@@ -348,15 +406,24 @@ require_once __DIR__ . '/../includes/header.php';
                            data-target="program_id">
                     <input type="hidden" name="program_id" id="program_id" value="<?= old('program_id') ?>">
                     <div class="ss-list" id="prog_list">
-                        <div class="ss-item" data-value="" data-label="">— None —</div>
+                        <div class="ss-item" data-value="" data-label="" data-type="">— None —</div>
                         <?php foreach ($all_programs as $p): ?>
                         <div class="ss-item" data-value="<?= $p['id'] ?>" data-label="<?= h($p['program_name']) ?>"
-                             data-dept="<?= $p['dept_id'] ?>">
+                             data-dept="<?= $p['dept_id'] ?>"
+                             data-type="<?= h($p['program_type'] ?? '') ?>">
                             <?= h($p['program_name']) ?>
                         </div>
                         <?php endforeach; ?>
                     </div>
                 </div>
+            </div>
+            <!-- Program Type (auto-populated) -->
+            <div class="col-12 col-md-3">
+                <label class="form-label fw-semibold">Program Type</label>
+                <input type="text" class="form-control" id="program_type_display"
+                       value="<?= old('program_type') ?>" readonly
+                       placeholder="Auto-detected from program" style="background:#f8f9fa;">
+                <input type="hidden" name="program_type" id="program_type" value="<?= old('program_type') ?>">
             </div>
             <!-- Admitted Semester -->
             <div class="col-12 col-md-4">
@@ -376,10 +443,32 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
         </div>
         <div class="row g-3 mt-1">
-            <div class="col-12 col-md-4">
+            <!-- Batch (searchable from DB) -->
+            <div class="col-12 col-md-3">
                 <label class="form-label fw-semibold">Batch</label>
-                <input type="text" class="form-control" name="batch"
-                       value="<?= old('batch') ?>" maxlength="50" placeholder="e.g. 35th">
+                <div class="searchable-select-wrap">
+                    <input type="text" class="form-control ss-trigger" id="batch_search"
+                           placeholder="Search batch…"
+                           autocomplete="off"
+                           data-target="batch_id">
+                    <input type="hidden" name="batch_id" id="batch_id" value="<?= old('batch_id') ?>">
+                    <!-- Also keep text field for manual entry -->
+                    <input type="hidden" name="batch" id="batch_text" value="<?= old('batch') ?>">
+                    <div class="ss-list" id="batch_list">
+                        <div class="ss-item" data-value="" data-label="">— None —</div>
+                        <?php foreach ($batches as $b): ?>
+                        <div class="ss-item" data-value="<?= $b['id'] ?>" data-label="<?= h($b['name']) ?>">
+                            <?= h($b['name']) ?>
+                        </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            </div>
+            <!-- Year -->
+            <div class="col-12 col-md-2">
+                <label class="form-label fw-semibold">Year</label>
+                <input type="text" class="form-control" name="year"
+                       value="<?= old('year', date('Y')) ?>" maxlength="10" placeholder="e.g. <?= date('Y') ?>">
             </div>
             <div class="col-12 col-md-4">
                 <label class="form-label fw-semibold">Shift</label>
@@ -432,6 +521,10 @@ require_once __DIR__ . '/../includes/header.php';
                 <input type="text" class="form-control" name="nationality" value="<?= old('nationality','Bangladeshi') ?>" maxlength="100">
             </div>
             <div class="col-12 col-md-3">
+                <label class="form-label fw-semibold">Country</label>
+                <input type="text" class="form-control" name="country" value="<?= old('country','Bangladesh') ?>" maxlength="100">
+            </div>
+            <div class="col-12 col-md-3">
                 <label class="form-label fw-semibold">Place of Birth</label>
                 <input type="text" class="form-control" name="place_of_birth" value="<?= old('place_of_birth') ?>" maxlength="200">
             </div>
@@ -451,6 +544,51 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="col-12 col-md-4">
                 <label class="form-label fw-semibold">NID Number</label>
                 <input type="text" class="form-control" name="nid" value="<?= old('nid') ?>" maxlength="50">
+            </div>
+            <!-- District (searchable) -->
+            <div class="col-12 col-md-4">
+                <label class="form-label fw-semibold">District</label>
+                <div class="searchable-select-wrap">
+                    <input type="text" class="form-control ss-trigger" id="district_search"
+                           placeholder="Search district…" autocomplete="off" data-target="district_id">
+                    <input type="hidden" name="district_id" id="district_id" value="<?= old('district_id') ?>">
+                    <div class="ss-list" id="district_list">
+                        <div class="ss-item" data-value="" data-label="">— None —</div>
+                        <?php
+                        $cur_div = '';
+                        foreach ($districts as $dist):
+                            if ($dist['division'] !== $cur_div) {
+                                $cur_div = $dist['division'];
+                        ?>
+                        <div class="ss-item" data-value="" data-label="" style="font-weight:600;background:#f0f4ff;pointer-events:none;font-size:.75rem;padding:4px 12px;color:#555;">
+                            — <?= h($cur_div) ?> Division —
+                        </div>
+                        <?php } ?>
+                        <div class="ss-item" data-value="<?= $dist['id'] ?>" data-label="<?= h($dist['name']) ?>"
+                             data-division="<?= h($dist['division']) ?>">
+                            <?= h($dist['name']) ?>
+                        </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            </div>
+            <!-- Thana (searchable, filtered by district) -->
+            <div class="col-12 col-md-4">
+                <label class="form-label fw-semibold">Thana / Upazila</label>
+                <div class="searchable-select-wrap">
+                    <input type="text" class="form-control ss-trigger" id="thana_search"
+                           placeholder="Select district first…" autocomplete="off" data-target="thana_id">
+                    <input type="hidden" name="thana_id" id="thana_id" value="<?= old('thana_id') ?>">
+                    <div class="ss-list" id="thana_list">
+                        <div class="ss-item" data-value="" data-label="" data-district="">— None —</div>
+                        <?php foreach ($thanas as $th): ?>
+                        <div class="ss-item" data-value="<?= $th['id'] ?>" data-label="<?= h($th['name']) ?>"
+                             data-district="<?= $th['district_id'] ?>">
+                            <?= h($th['name']) ?>
+                        </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
             </div>
             <div class="col-12 col-md-6">
                 <label class="form-label fw-semibold">Present Address</label>
@@ -632,43 +770,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="d-flex justify-content-between align-items-center mb-2">
                     <strong style="font-size:.85rem;">Qualification #1</strong>
                 </div>
-                <div class="row g-2">
-                    <div class="col-12 col-md-4">
-                        <label class="form-label" style="font-size:.8rem;">Exam Name</label>
-                        <input type="text" class="form-control form-control-sm" name="qual[0][exam_name]"
-                               placeholder="e.g. SSC, HSC, B.Sc.">
-                    </div>
-                    <div class="col-6 col-md-2">
-                        <label class="form-label" style="font-size:.8rem;">Session</label>
-                        <input type="text" class="form-control form-control-sm" name="qual[0][session]"
-                               placeholder="2018-2019">
-                    </div>
-                    <div class="col-6 col-md-2">
-                        <label class="form-label" style="font-size:.8rem;">Group</label>
-                        <input type="text" class="form-control form-control-sm" name="qual[0][group_name]"
-                               placeholder="Science">
-                    </div>
-                    <div class="col-12 col-md-4">
-                        <label class="form-label" style="font-size:.8rem;">Board / University</label>
-                        <input type="text" class="form-control form-control-sm" name="qual[0][board_university]"
-                               placeholder="Dhaka Board">
-                    </div>
-                    <div class="col-6 col-md-2">
-                        <label class="form-label" style="font-size:.8rem;">Year of Passing</label>
-                        <input type="text" class="form-control form-control-sm" name="qual[0][passing_year]"
-                               placeholder="2019">
-                    </div>
-                    <div class="col-6 col-md-3">
-                        <label class="form-label" style="font-size:.8rem;">Division / Class / Grade</label>
-                        <input type="text" class="form-control form-control-sm" name="qual[0][division_class_grade]"
-                               placeholder="A+">
-                    </div>
-                    <div class="col-12 col-md-3">
-                        <label class="form-label" style="font-size:.8rem;">Obtained Marks / GPA / CGPA</label>
-                        <input type="text" class="form-control form-control-sm" name="qual[0][obtained_marks_gpa]"
-                               placeholder="5.00">
-                    </div>
-                </div>
+                <?= sm_qual_row_html(0, [], $exam_titles, $boards, $groups) ?>
             </div>
         </div>
         <small class="text-muted">Click <strong>+ Add Row</strong> to add more qualifications.</small>
@@ -688,20 +790,26 @@ require_once __DIR__ . '/../includes/header.php';
 </form>
 
 <script>
-// ── Searchable select widget ──────────────────────────────────────────────────
-document.querySelectorAll('.ss-trigger').forEach(function(input) {
-    var targetId  = input.dataset.target;
-    var targetEl  = document.getElementById(targetId);
-    var listEl    = input.nextElementSibling.nextElementSibling || input.nextElementSibling;
-    // Find the .ss-list sibling
-    var wrap      = input.closest('.searchable-select-wrap');
-    var list      = wrap.querySelector('.ss-list');
-    var items     = Array.from(list.querySelectorAll('.ss-item'));
+// ── Reference data for JS ─────────────────────────────────────────────────────
+var DEPT_MAP = <?= json_encode($dept_map, JSON_UNESCAPED_UNICODE) ?>;
+var PROG_MAP = <?= json_encode($prog_map, JSON_UNESCAPED_UNICODE) ?>;
+var EXAM_DATA = <?= json_encode(array_values($exam_titles), JSON_UNESCAPED_UNICODE) ?>;
+var BOARD_DATA = <?= json_encode(array_values($boards), JSON_UNESCAPED_UNICODE) ?>;
+var GROUP_DATA = <?= json_encode(array_values($groups), JSON_UNESCAPED_UNICODE) ?>;
+var THANA_MAP = <?= json_encode($thana_map, JSON_UNESCAPED_UNICODE) ?>;
 
-    // Pre-fill display value if old() had a value
-    var currentVal = targetEl.value;
+// ── Searchable select widget ──────────────────────────────────────────────────
+function initSearchableSelect(wrap) {
+    var input   = wrap.querySelector('.ss-trigger');
+    if (!input) return;
+    var targetId = input.dataset.target;
+    var targetEl = document.getElementById(targetId);
+    var list     = wrap.querySelector('.ss-list');
+    var items    = Array.from(list.querySelectorAll('.ss-item'));
+
+    var currentVal = targetEl ? targetEl.value : '';
     if (currentVal) {
-        var match = items.find(function(i){ return i.dataset.value == currentVal; });
+        var match = items.find(function(i){ return String(i.dataset.value) === String(currentVal); });
         if (match) input.value = match.dataset.label;
     }
 
@@ -711,20 +819,31 @@ document.querySelectorAll('.ss-trigger').forEach(function(input) {
     function filterList(q) {
         q = q.toLowerCase();
         items.forEach(function(item) {
-            item.style.display = item.textContent.toLowerCase().includes(q) ? '' : 'none';
+            var noVal = item.dataset.value === '' && item.style.pointerEvents === 'none';
+            item.style.display = (noVal || item.textContent.toLowerCase().includes(q)) ? '' : 'none';
         });
     }
 
     items.forEach(function(item) {
+        if (item.style.pointerEvents === 'none') return; // division headers
         item.addEventListener('mousedown', function(e) {
             e.preventDefault();
-            targetEl.value = item.dataset.value;
-            input.value    = item.dataset.label;
+            if (targetEl) targetEl.value = item.dataset.value;
+            input.value = item.dataset.label;
             list.classList.remove('open');
 
-            // If dept changed, filter programs
             if (targetId === 'dept_id') {
+                updateFaculty(item.dataset.value);
                 filterProgsByDept(item.dataset.value);
+            }
+            if (targetId === 'program_id') {
+                updateProgramType(item.dataset.value, item.dataset.type);
+            }
+            if (targetId === 'batch_id') {
+                document.getElementById('batch_text').value = item.dataset.label;
+            }
+            if (targetId === 'district_id') {
+                filterThanasByDistrict(item.dataset.value);
             }
         });
     });
@@ -732,7 +851,24 @@ document.querySelectorAll('.ss-trigger').forEach(function(input) {
     document.addEventListener('click', function(e) {
         if (!wrap.contains(e.target)) list.classList.remove('open');
     });
+}
+
+document.querySelectorAll('.searchable-select-wrap').forEach(function(wrap) {
+    initSearchableSelect(wrap);
 });
+
+function updateFaculty(deptId) {
+    var info = DEPT_MAP[deptId] || {};
+    var label = info.faculty_label || '';
+    document.getElementById('faculty_display').value = label;
+    document.getElementById('faculty_label').value   = label;
+}
+
+function updateProgramType(progId, typeFromData) {
+    var type = typeFromData || (PROG_MAP[progId] ? PROG_MAP[progId].program_type : '') || '';
+    document.getElementById('program_type_display').value = type;
+    document.getElementById('program_type').value          = type;
+}
 
 function filterProgsByDept(deptId) {
     var progList  = document.getElementById('prog_list');
@@ -740,12 +876,27 @@ function filterProgsByDept(deptId) {
     var progVal   = document.getElementById('program_id');
     progInput.value = '';
     progVal.value   = '';
+    document.getElementById('program_type_display').value = '';
+    document.getElementById('program_type').value = '';
     Array.from(progList.querySelectorAll('.ss-item')).forEach(function(item) {
         if (!item.dataset.dept || item.dataset.dept === deptId || item.dataset.value === '') {
             item.style.display = '';
         } else {
             item.style.display = 'none';
         }
+    });
+}
+
+function filterThanasByDistrict(districtId) {
+    var thanaList  = document.getElementById('thana_list');
+    var thanaInput = document.getElementById('thana_search');
+    var thanaVal   = document.getElementById('thana_id');
+    thanaInput.placeholder = districtId ? 'Search thana…' : 'Select district first…';
+    thanaInput.value = '';
+    thanaVal.value = '';
+    Array.from(thanaList.querySelectorAll('.ss-item')).forEach(function(item) {
+        var d = item.dataset.district;
+        item.style.display = (!d || d === '' || d === districtId) ? '' : 'none';
     });
 }
 
@@ -760,35 +911,139 @@ document.querySelectorAll('input[name="student_id_mode"]').forEach(function(r) {
 });
 updateSidMode();
 
+// ── Qual row searchable select (within qual rows) ─────────────────────────────
+function initQualSearchableSelects(rowEl) {
+    rowEl.querySelectorAll('.qual-ss-wrap').forEach(function(wrap) {
+        var input    = wrap.querySelector('.qual-ss-trigger');
+        if (!input) return;
+        var targetId = input.dataset.target;
+        var targetEl = document.getElementById(targetId);
+        var list     = wrap.querySelector('.qual-ss-list');
+        var items    = Array.from(list.querySelectorAll('.qual-ss-item'));
+
+        input.addEventListener('focus',  function() { list.style.display = 'block'; filterQList(''); });
+        input.addEventListener('input',  function() { filterQList(this.value); list.style.display = 'block'; });
+
+        function filterQList(q) {
+            q = q.toLowerCase();
+            items.forEach(function(item) {
+                item.style.display = item.textContent.toLowerCase().includes(q) ? '' : 'none';
+            });
+        }
+
+        items.forEach(function(item) {
+            item.addEventListener('mousedown', function(e) {
+                e.preventDefault();
+                if (targetEl) targetEl.value = item.dataset.value;
+                input.value = item.dataset.label;
+                list.style.display = 'none';
+
+                // Sync text fallback field for legacy data
+                var prefix = targetId.replace(/_exam_id$/, '').replace(/_board_id$/, '').replace(/_grp_id$/, '');
+                if (targetId.endsWith('_exam_id')) {
+                    var nameEl = document.getElementById(prefix + '_exam_name');
+                    if (nameEl) nameEl.value = item.dataset.label;
+                } else if (targetId.endsWith('_board_id')) {
+                    var nameEl = document.getElementById(prefix + '_board_name');
+                    if (nameEl) nameEl.value = item.dataset.label;
+                } else if (targetId.endsWith('_grp_id')) {
+                    var nameEl = document.getElementById(prefix + '_grp_name');
+                    if (nameEl) nameEl.value = item.dataset.label;
+                }
+            });
+        });
+
+        document.addEventListener('click', function(e) {
+            if (!wrap.contains(e.target)) list.style.display = 'none';
+        });
+    });
+}
+
+// Init existing qual rows
+document.querySelectorAll('.qual-row').forEach(function(row) {
+    initQualSearchableSelects(row);
+});
+
 // ── Dynamic qualification rows ────────────────────────────────────────────────
 var qualCount = 1;
 document.getElementById('add_qual_btn').addEventListener('click', function() {
-    var idx = qualCount++;
-    var row = document.createElement('div');
+    var idx  = qualCount++;
+    var uid  = 'q' + idx;
+    var row  = document.createElement('div');
     row.className = 'qual-row mb-3';
     row.id = 'qual_row_' + idx;
-    row.innerHTML = '<div class="d-flex justify-content-between align-items-center mb-2">'
+
+    var examOpts  = '<div class="qual-ss-item" data-value="" data-label="" style="padding:5px 10px;cursor:pointer;font-size:.8rem;color:#999;">— None (type manually) —</div>'
+        + EXAM_DATA.map(function(e) {
+            return '<div class="qual-ss-item" data-value="' + e.id + '" data-label="' + escHtml(e.name) + '" style="padding:5px 10px;cursor:pointer;font-size:.8rem;">'
+                + escHtml(e.name) + (e.short_name ? ' <small style="color:#999;">(' + escHtml(e.short_name) + ')</small>' : '') + '</div>';
+        }).join('');
+
+    var boardOpts = '<div class="qual-ss-item" data-value="" data-label="" style="padding:5px 10px;cursor:pointer;font-size:.8rem;color:#999;">— None (type manually) —</div>'
+        + BOARD_DATA.map(function(b) {
+            return '<div class="qual-ss-item" data-value="' + b.id + '" data-label="' + escHtml(b.name) + '" style="padding:5px 10px;cursor:pointer;font-size:.8rem;">'
+                + escHtml(b.name) + (b.short_name ? ' <small style="color:#999;">(' + escHtml(b.short_name) + ')</small>' : '') + '</div>';
+        }).join('');
+
+    var groupOpts = '<div class="qual-ss-item" data-value="" data-label="" style="padding:5px 10px;cursor:pointer;font-size:.8rem;color:#999;">— None —</div>'
+        + GROUP_DATA.map(function(g) {
+            return '<div class="qual-ss-item" data-value="' + g.id + '" data-label="' + escHtml(g.name) + '" style="padding:5px 10px;cursor:pointer;font-size:.8rem;">' + escHtml(g.name) + '</div>';
+        }).join('');
+
+    var listStyle = 'position:absolute;top:100%;left:0;right:0;max-height:180px;overflow-y:auto;background:#fff;border:1px solid #dee2e6;border-top:0;border-radius:0 0 6px 6px;z-index:1060;display:none;';
+
+    row.innerHTML =
+        '<div class="d-flex justify-content-between align-items-center mb-2">'
         + '<strong style="font-size:.85rem;">Qualification #' + (idx + 1) + '</strong>'
         + '<button type="button" class="btn btn-sm btn-outline-danger" style="border-radius:7px;" '
         + 'onclick="this.closest(\'.qual-row\').remove()"><i class="fas fa-times"></i></button></div>'
+        + '<input type="hidden" name="qual[' + idx + '][id]" value="0">'
         + '<div class="row g-2">'
-        + '<div class="col-12 col-md-4"><label class="form-label" style="font-size:.8rem;">Exam Name</label>'
-        + '<input type="text" class="form-control form-control-sm" name="qual[' + idx + '][exam_name]" placeholder="e.g. SSC, HSC, B.Sc."></div>'
+        // Exam Title
+        + '<div class="col-12 col-md-4"><label class="form-label" style="font-size:.8rem;">Exam Title</label>'
+        + '<div class="qual-ss-wrap" style="position:relative;">'
+        + '<input type="text" class="form-control form-control-sm qual-ss-trigger" id="' + uid + '_exam_txt" placeholder="SSC, HSC, O Level…" autocomplete="off" data-target="' + uid + '_exam_id">'
+        + '<input type="hidden" name="qual[' + idx + '][exam_title_id]" id="' + uid + '_exam_id" value="">'
+        + '<input type="hidden" name="qual[' + idx + '][exam_name]" id="' + uid + '_exam_name" value="">'
+        + '<div class="qual-ss-list" style="' + listStyle + '">' + examOpts + '</div>'
+        + '</div></div>'
+        // Session
         + '<div class="col-6 col-md-2"><label class="form-label" style="font-size:.8rem;">Session</label>'
         + '<input type="text" class="form-control form-control-sm" name="qual[' + idx + '][session]" placeholder="2018-2019"></div>'
-        + '<div class="col-6 col-md-2"><label class="form-label" style="font-size:.8rem;">Group</label>'
-        + '<input type="text" class="form-control form-control-sm" name="qual[' + idx + '][group_name]" placeholder="Science"></div>'
-        + '<div class="col-12 col-md-4"><label class="form-label" style="font-size:.8rem;">Board / University</label>'
-        + '<input type="text" class="form-control form-control-sm" name="qual[' + idx + '][board_university]" placeholder="Dhaka Board"></div>'
+        // Group
+        + '<div class="col-6 col-md-2"><label class="form-label" style="font-size:.8rem;">Academic Group</label>'
+        + '<div class="qual-ss-wrap" style="position:relative;">'
+        + '<input type="text" class="form-control form-control-sm qual-ss-trigger" id="' + uid + '_grp_txt" placeholder="Science, Arts…" autocomplete="off" data-target="' + uid + '_grp_id">'
+        + '<input type="hidden" name="qual[' + idx + '][group_id]" id="' + uid + '_grp_id" value="">'
+        + '<input type="hidden" name="qual[' + idx + '][group_name]" id="' + uid + '_grp_name" value="">'
+        + '<div class="qual-ss-list" style="' + listStyle + '">' + groupOpts + '</div>'
+        + '</div></div>'
+        // Board
+        + '<div class="col-12 col-md-4"><label class="form-label" style="font-size:.8rem;">Academic Board / University</label>'
+        + '<div class="qual-ss-wrap" style="position:relative;">'
+        + '<input type="text" class="form-control form-control-sm qual-ss-trigger" id="' + uid + '_board_txt" placeholder="Dhaka Board, NU…" autocomplete="off" data-target="' + uid + '_board_id">'
+        + '<input type="hidden" name="qual[' + idx + '][board_id]" id="' + uid + '_board_id" value="">'
+        + '<input type="hidden" name="qual[' + idx + '][board_university]" id="' + uid + '_board_name" value="">'
+        + '<div class="qual-ss-list" style="' + listStyle + '">' + boardOpts + '</div>'
+        + '</div></div>'
+        // Passing Year
         + '<div class="col-6 col-md-2"><label class="form-label" style="font-size:.8rem;">Year of Passing</label>'
         + '<input type="text" class="form-control form-control-sm" name="qual[' + idx + '][passing_year]" placeholder="2019"></div>'
+        // Grade
         + '<div class="col-6 col-md-3"><label class="form-label" style="font-size:.8rem;">Division / Class / Grade</label>'
         + '<input type="text" class="form-control form-control-sm" name="qual[' + idx + '][division_class_grade]" placeholder="A+"></div>'
+        // GPA
         + '<div class="col-12 col-md-3"><label class="form-label" style="font-size:.8rem;">Obtained Marks / GPA / CGPA</label>'
         + '<input type="text" class="form-control form-control-sm" name="qual[' + idx + '][obtained_marks_gpa]" placeholder="5.00"></div>'
         + '</div>';
+
     document.getElementById('qual_container').appendChild(row);
+    initQualSearchableSelects(row);
 });
+
+function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 </script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
