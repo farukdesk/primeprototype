@@ -572,14 +572,15 @@ $photo_url = rp_photo_url($student['photo']);
 
         /* ── Print overrides ─────────────────────────────────────────────── */
         @media print {
-            body { background: #fff; }
+            @page { size: A4 portrait; margin: 8mm 10mm; }
+            body { background: #fff; font-size: 9.5pt; }
             .toolbar { display: none !important; }
             .doc-outer { max-width: 100%; margin: 0; padding: 0; }
             .document {
                 border-radius: 0;
                 box-shadow: none;
             }
-            .doc-topband { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .doc-topband { -webkit-print-color-adjust: exact; print-color-adjust: exact; height: 5px; }
             .doc-header, .doc-titlebar, .doc-body, .doc-footer {
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
@@ -588,6 +589,27 @@ $photo_url = rp_photo_url($student['photo']);
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
             }
+            .doc-header { padding: 12px 24px 10px; gap: 6px; }
+            .doc-header-info .uni-name { font-size: 14pt; }
+            .doc-header-info .uni-tagline { font-size: 7.5pt; margin-bottom: 4px; }
+            .doc-header-info .uni-contact { font-size: 7.5pt; line-height: 1.7; }
+            .doc-titlebar { padding: 8px 24px; }
+            .doc-titlebar .doc-title { font-size: 11pt; }
+            .doc-body { padding: 12px 24px 14px; }
+            .student-snapshot { padding: 12px 16px; margin-bottom: 12px; gap: 14px; }
+            .student-photo,
+            .student-photo-placeholder { width: 76px; height: 92px; }
+            .student-name { font-size: 12pt; margin-bottom: 4px; }
+            .student-meta { line-height: 1.6; }
+            .section-heading { margin: 0 0 8px; padding-bottom: 5px; }
+            .info-grid { gap: 8px; margin-bottom: 12px; }
+            .info-cell { padding: 9px 12px; }
+            .cgpa-block { padding: 10px 16px; margin-bottom: 12px; gap: 12px; }
+            .cgpa-circle { width: 58px; height: 58px; }
+            .cgpa-circle .cgpa-num { font-size: 13pt; }
+            .seal-row { padding: 8px 14px; margin-bottom: 12px; gap: 10px; }
+            .seal-icon { width: 38px; height: 38px; font-size: 1.1rem; }
+            .doc-footer { padding: 8px 24px; gap: 2px; }
         }
     </style>
 </head>
