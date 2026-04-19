@@ -596,7 +596,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <input type="hidden" name="program_type" id="program_type" value="<?= old('program_type') ?>">
             </div>
             <!-- Year -->
-            <div class="col-12 col-md-3">
+            <div class="col-12 col-md-6">
                 <label class="form-label">Year</label>
                 <input type="text" class="form-control" name="year"
                        value="<?= old('year', date('Y')) ?>" maxlength="10" placeholder="<?= date('Y') ?>">
