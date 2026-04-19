@@ -123,9 +123,13 @@ ALTER TABLE `students`
         AFTER `thana_id`;
 
 ALTER TABLE `students`
-    ADD CONSTRAINT IF NOT EXISTS `fk_students_batch`    FOREIGN KEY (`batch_id`)    REFERENCES `student_batches`(`id`) ON DELETE SET NULL,
-    ADD CONSTRAINT IF NOT EXISTS `fk_students_district` FOREIGN KEY (`district_id`) REFERENCES `bd_districts`(`id`)   ON DELETE SET NULL,
-    ADD CONSTRAINT IF NOT EXISTS `fk_students_thana`    FOREIGN KEY (`thana_id`)    REFERENCES `bd_thanas`(`id`)      ON DELETE SET NULL;
+    DROP FOREIGN KEY IF EXISTS `fk_students_batch`,
+    DROP FOREIGN KEY IF EXISTS `fk_students_district`,
+    DROP FOREIGN KEY IF EXISTS `fk_students_thana`;
+ALTER TABLE `students`
+    ADD CONSTRAINT `fk_students_batch`    FOREIGN KEY (`batch_id`)    REFERENCES `student_batches`(`id`) ON DELETE SET NULL,
+    ADD CONSTRAINT `fk_students_district` FOREIGN KEY (`district_id`) REFERENCES `bd_districts`(`id`)   ON DELETE SET NULL,
+    ADD CONSTRAINT `fk_students_thana`    FOREIGN KEY (`thana_id`)    REFERENCES `bd_thanas`(`id`)      ON DELETE SET NULL;
 
 -- ─────────────────────────────────────────────────────────────
 -- Alter: student_academic_qualifications – new reference IDs
@@ -142,9 +146,13 @@ ALTER TABLE `student_academic_qualifications`
         AFTER `group_name`;
 
 ALTER TABLE `student_academic_qualifications`
-    ADD CONSTRAINT IF NOT EXISTS `fk_qual_exam_title` FOREIGN KEY (`exam_title_id`) REFERENCES `student_exam_titles`(`id`) ON DELETE SET NULL,
-    ADD CONSTRAINT IF NOT EXISTS `fk_qual_board`      FOREIGN KEY (`board_id`)      REFERENCES `student_boards`(`id`)      ON DELETE SET NULL,
-    ADD CONSTRAINT IF NOT EXISTS `fk_qual_group`      FOREIGN KEY (`group_id`)      REFERENCES `student_groups`(`id`)      ON DELETE SET NULL;
+    DROP FOREIGN KEY IF EXISTS `fk_qual_exam_title`,
+    DROP FOREIGN KEY IF EXISTS `fk_qual_board`,
+    DROP FOREIGN KEY IF EXISTS `fk_qual_group`;
+ALTER TABLE `student_academic_qualifications`
+    ADD CONSTRAINT `fk_qual_exam_title` FOREIGN KEY (`exam_title_id`) REFERENCES `student_exam_titles`(`id`) ON DELETE SET NULL,
+    ADD CONSTRAINT `fk_qual_board`      FOREIGN KEY (`board_id`)      REFERENCES `student_boards`(`id`)      ON DELETE SET NULL,
+    ADD CONSTRAINT `fk_qual_group`      FOREIGN KEY (`group_id`)      REFERENCES `student_groups`(`id`)      ON DELETE SET NULL;
 
 -- ─────────────────────────────────────────────────────────────
 -- Register module
