@@ -199,10 +199,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'Please describe the issues found with the Certificate &amp; Transcript.';
     }
     if (!in_array($_POST['admission_form_ok'] ?? '', ['yes', 'no'], true)) {
-        $errors[] = 'Please answer the Admission Form check.';
+        $errors[] = 'Please answer the Admission Info File check.';
     }
     if (!$admission_ok && $admission_issues === '') {
-        $errors[] = 'Please describe the issues found with the Admission Form.';
+        $errors[] = 'Please describe the issues found with the Admission Info File.';
     }
     if (!in_array($_POST['tabulation_ok'] ?? '', ['yes', 'no'], true)) {
         $errors[] = 'Please answer the Final Result Tabulation check.';
