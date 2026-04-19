@@ -258,10 +258,6 @@ $photo_url = rp_photo_url($student['photo']);
             border-bottom: 2px solid #e8edf5;
             position: relative;
         }
-        .doc-header-logo {
-            width: 80px;
-            height: auto;
-        }
         .doc-header-info { width: 100%; }
         .doc-header-info .uni-name {
             font-size: 17pt;
