@@ -31,7 +31,94 @@ function sv_find_files(array $files): array
     return [$adm, $tab];
 }
 
-// ── Handle student search (AJAX or GET) ──────────────────────────────────────
+/**
+ * Returns HTML for an inline file viewer (PDF iframe or image) plus an "Open" link.
+ */
+function sv_file_viewer_html(?array $file, string $label): string
+{
+    if (!$file) {
+        return '<div class="alert alert-secondary py-2 px-3 mb-0" style="font-size:.85rem;">'
+             . '<i class="fas fa-folder-open me-1"></i><strong>' . h($label) . ':</strong> '
+             . 'No file available for this student.</div>';
+    }
+
+    $url  = UPLOAD_URL . '/students/files/' . rawurlencode($file['stored_name']);
+    $mime = $file['mime_type'] ?? '';
+    $name = $file['file_name'] ?? '';
+    $orig = $file['original_name'] ?? '';
+
+    $display_name = h($name) . ($orig && $orig !== $name ? ' (' . h($orig) . ')' : '');
+
+    $header_html = '<div class="d-flex align-items-center gap-2 mb-2 flex-wrap">'
+                 . '<i class="fas fa-file-pdf text-danger"></i>'
+                 . '<strong style="font-size:.9rem;">' . h($label) . '</strong>'
+                 . '<code class="text-muted" style="font-size:.75rem;">' . $display_name . '</code>'
+                 . '<a href="' . h($url) . '" target="_blank" class="btn btn-sm btn-outline-primary ms-auto" style="border-radius:6px;font-size:.78rem;">'
+                 . '<i class="fas fa-external-link-alt me-1"></i>Open in New Tab</a>'
+                 . '</div>';
+
+    if ($mime === 'application/pdf') {
+        $viewer = '<iframe src="' . h($url) . '" style="width:100%;height:480px;border:1px solid #dee2e6;border-radius:8px;" title="' . h($name) . '"></iframe>';
+    } elseif (str_starts_with($mime, 'image/')) {
+        $viewer = '<div class="text-center border rounded p-2 bg-white">'
+                . '<img src="' . h($url) . '" class="img-fluid rounded" style="max-height:420px;" alt="' . h($name) . '">'
+                . '</div>';
+    } else {
+        $viewer = '<div class="alert alert-info py-2 px-3 mb-0" style="font-size:.85rem;">'
+                . '<i class="fas fa-file me-1"></i>File attached. Use the <strong>Open in New Tab</strong> button above to view it.'
+                . '</div>';
+    }
+
+    return '<div class="p-3 bg-white border rounded-3 shadow-sm">' . $header_html . $viewer . '</div>';
+}
+
+// Helper to render student info card
+function sv_render_student_card(array $s, array $files = []): void
+{
+    [$adm_file, $tab_file] = sv_find_files($files);
+    ?>
+    <div class="p-3 rounded-3 border border-success-subtle" style="background:#f0fff4;">
+        <div class="d-flex align-items-center gap-3 flex-wrap">
+            <div class="flex-grow-1">
+                <div class="fw-bold fs-6 mb-1"><?= h($s['full_name']) ?></div>
+                <div class="d-flex gap-2 flex-wrap">
+                    <code class="bg-white px-2 py-1 rounded border" style="font-size:.85rem;"><?= h($s['student_id']) ?></code>
+                    <span class="badge bg-primary bg-opacity-10 text-primary align-self-center"><?= h($s['dept_name']) ?></span>
+                    <?php if (!empty($s['admitted_semester'])): ?>
+                    <span class="badge bg-secondary bg-opacity-10 text-secondary align-self-center"><?= h($s['admitted_semester']) ?></span>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <div class="text-success fw-semibold d-flex align-items-center gap-1" style="font-size:.88rem;">
+                <i class="fas fa-check-circle"></i> Student found
+            </div>
+        </div>
+        <?php if ($adm_file || $tab_file): ?>
+        <hr class="my-2">
+        <div class="d-flex gap-3 flex-wrap" style="font-size:.82rem;">
+            <?php if ($adm_file): ?>
+            <a href="<?= UPLOAD_URL ?>/students/files/<?= h($adm_file['stored_name']) ?>"
+               target="_blank" class="text-primary text-decoration-none">
+                <i class="fas fa-file-alt me-1"></i><?= h($adm_file['file_name']) ?>
+            </a>
+            <?php else: ?>
+            <span class="text-muted"><i class="fas fa-file-alt me-1"></i>Admission Info File: <em>not uploaded</em></span>
+            <?php endif; ?>
+            <?php if ($tab_file): ?>
+            <a href="<?= UPLOAD_URL ?>/students/files/<?= h($tab_file['stored_name']) ?>"
+               target="_blank" class="text-danger text-decoration-none ms-3">
+                <i class="fas fa-file-pdf me-1"></i><?= h($tab_file['file_name']) ?>
+            </a>
+            <?php else: ?>
+            <span class="text-muted ms-3"><i class="fas fa-file-pdf me-1"></i>Final Result Tabulation: <em>not uploaded</em></span>
+            <?php endif; ?>
+        </div>
+        <?php endif; ?>
+    </div>
+    <?php
+}
+
+// ── Handle student search AJAX ────────────────────────────────────────────────
 if (isset($_GET['ajax_search'])) {
     header('Content-Type: application/json');
     $q    = trim($_GET['q'] ?? '');
@@ -50,6 +137,37 @@ if (isset($_GET['ajax_search'])) {
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
     echo json_encode($rows);
+    exit;
+}
+
+// ── Handle student card AJAX ──────────────────────────────────────────────────
+if (isset($_GET['ajax_student_card'])) {
+    header('Content-Type: text/html; charset=utf-8');
+    $sid = (int)($_GET['id'] ?? 0);
+    if ($sid > 0) {
+        $ss = db()->prepare('SELECT s.*, d.name AS dept_name FROM students s JOIN dept_departments d ON d.id=s.dept_id WHERE s.id=?');
+        $ss->execute([$sid]);
+        $sc = $ss->fetch();
+        if ($sc) {
+            $sfst = db()->prepare("SELECT id, file_name, original_name, mime_type, stored_name FROM student_files WHERE student_id = ? ORDER BY created_at DESC");
+            $sfst->execute([$sid]);
+            $sf = $sfst->fetchAll();
+
+            ob_start();
+            sv_render_student_card($sc, $sf);
+            $card_html = ob_get_clean();
+
+            [$adm_f, $tab_f] = sv_find_files($sf);
+            $adm_html = sv_file_viewer_html($adm_f, 'Admission Info File');
+            $tab_html = sv_file_viewer_html($tab_f, 'Final Result Tabulation');
+
+            echo $card_html;
+            echo '<script>';
+            echo 'document.getElementById("admission_file_area").innerHTML=' . json_encode($adm_html) . ';';
+            echo 'document.getElementById("tabulation_file_area").innerHTML=' . json_encode($tab_html) . ';';
+            echo '</script>';
+        }
+    }
     exit;
 }
 
@@ -271,7 +389,7 @@ require_once __DIR__ . '/../includes/header.php';
                            <?= (($_POST['cert_transcript_ok'] ?? '') === 'yes') ? 'checked' : '' ?>
                            data-issues="cert_issues_box">
                     <label class="form-check-label text-success fw-semibold" for="cert_yes">
-                        <i class="fas fa-check me-1"></i> Yes
+                        <i class="fas fa-check-circle me-1"></i> Yes
                     </label>
                 </div>
                 <div class="form-check">
@@ -280,39 +398,54 @@ require_once __DIR__ . '/../includes/header.php';
                            <?= (($_POST['cert_transcript_ok'] ?? '') === 'no') ? 'checked' : '' ?>
                            data-issues="cert_issues_box">
                     <label class="form-check-label text-danger fw-semibold" for="cert_no">
-                        <i class="fas fa-times me-1"></i> No
+                        <i class="fas fa-times-circle me-1"></i> No
                     </label>
                 </div>
             </div>
         </div>
         <div id="cert_issues_box" class="<?= (($_POST['cert_transcript_ok'] ?? '') === 'no') ? '' : 'd-none' ?>">
-            <label class="form-label fw-semibold text-danger">Describe the issues found:</label>
-            <textarea class="form-control" name="cert_transcript_issues" rows="3"
-                      placeholder="Describe any discrepancies or missing security features…"><?= h($_POST['cert_transcript_issues'] ?? '') ?></textarea>
+            <div class="alert alert-danger border-danger p-3">
+                <label class="form-label fw-semibold text-danger mb-2">
+                    <i class="fas fa-exclamation-triangle me-1"></i> Describe the issues found:
+                </label>
+                <textarea class="form-control border-danger" name="cert_transcript_issues" rows="3"
+                          placeholder="Describe any discrepancies or missing security features…"><?= h($_POST['cert_transcript_issues'] ?? '') ?></textarea>
+            </div>
         </div>
     </div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════
-     STEP 3 – Check 2: Admission Form
+     STEP 3 – Check 2: Admission Info File
 ═══════════════════════════════════════════════════════════ -->
 <div class="card mb-4 verification-step" id="step-3-card" <?= $pre_student ? '' : 'style="display:none"' ?>>
     <div class="card-header py-3 px-4 d-flex align-items-center gap-2">
         <span class="badge rounded-pill bg-warning text-dark" style="font-size:.9rem;width:28px;height:28px;line-height:28px;text-align:center;">3</span>
-        <h6 class="mb-0 fw-semibold">Admission Form Check</h6>
+        <h6 class="mb-0 fw-semibold"><i class="fas fa-file-alt me-2 text-primary"></i>Admission Info File</h6>
     </div>
     <div class="card-body px-4 py-3">
         <p class="text-muted mb-3" style="font-size:.9rem;">
             <i class="fas fa-info-circle me-1 text-primary"></i>
-            The system will show the student's scanned Admission Form document (file titled <strong>"Admission forms and info"</strong>).
-            Check that the scanned document matches the student's records.
+            Review the student's scanned Admission Info File below. Confirm the document matches the student's records before answering.
         </p>
 
-        <!-- Admission form file from student files -->
-        <div id="admission_file_area" class="mb-3"></div>
+        <!-- Admission form file viewer -->
+        <div class="mb-4">
+            <div class="fw-semibold mb-2" style="font-size:.88rem;color:#495057;">
+                <i class="fas fa-eye me-1 text-primary"></i> Admission Info File Preview
+            </div>
+            <div id="admission_file_area">
+                <?php if ($pre_student): ?>
+                <?php
+                [$adm_f_pre] = sv_find_files($pre_files);
+                echo sv_file_viewer_html($adm_f_pre, 'Admission Info File');
+                ?>
+                <?php endif; ?>
+            </div>
+        </div>
 
         <div class="mb-3">
-            <label class="form-label fw-semibold">Does the Admission Form scanned document match the student's records?</label>
+            <label class="form-label fw-semibold">Does the Admission Info File match the student's records?</label>
             <div class="d-flex gap-3">
                 <div class="form-check">
                     <input class="form-check-input check-radio" type="radio" name="admission_form_ok"
@@ -320,7 +453,7 @@ require_once __DIR__ . '/../includes/header.php';
                            <?= (($_POST['admission_form_ok'] ?? '') === 'yes') ? 'checked' : '' ?>
                            data-issues="adm_issues_box">
                     <label class="form-check-label text-success fw-semibold" for="adm_yes">
-                        <i class="fas fa-check me-1"></i> Yes
+                        <i class="fas fa-check-circle me-1"></i> Yes
                     </label>
                 </div>
                 <div class="form-check">
@@ -329,15 +462,19 @@ require_once __DIR__ . '/../includes/header.php';
                            <?= (($_POST['admission_form_ok'] ?? '') === 'no') ? 'checked' : '' ?>
                            data-issues="adm_issues_box">
                     <label class="form-check-label text-danger fw-semibold" for="adm_no">
-                        <i class="fas fa-times me-1"></i> No
+                        <i class="fas fa-times-circle me-1"></i> No
                     </label>
                 </div>
             </div>
         </div>
         <div id="adm_issues_box" class="<?= (($_POST['admission_form_ok'] ?? '') === 'no') ? '' : 'd-none' ?>">
-            <label class="form-label fw-semibold text-danger">Describe the issues found:</label>
-            <textarea class="form-control" name="admission_form_issues" rows="3"
-                      placeholder="Describe any discrepancies found in the admission form…"><?= h($_POST['admission_form_issues'] ?? '') ?></textarea>
+            <div class="alert alert-danger border-danger p-3">
+                <label class="form-label fw-semibold text-danger mb-2">
+                    <i class="fas fa-exclamation-triangle me-1"></i> Describe the issues found:
+                </label>
+                <textarea class="form-control border-danger" name="admission_form_issues" rows="3"
+                          placeholder="Describe any discrepancies found in the admission info file…"><?= h($_POST['admission_form_issues'] ?? '') ?></textarea>
+            </div>
         </div>
     </div>
 </div>
@@ -348,17 +485,28 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="card mb-4 verification-step" id="step-4-card" <?= $pre_student ? '' : 'style="display:none"' ?>>
     <div class="card-header py-3 px-4 d-flex align-items-center gap-2">
         <span class="badge rounded-pill bg-warning text-dark" style="font-size:.9rem;width:28px;height:28px;line-height:28px;text-align:center;">4</span>
-        <h6 class="mb-0 fw-semibold">Final Result Tabulation Check</h6>
+        <h6 class="mb-0 fw-semibold"><i class="fas fa-file-pdf me-2 text-danger"></i>Final Result Tabulation</h6>
     </div>
     <div class="card-body px-4 py-3">
         <p class="text-muted mb-3" style="font-size:.9rem;">
             <i class="fas fa-info-circle me-1 text-primary"></i>
-            The system will show the <strong>"Final Result Tabulation"</strong> PDF from the student's file.
-            Verify that the student's name and ID appear in the tabulation.
+            Review the Final Result Tabulation PDF below. Verify that the student's name and ID appear in the tabulation.
         </p>
 
-        <!-- Tabulation file from student files -->
-        <div id="tabulation_file_area" class="mb-3"></div>
+        <!-- Tabulation file viewer -->
+        <div class="mb-4">
+            <div class="fw-semibold mb-2" style="font-size:.88rem;color:#495057;">
+                <i class="fas fa-eye me-1 text-danger"></i> Final Result Tabulation Preview
+            </div>
+            <div id="tabulation_file_area">
+                <?php if ($pre_student): ?>
+                <?php
+                [, $tab_f_pre] = sv_find_files($pre_files);
+                echo sv_file_viewer_html($tab_f_pre, 'Final Result Tabulation');
+                ?>
+                <?php endif; ?>
+            </div>
+        </div>
 
         <div class="mb-3">
             <label class="form-label fw-semibold">Was the student found in the Final Result Tabulation?</label>
@@ -369,7 +517,7 @@ require_once __DIR__ . '/../includes/header.php';
                            <?= (($_POST['tabulation_ok'] ?? '') === 'yes') ? 'checked' : '' ?>
                            data-issues="tab_issues_box">
                     <label class="form-check-label text-success fw-semibold" for="tab_yes">
-                        <i class="fas fa-check me-1"></i> Yes
+                        <i class="fas fa-check-circle me-1"></i> Yes
                     </label>
                 </div>
                 <div class="form-check">
@@ -378,15 +526,19 @@ require_once __DIR__ . '/../includes/header.php';
                            <?= (($_POST['tabulation_ok'] ?? '') === 'no') ? 'checked' : '' ?>
                            data-issues="tab_issues_box">
                     <label class="form-check-label text-danger fw-semibold" for="tab_no">
-                        <i class="fas fa-times me-1"></i> No
+                        <i class="fas fa-times-circle me-1"></i> No
                     </label>
                 </div>
             </div>
         </div>
         <div id="tab_issues_box" class="<?= (($_POST['tabulation_ok'] ?? '') === 'no') ? '' : 'd-none' ?>">
-            <label class="form-label fw-semibold text-danger">Reason not found / issues:</label>
-            <textarea class="form-control" name="tabulation_issues" rows="3"
-                      placeholder="Describe the reason the student was not found or any issues…"><?= h($_POST['tabulation_issues'] ?? '') ?></textarea>
+            <div class="alert alert-danger border-danger p-3">
+                <label class="form-label fw-semibold text-danger mb-2">
+                    <i class="fas fa-exclamation-triangle me-1"></i> Describe the reason not found / issues:
+                </label>
+                <textarea class="form-control border-danger" name="tabulation_issues" rows="3"
+                          placeholder="Describe the reason the student was not found or any issues…"><?= h($_POST['tabulation_issues'] ?? '') ?></textarea>
+            </div>
         </div>
     </div>
 </div>
@@ -421,93 +573,6 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 </form>
-
-<?php
-// Helper to render student info card
-function sv_render_student_card(array $s, array $files = []): void
-{
-    [$adm_file, $tab_file] = sv_find_files($files);
-    ?>
-    <div class="p-3 rounded-3 border" style="background:#f8f9ff;">
-        <div class="d-flex align-items-center gap-3 flex-wrap">
-            <div>
-                <div class="fw-bold fs-6"><?= h($s['full_name']) ?></div>
-                <div class="d-flex gap-2 mt-1">
-                    <code class="bg-white px-2 py-1 rounded border" style="font-size:.85rem;"><?= h($s['student_id']) ?></code>
-                    <span class="badge bg-primary bg-opacity-10 text-primary align-self-center"><?= h($s['dept_name']) ?></span>
-                    <span class="badge bg-secondary bg-opacity-10 text-secondary align-self-center"><?= h($s['admitted_semester'] ?? '') ?></span>
-                </div>
-            </div>
-            <div class="ms-auto text-success fw-semibold" style="font-size:.85rem;">
-                <i class="fas fa-check-circle me-1"></i>Student found
-            </div>
-        </div>
-        <?php if ($adm_file || $tab_file): ?>
-        <hr class="my-2">
-        <div class="d-flex gap-3 flex-wrap" style="font-size:.82rem;">
-            <?php if ($adm_file): ?>
-            <a href="<?= UPLOAD_URL ?>/students/files/<?= h($adm_file['stored_name']) ?>"
-               target="_blank" class="text-primary text-decoration-none">
-                <i class="fas fa-file-alt me-1"></i><?= h($adm_file['file_name']) ?>
-            </a>
-            <?php else: ?>
-            <span class="text-muted"><i class="fas fa-file-alt me-1"></i>Admission Form: <em>not uploaded</em></span>
-            <?php endif; ?>
-            <?php if ($tab_file): ?>
-            <a href="<?= UPLOAD_URL ?>/students/files/<?= h($tab_file['stored_name']) ?>"
-               target="_blank" class="text-danger text-decoration-none ms-3">
-                <i class="fas fa-file-pdf me-1"></i><?= h($tab_file['file_name']) ?>
-            </a>
-            <?php else: ?>
-            <span class="text-muted ms-3"><i class="fas fa-file-pdf me-1"></i>Final Result Tabulation: <em>not uploaded</em></span>
-            <?php endif; ?>
-        </div>
-        <?php endif; ?>
-    </div>
-    <?php
-}
-
-/**
- * Returns HTML for an inline file viewer (PDF iframe or image) plus an "Open" link.
- * Used in both the pre-loaded PHP block and the AJAX handler.
- */
-function sv_file_viewer_html(?array $file, string $label): string
-{
-    if (!$file) {
-        return '<div class="alert alert-secondary py-2 px-3 mb-0" style="font-size:.85rem;">'
-             . '<i class="fas fa-folder-open me-1"></i><strong>' . h($label) . ':</strong> '
-             . 'No files available for this student.</div>';
-    }
-
-    $url  = UPLOAD_URL . '/students/files/' . rawurlencode($file['stored_name']);
-    $mime = $file['mime_type'] ?? '';
-    $name = $file['file_name'] ?? '';
-    $orig = $file['original_name'] ?? '';
-
-    $label_html = '<div class="d-flex align-items-center gap-2 mb-2 flex-wrap">'
-                . '<i class="fas fa-file-alt text-primary"></i>'
-                . '<strong style="font-size:.9rem;">' . h($label) . ':</strong>';
-    $display_name = h($name) . ($orig && $orig !== $name ? ' (' . h($orig) . ')' : '');
-    $label_html .= '<code style="font-size:.78rem;">' . $display_name . '</code>'
-                . '<a href="' . h($url) . '" target="_blank" class="btn btn-sm btn-outline-primary ms-auto" style="border-radius:6px;font-size:.78rem;">'
-                . '<i class="fas fa-external-link-alt me-1"></i>Open in New Tab</a>'
-                . '</div>';
-
-    if ($mime === 'application/pdf') {
-        $viewer = '<iframe src="' . h($url) . '" style="width:100%;height:450px;border:1px solid #dee2e6;border-radius:6px;" title="' . h($name) . '"></iframe>';
-    } elseif (str_starts_with($mime, 'image/')) {
-        $viewer = '<div class="text-center border rounded p-2 bg-white">'
-                . '<img src="' . h($url) . '" class="img-fluid rounded" style="max-height:420px;" alt="' . h($name) . '">'
-                . '</div>';
-    } else {
-        $viewer = '<div class="alert alert-info py-2 px-3 mb-0" style="font-size:.85rem;">'
-                . '<i class="fas fa-file me-1"></i>File attached. Use the <strong>Open in New Tab</strong> button above to view it.'
-                . '</div>';
-    }
-
-    return '<div class="p-3 bg-light border rounded-3">' . $label_html . $viewer . '</div>';
-}
-?>
 
 <script>
 (function () {
@@ -601,54 +666,7 @@ function sv_file_viewer_html(?array $file, string $label): string
         });
     });
 
-    // Pre-populate admission/tabulation file viewers if student already selected
-    <?php if ($pre_student && !empty($pre_files)): ?>
-    (function() {
-        const admArea = document.getElementById('admission_file_area');
-        const tabArea = document.getElementById('tabulation_file_area');
-        <?php [$adm_f, $tab_f] = sv_find_files($pre_files); ?>
-        admArea.innerHTML = <?= json_encode(sv_file_viewer_html($adm_f, 'Admission Form')) ?>;
-        tabArea.innerHTML = <?= json_encode(sv_file_viewer_html($tab_f, 'Final Result Tabulation')) ?>;
-    })();
-    <?php elseif ($pre_student): ?>
-    (function() {
-        document.getElementById('admission_file_area').innerHTML = <?= json_encode(sv_file_viewer_html(null, 'Admission Form')) ?>;
-        document.getElementById('tabulation_file_area').innerHTML = <?= json_encode(sv_file_viewer_html(null, 'Final Result Tabulation')) ?>;
-    })();
-    <?php endif; ?>
 })();
 </script>
-
-<?php
-// AJAX: return student info card HTML
-if (isset($_GET['ajax_student_card'])) {
-    $sid  = (int)($_GET['id'] ?? 0);
-    $ss   = db()->prepare('SELECT s.*, d.name AS dept_name FROM students s JOIN dept_departments d ON d.id=s.dept_id WHERE s.id=?');
-    $ss->execute([$sid]);
-    $sc = $ss->fetch();
-    $sf = [];
-    if ($sc) {
-        $sfst = db()->prepare("SELECT id, file_name, original_name, mime_type, stored_name FROM student_files WHERE student_id = ? ORDER BY created_at DESC");
-        $sfst->execute([$sid]);
-        $sf = $sfst->fetchAll();
-    }
-    if ($sc) {
-        ob_start();
-        sv_render_student_card($sc, $sf);
-        $card_html = ob_get_clean();
-
-        [$adm_f, $tab_f] = sv_find_files($sf);
-
-        $adm_html = sv_file_viewer_html($adm_f, 'Admission Form');
-        $tab_html = sv_file_viewer_html($tab_f, 'Final Result Tabulation');
-
-        echo $card_html . '<script>
-document.getElementById("admission_file_area").innerHTML = ' . json_encode($adm_html) . ';
-document.getElementById("tabulation_file_area").innerHTML = ' . json_encode($tab_html) . ';
-</script>';
-    }
-    exit;
-}
-?>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
