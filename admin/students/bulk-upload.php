@@ -87,7 +87,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $csv_parse_error = 'Could not open the CSV mapping file.';
                     } else {
                         // Read header row; find the required column indices
-                        $header = fgetcsv($csv_handle);
+                        $header = fgetcsv($csv_handle, 0, ',');
                         if ($header === false || $header === null) {
                             $csv_parse_error = 'The CSV file appears to be empty.';
                         } else {
@@ -104,7 +104,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             } else {
                                 $csv_map = [];
                                 $row_num = 1;
-                                while (($row = fgetcsv($csv_handle)) !== false) {
+                                while (($row = fgetcsv($csv_handle, 0, ',')) !== false) {
                                     $row_num++;
                                     $filename_val = trim($row[$col_file] ?? '');
                                     $ids_val      = trim($row[$col_ids]  ?? '');
