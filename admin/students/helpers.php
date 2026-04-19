@@ -226,52 +226,275 @@ function sm_format_size(int $bytes): string
     return round($bytes / 1048576, 1) . ' MB';
 }
 
+// ── Reference data helpers ────────────────────────────────────────────────────
+
+/**
+ * Returns all departments with id, name, code, faculty_label as an associative array.
+ */
+function sm_dept_data(): array
+{
+    static $data = null;
+    if ($data === null) {
+        $data = db()->query(
+            'SELECT id, name, code, faculty_label FROM dept_departments WHERE is_active = 1 ORDER BY name ASC'
+        )->fetchAll(PDO::FETCH_ASSOC);
+    }
+    return $data;
+}
+
+/**
+ * Returns all active programs with id, dept_id, program_name, program_type as an array.
+ */
+function sm_program_data(): array
+{
+    static $data = null;
+    if ($data === null) {
+        $data = db()->query(
+            'SELECT id, dept_id, program_name, program_type FROM dept_academic_programs WHERE is_active = 1 ORDER BY program_name ASC'
+        )->fetchAll(PDO::FETCH_ASSOC);
+    }
+    return $data;
+}
+
+/**
+ * Detects program type from a degree_type string.
+ */
+function sm_program_type_detect(?string $degree_type): string
+{
+    if (!$degree_type) return '';
+    $dt = strtolower($degree_type);
+    if (str_contains($dt, 'bachelor') || str_contains($dt, 'b.sc') || str_contains($dt, 'b.a')
+        || str_contains($dt, 'bba') || str_contains($dt, 'llb') || str_contains($dt, 'b.eng')) {
+        return 'Bachelor';
+    }
+    if (str_contains($dt, 'master') || str_contains($dt, 'm.sc') || str_contains($dt, 'm.a')
+        || str_contains($dt, 'mba') || str_contains($dt, 'llm')) {
+        return 'Masters';
+    }
+    if (str_contains($dt, 'diploma'))      return 'Diploma';
+    if (str_contains($dt, 'certificate'))  return 'Certificate';
+    if ($degree_type !== '')               return 'Other';
+    return '';
+}
+
+/**
+ * Returns all active student batches.
+ */
+function sm_batches(): array
+{
+    static $data = null;
+    if ($data === null) {
+        $data = db()->query(
+            'SELECT id, name FROM student_batches WHERE is_active = 1 ORDER BY sort_order, name ASC'
+        )->fetchAll(PDO::FETCH_ASSOC);
+    }
+    return $data;
+}
+
+/**
+ * Returns all active exam titles.
+ */
+function sm_exam_titles(): array
+{
+    static $data = null;
+    if ($data === null) {
+        $data = db()->query(
+            'SELECT id, name, short_name FROM student_exam_titles WHERE is_active = 1 ORDER BY sort_order, name ASC'
+        )->fetchAll(PDO::FETCH_ASSOC);
+    }
+    return $data;
+}
+
+/**
+ * Returns all active boards.
+ */
+function sm_boards(): array
+{
+    static $data = null;
+    if ($data === null) {
+        $data = db()->query(
+            'SELECT id, name, short_name FROM student_boards WHERE is_active = 1 ORDER BY sort_order, name ASC'
+        )->fetchAll(PDO::FETCH_ASSOC);
+    }
+    return $data;
+}
+
+/**
+ * Returns all active academic groups.
+ */
+function sm_academic_groups(): array
+{
+    static $data = null;
+    if ($data === null) {
+        $data = db()->query(
+            'SELECT id, name FROM student_groups WHERE is_active = 1 ORDER BY sort_order, name ASC'
+        )->fetchAll(PDO::FETCH_ASSOC);
+    }
+    return $data;
+}
+
+/**
+ * Returns all Bangladesh districts ordered by division then name.
+ */
+function sm_bd_districts(): array
+{
+    static $data = null;
+    if ($data === null) {
+        $data = db()->query(
+            'SELECT id, name, division FROM bd_districts ORDER BY division, name ASC'
+        )->fetchAll(PDO::FETCH_ASSOC);
+    }
+    return $data;
+}
+
+/**
+ * Returns all Bangladesh thanas, keyed by district_id for JS use.
+ * Returns flat array with district_id column.
+ */
+function sm_bd_thanas(): array
+{
+    static $data = null;
+    if ($data === null) {
+        $data = db()->query(
+            'SELECT id, district_id, name FROM bd_thanas ORDER BY name ASC'
+        )->fetchAll(PDO::FETCH_ASSOC);
+    }
+    return $data;
+}
+
 // ── Qual row HTML helper (used in edit.php) ───────────────────────────────────
 
 /**
  * Render HTML fields for one academic qualification row.
+ * Includes searchable Exam Title, Academic Board, Academic Group dropdowns.
  *
- * @param int   $idx Zero-based row index (used as array key in form field names).
- * @param array $q   Existing qualification data; empty array for a blank row.
- * @return string    HTML markup for the row's form fields.
+ * @param int   $idx       Zero-based row index (used as array key in form field names).
+ * @param array $q         Existing qualification data; empty array for a blank row.
+ * @param array $exams     List from sm_exam_titles().
+ * @param array $boards    List from sm_boards().
+ * @param array $groups    List from sm_academic_groups().
+ * @return string          HTML markup for the row's form fields.
  */
-function sm_qual_row_html(int $idx, array $q): string {
-    $v = function($key) use ($q) { return htmlspecialchars((string)($q[$key] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); };
-    $n = function($k) use ($idx) { return 'qual[' . $idx . '][' . $k . ']'; };
+function sm_qual_row_html(int $idx, array $q, array $exams = [], array $boards = [], array $groups = []): string {
+    $v  = function($key) use ($q) { return htmlspecialchars((string)($q[$key] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); };
+    $n  = function($k) use ($idx) { return 'qual[' . $idx . '][' . $k . ']'; };
+    $uid = 'q' . $idx; // unique prefix for element IDs
+
+    // Determine display values for searchable fields
+    $examVal   = (int)($q['exam_title_id']  ?? 0);
+    $boardVal  = (int)($q['board_id']       ?? 0);
+    $groupVal  = (int)($q['group_id']       ?? 0);
+
+    // Fallback labels from text fields when IDs are not set
+    $examText  = $examVal  ? '' : (string)($q['exam_name']        ?? '');
+    $boardText = $boardVal ? '' : (string)($q['board_university']  ?? '');
+    $groupText = $groupVal ? '' : (string)($q['group_name']        ?? '');
+
     ob_start();
     ?>
     <input type="hidden" name="<?= $n('id') ?>" value="<?= (int)($q['id'] ?? 0) ?>">
     <div class="row g-2">
+        <!-- Exam Title -->
         <div class="col-12 col-md-4">
-            <label class="form-label" style="font-size:.8rem;">Exam Name</label>
-            <input type="text" class="form-control form-control-sm" name="<?= $n('exam_name') ?>"
-                   value="<?= $v('exam_name') ?>" placeholder="e.g. SSC, HSC, B.Sc.">
+            <label class="form-label" style="font-size:.8rem;">Exam Title</label>
+            <div class="qual-ss-wrap" style="position:relative;">
+                <input type="text" class="form-control form-control-sm qual-ss-trigger"
+                       id="<?= $uid ?>_exam_txt" placeholder="SSC, HSC, O Level…"
+                       autocomplete="off"
+                       value="<?= htmlspecialchars($examText, ENT_QUOTES, 'UTF-8') ?>"
+                       data-target="<?= $uid ?>_exam_id">
+                <input type="hidden" name="<?= $n('exam_title_id') ?>" id="<?= $uid ?>_exam_id"
+                       value="<?= $examVal ?: '' ?>">
+                <!-- Also keep text fallback -->
+                <input type="hidden" name="<?= $n('exam_name') ?>" id="<?= $uid ?>_exam_name"
+                       value="<?= $v('exam_name') ?>">
+                <div class="qual-ss-list" style="position:absolute;top:100%;left:0;right:0;max-height:180px;overflow-y:auto;background:#fff;border:1px solid #dee2e6;border-top:0;border-radius:0 0 6px 6px;z-index:1060;display:none;">
+                    <div class="qual-ss-item" data-value="" data-label=""
+                         style="padding:5px 10px;cursor:pointer;font-size:.8rem;color:#999;">— None (type manually) —</div>
+                    <?php foreach ($exams as $et): ?>
+                    <div class="qual-ss-item"
+                         data-value="<?= $et['id'] ?>"
+                         data-label="<?= h($et['name']) ?>"
+                         style="padding:5px 10px;cursor:pointer;font-size:.8rem;">
+                        <?= h($et['name']) ?><?= $et['short_name'] ? ' <small class="text-muted">(' . h($et['short_name']) . ')</small>' : '' ?>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
         </div>
+        <!-- Session -->
         <div class="col-6 col-md-2">
             <label class="form-label" style="font-size:.8rem;">Session</label>
             <input type="text" class="form-control form-control-sm" name="<?= $n('session') ?>"
                    value="<?= $v('session') ?>" placeholder="2018-2019">
         </div>
+        <!-- Academic Group -->
         <div class="col-6 col-md-2">
-            <label class="form-label" style="font-size:.8rem;">Group</label>
-            <input type="text" class="form-control form-control-sm" name="<?= $n('group_name') ?>"
-                   value="<?= $v('group_name') ?>" placeholder="Science">
+            <label class="form-label" style="font-size:.8rem;">Academic Group</label>
+            <div class="qual-ss-wrap" style="position:relative;">
+                <input type="text" class="form-control form-control-sm qual-ss-trigger"
+                       id="<?= $uid ?>_grp_txt" placeholder="Science, Arts…"
+                       autocomplete="off"
+                       value="<?= htmlspecialchars($groupText, ENT_QUOTES, 'UTF-8') ?>"
+                       data-target="<?= $uid ?>_grp_id">
+                <input type="hidden" name="<?= $n('group_id') ?>" id="<?= $uid ?>_grp_id"
+                       value="<?= $groupVal ?: '' ?>">
+                <input type="hidden" name="<?= $n('group_name') ?>" id="<?= $uid ?>_grp_name"
+                       value="<?= $v('group_name') ?>">
+                <div class="qual-ss-list" style="position:absolute;top:100%;left:0;right:0;max-height:180px;overflow-y:auto;background:#fff;border:1px solid #dee2e6;border-top:0;border-radius:0 0 6px 6px;z-index:1060;display:none;">
+                    <div class="qual-ss-item" data-value="" data-label=""
+                         style="padding:5px 10px;cursor:pointer;font-size:.8rem;color:#999;">— None —</div>
+                    <?php foreach ($groups as $g): ?>
+                    <div class="qual-ss-item"
+                         data-value="<?= $g['id'] ?>"
+                         data-label="<?= h($g['name']) ?>"
+                         style="padding:5px 10px;cursor:pointer;font-size:.8rem;">
+                        <?= h($g['name']) ?>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
         </div>
+        <!-- Academic Board -->
         <div class="col-12 col-md-4">
-            <label class="form-label" style="font-size:.8rem;">Board / University</label>
-            <input type="text" class="form-control form-control-sm" name="<?= $n('board_university') ?>"
-                   value="<?= $v('board_university') ?>" placeholder="Dhaka Board">
+            <label class="form-label" style="font-size:.8rem;">Academic Board / University</label>
+            <div class="qual-ss-wrap" style="position:relative;">
+                <input type="text" class="form-control form-control-sm qual-ss-trigger"
+                       id="<?= $uid ?>_board_txt" placeholder="Dhaka Board, NU…"
+                       autocomplete="off"
+                       value="<?= htmlspecialchars($boardText, ENT_QUOTES, 'UTF-8') ?>"
+                       data-target="<?= $uid ?>_board_id">
+                <input type="hidden" name="<?= $n('board_id') ?>" id="<?= $uid ?>_board_id"
+                       value="<?= $boardVal ?: '' ?>">
+                <input type="hidden" name="<?= $n('board_university') ?>" id="<?= $uid ?>_board_name"
+                       value="<?= $v('board_university') ?>">
+                <div class="qual-ss-list" style="position:absolute;top:100%;left:0;right:0;max-height:180px;overflow-y:auto;background:#fff;border:1px solid #dee2e6;border-top:0;border-radius:0 0 6px 6px;z-index:1060;display:none;">
+                    <div class="qual-ss-item" data-value="" data-label=""
+                         style="padding:5px 10px;cursor:pointer;font-size:.8rem;color:#999;">— None (type manually) —</div>
+                    <?php foreach ($boards as $b): ?>
+                    <div class="qual-ss-item"
+                         data-value="<?= $b['id'] ?>"
+                         data-label="<?= h($b['name']) ?>"
+                         style="padding:5px 10px;cursor:pointer;font-size:.8rem;">
+                        <?= h($b['name']) ?><?= $b['short_name'] ? ' <small class="text-muted">(' . h($b['short_name']) . ')</small>' : '' ?>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
         </div>
+        <!-- Year of Passing -->
         <div class="col-6 col-md-2">
             <label class="form-label" style="font-size:.8rem;">Year of Passing</label>
             <input type="text" class="form-control form-control-sm" name="<?= $n('passing_year') ?>"
                    value="<?= $v('passing_year') ?>" placeholder="2019">
         </div>
+        <!-- Division / Grade -->
         <div class="col-6 col-md-3">
             <label class="form-label" style="font-size:.8rem;">Division / Class / Grade</label>
             <input type="text" class="form-control form-control-sm" name="<?= $n('division_class_grade') ?>"
                    value="<?= $v('division_class_grade') ?>" placeholder="A+">
         </div>
+        <!-- Marks / GPA -->
         <div class="col-12 col-md-3">
             <label class="form-label" style="font-size:.8rem;">Obtained Marks / GPA / CGPA</label>
             <input type="text" class="form-control form-control-sm" name="<?= $n('obtained_marks_gpa') ?>"
@@ -287,13 +510,22 @@ function sm_get_student(int $id): array
 {
     $stmt = db()->prepare(
         'SELECT s.*,
-                d.name  AS dept_name,
-                d.code  AS dept_code,
+                d.name          AS dept_name,
+                d.code          AS dept_code,
+                d.faculty_label AS dept_faculty_label,
                 p.program_name,
-                u.full_name AS created_by_name
+                p.program_type,
+                b.name          AS batch_name,
+                dist.name       AS district_name,
+                dist.division   AS district_division,
+                th.name         AS thana_name,
+                u.full_name     AS created_by_name
          FROM students s
          JOIN dept_departments d ON d.id = s.dept_id
          LEFT JOIN dept_academic_programs p ON p.id = s.program_id
+         LEFT JOIN student_batches b ON b.id = s.batch_id
+         LEFT JOIN bd_districts dist ON dist.id = s.district_id
+         LEFT JOIN bd_thanas th ON th.id = s.thana_id
          LEFT JOIN users u ON u.id = s.created_by
          WHERE s.id = ?'
     );

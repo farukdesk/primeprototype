@@ -75,7 +75,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // ── Fetch related data ────────────────────────────────────────────────────────
 $qualifications = db()->prepare(
-    'SELECT * FROM student_academic_qualifications WHERE student_id = ? ORDER BY sort_order ASC, id ASC'
+    'SELECT q.*,
+            et.name AS exam_title_name,
+            b.name  AS board_name,
+            g.name  AS group_ref_name
+     FROM student_academic_qualifications q
+     LEFT JOIN student_exam_titles et ON et.id = q.exam_title_id
+     LEFT JOIN student_boards b ON b.id = q.board_id
+     LEFT JOIN student_groups g ON g.id = q.group_id
+     WHERE q.student_id = ? ORDER BY q.sort_order ASC, q.id ASC'
 );
 $qualifications->execute([$id]);
 $qualifications = $qualifications->fetchAll();
@@ -172,13 +180,27 @@ require_once __DIR__ . '/../includes/header.php';
                     <?php endif; ?>
                 </div>
                 <div class="text-muted" style="font-size:.875rem;">
+                    <?php if (!empty($student['faculty_label'])): ?>
+                        <strong style="color:#555;"><?= h($student['faculty_label']) ?></strong>
+                        &nbsp;·&nbsp;
+                    <?php endif; ?>
                     <strong><?= h($student['dept_name']) ?></strong>
                     <?php if ($student['program_name']): ?>
                         &nbsp;·&nbsp; <?= h($student['program_name']) ?>
+                        <?php if (!empty($student['program_type'])): ?>
+                            <span class="badge bg-info bg-opacity-15 text-info" style="font-size:.7rem;"><?= h($student['program_type']) ?></span>
+                        <?php endif; ?>
                     <?php endif; ?>
                     &nbsp;·&nbsp; Admitted: <?= h($student['admitted_semester']) ?>
-                    <?php if (!empty($student['batch'])): ?>
-                        &nbsp;·&nbsp; Batch: <?= h($student['batch']) ?>
+                    <?php
+                    // Batch: prefer batch_name from JOIN, fall back to text
+                    $batchLabel = $student['batch_name'] ?? $student['batch'] ?? null;
+                    ?>
+                    <?php if ($batchLabel): ?>
+                        &nbsp;·&nbsp; Batch: <?= h($batchLabel) ?>
+                    <?php endif; ?>
+                    <?php if (!empty($student['year'])): ?>
+                        &nbsp;·&nbsp; Year: <?= h($student['year']) ?>
                     <?php endif; ?>
                     <?php if (!empty($student['shift'])): ?>
                         &nbsp;·&nbsp; <?= h($student['shift']) ?> Shift
@@ -217,6 +239,9 @@ require_once __DIR__ . '/../includes/header.php';
                     'NID'              => $student['nid'],
                     'Place of Birth'   => $student['place_of_birth'],
                     'Nationality'      => $student['nationality'],
+                    'Country'          => !empty($student['country']) && $student['country'] !== 'Bangladesh' ? $student['country'] : null,
+                    'District'         => $student['district_name'] ?? null,
+                    'Thana / Upazila'  => $student['thana_name'] ?? null,
                     'Religion'         => $student['religion'],
                     'Present Address'  => $student['present_address'],
                     'Permanent Address'=> $student['permanent_address'],
@@ -356,12 +381,23 @@ if ($has_fee):
                     </tr>
                 </thead>
                 <tbody>
-                <?php foreach ($qualifications as $q): ?>
+                <?php foreach ($qualifications as $q):
+                    // Prefer referenced name, fall back to free-text
+                    $examLabel  = !empty($q['exam_title_id'])
+                        ? ($q['exam_title_name'] ?? $q['exam_name'] ?? '—')
+                        : ($q['exam_name'] ?? '—');
+                    $boardLabel = !empty($q['board_id'])
+                        ? ($q['board_name'] ?? $q['board_university'] ?? '—')
+                        : ($q['board_university'] ?? '—');
+                    $groupLabel = !empty($q['group_id'])
+                        ? ($q['group_ref_name'] ?? $q['group_name'] ?? '—')
+                        : ($q['group_name'] ?? '—');
+                ?>
                 <tr>
-                    <td class="px-4 fw-medium"><?= h($q['exam_name'] ?? '—') ?></td>
+                    <td class="px-4 fw-medium"><?= h($examLabel  ?: '—') ?></td>
                     <td><?= h($q['session'] ?? '—') ?></td>
-                    <td><?= h($q['group_name'] ?? '—') ?></td>
-                    <td><?= h($q['board_university'] ?? '—') ?></td>
+                    <td><?= h($groupLabel ?: '—') ?></td>
+                    <td><?= h($boardLabel ?: '—') ?></td>
                     <td><?= h($q['passing_year'] ?? '—') ?></td>
                     <td><?= h($q['division_class_grade'] ?? '—') ?></td>
                     <td><?= h($q['obtained_marks_gpa'] ?? '—') ?></td>
