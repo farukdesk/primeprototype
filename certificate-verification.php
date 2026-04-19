@@ -593,6 +593,23 @@ function cert_photo_url(?string $photo): string
    }
    .cv-manual-note a { color: #b45309; font-weight: 700; }
 
+   /* Print / PDF button */
+   .cv-print-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      background: linear-gradient(135deg, #1a2e5a 0%, #2563eb 100%);
+      color: #fff;
+      font-weight: 700;
+      font-size: .9rem;
+      padding: 12px 26px;
+      border-radius: 10px;
+      text-decoration: none;
+      box-shadow: 0 4px 18px rgba(37,99,235,.28);
+      transition: opacity .25s, transform .2s;
+   }
+   .cv-print-btn:hover { opacity: .88; transform: translateY(-2px); color: #fff; }
+
    /* Not-found card */
    .cv-not-found {
       background: #fff;
@@ -1018,6 +1035,17 @@ function cert_photo_url(?string $photo): string
                               <?php else: echo '—'; endif; ?>
                            </div>
                         </div>
+                     </div>
+
+                     <!-- Print / Download PDF button -->
+                     <div style="text-align:right;margin-bottom:16px;">
+                        <a href="<?= fh(SITE_URL) ?>/result-print.php?sid=<?= urlencode($student['student_id']) ?>"
+                           target="_blank"
+                           rel="noopener noreferrer"
+                           class="cv-print-btn">
+                           <i class="fas fa-file-pdf"></i>
+                           Print / Download PDF
+                        </a>
                      </div>
 
                      <!-- Manual check note -->
