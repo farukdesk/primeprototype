@@ -122,6 +122,9 @@ require_once __DIR__ . '/../includes/header.php';
         <a href="<?= APP_URL ?>/students/bulk-upload.php" class="btn btn-outline-primary" style="border-radius:10px;font-size:.875rem;">
             <i class="fas fa-file-archive me-1"></i> Bulk Upload Files
         </a>
+        <a href="<?= APP_URL ?>/students/bulk-photo-upload.php" class="btn btn-outline-warning" style="border-radius:10px;font-size:.875rem;">
+            <i class="fas fa-images me-1"></i> Bulk Upload Photos
+        </a>
         <a href="<?= APP_URL ?>/students/create.php" class="btn btn-primary" style="border-radius:10px;font-size:.875rem;">
             <i class="fas fa-user-plus me-1"></i> Add Student
         </a>
