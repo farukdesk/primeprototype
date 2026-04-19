@@ -183,10 +183,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $existing_stmt = db()->query(
                     "SELECT student_id, original_name FROM student_files"
                 );
-                $existing_files = [];  // "student_pk:original_name" => true
+                $existing_files = [];  // "student_pk:original_name" => true  (cross-upload dedup from DB)
                 foreach ($existing_stmt->fetchAll() as $row) {
                     $existing_files[$row['student_id'] . ':' . $row['original_name']] = true;
                 }
+                $seen_in_zip = [];    // "student_pk:full_zip_path" => true  (within-ZIP dedup)
 
                 $dest_dir = UPLOAD_DIR . '/students/files';
                 if (!is_dir($dest_dir)) {
@@ -317,9 +318,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $student = $student_map[$sid_key];
                         $stu_pk  = (int)$student['id'];
 
-                        // Duplicate check (per-student)
-                        $dup_key = $stu_pk . ':' . $original_name;
-                        if (isset($existing_files[$dup_key])) {
+                        // Cross-upload duplicate check: already in DB for this student?
+                        $db_dup_key  = $stu_pk . ':' . $original_name;
+                        // Within-ZIP duplicate check: exact same ZIP entry already processed?
+                        $zip_dup_key = $stu_pk . ':' . $entry;
+                        if (isset($existing_files[$db_dup_key]) || isset($seen_in_zip[$zip_dup_key])) {
                             $skipped_dup[] = [
                                 'path'       => $entry,
                                 'student_id' => $sid_raw,
@@ -340,8 +343,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $user['id'],
                         ]);
 
-                        // Mark so we won't import duplicate within the same ZIP
-                        $existing_files[$dup_key] = true;
+                        // Mark the exact ZIP entry as processed so an identical path
+                        // within the same ZIP is not inserted twice for the same student.
+                        // (Uses the full ZIP path, not just the basename, so files with
+                        // the same filename in different subdirectories are treated as
+                        // distinct and are all imported correctly.)
+                        $seen_in_zip[$zip_dup_key] = true;
                         $any_inserted = true;
 
                         $imported[] = [
