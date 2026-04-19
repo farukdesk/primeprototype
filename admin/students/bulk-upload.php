@@ -650,7 +650,7 @@ transcript.pdf,25020101</pre>
                         </label>
                         <input type="file" class="form-control" id="zip_file" name="zip_file"
                                accept=".zip,application/zip" required>
-                        <div class="form-text">Maximum upload size: 2048 MB (configured for large ZIP files).</div>
+                        <div class="form-text">Maximum upload size: 200 GB (configured for large ZIP files).</div>
                     </div>
 
                     <div class="d-flex gap-2">
