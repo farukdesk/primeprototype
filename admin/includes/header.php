@@ -254,7 +254,7 @@ $user       = auth_user();
     <?php
     $current_path = $_SERVER['PHP_SELF'];
     $is_website_active  = strpos($current_path, '/cms/') !== false || strpos($current_path, '/homepage/') !== false || strpos($current_path, '/pages/') !== false || strpos($current_path, '/policy-procedure/') !== false;
-    $is_academic_active = strpos($current_path, '/departments/') !== false || strpos($current_path, '/faculty-profiles/') !== false || strpos($current_path, '/students/') !== false || strpos($current_path, '/course-curriculum/') !== false || strpos($current_path, '/clubs/') !== false || strpos($current_path, '/staff-profiles/') !== false || strpos($current_path, '/results/') !== false || strpos($current_path, '/student-verification/') !== false;
+    $is_academic_active = strpos($current_path, '/departments/') !== false || strpos($current_path, '/faculty-profiles/') !== false || strpos($current_path, '/students/') !== false || strpos($current_path, '/course-curriculum/') !== false || strpos($current_path, '/clubs/') !== false || strpos($current_path, '/staff-profiles/') !== false || strpos($current_path, '/results/') !== false || strpos($current_path, '/student-verification/') !== false || strpos($current_path, '/cert-verifiers/') !== false;
     $is_comms_active    = strpos($current_path, '/contact/') !== false || strpos($current_path, '/support-tickets/') !== false || strpos($current_path, '/knowledge-base/') !== false || strpos($current_path, '/broadcast/') !== false;
     $is_leads_active    = strpos($current_path, '/leads/') !== false;
     $is_admissions_active = strpos($current_path, '/admissions/') !== false;
@@ -695,6 +695,14 @@ $user       = auth_user();
                 <a href="<?= APP_URL ?>/student-verification/index.php"
                    class="<?= strpos($current_path, '/student-verification/') !== false ? 'active' : '' ?>">
                     <i class="fas fa-shield-alt"></i> Student Verification
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('cert-verifiers')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/cert-verifiers/index.php"
+                   class="<?= strpos($current_path, '/cert-verifiers/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-search-plus"></i> Cert. Verifiers
                 </a>
             </li>
             <?php endif; ?>
