@@ -5,16 +5,18 @@
  */
 $hs = get_header_settings();
 
-$phone               = $hs['phone']               ?? '01969-955566';
-$email               = $hs['email']               ?? 'info@primeuniversity.ac.bd';
-$student_portal_url  = $hs['student_portal_url']  ?? '#';
-$student_portal_text = $hs['student_portal_text'] ?? 'Student Portal';
-$find_result_url     = $hs['find_result_url']      ?? '#';
-$find_result_text    = $hs['find_result_text']     ?? 'Find Result';
-$facebook_url        = $hs['facebook_url']         ?? '#';
-$twitter_url         = $hs['twitter_url']          ?? '#';
-$instagram_url       = $hs['instagram_url']        ?? '#';
-$linkedin_url        = $hs['linkedin_url']         ?? '#';
+$phone                  = $hs['phone']                  ?? '01969-955566';
+$email                  = $hs['email']                  ?? 'info@primeuniversity.ac.bd';
+$student_portal_url     = $hs['student_portal_url']     ?? '#';
+$student_portal_text    = $hs['student_portal_text']    ?? 'Student Portal';
+$find_result_url        = $hs['find_result_url']        ?? '#';
+$find_result_text       = $hs['find_result_text']       ?? 'Find Result';
+$current_result_url     = $hs['current_result_url']     ?? '#';
+$current_result_text    = $hs['current_result_text']    ?? 'Current Student Results';
+$facebook_url           = $hs['facebook_url']           ?? '#';
+$twitter_url            = $hs['twitter_url']            ?? '#';
+$instagram_url          = $hs['instagram_url']          ?? '#';
+$linkedin_url           = $hs['linkedin_url']           ?? '#';
 ?>
 <!-- header-top-area-start -->
 <div class="it-header-top-area  black-bg it-header-top-ptb">
@@ -52,6 +54,8 @@ $linkedin_url        = $hs['linkedin_url']         ?? '#';
                   <a href="<?= fh($student_portal_url) ?>"><?= fh($student_portal_text) ?></a>
                   <span>/</span>
                   <a href="<?= fh($find_result_url) ?>"><?= fh($find_result_text) ?></a>
+                  <span>/</span>
+                  <a href="<?= fh($current_result_url) ?>"><?= fh($current_result_text) ?></a>
                </div>
                <div class="it-header-top-social-box align-items-center d-none d-md-flex">
                   <span>Follow On:</span>

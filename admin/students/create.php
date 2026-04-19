@@ -487,7 +487,7 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
             </div>
             <!-- Status -->
-            <div class="col-12 col-md-3">
+            <div class="col-12 col-md-6">
                 <label class="form-label">Enrollment Status</label>
                 <select name="status" class="form-select">
                     <?php foreach (['Active','Inactive','Graduated','Dropped'] as $s): ?>
@@ -543,16 +543,6 @@ require_once __DIR__ . '/../includes/header.php';
                     </div>
                 </div>
             </div>
-            <!-- Program Type (auto-populated) -->
-            <div class="col-12 col-md-3">
-                <label class="form-label">Program Type <small class="text-muted fw-normal">— auto-detected</small></label>
-                <div class="input-group">
-                    <span class="input-group-text"><i class="fas fa-layer-group"></i></span>
-                    <input type="text" class="form-control" id="program_type_display"
-                           value="<?= old('program_type') ?>" readonly placeholder="Auto-detected">
-                </div>
-                <input type="hidden" name="program_type" id="program_type" value="<?= old('program_type') ?>">
-            </div>
             <!-- Admitted Semester -->
             <div class="col-12 col-md-4">
                 <label class="form-label">Admitted Semester <span class="text-danger">*</span></label>
@@ -568,7 +558,7 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
             </div>
             <!-- Batch -->
-            <div class="col-12 col-md-3">
+            <div class="col-12 col-md-4">
                 <label class="form-label">Batch</label>
                 <div class="searchable-select-wrap">
                     <input type="text" class="form-control ss-trigger" id="batch_search"
@@ -585,14 +575,8 @@ require_once __DIR__ . '/../includes/header.php';
                     </div>
                 </div>
             </div>
-            <!-- Year -->
-            <div class="col-6 col-md-2">
-                <label class="form-label">Year</label>
-                <input type="text" class="form-control" name="year"
-                       value="<?= old('year', date('Y')) ?>" maxlength="10" placeholder="<?= date('Y') ?>">
-            </div>
             <!-- Shift -->
-            <div class="col-6 col-md-3">
+            <div class="col-12 col-md-4">
                 <label class="form-label">Shift</label>
                 <select name="shift" class="form-select">
                     <option value="">— Select —</option>
@@ -600,6 +584,22 @@ require_once __DIR__ . '/../includes/header.php';
                     <option value="<?= $sh ?>" <?= old('shift') === $sh ? 'selected' : '' ?>><?= $sh ?></option>
                     <?php endforeach; ?>
                 </select>
+            </div>
+            <!-- Program Type (auto-populated) -->
+            <div class="col-12 col-md-6">
+                <label class="form-label">Program Type <small class="text-muted fw-normal">— auto-detected</small></label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-layer-group"></i></span>
+                    <input type="text" class="form-control" id="program_type_display"
+                           value="<?= old('program_type') ?>" readonly placeholder="Auto-detected">
+                </div>
+                <input type="hidden" name="program_type" id="program_type" value="<?= old('program_type') ?>">
+            </div>
+            <!-- Year -->
+            <div class="col-12 col-md-6">
+                <label class="form-label">Year</label>
+                <input type="text" class="form-control" name="year"
+                       value="<?= old('year', date('Y')) ?>" maxlength="10" placeholder="<?= date('Y') ?>">
             </div>
         </div>
     </div>
