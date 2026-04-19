@@ -13,7 +13,7 @@ function sv_find_files(array $files): array
     $adm = null;
     $tab = null;
     // Ordered from most-specific to least-specific so the best title wins first
-    $adm_keywords = ['admission form', 'admission info', 'scanned file', 'scanned', 'admission'];
+    $adm_keywords = ['admission form', 'admission info', 'admisison', 'scanned file', 'scanned', 'admission'];
     $tab_keywords = ['final result tabulation', 'tabulation', 'final result'];
     foreach ($files as $f) {
         $fn = strtolower($f['file_name'] ?? '');
@@ -558,7 +558,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <input type="email" name="verifier_email" class="form-control"
                        placeholder="verifier@example.com"
                        value="<?= h($_POST['verifier_email'] ?? '') ?>">
-                <div class="form-text">If provided, verification results will be emailed from <strong>verification@primeuniversity.ac.bd</strong>.</div>
+                <div class="form-text">If provided, you can send the result email to the verifier from the verification result page after submission.</div>
             </div>
         </div>
         <div class="mt-4 d-flex gap-3 flex-wrap">

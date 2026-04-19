@@ -467,16 +467,20 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 <?php else: ?>
 <!-- Failed: show note and email option -->
-<div class="card mb-4">
-    <div class="card-header py-3 px-4">
-        <h6 class="mb-0 fw-semibold"><i class="fas fa-envelope me-2 text-muted"></i>Send Failure Notification</h6>
+<div class="card mb-4 border-danger border-opacity-50">
+    <div class="card-header py-3 px-4 bg-danger bg-opacity-10">
+        <h6 class="mb-0 fw-semibold text-danger"><i class="fas fa-envelope me-2"></i>Send Failure Notification</h6>
     </div>
     <div class="card-body px-4 py-3">
+        <div class="alert alert-warning d-flex align-items-start gap-2 mb-3 py-2 px-3" style="font-size:.85rem;">
+            <i class="fas fa-exclamation-triangle mt-1 flex-shrink-0"></i>
+            <div><strong>Warning:</strong> This verification has <strong>failed</strong>. Only send this notification if you intend to inform the recipient of the failure result.</div>
+        </div>
         <p class="text-muted" style="font-size:.875rem;">
-            Send the verification failure result from <strong>verification@primeuniversity.ac.bd</strong>.
-            The email will include the reasons for failure and a note to visit the university.
+            The email will be sent from <strong>verification@primeuniversity.ac.bd</strong> and will include the reasons for failure and a note to visit the university.
         </p>
-        <form method="POST" class="row g-2 align-items-end">
+        <form method="POST" class="row g-2 align-items-end"
+              onsubmit="return confirm('This verification has FAILED.\n\nAre you sure you want to send a failure notification email to the recipient?\n\nThis action cannot be undone.');">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="send_email">
             <div class="col-12 col-md-4">
@@ -490,8 +494,8 @@ require_once __DIR__ . '/../includes/header.php';
                        value="<?= h($rec['verifier_email'] ?? '') ?>" required>
             </div>
             <div class="col-auto">
-                <button type="submit" class="btn btn-outline-danger btn-sm" style="border-radius:8px;">
-                    <i class="fas fa-paper-plane me-1"></i> Send
+                <button type="submit" class="btn btn-danger btn-sm" style="border-radius:8px;">
+                    <i class="fas fa-paper-plane me-1"></i> Send Failure Notification
                 </button>
             </div>
         </form>
