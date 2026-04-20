@@ -47,8 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $dept_id     = (int)($_POST['dept_id']    ?? 0) ?: null;
     $program_id  = (int)($_POST['program_id'] ?? 0) ?: null;
     $preferred_semester = trim($_POST['preferred_semester'] ?? '');
-    $preferred_call_time_options = ['Morning (9 AM – 12 PM)', 'Afternoon (12 PM – 3 PM)', 'Evening (3 PM – 6 PM)'];
-    $preferred_call_time = in_array($_POST['preferred_call_time'] ?? '', $preferred_call_time_options, true)
+    $preferred_call_time = in_array($_POST['preferred_call_time'] ?? '', leads_call_time_options(), true)
                    ? $_POST['preferred_call_time'] : '';
     $status      = in_array($_POST['status'] ?? '', ['fresh', 'unable_to_reach', 'converted'], true)
                    ? $_POST['status'] : 'fresh';
@@ -195,7 +194,7 @@ require_once __DIR__ . '/../includes/header.php';
                             <label class="form-label">Preferred Call Time</label>
                             <select name="preferred_call_time" class="form-select">
                                 <option value="">— Not specified —</option>
-                                <?php foreach (['Morning (9 AM – 12 PM)', 'Afternoon (12 PM – 3 PM)', 'Evening (3 PM – 6 PM)'] as $ct): ?>
+                                <?php foreach (leads_call_time_options() as $ct): ?>
                                 <option value="<?= h($ct) ?>" <?= old('preferred_call_time') === $ct ? 'selected' : '' ?>><?= h($ct) ?></option>
                                 <?php endforeach; ?>
                             </select>

@@ -66,6 +66,15 @@ function an_semester_list(): array
     return $list;
 }
 
+function an_call_time_options(): array
+{
+    return [
+        'Morning (9 AM – 12 PM)',
+        'Afternoon (12 PM – 3 PM)',
+        'Evening (3 PM – 6 PM)',
+    ];
+}
+
 $departments = [];
 $programs_by_dept = [];
 try {
@@ -114,12 +123,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $dept_id = (int)($_POST['dept_id'] ?? 0) ?: null;
         $program_id = (int)($_POST['program_id'] ?? 0) ?: null;
         $preferred_semester = trim($_POST['preferred_semester'] ?? '');
-        $call_time_options  = [
-            'Morning (9 AM – 12 PM)',
-            'Afternoon (12 PM – 3 PM)',
-            'Evening (3 PM – 6 PM)',
-        ];
-        $preferred_call_time = in_array($_POST['preferred_call_time'] ?? '', $call_time_options, true)
+        $preferred_call_time = in_array($_POST['preferred_call_time'] ?? '', an_call_time_options(), true)
             ? $_POST['preferred_call_time'] : '';
 
         if ($first_name === '') $form_errors[] = 'First name is required.';
@@ -890,7 +894,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     <label class="pu-form-label" for="apply_preferred_call_time">Preferred Time to Call <span class="pu-required">*</span></label>
                                     <select id="apply_preferred_call_time" name="preferred_call_time" class="pu-form-select" required>
                                        <option value="">Select a time slot</option>
-                                       <?php foreach (['Morning (9 AM â 12 PM)', 'Afternoon (12 PM â 3 PM)', 'Evening (3 PM â 6 PM)'] as $ct): ?>
+                                       <?php foreach (an_call_time_options() as $ct): ?>
                                           <option value="<?= an_h($ct) ?>" <?= an_old('preferred_call_time', $old) === $ct ? 'selected' : '' ?>><?= an_h($ct) ?></option>
                                        <?php endforeach; ?>
                                     </select>
