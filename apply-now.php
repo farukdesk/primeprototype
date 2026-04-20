@@ -66,6 +66,15 @@ function an_semester_list(): array
     return $list;
 }
 
+function an_call_time_options(): array
+{
+    return [
+        'Morning (9 AM – 12 PM)',
+        'Afternoon (12 PM – 3 PM)',
+        'Evening (3 PM – 6 PM)',
+    ];
+}
+
 $departments = [];
 $programs_by_dept = [];
 try {
@@ -114,6 +123,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $dept_id = (int)($_POST['dept_id'] ?? 0) ?: null;
         $program_id = (int)($_POST['program_id'] ?? 0) ?: null;
         $preferred_semester = trim($_POST['preferred_semester'] ?? '');
+        $preferred_call_time = in_array($_POST['preferred_call_time'] ?? '', an_call_time_options(), true)
+            ? $_POST['preferred_call_time'] : '';
 
         if ($first_name === '') $form_errors[] = 'First name is required.';
         if ($last_name === '') $form_errors[] = 'Last name is required.';
@@ -132,9 +143,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $db->prepare(
                 'INSERT INTO leads
                    (lead_number, first_name, last_name, email, phone, address, current_city,
-                    degree_type, dept_id, program_id, preferred_semester,
+                    degree_type, dept_id, program_id, preferred_semester, preferred_call_time,
                     status, source)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)'
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
             )->execute([
                 $lead_number,
                 $first_name,
@@ -147,6 +158,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $dept_id,
                 $program_id,
                 $preferred_semester ?: null,
+                $preferred_call_time ?: null,
                 'fresh',
                 'online',
             ]);
@@ -877,6 +889,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                           <option value="<?= an_h($sem) ?>" <?= an_old('preferred_semester', $old) === $sem ? 'selected' : '' ?>><?= an_h($sem) ?></option>
                                        <?php endforeach; ?>
                                     </select>
+                                 </div>
+                                 <div class="col-md-6">
+                                    <label class="pu-form-label" for="apply_preferred_call_time">Preferred Time to Call <span class="pu-required">*</span></label>
+                                    <select id="apply_preferred_call_time" name="preferred_call_time" class="pu-form-select" required>
+                                       <option value="">Select a time slot</option>
+                                       <?php foreach (an_call_time_options() as $ct): ?>
+                                          <option value="<?= an_h($ct) ?>" <?= an_old('preferred_call_time', $old) === $ct ? 'selected' : '' ?>><?= an_h($ct) ?></option>
+                                       <?php endforeach; ?>
+                                    </select>
+                                    <div class="pu-form-note">Our admissions team will try to call you during this window.</div>
                                  </div>
                                  <div class="col-md-6">
                                     <label class="pu-form-label" for="an_dept_select">Department</label>
