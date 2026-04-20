@@ -80,9 +80,14 @@ function ses_badge_icon(string $status): string
 }
 function ses_ordinal(int $n): string
 {
+    $mod100 = $n % 100;
+    // 11, 12, 13 are special-cased to 'th' (e.g. 11th, 12th, 13th)
+    if ($mod100 >= 11 && $mod100 <= 13) {
+        return $n . 'th';
+    }
     $suffix = ['th','st','nd','rd'];
-    $v = $n % 100;
-    return $n . ($suffix[($v - 20) % 10] ?? $suffix[min($v, 3)]);
+    $mod10  = $n % 10;
+    return $n . ($suffix[$mod10] ?? 'th');
 }
 ?>
 <!doctype html>
@@ -454,6 +459,14 @@ function ses_ordinal(int $n): string
       .ses-sidebar { position: static; margin-top: 32px; }
    }
 
+   /* Span 2 columns on wider grids */
+   .ses-info-item--wide {
+      grid-column: span 2;
+   }
+   @media (max-width: 479px) {
+      .ses-info-item--wide { grid-column: span 1; }
+   }
+
    /* Divider */
    .ses-divider {
       border: none;
@@ -704,7 +717,7 @@ function ses_ordinal(int $n): string
                            </div>
 
                            <!-- Current semester with progress bar -->
-                           <div class="ses-info-item" style="grid-column: span 2;">
+                           <div class="ses-info-item ses-info-item--wide">
                               <div class="lbl">Current Semester</div>
                               <div class="val">
                                  <?= ses_ordinal($cur_sem) ?> Semester
