@@ -669,45 +669,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
          </div>
       </form>
    </div>
-
-   <div class="it-offcanvas-area">
-      <div class="itoffcanvas">
-         <div class="itoffcanvas__close-btn">
-            <button class="close-btn" aria-label="Close offcanvas menu"><i class="fal fa-times" aria-hidden="true"></i></button>
-         </div>
-         <div class="itoffcanvas__logo">
-            <a href="<?= an_h(SITE_URL) ?>/index.php">
-               <img src="/assets/img/logo/logo-black.png" alt="Prime University">
-            </a>
-         </div>
-         <div class="it-menu-mobile d-xl-none"></div>
-         <div class="itoffcanvas__info">
-            <h3 class="offcanva-title">Admissions Help Desk</h3>
-            <div class="it-info-wrapper mb-20 d-flex align-items-center">
-               <div class="itoffcanvas__info-icon"><a href="mailto:info@primeuniversity.ac.bd" aria-label="Send email to info@primeuniversity.ac.bd"><i class="fal fa-envelope" aria-hidden="true"></i></a></div>
-               <div class="itoffcanvas__info-address">
-                  <span>Email</span>
-                  <a href="mailto:info@primeuniversity.ac.bd">info@primeuniversity.ac.bd</a>
-               </div>
-            </div>
-            <div class="it-info-wrapper mb-20 d-flex align-items-center">
-               <div class="itoffcanvas__info-icon"><a href="tel:+8801969955566" aria-label="Call admissions at 01969-955566"><i class="fal fa-phone-alt" aria-hidden="true"></i></a></div>
-               <div class="itoffcanvas__info-address">
-                  <span>Phone</span>
-                  <a href="tel:+8801969955566">01969-955566</a>
-               </div>
-            </div>
-            <div class="it-info-wrapper mb-20 d-flex align-items-center">
-               <div class="itoffcanvas__info-icon"><a href="https://maps.google.com/?q=Prime+University+Dhaka" target="_blank" rel="noopener" aria-label="Open campus location map in new tab"><i class="fas fa-map-marker-alt" aria-hidden="true"></i></a></div>
-               <div class="itoffcanvas__info-address">
-                  <span>Location</span>
-                  <a href="https://maps.google.com/?q=Prime+University+Dhaka" target="_blank" rel="noopener">114/116 Mazar Road, Mirpur-1, Dhaka 1216</a>
-               </div>
-            </div>
-         </div>
-      </div>
-   </div>
-   <div class="body-overlay"></div>
+<?php include __DIR__ . '/includes/offcanvas.php'; ?>
 
    <header class="it-header-height">
       <?php include __DIR__ . '/includes/header-top.php'; ?>

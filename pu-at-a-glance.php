@@ -373,46 +373,7 @@ function gs_url(array $s, string $key, string $default = '#'): string {
     <div class="search-popup-form"><form action="#"><input type="text" placeholder="Search here…"><button type="submit"><i class="fad fa-search"></i></button></form></div>
   </div></div></div></div>
 </div>
-<!-- offcanvas area start -->
-<div class="it-offcanvas-area">
-   <div class="itoffcanvas">
-      <div class="itoffcanvas__close-btn">
-         <button class="close-btn"><i class="fal fa-times"></i></button>
-      </div>
-      <div class="itoffcanvas__logo">
-         <a href="<?= fh(SITE_URL) ?>/index.php">
-            <img src="/assets/img/logo/logo-black.png" alt="Prime University">
-         </a>
-      </div>
-      <div class="it-menu-mobile d-xl-none"></div>
-      <div class="itoffcanvas__info">
-         <h3 class="offcanva-title">Get In Touch</h3>
-         <div class="it-info-wrapper mb-20 d-flex align-items-center">
-            <div class="itoffcanvas__info-icon"><a href="#"><i class="fal fa-envelope"></i></a></div>
-            <div class="itoffcanvas__info-address">
-               <span>Email</span>
-               <a href="mailto:info@primeuniversity.ac.bd">info@primeuniversity.ac.bd</a>
-            </div>
-         </div>
-         <div class="it-info-wrapper mb-20 d-flex align-items-center">
-            <div class="itoffcanvas__info-icon"><a href="#"><i class="fal fa-phone-alt"></i></a></div>
-            <div class="itoffcanvas__info-address">
-               <span>Phone</span>
-               <a href="tel:+8801969955566">01969-955566</a>
-            </div>
-         </div>
-         <div class="it-info-wrapper mb-20 d-flex align-items-center">
-            <div class="itoffcanvas__info-icon"><a href="#"><i class="fas fa-map-marker-alt"></i></a></div>
-            <div class="itoffcanvas__info-address">
-               <span>Location</span>
-               <a href="https://www.google.com/maps/@23.7934913,90.3547073,15z" target="_blank">114/116, Mazar Rd, Dhaka-1216</a>
-            </div>
-         </div>
-      </div>
-   </div>
-</div>
-<div class="body-overlay"></div>
-<!-- offcanvas area end -->
+<?php include __DIR__ . '/includes/offcanvas.php'; ?>
 
 <header class="it-header-height">
    <?php include __DIR__ . '/includes/header-top.php'; ?>
