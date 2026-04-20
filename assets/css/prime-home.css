@@ -1620,3 +1620,29 @@ button.it-menu-bar:focus-visible {
   .pu-footer__contact { max-width: 100%; }
   .pu-footer__contact-label { font-size: .7rem; }
 }
+
+/* ── Header Top Bar – Mobile Responsive ────────────────────────────────────── */
+@media (max-width: 575px) {
+  /* Shrink email link to fit in col-6 */
+  .it-header-top-contact a {
+    font-size: 11px;
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: inline-block;
+    vertical-align: middle;
+  }
+  /* Tighten icon gap */
+  .it-header-top-contact {
+    padding-left: 22px;
+  }
+  /* Hide "Follow On:" label on mobile */
+  .it-header-top-social-box > span {
+    display: none !important;
+  }
+  /* Tighten social icon spacing */
+  .it-header-top-social-box a:not(:last-child) {
+    margin-right: 10px;
+  }
+}
