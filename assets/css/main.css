@@ -1912,21 +1912,67 @@ input[type=color] {
   font-weight: 400;
   color: rgba(0, 0, 0, 0.6);
 }
+.itoffcanvas__info-address {
+  min-width: 0;
+  flex: 1;
+}
 .itoffcanvas__info-address a {
   display: block;
   color: var(--it-common-black);
   font-size: 18px;
   font-weight: 600;
   transition: 0.3s;
-  overflow-wrap: break-word;
+  overflow-wrap: anywhere;
+  word-break: break-all;
 }
 @media (max-width: 767px) {
   .itoffcanvas__info-address a {
-    font-size: 16px;
+    font-size: 15px;
   }
 }
 .itoffcanvas__info-address a:hover {
   color: var(--it-theme-1);
+}
+/* Offcanvas quick-links block */
+.itoffcanvas__quick-links {
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  padding: 12px 0;
+  margin-bottom: 4px;
+}
+.itoffcanvas__quick-links-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.itoffcanvas__quick-links-list li {
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+.itoffcanvas__quick-links-list li:last-child {
+  border-bottom: none;
+}
+.itoffcanvas__quick-links-list li a {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--it-theme-1, #1d2b4e);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.itoffcanvas__quick-links-list li a::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--it-theme-2, #ffb81c);
+  flex-shrink: 0;
+}
+.itoffcanvas__quick-links-list li a:hover {
+  color: var(--it-theme-2, #ffb81c);
 }
 .itoffcanvas .it-homemenu-wrapper {
   padding: 0;
@@ -10114,6 +10160,32 @@ input[type=radio] {
     font-size: 13px;
   }
 }
+/* ── Header Top Bar – Small Mobile (≤575px) fix ────────── */
+@media (max-width: 575px) {
+  /* Truncate long email to stay within its column */
+  .it-header-top-contact a {
+    font-size: 11px;
+    max-width: 130px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: inline-block;
+    vertical-align: middle;
+  }
+  /* Reduce left icon indent */
+  .it-header-top-contact {
+    padding-left: 22px;
+  }
+  /* Hide "Follow On:" label – too wide at this breakpoint */
+  .it-header-top-social-box > span {
+    display: none !important;
+  }
+  /* Tighten social icon gaps */
+  .it-header-top-social-box a:not(:last-child) {
+    margin-right: 8px;
+  }
+}
+
 @media (max-width: 767px) {
   .it-header-top-list-box {
     text-align: center;
