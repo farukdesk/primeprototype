@@ -783,7 +783,7 @@ function ses_ordinal(int $n): string
                         Contact the Registrar&rsquo;s Office at
                         <a href="tel:+8801969955566" style="color:#93c5fd;">01969-955566</a>
                         or email
-                        <a href="mailto:registrar@primeuniversity.ac.bd" style="color:#93c5fd;">registrar@primeuniversity.ac.bd</a>.
+                        <a href="mailto:verification@primeuniversity.ac.bd" style="color:#93c5fd;">verification@primeuniversity.ac.bd</a>.
                      </div>
                   </div>
                </div>
