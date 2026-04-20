@@ -568,37 +568,7 @@ $lib_desc    = $lib_settings['lib_description']  ?? 'A modern academic library s
          </div>
       </form>
    </div>
-
-   <!-- offcanvas -->
-   <div class="it-offcanvas-area">
-      <div class="itoffcanvas">
-         <div class="itoffcanvas__close-btn"><button class="close-btn"><i class="fal fa-times"></i></button></div>
-         <div class="itoffcanvas__logo">
-            <a href="<?= fh(SITE_URL) ?>/index.php">
-               <img src="/assets/img/logo/logo-black.png" alt="Prime University">
-            </a>
-         </div>
-         <div class="it-menu-mobile d-xl-none"></div>
-         <div class="itoffcanvas__info">
-            <h3 class="offcanva-title">Get In Touch</h3>
-            <div class="it-info-wrapper mb-20 d-flex align-items-center">
-               <div class="itoffcanvas__info-icon"><a href="#"><i class="fal fa-phone-alt"></i></a></div>
-               <div class="itoffcanvas__info-address">
-                  <span>Phone</span>
-                  <a href="tel:<?= fh($lib_phone_tel) ?>"><?= fh($lib_phone) ?></a>
-               </div>
-            </div>
-            <div class="it-info-wrapper mb-20 d-flex align-items-center">
-               <div class="itoffcanvas__info-icon"><a href="#"><i class="fal fa-mobile-alt"></i></a></div>
-               <div class="itoffcanvas__info-address">
-                  <span>Cell</span>
-                  <a href="tel:<?= fh($lib_cell_tel) ?>"><?= fh($lib_cell) ?></a>
-               </div>
-            </div>
-         </div>
-      </div>
-   </div>
-   <div class="body-overlay"></div>
+<?php include __DIR__ . '/includes/offcanvas.php'; ?>
 
    <header class="it-header-height">
       <?php include __DIR__ . '/includes/header-top.php'; ?>

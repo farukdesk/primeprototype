@@ -607,51 +607,7 @@ $page_title = 'Scholarships & Waivers – Prime University';
          </div>
       </form>
    </div>
-
-   <!-- offcanvas -->
-   <div class="it-offcanvas-area">
-      <div class="itoffcanvas">
-         <div class="itoffcanvas__close-btn">
-            <button class="close-btn"><i class="fal fa-times"></i></button>
-         </div>
-         <div class="itoffcanvas__logo">
-            <a href="<?= fh(SITE_URL) ?>/index.php">
-               <img src="/assets/img/logo/logo-black.png" alt="Prime University">
-            </a>
-         </div>
-         <div class="it-menu-mobile d-xl-none"></div>
-         <div class="itoffcanvas__info">
-            <h3 class="offcanva-title">Get In Touch</h3>
-            <div class="it-info-wrapper mb-20 d-flex align-items-center">
-               <div class="itoffcanvas__info-icon">
-                  <a href="#"><i class="fal fa-envelope"></i></a>
-               </div>
-               <div class="itoffcanvas__info-address">
-                  <span>Email</span>
-                  <a href="mailto:primeuniversity@gmail.com">primeuniversity@gmail.com</a>
-               </div>
-            </div>
-            <div class="it-info-wrapper mb-20 d-flex align-items-center">
-               <div class="itoffcanvas__info-icon">
-                  <a href="#"><i class="fal fa-phone-alt"></i></a>
-               </div>
-               <div class="itoffcanvas__info-address">
-                  <span>Phone</span>
-                  <a href="tel:+8801969955566">01969-955566</a>
-               </div>
-            </div>
-         </div>
-         <div class="it-offcanvas-social">
-            <a href="#"><i class="fab fa-facebook-f"></i></a>
-            <a href="#"><i class="fab fa-twitter"></i></a>
-            <a href="#"><i class="fab fa-instagram"></i></a>
-            <a href="#"><i class="fab fa-linkedin-in"></i></a>
-         </div>
-      </div>
-   </div>
-   <div class="body-overlay"></div>
-
-   <!-- HEADER -->
+<?php include __DIR__ . '/includes/offcanvas.php'; ?>
    <header class="it-header-height">
       <?php include __DIR__ . '/includes/header-top.php'; ?>
       <?php include __DIR__ . '/includes/nav-menu.php'; ?>
