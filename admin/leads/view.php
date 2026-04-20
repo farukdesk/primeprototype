@@ -282,6 +282,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <div class="col-6 col-md-3 text-muted small">Department</div><div class="col-6 col-md-3"><?= h($lead['dept_name'] ?? '–') ?></div>
                     <div class="col-6 col-md-3 text-muted small">Program</div><div class="col-6 col-md-3"><?= h($lead['program_name'] ?? '–') ?></div>
                     <div class="col-6 col-md-3 text-muted small">Preferred Semester</div><div class="col-6 col-md-3"><?= h($lead['preferred_semester'] ?? '–') ?></div>
+                    <div class="col-6 col-md-3 text-muted small">Preferred Call Time</div><div class="col-6 col-md-3"><?= $lead['preferred_call_time'] ? '<span class="badge bg-info text-dark"><i class="fas fa-phone-alt me-1"></i>' . h($lead['preferred_call_time']) . '</span>' : '–' ?></div>
                 </div>
             </div>
         </div>

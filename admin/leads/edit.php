@@ -50,6 +50,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $dept_id      = (int)($_POST['dept_id']    ?? 0) ?: null;
     $program_id   = (int)($_POST['program_id'] ?? 0) ?: null;
     $preferred_semester = trim($_POST['preferred_semester'] ?? '');
+    $preferred_call_time_options = ['Morning (9 AM – 12 PM)', 'Afternoon (12 PM – 3 PM)', 'Evening (3 PM – 6 PM)'];
+    $preferred_call_time = in_array($_POST['preferred_call_time'] ?? '', $preferred_call_time_options, true)
+                     ? $_POST['preferred_call_time'] : '';
     $new_status   = in_array($_POST['status'] ?? '', ['fresh', 'unable_to_reach', 'converted'], true)
                     ? $_POST['status'] : $lead['status'];
     $source       = in_array($_POST['source'] ?? '', ['online', 'campus_visit', 'agent', 'f2f_marketing', 'facebook'], true)
@@ -75,6 +78,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'dept_id'            => [$lead['dept_id'],            $dept_id],
             'program_id'         => [$lead['program_id'],         $program_id],
             'preferred_semester' => [$lead['preferred_semester'] ?? '', $preferred_semester],
+            'preferred_call_time'=> [$lead['preferred_call_time'] ?? '', $preferred_call_time],
             'status'             => [$lead['status'],             $new_status],
             'source'             => [$lead['source'],             $source],
             'assigned_to'        => [$lead['assigned_to'],        $assigned_to],
@@ -83,13 +87,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         db()->prepare(
             'UPDATE leads SET first_name=?, last_name=?, email=?, phone=?, address=?,
              current_city=?, degree_type=?, dept_id=?, program_id=?,
-             preferred_semester=?, status=?, source=?, assigned_to=?, updated_by=?
+             preferred_semester=?, preferred_call_time=?, status=?, source=?, assigned_to=?, updated_by=?
              WHERE id=?'
         )->execute([
             $first_name, $last_name, $email ?: null, $phone,
             $address ?: null, $current_city ?: null,
             $degree_type, $dept_id, $program_id,
-            $preferred_semester ?: null, $new_status, $source, $assigned_to,
+            $preferred_semester ?: null, $preferred_call_time ?: null, $new_status, $source, $assigned_to,
             $user['id'], $id,
         ]);
 
@@ -214,6 +218,15 @@ $v = function(string $field) use ($lead, $old): string {
                                 <option value="">— Select Semester —</option>
                                 <?php foreach ($semesters as $sem): ?>
                                 <option value="<?= h($sem) ?>" <?= $v('preferred_semester') === $sem ? 'selected' : '' ?>><?= h($sem) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <label class="form-label">Preferred Call Time</label>
+                            <select name="preferred_call_time" class="form-select">
+                                <option value="">— Not specified —</option>
+                                <?php foreach (['Morning (9 AM – 12 PM)', 'Afternoon (12 PM – 3 PM)', 'Evening (3 PM – 6 PM)'] as $ct): ?>
+                                <option value="<?= h($ct) ?>" <?= $v('preferred_call_time') === $ct ? 'selected' : '' ?>><?= h($ct) ?></option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
