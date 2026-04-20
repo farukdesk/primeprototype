@@ -276,6 +276,11 @@ $user       = auth_user();
     $is_office_of_crhp_active            = strpos($current_path, '/office-of-crhp/') !== false;
     $is_office_of_proctor_active         = strpos($current_path, '/office-of-proctor/') !== false;
     $is_law_legal_active            = strpos($current_path, '/law-legal/') !== false;
+    $is_offices_active = $is_office_of_vc_active || $is_office_of_chairman_active || $is_office_of_pro_vc_active
+                      || $is_office_of_treasurer_active || $is_office_of_registrar_active || $is_office_of_coe_active
+                      || $is_office_of_it_active || $is_office_of_accounts_audit_active || $is_office_of_estate_store_active
+                      || $is_students_affairs_active || $is_office_of_crhp_active || $is_office_of_proctor_active
+                      || $is_law_legal_active;
     $is_admin_active    = strpos($current_path, '/users/') !== false || strpos($current_path, '/user-groups/') !== false
                        || strpos($current_path, '/modules/') !== false || strpos($current_path, '/access/') !== false
                        || strpos($current_path, '/email-templates/') !== false || strpos($current_path, '/change-log/') !== false;
@@ -499,160 +504,123 @@ $user       = auth_user();
     </div>
     <?php endif; ?>
 
-    <!-- ── Office of Vice Chancellor ── -->
-    <?php if (is_super_admin() || can_access('office-of-vc')): ?>
-    <ul class="nav flex-column mt-2">
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/office-of-vc/index.php"
-               class="<?= $is_office_of_vc_active ? 'active' : '' ?>">
-                <i class="fas fa-user-tie"></i> Office of Vice Chancellor
-            </a>
-        </li>
-    </ul>
-    <?php endif; ?>
-
-    <!-- ── Office of Chairman ── -->
-    <?php if (is_super_admin() || can_access('office-of-chairman')): ?>
-    <ul class="nav flex-column mt-2">
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/office-of-chairman/index.php"
-               class="<?= $is_office_of_chairman_active ? 'active' : '' ?>">
-                <i class="fas fa-gavel"></i> Office of Chairman
-            </a>
-        </li>
-    </ul>
-    <?php endif; ?>
-
-    <!-- ── Office of Pro Vice Chancellor ── -->
-    <?php if (is_super_admin() || can_access('office-of-pro-vc')): ?>
-    <ul class="nav flex-column mt-2">
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/office-of-pro-vc/index.php"
-               class="<?= $is_office_of_pro_vc_active ? 'active' : '' ?>">
-                <i class="fas fa-user-graduate"></i> Office of Pro VC
-            </a>
-        </li>
-    </ul>
-    <?php endif; ?>
-
-    <!-- ── Office of Treasurer ── -->
-    <?php if (is_super_admin() || can_access('office-of-treasurer')): ?>
-    <ul class="nav flex-column mt-2">
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/office-of-treasurer/index.php"
-               class="<?= $is_office_of_treasurer_active ? 'active' : '' ?>">
-                <i class="fas fa-coins"></i> Office of Treasurer
-            </a>
-        </li>
-    </ul>
-    <?php endif; ?>
-
-    <!-- ── Office of Registrar ── -->
-    <?php if (is_super_admin() || can_access('office-of-registrar')): ?>
-    <ul class="nav flex-column mt-2">
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/office-of-registrar/index.php"
-               class="<?= $is_office_of_registrar_active ? 'active' : '' ?>">
-                <i class="fas fa-stamp"></i> Office of Registrar
-            </a>
-        </li>
-    </ul>
-    <?php endif; ?>
-
-    <!-- ── Office of Controller of Examinations ── -->
-    <?php if (is_super_admin() || can_access('office-of-coe')): ?>
-    <ul class="nav flex-column mt-2">
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/office-of-coe/index.php"
-               class="<?= $is_office_of_coe_active ? 'active' : '' ?>">
-                <i class="fas fa-scroll"></i> Controller of Examinations
-            </a>
-        </li>
-    </ul>
-    <?php endif; ?>
-
-    <!-- ── Office of IT ── -->
-    <?php if (is_super_admin() || can_access('office-of-it')): ?>
-    <ul class="nav flex-column mt-2">
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/office-of-it/index.php"
-               class="<?= $is_office_of_it_active ? 'active' : '' ?>">
-                <i class="fas fa-laptop-code"></i> Office of IT
-            </a>
-        </li>
-    </ul>
-    <?php endif; ?>
-
-    <!-- ── Office of Accounts & Audit ── -->
-    <?php if (is_super_admin() || can_access('office-of-accounts-audit')): ?>
-    <ul class="nav flex-column mt-2">
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/office-of-accounts-audit/index.php"
-               class="<?= $is_office_of_accounts_audit_active ? 'active' : '' ?>">
-                <i class="fas fa-file-invoice-dollar"></i> Office of Accounts &amp; Audit
-            </a>
-        </li>
-    </ul>
-    <?php endif; ?>
-
-    <!-- ── Office of the Estate & Store ── -->
-    <?php if (is_super_admin() || can_access('office-of-estate-store')): ?>
-    <ul class="nav flex-column mt-2">
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/office-of-estate-store/index.php"
-               class="<?= $is_office_of_estate_store_active ? 'active' : '' ?>">
-                <i class="fas fa-building"></i> Office of the Estate &amp; Store
-            </a>
-        </li>
-    </ul>
-    <?php endif; ?>
-
-    <!-- ── Students' Affairs ── -->
-    <?php if (is_super_admin() || can_access('students-affairs')): ?>
-    <ul class="nav flex-column mt-2">
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/students-affairs/index.php"
-               class="<?= $is_students_affairs_active ? 'active' : '' ?>">
-                <i class="fas fa-user-graduate"></i> Students&#039; Affairs
-            </a>
-        </li>
-    </ul>
-    <?php endif; ?>
-
-    <!-- ── Office of the CRHP ── -->
-    <?php if (is_super_admin() || can_access('office-of-crhp')): ?>
-    <ul class="nav flex-column mt-2">
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/office-of-crhp/index.php"
-               class="<?= $is_office_of_crhp_active ? 'active' : '' ?>">
-                <i class="fas fa-flask"></i> Office of the CRHP
-            </a>
-        </li>
-    </ul>
-    <?php endif; ?>
-
-    <!-- ── Office of the Proctor ── -->
-    <?php if (is_super_admin() || can_access('office-of-proctor')): ?>
-    <ul class="nav flex-column mt-2">
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/office-of-proctor/index.php"
-               class="<?= $is_office_of_proctor_active ? 'active' : '' ?>">
-                <i class="fas fa-user-shield"></i> Office of the Proctor
-            </a>
-        </li>
-    </ul>
-    <?php endif; ?>
-
-    <!-- ── Law & Legal Affairs ── -->
-    <?php if (is_super_admin() || can_access('law-legal')): ?>
-    <ul class="nav flex-column mt-2">
-        <li class="nav-item">
-            <a href="<?= APP_URL ?>/law-legal/index.php"
-               class="<?= $is_law_legal_active ? 'active' : '' ?>">
-                <i class="fas fa-gavel"></i> Law &amp; Legal Affairs
-            </a>
-        </li>
-    </ul>
+    <!-- ── University Offices ── -->
+    <?php if (is_super_admin() || can_access('office-of-vc') || can_access('office-of-chairman') || can_access('office-of-pro-vc') || can_access('office-of-treasurer') || can_access('office-of-registrar') || can_access('office-of-coe') || can_access('office-of-it') || can_access('office-of-accounts-audit') || can_access('office-of-estate-store') || can_access('students-affairs') || can_access('office-of-crhp') || can_access('office-of-proctor') || can_access('law-legal')): ?>
+    <button class="nav-group-toggle <?= $is_offices_active ? '' : 'collapsed' ?>"
+            data-bs-toggle="collapse" data-bs-target="#grp-offices"
+            aria-expanded="<?= $is_offices_active ? 'true' : 'false' ?>">
+        <i class="fas fa-landmark grp-icon" style="color:#3498db"></i>
+        University Offices
+        <i class="fas fa-chevron-down toggle-icon"></i>
+    </button>
+    <div class="collapse <?= $is_offices_active ? 'show' : '' ?>" id="grp-offices">
+        <ul class="nav flex-column grp-items">
+            <?php if (is_super_admin() || can_access('office-of-vc')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/office-of-vc/index.php"
+                   class="<?= $is_office_of_vc_active ? 'active' : '' ?>">
+                    <i class="fas fa-user-tie"></i> Office of Vice Chancellor
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('office-of-chairman')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/office-of-chairman/index.php"
+                   class="<?= $is_office_of_chairman_active ? 'active' : '' ?>">
+                    <i class="fas fa-gavel"></i> Office of Chairman
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('office-of-pro-vc')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/office-of-pro-vc/index.php"
+                   class="<?= $is_office_of_pro_vc_active ? 'active' : '' ?>">
+                    <i class="fas fa-user-graduate"></i> Office of Pro VC
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('office-of-treasurer')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/office-of-treasurer/index.php"
+                   class="<?= $is_office_of_treasurer_active ? 'active' : '' ?>">
+                    <i class="fas fa-coins"></i> Office of Treasurer
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('office-of-registrar')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/office-of-registrar/index.php"
+                   class="<?= $is_office_of_registrar_active ? 'active' : '' ?>">
+                    <i class="fas fa-stamp"></i> Office of Registrar
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('office-of-coe')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/office-of-coe/index.php"
+                   class="<?= $is_office_of_coe_active ? 'active' : '' ?>">
+                    <i class="fas fa-scroll"></i> Controller of Examinations
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('office-of-it')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/office-of-it/index.php"
+                   class="<?= $is_office_of_it_active ? 'active' : '' ?>">
+                    <i class="fas fa-laptop-code"></i> Office of IT
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('office-of-accounts-audit')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/office-of-accounts-audit/index.php"
+                   class="<?= $is_office_of_accounts_audit_active ? 'active' : '' ?>">
+                    <i class="fas fa-file-invoice-dollar"></i> Office of Accounts &amp; Audit
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('office-of-estate-store')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/office-of-estate-store/index.php"
+                   class="<?= $is_office_of_estate_store_active ? 'active' : '' ?>">
+                    <i class="fas fa-building"></i> Office of Estate &amp; Store
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('students-affairs')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/students-affairs/index.php"
+                   class="<?= $is_students_affairs_active ? 'active' : '' ?>">
+                    <i class="fas fa-user-graduate"></i> Students&#039; Affairs
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('office-of-crhp')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/office-of-crhp/index.php"
+                   class="<?= $is_office_of_crhp_active ? 'active' : '' ?>">
+                    <i class="fas fa-flask"></i> Office of the CRHP
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('office-of-proctor')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/office-of-proctor/index.php"
+                   class="<?= $is_office_of_proctor_active ? 'active' : '' ?>">
+                    <i class="fas fa-user-shield"></i> Office of the Proctor
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('law-legal')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/law-legal/index.php"
+                   class="<?= $is_law_legal_active ? 'active' : '' ?>">
+                    <i class="fas fa-gavel"></i> Law &amp; Legal Affairs
+                </a>
+            </li>
+            <?php endif; ?>
+        </ul>
+    </div>
     <?php endif; ?>
 
     <!-- ── Academic ── -->
@@ -748,55 +716,45 @@ $user       = auth_user();
     </div>
     <?php endif; ?>
 
-    <!-- ── Gallery ── -->
-    <?php if (is_super_admin() || can_access('gallery')): ?>
-    <?php
-    try {
-        $_gal_pending = (int)db()->query("SELECT COUNT(*) FROM gallery_photos WHERE status='pending'")->fetchColumn();
-    } catch (Throwable $_gpe) { $_gal_pending = 0; }
-    ?>
-    <button class="nav-group-toggle <?= $is_gallery_active ? '' : 'collapsed' ?>"
-            data-bs-toggle="collapse" data-bs-target="#grp-gallery"
-            aria-expanded="<?= $is_gallery_active ? 'true' : 'false' ?>">
-        <i class="fas fa-images grp-icon" style="color:#a78bfa"></i>
-        Gallery
-        <?php if ($_gal_pending > 0): ?>
-        <span class="badge bg-warning text-dark ms-1" style="font-size:.6rem;"><?= $_gal_pending ?></span>
-        <?php endif; ?>
+    <!-- ── Admissions ── -->
+    <?php if (is_super_admin() || can_access('admissions')): ?>
+    <button class="nav-group-toggle <?= $is_admissions_active ? '' : 'collapsed' ?>"
+            data-bs-toggle="collapse" data-bs-target="#grp-admissions"
+            aria-expanded="<?= $is_admissions_active ? 'true' : 'false' ?>">
+        <i class="fas fa-user-plus grp-icon" style="color:#e67e22"></i>
+        Admissions
         <i class="fas fa-chevron-down toggle-icon"></i>
     </button>
-    <div class="collapse <?= $is_gallery_active ? 'show' : '' ?>" id="grp-gallery">
+    <div class="collapse <?= $is_admissions_active ? 'show' : '' ?>" id="grp-admissions">
         <ul class="nav flex-column grp-items">
             <li class="nav-item">
-                <a href="<?= APP_URL ?>/gallery/index.php"
-                   class="<?= (strpos($current_path, '/gallery/') !== false && strpos($current_path, '/create') === false && strpos($current_path, '/photo-approve') === false) ? 'active' : '' ?>">
-                    <i class="fas fa-th"></i> All Albums
+                <a href="<?= APP_URL ?>/admissions/index.php"
+                   class="<?= (strpos($current_path, '/admissions/') !== false && strpos($current_path, '/create') === false && strpos($current_path, '/settings') === false && strpos($current_path, '/form-sale') === false) ? 'active' : '' ?>">
+                    <i class="fas fa-list"></i> All Applications
                 </a>
             </li>
-            <?php if (is_super_admin() || can_access('gallery', 'can_create')): ?>
+            <?php if (is_super_admin() || can_access('admissions', 'can_create')): ?>
             <li class="nav-item">
-                <a href="<?= APP_URL ?>/gallery/create.php"
-                   class="<?= strpos($current_path, '/gallery/create') !== false ? 'active' : '' ?>">
-                    <i class="fas fa-plus"></i> New Album
-                </a>
-            </li>
-            <?php endif; ?>
-            <?php if (is_super_admin() || can_access('gallery', 'can_edit')): ?>
-            <li class="nav-item">
-                <a href="<?= APP_URL ?>/gallery/photo-approve.php"
-                   class="<?= strpos($current_path, '/gallery/photo-approve') !== false ? 'active' : '' ?>">
-                    <i class="fas fa-clock"></i> Pending Approvals
-                    <?php if ($_gal_pending > 0): ?>
-                    <span class="badge bg-warning text-dark ms-auto" style="font-size:.6rem;"><?= $_gal_pending ?></span>
-                    <?php endif; ?>
+                <a href="<?= APP_URL ?>/admissions/create.php"
+                   class="<?= strpos($current_path, '/admissions/create') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-plus"></i> New Application
                 </a>
             </li>
             <?php endif; ?>
             <li class="nav-item">
-                <a href="<?= SITE_URL ?>/gallery.php" target="_blank">
-                    <i class="fas fa-external-link-alt"></i> Public Page
+                <a href="<?= APP_URL ?>/admissions/form-sale-index.php"
+                   class="<?= strpos($current_path, '/admissions/form-sale') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-receipt"></i> Form Sale
                 </a>
             </li>
+            <?php if (is_super_admin() || can_access('admissions', 'can_edit')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/admissions/settings.php"
+                   class="<?= strpos($current_path, '/admissions/settings') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-cog"></i> Settings
+                </a>
+            </li>
+            <?php endif; ?>
         </ul>
     </div>
     <?php endif; ?>
@@ -839,49 +797,6 @@ $user       = auth_user();
                 <a href="<?= APP_URL ?>/leads/create.php"
                    class="<?= strpos($current_path, '/leads/create') !== false ? 'active' : '' ?>">
                     <i class="fas fa-plus"></i> Add Lead
-                </a>
-            </li>
-            <?php endif; ?>
-        </ul>
-    </div>
-    <?php endif; ?>
-
-    <!-- ── Admissions ── -->
-    <?php if (is_super_admin() || can_access('admissions')): ?>
-    <button class="nav-group-toggle <?= $is_admissions_active ? '' : 'collapsed' ?>"
-            data-bs-toggle="collapse" data-bs-target="#grp-admissions"
-            aria-expanded="<?= $is_admissions_active ? 'true' : 'false' ?>">
-        <i class="fas fa-user-plus grp-icon" style="color:#e67e22"></i>
-        Admissions
-        <i class="fas fa-chevron-down toggle-icon"></i>
-    </button>
-    <div class="collapse <?= $is_admissions_active ? 'show' : '' ?>" id="grp-admissions">
-        <ul class="nav flex-column grp-items">
-            <li class="nav-item">
-                <a href="<?= APP_URL ?>/admissions/index.php"
-                   class="<?= (strpos($current_path, '/admissions/') !== false && strpos($current_path, '/create') === false && strpos($current_path, '/settings') === false && strpos($current_path, '/form-sale') === false) ? 'active' : '' ?>">
-                    <i class="fas fa-list"></i> All Applications
-                </a>
-            </li>
-            <?php if (is_super_admin() || can_access('admissions', 'can_create')): ?>
-            <li class="nav-item">
-                <a href="<?= APP_URL ?>/admissions/create.php"
-                   class="<?= strpos($current_path, '/admissions/create') !== false ? 'active' : '' ?>">
-                    <i class="fas fa-plus"></i> New Application
-                </a>
-            </li>
-            <?php endif; ?>
-            <li class="nav-item">
-                <a href="<?= APP_URL ?>/admissions/form-sale-index.php"
-                   class="<?= strpos($current_path, '/admissions/form-sale') !== false ? 'active' : '' ?>">
-                    <i class="fas fa-receipt"></i> Form Sale
-                </a>
-            </li>
-            <?php if (is_super_admin() || can_access('admissions', 'can_edit')): ?>
-            <li class="nav-item">
-                <a href="<?= APP_URL ?>/admissions/settings.php"
-                   class="<?= strpos($current_path, '/admissions/settings') !== false ? 'active' : '' ?>">
-                    <i class="fas fa-cog"></i> Settings
                 </a>
             </li>
             <?php endif; ?>
@@ -971,6 +886,59 @@ $user       = auth_user();
                 <a href="<?= APP_URL ?>/jobs/applications.php"
                    class="<?= strpos($current_path, '/jobs/application') !== false ? 'active' : '' ?>">
                     <i class="fas fa-file-alt"></i> Applications
+                </a>
+            </li>
+        </ul>
+    </div>
+    <?php endif; ?>
+
+    <!-- ── Gallery ── -->
+    <?php if (is_super_admin() || can_access('gallery')): ?>
+    <?php
+    try {
+        $_gal_pending = (int)db()->query("SELECT COUNT(*) FROM gallery_photos WHERE status='pending'")->fetchColumn();
+    } catch (Throwable $_gpe) { $_gal_pending = 0; }
+    ?>
+    <button class="nav-group-toggle <?= $is_gallery_active ? '' : 'collapsed' ?>"
+            data-bs-toggle="collapse" data-bs-target="#grp-gallery"
+            aria-expanded="<?= $is_gallery_active ? 'true' : 'false' ?>">
+        <i class="fas fa-images grp-icon" style="color:#a78bfa"></i>
+        Gallery
+        <?php if ($_gal_pending > 0): ?>
+        <span class="badge bg-warning text-dark ms-1" style="font-size:.6rem;"><?= $_gal_pending ?></span>
+        <?php endif; ?>
+        <i class="fas fa-chevron-down toggle-icon"></i>
+    </button>
+    <div class="collapse <?= $is_gallery_active ? 'show' : '' ?>" id="grp-gallery">
+        <ul class="nav flex-column grp-items">
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/gallery/index.php"
+                   class="<?= (strpos($current_path, '/gallery/') !== false && strpos($current_path, '/create') === false && strpos($current_path, '/photo-approve') === false) ? 'active' : '' ?>">
+                    <i class="fas fa-th"></i> All Albums
+                </a>
+            </li>
+            <?php if (is_super_admin() || can_access('gallery', 'can_create')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/gallery/create.php"
+                   class="<?= strpos($current_path, '/gallery/create') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-plus"></i> New Album
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('gallery', 'can_edit')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/gallery/photo-approve.php"
+                   class="<?= strpos($current_path, '/gallery/photo-approve') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-clock"></i> Pending Approvals
+                    <?php if ($_gal_pending > 0): ?>
+                    <span class="badge bg-warning text-dark ms-auto" style="font-size:.6rem;"><?= $_gal_pending ?></span>
+                    <?php endif; ?>
+                </a>
+            </li>
+            <?php endif; ?>
+            <li class="nav-item">
+                <a href="<?= SITE_URL ?>/gallery.php" target="_blank">
+                    <i class="fas fa-external-link-alt"></i> Public Page
                 </a>
             </li>
         </ul>
