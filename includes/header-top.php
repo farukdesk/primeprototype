@@ -22,8 +22,8 @@ $linkedin_url           = $hs['linkedin_url']           ?? '#';
 <div class="it-header-top-area  black-bg it-header-top-ptb">
    <div class="container">
       <div class="row align-items-center">
-         <div class="col-xl-4 col-lg-5 col-md-4 col-sm-5">
-            <div class="it-header-top-contact-wrap d-flex justify-content-center justify-content-sm-start align-items-center">
+         <div class="col-6 col-sm-5 col-md-4 col-lg-5 col-xl-4">
+            <div class="it-header-top-contact-wrap d-flex justify-content-start align-items-center">
                <ul>
                   <li class="d-none d-lg-inline-block">
                      <div class="it-header-top-contact d-flex align-items-center">
@@ -48,7 +48,7 @@ $linkedin_url           = $hs['linkedin_url']           ?? '#';
                </ul>
             </div>
          </div>
-         <div class="col-xl-8 col-lg-7 col-md-8 col-sm-7 d-none d-sm-block">
+         <div class="col-6 col-sm-7 col-md-8 col-lg-7 col-xl-8">
             <div class="it-header-top-right-action d-flex align-items-center justify-content-end">
                <div class="it-header-top-login-box d-none d-sm-block">
                   <a href="<?= fh($student_portal_url) ?>"><?= fh($student_portal_text) ?></a>
@@ -57,7 +57,7 @@ $linkedin_url           = $hs['linkedin_url']           ?? '#';
                   <span>/</span>
                   <a href="<?= fh($current_result_url) ?>"><?= fh($current_result_text) ?></a>
                </div>
-               <div class="it-header-top-social-box align-items-center d-none d-md-flex">
+               <div class="it-header-top-social-box align-items-center d-flex">
                   <span>Follow On:</span>
                   <?php if ($facebook_url && $facebook_url !== '#'): ?>
                   <a href="<?= fh($facebook_url) ?>" target="_blank" rel="noopener">
