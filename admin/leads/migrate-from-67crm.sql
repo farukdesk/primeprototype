@@ -35,20 +35,51 @@ ALTER TABLE `leads`
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- STEP 2: Import users (match by email to avoid duplicates)
---         Maps crm_import user_type values (identical ENUMs so no change needed)
+--         The new users table uses group_id (FK → user_groups) instead of a
+--         user_type column.  Ensure the five legacy role groups exist first,
+--         then map user_type → group_id via a name lookup.
+--         username is derived from the email address (unique in the legacy DB).
+--         full_name is taken from crm_import_user_profile when available,
+--         falling back to the email address.
 -- ─────────────────────────────────────────────────────────────────────────────
+INSERT INTO `user_groups` (`name`, `description`, `is_super`, `is_active`)
+SELECT 'Super Admin', 'Full system access – unrestricted.', 1, 1
+WHERE NOT EXISTS (SELECT 1 FROM `user_groups` WHERE `name` = 'Super Admin');
+
+INSERT INTO `user_groups` (`name`, `description`, `is_super`, `is_active`)
+SELECT 'Admin', 'Administrator access.', 0, 1
+WHERE NOT EXISTS (SELECT 1 FROM `user_groups` WHERE `name` = 'Admin');
+
+INSERT INTO `user_groups` (`name`, `description`, `is_super`, `is_active`)
+SELECT 'Manager', 'Manager access.', 0, 1
+WHERE NOT EXISTS (SELECT 1 FROM `user_groups` WHERE `name` = 'Manager');
+
+INSERT INTO `user_groups` (`name`, `description`, `is_super`, `is_active`)
+SELECT 'Counselor', 'Counselor / admissions advisor access.', 0, 1
+WHERE NOT EXISTS (SELECT 1 FROM `user_groups` WHERE `name` = 'Counselor');
+
+INSERT INTO `user_groups` (`name`, `description`, `is_super`, `is_active`)
+SELECT 'Agent', 'External agent access.', 0, 1
+WHERE NOT EXISTS (SELECT 1 FROM `user_groups` WHERE `name` = 'Agent');
+
 INSERT IGNORE INTO `users`
-  (id, email, password, user_type, is_active, created_at)
+  (id, group_id, username, email, password, full_name, is_active, created_at)
 SELECT
   u.id,
+  (SELECT g.id FROM `user_groups` g WHERE g.name = u.user_type LIMIT 1),
+  LEFT(u.email, 60),
   u.email,
   u.password,
-  u.user_type,
+  COALESCE(
+    NULLIF(TRIM(CONCAT(COALESCE(up.first_name, ''), ' ', COALESCE(up.last_name, ''))), ''),
+    u.email
+  ),
   IF(u.account_status = 'Active', 1, 0),
   u.created_at
 FROM `crm_import_users` u
+LEFT JOIN `crm_import_user_profile` up ON up.user_id = u.id
 ON DUPLICATE KEY UPDATE
-  -- do not overwrite existing passwords/types; only mark active
+  -- do not overwrite existing passwords/groups; only sync active status
   is_active = IF(u.account_status = 'Active', 1, 0);
 
 -- ─────────────────────────────────────────────────────────────────────────────
