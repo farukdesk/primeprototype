@@ -48,6 +48,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $program_id  = (int)($_POST['program_id'] ?? 0) ?: null;
     $preferred_semester = trim($_POST['preferred_semester'] ?? '');
     $preferred_call_time = trim($_POST['preferred_call_time'] ?? '');
+    $ssc_gpa     = is_numeric($_POST['ssc_gpa'] ?? '') ? (float)$_POST['ssc_gpa'] : null;
+    $hsc_gpa     = is_numeric($_POST['hsc_gpa'] ?? '') ? (float)$_POST['hsc_gpa'] : null;
+    $bachelor_subject = trim($_POST['bachelor_subject'] ?? '');
+    $bachelor_cgpa    = is_numeric($_POST['bachelor_cgpa'] ?? '') ? (float)$_POST['bachelor_cgpa'] : null;
     $status      = in_array($_POST['status'] ?? '', array_keys(leads_all_statuses()), true)
                    ? $_POST['status'] : 'fresh';
     $source      = in_array($_POST['source'] ?? '', ['online', 'campus_visit', 'agent', 'f2f_marketing', 'facebook'], true)
@@ -67,15 +71,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'INSERT INTO leads
                (lead_number, first_name, last_name, email, phone, address, current_city,
                 degree_type, dept_id, program_id, preferred_semester, preferred_call_time,
+                ssc_gpa, hsc_gpa, bachelor_subject, bachelor_cgpa,
                 next_followup_date, followup_notes,
                 status, source, assigned_to, created_by)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
         )->execute([
             $lead_number, $first_name, $last_name, $email ?: null, $phone,
             $address ?: null, $current_city ?: null,
             $degree_type, $dept_id, $program_id,
             $preferred_semester ?: null,
             $preferred_call_time ?: null,
+            $ssc_gpa,
+            $hsc_gpa,
+            $bachelor_subject ?: null,
+            $bachelor_cgpa,
             $next_followup_date ?: null,
             $followup_notes ?: null,
             $status, $source, $assigned_to, $user['id'],
@@ -198,6 +207,22 @@ require_once __DIR__ . '/../includes/header.php';
                             <label class="form-label">Preferred Call Time</label>
                             <input type="text" name="preferred_call_time" class="form-control" placeholder="e.g. 10:30 AM" maxlength="50" value="<?= h(old('preferred_call_time')) ?>">
                         </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label">SSC GPA</label>
+                            <input type="number" name="ssc_gpa" class="form-control" step="0.01" min="0" max="5" placeholder="0.00" value="<?= h(old('ssc_gpa')) ?>">
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label">HSC GPA</label>
+                            <input type="number" name="hsc_gpa" class="form-control" step="0.01" min="0" max="5" placeholder="0.00" value="<?= h(old('hsc_gpa')) ?>">
+                        </div>
+                        <div class="col-6 col-md-4" id="bachelor_subject_row" style="display:none">
+                            <label class="form-label">Bachelor Subject</label>
+                            <input type="text" name="bachelor_subject" class="form-control" placeholder="e.g. Computer Science" maxlength="255" value="<?= h(old('bachelor_subject')) ?>">
+                        </div>
+                        <div class="col-6 col-md-2" id="bachelor_cgpa_row" style="display:none">
+                            <label class="form-label">Bachelor CGPA</label>
+                            <input type="number" name="bachelor_cgpa" class="form-control" step="0.01" min="0" max="4" placeholder="0.00" value="<?= h(old('bachelor_cgpa')) ?>">
+                        </div>
                     </div>
                 </div>
             </div>
@@ -266,6 +291,16 @@ function updatePrograms() {
     });
 }
 deptSelect.addEventListener('change', updatePrograms);
+
+// Show bachelor subject/cgpa only for Master applicants
+const degreeSelect = document.getElementById('degree_type');
+function toggleMasterFields() {
+    const isMaster = degreeSelect.value === 'master';
+    document.getElementById('bachelor_subject_row').style.display = isMaster ? '' : 'none';
+    document.getElementById('bachelor_cgpa_row').style.display    = isMaster ? '' : 'none';
+}
+degreeSelect.addEventListener('change', toggleMasterFields);
+toggleMasterFields();
 </script>
 
 <?php clear_old(); require_once __DIR__ . '/../includes/footer.php'; ?>

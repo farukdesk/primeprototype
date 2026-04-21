@@ -51,6 +51,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $program_id   = (int)($_POST['program_id'] ?? 0) ?: null;
     $preferred_semester = trim($_POST['preferred_semester'] ?? '');
     $preferred_call_time = trim($_POST['preferred_call_time'] ?? '');
+    $ssc_gpa          = is_numeric($_POST['ssc_gpa'] ?? '') ? (float)$_POST['ssc_gpa'] : null;
+    $hsc_gpa          = is_numeric($_POST['hsc_gpa'] ?? '') ? (float)$_POST['hsc_gpa'] : null;
+    $bachelor_subject = trim($_POST['bachelor_subject'] ?? '');
+    $bachelor_cgpa    = is_numeric($_POST['bachelor_cgpa'] ?? '') ? (float)$_POST['bachelor_cgpa'] : null;
     $new_status   = in_array($_POST['status'] ?? '', array_keys(leads_all_statuses()), true)
                     ? $_POST['status'] : $lead['status'];
     $source       = in_array($_POST['source'] ?? '', ['online', 'campus_visit', 'agent', 'f2f_marketing', 'facebook'], true)
@@ -79,6 +83,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'program_id'         => [$lead['program_id'],         $program_id],
             'preferred_semester' => [$lead['preferred_semester'] ?? '', $preferred_semester],
             'preferred_call_time'=> [$lead['preferred_call_time'] ?? '', $preferred_call_time],
+            'ssc_gpa'            => [$lead['ssc_gpa'] ?? '',           $ssc_gpa],
+            'hsc_gpa'            => [$lead['hsc_gpa'] ?? '',           $hsc_gpa],
+            'bachelor_subject'   => [$lead['bachelor_subject'] ?? '',  $bachelor_subject],
+            'bachelor_cgpa'      => [$lead['bachelor_cgpa'] ?? '',     $bachelor_cgpa],
             'status'             => [$lead['status'],             $new_status],
             'source'             => [$lead['source'],             $source],
             'assigned_to'        => [$lead['assigned_to'],        $assigned_to],
@@ -90,6 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'UPDATE leads SET first_name=?, last_name=?, email=?, phone=?, address=?,
              current_city=?, degree_type=?, dept_id=?, program_id=?,
              preferred_semester=?, preferred_call_time=?,
+             ssc_gpa=?, hsc_gpa=?, bachelor_subject=?, bachelor_cgpa=?,
              next_followup_date=?, followup_notes=?,
              status=?, source=?, assigned_to=?, updated_by=?
              WHERE id=?'
@@ -98,6 +107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $address ?: null, $current_city ?: null,
             $degree_type, $dept_id, $program_id,
             $preferred_semester ?: null, $preferred_call_time ?: null,
+            $ssc_gpa, $hsc_gpa, $bachelor_subject ?: null, $bachelor_cgpa,
             $next_followup_date ?: null, $followup_notes ?: null,
             $new_status, $source, $assigned_to,
             $user['id'], $id,
@@ -231,6 +241,22 @@ $v = function(string $field) use ($lead, $old): string {
                             <label class="form-label">Preferred Call Time</label>
                             <input type="text" name="preferred_call_time" class="form-control" placeholder="e.g. 10:30 AM" maxlength="50" value="<?= h($v('preferred_call_time')) ?>">
                         </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label">SSC GPA</label>
+                            <input type="number" name="ssc_gpa" class="form-control" step="0.01" min="0" max="5" placeholder="0.00" value="<?= h($v('ssc_gpa')) ?>">
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label">HSC GPA</label>
+                            <input type="number" name="hsc_gpa" class="form-control" step="0.01" min="0" max="5" placeholder="0.00" value="<?= h($v('hsc_gpa')) ?>">
+                        </div>
+                        <div class="col-6 col-md-4" id="bachelor_subject_row">
+                            <label class="form-label">Bachelor Subject</label>
+                            <input type="text" name="bachelor_subject" class="form-control" placeholder="e.g. Computer Science" maxlength="255" value="<?= h($v('bachelor_subject')) ?>">
+                        </div>
+                        <div class="col-6 col-md-2" id="bachelor_cgpa_row">
+                            <label class="form-label">Bachelor CGPA</label>
+                            <input type="number" name="bachelor_cgpa" class="form-control" step="0.01" min="0" max="4" placeholder="0.00" value="<?= h($v('bachelor_cgpa')) ?>">
+                        </div>
                     </div>
                 </div>
             </div>
@@ -300,6 +326,20 @@ function updatePrograms(preserveSelection) {
 }
 updatePrograms(true);
 deptSelect.addEventListener('change', () => updatePrograms(false));
+
+// Show bachelor subject/cgpa only for Master applicants
+const degreeSelectEdit = document.getElementById('degree_type');
+function toggleMasterFieldsEdit() {
+    const isMaster = degreeSelectEdit ? degreeSelectEdit.value === 'master' : false;
+    const sr = document.getElementById('bachelor_subject_row');
+    const cr = document.getElementById('bachelor_cgpa_row');
+    if (sr) sr.style.display = isMaster ? '' : 'none';
+    if (cr) cr.style.display = isMaster ? '' : 'none';
+}
+if (degreeSelectEdit) {
+    degreeSelectEdit.addEventListener('change', toggleMasterFieldsEdit);
+    toggleMasterFieldsEdit();
+}
 </script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>

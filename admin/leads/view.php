@@ -23,6 +23,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ->execute([$new_status, $user['id'], $id]);
             leads_log($id, 'status_changed', 'status', $lead['status'], $new_status,
                 'Status changed by ' . $user['full_name']);
+            // Auto-log the status change as a call entry
+            $call_type_map = [
+                '1st_call' => '1st_call', '2nd_call' => '2nd_call', '3rd_call' => '3rd_call',
+                'will_visit' => 'visit_confirmation', 'converted' => 'final_call',
+            ];
+            $ct = $call_type_map[$new_status] ?? 'followup_call';
+            try {
+                db()->prepare(
+                    'INSERT INTO lead_call_logs (lead_id, user_id, call_type, previous_status, new_status, call_date, call_notes)
+                     VALUES (?,?,?,?,?,NOW(),?)'
+                )->execute([$id, $user['id'], $ct, $lead['status'], $new_status,
+                    trim($_POST['call_notes'] ?? '') ?: null]);
+            } catch (Exception $e) { /* table may not exist yet – silent fail */ }
             flash_set('success', 'Status updated to ' . leads_status_label($new_status) . '.');
         }
         redirect(APP_URL . '/leads/view.php?id=' . $id);
@@ -149,6 +162,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         redirect(APP_URL . '/leads/view.php?id=' . $id . '#facebook');
     }
+
+    // ── Log call manually ──────────────────────────────────────────────────
+    if ($action === 'log_call' && $is_staff) {
+        $call_type    = in_array($_POST['call_type'] ?? '', ['1st_call','2nd_call','3rd_call','followup_call','visit_confirmation','final_call'], true)
+                        ? $_POST['call_type'] : 'followup_call';
+        $call_notes   = trim($_POST['call_notes'] ?? '');
+        $call_outcome = trim($_POST['call_outcome'] ?? '');
+        $call_duration= max(0, (int)($_POST['call_duration'] ?? 0));
+        $call_date    = trim($_POST['call_date'] ?? '') ?: date('Y-m-d H:i:s');
+        try {
+            db()->prepare(
+                'INSERT INTO lead_call_logs (lead_id, user_id, call_type, previous_status, new_status, call_date, call_duration, call_notes, call_outcome)
+                 VALUES (?,?,?,?,?,?,?,?,?)'
+            )->execute([
+                $id, $user['id'], $call_type,
+                $lead['status'], $lead['status'],
+                $call_date,
+                $call_duration ?: null,
+                $call_notes ?: null,
+                $call_outcome ?: null,
+            ]);
+            leads_log($id, 'call_logged', null, null, null, 'Call logged by ' . $user['full_name']);
+            flash_set('success', 'Call logged successfully.');
+        } catch (Exception $e) {
+            flash_set('error', 'Could not log call. Run call-logs.sql migration first.');
+        }
+        redirect(APP_URL . '/leads/view.php?id=' . $id . '#call-logs');
+    }
 }
 
 // ── Fetch related data ────────────────────────────────────────────────────────
@@ -189,6 +230,19 @@ $appointments = db()->prepare(
 );
 $appointments->execute([$id]);
 $appointments = $appointments->fetchAll();
+
+// ── Call logs for this lead ───────────────────────────────────────────────────
+$call_logs = [];
+try {
+    $cl_stmt = db()->prepare(
+        'SELECT cl.*, u.full_name AS caller_name
+         FROM lead_call_logs cl
+         LEFT JOIN users u ON u.id = cl.user_id
+         WHERE cl.lead_id = ? ORDER BY cl.call_date DESC'
+    );
+    $cl_stmt->execute([$id]);
+    $call_logs = $cl_stmt->fetchAll();
+} catch (Exception $e) { /* table not yet created */ }
 
 $staff_users = db()->query(
     "SELECT id, full_name FROM users WHERE is_active = 1 ORDER BY full_name"
@@ -298,6 +352,14 @@ require_once __DIR__ . '/../includes/header.php';
                     <div class="col-6 col-md-3 text-muted small">Program</div><div class="col-6 col-md-3"><?= h($lead['program_name'] ?? '–') ?></div>
                     <div class="col-6 col-md-3 text-muted small">Preferred Semester</div><div class="col-6 col-md-3"><?= h($lead['preferred_semester'] ?? '–') ?></div>
                     <div class="col-6 col-md-3 text-muted small">Preferred Call Time</div><div class="col-6 col-md-3"><?= $lead['preferred_call_time'] ? '<span class="badge bg-info text-dark"><i class="fas fa-phone-alt me-1"></i>' . h($lead['preferred_call_time']) . '</span>' : '–' ?></div>
+                    <?php if (!empty($lead['ssc_gpa']) || !empty($lead['hsc_gpa'])): ?>
+                    <div class="col-6 col-md-3 text-muted small">SSC GPA</div><div class="col-6 col-md-3"><?= $lead['ssc_gpa'] !== null ? h(number_format((float)$lead['ssc_gpa'], 2)) : '–' ?></div>
+                    <div class="col-6 col-md-3 text-muted small">HSC GPA</div><div class="col-6 col-md-3"><?= $lead['hsc_gpa'] !== null ? h(number_format((float)$lead['hsc_gpa'], 2)) : '–' ?></div>
+                    <?php endif; ?>
+                    <?php if ($lead['degree_type'] === 'master' && (!empty($lead['bachelor_subject']) || !empty($lead['bachelor_cgpa']))): ?>
+                    <div class="col-6 col-md-3 text-muted small">Bachelor Subject</div><div class="col-6 col-md-3"><?= h($lead['bachelor_subject'] ?? '–') ?></div>
+                    <div class="col-6 col-md-3 text-muted small">Bachelor CGPA</div><div class="col-6 col-md-3"><?= $lead['bachelor_cgpa'] !== null ? h(number_format((float)$lead['bachelor_cgpa'], 2)) : '–' ?></div>
+                    <?php endif; ?>
                     <div class="col-6 col-md-3 text-muted small">Next Follow-up</div>
                     <div class="col-6 col-md-3"><?= leads_followup_badge($lead['next_followup_date'] ?? null, in_array($lead['status'], ['converted','not_interested'], true)) ?></div>
                     <?php if (!empty($lead['followup_notes'])): ?>
@@ -509,6 +571,89 @@ require_once __DIR__ . '/../includes/header.php';
                     </div>
                 </form>
                 <?php endif; ?>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <!-- Call Logs -->
+        <div class="card border-0 shadow-sm mb-4" id="call-logs">
+            <div class="card-header bg-white fw-semibold d-flex justify-content-between">
+                <span><i class="fas fa-phone-alt me-2 text-success"></i>Call Logs</span>
+                <span class="badge bg-secondary"><?= count($call_logs) ?></span>
+            </div>
+            <div class="card-body">
+                <?php if ($call_logs): ?>
+                <div class="table-responsive mb-3">
+                    <table class="table table-sm table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr><th>Date/Time</th><th>Type</th><th>By</th><th>Status Change</th><th>Duration</th><th>Notes</th><th>Outcome</th></tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($call_logs as $cl):
+                                $ct_labels = [
+                                    '1st_call' => '1st Call', '2nd_call' => '2nd Call', '3rd_call' => '3rd Call',
+                                    'followup_call' => 'Follow-up', 'visit_confirmation' => 'Visit Confirm', 'final_call' => 'Final Call',
+                                ];
+                            ?>
+                            <tr>
+                                <td class="small"><?= date('d M Y, h:i A', strtotime($cl['call_date'])) ?></td>
+                                <td><span class="badge bg-info text-dark"><?= h($ct_labels[$cl['call_type']] ?? $cl['call_type']) ?></span></td>
+                                <td class="small"><?= h($cl['caller_name'] ?? '–') ?></td>
+                                <td class="small">
+                                    <?php if ($cl['previous_status'] && $cl['previous_status'] !== $cl['new_status']): ?>
+                                    <?= leads_status_badge($cl['previous_status']) ?> → <?= leads_status_badge($cl['new_status']) ?>
+                                    <?php else: ?>
+                                    <span class="text-muted">–</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td class="small"><?= $cl['call_duration'] ? $cl['call_duration'] . ' min' : '–' ?></td>
+                                <td class="small text-muted"><?= $cl['call_notes'] ? nl2br(h(mb_substr($cl['call_notes'], 0, 80))) : '–' ?></td>
+                                <td class="small"><?= h($cl['call_outcome'] ?? '–') ?></td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+                <?php else: ?>
+                <p class="text-muted small mb-3">No call logs yet.</p>
+                <?php endif; ?>
+
+                <?php if ($is_staff): ?>
+                <hr>
+                <form method="post">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="action" value="log_call">
+                    <div class="row g-2">
+                        <div class="col-6 col-md-2">
+                            <label class="form-label small fw-semibold">Call Type <span class="text-danger">*</span></label>
+                            <select name="call_type" class="form-select form-select-sm">
+                                <option value="1st_call">1st Call</option>
+                                <option value="2nd_call">2nd Call</option>
+                                <option value="3rd_call">3rd Call</option>
+                                <option value="followup_call" selected>Follow-up</option>
+                                <option value="visit_confirmation">Visit Confirm</option>
+                                <option value="final_call">Final Call</option>
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label small fw-semibold">Date &amp; Time</label>
+                            <input type="datetime-local" name="call_date" class="form-control form-control-sm" value="<?= date('Y-m-d\TH:i') ?>">
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label small fw-semibold">Duration (min)</label>
+                            <input type="number" name="call_duration" class="form-control form-control-sm" min="0" max="999" placeholder="e.g. 5">
+                        </div>
+                        <div class="col-12 col-md-3">
+                            <label class="form-label small fw-semibold">Outcome</label>
+                            <input type="text" name="call_outcome" class="form-control form-control-sm" placeholder="e.g. Interested, Will visit" maxlength="100">
+                        </div>
+                        <div class="col-12 col-md-3">
+                            <label class="form-label small fw-semibold">Notes</label>
+                            <input type="text" name="call_notes" class="form-control form-control-sm" placeholder="Brief call notes…">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-success btn-sm mt-2"><i class="fas fa-phone-alt me-1"></i> Log Call</button>
+                </form>
                 <?php endif; ?>
             </div>
         </div>
