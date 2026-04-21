@@ -183,11 +183,18 @@ function prepare_staging_sql(string $sql): string {
         . '|REFERENCES'
         . ')\s+`([^`]+)`/i',
         static function (array $m) use ($prefix): string {
-            $tbl = $m[2];
-            if (str_starts_with($tbl, $prefix)) {
-                return $m[1] . ' `' . $tbl . '`';
+            $keyword = $m[1];
+            $tbl     = $m[2];
+            // Convert plain INSERT INTO → INSERT IGNORE INTO so that re-running
+            // the migration does not fail with "Duplicate entry" errors when the
+            // staging tables already contain data from a previous import.
+            if (preg_match('/^INSERT\s+INTO$/i', trim($keyword))) {
+                $keyword = 'INSERT IGNORE INTO';
             }
-            return $m[1] . ' `' . $prefix . $tbl . '`';
+            if (str_starts_with($tbl, $prefix)) {
+                return $keyword . ' `' . $tbl . '`';
+            }
+            return $keyword . ' `' . $prefix . $tbl . '`';
         },
         $sql
     );
