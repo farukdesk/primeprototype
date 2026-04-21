@@ -4,12 +4,11 @@
 -- Instructions:
 --   1. Back up your current database before running this script.
 --   2. Run call-logs.sql FIRST to create lead_call_logs table.
---   3. Run this script against the NEW (primeprototype) database, NOT admin_67crm.
---   4. The script imports data from a temporary staging schema called `crm_import`
---      that you should import admin_67crm.sql into first:
---        a) Create database crm_import;
---        b) Import admin_67crm.sql into crm_import;
---        c) Then run THIS script against your live primeprototype database.
+--   3. Run this script against the NEW (primeprototype) database.
+--   4. The migrate.php browser UI handles the staging import automatically:
+--      it imports admin_67crm.sql into the same database using a crm_import_
+--      table prefix, so no separate database or CREATE DATABASE privilege is
+--      required.  All legacy table references below use that prefix.
 --
 -- What this script migrates:
 --   • Users & user profiles  (matched by email to avoid duplicates)
@@ -47,7 +46,7 @@ SELECT
   u.user_type,
   IF(u.account_status = 'Active', 1, 0),
   u.created_at
-FROM crm_import.users u
+FROM `crm_import_users` u
 ON DUPLICATE KEY UPDATE
   -- do not overwrite existing passwords/types; only mark active
   is_active = IF(u.account_status = 'Active', 1, 0);
@@ -62,7 +61,7 @@ SELECT
   CONCAT(up.first_name, ' ', up.last_name),
   up.mobile_number,
   NOW()
-FROM crm_import.user_profile up
+FROM `crm_import_user_profile` up
 WHERE EXISTS (SELECT 1 FROM `users` WHERE id = up.user_id)
 ON DUPLICATE KEY UPDATE
   display_name = CONCAT(up.first_name, ' ', up.last_name),
@@ -165,7 +164,7 @@ SELECT
   IF(EXISTS(SELECT 1 FROM `users` WHERE id = l.updated_by), l.updated_by, NULL),
   l.created_at,
   l.updated_at
-FROM crm_import.leads l;
+FROM `crm_import_leads` l;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- STEP 5: Import lead notes
@@ -178,7 +177,7 @@ SELECT
   IF(EXISTS(SELECT 1 FROM `users` WHERE id = n.created_by), n.created_by, NULL),
   n.note_text,
   n.created_at
-FROM crm_import.lead_notes n
+FROM `crm_import_lead_notes` n
 WHERE EXISTS (SELECT 1 FROM `leads` WHERE id = n.lead_id);
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -206,7 +205,7 @@ SELECT
   h.new_value,
   CONCAT('Imported from legacy CRM: ', h.field_name, ' changed'),
   h.edited_at
-FROM crm_import.lead_edit_history h
+FROM `crm_import_lead_edit_history` h
 WHERE EXISTS (SELECT 1 FROM `leads` WHERE id = h.lead_id);
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -219,7 +218,7 @@ SELECT
   a.staff_id,
   IF(EXISTS(SELECT 1 FROM `users` WHERE id = a.assigned_by), a.assigned_by, NULL),
   a.assigned_at
-FROM crm_import.lead_staff_assignments a
+FROM `crm_import_lead_staff_assignments` a
 WHERE EXISTS (SELECT 1 FROM `leads`   WHERE id = a.lead_id)
   AND EXISTS (SELECT 1 FROM `users`   WHERE id = a.staff_id);
 
@@ -275,7 +274,7 @@ SELECT
   cl.call_outcome,
   cl.call_converted,
   cl.created_at
-FROM crm_import.call_logs cl
+FROM `crm_import_call_logs` cl
 WHERE EXISTS (SELECT 1 FROM `leads` WHERE id = cl.lead_id);
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -293,7 +292,7 @@ SELECT
   IF(l.campus_visit_attended_at IS NOT NULL OR l.attended_at IS NOT NULL, 'completed', 'scheduled'),
   IF(EXISTS(SELECT 1 FROM `users` WHERE id = l.created_by), l.created_by, NULL),
   COALESCE(l.campus_visit_date, l.created_at)
-FROM crm_import.leads l
+FROM `crm_import_leads` l
 WHERE l.campus_visit_date IS NOT NULL
   AND EXISTS (SELECT 1 FROM `leads` WHERE id = l.id);
 

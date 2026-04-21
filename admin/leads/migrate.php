@@ -6,9 +6,9 @@
  *
  * POST actions
  *   schema  – run call-logs.sql + leads-gpa.sql (schema only, no data)
- *   migrate – upload admin_67crm.sql, create crm_import DB, import it,
+ *   migrate – upload admin_67crm.sql, import as crm_import_ staging tables,
  *             then run migrate-from-67crm.sql
- *   cleanup – DROP DATABASE crm_import
+ *   cleanup – DROP TABLE all crm_import_* staging tables
  */
 
 require_once __DIR__ . '/../includes/auth.php';
@@ -147,28 +147,48 @@ function sql_exec_all(PDO $pdo, string $sql): array {
 }
 
 /**
- * Open a PDO connection to MySQL without selecting a database.
- * Uses the same credentials as the main app.
+ * Prepare a legacy CRM SQL dump for import into the main application database.
+ *
+ * - Strips DELIMITER blocks (stored functions / procedures) that require SUPER privilege.
+ * - Strips CREATE DATABASE and USE statements.
+ * - Converts CREATE TABLE to CREATE TABLE IF NOT EXISTS so re-runs are safe.
+ * - Prefixes every backtick-quoted table name with "crm_import_" so staging data
+ *   sits alongside the app tables without requiring a separate database.
  */
-function db_server(): PDO {
-    $dsn = sprintf('mysql:host=%s;port=%s;charset=utf8mb4', DB_HOST, DB_PORT);
-    return new PDO($dsn, DB_USER, DB_PASS, [
-        PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        PDO::ATTR_EMULATE_PREPARES   => true,
-    ]);
-}
+function prepare_staging_sql(string $sql): string {
+    // 1. Remove DELIMITER $$ ... DELIMITER ; blocks (functions, procedures, triggers)
+    $sql = preg_replace('/DELIMITER\s+\$\$.*?DELIMITER\s+;/si', '', $sql);
 
-/**
- * Open a PDO connection to a specific database (crm_import).
- */
-function db_crm(): PDO {
-    $dsn = sprintf('mysql:host=%s;port=%s;dbname=crm_import;charset=utf8mb4', DB_HOST, DB_PORT);
-    return new PDO($dsn, DB_USER, DB_PASS, [
-        PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        PDO::ATTR_EMULATE_PREPARES   => true,
-    ]);
+    // 2. Remove CREATE DATABASE and USE statements
+    $sql = preg_replace('/^\s*CREATE\s+DATABASE\b[^;]*;\s*/im', '', $sql);
+    $sql = preg_replace('/^\s*USE\s+`?[^`;\s]+`?\s*;\s*/im', '', $sql);
+
+    // 3. Convert CREATE TABLE to CREATE TABLE IF NOT EXISTS (idempotent re-runs)
+    $sql = preg_replace('/\bCREATE\s+TABLE\s+(?!IF\s+NOT\s+EXISTS\s)/i', 'CREATE TABLE IF NOT EXISTS ', $sql);
+
+    // 4. Prefix every backtick-quoted table name that follows a table-manipulating keyword.
+    //    Covers: CREATE TABLE [IF NOT EXISTS], INSERT [IGNORE] INTO,
+    //            DROP TABLE [IF EXISTS], TRUNCATE [TABLE], ALTER TABLE, REFERENCES.
+    $prefix = 'crm_import_';
+    $sql = preg_replace_callback(
+        '/\b(CREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?'
+        . '|INSERT\s+(?:IGNORE\s+)?INTO'
+        . '|DROP\s+TABLE(?:\s+IF\s+EXISTS)?'
+        . '|TRUNCATE\s+(?:TABLE\s+)?'
+        . '|ALTER\s+TABLE'
+        . '|REFERENCES'
+        . ')\s+`([^`]+)`/i',
+        static function (array $m) use ($prefix): string {
+            $tbl = $m[2];
+            if (str_starts_with($tbl, $prefix)) {
+                return $m[1] . ' `' . $tbl . '`';
+            }
+            return $m[1] . ' `' . $prefix . $tbl . '`';
+        },
+        $sql
+    );
+
+    return $sql;
 }
 
 // ── Status checks ─────────────────────────────────────────────────────────────
@@ -184,9 +204,8 @@ try {
 } catch (Exception $e) {}
 
 try {
-    $server_pdo = db_server();
-    $dbs = $server_pdo->query("SHOW DATABASES LIKE 'crm_import'")->fetchAll();
-    $crm_import_exists = !empty($dbs);
+    $staging_tbls = db()->query("SHOW TABLES LIKE 'crm_import_%'")->fetchAll();
+    $crm_import_exists = !empty($staging_tbls);
 } catch (Exception $e) {}
 
 // ── POST handling ─────────────────────────────────────────────────────────────
@@ -254,42 +273,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $results[] = ['step' => 'Upload', 'ok' => true, 'msg' => '✔ File "' . h($upload['name']) . '" received (' . number_format($upload['size'] / 1024, 1) . ' KB).'];
 
-                // ── Step A: Create crm_import database ───────────────────────
+                // ── Step A: Import uploaded dump into staging tables (crm_import_ prefix) ──
                 $step_ok = true;
-                try {
-                    $srv = db_server();
-                    $srv->exec('CREATE DATABASE IF NOT EXISTS `crm_import` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
-                    $results[] = ['step' => 'Create crm_import DB', 'ok' => true, 'msg' => '✔ Database crm_import is ready.'];
-                    $crm_import_exists = true;
-                } catch (PDOException $e) {
-                    $results[] = ['step' => 'Create crm_import DB', 'ok' => false, 'msg' => 'Could not create crm_import database: ' . h($e->getMessage()) . '. Make sure the database user (' . h(DB_USER) . ') has CREATE privilege.'];
+                $sql_content = file_get_contents($upload['tmp_name']);
+                if ($sql_content === false) {
+                    $results[] = ['step' => 'Import staging tables', 'ok' => false, 'msg' => '✘ Could not read uploaded file.'];
                     $step_ok = false;
-                }
-
-                // ── Step B: Import uploaded SQL into crm_import ───────────────
-                if ($step_ok) {
-                    $sql_content = file_get_contents($upload['tmp_name']);
-                    if ($sql_content === false) {
-                        $results[] = ['step' => 'Import into crm_import', 'ok' => false, 'msg' => '✘ Could not read uploaded file.'];
-                        $step_ok = false;
-                    } else {
-                        try {
-                            $crm_pdo = db_crm();
-                            $res = sql_exec_all($crm_pdo, $sql_content);
-                            if ($res['ok']) {
-                                $results[] = ['step' => 'Import into crm_import', 'ok' => true, 'msg' => "✔ Executed {$res['executed']} statement(s) — legacy data loaded."];
-                            } else {
-                                $results[] = ['step' => 'Import into crm_import', 'ok' => false, 'msg' => '✘ ' . $res['error']];
-                                $step_ok = false;
-                            }
-                        } catch (PDOException $e) {
-                            $results[] = ['step' => 'Import into crm_import', 'ok' => false, 'msg' => '✘ ' . h($e->getMessage())];
+                } else {
+                    try {
+                        $staging_sql = prepare_staging_sql($sql_content);
+                        $res = sql_exec_all(db(), $staging_sql);
+                        if ($res['ok']) {
+                            $results[] = ['step' => 'Import staging tables', 'ok' => true, 'msg' => "✔ Executed {$res['executed']} statement(s) — legacy data loaded into staging tables."];
+                            $crm_import_exists = true;
+                        } else {
+                            $results[] = ['step' => 'Import staging tables', 'ok' => false, 'msg' => '✘ ' . $res['error']];
                             $step_ok = false;
                         }
+                    } catch (PDOException $e) {
+                        $results[] = ['step' => 'Import staging tables', 'ok' => false, 'msg' => '✘ ' . h($e->getMessage())];
+                        $step_ok = false;
                     }
                 }
 
-                // ── Step C: Run schema files if not yet done ──────────────────
+                // ── Step B: Run schema files if not yet done ──────────────────
                 if ($step_ok && !$schema_done) {
                     foreach (['call-logs.sql', 'leads-gpa.sql'] as $fname) {
                         $path = __DIR__ . '/' . $fname;
@@ -312,7 +319,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     } catch (Exception $e) {}
                 }
 
-                // ── Step D: Run migrate-from-67crm.sql ────────────────────────
+                // ── Step C: Run migrate-from-67crm.sql ────────────────────────
                 if ($step_ok) {
                     $migrate_path = __DIR__ . '/migrate-from-67crm.sql';
                     if (!file_exists($migrate_path)) {
@@ -331,7 +338,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
 
-                // ── Step E: Record counts ─────────────────────────────────────
+                // ── Step D: Record counts ─────────────────────────────────────
                 if ($step_ok) {
                     $count_tables = [
                         'leads'             => 'Leads',
@@ -360,13 +367,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+
     // ── ACTION: cleanup ───────────────────────────────────────────────────────
     if ($action === 'cleanup') {
         try {
-            $srv = db_server();
-            $srv->exec('DROP DATABASE IF EXISTS `crm_import`');
-            $results[] = ['step' => 'Cleanup', 'ok' => true, 'msg' => '✔ crm_import database has been dropped.'];
-            $crm_import_exists = false;
+            $tables = db()->query("SHOW TABLES LIKE 'crm_import_%'")->fetchAll(PDO::FETCH_COLUMN, 0);
+            if (empty($tables)) {
+                $results[] = ['step' => 'Cleanup', 'ok' => true, 'msg' => '✔ No staging tables found — nothing to drop.'];
+            } else {
+                db()->exec('SET FOREIGN_KEY_CHECKS=0');
+                foreach ($tables as $tbl) {
+                    db()->exec('DROP TABLE IF EXISTS `' . $tbl . '`');
+                }
+                db()->exec('SET FOREIGN_KEY_CHECKS=1');
+                $results[] = ['step' => 'Cleanup', 'ok' => true, 'msg' => '✔ Dropped ' . count($tables) . ' staging table(s).'];
+                $crm_import_exists = false;
+            }
         } catch (PDOException $e) {
             $results[] = ['step' => 'Cleanup', 'ok' => false, 'msg' => '✘ ' . h($e->getMessage())];
         }
@@ -431,11 +447,11 @@ require_once __DIR__ . '/../includes/header.php';
         <div class="card border-0 shadow-sm h-100">
             <div class="card-body p-3 d-flex align-items-center gap-3">
                 <?php if ($crm_import_exists): ?>
-                    <span class="badge bg-info fs-6 px-3 py-2"><i class="fas fa-database me-1"></i>crm_import Exists</span>
-                    <span class="text-muted small">Staging DB is present. You may clean it up after migration.</span>
+                    <span class="badge bg-info fs-6 px-3 py-2"><i class="fas fa-database me-1"></i>Staging Tables Exist</span>
+                    <span class="text-muted small">Legacy data is loaded. You may clean it up after migration.</span>
                 <?php else: ?>
-                    <span class="badge bg-secondary fs-6 px-3 py-2"><i class="fas fa-database me-1"></i>No crm_import</span>
-                    <span class="text-muted small">Staging DB will be created during migration.</span>
+                    <span class="badge bg-secondary fs-6 px-3 py-2"><i class="fas fa-database me-1"></i>No Staging Tables</span>
+                    <span class="text-muted small">Staging tables will be created during migration.</span>
                 <?php endif ?>
             </div>
         </div>
@@ -458,13 +474,13 @@ require_once __DIR__ . '/../includes/header.php';
             <li class="mb-1"><strong>Schema step</strong> (optional, run once): Creates the <code>lead_call_logs</code> table and adds <code>ssc_gpa</code>, <code>hsc_gpa</code>, <code>bachelor_subject</code>, <code>bachelor_cgpa</code> columns to the <code>leads</code> table.</li>
             <li class="mb-1"><strong>Data migration</strong>: Upload your <code>admin_67crm.sql</code> backup file. The tool will:
                 <ol type="a" class="mt-1">
-                    <li>Create a temporary <code>crm_import</code> database and import the file into it.</li>
+                    <li>Import the legacy data into staging tables (prefixed <code>crm_import_</code>) inside the current database — no separate database or extra privileges required.</li>
                     <li>Apply the schema step automatically if not done yet.</li>
                     <li>Copy all leads, notes, history, assignments, call logs and campus visits into the new system with proper value mapping.</li>
                     <li>Show final record counts so you can verify the import.</li>
                 </ol>
             </li>
-            <li><strong>Cleanup</strong> (optional): Drop the <code>crm_import</code> staging database once you are satisfied.</li>
+            <li><strong>Cleanup</strong> (optional): Drop all <code>crm_import_*</code> staging tables once you are satisfied.</li>
         </ol>
     </div>
 </div>
@@ -536,15 +552,15 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
             <div class="card-body d-flex align-items-center justify-content-between flex-wrap gap-3">
                 <p class="mb-0 text-muted small">
-                    The <code>crm_import</code> staging database is no longer needed once migration is verified.
-                    Drop it to free up disk space.
+                    The <code>crm_import_*</code> staging tables are no longer needed once migration is verified.
+                    Drop them to free up disk space.
                 </p>
                 <form method="post" class="flex-shrink-0">
                     <?= csrf_field() ?>
                     <input type="hidden" name="action" value="cleanup">
                     <button type="submit" class="btn btn-outline-danger btn-sm"
-                            onclick="return confirm('Drop the crm_import staging database? This cannot be undone.')">
-                        <i class="fas fa-trash-alt me-1"></i>Drop crm_import Database
+                            onclick="return confirm('Drop all crm_import_* staging tables? This cannot be undone.')">
+                        <i class="fas fa-trash-alt me-1"></i>Drop Staging Tables
                     </button>
                 </form>
             </div>
