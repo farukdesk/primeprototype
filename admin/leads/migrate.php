@@ -149,22 +149,26 @@ function sql_exec_all(PDO $pdo, string $sql): array {
 /**
  * Prepare a legacy CRM SQL dump for import into the main application database.
  *
- * - Strips DELIMITER blocks (stored functions / procedures) that require SUPER privilege.
+ * - Strips DELIMITER $$ … DELIMITER ; blocks (stored functions / procedures)
+ *   that require SUPER privilege.  Only the $$ delimiter used by mysqldump
+ *   is handled; other custom delimiters are not supported.
  * - Strips CREATE DATABASE and USE statements.
  * - Converts CREATE TABLE to CREATE TABLE IF NOT EXISTS so re-runs are safe.
  * - Prefixes every backtick-quoted table name with "crm_import_" so staging data
  *   sits alongside the app tables without requiring a separate database.
  */
 function prepare_staging_sql(string $sql): string {
-    // 1. Remove DELIMITER $$ ... DELIMITER ; blocks (functions, procedures, triggers)
+    // 1. Remove DELIMITER $$ ... DELIMITER ; blocks (functions, procedures, triggers).
+    //    mysqldump always uses $$ as the alternate delimiter.
     $sql = preg_replace('/DELIMITER\s+\$\$.*?DELIMITER\s+;/si', '', $sql);
 
     // 2. Remove CREATE DATABASE and USE statements
     $sql = preg_replace('/^\s*CREATE\s+DATABASE\b[^;]*;\s*/im', '', $sql);
     $sql = preg_replace('/^\s*USE\s+`?[^`;\s]+`?\s*;\s*/im', '', $sql);
 
-    // 3. Convert CREATE TABLE to CREATE TABLE IF NOT EXISTS (idempotent re-runs)
-    $sql = preg_replace('/\bCREATE\s+TABLE\s+(?!IF\s+NOT\s+EXISTS\s)/i', 'CREATE TABLE IF NOT EXISTS ', $sql);
+    // 3. Convert CREATE TABLE to CREATE TABLE IF NOT EXISTS (idempotent re-runs).
+    //    The word boundary after EXISTS handles any whitespace that follows.
+    $sql = preg_replace('/\bCREATE\s+TABLE\s+(?!IF\s+NOT\s+EXISTS\b)/i', 'CREATE TABLE IF NOT EXISTS ', $sql);
 
     // 4. Prefix every backtick-quoted table name that follows a table-manipulating keyword.
     //    Covers: CREATE TABLE [IF NOT EXISTS], INSERT [IGNORE] INTO,
@@ -377,6 +381,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 db()->exec('SET FOREIGN_KEY_CHECKS=0');
                 foreach ($tables as $tbl) {
+                    // Validate name matches expected pattern before use in SQL
+                    if (!preg_match('/^crm_import_[a-zA-Z0-9_]+$/', $tbl)) {
+                        continue;
+                    }
                     db()->exec('DROP TABLE IF EXISTS `' . $tbl . '`');
                 }
                 db()->exec('SET FOREIGN_KEY_CHECKS=1');
