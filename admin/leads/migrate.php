@@ -133,8 +133,12 @@ function sql_exec_all(PDO $pdo, string $sql): array {
             $pdo->exec($stmt);
             $executed++;
         } catch (PDOException $e) {
-            // Ignore "Column already exists" (MySQL 1060) – idempotent ALTERs
-            if ((int)$e->getCode() === 1060 || (isset($e->errorInfo[1]) && (int)$e->errorInfo[1] === 1060)) {
+            // Ignore errors that occur when re-running against already-staged tables:
+            //   1060 – Duplicate column name   (ADD COLUMN IF NOT EXISTS fallback)
+            //   1061 – Duplicate key name      (ADD KEY / ADD INDEX)
+            //   1068 – Multiple primary key    (ADD PRIMARY KEY on existing table)
+            $mysql_errno = isset($e->errorInfo[1]) ? (int)$e->errorInfo[1] : 0;
+            if (in_array($mysql_errno, [1060, 1061, 1068], true)) {
                 $executed++; continue;
             }
             // Limit statement snippet to avoid exposing sensitive data
