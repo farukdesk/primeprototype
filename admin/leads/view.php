@@ -35,7 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                      VALUES (?,?,?,?,?,NOW(),?)'
                 )->execute([$id, $user['id'], $ct, $lead['status'], $new_status,
                     trim($_POST['call_notes'] ?? '') ?: null]);
-            } catch (Exception $e) { /* table may not exist yet – silent fail */ }
+            } catch (Exception $e) { /* table not yet created – run admin/leads/call-logs.sql first */ }
             flash_set('success', 'Status updated to ' . leads_status_label($new_status) . '.');
         }
         redirect(APP_URL . '/leads/view.php?id=' . $id);

@@ -205,7 +205,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <select name="dept" class="form-select form-select-sm">
                     <option value="">All Departments</option>
                     <?php foreach ($departments as $d): ?>
-                    <option value="<?= $d['id'] ?>" <?= $f_dept == $d['id'] ? 'selected' : '' ?>><?= h($d['name']) ?></option>
+                    <option value="<?= $d['id'] ?>" <?= $f_dept === (int)$d['id'] ? 'selected' : '' ?>><?= h($d['name']) ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>

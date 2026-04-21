@@ -295,12 +295,12 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
                 <div class="col-6 col-md-1">
                     <select name="sort" class="form-select form-select-sm">
-                        <option value="date_desc"    <?= $f_sort === 'date_desc'    ? 'selected' : '' ?>>Newest</option>
-                        <option value="date_asc"     <?= $f_sort === 'date_asc'     ? 'selected' : '' ?>>Oldest</option>
-                        <option value="name_asc"     <?= $f_sort === 'name_asc'     ? 'selected' : '' ?>>A–Z</option>
-                        <option value="name_desc"    <?= $f_sort === 'name_desc'    ? 'selected' : '' ?>>Z–A</option>
-                        <option value="status_asc"   <?= $f_sort === 'status_asc'   ? 'selected' : '' ?>>Status</option>
-                        <option value="followup_asc" <?= $f_sort === 'followup_asc' ? 'selected' : '' ?>>Follow-up</option>
+                        <option value="date_desc"    <?= $f_sort === 'date_desc'    ? 'selected' : '' ?>>Date: Newest</option>
+                        <option value="date_asc"     <?= $f_sort === 'date_asc'     ? 'selected' : '' ?>>Date: Oldest</option>
+                        <option value="name_asc"     <?= $f_sort === 'name_asc'     ? 'selected' : '' ?>>Name: A–Z</option>
+                        <option value="name_desc"    <?= $f_sort === 'name_desc'    ? 'selected' : '' ?>>Name: Z–A</option>
+                        <option value="status_asc"   <?= $f_sort === 'status_asc'   ? 'selected' : '' ?>>By Status</option>
+                        <option value="followup_asc" <?= $f_sort === 'followup_asc' ? 'selected' : '' ?>>Follow-up Date</option>
                     </select>
                 </div>
                 <div class="col-auto d-flex gap-1">
