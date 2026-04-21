@@ -18,7 +18,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // ── Quick status change ───────────────────────────────────────────────
     if ($action === 'change_status' && $is_staff) {
         $new_status = $_POST['new_status'] ?? '';
-        if (in_array($new_status, ['fresh', 'unable_to_reach', 'converted'], true) && $new_status !== $lead['status']) {
+        if (in_array($new_status, array_keys(leads_all_statuses()), true) && $new_status !== $lead['status']) {
             db()->prepare('UPDATE leads SET status=?, updated_by=? WHERE id=?')
                 ->execute([$new_status, $user['id'], $id]);
             leads_log($id, 'status_changed', 'status', $lead['status'], $new_status,
@@ -241,15 +241,30 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="card border-0 shadow-sm mb-3">
     <div class="card-body py-2 px-3 d-flex align-items-center flex-wrap gap-2">
         <span class="text-muted small fw-semibold me-1">Quick Status:</span>
-        <?php foreach (['fresh' => ['Fresh','success'], 'unable_to_reach' => ['Unable to Reach','warning'], 'converted' => ['Converted','primary']] as $sv => [$sl, $color]): ?>
-        <?php if ($lead['status'] !== $sv): ?>
+        <?php
+        $quick_statuses = [
+            'fresh'           => ['Fresh',             'success'],
+            '1st_call'        => ['1st Call',          'info'],
+            '2nd_call'        => ['2nd Call',          'info'],
+            '3rd_call'        => ['3rd Call',          'primary'],
+            'unable_to_reach' => ['Unable to Reach',   'warning'],
+            'interested'      => ['Interested',        'teal'],
+            'not_interested'  => ['Not Interested',    'danger'],
+            'will_visit'      => ['Will Visit',        'purple'],
+            'converted'       => ['Converted',         'dark'],
+        ];
+        foreach ($quick_statuses as $sv => [$sl, $color]):
+            if ($lead['status'] === $sv) continue;
+            $style = in_array($color, ['teal','purple'], true)
+                ? ' style="color:' . ($color === 'teal' ? '#20c997' : '#6f42c1') . ';border-color:' . ($color === 'teal' ? '#20c997' : '#6f42c1') . '"'
+                : '';
+        ?>
         <form method="post" class="d-inline">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="change_status">
             <input type="hidden" name="new_status" value="<?= $sv ?>">
-            <button type="submit" class="btn btn-sm btn-outline-<?= $color ?>">Mark as <?= $sl ?></button>
+            <button type="submit" class="btn btn-sm btn-outline-<?= in_array($color, ['teal','purple'], true) ? 'secondary' : $color ?>"<?= $style ?>><?= $sl ?></button>
         </form>
-        <?php endif; ?>
         <?php endforeach; ?>
     </div>
 </div>
@@ -283,6 +298,12 @@ require_once __DIR__ . '/../includes/header.php';
                     <div class="col-6 col-md-3 text-muted small">Program</div><div class="col-6 col-md-3"><?= h($lead['program_name'] ?? '–') ?></div>
                     <div class="col-6 col-md-3 text-muted small">Preferred Semester</div><div class="col-6 col-md-3"><?= h($lead['preferred_semester'] ?? '–') ?></div>
                     <div class="col-6 col-md-3 text-muted small">Preferred Call Time</div><div class="col-6 col-md-3"><?= $lead['preferred_call_time'] ? '<span class="badge bg-info text-dark"><i class="fas fa-phone-alt me-1"></i>' . h($lead['preferred_call_time']) . '</span>' : '–' ?></div>
+                    <div class="col-6 col-md-3 text-muted small">Next Follow-up</div>
+                    <div class="col-6 col-md-3"><?= leads_followup_badge($lead['next_followup_date'] ?? null, in_array($lead['status'], ['converted','not_interested'], true)) ?></div>
+                    <?php if (!empty($lead['followup_notes'])): ?>
+                    <div class="col-6 col-md-3 text-muted small">Follow-up Notes</div>
+                    <div class="col-6 col-md-3"><?= h($lead['followup_notes']) ?></div>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
