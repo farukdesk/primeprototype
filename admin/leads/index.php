@@ -234,111 +234,163 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 <?php endif; ?>
 
-<!-- ── Source quick-filter tabs ── -->
-<div class="card border-0 shadow-sm mb-3">
-    <div class="card-body p-2">
-        <div class="d-flex flex-wrap gap-2 align-items-center">
-            <span class="text-muted small fw-semibold me-1">Source:</span>
-            <?php
-            $sources = ['' => 'All', 'online' => 'Online', 'campus_visit' => 'Campus Visit', 'agent' => 'Promoter', 'f2f_marketing' => 'F2F Marketing', 'facebook' => 'Facebook'];
-            foreach ($sources as $sv => $sl):
-                $q = http_build_query(array_filter(array_merge(
-                    ['search' => $search, 'status' => $f_status, 'dept' => $f_dept ?: '', 'semester' => $f_sem, 'degree' => $f_degree, 'user_id' => $f_user ?: '', 'followup' => $f_followup],
-                    ['source' => $sv]
-                )));
-                $active = $f_source === $sv ? 'btn-secondary' : 'btn-outline-secondary';
-            ?>
-            <a href="?<?= $q ?>" class="btn btn-sm <?= $active ?>"><?= h($sl) ?> <span class="badge bg-light text-dark ms-1"><?= number_format($sv === '' ? $total_leads : ($source_stats[$sv] ?? 0)) ?></span></a>
-            <?php endforeach; ?>
-        </div>
-    </div>
+<!-- ── Quick navigation links ── -->
+<div class="d-flex flex-wrap gap-2 mb-3">
+    <a href="<?= APP_URL ?>/leads/campus-visits.php" class="btn btn-sm btn-outline-info">
+        <i class="fas fa-university me-1"></i> Campus Visits
+    </a>
+    <a href="<?= APP_URL ?>/leads/call-logs.php" class="btn btn-sm btn-outline-secondary">
+        <i class="fas fa-phone-alt me-1"></i> Call Logs
+    </a>
 </div>
 
-<!-- ── Status tabs ── -->
-<ul class="nav nav-tabs mb-0" style="border-bottom:none">
-    <?php
-    $tab_statuses = ['' => 'All'] + leads_all_statuses();
-    foreach ($tab_statuses as $sv => $sl):
-        $q = http_build_query(array_filter(array_merge(
-            ['search' => $search, 'source' => $f_source, 'dept' => $f_dept ?: '', 'semester' => $f_sem, 'degree' => $f_degree, 'user_id' => $f_user ?: '', 'followup' => $f_followup, 'sort' => $f_sort !== 'date_desc' ? $f_sort : ''],
-            ['status' => $sv]
-        )));
-        $cnt = $sv === '' ? $total_leads : ($status_stats[$sv] ?? 0);
-    ?>
-    <li class="nav-item">
-        <a class="nav-link <?= $f_status === $sv ? 'active' : '' ?>" href="?<?= $q ?>">
-            <?= h($sl) ?> <span class="badge bg-secondary ms-1"><?= number_format($cnt) ?></span>
-        </a>
-    </li>
-    <?php endforeach; ?>
-</ul>
-
 <!-- ── Filter & list card ── -->
-<div class="card border-0 shadow-sm" style="border-top-left-radius:0">
+<div class="card border-0 shadow-sm">
     <div class="card-body">
 
-        <!-- Filter form -->
+        <!-- ── Filter panel ── -->
         <div class="mb-3">
-            <button class="btn btn-outline-secondary btn-sm mb-2" type="button" data-bs-toggle="collapse" data-bs-target="#filterPanel" aria-expanded="<?= ($search || $f_dept || $f_sem || $f_degree || $f_user || $f_sort !== 'date_desc') ? 'true' : 'false' ?>">
-                <i class="fas fa-filter me-1"></i> Filters &amp; Sort
-                <?php if ($search || $f_dept || $f_sem || $f_degree || $f_user): ?>
-                <span class="badge bg-primary ms-1">Active</span>
-                <?php endif; ?>
-            </button>
-            <div class="collapse <?= ($search || $f_dept || $f_sem || $f_degree || $f_user || $f_sort !== 'date_desc') ? 'show' : '' ?>" id="filterPanel">
-                <form method="get" class="row g-2 pt-2 border-top mt-1">
-                    <input type="hidden" name="status" value="<?= h($f_status) ?>">
-                    <input type="hidden" name="source" value="<?= h($f_source) ?>">
-                    <?php if ($f_followup): ?><input type="hidden" name="followup" value="<?= h($f_followup) ?>"><?php endif; ?>
-                    <div class="col-12 col-md-4">
-                        <input type="text" name="search" class="form-control form-control-sm" placeholder="Search name, phone, email, city…" value="<?= h($search) ?>">
+
+            <!-- Row 1: Search + dept/degree/semester + apply/reset -->
+            <form method="get" class="row g-2 mb-2" id="leads-filter-form">
+                <input type="hidden" name="status" value="<?= h($f_status) ?>">
+                <input type="hidden" name="source" value="<?= h($f_source) ?>">
+                <?php if ($f_followup): ?><input type="hidden" name="followup" value="<?= h($f_followup) ?>"><?php endif; ?>
+                <div class="col-12 col-md-4">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text"><i class="fas fa-search"></i></span>
+                        <input type="text" name="search" class="form-control" placeholder="Search name, phone, email, city…" value="<?= h($search) ?>">
                     </div>
-                    <div class="col-6 col-md-2">
-                        <select name="dept" class="form-select form-select-sm">
-                            <option value="">All Departments</option>
-                            <?php foreach ($departments as $d): ?>
-                            <option value="<?= $d['id'] ?>" <?= $f_dept == $d['id'] ? 'selected' : '' ?>><?= h($d['name']) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                    <div class="col-6 col-md-2">
-                        <select name="degree" class="form-select form-select-sm">
-                            <option value="">All Degrees</option>
-                            <option value="bachelor" <?= $f_degree === 'bachelor' ? 'selected' : '' ?>>Bachelor</option>
-                            <option value="master"   <?= $f_degree === 'master'   ? 'selected' : '' ?>>Master</option>
-                        </select>
-                    </div>
-                    <div class="col-6 col-md-2">
-                        <select name="semester" class="form-select form-select-sm">
-                            <option value="">All Semesters</option>
-                            <?php foreach ($semesters as $sem): ?>
-                            <option value="<?= h($sem) ?>" <?= $f_sem === $sem ? 'selected' : '' ?>><?= h($sem) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                    <div class="col-6 col-md-2">
-                        <select name="user_id" class="form-select form-select-sm">
-                            <option value="">All Assignees</option>
-                            <?php foreach ($staff_users as $su): ?>
-                            <option value="<?= $su['id'] ?>" <?= $f_user == $su['id'] ? 'selected' : '' ?>><?= h($su['full_name']) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                    <div class="col-6 col-md-2">
-                        <select name="sort" class="form-select form-select-sm">
-                            <option value="date_desc"  <?= $f_sort === 'date_desc'   ? 'selected' : '' ?>>Newest First</option>
-                            <option value="date_asc"   <?= $f_sort === 'date_asc'    ? 'selected' : '' ?>>Oldest First</option>
-                            <option value="name_asc"   <?= $f_sort === 'name_asc'    ? 'selected' : '' ?>>Name A–Z</option>
-                            <option value="name_desc"  <?= $f_sort === 'name_desc'   ? 'selected' : '' ?>>Name Z–A</option>
-                            <option value="status_asc" <?= $f_sort === 'status_asc'  ? 'selected' : '' ?>>By Status</option>
-                            <option value="followup_asc" <?= $f_sort === 'followup_asc' ? 'selected' : '' ?>>Follow-up Date</option>
-                        </select>
-                    </div>
-                    <div class="col-12 col-md-auto d-flex gap-2">
-                        <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-search me-1"></i>Apply</button>
-                        <a href="<?= APP_URL ?>/leads/index.php" class="btn btn-outline-secondary btn-sm">Reset</a>
-                    </div>
-                </form>
+                </div>
+                <div class="col-6 col-md-2">
+                    <select name="dept" class="form-select form-select-sm">
+                        <option value="">All Departments</option>
+                        <?php foreach ($departments as $d): ?>
+                        <option value="<?= $d['id'] ?>" <?= $f_dept == $d['id'] ? 'selected' : '' ?>><?= h($d['name']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-6 col-md-2">
+                    <select name="degree" class="form-select form-select-sm">
+                        <option value="">All Degrees</option>
+                        <option value="bachelor" <?= $f_degree === 'bachelor' ? 'selected' : '' ?>>Bachelor</option>
+                        <option value="master"   <?= $f_degree === 'master'   ? 'selected' : '' ?>>Master</option>
+                    </select>
+                </div>
+                <div class="col-6 col-md-2">
+                    <select name="semester" class="form-select form-select-sm">
+                        <option value="">All Semesters</option>
+                        <?php foreach ($semesters as $sem): ?>
+                        <option value="<?= h($sem) ?>" <?= $f_sem === $sem ? 'selected' : '' ?>><?= h($sem) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-6 col-md-2">
+                    <select name="user_id" class="form-select form-select-sm">
+                        <option value="">All Assignees</option>
+                        <?php foreach ($staff_users as $su): ?>
+                        <option value="<?= $su['id'] ?>" <?= $f_user == $su['id'] ? 'selected' : '' ?>><?= h($su['full_name']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-6 col-md-1">
+                    <select name="sort" class="form-select form-select-sm">
+                        <option value="date_desc"    <?= $f_sort === 'date_desc'    ? 'selected' : '' ?>>Date: Newest</option>
+                        <option value="date_asc"     <?= $f_sort === 'date_asc'     ? 'selected' : '' ?>>Date: Oldest</option>
+                        <option value="name_asc"     <?= $f_sort === 'name_asc'     ? 'selected' : '' ?>>Name: A–Z</option>
+                        <option value="name_desc"    <?= $f_sort === 'name_desc'    ? 'selected' : '' ?>>Name: Z–A</option>
+                        <option value="status_asc"   <?= $f_sort === 'status_asc'   ? 'selected' : '' ?>>By Status</option>
+                        <option value="followup_asc" <?= $f_sort === 'followup_asc' ? 'selected' : '' ?>>Follow-up Date</option>
+                    </select>
+                </div>
+                <div class="col-auto d-flex gap-1">
+                    <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-search me-1"></i>Apply</button>
+                    <a href="<?= APP_URL ?>/leads/index.php" class="btn btn-outline-secondary btn-sm">Reset</a>
+                </div>
+            </form>
+
+            <!-- Row 2: Status filter pills (link-based, preserve other filters) -->
+            <div class="d-flex flex-wrap gap-1 align-items-center mb-2">
+                <span class="text-muted small fw-semibold me-1">Status:</span>
+                <?php
+                $base_qs_status = array_filter([
+                    'search'   => $search,
+                    'source'   => $f_source,
+                    'dept'     => $f_dept ?: '',
+                    'semester' => $f_sem,
+                    'degree'   => $f_degree,
+                    'user_id'  => $f_user ?: '',
+                    'followup' => $f_followup,
+                    'sort'     => $f_sort !== 'date_desc' ? $f_sort : '',
+                ]);
+                $pill_statuses = ['' => 'All'] + leads_all_statuses();
+                $status_colors = [
+                    ''               => ['secondary',  ''],
+                    'fresh'          => ['success',    ''],
+                    '1st_call'       => ['info',       ''],
+                    '2nd_call'       => ['info',       ''],
+                    '3rd_call'       => ['primary',    ''],
+                    'unable_to_reach'=> ['warning',    ''],
+                    'interested'     => ['secondary',  '#20c997'],
+                    'not_interested' => ['danger',     ''],
+                    'will_visit'     => ['secondary',  '#6f42c1'],
+                    'converted'      => ['dark',       ''],
+                ];
+                foreach ($pill_statuses as $sv => $sl):
+                    $cnt      = $sv === '' ? $total_leads : ($status_stats[$sv] ?? 0);
+                    $is_act   = $f_status === $sv;
+                    [$col, $custom] = $status_colors[$sv] ?? ['secondary', ''];
+                    $pill_url = '?' . http_build_query(array_filter(array_merge($base_qs_status, ['status' => $sv])));
+                    if ($custom) {
+                        $ps = $is_act
+                            ? 'background:' . $custom . ';border-color:' . $custom . ';color:#fff;font-weight:600'
+                            : 'border-color:' . $custom . ';color:' . $custom;
+                        $pc = '';
+                    } else {
+                        $ps = $is_act ? 'font-weight:600' : '';
+                        $pc = $is_act ? 'btn-' . $col : 'btn-outline-' . $col;
+                    }
+                ?>
+                <a href="<?= $pill_url ?>" class="btn btn-sm <?= $pc ?>" style="<?= $ps ?>">
+                    <?= h($sl) ?> <span class="badge ms-1 <?= $is_act ? 'bg-white text-dark' : 'bg-secondary' ?>"><?= number_format($cnt) ?></span>
+                </a>
+                <?php endforeach; ?>
+            </div>
+
+            <!-- Row 3: Source filter pills (link-based, preserve other filters) -->
+            <div class="d-flex flex-wrap gap-1 align-items-center">
+                <span class="text-muted small fw-semibold me-1">Source:</span>
+                <?php
+                $base_qs_source = array_filter([
+                    'search'   => $search,
+                    'status'   => $f_status,
+                    'dept'     => $f_dept ?: '',
+                    'semester' => $f_sem,
+                    'degree'   => $f_degree,
+                    'user_id'  => $f_user ?: '',
+                    'followup' => $f_followup,
+                    'sort'     => $f_sort !== 'date_desc' ? $f_sort : '',
+                ]);
+                $pill_sources = ['' => 'All', 'online' => 'Online', 'campus_visit' => 'Campus Visit', 'agent' => 'Promoter', 'f2f_marketing' => 'F2F Marketing', 'facebook' => 'Facebook'];
+                $source_colors = ['' => ['secondary',''], 'online' => ['info',''], 'campus_visit' => ['secondary',''], 'agent' => ['dark',''], 'f2f_marketing' => ['warning',''], 'facebook' => ['secondary','#1877F2']];
+                foreach ($pill_sources as $sv => $sl):
+                    $cnt    = $sv === '' ? $total_leads : ($source_stats[$sv] ?? 0);
+                    $is_act = $f_source === $sv;
+                    [$sc, $custom_sc] = $source_colors[$sv] ?? ['secondary',''];
+                    $src_url = '?' . http_build_query(array_filter(array_merge($base_qs_source, ['source' => $sv])));
+                    if ($custom_sc) {
+                        $ss = $is_act ? 'background:' . $custom_sc . ';border-color:' . $custom_sc . ';color:#fff;font-weight:600' : 'border-color:' . $custom_sc . ';color:' . $custom_sc;
+                        $sc_cls = '';
+                    } else {
+                        $ss = $is_act ? 'font-weight:600' : '';
+                        $sc_cls = $is_act ? 'btn-' . $sc : 'btn-outline-' . $sc;
+                    }
+                ?>
+                <a href="<?= $src_url ?>" class="btn btn-sm <?= $sc_cls ?>" style="<?= $ss ?>">
+                    <?php if ($sv === 'facebook'): ?><i class="fab fa-facebook-messenger me-1"></i><?php endif; ?>
+                    <?= h($sl) ?> <span class="badge ms-1 <?= $is_act ? 'bg-white text-dark' : 'bg-secondary' ?>"><?= number_format($cnt) ?></span>
+                </a>
+                <?php endforeach; ?>
             </div>
         </div>
 

@@ -800,6 +800,18 @@ $user       = auth_user();
                 </a>
             </li>
             <?php endif; ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/leads/campus-visits.php"
+                   class="<?= strpos($current_path, '/leads/campus-visits') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-university"></i> Campus Visits
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/leads/call-logs.php"
+                   class="<?= strpos($current_path, '/leads/call-logs') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-phone-alt"></i> Call Logs
+                </a>
+            </li>
         </ul>
     </div>
     <?php endif; ?>
