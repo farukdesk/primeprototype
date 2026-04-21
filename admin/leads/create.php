@@ -48,11 +48,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $program_id  = (int)($_POST['program_id'] ?? 0) ?: null;
     $preferred_semester = trim($_POST['preferred_semester'] ?? '');
     $preferred_call_time = trim($_POST['preferred_call_time'] ?? '');
-    $status      = in_array($_POST['status'] ?? '', ['fresh', 'unable_to_reach', 'converted'], true)
+    $status      = in_array($_POST['status'] ?? '', array_keys(leads_all_statuses()), true)
                    ? $_POST['status'] : 'fresh';
-    $source      = in_array($_POST['source'] ?? '', ['online', 'campus_visit', 'agent', 'f2f_marketing'], true)
+    $source      = in_array($_POST['source'] ?? '', ['online', 'campus_visit', 'agent', 'f2f_marketing', 'facebook'], true)
                    ? $_POST['source'] : 'online';
     $assigned_to = (int)($_POST['assigned_to'] ?? 0) ?: null;
+    $next_followup_date = trim($_POST['next_followup_date'] ?? '');
+    $followup_notes     = trim($_POST['followup_notes']     ?? '');
 
     if ($first_name === '') $errors[] = 'First name is required.';
     if ($last_name  === '') $errors[] = 'Last name is required.';
@@ -65,14 +67,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'INSERT INTO leads
                (lead_number, first_name, last_name, email, phone, address, current_city,
                 degree_type, dept_id, program_id, preferred_semester, preferred_call_time,
+                next_followup_date, followup_notes,
                 status, source, assigned_to, created_by)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
         )->execute([
             $lead_number, $first_name, $last_name, $email ?: null, $phone,
             $address ?: null, $current_city ?: null,
             $degree_type, $dept_id, $program_id,
             $preferred_semester ?: null,
             $preferred_call_time ?: null,
+            $next_followup_date ?: null,
+            $followup_notes ?: null,
             $status, $source, $assigned_to, $user['id'],
         ]);
         $lead_id = (int)db()->lastInsertId();
@@ -206,7 +211,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <div class="mb-3">
                         <label class="form-label">Status</label>
                         <select name="status" class="form-select">
-                            <?php foreach (['fresh' => 'Fresh', 'unable_to_reach' => 'Unable to Reach', 'converted' => 'Converted'] as $v => $l): ?>
+                            <?php foreach (leads_all_statuses() as $v => $l): ?>
                             <option value="<?= $v ?>" <?= old('status') === $v ? 'selected' : '' ?>><?= $l ?></option>
                             <?php endforeach; ?>
                         </select>
@@ -214,7 +219,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <div class="mb-3">
                         <label class="form-label">Lead Source</label>
                         <select name="source" class="form-select">
-                            <?php foreach (['online' => 'Online', 'campus_visit' => 'Campus Visit', 'agent' => 'Agent', 'f2f_marketing' => 'F2F Marketing', 'facebook' => 'Facebook'] as $v => $l): ?>
+                            <?php foreach (['online' => 'Online', 'campus_visit' => 'Campus Visit', 'agent' => 'Promoter', 'f2f_marketing' => 'F2F Marketing', 'facebook' => 'Facebook'] as $v => $l): ?>
                             <option value="<?= $v ?>" <?= old('source') === $v ? 'selected' : '' ?>><?= $l ?></option>
                             <?php endforeach; ?>
                         </select>
@@ -227,6 +232,14 @@ require_once __DIR__ . '/../includes/header.php';
                             <option value="<?= $su['id'] ?>" <?= old('assigned_to') == $su['id'] ? 'selected' : '' ?>><?= h($su['full_name']) ?></option>
                             <?php endforeach; ?>
                         </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label"><i class="fas fa-calendar-alt me-1 text-primary"></i>Next Follow-up Date</label>
+                        <input type="date" name="next_followup_date" class="form-control" value="<?= h(old('next_followup_date')) ?>">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Follow-up Notes</label>
+                        <textarea name="followup_notes" class="form-control" rows="2" maxlength="500" placeholder="What to discuss on follow-up…"><?= h(old('followup_notes')) ?></textarea>
                     </div>
                 </div>
             </div>

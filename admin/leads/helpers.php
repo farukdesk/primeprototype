@@ -57,12 +57,64 @@ function leads_semester_list(): array
 function leads_status_badge(string $status): string
 {
     $map = [
-        'fresh'            => ['bg-success',   'Fresh'],
-        'unable_to_reach'  => ['bg-warning text-dark', 'Unable to Reach'],
-        'converted'        => ['bg-primary',   'Converted'],
+        'fresh'            => ['bg-success',          'Fresh'],
+        '1st_call'         => ['bg-info text-dark',   '1st Call'],
+        '2nd_call'         => ['bg-info',             '2nd Call'],
+        '3rd_call'         => ['bg-primary',          '3rd Call'],
+        'unable_to_reach'  => ['bg-warning text-dark','Unable to Reach'],
+        'interested'       => ['bg-teal text-white',  'Interested'],
+        'not_interested'   => ['bg-danger',           'Not Interested'],
+        'will_visit'       => ['bg-purple text-white','Will Visit'],
+        'converted'        => ['bg-dark',             'Converted'],
     ];
-    [$cls, $label] = $map[$status] ?? ['bg-secondary', ucfirst($status)];
-    return '<span class="badge ' . $cls . '">' . h($label) . '</span>';
+    [$cls, $label] = $map[$status] ?? ['bg-secondary', ucfirst(str_replace('_', ' ', $status))];
+    return '<span class="badge ' . $cls . '" style="' . leads_status_inline_style($status) . '">' . h($label) . '</span>';
+}
+
+function leads_status_inline_style(string $status): string
+{
+    return match ($status) {
+        'interested'  => 'background:#20c997',
+        'will_visit'  => 'background:#6f42c1',
+        default       => '',
+    };
+}
+
+function leads_all_statuses(): array
+{
+    return [
+        'fresh'           => 'Fresh',
+        '1st_call'        => '1st Call',
+        '2nd_call'        => '2nd Call',
+        '3rd_call'        => '3rd Call',
+        'unable_to_reach' => 'Unable to Reach',
+        'interested'      => 'Interested',
+        'not_interested'  => 'Not Interested',
+        'will_visit'      => 'Will Visit Campus',
+        'converted'       => 'Converted',
+    ];
+}
+
+function leads_followup_badge(?string $date, bool $isTerminal = false): string
+{
+    if (!$date) {
+        return $isTerminal
+            ? '<span class="badge bg-secondary-subtle text-secondary"><i class="fas fa-check-double me-1"></i>Done</span>'
+            : '<span class="text-muted small">—</span>';
+    }
+    $today    = date('Y-m-d');
+    $diff     = (int)((strtotime($date) - strtotime($today)) / 86400);
+    if ($diff < 0) {
+        $days = abs($diff);
+        return '<span class="badge bg-danger" title="' . h($date) . '">'
+             . '<i class="fas fa-bell me-1"></i>Overdue ' . $days . 'd</span>';
+    }
+    if ($diff === 0) {
+        return '<span class="badge bg-warning text-dark" title="' . h($date) . '">'
+             . '<i class="fas fa-calendar-check me-1"></i>Today</span>';
+    }
+    return '<span class="badge bg-info text-dark" title="' . h($date) . '">'
+         . '<i class="fas fa-calendar me-1"></i>' . date('d M', strtotime($date)) . '</span>';
 }
 
 function leads_source_badge(string $source): string
@@ -73,7 +125,7 @@ function leads_source_badge(string $source): string
     $map = [
         'online'         => ['bg-info text-dark',  'Online'],
         'campus_visit'   => ['bg-secondary',        'Campus Visit'],
-        'agent'          => ['bg-dark',             'Agent'],
+        'agent'          => ['bg-dark',             'Promoter'],
         'f2f_marketing'  => ['bg-warning text-dark','F2F Marketing'],
     ];
     [$cls, $label] = $map[$source] ?? ['bg-secondary', ucfirst(str_replace('_', ' ', $source))];
@@ -104,7 +156,7 @@ function leads_source_label(string $source): string
     $map = [
         'online'        => 'Online',
         'campus_visit'  => 'Campus Visit',
-        'agent'         => 'Agent',
+        'agent'         => 'Promoter',
         'f2f_marketing' => 'F2F Marketing',
         'facebook'      => 'Facebook',
     ];
@@ -113,12 +165,7 @@ function leads_source_label(string $source): string
 
 function leads_status_label(string $status): string
 {
-    $map = [
-        'fresh'           => 'Fresh',
-        'unable_to_reach' => 'Unable to Reach',
-        'converted'       => 'Converted',
-    ];
-    return $map[$status] ?? ucfirst(str_replace('_', ' ', $status));
+    return leads_all_statuses()[$status] ?? ucfirst(str_replace('_', ' ', $status));
 }
 
 // ── History logger ────────────────────────────────────────────────────────────
