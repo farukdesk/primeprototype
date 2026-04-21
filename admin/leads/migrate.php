@@ -40,6 +40,11 @@ function sql_split(string $sql): array {
         $ch   = $sql[$i];
         $next = $sql[$i + 1] ?? '';
 
+        // ── Escape sequences – must be checked BEFORE quote toggles ─────────
+        if ($ch === '\\' && ($in_single || $in_double)) {
+            $current .= $ch . $next; $i += 2; continue;
+        }
+
         // ── String tracking ──────────────────────────────────────────────────
         if ($ch === "'" && !$in_double && !$in_backtick) {
             $in_single = !$in_single;
@@ -52,10 +57,6 @@ function sql_split(string $sql): array {
         if ($ch === '`' && !$in_single && !$in_double) {
             $in_backtick = !$in_backtick;
             $current .= $ch; $i++; continue;
-        }
-        // Escape sequences inside strings
-        if ($ch === '\\' && ($in_single || $in_double)) {
-            $current .= $ch . $next; $i += 2; continue;
         }
 
         if ($in_single || $in_double || $in_backtick) {
@@ -132,11 +133,13 @@ function sql_exec_all(PDO $pdo, string $sql): array {
             $pdo->exec($stmt);
             $executed++;
         } catch (PDOException $e) {
-            // Ignore "Column already exists" (1060) – idempotent ALTERs
-            if (strpos($e->getMessage(), '1060') !== false) {
+            // Ignore "Column already exists" (MySQL 1060) – idempotent ALTERs
+            if ((int)$e->getCode() === 1060 || (isset($e->errorInfo[1]) && (int)$e->errorInfo[1] === 1060)) {
                 $executed++; continue;
             }
-            return ['ok' => false, 'executed' => $executed, 'error' => $e->getMessage() . "\n\nStatement:\n" . substr($stmt, 0, 500)];
+            // Limit statement snippet to avoid exposing sensitive data
+            $snippet = htmlspecialchars(substr($stmt, 0, 200), ENT_QUOTES, 'UTF-8');
+            return ['ok' => false, 'executed' => $executed, 'error' => htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8') . '<br><small class="text-muted">Near: <code>' . $snippet . '…</code></small>'];
         }
     }
 
@@ -232,7 +235,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $upload = $_FILES['sql_file'] ?? null;
 
         if (!$upload || $upload['error'] !== UPLOAD_ERR_OK) {
-            $results[] = ['step' => 'Upload', 'ok' => false, 'msg' => 'No file uploaded or upload error (code ' . ($upload['error'] ?? '?') . '). Maximum upload size on this server: ' . ini_get('upload_max_filesize') . '.'];
+            $upload_err_map = [
+                UPLOAD_ERR_INI_SIZE   => 'The file exceeds the server\'s upload_max_filesize limit (' . ini_get('upload_max_filesize') . ').',
+                UPLOAD_ERR_FORM_SIZE  => 'The file exceeds the form\'s MAX_FILE_SIZE.',
+                UPLOAD_ERR_PARTIAL    => 'The file was only partially uploaded. Please try again.',
+                UPLOAD_ERR_NO_FILE    => 'No file was selected.',
+                UPLOAD_ERR_NO_TMP_DIR => 'Server error: missing temporary upload directory.',
+                UPLOAD_ERR_CANT_WRITE => 'Server error: failed to write the file to disk.',
+                UPLOAD_ERR_EXTENSION  => 'Upload blocked by a PHP extension.',
+            ];
+            $err_code = $upload['error'] ?? -1;
+            $err_msg  = $upload_err_map[$err_code] ?? 'Unknown upload error (code ' . $err_code . ').';
+            $results[] = ['step' => 'Upload', 'ok' => false, 'msg' => $err_msg];
         } else {
             $ext = strtolower(pathinfo($upload['name'], PATHINFO_EXTENSION));
             if ($ext !== 'sql') {
@@ -248,7 +262,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $results[] = ['step' => 'Create crm_import DB', 'ok' => true, 'msg' => '✔ Database crm_import is ready.'];
                     $crm_import_exists = true;
                 } catch (PDOException $e) {
-                    $results[] = ['step' => 'Create crm_import DB', 'ok' => false, 'msg' => '✘ Could not create crm_import database: ' . $e->getMessage() . '. Make sure the database user has CREATE privilege.'];
+                    $results[] = ['step' => 'Create crm_import DB', 'ok' => false, 'msg' => 'Could not create crm_import database: ' . h($e->getMessage()) . '. Make sure the database user (' . h(DB_USER) . ') has CREATE privilege.'];
                     $step_ok = false;
                 }
 
@@ -269,7 +283,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 $step_ok = false;
                             }
                         } catch (PDOException $e) {
-                            $results[] = ['step' => 'Import into crm_import', 'ok' => false, 'msg' => '✘ ' . $e->getMessage()];
+                            $results[] = ['step' => 'Import into crm_import', 'ok' => false, 'msg' => '✘ ' . h($e->getMessage())];
                             $step_ok = false;
                         }
                     }
@@ -354,7 +368,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $results[] = ['step' => 'Cleanup', 'ok' => true, 'msg' => '✔ crm_import database has been dropped.'];
             $crm_import_exists = false;
         } catch (PDOException $e) {
-            $results[] = ['step' => 'Cleanup', 'ok' => false, 'msg' => '✘ ' . $e->getMessage()];
+            $results[] = ['step' => 'Cleanup', 'ok' => false, 'msg' => '✘ ' . h($e->getMessage())];
         }
     }
 }
