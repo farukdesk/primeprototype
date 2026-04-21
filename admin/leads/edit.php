@@ -50,8 +50,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $dept_id      = (int)($_POST['dept_id']    ?? 0) ?: null;
     $program_id   = (int)($_POST['program_id'] ?? 0) ?: null;
     $preferred_semester = trim($_POST['preferred_semester'] ?? '');
-    $preferred_call_time = in_array($_POST['preferred_call_time'] ?? '', leads_call_time_options(), true)
-                     ? $_POST['preferred_call_time'] : '';
+    $preferred_call_time = trim($_POST['preferred_call_time'] ?? '');
     $new_status   = in_array($_POST['status'] ?? '', ['fresh', 'unable_to_reach', 'converted'], true)
                     ? $_POST['status'] : $lead['status'];
     $source       = in_array($_POST['source'] ?? '', ['online', 'campus_visit', 'agent', 'f2f_marketing', 'facebook'], true)
@@ -222,12 +221,7 @@ $v = function(string $field) use ($lead, $old): string {
                         </div>
                         <div class="col-12 col-md-4">
                             <label class="form-label">Preferred Call Time</label>
-                            <select name="preferred_call_time" class="form-select">
-                                <option value="">— Not specified —</option>
-                                <?php foreach (leads_call_time_options() as $ct): ?>
-                                <option value="<?= h($ct) ?>" <?= $v('preferred_call_time') === $ct ? 'selected' : '' ?>><?= h($ct) ?></option>
-                                <?php endforeach; ?>
-                            </select>
+                            <input type="text" name="preferred_call_time" class="form-control" placeholder="e.g. 10:30 AM" maxlength="50" value="<?= h($v('preferred_call_time')) ?>">
                         </div>
                     </div>
                 </div>

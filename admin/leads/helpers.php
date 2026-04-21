@@ -52,17 +52,6 @@ function leads_semester_list(): array
     return $list;
 }
 
-// ── Call-time options ─────────────────────────────────────────────────────────
-
-function leads_call_time_options(): array
-{
-    return [
-        'Morning (9 AM – 12 PM)',
-        'Afternoon (12 PM – 3 PM)',
-        'Evening (3 PM – 6 PM)',
-    ];
-}
-
 // ── Badge helpers ─────────────────────────────────────────────────────────────
 
 function leads_status_badge(string $status): string
