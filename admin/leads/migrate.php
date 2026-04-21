@@ -192,6 +192,24 @@ function prepare_staging_sql(string $sql): string {
         $sql
     );
 
+    // 5. Prefix backtick-quoted constraint names in ADD CONSTRAINT clauses.
+    //    In MySQL, FK constraint names must be unique within the whole database,
+    //    not just the table.  Without this step importing crm_import_users would
+    //    fail with errno 121 (duplicate key name) because the original names
+    //    (e.g. users_ibfk_1, users_company_fk) are already in use by the live
+    //    tables that share the same database.
+    $sql = preg_replace_callback(
+        '/\bADD\s+CONSTRAINT\s+`([^`]+)`/i',
+        static function (array $m) use ($prefix): string {
+            $name = $m[1];
+            if (str_starts_with($name, $prefix)) {
+                return 'ADD CONSTRAINT `' . $name . '`';
+            }
+            return 'ADD CONSTRAINT `' . $prefix . $name . '`';
+        },
+        $sql
+    );
+
     return $sql;
 }
 
