@@ -13,9 +13,11 @@ $stmt = db()->prepare(
     'SELECT sv.*,
             s.id AS s_id, s.student_id AS s_student_id, s.full_name AS s_full_name,
             s.email AS s_email, s.phone AS s_phone,
+            s.status AS s_status,
             d.name AS dept_name, d.code AS dept_code,
             p.program_name,
             s.admitted_semester,
+            s.batch,
             s.photo,
             u.full_name AS verifier_name, u.email AS verifier_user_email
      FROM student_verifications sv
@@ -168,6 +170,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $stmt->execute([$id]);
 $rec = $stmt->fetch();
 
+// Compute Final CGPA for display
+$view_cgpa = null;
+try {
+    $cq = db()->prepare(
+        'SELECT ROUND(SUM(rg.grade_point * COALESCE(rs.credits,3)) /
+             NULLIF(SUM(COALESCE(rs.credits,3)),0), 2) AS cgpa
+         FROM result_grades rg
+         JOIN result_exams re ON re.id = rg.exam_id
+         JOIN result_subjects rs ON rs.id = rg.subject_id
+         WHERE rg.student_sid=? AND re.is_published=1
+           AND rg.grade_point IS NOT NULL AND COALESCE(rs.credits,3)>0'
+    );
+    $cq->execute([$rec['s_student_id']]);
+    $cv = $cq->fetchColumn();
+    if ($cv !== null && $cv !== false) $view_cgpa = number_format((float)$cv, 2);
+} catch (Throwable $e) {}
+if ($view_cgpa === null) {
+    try {
+        $sr = db()->prepare(
+            'SELECT MAX(CAST(cgpa AS DECIMAL(5,2))) FROM student_results
+             WHERE student_id=? AND cgpa IS NOT NULL AND TRIM(cgpa)!=""'
+        );
+        $sr->execute([$rec['s_id']]);
+        $sv2 = $sr->fetchColumn();
+        if ($sv2 !== null && (float)$sv2 > 0) $view_cgpa = number_format((float)$sv2, 2);
+    } catch (Throwable $e) {}
+}
+
+// Fetch Ending Semester for display
+$view_ending_sem = null;
+try {
+    $eq = db()->prepare(
+        'SELECT re.completion_semester
+         FROM result_grades rg
+         JOIN result_exams re ON re.id = rg.exam_id
+         WHERE rg.student_sid = ? AND re.is_published = 1
+           AND re.completion_semester IS NOT NULL
+         ORDER BY re.updated_at DESC LIMIT 1'
+    );
+    $eq->execute([$rec['s_student_id']]);
+    $erow = $eq->fetchColumn();
+    if ($erow) $view_ending_sem = $erow;
+} catch (Throwable $e) {}
+
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
@@ -235,9 +281,18 @@ require_once __DIR__ . '/../includes/header.php';
                     <tr><th class="text-muted fw-normal">Student ID</th><td><code><?= h($rec['s_student_id']) ?></code></td></tr>
                     <tr><th class="text-muted fw-normal">Department</th><td><?= h($rec['dept_name']) ?></td></tr>
                     <?php if ($rec['program_name']): ?>
-                    <tr><th class="text-muted fw-normal">Program</th><td><?= h($rec['program_name']) ?></td></tr>
+                    <tr><th class="text-muted fw-normal">Obtained Degree</th><td><?= h($rec['program_name']) ?></td></tr>
                     <?php endif; ?>
-                    <tr><th class="text-muted fw-normal">Admitted</th><td><?= h($rec['admitted_semester']) ?></td></tr>
+                    <tr><th class="text-muted fw-normal">Enrolled Semester</th><td><?= h($rec['admitted_semester']) ?></td></tr>
+                    <tr><th class="text-muted fw-normal">Ending Semester</th><td><?= $view_ending_sem ? h($view_ending_sem) : '<span class="text-muted">—</span>' ?></td></tr>
+                    <?php if (!empty($rec['batch'])): ?>
+                    <tr><th class="text-muted fw-normal">Batch</th><td><?= h($rec['batch']) ?></td></tr>
+                    <?php endif; ?>
+                    <tr><th class="text-muted fw-normal">Graduated</th>
+                        <td><?= (($rec['s_status'] ?? '') === 'Graduated') ? '<span class="text-success fw-semibold">Yes</span>' : '<span class="text-muted">No</span>' ?></td></tr>
+                    <?php if ($view_cgpa): ?>
+                    <tr><th class="text-muted fw-normal">Final CGPA</th><td><strong><?= h($view_cgpa) ?></strong></td></tr>
+                    <?php endif; ?>
                     <?php if ($rec['s_email']): ?>
                     <tr><th class="text-muted fw-normal">Email</th><td><?= h($rec['s_email']) ?></td></tr>
                     <?php endif; ?>
