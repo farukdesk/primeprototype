@@ -512,7 +512,6 @@ require_once __DIR__ . '/../includes/header.php';
                         <tr><th class="text-muted fw-normal">Graduated</th><td><?= (($pre_student['status']??'')==='Graduated') ? '<span class="text-success fw-semibold">Yes</span>' : '<span class="text-muted">No</span>' ?></td></tr>
                         <?php if ($pre_cgpa): ?><tr><th class="text-muted fw-normal">Final CGPA</th><td><strong><?= h($pre_cgpa) ?></strong></td></tr><?php endif; ?>
                         <?php if (!empty($pre_student['email'])): ?><tr><th class="text-muted fw-normal">Email</th><td><?= h($pre_student['email']) ?></td></tr><?php endif; ?>
-                        <?php if (!empty($pre_student['phone'])): ?><tr><th class="text-muted fw-normal">Phone</th><td><?= h($pre_student['phone']) ?></td></tr><?php endif; ?>
                     </table>
                 </div>
                 <span class="badge bg-success p-2 align-self-start"><i class="fas fa-check-circle me-1"></i>Found</span>
@@ -793,7 +792,6 @@ function stuCard(s){
     rows+=`<tr><th class="text-muted fw-normal">Graduated</th><td>${s.graduated==='Yes'?'<span style="color:#198754;font-weight:600;">Yes</span>':'<span style="color:#6c757d;">No</span>'}</td></tr>`;
     if(s.cgpa)              rows+=`<tr><th class="text-muted fw-normal">Final CGPA</th><td><strong>${ex(s.cgpa)}</strong></td></tr>`;
     if(s.email)             rows+=`<tr><th class="text-muted fw-normal">Email</th><td>${ex(s.email)}</td></tr>`;
-    if(s.phone)             rows+=`<tr><th class="text-muted fw-normal">Phone</th><td>${ex(s.phone)}</td></tr>`;
     return`<div class="sv-scard"><div class="d-flex gap-3 flex-wrap align-items-start">${ph}<div class="flex-grow-1"><div class="d-flex align-items-center gap-2 flex-wrap mb-2"><h5 class="mb-0 fw-bold">${ex(s.full_name)}</h5>${sb}</div><code class="bg-white px-2 py-1 rounded border mb-2 d-inline-block" style="font-size:.88rem;">${ex(s.student_id)}</code><table class="table table-sm mb-0 mt-1" style="font-size:.84rem;max-width:420px;">${rows}</table></div><span class="badge bg-success p-2 align-self-start"><i class="fas fa-check-circle me-1"></i>Found</span></div></div>`;
 }
 
@@ -904,55 +902,76 @@ function buildPrev(){
     const ts=now.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
     const c1=ch[1].ok!==false,c2=ch[2].ok!==false,c3=ch[3].ok!==false,c4=ch[4].ok!==false;
     const allOk=c1&&c2&&c3&&c4;
-    const sc=allOk?'#198754':'#dc3545',sb=allOk?'#d1e7dd':'#f8d7da';
+    const sc =allOk?'#065f46':'#991b1b';
+    const sb =allOk?'#d1fae5':'#fee2e2';
+    const sbc=allOk?'#059669':'#dc2626';
     const stxt=allOk?'&#10003;&nbsp;VERIFIED – GENUINE &amp; AUTHENTIC':'&#10007;&nbsp;VERIFICATION INCOMPLETE / FAILED';
     const sicon=allOk?'fa-shield-alt':'fa-times-circle';
-    const ph=stu.photo_url?`<img src="${ex(stu.photo_url)}" style="width:82px;height:100px;object-fit:cover;border-radius:8px;border:2px solid #ced4da;flex-shrink:0;" alt="">`:`<div style="width:82px;height:100px;border-radius:8px;border:2px solid #ced4da;background:#e9ecef;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="fas fa-user-graduate" style="color:#adb5bd;font-size:2rem;"></i></div>`;
-    let sr=`<tr><td style="color:#6c757d;padding:2px 0;width:40%;font-size:.83rem;">Department</td><td style="font-weight:600;font-size:.83rem;">${ex(stu.dept_name)}</td></tr>`;
-    if(stu.program_name)      sr+=`<tr><td style="color:#6c757d;padding:2px 0;font-size:.83rem;">Obtained Degree</td><td style="font-weight:600;font-size:.83rem;">${ex(stu.program_name)}</td></tr>`;
-    if(stu.admitted_semester) sr+=`<tr><td style="color:#6c757d;padding:2px 0;font-size:.83rem;">Enrolled Semester</td><td style="font-size:.83rem;">${ex(stu.admitted_semester)}</td></tr>`;
-    if(stu.ending_semester)   sr+=`<tr><td style="color:#6c757d;padding:2px 0;font-size:.83rem;">Ending Semester</td><td style="font-size:.83rem;">${ex(stu.ending_semester)}</td></tr>`;
-    if(stu.batch)             sr+=`<tr><td style="color:#6c757d;padding:2px 0;font-size:.83rem;">Batch</td><td style="font-size:.83rem;">${ex(stu.batch)}</td></tr>`;
-    sr+=`<tr><td style="color:#6c757d;padding:2px 0;font-size:.83rem;">Graduated</td><td style="font-size:.83rem;${stu.graduated==='Yes'?'color:#198754;font-weight:600;':''}">${stu.graduated==='Yes'?'Yes':'No'}</td></tr>`;
-    if(stu.cgpa)              sr+=`<tr><td style="color:#6c757d;padding:2px 0;font-size:.83rem;">Final CGPA</td><td style="font-size:.83rem;"><strong>${ex(stu.cgpa)}</strong></td></tr>`;
-    const chk=(ok,lbl,iss)=>`<div class="sv-chk ${ok?'ok':'fail'}"><i class="fas ${ok?'fa-check-circle text-success':'fa-times-circle text-danger'}" style="font-size:1rem;flex-shrink:0;margin-top:1px;"></i><div><strong style="font-size:.86rem;">${lbl}</strong>${!ok&&iss?`<div style="font-size:.78rem;color:#842029;margin-top:2px;">${ex(iss)}</div>`:''}</div></div>`;
+    const ph=stu.photo_url
+        ?`<img src="${ex(stu.photo_url)}" style="width:90px;height:110px;object-fit:cover;border-radius:10px;border:2.5px solid #cbd5e1;flex-shrink:0;" alt="">`
+        :`<div style="width:90px;height:110px;border-radius:10px;border:2.5px solid #cbd5e1;background:linear-gradient(135deg,#dbeafe,#e0f2fe);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:2.4rem;color:#93c5fd;">&#127891;</div>`;
+    const statusSt=stu.status==='Graduated'?'background:#d1fae5;color:#065f46;':stu.status==='Active'?'background:#dbeafe;color:#1d4ed8;':'background:#f3f4f6;color:#6b7280;';
+    const cellSt='color:#9ca3af;font-size:7.5pt;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:3px 0;width:44%;';
+    const valSt ='font-size:9.5pt;font-weight:700;color:#1a2e5a;';
+    let sr=`<tr><td style="${cellSt}">Department</td><td style="${valSt}">${ex(stu.dept_name)}</td></tr>`;
+    if(stu.program_name)      sr+=`<tr><td style="${cellSt}">Program / Degree</td><td style="${valSt}">${ex(stu.program_name)}</td></tr>`;
+    if(stu.admitted_semester) sr+=`<tr><td style="${cellSt}">Enrolled Semester</td><td style="font-size:9.5pt;color:#1a2e5a;">${ex(stu.admitted_semester)}</td></tr>`;
+    if(stu.ending_semester)   sr+=`<tr><td style="${cellSt}">Ending Semester</td><td style="font-size:9.5pt;color:#1a2e5a;">${ex(stu.ending_semester)}</td></tr>`;
+    if(stu.batch)             sr+=`<tr><td style="${cellSt}">Batch</td><td style="font-size:9.5pt;color:#1a2e5a;">${ex(stu.batch)}</td></tr>`;
+    sr+=`<tr><td style="${cellSt}">Graduated</td><td style="font-size:9.5pt;${stu.graduated==='Yes'?'color:#059669;font-weight:700;':'color:#6b7280;'}">${stu.graduated==='Yes'?'&#10003; Yes':'No'}</td></tr>`;
+    if(stu.cgpa) sr+=`<tr><td style="${cellSt}">Final CGPA</td><td style="font-size:11pt;font-weight:900;color:#1a2e5a;">${ex(stu.cgpa)} / 4.00</td></tr>`;
+    const chk=(ok,lbl,iss)=>`<div style="display:flex;align-items:flex-start;gap:10px;padding:9px 12px;border-radius:8px;background:${ok?'#d1fae5':'#fee2e2'};border:1.5px solid ${ok?'#6ee7b7':'#fca5a5'};margin-bottom:7px;"><i class="fas ${ok?'fa-check-circle':'fa-times-circle'}" style="color:${ok?'#059669':'#dc2626'};font-size:1rem;flex-shrink:0;margin-top:2px;"></i><div><div style="font-size:.85rem;font-weight:700;color:${ok?'#065f46':'#991b1b'};">${lbl}</div>${!ok&&iss?`<div style="font-size:.78rem;color:#7f1d1d;margin-top:2px;">${ex(iss)}</div>`:''}</div></div>`;
     const vn=<?= json_encode($user['full_name']) ?>;
     const ref='PU-IV-'+(stu.student_id||'').replace(/[^A-Za-z0-9]/g,'').toUpperCase();
-    area.innerHTML=`<div class="sv-cert">
-<div class="sv-band"></div>
-<div class="sv-chd">
-    <div style="width:44px;height:44px;background:rgba(255,255,255,.15);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="fas fa-university" style="color:#fff;font-size:1.25rem;"></i></div>
-    <div class="sv-chd-t"><h6>Prime University Bangladesh</h6><p>Internal Verification Certificate &nbsp;·&nbsp; <code style="color:rgba(255,255,255,.55);font-size:.7rem;">${ex(ref)}</code></p></div>
-    <div class="ms-auto text-end" style="color:rgba(255,255,255,.55);font-size:.72rem;">${ex(ds)}<br>${ex(ts)}</div>
+    area.innerHTML=`<div style="background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,.12);border:1.5px solid #e2e8f0;">
+<div style="height:6px;background:linear-gradient(90deg,#1a2e5a 0%,#2563eb 50%,#10b981 100%);"></div>
+<div style="padding:22px 32px 18px;text-align:center;border-bottom:2px solid #e8edf5;position:relative;">
+    <div style="font-size:16pt;font-weight:800;color:#1a2e5a;letter-spacing:-.01em;margin:0 0 3px;line-height:1.2;">Prime University Bangladesh</div>
+    <div style="font-size:8pt;color:#2563eb;font-weight:700;letter-spacing:.07em;text-transform:uppercase;margin-bottom:7px;">Bangladesh — UGC Approved</div>
+    <div style="font-size:8pt;color:#4b5563;line-height:1.9;">
+        &#128205; 114/116 Mazar Road, Mirpur-1, Dhaka 1216, Bangladesh<br>
+        &#128222; PABX: +88-02-41002432 &nbsp;|&nbsp; +88-02-41002435 &nbsp;|&nbsp; 01969-955566<br>
+        &#127760; www.primeuniversity.ac.bd
+    </div>
+    <div style="position:absolute;right:28px;top:50%;transform:translateY(-50%);font-size:54pt;font-weight:900;color:rgba(26,46,90,.03);pointer-events:none;user-select:none;" aria-hidden="true">PU</div>
 </div>
-<div class="sv-cb">
-    <div style="display:flex;gap:14px;align-items:flex-start;background:#f8faff;border:1.5px solid #dbe4f3;border-radius:10px;padding:13px 16px;margin-bottom:16px;flex-wrap:wrap;">
+<div style="background:linear-gradient(135deg,#1a2e5a 0%,#1e3a8a 100%);padding:13px 32px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;">
+    <div style="font-size:11pt;font-weight:800;color:#fff;letter-spacing:.04em;text-transform:uppercase;">&#128737; Internal Verification Certificate</div>
+    <div style="font-size:7.5pt;color:rgba(255,255,255,.6);font-family:monospace;letter-spacing:.04em;">${ex(ref)}</div>
+</div>
+<div style="padding:24px 32px 28px;">
+    <div style="display:flex;gap:18px;align-items:flex-start;background:#f8faff;border:1.5px solid #dbe4f3;border-radius:12px;padding:16px 20px;margin-bottom:20px;flex-wrap:wrap;">
         ${ph}
         <div style="flex:1;min-width:180px;">
-            <div style="font-size:1.05rem;font-weight:800;color:#1a2e5a;margin-bottom:4px;">${ex(stu.full_name)}</div>
-            <code style="background:#fff;border:1px solid #dee2e6;padding:2px 6px;border-radius:4px;font-size:.83rem;">${ex(stu.student_id)}</code>
-            <table style="margin-top:7px;border-collapse:collapse;width:100%;max-width:380px;">${sr}</table>
+            <div style="font-size:13.5pt;font-weight:800;color:#1a2e5a;margin:0 0 6px;">${ex(stu.full_name)}</div>
+            <div style="display:inline-flex;align-items:center;gap:5px;background:#1a2e5a;color:#fff;border-radius:5px;padding:3px 10px;font-size:8pt;font-weight:700;letter-spacing:.05em;margin-bottom:5px;">&#128196; ${ex(stu.student_id)}</div>
+            <span style="display:inline-flex;align-items:center;padding:3px 11px;border-radius:50px;font-size:8pt;font-weight:700;margin-left:6px;${statusSt}">${ex(stu.status||'Active')}</span>
+            <table style="border-collapse:collapse;width:100%;max-width:400px;margin-top:10px;">${sr}</table>
         </div>
     </div>
-    <div style="padding:11px 14px;border-radius:9px;background:${sb};border:1.5px solid ${sc};margin-bottom:16px;display:flex;align-items:center;gap:10px;">
-        <i class="fas ${sicon}" style="color:${sc};font-size:1.35rem;flex-shrink:0;"></i>
+    <div style="padding:14px 18px;border-radius:10px;background:${sb};border:2px solid ${sbc};margin-bottom:20px;display:flex;align-items:center;gap:13px;">
+        <i class="fas ${sicon}" style="color:${sbc};font-size:1.5rem;flex-shrink:0;"></i>
         <div>
-            <div style="font-size:.92rem;font-weight:800;color:${sc};">${stxt}</div>
-            <div style="font-size:.82rem;color:${allOk?'#0f5132':'#842029'};margin-top:2px;">${allOk?'This is an internal verification and we found this student is genuine/authentic.':'One or more verification checks did not pass. See details below.'}</div>
+            <div style="font-size:10pt;font-weight:800;color:${sc};">${stxt}</div>
+            <div style="font-size:8pt;color:${sc};opacity:.85;margin-top:3px;">${allOk?'This is an internal verification confirming this student is genuine and authentic.':'One or more verification checks did not pass. See details below.'}</div>
         </div>
     </div>
-    <div style="margin-bottom:16px;">
-        <div style="font-weight:700;font-size:.86rem;color:#495057;margin-bottom:7px;"><i class="fas fa-tasks me-1"></i>We have checked:</div>
+    <div style="margin-bottom:20px;">
+        <div style="font-size:8pt;font-weight:800;color:#2563eb;text-transform:uppercase;letter-spacing:.07em;border-bottom:1.5px solid #dbe4f3;padding-bottom:7px;margin-bottom:11px;">&#10003; Verification Checklist</div>
         ${chk(c1,'Student record details match presented documents',ch[1].iss)}
         ${chk(c2,'Certificate &amp; Transcript – Visual security measures verified correct',ch[2].iss)}
-        ${chk(c3,'Hard copy student files (Admission Form) checked and found correct',ch[3].iss)}
-        ${chk(c4,'Hard copy student result tabulation checked and found correct',ch[4].iss)}
+        ${chk(c3,'Admission Form checked and confirmed correct',ch[3].iss)}
+        ${chk(c4,'Final Result Tabulation checked and confirmed correct',ch[4].iss)}
     </div>
-    <div style="border-top:1.5px solid #e9ecef;padding-top:11px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;font-size:.79rem;color:#6c757d;">
-        <div><div><strong>Verified by:</strong> ${ex(vn)}</div><div><strong>Date:</strong> ${ex(ds)} at ${ex(ts)}</div></div>
-        <div style="text-align:right;"><div>Prime University Bangladesh</div><div>House 28/A, Iqbal Road, Mohammadpur, Dhaka-1207</div></div>
+    <div style="border-top:1.5px solid #e8edf5;padding-top:14px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;font-size:8pt;color:#6b7280;">
+        <div><div style="font-weight:700;color:#1a2e5a;margin-bottom:2px;">Verified by: ${ex(vn)}</div><div>Date: ${ex(ds)} at ${ex(ts)}</div></div>
+        <div style="text-align:right;"><div style="font-weight:700;color:#1a2e5a;">Prime University Bangladesh</div><div>114/116 Mazar Road, Mirpur-1, Dhaka 1216</div></div>
     </div>
-</div></div>`;
+</div>
+<div style="background:#f8fafc;border-top:1.5px solid #e8edf5;padding:10px 32px;text-align:center;font-size:7pt;color:#9ca3af;">
+    This is a computer-generated internal verification document. For certified copies contact the Registrar&#39;s Office. &nbsp;|&nbsp; ${ex(ref)} &nbsp;|&nbsp; Generated: ${ex(ds)}
+</div>
+</div>`;
 }
 
 // ── Print ──────────────────────────────────────────────────────────────────
@@ -963,20 +982,14 @@ document.getElementById('sv-prn').addEventListener('click',()=>{
     if(!pw){alert('Please allow popups for this page to use the print feature.');return;}
     pw.document.write('<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Verification Preview</title>'
         +'<style>'
-        +'body{font-family:Segoe UI,Arial,sans-serif;margin:0;background:#f4f6fb;}'
-        +'.sv-cert{max-width:710px;margin:20px auto;border:2px solid #dee2e6;border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 4px 24px rgba(0,0,0,.1);}'
-        +'.sv-band{height:7px;background:linear-gradient(90deg,#1a2e5a,#2563eb 50%,#10b981);}'
-        +'.sv-chd{background:#1a2e5a;padding:16px 26px;display:flex;align-items:center;gap:14px;}'
-        +'.sv-chd-t h6{margin:0 0 3px;font-size:1rem;font-weight:800;color:#fff;}'
-        +'.sv-chd-t p{margin:0;font-size:.77rem;opacity:.7;color:#fff;}'
-        +'.sv-cb{padding:20px 26px;}'
-        +'.sv-chk{display:flex;align-items:flex-start;gap:10px;padding:9px 12px;border-radius:7px;background:#f8f9fa;border:1.5px solid #dee2e6;margin-bottom:7px;}'
-        +'.sv-chk.ok{background:#d1e7dd;border-color:#a3cfbb;}'
-        +'.sv-chk.fail{background:#f8d7da;border-color:#f1aeb5;}'
-        +'@media print{body{background:#fff;}.sv-cert{box-shadow:none;border:none;margin:0;max-width:100%;}}'
+        +'*{box-sizing:border-box;}'
+        +'body{font-family:Segoe UI,Arial,Helvetica,sans-serif;margin:0;background:#f0f4f8;}'
+        +'.doc-wrap{max-width:760px;margin:24px auto 40px;padding:0 16px;}'
+        +'@media print{body{background:#fff;}@page{size:A4 portrait;margin:10mm 12mm;}.doc-wrap{max-width:100%;margin:0;padding:0;}.no-print{display:none!important;}}'
         +'</style>'
         +'<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">'
-        +'</head><body>'+content+'<div style="text-align:center;padding:16px;"><button onclick="window.print()" style="padding:10px 28px;background:#1a2e5a;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;">&#128438; Print / Save as PDF</button></div></body></html>');
+        +'</head><body><div class="doc-wrap">'+content+'</div>'
+        +'<div class="no-print" style="text-align:center;padding:16px;"><button onclick="window.print()" style="padding:10px 28px;background:#1a2e5a;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;">&#128438; Print / Save as PDF</button></div></body></html>');
     pw.document.close();
 });
 
