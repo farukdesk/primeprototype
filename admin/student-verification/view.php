@@ -314,6 +314,28 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
     <div class="card-body px-4 py-3">
         <div class="row g-3">
+            <!-- Step 1: Student record confirmation (shown only when column exists) -->
+            <?php
+            $has_sdo_col = (bool)db()->query("SHOW COLUMNS FROM student_verifications LIKE 'student_data_ok'")->fetchColumn();
+            if ($has_sdo_col && array_key_exists('student_data_ok', $rec)):
+                $sdo = (bool)($rec['student_data_ok'] ?? 1);
+            ?>
+            <div class="col-12">
+                <div class="p-3 rounded-3 border <?= $sdo ? 'border-success bg-success bg-opacity-10' : 'border-danger bg-danger bg-opacity-10' ?>">
+                    <div class="d-flex align-items-start gap-2">
+                        <i class="fas <?= $sdo ? 'fa-check-circle text-success' : 'fa-times-circle text-danger' ?> mt-1" style="font-size:1.1rem;"></i>
+                        <div>
+                            <div class="fw-semibold">Step 1 – Student Record Details</div>
+                            <?php if ($sdo): ?>
+                                <div class="text-success" style="font-size:.85rem;">Student details match the presented documents.</div>
+                            <?php else: ?>
+                                <div class="text-danger mt-1" style="font-size:.85rem;"><strong>Data mismatch:</strong> <?= nl2br(h($rec['student_data_issues'])) ?></div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <?php endif; ?>
             <!-- Check 1 -->
             <div class="col-12">
                 <div class="p-3 rounded-3 border <?= $rec['cert_transcript_ok'] ? 'border-success bg-success bg-opacity-10' : 'border-danger bg-danger bg-opacity-10' ?>">
