@@ -92,7 +92,7 @@ $ref_no    = 'PU-VER-' . str_pad($id, 6, '0', STR_PAD_LEFT);
 // Photo URL
 function cert_photo_url(?string $photo): string {
     if (!$photo) return '';
-    if (!preg_match('/\A[A-Za-z0-9_\-]+\.[a-z]{2,5}\z/', $photo)) return '';
+    if (!preg_match('/\A[A-Za-z0-9_\-]+\.(jpg|jpeg|png|gif|webp)\z/i', $photo)) return '';
     $p = UPLOAD_DIR . '/students/photos/' . $photo;
     return is_file($p)
         ? UPLOAD_URL . '/students/photos/' . rawurlencode($photo)
@@ -421,7 +421,9 @@ $version_label = $is_digital ? 'Digital Signed' : ($is_hand ? 'Hand Signed' : ''
             <h1>Prime University Bangladesh</h1>
             <div class="addr">
                 114/116 Mazar Road, Mirpur-1, Dhaka 1216, Bangladesh<br>
-                PABX: +88-02-41002432 &nbsp;|&nbsp; +88-02-41002435 &nbsp;|&nbsp; 01969-955566<br>
+                PABX: <a href="tel:+88024100243200" style="color:inherit;text-decoration:none;">+88-02-41002432</a>
+                &nbsp;|&nbsp; <a href="tel:+88024100243500" style="color:inherit;text-decoration:none;">+88-02-41002435</a>
+                &nbsp;|&nbsp; <a href="tel:+8801969955566" style="color:inherit;text-decoration:none;">01969-955566</a><br>
                 www.primeuniversity.ac.bd &nbsp;|&nbsp; verification@primeuniversity.ac.bd
             </div>
         </div>
