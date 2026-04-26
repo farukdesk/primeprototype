@@ -682,19 +682,11 @@ require_once __DIR__ . '/../includes/header.php';
         <h6 class="mb-0 fw-semibold"><i class="fas fa-clipboard-check me-2 text-success"></i>Final Review &amp; Submit</h6>
     </div>
     <div class="card-body px-4 py-4">
-        <p class="text-muted mb-4" style="font-size:.875rem;"><i class="fas fa-info-circle me-1 text-primary"></i>Review the internal verification certificate below, enter the verifier's email (optional), then submit.</p>
+        <p class="text-muted mb-4" style="font-size:.875rem;"><i class="fas fa-info-circle me-1 text-primary"></i>Review the internal verification certificate below, then submit.</p>
         <div id="sv-prev" class="mb-4"></div>
-        <div class="row g-3 mb-4">
-            <div class="col-12 col-md-6">
-                <label class="form-label fw-semibold">Verifier Email Address <span class="text-muted fw-normal">(optional)</span></label>
-                <input type="email" name="verifier_email" class="form-control" placeholder="verifier@example.com" value="<?= h($_POST['verifier_email'] ?? '') ?>">
-                <div class="form-text">If provided, you can email the result from the verification record page.</div>
-            </div>
-        </div>
         <div class="d-flex gap-3 flex-wrap align-items-center">
             <button type="button" class="btn btn-outline-secondary sv-bk" data-to="4" style="border-radius:9px;"><i class="fas fa-arrow-left me-1"></i>Back</button>
             <button type="submit" class="btn btn-success px-4" style="border-radius:9px;"><i class="fas fa-shield-alt me-1"></i>Submit Verification</button>
-            <button type="button" id="sv-prn" class="btn btn-outline-dark" style="border-radius:9px;"><i class="fas fa-print me-1"></i>Print Preview</button>
             <a href="<?= APP_URL ?>/student-verification/index.php" class="btn btn-outline-secondary" style="border-radius:9px;">Cancel</a>
         </div>
     </div>
@@ -973,25 +965,6 @@ function buildPrev(){
 </div>
 </div>`;
 }
-
-// ── Print ──────────────────────────────────────────────────────────────────
-document.getElementById('sv-prn').addEventListener('click',()=>{
-    const content=document.getElementById('sv-prev').innerHTML;
-    if(!content.trim()||!stu){alert('No preview available. Please complete steps 1–4 first.');return;}
-    const pw=window.open('','_blank','width=780,height=900');
-    if(!pw){alert('Please allow popups for this page to use the print feature.');return;}
-    pw.document.write('<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Verification Preview</title>'
-        +'<style>'
-        +'*{box-sizing:border-box;}'
-        +'body{font-family:Segoe UI,Arial,Helvetica,sans-serif;margin:0;background:#f0f4f8;}'
-        +'.doc-wrap{max-width:760px;margin:24px auto 40px;padding:0 16px;}'
-        +'@media print{body{background:#fff;}@page{size:A4 portrait;margin:10mm 12mm;}.doc-wrap{max-width:100%;margin:0;padding:0;}.no-print{display:none!important;}}'
-        +'</style>'
-        +'<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">'
-        +'</head><body><div class="doc-wrap">'+content+'</div>'
-        +'<div class="no-print" style="text-align:center;padding:16px;"><button onclick="window.print()" style="padding:10px 28px;background:#1a2e5a;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;">&#128438; Print / Save as PDF</button></div></body></html>');
-    pw.document.close();
-});
 
 // ── Escape ─────────────────────────────────────────────────────────────────
 function ex(s){if(s==null)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');}
