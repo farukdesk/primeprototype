@@ -12,6 +12,10 @@ CREATE TABLE IF NOT EXISTS `student_verifications` (
   `student_id`               INT UNSIGNED NOT NULL COMMENT 'FK → students.id',
   `verified_by`              INT UNSIGNED NOT NULL COMMENT 'FK → users.id',
 
+  -- Step 1: Student record confirmation
+  `student_data_ok`          TINYINT(1)   NOT NULL DEFAULT 1 COMMENT '1=details match, 0=data mismatch',
+  `student_data_issues`      TEXT         DEFAULT NULL,
+
   -- Check 1: Certificate & Transcript Visual Security Measures
   `cert_transcript_ok`       TINYINT(1)   NOT NULL DEFAULT 0,
   `cert_transcript_issues`   TEXT         DEFAULT NULL,
