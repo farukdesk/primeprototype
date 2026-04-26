@@ -933,7 +933,7 @@ function buildPrev(){
         &#128222; PABX: +88-02-41002432 &nbsp;|&nbsp; +88-02-41002435 &nbsp;|&nbsp; 01969-955566<br>
         &#127760; www.primeuniversity.ac.bd
     </div>
-    <div style="position:absolute;right:28px;top:50%;transform:translateY(-50%);font-size:54pt;font-weight:900;color:rgba(26,46,90,.03);pointer-events:none;user-select:none;">PU</div>
+    <div style="position:absolute;right:28px;top:50%;transform:translateY(-50%);font-size:54pt;font-weight:900;color:rgba(26,46,90,.03);pointer-events:none;user-select:none;" aria-hidden="true">PU</div>
 </div>
 <div style="background:linear-gradient(135deg,#1a2e5a 0%,#1e3a8a 100%);padding:13px 32px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;">
     <div style="font-size:11pt;font-weight:800;color:#fff;letter-spacing:.04em;text-transform:uppercase;">&#128737; Internal Verification Certificate</div>
