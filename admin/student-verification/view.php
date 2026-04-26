@@ -111,45 +111,142 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $visit_note = $rec['overall_status'] === 'Failed'
-            ? '<p style="margin-top:16px;color:#555;">If you have questions regarding this verification result, please visit our university for further assistance.</p>'
+            ? '<p style="margin-top:16px;color:#555;">If you have questions regarding this verification result, please visit Prime University Bangladesh at 114/116 Mazar Road, Mirpur-1, Dhaka 1216, Bangladesh.</p>'
             : '';
 
-        $subject = 'Student Verification Result – ' . $rec['s_full_name'] . ' (' . $rec['s_student_id'] . ')';
+        $subject  = 'Student Verification Result – ' . $rec['s_full_name'] . ' (' . $rec['s_student_id'] . ')';
+        $ref_no_e = 'PU-VER-' . str_pad($id, 6, '0', STR_PAD_LEFT);
+        $date_str_e = date('d F Y, H:i', strtotime($rec['created_at']));
 
-        $body = '<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;color:#333;max-width:620px;margin:auto;">'
-              . '<div style="background:#002147;color:#fff;padding:18px 24px;border-radius:8px 8px 0 0;">'
-              . '<h2 style="margin:0;font-size:1.3rem;">Prime University Bangladesh</h2>'
-              . '<p style="margin:4px 0 0;font-size:.85rem;opacity:.8;">Student Verification Certificate</p>'
+        $body = '<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;color:#333;max-width:640px;margin:auto;">'
+              . '<div style="background:linear-gradient(135deg,#1a2e5a,#1e3a8a);color:#fff;padding:20px 28px;border-radius:10px 10px 0 0;">'
+              . '<h2 style="margin:0;font-size:1.25rem;font-weight:800;">Prime University Bangladesh</h2>'
+              . '<p style="margin:4px 0 0;font-size:.8rem;opacity:.75;">Student Verification Certificate &nbsp;|&nbsp; ' . htmlspecialchars($ref_no_e) . '</p>'
               . '</div>'
-              . '<div style="padding:24px;border:1px solid #e0e0e0;border-top:none;border-radius:0 0 8px 8px;">'
-              . '<p>Dear ' . ($to_name ?: 'Recipient') . ',</p>'
-              . '<p>This is the official verification result for the following student:</p>'
-              . '<table style="width:100%;border-collapse:collapse;margin:12px 0;">'
-              . '<tr><td style="padding:6px 10px;background:#f5f7fa;font-weight:600;width:40%;">Student Name</td><td style="padding:6px 10px;border-bottom:1px solid #eee;">' . h($rec['s_full_name']) . '</td></tr>'
-              . '<tr><td style="padding:6px 10px;background:#f5f7fa;font-weight:600;">Student ID</td><td style="padding:6px 10px;border-bottom:1px solid #eee;">' . h($rec['s_student_id']) . '</td></tr>'
-              . '<tr><td style="padding:6px 10px;background:#f5f7fa;font-weight:600;">Department</td><td style="padding:6px 10px;border-bottom:1px solid #eee;">' . h($rec['dept_name']) . '</td></tr>'
-              . '<tr><td style="padding:6px 10px;background:#f5f7fa;font-weight:600;">Verification Date</td><td style="padding:6px 10px;">' . date('d F Y, H:i', strtotime($rec['created_at'])) . '</td></tr>'
+              . '<div style="padding:26px 28px;border:1px solid #e0e0e0;border-top:none;border-radius:0 0 10px 10px;">'
+              . '<p style="margin:0 0 16px;">Dear ' . htmlspecialchars($to_name ?: 'Recipient') . ',</p>'
+              . '<p style="margin:0 0 16px;">Please find below the official verification result for the following student. The Digital Signed Certificate is attached to this email.</p>'
+              . '<table style="width:100%;border-collapse:collapse;margin:0 0 16px;">'
+              . '<tr><td style="padding:7px 10px;background:#f5f7fa;font-weight:600;width:40%;border-bottom:1px solid #eee;">Student Name</td><td style="padding:7px 10px;border-bottom:1px solid #eee;">' . h($rec['s_full_name']) . '</td></tr>'
+              . '<tr><td style="padding:7px 10px;background:#f5f7fa;font-weight:600;border-bottom:1px solid #eee;">Student ID</td><td style="padding:7px 10px;border-bottom:1px solid #eee;">' . h($rec['s_student_id']) . '</td></tr>'
+              . '<tr><td style="padding:7px 10px;background:#f5f7fa;font-weight:600;border-bottom:1px solid #eee;">Department</td><td style="padding:7px 10px;border-bottom:1px solid #eee;">' . h($rec['dept_name']) . '</td></tr>'
+              . '<tr><td style="padding:7px 10px;background:#f5f7fa;font-weight:600;">Verification Date</td><td style="padding:7px 10px;">' . $date_str_e . '</td></tr>'
               . '</table>'
-              . '<p style="font-size:1.1rem;font-weight:700;padding:12px 16px;border-radius:6px;'
+              . '<p style="font-size:1.05rem;font-weight:700;padding:12px 16px;border-radius:8px;margin:0 0 16px;'
               . ($rec['overall_status'] === 'Verified' ? 'background:#d4edda;color:#155724;' : 'background:#f8d7da;color:#721c24;')
               . '">' . $status_text . '</p>'
               . $reasons_html
               . $visit_note
               . '<hr style="border:none;border-top:1px solid #eee;margin:20px 0;">'
-              . '<p style="font-size:.82rem;color:#888;">This email was sent from <a href="mailto:verification@primeuniversity.ac.bd">verification@primeuniversity.ac.bd</a> by the Prime University Verification System.</p>'
+              . '<p style="font-size:.8rem;color:#888;">This email was sent from <a href="mailto:verification@primeuniversity.ac.bd">verification@primeuniversity.ac.bd</a> by the Prime University Verification System.</p>'
               . '</div></body></html>';
 
-        $from_email = 'verification@primeuniversity.ac.bd';
-        $from_name  = 'Prime University Verification';
+        // Build digital certificate HTML for attachment
+        $cert_status     = $rec['overall_status'] === 'Verified';
+        $cert_date       = date('d F Y', strtotime($rec['created_at']));
+        $cert_time       = date('H:i',   strtotime($rec['created_at']));
+        $cert_s_status   = $rec['s_status'] ?? '';
+
+        $has_sdo_col = (bool)db()->query("SHOW COLUMNS FROM student_verifications LIKE 'student_data_ok'")->fetchColumn();
+        $online_ok   = $has_sdo_col ? (bool)($rec['student_data_ok'] ?? 1) : true;
+
+        $chk_fn = function(bool $ok, string $label, ?string $issue) {
+            $bg    = $ok ? '#d1fae5' : '#fee2e2';
+            $bc    = $ok ? '#6ee7b7' : '#fca5a5';
+            $ic    = $ok ? '#059669' : '#dc2626';
+            $lc    = $ok ? '#065f46' : '#991b1b';
+            $icon  = $ok ? '✔' : '✘';
+            $issue_html = (!$ok && $issue) ? '<div style="font-size:7.5pt;color:#7f1d1d;margin-top:2px;">' . htmlspecialchars($issue) . '</div>' : '';
+            return '<div style="display:flex;align-items:flex-start;gap:10px;padding:9px 14px;border-radius:8px;background:' . $bc . ';border:1.5px solid ' . $bc . ';margin-bottom:8px;">'
+                 . '<span style="color:' . $ic . ';font-size:1rem;flex-shrink:0;margin-top:1px;">' . $icon . '</span>'
+                 . '<div><div style="font-size:8.5pt;font-weight:700;color:' . $lc . ';">' . htmlspecialchars($label) . '</div>' . $issue_html . '</div>'
+                 . '</div>';
+        };
+
+        $cert_checks = '';
+        if ($has_sdo_col) {
+            $cert_checks .= $chk_fn($online_ok, 'Online Record', $rec['student_data_issues'] ?? null);
+        }
+        $cert_checks .= $chk_fn((bool)$rec['cert_transcript_ok'], 'Certificate & Transcript – Visual Security Measures', $rec['cert_transcript_issues'] ?? null);
+        $cert_checks .= $chk_fn((bool)$rec['admission_form_ok'],  'Admission Form (Hard Copy)',                          $rec['admission_form_issues'] ?? null);
+        $cert_checks .= $chk_fn((bool)$rec['tabulation_ok'],      'Final Result Tabulation (Hard Copy)',                 $rec['tabulation_issues'] ?? null);
+
+        $s_status_style = $cert_s_status === 'Graduated'
+            ? 'background:#d1fae5;color:#065f46;'
+            : ($cert_s_status === 'Active' ? 'background:#dbeafe;color:#1d4ed8;' : 'background:#f3f4f6;color:#6b7280;');
+
+        $cert_attachment = '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">'
+            . '<title>Verification Certificate – ' . htmlspecialchars($rec['s_full_name']) . '</title></head>'
+            . '<body style="font-family:Segoe UI,Arial,Helvetica,sans-serif;background:#eef2f7;margin:0;padding:20px 16px 40px;">'
+            . '<div style="max-width:760px;margin:0 auto;">'
+            . '<div style="background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.12);border:1.5px solid #e2e8f0;">'
+            . '<div style="height:7px;background:linear-gradient(90deg,#1a2e5a 0%,#2563eb 50%,#10b981 100%);"></div>'
+            . '<div style="padding:20px 32px 16px;border-bottom:2px solid #e8edf5;position:relative;">'
+            . '<div style="font-size:14pt;font-weight:800;color:#1a2e5a;margin-bottom:3px;">Prime University Bangladesh</div>'
+            . '<div style="font-size:7.5pt;color:#4b5563;line-height:1.8;">114/116 Mazar Road, Mirpur-1, Dhaka 1216, Bangladesh &nbsp;|&nbsp; verification@primeuniversity.ac.bd</div>'
+            . '<div style="position:absolute;right:32px;top:50%;transform:translateY(-50%);font-size:50pt;font-weight:900;color:rgba(26,46,90,.03);pointer-events:none;">PU</div>'
+            . '</div>'
+            . '<div style="background:linear-gradient(135deg,#1a2e5a,#1e3a8a);padding:12px 32px;display:flex;align-items:center;justify-content:space-between;">'
+            . '<span style="font-size:10.5pt;font-weight:800;color:#fff;letter-spacing:.04em;text-transform:uppercase;">&#128737; Student Verification Certificate</span>'
+            . '<span style="font-size:7.5pt;color:rgba(255,255,255,.65);font-family:monospace;">' . htmlspecialchars($ref_no_e) . '</span>'
+            . '</div>'
+            . '<div style="padding:24px 32px 28px;">'
+            . '<div style="display:flex;gap:16px;align-items:flex-start;background:#f8faff;border:1.5px solid #dbe4f3;border-radius:12px;padding:16px 20px;margin-bottom:20px;flex-wrap:wrap;">'
+            . '<div style="flex:1;min-width:200px;">'
+            . '<div style="font-size:13pt;font-weight:800;color:#1a2e5a;margin-bottom:6px;">' . h($rec['s_full_name']) . '</div>'
+            . '<div style="display:inline-flex;align-items:center;background:#1a2e5a;color:#fff;border-radius:5px;padding:3px 10px;font-size:8pt;font-weight:700;letter-spacing:.05em;margin-bottom:4px;">&#128196; ' . h($rec['s_student_id']) . '</div>'
+            . '<span style="display:inline-flex;align-items:center;padding:3px 11px;border-radius:50px;font-size:8pt;font-weight:700;margin-left:6px;' . $s_status_style . '">' . h($cert_s_status ?: 'Active') . '</span>'
+            . '<table style="border-collapse:collapse;width:100%;max-width:420px;margin-top:10px;">'
+            . '<tr><td style="color:#9ca3af;font-size:7.5pt;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:3px 0;width:44%;">Department</td><td style="font-size:9.5pt;font-weight:700;color:#1a2e5a;">' . h($rec['dept_name']) . '</td></tr>'
+            . ($rec['program_name'] ? '<tr><td style="color:#9ca3af;font-size:7.5pt;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:3px 0;">Obtained Degree</td><td style="font-size:9.5pt;font-weight:700;color:#1a2e5a;">' . h($rec['program_name']) . '</td></tr>' : '')
+            . ($rec['admitted_semester'] ? '<tr><td style="color:#9ca3af;font-size:7.5pt;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:3px 0;">Enrolled Semester</td><td style="font-size:9.5pt;color:#1a2e5a;">' . h($rec['admitted_semester']) . '</td></tr>' : '')
+            . '</table>'
+            . '</div>'
+            . '</div>'
+            . '<div style="padding:13px 16px;border-radius:10px;background:' . ($cert_status ? '#d1fae5' : '#fee2e2') . ';border:2px solid ' . ($cert_status ? '#6ee7b7' : '#fca5a5') . ';margin-bottom:20px;display:flex;align-items:center;gap:12px;">'
+            . '<span style="font-size:1.4rem;color:' . ($cert_status ? '#059669' : '#dc2626') . ';">' . ($cert_status ? '✔' : '✘') . '</span>'
+            . '<div><div style="font-size:10pt;font-weight:800;color:' . ($cert_status ? '#065f46' : '#991b1b') . ';">' . ($cert_status ? 'VERIFIED – GENUINE &amp; AUTHENTIC' : 'VERIFICATION FAILED') . '</div>'
+            . '<div style="font-size:8pt;color:' . ($cert_status ? '#065f46' : '#991b1b') . ';opacity:.85;margin-top:3px;">' . ($cert_status ? 'Credentials verified and found genuine.' : 'One or more checks did not pass.') . '</div>'
+            . '</div></div>'
+            . '<div style="font-size:8pt;font-weight:800;color:#2563eb;text-transform:uppercase;letter-spacing:.07em;border-bottom:1.5px solid #dbe4f3;padding-bottom:7px;margin-bottom:12px;">✓ Verification Checklist</div>'
+            . $cert_checks
+            . '<div style="display:flex;align-items:center;gap:14px;background:linear-gradient(135deg,#f0fdf4,#ecfdf5);border:1.5px solid #6ee7b7;border-radius:12px;padding:14px 18px;margin-top:20px;">'
+            . '<span style="font-size:2rem;color:#059669;flex-shrink:0;">&#128737;</span>'
+            . '<div><div style="font-size:9pt;font-weight:800;color:#065f46;margin-bottom:3px;">Digitally Authenticated by Prime University Bangladesh</div>'
+            . '<div style="font-size:7.5pt;color:#059669;line-height:1.4;">'
+            . 'Verified by: <strong>' . h($rec['verifier_name']) . '</strong> &nbsp;|&nbsp; Date: ' . $cert_date . ' at ' . $cert_time . ' &nbsp;|&nbsp; Ref: ' . htmlspecialchars($ref_no_e)
+            . '</div></div></div>'
+            . '</div>'
+            . '<div style="background:#f8fafc;border-top:1.5px solid #e8edf5;padding:10px 32px;text-align:center;font-size:7pt;color:#9ca3af;">'
+            . 'This certificate was generated by the Prime University Bangladesh Verification System. Reference: ' . htmlspecialchars($ref_no_e) . ' | Digital Signed Version'
+            . '</div>'
+            . '</div></div></body></html>';
+
+        $from_email   = 'verification@primeuniversity.ac.bd';
+        $from_name    = 'Prime University Verification';
         $encoded_from = '=?UTF-8?B?' . base64_encode($from_name) . '?=';
+        $boundary     = '----=_Part_' . md5(uniqid('', true));
+        $attach_name  = 'verification-certificate-' . preg_replace('/[^A-Za-z0-9\-]/', '', $rec['s_student_id']) . '.html';
 
         $headers  = 'MIME-Version: 1.0' . "\r\n";
-        $headers .= 'Content-Type: text/html; charset=UTF-8' . "\r\n";
+        $headers .= 'Content-Type: multipart/mixed; boundary="' . $boundary . '"' . "\r\n";
         $headers .= 'From: ' . $encoded_from . ' <' . $from_email . '>' . "\r\n";
         $headers .= 'Reply-To: ' . $from_email . "\r\n";
         $headers .= 'X-Mailer: PHP/' . PHP_VERSION;
 
-        $sent = mail($to_email, $subject, $body, $headers, '-f' . escapeshellarg($from_email));
+        $message  = '--' . $boundary . "\r\n";
+        $message .= 'Content-Type: text/html; charset=UTF-8' . "\r\n";
+        $message .= 'Content-Transfer-Encoding: quoted-printable' . "\r\n\r\n";
+        $message .= quoted_printable_encode($body) . "\r\n";
+
+        $message .= '--' . $boundary . "\r\n";
+        $message .= 'Content-Type: text/html; charset=UTF-8; name="' . $attach_name . '"' . "\r\n";
+        $message .= 'Content-Transfer-Encoding: base64' . "\r\n";
+        $message .= 'Content-Disposition: attachment; filename="' . $attach_name . '"' . "\r\n\r\n";
+        $message .= chunk_split(base64_encode($cert_attachment)) . "\r\n";
+        $message .= '--' . $boundary . '--';
+
+        $sent = mail($to_email, $subject, $message, $headers, '-f' . escapeshellarg($from_email));
 
         if ($sent) {
             db()->prepare('UPDATE student_verifications SET email_sent=1, email_sent_at=NOW(), verifier_email=? WHERE id=?')
@@ -158,7 +255,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $rec['s_full_name'] . ' (' . $rec['s_student_id'] . ')',
                 'email_sent', 0, 1,
                 'Verification email sent to ' . $to_email . ' by ' . $user['full_name']);
-            flash_set('success', 'Verification email sent to ' . $to_email . '.');
+            flash_set('success', 'Verification email sent to ' . $to_email . ' (with Digital Certificate attached).');
         } else {
             flash_set('error', 'Failed to send the email. Please check the mail server configuration.');
         }
@@ -233,10 +330,37 @@ require_once __DIR__ . '/../includes/header.php';
         <a href="<?= APP_URL ?>/student-verification/index.php" class="btn btn-outline-secondary btn-sm" style="border-radius:8px;">
             <i class="fas fa-list me-1"></i> Log
         </a>
-        <a href="<?= APP_URL ?>/student-verification/certificate.php?id=<?= $id ?>"
-           target="_blank" class="btn btn-outline-dark btn-sm" style="border-radius:8px;">
-            <i class="fas fa-print me-1"></i> Print Certificate
-        </a>
+        <div class="btn-group">
+            <a href="<?= APP_URL ?>/student-verification/certificate.php?id=<?= $id ?>&mode=digital"
+               target="_blank" class="btn btn-outline-dark btn-sm" style="border-radius:8px 0 0 8px;">
+                <i class="fas fa-print me-1"></i> Print Certificate
+            </a>
+            <button type="button" class="btn btn-outline-dark btn-sm dropdown-toggle dropdown-toggle-split"
+                    data-bs-toggle="dropdown" aria-expanded="false" style="border-radius:0 8px 8px 0;">
+                <span class="visually-hidden">Toggle Dropdown</span>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+                <li>
+                    <a href="<?= APP_URL ?>/student-verification/certificate.php?id=<?= $id ?>&mode=digital"
+                       target="_blank" class="dropdown-item">
+                        <i class="fas fa-shield-alt me-2 text-primary"></i> Digital Signed Version
+                    </a>
+                </li>
+                <li>
+                    <a href="<?= APP_URL ?>/student-verification/certificate.php?id=<?= $id ?>&mode=hand"
+                       target="_blank" class="dropdown-item">
+                        <i class="fas fa-pen-nib me-2 text-success"></i> Hand Signed Version
+                    </a>
+                </li>
+                <li><hr class="dropdown-divider"></li>
+                <li>
+                    <a href="<?= APP_URL ?>/student-verification/certificate.php?id=<?= $id ?>"
+                       target="_blank" class="dropdown-item text-muted" style="font-size:.82rem;">
+                        <i class="fas fa-th-large me-2"></i> Choose Version…
+                    </a>
+                </li>
+            </ul>
+        </div>
     </div>
 </div>
 
