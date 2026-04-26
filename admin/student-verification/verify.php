@@ -321,6 +321,36 @@ if ($pre_student) {
 $has_pre = (bool)$pre_student;
 [$pre_adm_f, $pre_tab_f] = $has_pre ? sv_find_files($pre_files) : [null, null];
 
+// Pre-calculate CGPA for pre-loaded student (matches AJAX endpoint logic)
+$pre_cgpa = null;
+if ($has_pre) {
+    try {
+        $cq = db()->prepare(
+            'SELECT ROUND(SUM(rg.grade_point * COALESCE(rs.credits,3)) /
+                 NULLIF(SUM(COALESCE(rs.credits,3)),0), 2) AS cgpa
+             FROM result_grades rg
+             JOIN result_exams re ON re.id = rg.exam_id
+             JOIN result_subjects rs ON rs.id = rg.subject_id
+             WHERE rg.student_sid=? AND re.is_published=1
+               AND rg.grade_point IS NOT NULL AND COALESCE(rs.credits,3)>0'
+        );
+        $cq->execute([$pre_student['student_id']]);
+        $cv = $cq->fetchColumn();
+        if ($cv !== null && $cv !== false) $pre_cgpa = number_format((float)$cv, 2);
+    } catch (Throwable $e) {}
+    if ($pre_cgpa === null) {
+        try {
+            $sr = db()->prepare(
+                'SELECT MAX(CAST(cgpa AS DECIMAL(5,2))) FROM student_results
+                 WHERE student_id=? AND cgpa IS NOT NULL AND TRIM(cgpa)!=""'
+            );
+            $sr->execute([$pre_student['id']]);
+            $sv2 = $sr->fetchColumn();
+            if ($sv2 !== null && (float)$sv2 > 0) $pre_cgpa = number_format((float)$sv2, 2);
+        } catch (Throwable $e) {}
+    }
+}
+
 require_once __DIR__ . '/../includes/header.php';
 ?>
 <style>
@@ -641,7 +671,7 @@ let stu=<?= $has_pre ? json_encode([
     'batch'             => $pre_student['batch'] ?? '',
     'status'            => $pre_student['status'] ?? '',
     'photo_url'         => sv_photo_url($pre_student['photo'] ?? null),
-    'cgpa'              => null,
+    'cgpa'              => $pre_cgpa,
 ]) : 'null' ?>;
 const ch={1:{ok:null,iss:''},2:{ok:null,iss:''},3:{ok:null,iss:''},4:{ok:null,iss:''}};
 const csrf=(document.querySelector('input[name="_csrf_token"]')||{}).value||'';
@@ -804,7 +834,7 @@ document.querySelectorAll('.sv-tc').forEach(btn=>{
         .then(r=>r.json()).then(d=>{
             res.classList.remove('d-none');
             if(d.ok){
-                res.innerHTML=`<div class="alert alert-success py-2 px-3 mb-0" style="font-size:.82rem;"><i class="fas fa-check-circle me-1"></i>Ticket <strong>${ex(d.ticket_number)}</strong> created. <a href="<?= APP_URL ?>/support-tickets/view.php?id=${d.id}" target="_blank">View</a></div>`;
+                res.innerHTML=`<div class="alert alert-success py-2 px-3 mb-0" style="font-size:.82rem;"><i class="fas fa-check-circle me-1"></i>Ticket <strong>${ex(d.ticket_number)}</strong> created. <a href="<?= APP_URL ?>/support-tickets/view.php?id=${parseInt(d.id,10)}" target="_blank">View</a></div>`;
                 this.innerHTML='<i class="fas fa-check me-1"></i>Sent';this.classList.replace('btn-warning','btn-success');
             }else{
                 res.innerHTML=`<div class="alert alert-danger py-2 px-3 mb-0" style="font-size:.82rem;">${ex(d.error||'Error')}</div>`;
