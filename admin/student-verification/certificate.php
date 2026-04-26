@@ -16,6 +16,7 @@ $stmt = db()->prepare(
             p.program_name,
             s.admitted_semester,
             s.batch,
+            s.status AS s_status,
             u.full_name AS verifier_name
      FROM student_verifications sv
      JOIN students s ON s.id = sv.student_id
@@ -30,6 +31,50 @@ $rec = $stmt->fetch();
 if (!$rec) {
     die('Record not found.');
 }
+
+// Compute Final CGPA
+$cert_cgpa = null;
+try {
+    $cq = db()->prepare(
+        'SELECT ROUND(SUM(rg.grade_point * COALESCE(rs.credits,3)) /
+             NULLIF(SUM(COALESCE(rs.credits,3)),0), 2) AS cgpa
+         FROM result_grades rg
+         JOIN result_exams re ON re.id = rg.exam_id
+         JOIN result_subjects rs ON rs.id = rg.subject_id
+         WHERE rg.student_sid=? AND re.is_published=1
+           AND rg.grade_point IS NOT NULL AND COALESCE(rs.credits,3)>0'
+    );
+    $cq->execute([$rec['s_student_id']]);
+    $cv = $cq->fetchColumn();
+    if ($cv !== null && $cv !== false) $cert_cgpa = number_format((float)$cv, 2);
+} catch (Throwable $e) {}
+if ($cert_cgpa === null) {
+    try {
+        $sr = db()->prepare(
+            'SELECT MAX(CAST(cgpa AS DECIMAL(5,2))) FROM student_results
+             WHERE student_id=? AND cgpa IS NOT NULL AND TRIM(cgpa)!=""'
+        );
+        $sr->execute([$rec['student_id']]);
+        $sv2 = $sr->fetchColumn();
+        if ($sv2 !== null && (float)$sv2 > 0) $cert_cgpa = number_format((float)$sv2, 2);
+    } catch (Throwable $e) {}
+}
+
+// Fetch Ending Semester
+$cert_ending_sem = null;
+try {
+    $eq = db()->prepare(
+        'SELECT re.completion_semester
+         FROM result_grades rg
+         JOIN result_exams re ON re.id = rg.exam_id
+         WHERE rg.student_sid = ? AND re.is_published = 1
+           AND re.completion_semester IS NOT NULL
+         ORDER BY re.updated_at DESC LIMIT 1'
+    );
+    $eq->execute([$rec['s_student_id']]);
+    $erow = $eq->fetchColumn();
+    if ($erow) $cert_ending_sem = $erow;
+} catch (Throwable $e) {}
 
 $verified  = $rec['overall_status'] === 'Verified';
 $date_str  = date('d F Y', strtotime($rec['created_at']));
@@ -169,11 +214,16 @@ $ref_no    = 'PU-VER-' . str_pad($id, 6, '0', STR_PAD_LEFT);
         <tr><td>Student ID</td><td><?= h($rec['s_student_id']) ?></td></tr>
         <tr><td>Department</td><td><?= h($rec['dept_name']) ?></td></tr>
         <?php if ($rec['program_name']): ?>
-        <tr><td>Program</td><td><?= h($rec['program_name']) ?></td></tr>
+        <tr><td>Obtained Degree</td><td><?= h($rec['program_name']) ?></td></tr>
         <?php endif; ?>
-        <tr><td>Admitted Semester</td><td><?= h($rec['admitted_semester']) ?></td></tr>
+        <tr><td>Enrolled Semester</td><td><?= h($rec['admitted_semester']) ?></td></tr>
+        <tr><td>Ending Semester</td><td><?= $cert_ending_sem ? h($cert_ending_sem) : '—' ?></td></tr>
         <?php if ($rec['batch']): ?>
         <tr><td>Batch</td><td><?= h($rec['batch']) ?></td></tr>
+        <?php endif; ?>
+        <tr><td>Graduated</td><td><?= (($rec['s_status'] ?? '') === 'Graduated') ? '<strong style="color:#155724;">Yes</strong>' : 'No' ?></td></tr>
+        <?php if ($cert_cgpa): ?>
+        <tr><td>Final CGPA</td><td><strong><?= h($cert_cgpa) ?></strong></td></tr>
         <?php endif; ?>
         <tr><td>Verified By</td><td><?= h($rec['verifier_name']) ?></td></tr>
     </table>

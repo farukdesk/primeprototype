@@ -182,22 +182,43 @@ if (isset($_GET['ajax_student_card'])) {
             if ($sv2 !== null && (float)$sv2 > 0) $cgpa = number_format((float)$sv2, 2);
         } catch (Throwable $e) {}
     }
+    $ending_sem      = null;
+    $result_published = null;
+    try {
+        $eq = db()->prepare(
+            'SELECT re.completion_semester, re.updated_at
+             FROM result_grades rg
+             JOIN result_exams re ON re.id = rg.exam_id
+             WHERE rg.student_sid = ? AND re.is_published = 1
+               AND re.completion_semester IS NOT NULL
+             ORDER BY re.updated_at DESC LIMIT 1'
+        );
+        $eq->execute([$sc['student_id']]);
+        $erow = $eq->fetch();
+        if ($erow) {
+            $ending_sem       = $erow['completion_semester'];
+            $result_published = $erow['updated_at'] ? date('d M Y', strtotime($erow['updated_at'])) : null;
+        }
+    } catch (Throwable $e) {}
     echo json_encode([
         'ok'      => true,
         'student' => [
-            'id'                => (int)$sc['id'],
-            'student_id'        => $sc['student_id'],
-            'full_name'         => $sc['full_name'],
-            'dept_name'         => $sc['dept_name'],
-            'dept_code'         => $sc['dept_code'] ?? '',
-            'program_name'      => $sc['program_name'] ?? '',
-            'admitted_semester' => $sc['admitted_semester'] ?? '',
-            'batch'             => $sc['batch'] ?? '',
-            'status'            => $sc['status'] ?? '',
-            'email'             => $sc['email'] ?? '',
-            'phone'             => $sc['phone'] ?? '',
-            'photo_url'         => sv_photo_url($sc['photo'] ?? null),
-            'cgpa'              => $cgpa,
+            'id'               => (int)$sc['id'],
+            'student_id'       => $sc['student_id'],
+            'full_name'        => $sc['full_name'],
+            'dept_name'        => $sc['dept_name'],
+            'dept_code'        => $sc['dept_code'] ?? '',
+            'program_name'     => $sc['program_name'] ?? '',
+            'admitted_semester'=> $sc['admitted_semester'] ?? '',
+            'ending_semester'  => $ending_sem,
+            'result_published' => $result_published,
+            'batch'            => $sc['batch'] ?? '',
+            'status'           => $sc['status'] ?? '',
+            'graduated'        => ($sc['status'] ?? '') === 'Graduated' ? 'Yes' : 'No',
+            'email'            => $sc['email'] ?? '',
+            'phone'            => $sc['phone'] ?? '',
+            'photo_url'        => sv_photo_url($sc['photo'] ?? null),
+            'cgpa'             => $cgpa,
         ],
         'adm_html' => sv_file_viewer_html($adm_f, 'Admission Form'),
         'tab_html' => sv_file_viewer_html($tab_f, 'Final Result Tabulation'),
@@ -351,6 +372,28 @@ if ($has_pre) {
     }
 }
 
+// Pre-fetch ending semester and result published date for pre-loaded student
+$pre_ending_sem       = null;
+$pre_result_published = null;
+if ($has_pre) {
+    try {
+        $eq = db()->prepare(
+            'SELECT re.completion_semester, re.updated_at
+             FROM result_grades rg
+             JOIN result_exams re ON re.id = rg.exam_id
+             WHERE rg.student_sid = ? AND re.is_published = 1
+               AND re.completion_semester IS NOT NULL
+             ORDER BY re.updated_at DESC LIMIT 1'
+        );
+        $eq->execute([$pre_student['student_id']]);
+        $erow = $eq->fetch();
+        if ($erow) {
+            $pre_ending_sem       = $erow['completion_semester'];
+            $pre_result_published = $erow['updated_at'] ? date('d M Y', strtotime($erow['updated_at'])) : null;
+        }
+    } catch (Throwable $e) {}
+}
+
 require_once __DIR__ . '/../includes/header.php';
 ?>
 <style>
@@ -460,11 +503,14 @@ require_once __DIR__ . '/../includes/header.php';
                         <span class="badge <?= ($pre_student['status']??'')==='Graduated'?'bg-success':'bg-primary' ?>"><?= h($pre_student['status']??'Active') ?></span>
                     </div>
                     <code class="bg-white px-2 py-1 rounded border mb-2 d-inline-block" style="font-size:.88rem;"><?= h($pre_student['student_id']) ?></code>
-                    <table class="table table-sm mb-0 mt-1" style="font-size:.84rem;max-width:380px;">
+                    <table class="table table-sm mb-0 mt-1" style="font-size:.84rem;max-width:420px;">
                         <tr><th class="text-muted fw-normal" style="width:38%;">Department</th><td class="fw-medium"><?= h($pre_student['dept_name']) ?></td></tr>
-                        <?php if (!empty($pre_student['program_name'])): ?><tr><th class="text-muted fw-normal">Program</th><td><?= h($pre_student['program_name']) ?></td></tr><?php endif; ?>
-                        <?php if (!empty($pre_student['admitted_semester'])): ?><tr><th class="text-muted fw-normal">Admitted</th><td><?= h($pre_student['admitted_semester']) ?></td></tr><?php endif; ?>
+                        <?php if (!empty($pre_student['program_name'])): ?><tr><th class="text-muted fw-normal">Obtained Degree</th><td><?= h($pre_student['program_name']) ?></td></tr><?php endif; ?>
+                        <?php if (!empty($pre_student['admitted_semester'])): ?><tr><th class="text-muted fw-normal">Enrolled Semester</th><td><?= h($pre_student['admitted_semester']) ?></td></tr><?php endif; ?>
+                        <?php if ($pre_ending_sem): ?><tr><th class="text-muted fw-normal">Ending Semester</th><td><?= h($pre_ending_sem) ?></td></tr><?php endif; ?>
                         <?php if (!empty($pre_student['batch'])): ?><tr><th class="text-muted fw-normal">Batch</th><td><?= h($pre_student['batch']) ?></td></tr><?php endif; ?>
+                        <tr><th class="text-muted fw-normal">Graduated</th><td><?= (($pre_student['status']??'')==='Graduated') ? '<span class="text-success fw-semibold">Yes</span>' : '<span class="text-muted">No</span>' ?></td></tr>
+                        <?php if ($pre_cgpa): ?><tr><th class="text-muted fw-normal">Final CGPA</th><td><strong><?= h($pre_cgpa) ?></strong></td></tr><?php endif; ?>
                         <?php if (!empty($pre_student['email'])): ?><tr><th class="text-muted fw-normal">Email</th><td><?= h($pre_student['email']) ?></td></tr><?php endif; ?>
                         <?php if (!empty($pre_student['phone'])): ?><tr><th class="text-muted fw-normal">Phone</th><td><?= h($pre_student['phone']) ?></td></tr><?php endif; ?>
                     </table>
@@ -662,16 +708,19 @@ require_once __DIR__ . '/../includes/header.php';
 (function(){
 'use strict';
 let stu=<?= $has_pre ? json_encode([
-    'id'                => (int)$pre_student['id'],
-    'student_id'        => $pre_student['student_id'],
-    'full_name'         => $pre_student['full_name'],
-    'dept_name'         => $pre_student['dept_name'],
-    'program_name'      => $pre_student['program_name'] ?? '',
-    'admitted_semester' => $pre_student['admitted_semester'] ?? '',
-    'batch'             => $pre_student['batch'] ?? '',
-    'status'            => $pre_student['status'] ?? '',
-    'photo_url'         => sv_photo_url($pre_student['photo'] ?? null),
-    'cgpa'              => $pre_cgpa,
+    'id'               => (int)$pre_student['id'],
+    'student_id'       => $pre_student['student_id'],
+    'full_name'        => $pre_student['full_name'],
+    'dept_name'        => $pre_student['dept_name'],
+    'program_name'     => $pre_student['program_name'] ?? '',
+    'admitted_semester'=> $pre_student['admitted_semester'] ?? '',
+    'ending_semester'  => $pre_ending_sem,
+    'result_published' => $pre_result_published,
+    'batch'            => $pre_student['batch'] ?? '',
+    'status'           => $pre_student['status'] ?? '',
+    'graduated'        => (($pre_student['status'] ?? '') === 'Graduated') ? 'Yes' : 'No',
+    'photo_url'        => sv_photo_url($pre_student['photo'] ?? null),
+    'cgpa'             => $pre_cgpa,
 ]) : 'null' ?>;
 const ch={1:{ok:null,iss:''},2:{ok:null,iss:''},3:{ok:null,iss:''},4:{ok:null,iss:''}};
 const csrf=(document.querySelector('input[name="_csrf_token"]')||{}).value||'';
@@ -736,14 +785,16 @@ function loadStu(id,sid,name){
 function stuCard(s){
     const ph=s.photo_url?`<img src="${ex(s.photo_url)}" class="sv-ph" alt="${ex(s.full_name)}">`:`<div class="sv-ph-ph"><i class="fas fa-user-graduate"></i></div>`;
     const sb=`<span class="badge ${s.status==='Graduated'?'bg-success':'bg-primary'}">${ex(s.status||'Active')}</span>`;
-    let rows=`<tr><th class="text-muted fw-normal" style="width:38%;">Department</th><td class="fw-medium">${ex(s.dept_name)}</td></tr>`;
-    if(s.program_name)      rows+=`<tr><th class="text-muted fw-normal">Program</th><td>${ex(s.program_name)}</td></tr>`;
-    if(s.admitted_semester) rows+=`<tr><th class="text-muted fw-normal">Admitted</th><td>${ex(s.admitted_semester)}</td></tr>`;
+    let rows=`<tr><th class="text-muted fw-normal" style="width:40%;">Department</th><td class="fw-medium">${ex(s.dept_name)}</td></tr>`;
+    if(s.program_name)      rows+=`<tr><th class="text-muted fw-normal">Obtained Degree</th><td>${ex(s.program_name)}</td></tr>`;
+    if(s.admitted_semester) rows+=`<tr><th class="text-muted fw-normal">Enrolled Semester</th><td>${ex(s.admitted_semester)}</td></tr>`;
+    if(s.ending_semester)   rows+=`<tr><th class="text-muted fw-normal">Ending Semester</th><td>${ex(s.ending_semester)}</td></tr>`;
     if(s.batch)             rows+=`<tr><th class="text-muted fw-normal">Batch</th><td>${ex(s.batch)}</td></tr>`;
-    if(s.cgpa)              rows+=`<tr><th class="text-muted fw-normal">CGPA</th><td><strong>${ex(s.cgpa)}</strong></td></tr>`;
+    rows+=`<tr><th class="text-muted fw-normal">Graduated</th><td>${s.graduated==='Yes'?'<span style="color:#198754;font-weight:600;">Yes</span>':'<span style="color:#6c757d;">No</span>'}</td></tr>`;
+    if(s.cgpa)              rows+=`<tr><th class="text-muted fw-normal">Final CGPA</th><td><strong>${ex(s.cgpa)}</strong></td></tr>`;
     if(s.email)             rows+=`<tr><th class="text-muted fw-normal">Email</th><td>${ex(s.email)}</td></tr>`;
     if(s.phone)             rows+=`<tr><th class="text-muted fw-normal">Phone</th><td>${ex(s.phone)}</td></tr>`;
-    return`<div class="sv-scard"><div class="d-flex gap-3 flex-wrap align-items-start">${ph}<div class="flex-grow-1"><div class="d-flex align-items-center gap-2 flex-wrap mb-2"><h5 class="mb-0 fw-bold">${ex(s.full_name)}</h5>${sb}</div><code class="bg-white px-2 py-1 rounded border mb-2 d-inline-block" style="font-size:.88rem;">${ex(s.student_id)}</code><table class="table table-sm mb-0 mt-1" style="font-size:.84rem;max-width:380px;">${rows}</table></div><span class="badge bg-success p-2 align-self-start"><i class="fas fa-check-circle me-1"></i>Found</span></div></div>`;
+    return`<div class="sv-scard"><div class="d-flex gap-3 flex-wrap align-items-start">${ph}<div class="flex-grow-1"><div class="d-flex align-items-center gap-2 flex-wrap mb-2"><h5 class="mb-0 fw-bold">${ex(s.full_name)}</h5>${sb}</div><code class="bg-white px-2 py-1 rounded border mb-2 d-inline-block" style="font-size:.88rem;">${ex(s.student_id)}</code><table class="table table-sm mb-0 mt-1" style="font-size:.84rem;max-width:420px;">${rows}</table></div><span class="badge bg-success p-2 align-self-start"><i class="fas fa-check-circle me-1"></i>Found</span></div></div>`;
 }
 
 function resetD1(){
@@ -857,10 +908,13 @@ function buildPrev(){
     const stxt=allOk?'&#10003;&nbsp;VERIFIED – GENUINE &amp; AUTHENTIC':'&#10007;&nbsp;VERIFICATION INCOMPLETE / FAILED';
     const sicon=allOk?'fa-shield-alt':'fa-times-circle';
     const ph=stu.photo_url?`<img src="${ex(stu.photo_url)}" style="width:82px;height:100px;object-fit:cover;border-radius:8px;border:2px solid #ced4da;flex-shrink:0;" alt="">`:`<div style="width:82px;height:100px;border-radius:8px;border:2px solid #ced4da;background:#e9ecef;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="fas fa-user-graduate" style="color:#adb5bd;font-size:2rem;"></i></div>`;
-    let sr=`<tr><td style="color:#6c757d;padding:2px 0;width:38%;font-size:.83rem;">Department</td><td style="font-weight:600;font-size:.83rem;">${ex(stu.dept_name)}</td></tr>`;
-    if(stu.program_name)      sr+=`<tr><td style="color:#6c757d;padding:2px 0;font-size:.83rem;">Program</td><td style="font-weight:600;font-size:.83rem;">${ex(stu.program_name)}</td></tr>`;
-    if(stu.admitted_semester) sr+=`<tr><td style="color:#6c757d;padding:2px 0;font-size:.83rem;">Admitted</td><td style="font-size:.83rem;">${ex(stu.admitted_semester)}</td></tr>`;
-    if(stu.cgpa)              sr+=`<tr><td style="color:#6c757d;padding:2px 0;font-size:.83rem;">CGPA</td><td style="font-size:.83rem;"><strong>${ex(stu.cgpa)}</strong></td></tr>`;
+    let sr=`<tr><td style="color:#6c757d;padding:2px 0;width:40%;font-size:.83rem;">Department</td><td style="font-weight:600;font-size:.83rem;">${ex(stu.dept_name)}</td></tr>`;
+    if(stu.program_name)      sr+=`<tr><td style="color:#6c757d;padding:2px 0;font-size:.83rem;">Obtained Degree</td><td style="font-weight:600;font-size:.83rem;">${ex(stu.program_name)}</td></tr>`;
+    if(stu.admitted_semester) sr+=`<tr><td style="color:#6c757d;padding:2px 0;font-size:.83rem;">Enrolled Semester</td><td style="font-size:.83rem;">${ex(stu.admitted_semester)}</td></tr>`;
+    if(stu.ending_semester)   sr+=`<tr><td style="color:#6c757d;padding:2px 0;font-size:.83rem;">Ending Semester</td><td style="font-size:.83rem;">${ex(stu.ending_semester)}</td></tr>`;
+    if(stu.batch)             sr+=`<tr><td style="color:#6c757d;padding:2px 0;font-size:.83rem;">Batch</td><td style="font-size:.83rem;">${ex(stu.batch)}</td></tr>`;
+    sr+=`<tr><td style="color:#6c757d;padding:2px 0;font-size:.83rem;">Graduated</td><td style="font-size:.83rem;${stu.graduated==='Yes'?'color:#198754;font-weight:600;':''}">${stu.graduated==='Yes'?'Yes':'No'}</td></tr>`;
+    if(stu.cgpa)              sr+=`<tr><td style="color:#6c757d;padding:2px 0;font-size:.83rem;">Final CGPA</td><td style="font-size:.83rem;"><strong>${ex(stu.cgpa)}</strong></td></tr>`;
     const chk=(ok,lbl,iss)=>`<div class="sv-chk ${ok?'ok':'fail'}"><i class="fas ${ok?'fa-check-circle text-success':'fa-times-circle text-danger'}" style="font-size:1rem;flex-shrink:0;margin-top:1px;"></i><div><strong style="font-size:.86rem;">${lbl}</strong>${!ok&&iss?`<div style="font-size:.78rem;color:#842029;margin-top:2px;">${ex(iss)}</div>`:''}</div></div>`;
     const vn=<?= json_encode($user['full_name']) ?>;
     const ref='PU-IV-'+(stu.student_id||'').replace(/[^A-Za-z0-9]/g,'').toUpperCase();
@@ -877,7 +931,7 @@ function buildPrev(){
         <div style="flex:1;min-width:180px;">
             <div style="font-size:1.05rem;font-weight:800;color:#1a2e5a;margin-bottom:4px;">${ex(stu.full_name)}</div>
             <code style="background:#fff;border:1px solid #dee2e6;padding:2px 6px;border-radius:4px;font-size:.83rem;">${ex(stu.student_id)}</code>
-            <table style="margin-top:7px;border-collapse:collapse;width:100%;max-width:340px;">${sr}</table>
+            <table style="margin-top:7px;border-collapse:collapse;width:100%;max-width:380px;">${sr}</table>
         </div>
     </div>
     <div style="padding:11px 14px;border-radius:9px;background:${sb};border:1.5px solid ${sc};margin-bottom:16px;display:flex;align-items:center;gap:10px;">
@@ -903,8 +957,14 @@ function buildPrev(){
 
 // ── Print ──────────────────────────────────────────────────────────────────
 document.getElementById('sv-prn').addEventListener('click',()=>{
-    const pa=document.getElementById('sv-pa');
-    pa.innerHTML='<style>body{font-family:Segoe UI,Arial,sans-serif;margin:0;}.sv-cert{max-width:710px;margin:20px auto;border:2px solid #dee2e6;border-radius:14px;overflow:hidden;}'
+    const content=document.getElementById('sv-prev').innerHTML;
+    if(!content.trim()||!stu){alert('No preview available. Please complete steps 1–4 first.');return;}
+    const pw=window.open('','_blank','width=780,height=900');
+    if(!pw){alert('Please allow popups for this page to use the print feature.');return;}
+    pw.document.write('<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Verification Preview</title>'
+        +'<style>'
+        +'body{font-family:Segoe UI,Arial,sans-serif;margin:0;background:#f4f6fb;}'
+        +'.sv-cert{max-width:710px;margin:20px auto;border:2px solid #dee2e6;border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 4px 24px rgba(0,0,0,.1);}'
         +'.sv-band{height:7px;background:linear-gradient(90deg,#1a2e5a,#2563eb 50%,#10b981);}'
         +'.sv-chd{background:#1a2e5a;padding:16px 26px;display:flex;align-items:center;gap:14px;}'
         +'.sv-chd-t h6{margin:0 0 3px;font-size:1rem;font-weight:800;color:#fff;}'
@@ -913,9 +973,11 @@ document.getElementById('sv-prn').addEventListener('click',()=>{
         +'.sv-chk{display:flex;align-items:flex-start;gap:10px;padding:9px 12px;border-radius:7px;background:#f8f9fa;border:1.5px solid #dee2e6;margin-bottom:7px;}'
         +'.sv-chk.ok{background:#d1e7dd;border-color:#a3cfbb;}'
         +'.sv-chk.fail{background:#f8d7da;border-color:#f1aeb5;}'
+        +'@media print{body{background:#fff;}.sv-cert{box-shadow:none;border:none;margin:0;max-width:100%;}}'
         +'</style>'
-        +document.getElementById('sv-prev').innerHTML;
-    window.print();
+        +'<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">'
+        +'</head><body>'+content+'<div style="text-align:center;padding:16px;"><button onclick="window.print()" style="padding:10px 28px;background:#1a2e5a;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;">&#128438; Print / Save as PDF</button></div></body></html>');
+    pw.document.close();
 });
 
 // ── Escape ─────────────────────────────────────────────────────────────────
