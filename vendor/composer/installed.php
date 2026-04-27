@@ -1,19 +1,19 @@
 <?php return array(
     'root' => array(
         'name' => '__root__',
-        'pretty_version' => 'dev-copilot/update-email-attachment-to-pdf',
-        'version' => 'dev-copilot/update-email-attachment-to-pdf',
-        'reference' => 'bc9a895d13c156035fd74f316a9e32f926c2b591',
+        'pretty_version' => 'dev-copilot/fix-dompdf-class-not-found-error',
+        'version' => 'dev-copilot/fix-dompdf-class-not-found-error',
+        'reference' => '336f433f1dd6ecb02193d472fb8214defb2b14ff',
         'type' => 'library',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
-        'dev' => true,
+        'dev' => false,
     ),
     'versions' => array(
         '__root__' => array(
-            'pretty_version' => 'dev-copilot/update-email-attachment-to-pdf',
-            'version' => 'dev-copilot/update-email-attachment-to-pdf',
-            'reference' => 'bc9a895d13c156035fd74f316a9e32f926c2b591',
+            'pretty_version' => 'dev-copilot/fix-dompdf-class-not-found-error',
+            'version' => 'dev-copilot/fix-dompdf-class-not-found-error',
+            'reference' => '336f433f1dd6ecb02193d472fb8214defb2b14ff',
             'type' => 'library',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),
