@@ -37,7 +37,7 @@ $user       = auth_user();
 $results        = null;  // null = not yet run
 $imported       = [];
 $auto_created   = [];   // PDFs whose student_id was not in DB → new stub student created
-$skipped_dup    = [];   // PDFs already attached to the student (same original_name)
+$updated        = [];   // PDFs already attached to the student → replaced with new upload
 $skipped_no_map = [];   // PDFs present in ZIP but not found in the CSV mapping
 $errors         = [];
 
@@ -179,13 +179,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                      VALUES (?, ?, 'Unknown', ?, 'Active', ?)"
                 );
 
+                // ── Prepared statement for updating an existing file record ────
+                $update_stmt = db()->prepare(
+                    'UPDATE student_files
+                        SET file_name=?, description=?, stored_name=?,
+                            original_name=?, mime_type=?, file_size=?,
+                            uploaded_by=?
+                      WHERE id=?'
+                );
+
+                // Old stored filenames replaced during this run (candidate for deletion)
+                $old_stored_names = [];
+
                 // ── Pre-load already-attached files to detect duplicates ───────
                 $existing_stmt = db()->query(
-                    "SELECT student_id, original_name FROM student_files"
+                    "SELECT id, student_id, original_name, stored_name FROM student_files"
                 );
-                $existing_files = [];  // "student_pk:original_name" => true
+                $existing_files = [];  // "student_pk:original_name" => ['id'=>…,'stored_name'=>…]
                 foreach ($existing_stmt->fetchAll() as $row) {
-                    $existing_files[$row['student_id'] . ':' . $row['original_name']] = true;
+                    $existing_files[$row['student_id'] . ':' . $row['original_name']] = [
+                        'id'          => (int)$row['id'],
+                        'stored_name' => $row['stored_name'],
+                    ];
                 }
 
                 $dest_dir = UPLOAD_DIR . '/students/files';
@@ -317,10 +332,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $student = $student_map[$sid_key];
                         $stu_pk  = (int)$student['id'];
 
-                        // Duplicate check (per-student)
+                        // Duplicate check → update instead of skip
                         $dup_key = $stu_pk . ':' . $original_name;
                         if (isset($existing_files[$dup_key])) {
-                            $skipped_dup[] = [
+                            $old_entry = $existing_files[$dup_key];
+                            try {
+                                $update_stmt->execute([
+                                    $file_label,
+                                    $auto_desc,
+                                    $stored_name,
+                                    $original_name,
+                                    'application/pdf',
+                                    $file_size,
+                                    $user['id'],
+                                    $old_entry['id'],
+                                ]);
+                            } catch (PDOException $e) {
+                                $errors[] = ['path' => $entry, 'reason' => "Student ID \"{$sid_raw}\": failed to update existing record: " . $e->getMessage()];
+                                continue;
+                            }
+                            // Track old physical file for cleanup (may be shared)
+                            if ($old_entry['stored_name'] !== $stored_name) {
+                                $old_stored_names[$old_entry['stored_name']] = true;
+                            }
+                            // Update in-memory map so within-ZIP re-encounters use new stored_name
+                            $existing_files[$dup_key] = [
+                                'id'          => $old_entry['id'],
+                                'stored_name' => $stored_name,
+                            ];
+                            $any_inserted = true;
+                            $updated[] = [
                                 'path'       => $entry,
                                 'student_id' => $sid_raw,
                                 'name'       => $student['full_name'],
@@ -340,8 +381,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $user['id'],
                         ]);
 
-                        // Mark so we won't import duplicate within the same ZIP
-                        $existing_files[$dup_key] = true;
+                        // Mark so we won't re-process within the same ZIP
+                        $existing_files[$dup_key] = [
+                            'id'          => (int)db()->lastInsertId(),
+                            'stored_name' => $stored_name,
+                        ];
                         $any_inserted = true;
 
                         $imported[] = [
@@ -361,6 +405,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 $zip->close();
+
+                // ── Clean up old physical files that were replaced ─────────────
+                if (!empty($old_stored_names)) {
+                    $placeholders = implode(',', array_fill(0, count($old_stored_names), '?'));
+                    $ref_stmt = db()->prepare(
+                        "SELECT DISTINCT stored_name FROM student_files WHERE stored_name IN ({$placeholders})"
+                    );
+                    $ref_stmt->execute(array_keys($old_stored_names));
+                    $still_used = array_flip($ref_stmt->fetchAll(PDO::FETCH_COLUMN));
+                    foreach (array_keys($old_stored_names) as $old_sn) {
+                        if (!isset($still_used[$old_sn])) {
+                            $old_path = $dest_dir . '/' . $old_sn;
+                            if (is_file($old_path) && !unlink($old_path)) {
+                                error_log("bulk-upload: could not delete replaced file {$old_sn}");
+                            }
+                        }
+                    }
+                }
+
                 $results = true;
                 }   // end if ($zip->open)
             }   // end if ($csv_parse_error === null)
@@ -410,10 +473,10 @@ require_once __DIR__ . '/../includes/header.php';
         <div class="stat-card" style="background:linear-gradient(135deg,#17a2b8,#117a8b);">
             <div class="d-flex justify-content-between align-items-start">
                 <div>
-                    <div class="stat-val"><?= count($skipped_dup) ?></div>
-                    <div class="stat-lbl">Already Exists</div>
+                    <div class="stat-val"><?= count($updated) ?></div>
+                    <div class="stat-lbl">Updated</div>
                 </div>
-                <i class="fas fa-copy" style="font-size:2rem;opacity:.4"></i>
+                <i class="fas fa-sync-alt" style="font-size:2rem;opacity:.4"></i>
             </div>
         </div>
     </div>
@@ -491,17 +554,17 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 <?php endif; ?>
 
-<?php if (!empty($skipped_dup)): ?>
+<?php if (!empty($updated)): ?>
 <div class="card shadow-sm mb-4">
     <div class="card-header bg-info text-white py-2">
-        <i class="fas fa-copy me-1"></i> Already Exists – Skipped (<?= count($skipped_dup) ?>)
+        <i class="fas fa-sync-alt me-1"></i> Updated – Replaced Existing (<?= count($updated) ?>)
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
             <table class="table table-sm table-hover mb-0">
                 <thead class="table-light"><tr><th>#</th><th>Student ID</th><th>Student Name</th><th>File in ZIP</th></tr></thead>
                 <tbody>
-                <?php foreach ($skipped_dup as $k => $r): ?>
+                <?php foreach ($updated as $k => $r): ?>
                     <tr>
                         <td class="text-muted"><?= $k + 1 ?></td>
                         <td><code><?= h($r['student_id']) ?></code></td>
@@ -607,7 +670,7 @@ New_Filename,All_IDs_In_File
 report.pdf,"25010101,25010102,25010103"
 transcript.pdf,25020101</pre>
 
-                    <p class="mb-0 mt-2 small">If no matching student is found a <strong>stub record</strong> is auto-created. If the same file is already linked to a student it will be <strong>skipped</strong>.</p>
+                    <p class="mb-0 mt-2 small">If no matching student is found a <strong>stub record</strong> is auto-created. If the same file is already linked to a student it will be <strong>replaced with the new upload</strong>.</p>
                 </div>
 
                 <form method="post" enctype="multipart/form-data" id="bulk-upload-form">
