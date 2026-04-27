@@ -4,6 +4,7 @@ require_access('student-verification');
 require_once __DIR__ . '/../students/helpers.php';
 require_once __DIR__ . '/../change-log/helpers.php';
 require_once __DIR__ . '/../includes/mailer.php';
+require_once __DIR__ . '/../../vendor/autoload.php';
 
 $id   = (int)($_GET['id'] ?? 0);
 $user = auth_user();
@@ -226,7 +227,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $from_name    = 'Prime University Verification';
         $encoded_from = '=?UTF-8?B?' . base64_encode($from_name) . '?=';
         $boundary     = '----=_Part_' . md5(uniqid('', true));
-        $attach_name  = 'verification-certificate-' . preg_replace('/[^A-Za-z0-9\-]/', '', $rec['s_student_id']) . '.html';
+        $attach_name  = 'verification-certificate-' . preg_replace('/[^A-Za-z0-9\-]/', '', $rec['s_student_id']) . '.pdf';
+
+        // Generate PDF from digital certificate HTML using Dompdf
+        $dompdf = new \Dompdf\Dompdf(['isRemoteEnabled' => false]);
+        $dompdf->loadHtml($cert_attachment, 'UTF-8');
+        $dompdf->setPaper('A4', 'portrait');
+        $dompdf->render();
+        $pdf_data = $dompdf->output();
 
         $headers  = 'MIME-Version: 1.0' . "\r\n";
         $headers .= 'Content-Type: multipart/mixed; boundary="' . $boundary . '"' . "\r\n";
@@ -240,10 +248,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $message .= quoted_printable_encode($body) . "\r\n";
 
         $message .= '--' . $boundary . "\r\n";
-        $message .= 'Content-Type: text/html; charset=UTF-8; name="' . $attach_name . '"' . "\r\n";
+        $message .= 'Content-Type: application/pdf; name="' . $attach_name . '"' . "\r\n";
         $message .= 'Content-Transfer-Encoding: base64' . "\r\n";
         $message .= 'Content-Disposition: attachment; filename="' . $attach_name . '"' . "\r\n\r\n";
-        $message .= chunk_split(base64_encode($cert_attachment)) . "\r\n";
+        $message .= chunk_split(base64_encode($pdf_data)) . "\r\n";
         $message .= '--' . $boundary . '--';
 
         $sent = mail($to_email, $subject, $message, $headers, '-f' . escapeshellarg($from_email));
@@ -255,7 +263,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $rec['s_full_name'] . ' (' . $rec['s_student_id'] . ')',
                 'email_sent', 0, 1,
                 'Verification email sent to ' . $to_email . ' by ' . $user['full_name']);
-            flash_set('success', 'Verification email sent to ' . $to_email . ' (with Digital Certificate attached).');
+            flash_set('success', 'Verification email sent to ' . $to_email . ' (with Digital Certificate PDF attached).');
         } else {
             flash_set('error', 'Failed to send the email. Please check the mail server configuration.');
         }
