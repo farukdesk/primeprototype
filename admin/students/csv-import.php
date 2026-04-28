@@ -230,7 +230,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                             $validated['row_num'] = $row_num;
                             $preview_rows[] = $validated;
                         }
-                        fclose($handle);
 
                         if (empty($preview_rows)) {
                             $parse_error = 'The CSV contains no data rows.';
@@ -242,9 +241,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                         }
                     }
                 }
-                if ($handle && is_resource($handle)) {
-                    fclose($handle);
-                }
+                fclose($handle);
             }
         }
     }
@@ -515,8 +512,6 @@ $invalid_count = count($preview_rows) - $valid_count;
                     <td>
                         <?php if ($r['program']): ?>
                             <?= htmlspecialchars($r['program']['program_name'], ENT_QUOTES, 'UTF-8') ?>
-                        <?php elseif ($r['dept'] && isset($r['batch_raw'])): ?>
-                            <span class="text-muted">—</span>
                         <?php else: ?>
                             <span class="text-muted">—</span>
                         <?php endif; ?>
