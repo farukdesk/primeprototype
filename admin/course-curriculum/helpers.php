@@ -68,17 +68,17 @@ function cc_programs(int $dept_id): array
 }
 
 /**
- * Fetch all curriculum rows for a program, keyed by semester.
+ * Fetch all curriculum rows for a program + intake, keyed by semester.
  * Returns [ semester => [ rows… ], … ]
  */
-function cc_get_curriculum(int $program_id): array
+function cc_get_curriculum(int $program_id, int $intake_id): array
 {
     $st = db()->prepare(
         "SELECT * FROM course_curriculum
-          WHERE program_id = ?
+          WHERE program_id = ? AND intake_id = ?
           ORDER BY semester ASC, sort_order ASC, sl_no ASC, id ASC"
     );
-    $st->execute([$program_id]);
+    $st->execute([$program_id, $intake_id]);
     $rows = $st->fetchAll();
 
     $grouped = [];
@@ -86,4 +86,46 @@ function cc_get_curriculum(int $program_id): array
         $grouped[(int)$row['semester']][] = $row;
     }
     return $grouped;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Intake helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Fetch all intakes for a program, newest first.
+ * Each row also carries a course count and total credits.
+ */
+function cc_get_intakes(int $program_id): array
+{
+    $st = db()->prepare(
+        "SELECT i.*,
+                COUNT(c.id)       AS course_count,
+                SUM(c.credit)     AS total_credits
+           FROM course_curriculum_intakes i
+           LEFT JOIN course_curriculum c ON c.intake_id = i.id
+          WHERE i.program_id = ?
+          GROUP BY i.id
+          ORDER BY i.intake_year DESC, i.created_at DESC"
+    );
+    $st->execute([$program_id]);
+    return $st->fetchAll();
+}
+
+/**
+ * Fetch a single intake row by ID.
+ */
+function cc_get_intake(int $intake_id): ?array
+{
+    $st = db()->prepare("SELECT * FROM course_curriculum_intakes WHERE id = ? LIMIT 1");
+    $st->execute([$intake_id]);
+    return $st->fetch() ?: null;
+}
+
+/**
+ * Season options used in create / edit forms.
+ */
+function cc_intake_seasons(): array
+{
+    return ['Spring', 'Summer', 'Fall', 'Winter'];
 }

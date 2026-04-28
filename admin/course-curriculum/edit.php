@@ -7,6 +7,7 @@ if (!cc_is_staff()) { redirect(APP_URL . '/course-curriculum/index.php'); }
 $id         = (int)($_GET['id']         ?? 0);
 $dept_id    = (int)($_POST['dept_id']    ?? $_GET['dept_id']    ?? 0);
 $program_id = (int)($_POST['program_id'] ?? $_GET['program_id'] ?? 0);
+$intake_id  = (int)($_POST['intake_id']  ?? $_GET['intake_id']  ?? 0);
 
 $page_title = 'Edit Course';
 $errors     = [];
@@ -24,10 +25,13 @@ if (!$course) {
     redirect(APP_URL . '/course-curriculum/index.php?dept_id=' . $dept_id . '&program_id=' . $program_id);
 }
 
+// Resolve intake_id from course row if not supplied
+if ($intake_id <= 0 && $course) {
+    $intake_id = (int)($course['intake_id'] ?? 0);
+}
+
 // Resolve program context (use course's program_id if not supplied in GET)
 if ($program_id <= 0) $program_id = (int)$course['program_id'];
-
-// Verify program belongs to dept
 $program_row = null;
 if ($program_id > 0) {
     $query = $dept_id > 0
@@ -91,7 +95,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ]);
 
         flash_set('success', 'Course <strong>' . h($course_name) . '</strong> updated.');
-        redirect(APP_URL . '/course-curriculum/index.php?dept_id=' . $dept_id . '&program_id=' . $program_id . '#sem-' . $semester);
+        redirect(APP_URL . '/course-curriculum/index.php?dept_id=' . $dept_id . '&program_id=' . $program_id . '&intake_id=' . $intake_id . '#sem-' . $semester);
     }
 
     save_old(compact('semester','sl_no','bnqf_code','course_code','course_name','credit_raw','sort_order'));
@@ -118,7 +122,7 @@ require_once __DIR__ . '/../includes/header.php';
         <ol class="breadcrumb mb-0">
             <li class="breadcrumb-item"><a href="<?= APP_URL ?>/index.php">Dashboard</a></li>
             <li class="breadcrumb-item">
-                <a href="<?= APP_URL ?>/course-curriculum/index.php?dept_id=<?= $dept_id ?>&program_id=<?= $program_id ?>">
+                <a href="<?= APP_URL ?>/course-curriculum/index.php?dept_id=<?= $dept_id ?>&program_id=<?= $program_id ?>&intake_id=<?= $intake_id ?>">
                     Course Curriculum
                 </a>
             </li>
@@ -141,6 +145,12 @@ require_once __DIR__ . '/../includes/header.php';
     <i class="fas fa-building me-1 text-muted"></i><?= h($program_row['dept_name']) ?>
     &nbsp;→&nbsp;
     <strong><?= h($program_row['program_name']) ?></strong>
+    <?php
+    $intake_ctx = $intake_id > 0 ? cc_get_intake($intake_id) : null;
+    if ($intake_ctx): ?>
+    &nbsp;→&nbsp;
+    <i class="fas fa-layer-group me-1 text-muted"></i><?= h($intake_ctx['batch_name']) ?>
+    <?php endif; ?>
     &nbsp;→&nbsp;
     <?= h(cc_semester_label((int)old('semester', $course['semester']))) ?>
 </div>
@@ -149,6 +159,7 @@ require_once __DIR__ . '/../includes/header.php';
     <?= csrf_field() ?>
     <input type="hidden" name="dept_id"    value="<?= $dept_id ?>">
     <input type="hidden" name="program_id" value="<?= $program_id ?>">
+    <input type="hidden" name="intake_id"  value="<?= $intake_id ?>">
 
     <div class="row g-4">
 
@@ -236,7 +247,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <button type="submit" class="btn btn-primary" style="border-radius:10px;">
                             <i class="fas fa-save me-1"></i> Update Course
                         </button>
-                        <a href="<?= APP_URL ?>/course-curriculum/index.php?dept_id=<?= $dept_id ?>&program_id=<?= $program_id ?>"
+                        <a href="<?= APP_URL ?>/course-curriculum/index.php?dept_id=<?= $dept_id ?>&program_id=<?= $program_id ?>&intake_id=<?= $intake_id ?>"
                            class="btn btn-light" style="border-radius:10px;">Cancel</a>
                     </div>
                 </div>
