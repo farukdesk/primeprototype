@@ -128,6 +128,9 @@ require_once __DIR__ . '/../includes/header.php';
         <a href="<?= APP_URL ?>/students/legacy-photo-import.php" class="btn btn-outline-info" style="border-radius:10px;font-size:.875rem;">
             <i class="fas fa-history me-1"></i> Legacy Photo Import
         </a>
+        <a href="<?= APP_URL ?>/students/csv-import.php" class="btn btn-outline-success" style="border-radius:10px;font-size:.875rem;">
+            <i class="fas fa-file-csv me-1"></i> Bulk CSV Import
+        </a>
         <a href="<?= APP_URL ?>/students/create.php" class="btn btn-primary" style="border-radius:10px;font-size:.875rem;">
             <i class="fas fa-user-plus me-1"></i> Add Student
         </a>
