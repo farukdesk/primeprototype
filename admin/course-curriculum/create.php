@@ -7,6 +7,7 @@ if (!cc_is_staff()) { redirect(APP_URL . '/course-curriculum/index.php'); }
 // Resolve context from GET / POST
 $dept_id    = (int)($_POST['dept_id']    ?? $_GET['dept_id']    ?? 0);
 $program_id = (int)($_POST['program_id'] ?? $_GET['program_id'] ?? 0);
+$intake_id  = (int)($_POST['intake_id']  ?? $_GET['intake_id']  ?? 0);
 $def_sem    = max(1, min(12, (int)($_GET['semester'] ?? 1)));
 
 $page_title = 'Add Course';
@@ -29,6 +30,20 @@ if ($program_id > 0 && $dept_id > 0) {
 if (!$program_row) {
     flash_set('danger', 'Invalid department or program selection.');
     redirect(APP_URL . '/course-curriculum/index.php');
+}
+
+// Verify intake belongs to the program
+$intake_row = null;
+if ($intake_id > 0) {
+    $intake_row = cc_get_intake($intake_id);
+    if (!$intake_row || (int)$intake_row['program_id'] !== $program_id) {
+        flash_set('danger', 'Invalid intake selection.');
+        redirect(APP_URL . '/course-curriculum/index.php?dept_id=' . $dept_id . '&program_id=' . $program_id);
+    }
+}
+if (!$intake_row) {
+    flash_set('danger', 'Please select an intake / batch first.');
+    redirect(APP_URL . '/course-curriculum/index.php?dept_id=' . $dept_id . '&program_id=' . $program_id);
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -57,10 +72,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($errors)) {
         db()->prepare(
             "INSERT INTO course_curriculum
-               (program_id, semester, sl_no, bnqf_code, course_code, course_name, credit, sort_order)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+               (program_id, intake_id, semester, sl_no, bnqf_code, course_code, course_name, credit, sort_order)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )->execute([
-            $program_id, $semester, $sl_no,
+            $program_id, $intake_id, $semester, $sl_no,
             $bnqf_code   ?: null,
             $course_code ?: null,
             $course_name,
@@ -69,7 +84,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ]);
 
         flash_set('success', 'Course <strong>' . h($course_name) . '</strong> added.');
-        redirect(APP_URL . '/course-curriculum/index.php?dept_id=' . $dept_id . '&program_id=' . $program_id . '#sem-' . $semester);
+        redirect(APP_URL . '/course-curriculum/index.php?dept_id=' . $dept_id . '&program_id=' . $program_id . '&intake_id=' . $intake_id . '#sem-' . $semester);
     }
 
     save_old(compact('semester','sl_no','bnqf_code','course_code','course_name','credit_raw','sort_order'));
@@ -85,7 +100,7 @@ require_once __DIR__ . '/../includes/header.php';
         <ol class="breadcrumb mb-0">
             <li class="breadcrumb-item"><a href="<?= APP_URL ?>/index.php">Dashboard</a></li>
             <li class="breadcrumb-item">
-                <a href="<?= APP_URL ?>/course-curriculum/index.php?dept_id=<?= $dept_id ?>&program_id=<?= $program_id ?>">
+                <a href="<?= APP_URL ?>/course-curriculum/index.php?dept_id=<?= $dept_id ?>&program_id=<?= $program_id ?>&intake_id=<?= $intake_id ?>">
                     Course Curriculum
                 </a>
             </li>
@@ -108,12 +123,15 @@ require_once __DIR__ . '/../includes/header.php';
     <i class="fas fa-building me-1 text-muted"></i><?= h($program_row['dept_name']) ?>
     &nbsp;→&nbsp;
     <strong><?= h($program_row['program_name']) ?></strong>
+    &nbsp;→&nbsp;
+    <i class="fas fa-layer-group me-1 text-muted"></i><?= h($intake_row['batch_name']) ?>
 </div>
 
 <form method="POST" novalidate>
     <?= csrf_field() ?>
     <input type="hidden" name="dept_id"    value="<?= $dept_id ?>">
     <input type="hidden" name="program_id" value="<?= $program_id ?>">
+    <input type="hidden" name="intake_id"  value="<?= $intake_id ?>">
 
     <div class="row g-4">
 
@@ -201,7 +219,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <button type="submit" class="btn btn-primary" style="border-radius:10px;">
                             <i class="fas fa-save me-1"></i> Save Course
                         </button>
-                        <a href="<?= APP_URL ?>/course-curriculum/index.php?dept_id=<?= $dept_id ?>&program_id=<?= $program_id ?>"
+                        <a href="<?= APP_URL ?>/course-curriculum/index.php?dept_id=<?= $dept_id ?>&program_id=<?= $program_id ?>&intake_id=<?= $intake_id ?>"
                            class="btn btn-light" style="border-radius:10px;">Cancel</a>
                     </div>
                 </div>
