@@ -639,9 +639,10 @@ $total_courses = array_sum(array_map('count', $curriculum));
                 ? 'Unpublish <strong>' + name + '</strong>? It will no longer be visible on the public site.'
                 : 'Publish <strong>' + name + '</strong>? Any currently published intake for this program will be unpublished.';
             var btn2 = document.getElementById('pub-btn');
-            btn2.textContent = published ? 'Unpublish' : 'Publish';
-            btn2.className   = published ? 'btn btn-warning' : 'btn btn-success';
-            document.getElementById('pub-form').querySelector('input[name="id"]').value = id;
+            btn2.innerHTML = published
+                ? '<i class="fas fa-globe me-1"></i>Unpublish'
+                : '<i class="fas fa-globe me-1"></i>Publish';
+            btn2.className = published ? 'btn btn-warning' : 'btn btn-success';
         });
     }
 
