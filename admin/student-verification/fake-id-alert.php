@@ -144,6 +144,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdf_data = $dompdf->output();
 
         // ── Build MIME multipart email with PDF attachment ───────────────────
+        // $from_email is a hardcoded constant – not derived from user input.
+        // escapeshellarg() is still applied below as a defence-in-depth measure.
         $from_email   = 'coe@primeuniversity.ac.bd';
         $from_name    = 'Prime University – Controller of Examinations';
         $encoded_from = '=?UTF-8?B?' . base64_encode($from_name) . '?=';
