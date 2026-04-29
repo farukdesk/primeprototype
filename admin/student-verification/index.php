@@ -75,11 +75,16 @@ require_once __DIR__ . '/../includes/header.php';
             <li class="breadcrumb-item active">Student Verification</li>
         </ol>
     </nav>
-    <?php if (is_super_admin() || can_access('student-verification', 'can_create')): ?>
-    <a href="<?= APP_URL ?>/student-verification/verify.php" class="btn btn-primary" style="border-radius:10px;font-size:.875rem;">
-        <i class="fas fa-shield-alt me-1"></i> New Verification
-    </a>
-    <?php endif; ?>
+    <div class="d-flex gap-2 flex-wrap">
+        <?php if (is_super_admin() || can_access('student-verification', 'can_create')): ?>
+        <a href="<?= APP_URL ?>/student-verification/verify.php" class="btn btn-primary" style="border-radius:10px;font-size:.875rem;">
+            <i class="fas fa-shield-alt me-1"></i> New Verification
+        </a>
+        <?php endif; ?>
+        <a href="<?= APP_URL ?>/student-verification/fake-id-alert.php" class="btn btn-danger" style="border-radius:10px;font-size:.875rem;">
+            <i class="fas fa-ban me-1"></i> Fake / Invalid ID Alert
+        </a>
+    </div>
 </div>
 
 <!-- Stats -->
