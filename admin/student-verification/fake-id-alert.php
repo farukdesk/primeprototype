@@ -39,6 +39,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $date_str = date('d F Y');
         $time_str = date('H:i');
 
+        // ── Embed logo as base64 for PDF (Dompdf cannot fetch remote URLs) ──
+        $logo_path     = dirname(dirname(__DIR__)) . '/assets/img/logo/logo-black.png';
+        $logo_data_uri = '';
+        if (is_file($logo_path) && is_readable($logo_path)) {
+            $logo_data_uri = 'data:image/png;base64,' . base64_encode(file_get_contents($logo_path));
+        }
+        $logo_img_html = $logo_data_uri
+            ? '<img src="' . $logo_data_uri . '" style="height:60px;width:auto;display:block;flex-shrink:0;" alt="Prime University Bangladesh">'
+            : '';
+
         // ── Build email body (HTML) ──────────────────────────────────────────
         $notes_html = $notes !== ''
             ? '<p style="margin:0 0 16px;"><strong>Additional Notes:</strong><br>' . nl2br(htmlspecialchars($notes)) . '</p>'
@@ -72,63 +82,67 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               . '</div>'
             : '';
 
+        // ── Build PDF certificate HTML (emoji-free for Dompdf compatibility) ─
         $cert_html = '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">'
-            . '<title>Fake / Invalid ID Notification – ' . htmlspecialchars($student_name) . '</title></head>'
-            . '<body style="font-family:Segoe UI,Arial,Helvetica,sans-serif;background:#eef2f7;margin:0;padding:20px 16px 40px;">'
+            . '<title>Fake / Invalid ID Notification - ' . htmlspecialchars($student_name) . '</title></head>'
+            . '<body style="font-family:Arial,Helvetica,sans-serif;background:#eef2f7;margin:0;padding:20px 16px 40px;">'
             . '<div style="max-width:760px;margin:0 auto;">'
             . '<div style="background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.12);border:1.5px solid #e2e8f0;">'
             . '<div style="height:7px;background:linear-gradient(90deg,#7f1d1d 0%,#dc2626 50%,#991b1b 100%);"></div>'
-            // Header
-            . '<div style="padding:20px 32px 16px;border-bottom:2px solid #e8edf5;position:relative;">'
+            // Header with logo
+            . '<div style="padding:18px 32px 14px;border-bottom:2px solid #e8edf5;display:table;width:100%;box-sizing:border-box;">'
+            . '<div style="display:table-cell;vertical-align:middle;width:80px;">' . $logo_img_html . '</div>'
+            . '<div style="display:table-cell;vertical-align:middle;padding-left:14px;">'
             . '<div style="font-size:14pt;font-weight:800;color:#1a2e5a;margin-bottom:3px;">Prime University Bangladesh</div>'
-            . '<div style="font-size:7.5pt;color:#4b5563;line-height:1.8;">114/116 Mazar Road, Mirpur-1, Dhaka 1216, Bangladesh &nbsp;|&nbsp; coe@primeuniversity.ac.bd</div>'
+            . '<div style="font-size:7.5pt;color:#4b5563;line-height:1.8;">114/116 Mazar Road, Mirpur-1, Dhaka 1216, Bangladesh | coe@primeuniversity.ac.bd</div>'
             . '<div style="font-size:8pt;color:#6b7280;margin-top:2px;">Controller of Examinations</div>'
-            . '<div style="position:absolute;right:32px;top:50%;transform:translateY(-50%);font-size:50pt;font-weight:900;color:rgba(220,38,38,.04);pointer-events:none;">PU</div>'
             . '</div>'
-            // Title bar
-            . '<div style="background:linear-gradient(135deg,#7f1d1d,#dc2626);padding:12px 32px;display:flex;align-items:center;justify-content:space-between;">'
-            . '<span style="font-size:10.5pt;font-weight:800;color:#fff;letter-spacing:.04em;text-transform:uppercase;">&#9888; Fake / Invalid ID Notification</span>'
-            . '<span style="font-size:7.5pt;color:rgba(255,255,255,.65);font-family:monospace;">' . htmlspecialchars($ref_no) . '</span>'
+            . '</div>'
+            // Title bar (no emoji - use plain text)
+            . '<div style="background:linear-gradient(135deg,#7f1d1d,#dc2626);padding:12px 32px;">'
+            . '<table style="width:100%;border-collapse:collapse;"><tr>'
+            . '<td style="font-size:10.5pt;font-weight:800;color:#fff;letter-spacing:.04em;text-transform:uppercase;">FAKE / INVALID ID NOTIFICATION</td>'
+            . '<td style="font-size:7.5pt;color:rgba(255,255,255,.65);font-family:monospace;text-align:right;">' . htmlspecialchars($ref_no) . '</td>'
+            . '</tr></table>'
             . '</div>'
             // Body
             . '<div style="padding:24px 32px 28px;">'
             // Student info block
             . '<div style="background:#fff5f5;border:1.5px solid #fca5a5;border-radius:12px;padding:16px 20px;margin-bottom:20px;">'
             . '<div style="font-size:13pt;font-weight:800;color:#1a2e5a;margin-bottom:6px;">' . htmlspecialchars($student_name) . '</div>'
-            . '<div style="display:inline-flex;align-items:center;background:#7f1d1d;color:#fff;border-radius:5px;padding:3px 10px;font-size:8pt;font-weight:700;letter-spacing:.05em;margin-bottom:10px;">&#128196; ' . htmlspecialchars($student_id) . '</div>'
+            . '<div style="display:inline-block;background:#7f1d1d;color:#fff;border-radius:5px;padding:3px 10px;font-size:8pt;font-weight:700;letter-spacing:.05em;margin-bottom:10px;">[ID] ' . htmlspecialchars($student_id) . '</div>'
             . '<table style="border-collapse:collapse;width:100%;max-width:420px;margin-top:6px;">'
             . '<tr><td style="color:#9ca3af;font-size:7.5pt;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:3px 0;width:44%;">Presented Student ID</td><td style="font-size:9.5pt;font-weight:700;color:#7f1d1d;">' . htmlspecialchars($student_id) . '</td></tr>'
             . '<tr><td style="color:#9ca3af;font-size:7.5pt;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:3px 0;">Presented Name</td><td style="font-size:9.5pt;font-weight:700;color:#1a2e5a;">' . htmlspecialchars($student_name) . '</td></tr>'
             . '<tr><td style="color:#9ca3af;font-size:7.5pt;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:3px 0;">Date of Check</td><td style="font-size:9pt;color:#1a2e5a;">' . $date_str . ' at ' . $time_str . '</td></tr>'
             . '</table>'
             . '</div>'
-            // Status badge
-            . '<div style="padding:13px 16px;border-radius:10px;background:#fee2e2;border:2px solid #fca5a5;margin-bottom:20px;display:flex;align-items:center;gap:12px;">'
-            . '<span style="font-size:1.4rem;color:#dc2626;">&#9888;</span>'
-            . '<div>'
-            . '<div style="font-size:10pt;font-weight:800;color:#7f1d1d;">FRAUDULENT ID – NOT GENUINE</div>'
-            . '<div style="font-size:8pt;color:#991b1b;opacity:.85;margin-top:3px;">This Student ID does NOT exist in the records of Prime University Bangladesh. The presented credentials are FAKE / INVALID.</div>'
-            . '</div></div>'
-            // Checklist
-            . '<div style="font-size:8pt;font-weight:800;color:#dc2626;text-transform:uppercase;letter-spacing:.07em;border-bottom:1.5px solid #fca5a5;padding-bottom:7px;margin-bottom:12px;">&#10005; Findings</div>'
-            . '<div style="display:flex;align-items:flex-start;gap:10px;padding:9px 14px;border-radius:8px;background:#fee2e2;border:1.5px solid #fca5a5;margin-bottom:8px;">'
-            . '<span style="color:#dc2626;font-size:1rem;flex-shrink:0;margin-top:1px;">&#10005;</span>'
-            . '<div><div style="font-size:8.5pt;font-weight:700;color:#991b1b;">Student ID Not Found in System</div>'
+            // Status badge (no emoji icon span - use styled text block)
+            . '<div style="padding:13px 16px;border-radius:10px;background:#fee2e2;border:2px solid #fca5a5;margin-bottom:20px;">'
+            . '<div style="font-size:10pt;font-weight:800;color:#7f1d1d;">&#9888; FRAUDULENT ID &#8211; NOT GENUINE</div>'
+            . '<div style="font-size:8pt;color:#991b1b;margin-top:5px;">This Student ID does NOT exist in the records of Prime University Bangladesh. The presented credentials are FAKE / INVALID.</div>'
+            . '</div>'
+            // Findings heading (use text X instead of &#10005; which may not render in Dompdf)
+            . '<div style="font-size:8pt;font-weight:800;color:#dc2626;text-transform:uppercase;letter-spacing:.07em;border-bottom:1.5px solid #fca5a5;padding-bottom:7px;margin-bottom:12px;">[X] FINDINGS</div>'
+            . '<table style="width:100%;border-collapse:collapse;margin-bottom:8px;">'
+            . '<tr><td style="width:22px;vertical-align:top;padding:9px 0 9px 14px;background:#fee2e2;border:1.5px solid #fca5a5;border-radius:8px 0 0 8px;"><span style="color:#dc2626;font-size:9pt;font-weight:900;">[X]</span></td>'
+            . '<td style="padding:9px 14px 9px 8px;background:#fee2e2;border:1.5px solid #fca5a5;border-left:none;border-radius:0 8px 8px 0;">'
+            . '<div style="font-size:8.5pt;font-weight:700;color:#991b1b;">Student ID Not Found in System</div>'
             . '<div style="font-size:7.5pt;color:#7f1d1d;margin-top:2px;">The Student ID "' . htmlspecialchars($student_id) . '" does not match any record in the Prime University Bangladesh student database.</div>'
-            . '</div></div>'
-            . '<div style="display:flex;align-items:flex-start;gap:10px;padding:9px 14px;border-radius:8px;background:#fee2e2;border:1.5px solid #fca5a5;margin-bottom:8px;">'
-            . '<span style="color:#dc2626;font-size:1rem;flex-shrink:0;margin-top:1px;">&#10005;</span>'
-            . '<div><div style="font-size:8.5pt;font-weight:700;color:#991b1b;">Presented Credentials Cannot Be Verified</div>'
+            . '</td></tr></table>'
+            . '<table style="width:100%;border-collapse:collapse;margin-bottom:8px;">'
+            . '<tr><td style="width:22px;vertical-align:top;padding:9px 0 9px 14px;background:#fee2e2;border:1.5px solid #fca5a5;border-radius:8px 0 0 8px;"><span style="color:#dc2626;font-size:9pt;font-weight:900;">[X]</span></td>'
+            . '<td style="padding:9px 14px 9px 8px;background:#fee2e2;border:1.5px solid #fca5a5;border-left:none;border-radius:0 8px 8px 0;">'
+            . '<div style="font-size:8.5pt;font-weight:700;color:#991b1b;">Presented Credentials Cannot Be Verified</div>'
             . '<div style="font-size:7.5pt;color:#7f1d1d;margin-top:2px;">No matching enrollment, academic records, or graduation data found for the presented identity.</div>'
-            . '</div></div>'
+            . '</td></tr></table>'
             . $notes_cert_html
-            // Footer seal
-            . '<div style="display:flex;align-items:center;gap:14px;background:linear-gradient(135deg,#fff5f5,#fee2e2);border:1.5px solid #fca5a5;border-radius:12px;padding:14px 18px;margin-top:20px;">'
-            . '<span style="font-size:2rem;color:#dc2626;flex-shrink:0;">&#9888;</span>'
-            . '<div><div style="font-size:9pt;font-weight:800;color:#7f1d1d;margin-bottom:3px;">Issued by Controller of Examinations – Prime University Bangladesh</div>'
+            // Footer seal (no emoji)
+            . '<div style="background:linear-gradient(135deg,#fff5f5,#fee2e2);border:1.5px solid #fca5a5;border-radius:12px;padding:14px 18px;margin-top:20px;">'
+            . '<div style="font-size:9pt;font-weight:800;color:#7f1d1d;margin-bottom:3px;">Issued by Controller of Examinations &#8211; Prime University Bangladesh</div>'
             . '<div style="font-size:7.5pt;color:#dc2626;line-height:1.4;">'
-            . 'Checked by: <strong>' . htmlspecialchars($user['full_name']) . '</strong> &nbsp;|&nbsp; Date: ' . $date_str . ' at ' . $time_str . ' &nbsp;|&nbsp; Ref: ' . htmlspecialchars($ref_no)
-            . '</div></div></div>'
+            . 'Checked by: <strong>' . htmlspecialchars($user['full_name']) . '</strong> | Date: ' . $date_str . ' at ' . $time_str . ' | Ref: ' . htmlspecialchars($ref_no)
+            . '</div></div>'
             . '</div>'
             // Footer bar
             . '<div style="background:#f8fafc;border-top:1.5px solid #e8edf5;padding:10px 32px;text-align:center;font-size:7pt;color:#9ca3af;">'
@@ -172,6 +186,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $message .= '--' . $boundary . '--';
 
         $sent = mail($to_email, $subject, $message, $headers, '-f' . escapeshellarg($from_email));
+
+        // ── Save to fake_id_verifications log (regardless of email outcome) ──
+        try {
+            db()->prepare(
+                'INSERT INTO fake_id_verifications
+                   (student_id, student_name, to_email, to_name, notes, ref_no, email_sent, checked_by)
+                 VALUES (?,?,?,?,?,?,?,?)'
+            )->execute([
+                $student_id, $student_name,
+                $to_email ?: null, $to_name ?: null,
+                $notes ?: null, $ref_no,
+                $sent ? 1 : 0,
+                $user['id'],
+            ]);
+        } catch (Throwable $e) {}
 
         if ($sent) {
             // Log the action

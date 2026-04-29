@@ -156,12 +156,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $bc    = $ok ? '#6ee7b7' : '#fca5a5';
             $ic    = $ok ? '#059669' : '#dc2626';
             $lc    = $ok ? '#065f46' : '#991b1b';
-            $icon  = $ok ? '✔' : '✘';
+            $icon  = $ok ? '&#10004;' : '&#10008;';
             $issue_html = (!$ok && $issue) ? '<div style="font-size:7.5pt;color:#7f1d1d;margin-top:2px;">' . htmlspecialchars($issue) . '</div>' : '';
-            return '<div style="display:flex;align-items:flex-start;gap:10px;padding:9px 14px;border-radius:8px;background:' . $bc . ';border:1.5px solid ' . $bc . ';margin-bottom:8px;">'
-                 . '<span style="color:' . $ic . ';font-size:1rem;flex-shrink:0;margin-top:1px;">' . $icon . '</span>'
-                 . '<div><div style="font-size:8.5pt;font-weight:700;color:' . $lc . ';">' . htmlspecialchars($label) . '</div>' . $issue_html . '</div>'
-                 . '</div>';
+            return '<table style="width:100%;border-collapse:collapse;margin-bottom:8px;">'
+                 . '<tr><td style="width:22px;vertical-align:top;padding:9px 0 9px 14px;background:' . $bg . ';border:1.5px solid ' . $bc . ';border-radius:8px 0 0 8px;">'
+                 . '<span style="color:' . $ic . ';font-size:9pt;font-weight:900;">' . $icon . '</span>'
+                 . '</td><td style="padding:9px 14px 9px 8px;background:' . $bg . ';border:1.5px solid ' . $bc . ';border-left:none;border-radius:0 8px 8px 0;">'
+                 . '<div style="font-size:8.5pt;font-weight:700;color:' . $lc . ';">' . htmlspecialchars($label) . '</div>' . $issue_html
+                 . '</td></tr></table>';
         };
 
         $cert_checks = '';
@@ -176,47 +178,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ? 'background:#d1fae5;color:#065f46;'
             : ($cert_s_status === 'Active' ? 'background:#dbeafe;color:#1d4ed8;' : 'background:#f3f4f6;color:#6b7280;');
 
+        // ── Embed logo as base64 for PDF (Dompdf cannot fetch remote URLs) ─────
+        $cert_logo_path     = dirname(dirname(__DIR__)) . '/assets/img/logo/logo-black.png';
+        $cert_logo_data_uri = '';
+        if (is_file($cert_logo_path) && is_readable($cert_logo_path)) {
+            $cert_logo_data_uri = 'data:image/png;base64,' . base64_encode(file_get_contents($cert_logo_path));
+        }
+        $cert_logo_html = $cert_logo_data_uri
+            ? '<img src="' . $cert_logo_data_uri . '" style="height:60px;width:auto;display:block;" alt="Prime University Bangladesh">'
+            : '';
+
         $cert_attachment = '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">'
-            . '<title>Verification Certificate – ' . htmlspecialchars($rec['s_full_name']) . '</title></head>'
-            . '<body style="font-family:Segoe UI,Arial,Helvetica,sans-serif;background:#eef2f7;margin:0;padding:20px 16px 40px;">'
+            . '<title>Verification Certificate - ' . htmlspecialchars($rec['s_full_name']) . '</title></head>'
+            . '<body style="font-family:Arial,Helvetica,sans-serif;background:#eef2f7;margin:0;padding:20px 16px 40px;">'
             . '<div style="max-width:760px;margin:0 auto;">'
             . '<div style="background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.12);border:1.5px solid #e2e8f0;">'
             . '<div style="height:7px;background:linear-gradient(90deg,#1a2e5a 0%,#2563eb 50%,#10b981 100%);"></div>'
-            . '<div style="padding:20px 32px 16px;border-bottom:2px solid #e8edf5;position:relative;">'
+            . '<div style="padding:18px 32px 14px;border-bottom:2px solid #e8edf5;display:table;width:100%;box-sizing:border-box;">'
+            . '<div style="display:table-cell;vertical-align:middle;width:80px;">' . $cert_logo_html . '</div>'
+            . '<div style="display:table-cell;vertical-align:middle;padding-left:14px;">'
             . '<div style="font-size:14pt;font-weight:800;color:#1a2e5a;margin-bottom:3px;">Prime University Bangladesh</div>'
-            . '<div style="font-size:7.5pt;color:#4b5563;line-height:1.8;">114/116 Mazar Road, Mirpur-1, Dhaka 1216, Bangladesh &nbsp;|&nbsp; verification@primeuniversity.ac.bd</div>'
-            . '<div style="position:absolute;right:32px;top:50%;transform:translateY(-50%);font-size:50pt;font-weight:900;color:rgba(26,46,90,.03);pointer-events:none;">PU</div>'
+            . '<div style="font-size:7.5pt;color:#4b5563;line-height:1.8;">114/116 Mazar Road, Mirpur-1, Dhaka 1216, Bangladesh | verification@primeuniversity.ac.bd</div>'
             . '</div>'
-            . '<div style="background:linear-gradient(135deg,#1a2e5a,#1e3a8a);padding:12px 32px;display:flex;align-items:center;justify-content:space-between;">'
-            . '<span style="font-size:10.5pt;font-weight:800;color:#fff;letter-spacing:.04em;text-transform:uppercase;">&#128737; Student Verification Certificate</span>'
-            . '<span style="font-size:7.5pt;color:rgba(255,255,255,.65);font-family:monospace;">' . htmlspecialchars($ref_no_e) . '</span>'
+            . '</div>'
+            . '<div style="background:linear-gradient(135deg,#1a2e5a,#1e3a8a);padding:12px 32px;">'
+            . '<table style="width:100%;border-collapse:collapse;"><tr>'
+            . '<td style="font-size:10.5pt;font-weight:800;color:#fff;letter-spacing:.04em;text-transform:uppercase;">Student Verification Certificate</td>'
+            . '<td style="font-size:7.5pt;color:rgba(255,255,255,.65);font-family:monospace;text-align:right;">' . htmlspecialchars($ref_no_e) . '</td>'
+            . '</tr></table>'
             . '</div>'
             . '<div style="padding:24px 32px 28px;">'
-            . '<div style="display:flex;gap:16px;align-items:flex-start;background:#f8faff;border:1.5px solid #dbe4f3;border-radius:12px;padding:16px 20px;margin-bottom:20px;flex-wrap:wrap;">'
-            . '<div style="flex:1;min-width:200px;">'
+            . '<div style="background:#f8faff;border:1.5px solid #dbe4f3;border-radius:12px;padding:16px 20px;margin-bottom:20px;">'
             . '<div style="font-size:13pt;font-weight:800;color:#1a2e5a;margin-bottom:6px;">' . h($rec['s_full_name']) . '</div>'
-            . '<div style="display:inline-flex;align-items:center;background:#1a2e5a;color:#fff;border-radius:5px;padding:3px 10px;font-size:8pt;font-weight:700;letter-spacing:.05em;margin-bottom:4px;">&#128196; ' . h($rec['s_student_id']) . '</div>'
-            . '<span style="display:inline-flex;align-items:center;padding:3px 11px;border-radius:50px;font-size:8pt;font-weight:700;margin-left:6px;' . $s_status_style . '">' . h($cert_s_status ?: 'Active') . '</span>'
+            . '<div style="display:inline-block;background:#1a2e5a;color:#fff;border-radius:5px;padding:3px 10px;font-size:8pt;font-weight:700;letter-spacing:.05em;margin-bottom:4px;">[ID] ' . h($rec['s_student_id']) . '</div>'
+            . '<span style="display:inline-block;padding:3px 11px;border-radius:50px;font-size:8pt;font-weight:700;margin-left:6px;' . $s_status_style . '">' . h($cert_s_status ?: 'Active') . '</span>'
             . '<table style="border-collapse:collapse;width:100%;max-width:420px;margin-top:10px;">'
             . '<tr><td style="color:#9ca3af;font-size:7.5pt;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:3px 0;width:44%;">Department</td><td style="font-size:9.5pt;font-weight:700;color:#1a2e5a;">' . h($rec['dept_name']) . '</td></tr>'
             . ($rec['program_name'] ? '<tr><td style="color:#9ca3af;font-size:7.5pt;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:3px 0;">Obtained Degree</td><td style="font-size:9.5pt;font-weight:700;color:#1a2e5a;">' . h($rec['program_name']) . '</td></tr>' : '')
             . ($rec['admitted_semester'] ? '<tr><td style="color:#9ca3af;font-size:7.5pt;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:3px 0;">Enrolled Semester</td><td style="font-size:9.5pt;color:#1a2e5a;">' . h($rec['admitted_semester']) . '</td></tr>' : '')
             . '</table>'
             . '</div>'
+            . '<div style="padding:13px 16px;border-radius:10px;background:' . ($cert_status ? '#d1fae5' : '#fee2e2') . ';border:2px solid ' . ($cert_status ? '#6ee7b7' : '#fca5a5') . ';margin-bottom:20px;">'
+            . '<div style="font-size:10pt;font-weight:800;color:' . ($cert_status ? '#065f46' : '#991b1b') . ';">' . ($cert_status ? '&#10004; VERIFIED &#8211; GENUINE &amp; AUTHENTIC' : '&#10008; VERIFICATION FAILED') . '</div>'
+            . '<div style="font-size:8pt;color:' . ($cert_status ? '#065f46' : '#991b1b') . ';margin-top:4px;">' . ($cert_status ? 'Credentials verified and found genuine.' : 'One or more checks did not pass.') . '</div>'
             . '</div>'
-            . '<div style="padding:13px 16px;border-radius:10px;background:' . ($cert_status ? '#d1fae5' : '#fee2e2') . ';border:2px solid ' . ($cert_status ? '#6ee7b7' : '#fca5a5') . ';margin-bottom:20px;display:flex;align-items:center;gap:12px;">'
-            . '<span style="font-size:1.4rem;color:' . ($cert_status ? '#059669' : '#dc2626') . ';">' . ($cert_status ? '✔' : '✘') . '</span>'
-            . '<div><div style="font-size:10pt;font-weight:800;color:' . ($cert_status ? '#065f46' : '#991b1b') . ';">' . ($cert_status ? 'VERIFIED – GENUINE &amp; AUTHENTIC' : 'VERIFICATION FAILED') . '</div>'
-            . '<div style="font-size:8pt;color:' . ($cert_status ? '#065f46' : '#991b1b') . ';opacity:.85;margin-top:3px;">' . ($cert_status ? 'Credentials verified and found genuine.' : 'One or more checks did not pass.') . '</div>'
-            . '</div></div>'
-            . '<div style="font-size:8pt;font-weight:800;color:#2563eb;text-transform:uppercase;letter-spacing:.07em;border-bottom:1.5px solid #dbe4f3;padding-bottom:7px;margin-bottom:12px;">✓ Verification Checklist</div>'
+            . '<div style="font-size:8pt;font-weight:800;color:#2563eb;text-transform:uppercase;letter-spacing:.07em;border-bottom:1.5px solid #dbe4f3;padding-bottom:7px;margin-bottom:12px;">Verification Checklist</div>'
             . $cert_checks
-            . '<div style="display:flex;align-items:center;gap:14px;background:linear-gradient(135deg,#f0fdf4,#ecfdf5);border:1.5px solid #6ee7b7;border-radius:12px;padding:14px 18px;margin-top:20px;">'
-            . '<span style="font-size:2rem;color:#059669;flex-shrink:0;">&#128737;</span>'
-            . '<div><div style="font-size:9pt;font-weight:800;color:#065f46;margin-bottom:3px;">Digitally Authenticated by Prime University Bangladesh</div>'
+            . '<div style="background:linear-gradient(135deg,#f0fdf4,#ecfdf5);border:1.5px solid #6ee7b7;border-radius:12px;padding:14px 18px;margin-top:20px;">'
+            . '<div style="font-size:9pt;font-weight:800;color:#065f46;margin-bottom:3px;">Digitally Authenticated by Prime University Bangladesh</div>'
             . '<div style="font-size:7.5pt;color:#059669;line-height:1.4;">'
-            . 'Verified by: <strong>' . h($rec['verifier_name']) . '</strong> &nbsp;|&nbsp; Date: ' . $cert_date . ' at ' . $cert_time . ' &nbsp;|&nbsp; Ref: ' . htmlspecialchars($ref_no_e)
-            . '</div></div></div>'
+            . 'Verified by: <strong>' . h($rec['verifier_name']) . '</strong> | Date: ' . $cert_date . ' at ' . $cert_time . ' | Ref: ' . htmlspecialchars($ref_no_e)
+            . '</div></div>'
             . '</div>'
             . '<div style="background:#f8fafc;border-top:1.5px solid #e8edf5;padding:10px 32px;text-align:center;font-size:7pt;color:#9ca3af;">'
             . 'This certificate was generated by the Prime University Bangladesh Verification System. Reference: ' . htmlspecialchars($ref_no_e) . ' | Digital Signed Version'
