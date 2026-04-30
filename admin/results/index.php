@@ -102,6 +102,11 @@ try {
     $wf_counts['published'] = (int)$r->fetchColumn();
 } catch (Throwable $_e) { /* tables may not exist yet */ }
 
+// ── Redirect before any output ────────────────────────────────────────────────
+if ($active_tab === 'queue' && wf_has_approver_role()) {
+    redirect(APP_URL . '/results/workflow-queue.php');
+}
+
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
@@ -174,11 +179,6 @@ require_once __DIR__ . '/../includes/header.php';
 <?php endif; ?>
 
 <?php
-// ── Active tab: queue redirect ────────────────────────────────────────────────
-if ($active_tab === 'queue' && wf_has_approver_role()):
-    redirect(APP_URL . '/results/workflow-queue.php');
-endif;
-
 // ── Active tab: My Sheets ─────────────────────────────────────────────────────
 if ($active_tab === 'my_sheets' && wf_can_create_sheet()):
     _wf_render_my_sheets($user_id, $dept_scope);
