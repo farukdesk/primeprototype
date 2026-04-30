@@ -106,6 +106,62 @@ function rm_get_subjects(int $exam_id): array
 }
 
 /**
+ * Returns marking categories for a single subject, ordered by sort_order.
+ */
+function rm_get_mark_categories(int $subject_id): array
+{
+    $stmt = db()->prepare(
+        'SELECT * FROM result_mark_categories
+         WHERE subject_id = ?
+         ORDER BY sort_order ASC, id ASC'
+    );
+    $stmt->execute([$subject_id]);
+    return $stmt->fetchAll();
+}
+
+/**
+ * Returns all marking categories for all subjects of an exam,
+ * keyed by subject_id: [ subject_id => [ category, ... ] ]
+ */
+function rm_get_all_mark_categories(int $exam_id): array
+{
+    $stmt = db()->prepare(
+        'SELECT mc.*
+         FROM result_mark_categories mc
+         JOIN result_subjects rs ON rs.id = mc.subject_id
+         WHERE rs.exam_id = ?
+         ORDER BY mc.subject_id ASC, mc.sort_order ASC, mc.id ASC'
+    );
+    $stmt->execute([$exam_id]);
+    $rows = $stmt->fetchAll();
+    $keyed = [];
+    foreach ($rows as $row) {
+        $keyed[(int)$row['subject_id']][] = $row;
+    }
+    return $keyed;
+}
+
+/**
+ * Returns grade-detail rows keyed by [grade_id][category_id].
+ */
+function rm_get_grade_details_for_exam(int $exam_id): array
+{
+    $stmt = db()->prepare(
+        'SELECT gd.grade_id, gd.category_id, gd.marks_obtained
+         FROM result_grade_details gd
+         JOIN result_grades rg ON rg.id = gd.grade_id
+         WHERE rg.exam_id = ?'
+    );
+    $stmt->execute([$exam_id]);
+    $rows = $stmt->fetchAll();
+    $keyed = [];
+    foreach ($rows as $row) {
+        $keyed[(int)$row['grade_id']][(int)$row['category_id']] = (float)$row['marks_obtained'];
+    }
+    return $keyed;
+}
+
+/**
  * Returns grades keyed by [student_sid][subject_id].
  */
 function rm_get_grades(int $exam_id): array

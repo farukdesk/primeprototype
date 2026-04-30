@@ -31,7 +31,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $credits       = trim($_POST['credits']        ?? '');
     $sort_order    = (int)($_POST['sort_order']    ?? 0);
 
+    // Mark categories
+    $cat_names    = (array)($_POST['cat_name']    ?? []);
+    $cat_marks    = (array)($_POST['cat_marks']   ?? []);
+    $cat_orders   = (array)($_POST['cat_order']   ?? []);
+
     if ($course_title === '') $errors[] = 'Course title is required.';
+
+    // Validate category totals if any provided
+    $valid_cats = [];
+    $cat_total = 0;
+    foreach ($cat_names as $ci => $cname) {
+        $cname = trim($cname);
+        $cmarks = isset($cat_marks[$ci]) ? (float)$cat_marks[$ci] : 0;
+        if ($cname === '') continue;
+        if ($cmarks <= 0) { $errors[] = 'Each category must have max marks greater than 0.'; break; }
+        $cat_total += $cmarks;
+        $valid_cats[] = ['name' => $cname, 'marks' => $cmarks, 'order' => (int)($cat_orders[$ci] ?? $ci)];
+    }
+    if (!empty($valid_cats) && abs($cat_total - 100) > 0.01) {
+        $errors[] = 'Marking category totals must add up to 100 (currently ' . number_format($cat_total, 2) . ').';
+    }
 
     // Validate curriculum link
     if ($curriculum_id > 0) {
@@ -61,6 +81,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $credits_val,
             $sort_order,
         ]);
+        $new_subject_id = (int)db()->lastInsertId();
+
+        // Save mark categories
+        if (!empty($valid_cats)) {
+            $cat_stmt = db()->prepare(
+                'INSERT INTO result_mark_categories (subject_id, category_name, max_marks, sort_order)
+                 VALUES (?, ?, ?, ?)'
+            );
+            foreach ($valid_cats as $cat) {
+                $cat_stmt->execute([$new_subject_id, $cat['name'], $cat['marks'], $cat['order']]);
+            }
+        }
+
         flash_set('success', 'Subject <strong>' . h($course_title) . '</strong> added.');
         redirect(APP_URL . '/results/view.php?id=' . $exam_id . '&tab=subjects');
     }
@@ -155,6 +188,28 @@ require_once __DIR__ . '/../../includes/header.php';
                         </div>
                     </div>
 
+                    <!-- ── Marking Categories ── -->
+                    <hr>
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <label class="form-label fw-medium mb-0">
+                            Marking Categories
+                            <small class="text-muted fw-normal">— breakdown of the 100 marks (optional)</small>
+                        </label>
+                        <button type="button" id="add_cat_btn" class="btn btn-sm btn-outline-primary" style="border-radius:7px;">
+                            <i class="fas fa-plus me-1"></i> Add Category
+                        </button>
+                    </div>
+                    <div id="cat_rows">
+                        <!-- rows injected by JS -->
+                    </div>
+                    <div id="cat_total_wrap" class="small mt-1" style="display:none;">
+                        Total: <span id="cat_total" class="fw-bold">0</span> / 100
+                        <span id="cat_total_warn" class="text-danger ms-1" style="display:none;">Must equal 100</span>
+                    </div>
+                    <div class="form-text mb-3">
+                        e.g. Attendance 10, Class Test 10, Mid Term 30, Final 50 — must sum to 100 if provided.
+                    </div>
+
                     <div class="d-flex gap-2">
                         <button type="submit" class="btn btn-primary" style="border-radius:10px;">
                             <i class="fas fa-save me-1"></i> Save Subject
@@ -181,5 +236,83 @@ document.getElementById('cc_picker').addEventListener('change', function () {
 });
 </script>
 <?php endif; ?>
+
+<script>
+(function () {
+    var rowIdx = 0;
+    var catRows = document.getElementById('cat_rows');
+    var totalSpan = document.getElementById('cat_total');
+    var totalWrap = document.getElementById('cat_total_wrap');
+    var totalWarn = document.getElementById('cat_total_warn');
+
+    function updateTotal() {
+        var total = 0;
+        catRows.querySelectorAll('.cat-marks-inp').forEach(function (inp) {
+            var v = parseFloat(inp.value);
+            if (!isNaN(v)) total += v;
+        });
+        totalSpan.textContent = total.toFixed(2);
+        var ok = Math.abs(total - 100) < 0.01 || catRows.children.length === 0;
+        totalWarn.style.display = ok ? 'none' : '';
+        totalWrap.style.display = catRows.children.length ? '' : 'none';
+    }
+
+    function addRow(name, marks, order) {
+        var idx = rowIdx++;
+        var div = document.createElement('div');
+        div.className = 'row g-2 mb-2 cat-row align-items-center';
+        div.innerHTML =
+            '<div class="col-md-5">' +
+            '<input type="text" name="cat_name[' + idx + ']" class="form-control form-control-sm" placeholder="Category name (e.g. Attendance)" maxlength="100" value="' + (name || '') + '" required>' +
+            '</div>' +
+            '<div class="col-md-3">' +
+            '<div class="input-group input-group-sm">' +
+            '<input type="number" name="cat_marks[' + idx + ']" class="form-control form-control-sm cat-marks-inp" placeholder="Max marks" min="0.01" max="100" step="0.01" value="' + (marks || '') + '" required>' +
+            '<span class="input-group-text">pts</span>' +
+            '</div>' +
+            '</div>' +
+            '<div class="col-md-2">' +
+            '<input type="number" name="cat_order[' + idx + ']" class="form-control form-control-sm" placeholder="Order" min="0" value="' + (order !== undefined ? order : idx) + '">' +
+            '</div>' +
+            '<div class="col-md-2">' +
+            '<button type="button" class="btn btn-sm btn-outline-danger remove-cat-btn" style="border-radius:7px;"><i class="fas fa-trash"></i></button>' +
+            '</div>';
+        div.querySelector('.cat-marks-inp').addEventListener('input', updateTotal);
+        div.querySelector('.remove-cat-btn').addEventListener('click', function () {
+            div.remove();
+            updateTotal();
+        });
+        catRows.appendChild(div);
+        updateTotal();
+    }
+
+    document.getElementById('add_cat_btn').addEventListener('click', function () {
+        addRow('', '', rowIdx);
+    });
+
+    // Restore old values on validation error
+    <?php
+    $old_cat_names  = $_POST['cat_name']  ?? [];
+    $old_cat_marks  = $_POST['cat_marks'] ?? [];
+    $old_cat_orders = $_POST['cat_order'] ?? [];
+    $restore_cats = [];
+    foreach ($old_cat_names as $ci => $cn) {
+        $cn = trim($cn);
+        if ($cn !== '') {
+            $restore_cats[] = [
+                'category_name' => $cn,
+                'max_marks'     => (float)($old_cat_marks[$ci] ?? 0),
+                'sort_order'    => (int)($old_cat_orders[$ci]  ?? $ci),
+            ];
+        }
+    }
+    ?>
+    <?php if (!empty($restore_cats)): ?>
+    <?= json_encode($restore_cats) ?>.forEach(function (c) {
+        addRow(c.category_name, parseFloat(c.max_marks), c.sort_order);
+    });
+    <?php endif; ?>
+})();
+</script>
 
 <?php require_once __DIR__ . '/../../includes/footer.php'; ?>

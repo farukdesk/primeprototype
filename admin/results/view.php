@@ -3,11 +3,12 @@ require_once __DIR__ . '/../includes/auth.php';
 require_access('results');
 require_once __DIR__ . '/helpers.php';
 
-$id       = (int)($_GET['id'] ?? 0);
-$exam     = rm_get_exam($id);
-$subjects = rm_get_subjects($id);
-$grades   = rm_get_grades($id);
-$students = rm_get_exam_students($id);
+$id         = (int)($_GET['id'] ?? 0);
+$exam       = rm_get_exam($id);
+$subjects   = rm_get_subjects($id);
+$grades     = rm_get_grades($id);
+$students   = rm_get_exam_students($id);
+$all_cats   = rm_get_all_mark_categories($id);   // keyed by subject_id
 
 $page_title = h($exam['exam_title']);
 
@@ -178,13 +179,14 @@ require_once __DIR__ . '/../includes/header.php';
                         <th>Course Code</th>
                         <th>Course Title</th>
                         <th>Credits</th>
+                        <th>Mark Categories</th>
                         <th>From Curriculum</th>
                         <?php if (rm_is_staff()): ?><th class="text-end pe-4">Actions</th><?php endif; ?>
                     </tr>
                 </thead>
                 <tbody>
                 <?php if (empty($subjects)): ?>
-                    <tr><td colspan="6" class="text-center text-muted py-4">
+                    <tr><td colspan="7" class="text-center text-muted py-4">
                         No subjects added yet.
                         <?php if (rm_is_staff()): ?>
                         <a href="<?= APP_URL ?>/results/subjects/create.php?exam_id=<?= $id ?>">Add one</a>
@@ -194,12 +196,27 @@ require_once __DIR__ . '/../includes/header.php';
                         <?php endif; ?>
                     </td></tr>
                 <?php else: ?>
-                    <?php foreach ($subjects as $i => $s): ?>
+                    <?php foreach ($subjects as $i => $s):
+                        $s_cats = $all_cats[(int)$s['id']] ?? [];
+                    ?>
                     <tr>
                         <td class="px-4"><?= $i + 1 ?></td>
                         <td><span class="badge bg-light text-dark border"><?= h($s['course_code'] ?? '—') ?></span></td>
                         <td class="fw-medium"><?= h($s['course_title']) ?></td>
                         <td><?= $s['credits'] !== null ? h($s['credits']) : '—' ?></td>
+                        <td>
+                            <?php if (!empty($s_cats)): ?>
+                            <div class="d-flex flex-wrap gap-1">
+                                <?php foreach ($s_cats as $cat): ?>
+                                <span class="badge bg-info bg-opacity-10 text-dark border" style="font-size:.7rem;">
+                                    <?= h($cat['category_name']) ?> (<?= (float)$cat['max_marks'] ?>)
+                                </span>
+                                <?php endforeach; ?>
+                            </div>
+                            <?php else: ?>
+                            <span class="text-muted small">0–100 (no breakdown)</span>
+                            <?php endif; ?>
+                        </td>
                         <td>
                             <?php if ($s['curriculum_id']): ?>
                             <span class="badge bg-success bg-opacity-10 text-success border border-success" style="font-size:.75rem;">
@@ -282,6 +299,25 @@ require_once __DIR__ . '/../includes/header.php';
                 <input type="hidden" name="student_sid"  id="inp_student_sid"  value="">
                 <input type="hidden" name="student_name" id="inp_student_name" value="">
 
+                <!-- Signoff fields -->
+                <div class="row g-3 mb-4">
+                    <div class="col-md-4">
+                        <label class="form-label fw-medium">Marked By</label>
+                        <input type="text" name="marked_by" id="inp_marked_by" class="form-control"
+                               placeholder="Name of person entering marks" maxlength="200">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-medium">Reviewed By</label>
+                        <input type="text" name="reviewed_by" id="inp_reviewed_by" class="form-control"
+                               placeholder="Reviewer name" maxlength="200">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-medium">Approved By</label>
+                        <input type="text" name="approved_by" id="inp_approved_by" class="form-control"
+                               placeholder="Approver name" maxlength="200">
+                    </div>
+                </div>
+
                 <div class="table-responsive mb-3">
                     <table class="table table-bordered align-middle" style="font-size:.875rem;">
                         <thead class="table-light">
@@ -289,18 +325,44 @@ require_once __DIR__ . '/../includes/header.php';
                                 <th style="width:50px;">#</th>
                                 <th>Course Code</th>
                                 <th>Course Title</th>
-                                <th style="width:110px;">Marks (0–100)</th>
+                                <th>Marks Entry</th>
+                                <th style="width:90px;">Total</th>
                                 <th style="width:90px;">Grade</th>
                                 <th style="width:80px;">Point</th>
                             </tr>
                         </thead>
                         <tbody>
-                        <?php foreach ($subjects as $i => $s): ?>
+                        <?php foreach ($subjects as $i => $s):
+                            $subj_cats = $all_cats[(int)$s['id']] ?? [];
+                        ?>
                         <tr>
                             <td><?= $i + 1 ?></td>
                             <td><span class="badge bg-light text-dark border"><?= h($s['course_code'] ?? '—') ?></span></td>
                             <td><?= h($s['course_title']) ?></td>
                             <td>
+                                <?php if (!empty($subj_cats)): ?>
+                                <!-- Per-category inputs -->
+                                <div class="cat-inputs" data-subject="<?= $s['id'] ?>">
+                                    <?php foreach ($subj_cats as $cat): ?>
+                                    <div class="d-flex align-items-center gap-2 mb-1">
+                                        <label class="text-muted small mb-0" style="min-width:120px;">
+                                            <?= h($cat['category_name']) ?>
+                                            <span class="text-muted">(max <?= (float)$cat['max_marks'] ?>)</span>
+                                        </label>
+                                        <input type="number"
+                                               name="cat_marks[<?= $s['id'] ?>][<?= $cat['id'] ?>]"
+                                               class="form-control form-control-sm cat-inp"
+                                               data-subject="<?= $s['id'] ?>"
+                                               data-max="<?= (float)$cat['max_marks'] ?>"
+                                               data-catid="<?= $cat['id'] ?>"
+                                               min="0" max="<?= (float)$cat['max_marks'] ?>" step="0.01"
+                                               placeholder="0"
+                                               style="width:80px;">
+                                    </div>
+                                    <?php endforeach; ?>
+                                </div>
+                                <?php else: ?>
+                                <!-- Single marks input (no categories) -->
                                 <input type="number"
                                        name="marks[<?= $s['id'] ?>]"
                                        class="form-control form-control-sm marks-input"
@@ -308,6 +370,10 @@ require_once __DIR__ . '/../includes/header.php';
                                        min="0" max="100" step="0.01"
                                        placeholder="—"
                                        style="width:90px;">
+                                <?php endif; ?>
+                            </td>
+                            <td>
+                                <span class="total-display fw-bold" id="total_<?= $s['id'] ?>">—</span>
                             </td>
                             <td>
                                 <span class="grade-display fw-bold" id="grade_<?= $s['id'] ?>">—</span>
@@ -418,10 +484,15 @@ require_once __DIR__ . '/../includes/header.php';
         fn($r) => ['min' => $r[0], 'max' => $r[1] === PHP_INT_MAX ? PHP_INT_MAX : $r[1], 'letter' => $r[2], 'point' => $r[3]],
         rm_grading_scale()
     )) ?>.map(function (r) {
-        // PHP_INT_MAX (9007199254740991) → Infinity for JS comparisons
         r.max = (r.max >= Number.MAX_SAFE_INTEGER) ? Infinity : r.max;
         return r;
     });
+
+    // Subject categories map: { subject_id: [ {id, max_marks}, ... ] }
+    var subjectCats = <?= json_encode(array_map(
+        fn($cats) => array_map(fn($c) => ['id' => (int)$c['id'], 'max_marks' => (float)$c['max_marks']], $cats),
+        $all_cats
+    )) ?>;
 
     function computeGrade(marks) {
         for (var i = 0; i < gradeScale.length; i++) {
@@ -433,19 +504,58 @@ require_once __DIR__ . '/../includes/header.php';
         return { letter: 'F', point: 0 };
     }
 
-    // Marks input → auto-compute grade
-    document.querySelectorAll('.marks-input').forEach(function (inp) {
-        inp.addEventListener('input', function () {
-            var sid = this.dataset.subject;
-            var raw = parseFloat(this.value);
-            if (isNaN(raw) || this.value === '') {
+    function updateSubjectDisplay(sid) {
+        var cats = subjectCats[sid];
+        var total;
+        if (cats && cats.length > 0) {
+            // Sum category inputs
+            total = 0;
+            var anyVal = false;
+            document.querySelectorAll('.cat-inp[data-subject="' + sid + '"]').forEach(function (inp) {
+                var v = parseFloat(inp.value);
+                if (!isNaN(v)) { total += v; anyVal = true; }
+            });
+            if (!anyVal) {
+                document.getElementById('total_' + sid).textContent = '—';
                 document.getElementById('grade_' + sid).textContent = '—';
                 document.getElementById('point_' + sid).textContent = '—';
-            } else {
-                var g = computeGrade(raw);
-                document.getElementById('grade_' + sid).textContent = g.letter;
-                document.getElementById('point_' + sid).textContent = g.point.toFixed(2);
+                return;
             }
+        } else {
+            // Plain marks input
+            var inp = document.querySelector('.marks-input[data-subject="' + sid + '"]');
+            if (!inp || inp.value === '') {
+                document.getElementById('total_' + sid).textContent = '—';
+                document.getElementById('grade_' + sid).textContent = '—';
+                document.getElementById('point_' + sid).textContent = '—';
+                return;
+            }
+            total = parseFloat(inp.value);
+            if (isNaN(total)) {
+                document.getElementById('total_' + sid).textContent = '—';
+                document.getElementById('grade_' + sid).textContent = '—';
+                document.getElementById('point_' + sid).textContent = '—';
+                return;
+            }
+        }
+        total = Math.min(Math.max(total, 0), 100);
+        var g = computeGrade(total);
+        document.getElementById('total_' + sid).textContent = total.toFixed(2);
+        document.getElementById('grade_' + sid).textContent = g.letter;
+        document.getElementById('point_' + sid).textContent = g.point.toFixed(2);
+    }
+
+    // Bind category inputs
+    document.querySelectorAll('.cat-inp').forEach(function (inp) {
+        inp.addEventListener('input', function () {
+            updateSubjectDisplay(this.dataset.subject);
+        });
+    });
+
+    // Bind plain marks inputs
+    document.querySelectorAll('.marks-input').forEach(function (inp) {
+        inp.addEventListener('input', function () {
+            updateSubjectDisplay(this.dataset.subject);
         });
     });
 
@@ -455,16 +565,44 @@ require_once __DIR__ . '/../includes/header.php';
     var formWrap     = document.getElementById('grade_form_wrap');
     var searchTimer  = null;
 
+    function resetAllInputs() {
+        document.querySelectorAll('.cat-inp, .marks-input').forEach(function (inp) {
+            inp.value = '';
+        });
+        <?php foreach ($subjects as $s): ?>
+        document.getElementById('total_<?= $s['id'] ?>').textContent = '—';
+        document.getElementById('grade_<?= $s['id'] ?>').textContent = '—';
+        document.getElementById('point_<?= $s['id'] ?>').textContent = '—';
+        <?php endforeach; ?>
+    }
+
     // Pre-fill grades for a student already in this exam
     function prefillGrades(sid) {
         fetch('<?= APP_URL ?>/results/grades/get.php?exam_id=<?= $id ?>&student_sid=' + encodeURIComponent(sid))
             .then(function (r) { return r.json(); })
             .then(function (data) {
+                // signoff from first grade row
+                if (data.length > 0) {
+                    document.getElementById('inp_marked_by').value   = data[0].marked_by   || '';
+                    document.getElementById('inp_reviewed_by').value = data[0].reviewed_by || '';
+                    document.getElementById('inp_approved_by').value = data[0].approved_by || '';
+                }
                 data.forEach(function (g) {
-                    var inp = document.querySelector('.marks-input[data-subject="' + g.subject_id + '"]');
-                    if (inp && g.marks !== null) {
-                        inp.value = g.marks;
-                        inp.dispatchEvent(new Event('input'));
+                    var sid = parseInt(g.subject_id);
+                    var cats = subjectCats[sid];
+                    if (cats && cats.length > 0 && g.category_marks) {
+                        // Fill per-category
+                        cats.forEach(function (cat) {
+                            var inp = document.querySelector('.cat-inp[data-subject="' + sid + '"][data-catid="' + cat.id + '"]');
+                            if (inp) {
+                                var v = g.category_marks[cat.id];
+                                inp.value = (v !== undefined) ? v : '';
+                            }
+                        });
+                        updateSubjectDisplay(sid);
+                    } else if (g.marks !== null) {
+                        var inp = document.querySelector('.marks-input[data-subject="' + sid + '"]');
+                        if (inp) { inp.value = g.marks; updateSubjectDisplay(sid); }
                     }
                 });
             });
@@ -479,11 +617,11 @@ require_once __DIR__ . '/../includes/header.php';
         formWrap.style.display = '';
         resultsDiv.innerHTML = '';
         searchInput.value = name + ' (' + sid + ')';
-        // Reset marks
-        document.querySelectorAll('.marks-input').forEach(function (inp) {
-            inp.value = '';
-            inp.dispatchEvent(new Event('input'));
-        });
+        // Clear signoff
+        document.getElementById('inp_marked_by').value   = '';
+        document.getElementById('inp_reviewed_by').value = '';
+        document.getElementById('inp_approved_by').value = '';
+        resetAllInputs();
         if (sid) prefillGrades(sid);
     }
 
@@ -525,12 +663,12 @@ require_once __DIR__ . '/../includes/header.php';
         document.getElementById('inp_student_name').value = '';
         document.getElementById('sel_student_name').textContent = '';
         document.getElementById('sel_student_sid').textContent  = '';
+        document.getElementById('inp_marked_by').value   = '';
+        document.getElementById('inp_reviewed_by').value = '';
+        document.getElementById('inp_approved_by').value = '';
         formWrap.style.display = 'none';
         searchInput.value = '';
-        document.querySelectorAll('.marks-input').forEach(function (inp) {
-            inp.value = '';
-            inp.dispatchEvent(new Event('input'));
-        });
+        resetAllInputs();
     });
 })();
 </script>
