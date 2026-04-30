@@ -690,6 +690,63 @@ $user       = auth_user();
                 </a>
             </li>
             <?php endif; ?>
+            <?php if (is_super_admin() || can_access('results-entry')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/results/mark-entry.php"
+                   class="<?= $current_path === (APP_URL . '/results/mark-entry.php') || basename($current_path) === 'mark-entry.php' ? 'active' : '' ?>" style="padding-left:2.2rem;">
+                    <i class="fas fa-pen-nib"></i> Mark Entry
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('results-review')): ?>
+            <?php
+            // Pending review badge
+            try {
+                $_rev_count = (int)db()->query("SELECT COUNT(*) FROM result_mark_sheets WHERE workflow_status='submitted'")->fetchColumn();
+            } catch (Throwable $_e) { $_rev_count = 0; }
+            ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/results/review-queue.php"
+                   class="<?= basename($current_path) === 'review-queue.php' || basename($current_path) === 'review-sheet.php' ? 'active' : '' ?>" style="padding-left:2.2rem;">
+                    <i class="fas fa-search"></i> Review Queue
+                    <?php if ($_rev_count > 0): ?>
+                    <span class="badge bg-primary ms-auto" style="font-size:.65rem;"><?= $_rev_count ?></span>
+                    <?php endif; ?>
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('results-hod')): ?>
+            <?php
+            try {
+                $_hod_count = (int)db()->query("SELECT COUNT(*) FROM result_mark_sheets WHERE workflow_status='under_review'")->fetchColumn();
+            } catch (Throwable $_e) { $_hod_count = 0; }
+            ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/results/hod-queue.php"
+                   class="<?= basename($current_path) === 'hod-queue.php' || basename($current_path) === 'hod-review.php' ? 'active' : '' ?>" style="padding-left:2.2rem;">
+                    <i class="fas fa-user-tie"></i> HOD Queue
+                    <?php if ($_hod_count > 0): ?>
+                    <span class="badge bg-warning text-dark ms-auto" style="font-size:.65rem;"><?= $_hod_count ?></span>
+                    <?php endif; ?>
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('results-controller')): ?>
+            <?php
+            try {
+                $_ctrl_count = (int)db()->query("SELECT COUNT(*) FROM result_mark_sheets WHERE workflow_status='hod_approved'")->fetchColumn();
+            } catch (Throwable $_e) { $_ctrl_count = 0; }
+            ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/results/controller-queue.php"
+                   class="<?= basename($current_path) === 'controller-queue.php' || basename($current_path) === 'controller-approve.php' ? 'active' : '' ?>" style="padding-left:2.2rem;">
+                    <i class="fas fa-check-double"></i> Controller Queue
+                    <?php if ($_ctrl_count > 0): ?>
+                    <span class="badge bg-success ms-auto" style="font-size:.65rem;"><?= $_ctrl_count ?></span>
+                    <?php endif; ?>
+                </a>
+            </li>
+            <?php endif; ?>
             <?php if (is_super_admin() || can_access('clubs')): ?>
             <li class="nav-item">
                 <a href="<?= APP_URL ?>/clubs/index.php"
