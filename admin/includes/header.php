@@ -693,57 +693,35 @@ $user       = auth_user();
             <?php if (is_super_admin() || can_access('results-entry')): ?>
             <li class="nav-item">
                 <a href="<?= APP_URL ?>/results/mark-entry.php"
-                   class="<?= $current_path === (APP_URL . '/results/mark-entry.php') || basename($current_path) === 'mark-entry.php' ? 'active' : '' ?>" style="padding-left:2.2rem;">
+                   class="<?= basename($current_path) === 'mark-entry.php' ? 'active' : '' ?>" style="padding-left:2.2rem;">
                     <i class="fas fa-pen-nib"></i> Mark Entry
                 </a>
             </li>
             <?php endif; ?>
-            <?php if (is_super_admin() || can_access('results-review')): ?>
             <?php
-            // Pending review badge
+            // Workflow queue: shown if user is an approver in any active chain
+            // Count pending sheets for this user (chain-aware, no hard-coded roles)
+            require_once __DIR__ . '/../results/workflow-helpers.php';
             try {
-                $_rev_count = (int)db()->query("SELECT COUNT(*) FROM result_mark_sheets WHERE workflow_status='submitted'")->fetchColumn();
-            } catch (Throwable $_e) { $_rev_count = 0; }
+                $_wf_queue_count = wf_has_approver_role() ? count(wf_get_approver_queue()) : 0;
+            } catch (Throwable $_e) { $_wf_queue_count = 0; }
+            if ($_wf_queue_count > 0 || wf_has_approver_role()):
             ?>
             <li class="nav-item">
-                <a href="<?= APP_URL ?>/results/review-queue.php"
-                   class="<?= basename($current_path) === 'review-queue.php' || basename($current_path) === 'review-sheet.php' ? 'active' : '' ?>" style="padding-left:2.2rem;">
-                    <i class="fas fa-search"></i> Review Queue
-                    <?php if ($_rev_count > 0): ?>
-                    <span class="badge bg-primary ms-auto" style="font-size:.65rem;"><?= $_rev_count ?></span>
+                <a href="<?= APP_URL ?>/results/workflow-queue.php"
+                   class="<?= in_array(basename($current_path), ['workflow-queue.php','workflow-review.php'], true) ? 'active' : '' ?>" style="padding-left:2.2rem;">
+                    <i class="fas fa-tasks"></i> Workflow Queue
+                    <?php if ($_wf_queue_count > 0): ?>
+                    <span class="badge bg-primary ms-auto" style="font-size:.65rem;"><?= $_wf_queue_count ?></span>
                     <?php endif; ?>
                 </a>
             </li>
             <?php endif; ?>
-            <?php if (is_super_admin() || can_access('results-hod')): ?>
-            <?php
-            try {
-                $_hod_count = (int)db()->query("SELECT COUNT(*) FROM result_mark_sheets WHERE workflow_status='under_review'")->fetchColumn();
-            } catch (Throwable $_e) { $_hod_count = 0; }
-            ?>
+            <?php if (is_super_admin() || can_access('results-chains')): ?>
             <li class="nav-item">
-                <a href="<?= APP_URL ?>/results/hod-queue.php"
-                   class="<?= basename($current_path) === 'hod-queue.php' || basename($current_path) === 'hod-review.php' ? 'active' : '' ?>" style="padding-left:2.2rem;">
-                    <i class="fas fa-user-tie"></i> HOD Queue
-                    <?php if ($_hod_count > 0): ?>
-                    <span class="badge bg-warning text-dark ms-auto" style="font-size:.65rem;"><?= $_hod_count ?></span>
-                    <?php endif; ?>
-                </a>
-            </li>
-            <?php endif; ?>
-            <?php if (is_super_admin() || can_access('results-controller')): ?>
-            <?php
-            try {
-                $_ctrl_count = (int)db()->query("SELECT COUNT(*) FROM result_mark_sheets WHERE workflow_status='hod_approved'")->fetchColumn();
-            } catch (Throwable $_e) { $_ctrl_count = 0; }
-            ?>
-            <li class="nav-item">
-                <a href="<?= APP_URL ?>/results/controller-queue.php"
-                   class="<?= basename($current_path) === 'controller-queue.php' || basename($current_path) === 'controller-approve.php' ? 'active' : '' ?>" style="padding-left:2.2rem;">
-                    <i class="fas fa-check-double"></i> Controller Queue
-                    <?php if ($_ctrl_count > 0): ?>
-                    <span class="badge bg-success ms-auto" style="font-size:.65rem;"><?= $_ctrl_count ?></span>
-                    <?php endif; ?>
+                <a href="<?= APP_URL ?>/results/chains/index.php"
+                   class="<?= strpos($current_path, '/results/chains/') !== false ? 'active' : '' ?>" style="padding-left:2.2rem;">
+                    <i class="fas fa-sitemap"></i> Workflow Chains
                 </a>
             </li>
             <?php endif; ?>

@@ -1,14 +1,20 @@
 <?php
 /**
  * Mark Entry – Teacher creates / edits a mark sheet.
+ *
+ * Access: determined dynamically — user must be in the entry step of a chain
+ * applicable to their dept scope. No hard-coded group names.
+ *
  * URL: /results/mark-entry.php          (new sheet)
  *      /results/mark-entry.php?id=X     (edit draft/returned sheet)
  */
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/workflow-helpers.php';
 
-if (!wf_can_enter()) {
-    flash_set('error', 'You do not have permission to enter marks.');
+auth_check();
+
+if (!wf_can_create_sheet()) {
+    flash_set('error', 'You are not assigned as an entry step in any active workflow chain.');
     redirect(APP_URL . '/results/index.php');
 }
 
@@ -19,25 +25,27 @@ $grades   = [];
 $errors   = [];
 clear_old();
 
-// ── Allowed departments for this teacher ──────────────────────────────────────
-$dept_scope   = get_dept_scope();  // null = all
-$dept_sql     = 'SELECT id, name FROM dept_departments WHERE is_active = 1';
-$dept_params  = [];
-if ($dept_scope !== null) {
-    if (empty($dept_scope)) {
-        $departments = [];
-    } else {
-        $phs          = implode(',', array_fill(0, count($dept_scope), '?'));
-        $dept_sql    .= " AND id IN ($phs)";
-        $dept_params  = $dept_scope;
-    }
+// ── Creatable chains for this user ────────────────────────────────────────────
+// These determine which dept/programs the teacher can submit for.
+$creatable = wf_get_creatable_chains(); // [{chain_id, dept_id, program_id, step_order, step_label}, ...]
+
+// Build unique dept_ids from creatable chains
+$creatable_dept_ids = array_unique(array_filter(array_column($creatable, 'dept_id')));
+$dept_scope         = get_dept_scope();
+
+if (empty($creatable_dept_ids) && !is_super_admin()) {
+    flash_set('error', 'No active workflow chains are configured for your department.');
+    redirect(APP_URL . '/results/index.php');
 }
-if ($dept_scope === null || !empty($dept_scope)) {
-    $ds           = db()->prepare($dept_sql . ' ORDER BY name ASC');
-    $ds->execute($dept_params);
-    $departments  = $ds->fetchAll();
+
+// Departments the user can submit for
+if (is_super_admin()) {
+    $departments = db()->query('SELECT id, name FROM dept_departments WHERE is_active = 1 ORDER BY name ASC')->fetchAll();
 } else {
-    $departments = [];
+    $phs         = implode(',', array_fill(0, count($creatable_dept_ids), '?'));
+    $ds          = db()->prepare("SELECT id, name FROM dept_departments WHERE is_active = 1 AND id IN ($phs) ORDER BY name ASC");
+    $ds->execute($creatable_dept_ids);
+    $departments = $ds->fetchAll();
 }
 
 // ── Load existing sheet (edit mode) ──────────────────────────────────────────
@@ -51,46 +59,51 @@ if ($sheet_id > 0) {
     );
     $stmt->execute([$sheet_id]);
     $sheet = $stmt->fetch();
-    if (!$sheet) {
-        flash_set('error', 'Mark sheet not found.');
-        redirect(APP_URL . '/results/index.php');
-    }
-    // Only owner can edit; status must be draft or returned
+
+    if (!$sheet) { flash_set('error', 'Sheet not found.'); redirect(APP_URL . '/results/index.php'); }
+
+    // Owner check
     if ((int)$sheet['created_by'] !== (int)$user['id'] && !is_super_admin()) {
         flash_set('error', 'You can only edit your own mark sheets.');
         redirect(APP_URL . '/results/index.php');
     }
+    // Status check – only draft or returned can be edited
     if (!in_array($sheet['workflow_status'], ['draft', 'returned'], true)) {
-        flash_set('error', 'This sheet has already been submitted and cannot be edited.');
-        redirect(APP_URL . '/results/mark-entry.php?id=' . $sheet_id . '&view=1');
+        flash_set('error', 'This sheet has been submitted and cannot be edited.');
+        redirect(APP_URL . '/results/index.php?tab=my_sheets');
     }
+
     $grades = wf_get_grades($sheet_id);
 }
 
-$semesters   = wf_semester_list();
-$page_title  = $sheet ? 'Edit Mark Sheet' : 'New Mark Sheet';
+$semesters  = wf_semester_list();
+$page_title = $sheet ? 'Edit Mark Sheet' : 'New Mark Sheet';
 
 // ── POST handler ──────────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
-    $action         = $_POST['action'] ?? 'save';   // 'save' or 'submit'
-    $dept_id        = (int)($_POST['dept_id']     ?? 0);
-    $program_id     = (int)($_POST['program_id']  ?? 0);
-    $semester       = trim($_POST['semester']     ?? '');
-    $academic_year  = trim($_POST['academic_year'] ?? '');
-    $curriculum_id  = (int)($_POST['curriculum_id'] ?? 0);
-    $subject_code   = trim($_POST['subject_code'] ?? '');
-    $subject_title  = trim($_POST['subject_title'] ?? '');
-    $credits        = trim($_POST['credits']       ?? '');
+    $action         = $_POST['action']         ?? 'save';
+    $dept_id        = (int)($_POST['dept_id']        ?? 0);
+    $program_id     = (int)($_POST['program_id']     ?? 0);
+    $semester       = trim($_POST['semester']        ?? '');
+    $academic_year  = trim($_POST['academic_year']   ?? '');
+    $curriculum_id  = (int)($_POST['curriculum_id']  ?? 0);
+    $subject_code   = trim($_POST['subject_code']    ?? '');
+    $subject_title  = trim($_POST['subject_title']   ?? '');
+    $credits        = trim($_POST['credits']         ?? '');
 
     if ($dept_id <= 0)        $errors[] = 'Department is required.';
-    if ($semester === '')      $errors[] = 'Semester is required.';
+    if ($semester === '')     $errors[] = 'Semester is required.';
     if ($subject_title === '') $errors[] = 'Subject title is required.';
 
-    // Validate dept access
-    if ($dept_id > 0 && !can_access_dept($dept_id)) {
-        $errors[] = 'You do not have access to the selected department.';
+    // Resolve chain on submit/save
+    $chain = null;
+    if ($action === 'submit') {
+        $chain = wf_resolve_chain($dept_id, $program_id ?: null);
+        if (!$chain) {
+            $errors[] = 'No active workflow chain is configured for this department/program. Please contact the administrator.';
+        }
     }
 
     if (empty($errors)) {
@@ -100,78 +113,92 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Update existing sheet header
             $db->prepare(
                 'UPDATE result_mark_sheets SET
-                   dept_id = ?, program_id = ?, semester = ?, academic_year = ?,
-                   curriculum_id = ?, subject_code = ?, subject_title = ?, credits = ?,
-                   workflow_status = ?, updated_at = NOW()
-                 WHERE id = ?'
+                   dept_id=?, program_id=?, semester=?, academic_year=?,
+                   curriculum_id=?, subject_code=?, subject_title=?, credits=?,
+                   updated_at=NOW()
+                 WHERE id=?'
             )->execute([
-                $dept_id,
-                $program_id ?: null,
-                $semester,
-                $academic_year ?: null,
-                $curriculum_id ?: null,
-                $subject_code ?: null,
-                $subject_title,
+                $dept_id, $program_id ?: null, $semester, $academic_year ?: null,
+                $curriculum_id ?: null, $subject_code ?: null, $subject_title,
                 $credits !== '' ? (float)$credits : null,
-                $action === 'submit' ? 'submitted' : 'draft',
                 $sheet_id,
             ]);
-            if ($action === 'submit') {
-                $db->prepare('UPDATE result_mark_sheets SET submitted_at = NOW() WHERE id = ? AND submitted_at IS NULL')
-                   ->execute([$sheet_id]);
-            }
         } else {
-            // Create new sheet
+            // Insert new sheet (always starts as draft)
             $db->prepare(
                 'INSERT INTO result_mark_sheets
                    (dept_id, program_id, semester, academic_year, curriculum_id,
-                    subject_code, subject_title, credits, workflow_status, created_by, submitted_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                    subject_code, subject_title, credits, workflow_status, created_by)
+                 VALUES (?,?,?,?,?,?,?,?,\'draft\',?)'
             )->execute([
-                $dept_id,
-                $program_id ?: null,
-                $semester,
-                $academic_year ?: null,
-                $curriculum_id ?: null,
-                $subject_code ?: null,
-                $subject_title,
+                $dept_id, $program_id ?: null, $semester, $academic_year ?: null,
+                $curriculum_id ?: null, $subject_code ?: null, $subject_title,
                 $credits !== '' ? (float)$credits : null,
-                $action === 'submit' ? 'submitted' : 'draft',
                 $user['id'],
-                $action === 'submit' ? date('Y-m-d H:i:s') : null,
             ]);
             $sheet_id = (int)$db->lastInsertId();
+            _wf_log($sheet_id, 0, 'Teacher', 0, 'created', (int)$user['id']);
         }
 
-        // ── Save student grades ────────────────────────────────────────────────
-        $sids        = (array)($_POST['student_sid']  ?? []);
-        $names       = (array)($_POST['student_name'] ?? []);
+        // ── Save grades ────────────────────────────────────────────────────────
+        $sids        = (array)($_POST['student_sid']   ?? []);
+        $names       = (array)($_POST['student_name']  ?? []);
         $id_pks      = (array)($_POST['student_id_pk'] ?? []);
-        $absents     = (array)($_POST['is_absent']    ?? []);
-        $attendances = (array)($_POST['attendance']   ?? []);
-        $class_tests = (array)($_POST['class_test']   ?? []);
-        $mid_terms   = (array)($_POST['mid_term']     ?? []);
-        $final_exams = (array)($_POST['final_exam']   ?? []);
+        $absents     = (array)($_POST['is_absent']     ?? []);
+        $attendances = (array)($_POST['attendance']    ?? []);
+        $class_tests = (array)($_POST['class_test']    ?? []);
+        $mid_terms   = (array)($_POST['mid_term']      ?? []);
+        $final_exams = (array)($_POST['final_exam']    ?? []);
 
         foreach ($sids as $idx => $sid) {
             $sid = trim($sid);
             if ($sid === '') continue;
-            $name       = trim($names[$idx] ?? '');
-            $id_pk      = (int)($id_pks[$idx] ?? 0);
-            $is_absent  = isset($absents[$idx]) && $absents[$idx] == '1' ? 1 : 0;
-            $att        = isset($attendances[$idx]) && $attendances[$idx] !== '' ? (float)$attendances[$idx] : null;
-            $ct         = isset($class_tests[$idx]) && $class_tests[$idx] !== '' ? (float)$class_tests[$idx] : null;
-            $mid        = isset($mid_terms[$idx])   && $mid_terms[$idx]   !== '' ? (float)$mid_terms[$idx]   : null;
-            $fin        = isset($final_exams[$idx]) && $final_exams[$idx] !== '' ? (float)$final_exams[$idx] : null;
-
-            wf_upsert_grade($sheet_id, $id_pk, $sid, $name, $is_absent, $att, $ct, $mid, $fin);
+            wf_upsert_grade(
+                $sheet_id,
+                (int)($id_pks[$idx] ?? 0),
+                $sid,
+                trim($names[$idx] ?? ''),
+                ($absents[$idx] ?? '0') === '1' ? 1 : 0,
+                isset($attendances[$idx]) && $attendances[$idx] !== '' ? (float)$attendances[$idx] : null,
+                isset($class_tests[$idx]) && $class_tests[$idx]  !== '' ? (float)$class_tests[$idx]  : null,
+                isset($mid_terms[$idx])   && $mid_terms[$idx]    !== '' ? (float)$mid_terms[$idx]    : null,
+                isset($final_exams[$idx]) && $final_exams[$idx]  !== '' ? (float)$final_exams[$idx]  : null
+            );
         }
 
-        if ($action === 'submit') {
+        // ── Submit: advance to first approver step ────────────────────────────
+        if ($action === 'submit' && $chain) {
+            $entry_step = wf_get_entry_step((int)$chain['id']);
+            $next_step  = $entry_step ? wf_get_next_step((int)$chain['id'], (int)$entry_step['step_order']) : null;
+
+            if ($next_step) {
+                $db->prepare(
+                    "UPDATE result_mark_sheets
+                     SET chain_id=?, current_step_order=?, workflow_status='pending', updated_at=NOW()
+                     WHERE id=?"
+                )->execute([$chain['id'], $next_step['step_order'], $sheet_id]);
+                _wf_log($sheet_id, (int)($entry_step['step_order'] ?? 1),
+                        $entry_step['step_label'] ?? 'Teacher',
+                        (int)($entry_step['group_id'] ?? 0),
+                        'submitted', (int)$user['id']);
+            } else {
+                // Chain has only entry step → publish immediately (unusual config but handle it)
+                $db->prepare(
+                    "UPDATE result_mark_sheets
+                     SET chain_id=?, current_step_order=?, workflow_status='published', updated_at=NOW()
+                     WHERE id=?"
+                )->execute([$chain['id'], $entry_step['step_order'] ?? 1, $sheet_id]);
+                _wf_log($sheet_id, (int)($entry_step['step_order'] ?? 1),
+                        $entry_step['step_label'] ?? 'Teacher',
+                        (int)($entry_step['group_id'] ?? 0),
+                        'published', (int)$user['id']);
+            }
+
             flash_set('success', 'Mark sheet submitted for review.');
         } else {
             flash_set('success', 'Mark sheet saved as draft.');
         }
+
         redirect(APP_URL . '/results/index.php?tab=my_sheets');
     }
 
@@ -181,7 +208,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 require_once __DIR__ . '/../includes/header.php';
 
-// Pre-fill values from sheet or old input
 $v_dept_id       = $sheet ? $sheet['dept_id']       : old('dept_id');
 $v_program_id    = $sheet ? $sheet['program_id']     : old('program_id');
 $v_semester      = $sheet ? $sheet['semester']       : old('semester');
@@ -205,33 +231,32 @@ $is_edit         = $sheet !== null;
 
 <?php if ($errors): ?>
 <div class="alert alert-danger alert-dismissible fade show">
-    <ul class="mb-0 ps-3"><?php foreach ($errors as $e): ?><li><?= h($e) ?></li><?php endforeach; ?></ul>
+    <ul class="mb-0 ps-3"><?php foreach ($errors as $e): ?><li><?= $e ?></li><?php endforeach; ?></ul>
     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
 </div>
 <?php endif; ?>
 <?php flash_show(); ?>
 
 <?php if ($sheet && $sheet['workflow_status'] === 'returned'): ?>
+<?php $history = wf_get_sheet_history($sheet_id); $last_return = null;
+foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $last_return = $h; break; } }
+?>
 <div class="alert alert-warning">
     <strong><i class="fas fa-undo me-1"></i> Returned for revision</strong>
-    <?php if ($sheet['return_remarks']): ?>
-    — <?= h($sheet['return_remarks']) ?>
+    <?php if ($last_return && $last_return['remarks']): ?>
+    — <?= h($last_return['remarks']) ?>
+    <small class="text-muted ms-2">by <?= h($last_return['actor_name'] ?? 'reviewer') ?> on <?= date('d M Y', strtotime($last_return['acted_at'])) ?></small>
     <?php endif; ?>
 </div>
 <?php endif; ?>
 
 <form method="POST" id="markEntryForm" novalidate>
     <?= csrf_field() ?>
-    <?php if ($sheet_id): ?>
-    <input type="hidden" name="sheet_id" value="<?= $sheet_id ?>">
-    <?php endif; ?>
 
     <div class="row g-4">
 
-        <!-- ── Left: Sheet Info ── -->
+        <!-- Left: Sheet Info -->
         <div class="col-lg-8">
-
-            <!-- Department & Program -->
             <div class="card mb-4" style="border-radius:12px;">
                 <div class="card-header py-3 px-4">
                     <h6 class="mb-0 fw-semibold"><i class="fas fa-university me-2 text-muted"></i>Department &amp; Subject</h6>
@@ -261,7 +286,7 @@ $is_edit         = $sheet !== null;
                     <div class="row g-3 mb-3">
                         <div class="col-md-6">
                             <label class="form-label fw-medium">Semester <span class="text-danger">*</span></label>
-                            <select name="semester" id="semester_select" class="form-select" required>
+                            <select name="semester" class="form-select" required>
                                 <option value="">— Select Semester —</option>
                                 <?php foreach ($semesters as $s): ?>
                                 <option value="<?= h($s) ?>" <?= $v_semester === $s ? 'selected' : '' ?>><?= h($s) ?></option>
@@ -275,11 +300,11 @@ $is_edit         = $sheet !== null;
                         </div>
                     </div>
 
-                    <!-- Subject (select from curriculum or enter manually) -->
                     <div class="mb-3">
                         <label class="form-label fw-medium">Subject from Curriculum</label>
-                        <select name="curriculum_id" id="curriculum_select" class="form-select" <?= ($v_dept_id && $v_program_id) ? '' : 'disabled' ?>>
-                            <option value="">— Select Subject from Curriculum (optional) —</option>
+                        <select name="curriculum_id" id="curriculum_select" class="form-select"
+                                <?= ($v_dept_id && $v_program_id) ? '' : 'disabled' ?>>
+                            <option value="">— Select from Curriculum (optional) —</option>
                         </select>
                         <div class="form-text">Selecting a subject auto-fills code, title, and credits below.</div>
                     </div>
@@ -310,10 +335,12 @@ $is_edit         = $sheet !== null;
                 <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center">
                     <h6 class="mb-0 fw-semibold"><i class="fas fa-list me-2 text-muted"></i>Student Marks</h6>
                     <div class="d-flex gap-2">
-                        <button type="button" id="btn_load_students" class="btn btn-sm btn-outline-primary" style="border-radius:8px;" disabled>
+                        <button type="button" id="btn_load_students" class="btn btn-sm btn-outline-primary"
+                                style="border-radius:8px;" disabled>
                             <i class="fas fa-users me-1"></i> Load Students
                         </button>
-                        <button type="button" id="btn_add_row" class="btn btn-sm btn-outline-secondary" style="border-radius:8px;">
+                        <button type="button" id="btn_add_row" class="btn btn-sm btn-outline-secondary"
+                                style="border-radius:8px;">
                             <i class="fas fa-plus me-1"></i> Add Row
                         </button>
                     </div>
@@ -339,11 +366,11 @@ $is_edit         = $sheet !== null;
                             <tbody id="marks_tbody">
                                 <?php if (!empty($grades)): ?>
                                 <?php foreach ($grades as $idx => $g): ?>
-                                <tr class="grade-row">
+                                <tr class="grade-row <?= $g['is_absent'] ? 'table-warning' : '' ?>">
                                     <td class="ps-3 row-num"><?= $idx + 1 ?></td>
                                     <td>
                                         <input type="hidden" name="student_id_pk[]" value="<?= (int)$g['student_id'] ?>">
-                                        <input type="text" name="student_sid[]" class="form-control form-control-sm sid-input"
+                                        <input type="text" name="student_sid[]" class="form-control form-control-sm"
                                                value="<?= h($g['student_sid']) ?>" placeholder="Student ID" required>
                                     </td>
                                     <td>
@@ -351,9 +378,8 @@ $is_edit         = $sheet !== null;
                                                value="<?= h($g['student_name']) ?>" placeholder="Full Name">
                                     </td>
                                     <td class="text-center">
-                                        <input type="checkbox" name="is_absent[<?= $idx ?>]" class="form-check-input absent-chk"
-                                               value="1" data-row="<?= $idx ?>" <?= $g['is_absent'] ? 'checked' : '' ?>>
-                                        <input type="hidden" name="is_absent[<?= $idx ?>]" value="0" class="absent-hidden" <?= $g['is_absent'] ? 'disabled' : '' ?>>
+                                        <input type="hidden" name="is_absent[]" class="absent-flag" value="<?= $g['is_absent'] ? '1' : '0' ?>">
+                                        <input type="checkbox" class="form-check-input absent-chk" <?= $g['is_absent'] ? 'checked' : '' ?>>
                                     </td>
                                     <td><input type="number" name="attendance[]" class="form-control form-control-sm marks-input att-input"
                                                value="<?= $g['is_absent'] ? '' : h($g['attendance'] ?? '') ?>"
@@ -370,13 +396,12 @@ $is_edit         = $sheet !== null;
                                     <td class="text-center total-cell fw-semibold">
                                         <?= $g['is_absent'] ? '<span class="text-danger">Abs</span>' : h($g['total_marks'] ?? '—') ?>
                                     </td>
-                                    <td class="text-center grade-cell fw-semibold">
+                                    <td class="text-center grade-cell fw-bold">
                                         <?= $g['is_absent'] ? '<span class="text-danger">F</span>' : h($g['letter_grade'] ?? '—') ?>
                                     </td>
                                     <td>
-                                        <button type="button" class="btn btn-sm btn-outline-danger btn-remove-row" style="border-radius:6px;">
-                                            <i class="fas fa-times"></i>
-                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-danger btn-remove-row"
+                                                style="border-radius:6px;"><i class="fas fa-times"></i></button>
                                     </td>
                                 </tr>
                                 <?php endforeach; ?>
@@ -392,10 +417,9 @@ $is_edit         = $sheet !== null;
                     </div>
                 </div>
             </div>
-
         </div>
 
-        <!-- ── Right: Actions & Reference ── -->
+        <!-- Right: Actions & Reference -->
         <div class="col-lg-4">
             <div class="card mb-4" style="border-radius:12px;">
                 <div class="card-header py-3 px-4">
@@ -412,12 +436,18 @@ $is_edit         = $sheet !== null;
                         <button type="submit" name="action" value="save" class="btn btn-outline-primary" style="border-radius:10px;">
                             <i class="fas fa-save me-1"></i> Save Draft
                         </button>
-                        <button type="submit" name="action" value="submit"
+                        <button type="submit" name="action" value="submit" id="btn_submit"
                                 class="btn btn-success" style="border-radius:10px;"
-                                onclick="return confirm('Submit this mark sheet for review? You will not be able to edit it after submission.');">
+                                onclick="return confirm('Submit this mark sheet for review? It will be locked for editing after submission.');">
                             <i class="fas fa-paper-plane me-1"></i> Submit for Review
                         </button>
                         <a href="<?= APP_URL ?>/results/index.php" class="btn btn-light" style="border-radius:10px;">Cancel</a>
+                    </div>
+
+                    <!-- Chain info (shown once dept is selected) -->
+                    <div id="chain_info" class="mt-3 p-2 border rounded small text-muted" style="display:none;">
+                        <i class="fas fa-sitemap me-1"></i>
+                        <span id="chain_info_text">Workflow chain will be shown here.</span>
                     </div>
                 </div>
             </div>
@@ -435,11 +465,11 @@ $is_edit         = $sheet !== null;
                             <tr><td>Class Test</td><td>10</td></tr>
                             <tr><td>Mid Term</td><td>30</td></tr>
                             <tr><td>Final Exam</td><td>50</td></tr>
-                            <tr class="table-light fw-semibold"><td>Total</td><td>100</td></tr>
+                            <tr class="fw-semibold"><td>Total</td><td>100</td></tr>
                         </tbody>
                     </table>
-                    <table class="table table-sm mb-0" style="font-size:.8rem;">
-                        <thead class="table-light"><tr><th>Marks</th><th>Grade</th><th>Point</th></tr></thead>
+                    <table class="table table-sm mb-0" style="font-size:.78rem;">
+                        <thead class="table-light"><tr><th>Marks</th><th>Grade</th><th>GPA</th></tr></thead>
                         <tbody>
                             <?php foreach (wf_grading_scale() as [$min, $max, $letter, $point]):
                                 $range = ($max === PHP_INT_MAX) ? '≥'.$min : $min.'–<'.$max; ?>
@@ -449,7 +479,6 @@ $is_edit         = $sheet !== null;
                     </table>
                 </div>
             </div>
-
         </div>
     </div>
 </form>
@@ -460,220 +489,199 @@ $is_edit         = $sheet !== null;
         <td class="ps-3 row-num"></td>
         <td>
             <input type="hidden" name="student_id_pk[]" value="0">
-            <input type="text" name="student_sid[]" class="form-control form-control-sm sid-input" placeholder="Student ID" required>
+            <input type="text" name="student_sid[]" class="form-control form-control-sm" placeholder="Student ID" required>
         </td>
         <td><input type="text" name="student_name[]" class="form-control form-control-sm" placeholder="Full Name"></td>
         <td class="text-center">
-            <input type="checkbox" class="form-check-input absent-chk" value="1">
+            <input type="hidden" name="is_absent[]" class="absent-flag" value="0">
+            <input type="checkbox" class="form-check-input absent-chk">
         </td>
         <td><input type="number" name="attendance[]" class="form-control form-control-sm marks-input att-input" min="0" max="10" step="0.5"></td>
-        <td><input type="number" name="class_test[]" class="form-control form-control-sm marks-input ct-input" min="0" max="10" step="0.5"></td>
-        <td><input type="number" name="mid_term[]" class="form-control form-control-sm marks-input mid-input" min="0" max="30" step="0.5"></td>
+        <td><input type="number" name="class_test[]" class="form-control form-control-sm marks-input ct-input"  min="0" max="10" step="0.5"></td>
+        <td><input type="number" name="mid_term[]"   class="form-control form-control-sm marks-input mid-input" min="0" max="30" step="0.5"></td>
         <td><input type="number" name="final_exam[]" class="form-control form-control-sm marks-input fin-input" min="0" max="50" step="0.5"></td>
         <td class="text-center total-cell fw-semibold">—</td>
-        <td class="text-center grade-cell fw-semibold">—</td>
+        <td class="text-center grade-cell fw-bold">—</td>
         <td><button type="button" class="btn btn-sm btn-outline-danger btn-remove-row" style="border-radius:6px;"><i class="fas fa-times"></i></button></td>
     </tr>
 </template>
 
+<?php
+// Build JS map: dept_id → [{chain_id, program_id, chain_name, step_label}]
+$chain_map = [];
+foreach ($creatable as $cr) {
+    $chain_map[$cr['dept_id'] ?? 'global'][] = $cr;
+}
+?>
 <script>
 (function () {
-    var APP_URL       = '<?= APP_URL ?>';
-    var deptSel       = document.getElementById('dept_select');
-    var progSel       = document.getElementById('prog_select');
-    var semSel        = document.getElementById('semester_select');
-    var currSel       = document.getElementById('curriculum_select');
-    var subCodeInput  = document.getElementById('subject_code');
-    var subTitleInput = document.getElementById('subject_title');
-    var creditsInput  = document.getElementById('credits_input');
-    var tbody         = document.getElementById('marks_tbody');
-    var emptyRow      = document.getElementById('empty_row');
-    var btnLoad       = document.getElementById('btn_load_students');
-    var btnAdd        = document.getElementById('btn_add_row');
-    var rowTemplate   = document.getElementById('row_template');
+    var APP_URL    = '<?= APP_URL ?>';
+    var chainMap   = <?= json_encode($chain_map) ?>;
+    var deptSel    = document.getElementById('dept_select');
+    var progSel    = document.getElementById('prog_select');
+    var currSel    = document.getElementById('curriculum_select');
+    var subCode    = document.getElementById('subject_code');
+    var subTitle   = document.getElementById('subject_title');
+    var credits    = document.getElementById('credits_input');
+    var tbody      = document.getElementById('marks_tbody');
+    var emptyRow   = document.getElementById('empty_row');
+    var btnLoad    = document.getElementById('btn_load_students');
+    var btnAdd     = document.getElementById('btn_add_row');
+    var template   = document.getElementById('row_template');
+    var chainInfo  = document.getElementById('chain_info');
+    var chainText  = document.getElementById('chain_info_text');
 
-    var savedDept    = <?= (int)$v_dept_id ?>;
-    var savedProg    = <?= (int)$v_program_id ?>;
-    var savedCurr    = <?= (int)$v_curriculum_id ?>;
+    var savedDept = <?= (int)$v_dept_id ?>;
+    var savedProg = <?= (int)$v_program_id ?>;
+    var savedCurr = <?= (int)$v_curriculum_id ?>;
 
-    // Grading scale (client-side)
-    var scale = [
-        [80, Infinity, 'A+'], [75, 80, 'A'], [70, 75, 'A-'],
-        [65, 70, 'B+'], [60, 65, 'B'], [55, 60, 'B-'],
-        [50, 55, 'C+'], [45, 50, 'C'], [40, 45, 'D'], [0, 40, 'F']
-    ];
-    function computeGrade(total) {
-        for (var i = 0; i < scale.length; i++) {
-            if (total >= scale[i][0] && total < scale[i][1]) return scale[i][2];
-        }
-        return 'F';
+    var scale = [[80,Infinity,'A+'],[75,80,'A'],[70,75,'A-'],[65,70,'B+'],
+                 [60,65,'B'],[55,60,'B-'],[50,55,'C+'],[45,50,'C'],[40,45,'D'],[0,40,'F']];
+    function grade(t) { for (var i=0;i<scale.length;i++) if (t>=scale[i][0]&&t<scale[i][1]) return scale[i][2]; return 'F'; }
+
+    // Show chain info for selected dept
+    function updateChainInfo(deptId, progId) {
+        var chains = chainMap[deptId] || chainMap['global'] || [];
+        if (!chains.length) { chainInfo.style.display = 'none'; return; }
+        // Find best match
+        var best = chains.find(function(c) { return (c.program_id == progId) || (!c.program_id); });
+        if (!best) best = chains[0];
+        chainInfo.style.display = '';
+        chainText.textContent = 'Chain: ' + best.chain_name + ' — Entry: ' + best.step_label;
     }
 
     function loadPrograms(deptId, selectId) {
-        progSel.innerHTML = '<option value="">Loading…</option>';
-        progSel.disabled = true;
-        currSel.innerHTML = '<option value="">— Select Subject from Curriculum (optional) —</option>';
-        currSel.disabled = true;
-        if (!deptId) { progSel.innerHTML = '<option value="">— Select Program —</option>'; return; }
+        progSel.innerHTML = '<option value="">— Select Program —</option>';
+        progSel.disabled  = true;
+        currSel.innerHTML = '<option value="">—</option>';
+        currSel.disabled  = true;
+        btnLoad.disabled  = true;
+        if (!deptId) { chainInfo.style.display='none'; return; }
         fetch(APP_URL + '/results/get-programs.php?dept_id=' + deptId)
-            .then(function (r) { return r.json(); })
-            .then(function (data) {
-                progSel.innerHTML = '<option value="">— Select Program —</option>';
-                data.forEach(function (p) {
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                data.forEach(function(p) {
                     var o = document.createElement('option');
                     o.value = p.id; o.textContent = p.program_name;
                     if (p.id == selectId) o.selected = true;
                     progSel.appendChild(o);
                 });
                 progSel.disabled = false;
-                if (selectId) loadSubjects(selectId, savedCurr);
+                updateChainInfo(deptId, selectId);
+                if (selectId) { loadSubjects(selectId, savedCurr); btnLoad.disabled = false; }
             });
     }
 
     function loadSubjects(progId, selectId) {
-        currSel.innerHTML = '<option value="">Loading subjects…</option>';
-        currSel.disabled = true;
-        if (!progId) { currSel.innerHTML = '<option value="">— Select Subject from Curriculum (optional) —</option>'; return; }
+        currSel.innerHTML = '<option value="">— Select from Curriculum (optional) —</option>';
+        currSel.disabled  = true;
+        if (!progId) return;
         fetch(APP_URL + '/results/get-subjects.php?program_id=' + progId)
-            .then(function (r) { return r.json(); })
-            .then(function (data) {
-                currSel.innerHTML = '<option value="">— Select Subject from Curriculum (optional) —</option>';
-                data.forEach(function (s) {
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                data.forEach(function(s) {
                     var o = document.createElement('option');
                     o.value = s.id;
                     o.textContent = (s.course_code ? s.course_code + ' – ' : '') + s.course_name;
-                    o.dataset.code    = s.course_code || '';
-                    o.dataset.title   = s.course_name;
-                    o.dataset.credits = s.credit || '';
+                    o.dataset.code = s.course_code || ''; o.dataset.title = s.course_name; o.dataset.credits = s.credit || '';
                     if (s.id == selectId) o.selected = true;
                     currSel.appendChild(o);
                 });
                 currSel.disabled = false;
-                if (selectId) fillSubjectFromCurriculum();
+                if (selectId) fillFromCurriculum();
             });
     }
 
-    function fillSubjectFromCurriculum() {
+    function fillFromCurriculum() {
         var sel = currSel.options[currSel.selectedIndex];
         if (!sel || !sel.value) return;
-        subCodeInput.value  = sel.dataset.code  || '';
-        subTitleInput.value = sel.dataset.title || '';
-        creditsInput.value  = sel.dataset.credits || '';
+        subCode.value   = sel.dataset.code    || '';
+        subTitle.value  = sel.dataset.title   || '';
+        credits.value   = sel.dataset.credits || '';
     }
 
-    deptSel.addEventListener('change', function () {
-        loadPrograms(this.value, 0);
-        btnLoad.disabled = true;
-    });
-    progSel.addEventListener('change', function () {
-        loadSubjects(this.value, 0);
-        btnLoad.disabled = !this.value;
-    });
-    currSel.addEventListener('change', fillSubjectFromCurriculum);
-
-    // On page load with saved values
-    if (savedDept) {
-        loadPrograms(savedDept, savedProg);
-        btnLoad.disabled = !savedProg;
-    }
+    deptSel.addEventListener('change', function() { loadPrograms(this.value, 0); updateChainInfo(this.value, 0); });
+    progSel.addEventListener('change', function() { loadSubjects(this.value, 0); btnLoad.disabled = !this.value; updateChainInfo(deptSel.value, this.value); });
+    currSel.addEventListener('change', fillFromCurriculum);
+    if (savedDept) loadPrograms(savedDept, savedProg);
 
     // ── Load students ──────────────────────────────────────────────────────────
-    btnLoad.addEventListener('click', function () {
-        var deptId = deptSel.value;
-        var progId = progSel.value;
+    btnLoad.addEventListener('click', function() {
+        var deptId = deptSel.value, progId = progSel.value;
         if (!progId) { alert('Please select a program first.'); return; }
-
         fetch(APP_URL + '/results/get-students.php?load_all=1&dept_id=' + deptId + '&program_id=' + progId)
-            .then(function (r) { return r.json(); })
-            .then(function (data) {
-                if (!data.length) { alert('No students found for this department / program.'); return; }
-                // Clear existing rows
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data.length) { alert('No students found for this program.'); return; }
                 clearRows();
-                data.forEach(function (s) { appendRow(s.student_id, s.full_name, s.id); });
-                renumberRows();
+                data.forEach(function(s) { appendRow(s.student_id, s.full_name, s.id); });
+                renumber();
             });
     });
 
     function clearRows() {
-        // Remove all grade rows (keep empty_row placeholder out)
-        Array.from(tbody.querySelectorAll('tr.grade-row')).forEach(function (r) { r.remove(); });
+        Array.from(tbody.querySelectorAll('tr.grade-row')).forEach(function(r) { r.remove(); });
         if (emptyRow) emptyRow.style.display = '';
     }
-
     function appendRow(sid, name, idPk) {
         if (emptyRow) emptyRow.style.display = 'none';
-        var clone = rowTemplate.content.cloneNode(true);
+        var clone = template.content.cloneNode(true);
         var tr    = clone.querySelector('tr');
-        tr.querySelector('[name="student_id_pk[]"]').value  = idPk || 0;
-        tr.querySelector('[name="student_sid[]"]').value    = sid  || '';
-        tr.querySelector('[name="student_name[]"]').value   = name || '';
-        // Wire up absent + total calc
+        tr.querySelector('[name="student_id_pk[]"]').value = idPk || 0;
+        tr.querySelector('[name="student_sid[]"]').value   = sid  || '';
+        tr.querySelector('[name="student_name[]"]').value  = name || '';
         wireRow(tr);
         tbody.appendChild(tr);
     }
-
-    // Add blank row
-    btnAdd.addEventListener('click', function () {
+    btnAdd.addEventListener('click', function() {
         if (emptyRow) emptyRow.style.display = 'none';
-        var clone = rowTemplate.content.cloneNode(true);
-        var tr    = clone.querySelector('tr');
-        wireRow(tr);
-        tbody.appendChild(tr);
-        renumberRows();
+        var clone = template.content.cloneNode(true);
+        wireRow(clone.querySelector('tr'));
+        tbody.appendChild(clone);
+        renumber();
     });
 
     function wireRow(tr) {
-        var absentChk   = tr.querySelector('.absent-chk');
-        var markInputs  = tr.querySelectorAll('.marks-input');
-        var totalCell   = tr.querySelector('.total-cell');
-        var gradeCell   = tr.querySelector('.grade-cell');
-        var removeBtn   = tr.querySelector('.btn-remove-row');
+        var flag   = tr.querySelector('.absent-flag');
+        var chk    = tr.querySelector('.absent-chk');
+        var inputs = tr.querySelectorAll('.marks-input');
+        var total  = tr.querySelector('.total-cell');
+        var grd    = tr.querySelector('.grade-cell');
 
         function updateTotal() {
-            if (absentChk && absentChk.checked) {
-                totalCell.innerHTML = '<span class="text-danger">Abs</span>';
-                gradeCell.innerHTML = '<span class="text-danger">F</span>';
-                return;
-            }
-            var att  = parseFloat(tr.querySelector('.att-input').value)  || 0;
-            var ct   = parseFloat(tr.querySelector('.ct-input').value)   || 0;
-            var mid  = parseFloat(tr.querySelector('.mid-input').value)  || 0;
-            var fin  = parseFloat(tr.querySelector('.fin-input').value)  || 0;
-            var sum  = att + ct + mid + fin;
-            if (sum <= 0) { totalCell.textContent = '—'; gradeCell.textContent = '—'; return; }
-            totalCell.textContent = sum.toFixed(1);
-            gradeCell.textContent = computeGrade(sum);
+            if (chk && chk.checked) { total.innerHTML='<span class="text-danger">Abs</span>'; grd.innerHTML='<span class="text-danger">F</span>'; return; }
+            var att=parseFloat(tr.querySelector('.att-input').value)||0;
+            var ct =parseFloat(tr.querySelector('.ct-input').value) ||0;
+            var mid=parseFloat(tr.querySelector('.mid-input').value)||0;
+            var fin=parseFloat(tr.querySelector('.fin-input').value)||0;
+            var sum=att+ct+mid+fin;
+            if(!sum&&!att&&!ct&&!mid&&!fin){total.textContent='—';grd.textContent='—';return;}
+            total.textContent=sum.toFixed(1); grd.textContent=grade(sum);
         }
-
-        if (absentChk) {
-            absentChk.addEventListener('change', function () {
-                markInputs.forEach(function (inp) { inp.disabled = absentChk.checked; });
+        if (chk && flag) {
+            chk.addEventListener('change', function() {
+                flag.value = this.checked ? '1' : '0';
+                inputs.forEach(function(i) { i.disabled = chk.checked; });
                 updateTotal();
             });
         }
-        markInputs.forEach(function (inp) { inp.addEventListener('input', updateTotal); });
-
-        if (removeBtn) {
-            removeBtn.addEventListener('click', function () {
-                tr.remove();
-                renumberRows();
-                if (!tbody.querySelector('tr.grade-row') && emptyRow) emptyRow.style.display = '';
-            });
-        }
-    }
-
-    // Wire existing rows (edit mode)
-    Array.from(tbody.querySelectorAll('tr.grade-row')).forEach(wireRow);
-
-    function renumberRows() {
-        Array.from(tbody.querySelectorAll('tr.grade-row')).forEach(function (tr, i) {
-            var num = tr.querySelector('.row-num');
-            if (num) num.textContent = i + 1;
+        inputs.forEach(function(i) { i.addEventListener('input', updateTotal); });
+        var btn = tr.querySelector('.btn-remove-row');
+        if (btn) btn.addEventListener('click', function() {
+            tr.remove(); renumber();
+            if (!tbody.querySelector('tr.grade-row') && emptyRow) emptyRow.style.display = '';
         });
     }
 
-    renumberRows();
+    // Wire existing rows
+    Array.from(tbody.querySelectorAll('tr.grade-row')).forEach(wireRow);
 
+    function renumber() {
+        Array.from(tbody.querySelectorAll('tr.grade-row')).forEach(function(tr, i) {
+            var n = tr.querySelector('.row-num'); if (n) n.textContent = i + 1;
+        });
+    }
+    renumber();
 })();
 </script>
 

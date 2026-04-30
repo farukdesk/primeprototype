@@ -73,66 +73,34 @@ if ($dept_scope !== null) {
     ));
 }
 
-// ── Workflow dashboard counts ──────────────────────────────────────────────────
-$wf_counts = ['my_sheets' => 0, 'review' => 0, 'hod' => 0, 'publish' => 0, 'published' => 0];
-$user_id = (int)(auth_user()['id'] ?? 0);
+// ── Workflow counts (chain-aware) ─────────────────────────────────────────────
+$wf_counts  = ['my_sheets' => 0, 'queue' => 0, 'published' => 0];
+$user_id    = (int)(auth_user()['id'] ?? 0);
 try {
-    // My sheets (teacher)
-    if (wf_can_enter()) {
+    // My sheets
+    if (wf_can_create_sheet()) {
         $r = db()->prepare('SELECT COUNT(*) FROM result_mark_sheets WHERE created_by = ?');
         $r->execute([$user_id]);
         $wf_counts['my_sheets'] = (int)$r->fetchColumn();
     }
-    // Pending review
-    if (wf_can_review()) {
-        $r_where = "workflow_status = 'submitted'";
-        $r_params = [];
-        if ($dept_scope !== null && !empty($dept_scope)) {
-            $phs      = implode(',', array_fill(0, count($dept_scope), '?'));
-            $r_where .= " AND dept_id IN ($phs)";
-            $r_params = $dept_scope;
-        } elseif ($dept_scope !== null && empty($dept_scope)) {
-            $r_where .= ' AND 0=1';
-        }
-        $r = db()->prepare("SELECT COUNT(*) FROM result_mark_sheets WHERE $r_where");
-        $r->execute($r_params);
-        $wf_counts['review'] = (int)$r->fetchColumn();
+    // Approver queue (sheets pending current user's action)
+    if (wf_has_approver_role()) {
+        $wf_counts['queue'] = count(wf_get_approver_queue());
     }
-    // Pending HOD
-    if (wf_can_hod()) {
-        $h_where  = "workflow_status = 'under_review'";
-        $h_params = [];
-        if ($dept_scope !== null && !empty($dept_scope)) {
-            $phs      = implode(',', array_fill(0, count($dept_scope), '?'));
-            $h_where .= " AND dept_id IN ($phs)";
-            $h_params = $dept_scope;
-        } elseif ($dept_scope !== null && empty($dept_scope)) {
-            $h_where .= ' AND 0=1';
-        }
-        $r = db()->prepare("SELECT COUNT(*) FROM result_mark_sheets WHERE $h_where");
-        $r->execute($h_params);
-        $wf_counts['hod'] = (int)$r->fetchColumn();
-    }
-    // Pending publish
-    if (wf_can_publish()) {
-        $r = db()->prepare("SELECT COUNT(*) FROM result_mark_sheets WHERE workflow_status = 'hod_approved'");
-        $r->execute();
-        $wf_counts['publish'] = (int)$r->fetchColumn();
-    }
-    // Published sheets
+    // Published
     $pub_where  = "workflow_status = 'published'";
     $pub_params = [];
     if ($dept_scope !== null && !empty($dept_scope)) {
-        $phs         = implode(',', array_fill(0, count($dept_scope), '?'));
-        $pub_where  .= " AND dept_id IN ($phs)";
+        $dphs        = implode(',', array_fill(0, count($dept_scope), '?'));
+        $pub_where  .= " AND dept_id IN ($dphs)";
         $pub_params  = $dept_scope;
     } elseif ($dept_scope !== null && empty($dept_scope)) {
-        $pub_where  .= ' AND 0=1';
+        $pub_where .= ' AND 0=1';
     }
     $r = db()->prepare("SELECT COUNT(*) FROM result_mark_sheets WHERE $pub_where");
     $r->execute($pub_params);
     $wf_counts['published'] = (int)$r->fetchColumn();
-} catch (Throwable $e) { /* tables may not exist yet on fresh installs */ }
+} catch (Throwable $_e) { /* tables may not exist yet */ }
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -145,7 +113,7 @@ require_once __DIR__ . '/../includes/header.php';
         </ol>
     </nav>
     <div class="d-flex gap-2 flex-wrap">
-        <?php if (wf_can_enter()): ?>
+        <?php if (wf_can_create_sheet()): ?>
         <a href="<?= APP_URL ?>/results/mark-entry.php" class="btn btn-success" style="border-radius:10px;font-size:.875rem;">
             <i class="fas fa-pen-nib me-1"></i> New Mark Sheet
         </a>
@@ -165,13 +133,13 @@ require_once __DIR__ . '/../includes/header.php';
 
 <?php flash_show(); ?>
 
-<!-- ── Workflow Dashboard Tabs ─────────────────────────────────────────────── -->
-<?php if (wf_has_any_role()): ?>
+<!-- ── Workflow Dashboard Tabs (chain-aware) ──────────────────────────────── -->
+<?php $has_wf_access = wf_can_create_sheet() || wf_has_approver_role(); ?>
+<?php if ($has_wf_access): ?>
 <ul class="nav nav-tabs mb-4" id="resultTabs">
-    <?php if (wf_can_enter()): ?>
+    <?php if (wf_can_create_sheet()): ?>
     <li class="nav-item">
-        <a class="nav-link <?= $active_tab === 'my_sheets' ? 'active' : '' ?>"
-           href="?tab=my_sheets">
+        <a class="nav-link <?= $active_tab === 'my_sheets' ? 'active' : '' ?>" href="?tab=my_sheets">
             <i class="fas fa-pen-nib me-1"></i> My Sheets
             <?php if ($wf_counts['my_sheets'] > 0): ?>
             <span class="badge bg-secondary ms-1"><?= $wf_counts['my_sheets'] ?></span>
@@ -179,42 +147,18 @@ require_once __DIR__ . '/../includes/header.php';
         </a>
     </li>
     <?php endif; ?>
-    <?php if (wf_can_review()): ?>
+    <?php if (wf_has_approver_role()): ?>
     <li class="nav-item">
-        <a class="nav-link <?= $active_tab === 'review' ? 'active' : '' ?>"
-           href="?tab=review">
-            <i class="fas fa-search me-1"></i> Pending Review
-            <?php if ($wf_counts['review'] > 0): ?>
-            <span class="badge bg-primary ms-1"><?= $wf_counts['review'] ?></span>
-            <?php endif; ?>
-        </a>
-    </li>
-    <?php endif; ?>
-    <?php if (wf_can_hod()): ?>
-    <li class="nav-item">
-        <a class="nav-link <?= $active_tab === 'hod' ? 'active' : '' ?>"
-           href="?tab=hod">
-            <i class="fas fa-user-tie me-1"></i> Pending HOD Approval
-            <?php if ($wf_counts['hod'] > 0): ?>
-            <span class="badge bg-warning text-dark ms-1"><?= $wf_counts['hod'] ?></span>
-            <?php endif; ?>
-        </a>
-    </li>
-    <?php endif; ?>
-    <?php if (wf_can_publish()): ?>
-    <li class="nav-item">
-        <a class="nav-link <?= $active_tab === 'publish' ? 'active' : '' ?>"
-           href="?tab=publish">
-            <i class="fas fa-check-double me-1"></i> Pending Publish
-            <?php if ($wf_counts['publish'] > 0): ?>
-            <span class="badge bg-success ms-1"><?= $wf_counts['publish'] ?></span>
+        <a class="nav-link <?= $active_tab === 'queue' ? 'active' : '' ?>" href="?tab=queue">
+            <i class="fas fa-tasks me-1"></i> Workflow Queue
+            <?php if ($wf_counts['queue'] > 0): ?>
+            <span class="badge bg-primary ms-1"><?= $wf_counts['queue'] ?></span>
             <?php endif; ?>
         </a>
     </li>
     <?php endif; ?>
     <li class="nav-item">
-        <a class="nav-link <?= $active_tab === 'published' ? 'active' : '' ?>"
-           href="?tab=published">
+        <a class="nav-link <?= $active_tab === 'published' ? 'active' : '' ?>" href="?tab=published">
             <i class="fas fa-globe me-1"></i> Published
             <?php if ($wf_counts['published'] > 0): ?>
             <span class="badge bg-success bg-opacity-75 ms-1"><?= $wf_counts['published'] ?></span>
@@ -222,8 +166,7 @@ require_once __DIR__ . '/../includes/header.php';
         </a>
     </li>
     <li class="nav-item">
-        <a class="nav-link <?= $active_tab === 'legacy' ? 'active' : '' ?>"
-           href="?tab=legacy">
+        <a class="nav-link <?= $active_tab === 'legacy' ? 'active' : '' ?>" href="?tab=legacy">
             <i class="fas fa-archive me-1"></i> Legacy Exams
         </a>
     </li>
@@ -231,101 +174,69 @@ require_once __DIR__ . '/../includes/header.php';
 <?php endif; ?>
 
 <?php
-// ── Render the active tab content ────────────────────────────────────────────
-if ($active_tab !== 'legacy' && wf_has_any_role()):
-    wf_render_tab($active_tab, $dept_scope);
+// ── Active tab: queue redirect ────────────────────────────────────────────────
+if ($active_tab === 'queue' && wf_has_approver_role()):
+    redirect(APP_URL . '/results/workflow-queue.php');
+endif;
+
+// ── Active tab: My Sheets ─────────────────────────────────────────────────────
+if ($active_tab === 'my_sheets' && wf_can_create_sheet()):
+    _wf_render_my_sheets($user_id, $dept_scope);
+    require_once __DIR__ . '/../includes/footer.php';
+    exit;
+endif;
+
+// ── Active tab: Published workflow sheets ─────────────────────────────────────
+if ($active_tab === 'published' && $has_wf_access):
+    _wf_render_published($dept_scope);
     require_once __DIR__ . '/../includes/footer.php';
     exit;
 endif;
 // Fall through to legacy exam list
 ?>
+
 <?php
-
 /**
- * Render inline tab content for the workflow dashboard.
+ * Render "My Sheets" tab — teacher view of their own mark sheets.
  */
-function wf_render_tab(string $tab, ?array $dept_scope): void
+function _wf_render_my_sheets(int $user_id, ?array $dept_scope): void
 {
-    $where  = [];
-    $params = [];
-
-    if ($dept_scope !== null) {
-        if (empty($dept_scope)) {
-            $where[] = '0 = 1';
-        } else {
-            $phs     = implode(',', array_fill(0, count($dept_scope), '?'));
-            $where[] = "ms.dept_id IN ($phs)";
-            array_push($params, ...$dept_scope);
-        }
-    }
-
-    $user_id = (int)(auth_user()['id'] ?? 0);
-
-    switch ($tab) {
-        case 'my_sheets':
-            $where[] = 'ms.created_by = ?';
-            $params[] = $user_id;
-            $order   = 'ms.updated_at DESC';
-            break;
-        case 'review':
-            $where[] = "ms.workflow_status = 'submitted'";
-            $order   = 'ms.submitted_at ASC';
-            break;
-        case 'hod':
-            $where[] = "ms.workflow_status = 'under_review'";
-            $order   = 'ms.reviewed_at ASC';
-            break;
-        case 'publish':
-            $where[] = "ms.workflow_status = 'hod_approved'";
-            $order   = 'ms.hod_approved_at ASC';
-            break;
-        case 'published':
-        default:
-            $where[] = "ms.workflow_status = 'published'";
-            $order   = 'ms.published_at DESC';
-            break;
-    }
-
-    $where_sql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
-
     try {
         $stmt = db()->prepare(
             "SELECT ms.*,
                     d.name          AS dept_name,
                     p.program_name,
-                    u_c.username    AS creator_name,
-                    (SELECT COUNT(*) FROM result_sheet_grades g WHERE g.sheet_id = ms.id) AS student_count
+                    c.name          AS chain_name,
+                    s.step_label    AS current_step_label,
+                    g.name          AS current_group_name,
+                    (SELECT COUNT(*) FROM result_sheet_grades sg WHERE sg.sheet_id = ms.id) AS student_count
              FROM result_mark_sheets ms
-             JOIN dept_departments d             ON d.id = ms.dept_id
-             LEFT JOIN dept_academic_programs p  ON p.id = ms.program_id
-             LEFT JOIN users u_c                 ON u_c.id = ms.created_by
-             $where_sql
-             ORDER BY $order
-             LIMIT 100"
+             JOIN dept_departments d              ON d.id  = ms.dept_id
+             LEFT JOIN dept_academic_programs p   ON p.id  = ms.program_id
+             LEFT JOIN wf_chains c                ON c.id  = ms.chain_id
+             LEFT JOIN wf_chain_steps s           ON s.chain_id = ms.chain_id
+                                                 AND s.step_order = ms.current_step_order
+             LEFT JOIN user_groups g              ON g.id  = s.group_id
+             WHERE ms.created_by = ?
+             ORDER BY ms.updated_at DESC
+             LIMIT 200"
         );
-        $stmt->execute($params);
+        $stmt->execute([$user_id]);
         $sheets = $stmt->fetchAll();
     } catch (Throwable $e) {
-        echo '<div class="alert alert-warning">Workflow tables not yet created. Please run <code>results-workflow-migration.sql</code>.</div>';
+        echo '<div class="alert alert-warning">Run <code>results-workflow-migration.sql</code> first.</div>';
         return;
     }
     ?>
     <div class="card" style="border-radius:12px;">
         <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center">
-            <h6 class="mb-0 fw-semibold">
-                <i class="fas fa-table me-2 text-muted"></i>
-                <?php
-                $labels = [
-                    'my_sheets' => 'My Mark Sheets',
-                    'review'    => 'Sheets Pending Review',
-                    'hod'       => 'Sheets Pending HOD Approval',
-                    'publish'   => 'Sheets Pending Publication',
-                    'published' => 'Published Sheets',
-                ];
-                echo h($labels[$tab] ?? 'Sheets');
-                ?>
-            </h6>
-            <span class="badge bg-primary bg-opacity-10 text-primary"><?= count($sheets) ?></span>
+            <h6 class="mb-0 fw-semibold"><i class="fas fa-pen-nib me-2 text-muted"></i>My Mark Sheets</h6>
+            <div class="d-flex gap-2 align-items-center">
+                <span class="badge bg-secondary"><?= count($sheets) ?></span>
+                <a href="<?= APP_URL ?>/results/mark-entry.php" class="btn btn-sm btn-success" style="border-radius:8px;">
+                    <i class="fas fa-plus me-1"></i> New
+                </a>
+            </div>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
@@ -336,19 +247,18 @@ function wf_render_tab(string $tab, ?array $dept_scope): void
                             <th>Subject</th>
                             <th>Department / Program</th>
                             <th>Semester</th>
-                            <th>Teacher</th>
                             <th class="text-center">Students</th>
                             <th>Status</th>
+                            <th>Current Step</th>
                             <th class="text-end pe-4">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                     <?php if (empty($sheets)): ?>
                         <tr><td colspan="8" class="text-center text-muted py-5">
-                            <i class="fas fa-inbox fa-2x mb-2 d-block"></i>No sheets found.
-                            <?php if ($tab === 'my_sheets' && wf_can_enter()): ?>
-                                <a href="<?= APP_URL ?>/results/mark-entry.php">Create a new mark sheet</a>.
-                            <?php endif; ?>
+                            <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
+                            No mark sheets yet.
+                            <a href="<?= APP_URL ?>/results/mark-entry.php">Create one now</a>.
                         </td></tr>
                     <?php else: ?>
                         <?php foreach ($sheets as $i => $s): ?>
@@ -367,35 +277,27 @@ function wf_render_tab(string $tab, ?array $dept_scope): void
                                 <?php endif; ?>
                             </td>
                             <td><?= h($s['semester']) ?></td>
-                            <td><?= h($s['creator_name'] ?? '—') ?></td>
                             <td class="text-center">
                                 <span class="badge bg-secondary"><?= (int)$s['student_count'] ?></span>
                             </td>
                             <td><?= wf_status_badge($s['workflow_status']) ?></td>
+                            <td>
+                                <?php if ($s['workflow_status'] === 'pending' && $s['current_step_label']): ?>
+                                <small class="text-info"><?= h($s['current_step_label']) ?></small>
+                                <?php elseif ($s['workflow_status'] === 'published'): ?>
+                                <small class="text-success"><i class="fas fa-globe me-1"></i>Published</small>
+                                <?php elseif ($s['workflow_status'] === 'returned'): ?>
+                                <small class="text-danger"><i class="fas fa-undo me-1"></i>Returned – check remarks</small>
+                                <?php else: ?>
+                                <small class="text-muted">—</small>
+                                <?php endif; ?>
+                            </td>
                             <td class="text-end pe-4">
-                                <div class="d-flex gap-1 justify-content-end flex-wrap">
-                                    <?php if (in_array($s['workflow_status'], ['draft','returned'], true) && wf_can_edit_sheet($s)): ?>
+                                <div class="d-flex gap-1 justify-content-end">
+                                    <?php if (in_array($s['workflow_status'], ['draft','returned'], true)): ?>
                                     <a href="<?= APP_URL ?>/results/mark-entry.php?id=<?= $s['id'] ?>"
                                        class="btn btn-sm btn-outline-primary" title="Edit" style="border-radius:7px;">
                                         <i class="fas fa-edit"></i>
-                                    </a>
-                                    <?php endif; ?>
-                                    <?php if ($s['workflow_status'] === 'submitted' && wf_can_review()): ?>
-                                    <a href="<?= APP_URL ?>/results/review-sheet.php?id=<?= $s['id'] ?>"
-                                       class="btn btn-sm btn-primary" title="Review" style="border-radius:7px;">
-                                        <i class="fas fa-search"></i>
-                                    </a>
-                                    <?php endif; ?>
-                                    <?php if ($s['workflow_status'] === 'under_review' && wf_can_hod()): ?>
-                                    <a href="<?= APP_URL ?>/results/hod-review.php?id=<?= $s['id'] ?>"
-                                       class="btn btn-sm btn-warning text-dark" title="HOD Review" style="border-radius:7px;">
-                                        <i class="fas fa-user-tie"></i>
-                                    </a>
-                                    <?php endif; ?>
-                                    <?php if ($s['workflow_status'] === 'hod_approved' && wf_can_publish()): ?>
-                                    <a href="<?= APP_URL ?>/results/controller-approve.php?id=<?= $s['id'] ?>"
-                                       class="btn btn-sm btn-success" title="Publish" style="border-radius:7px;">
-                                        <i class="fas fa-check-double"></i>
                                     </a>
                                     <?php endif; ?>
                                     <a href="<?= APP_URL ?>/results/sheet-print.php?id=<?= $s['id'] ?>" target="_blank"
@@ -403,6 +305,103 @@ function wf_render_tab(string $tab, ?array $dept_scope): void
                                         <i class="fas fa-print"></i>
                                     </a>
                                 </div>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <?php
+}
+
+/**
+ * Render "Published" tab — all published workflow sheets in user's scope.
+ */
+function _wf_render_published(?array $dept_scope): void
+{
+    $where  = ["ms.workflow_status = 'published'"];
+    $params = [];
+    if ($dept_scope !== null) {
+        if (empty($dept_scope)) { $where[] = '0=1'; }
+        else {
+            $phs     = implode(',', array_fill(0, count($dept_scope), '?'));
+            $where[] = "ms.dept_id IN ($phs)";
+            array_push($params, ...$dept_scope);
+        }
+    }
+    $where_sql = 'WHERE ' . implode(' AND ', $where);
+
+    try {
+        $stmt = db()->prepare(
+            "SELECT ms.*,
+                    d.name          AS dept_name,
+                    p.program_name,
+                    c.name          AS chain_name,
+                    u.username      AS creator_name,
+                    (SELECT COUNT(*) FROM result_sheet_grades sg WHERE sg.sheet_id = ms.id) AS student_count
+             FROM result_mark_sheets ms
+             JOIN dept_departments d              ON d.id  = ms.dept_id
+             LEFT JOIN dept_academic_programs p   ON p.id  = ms.program_id
+             LEFT JOIN wf_chains c                ON c.id  = ms.chain_id
+             LEFT JOIN users u                    ON u.id  = ms.created_by
+             $where_sql
+             ORDER BY ms.updated_at DESC
+             LIMIT 500"
+        );
+        $stmt->execute($params);
+        $sheets = $stmt->fetchAll();
+    } catch (Throwable $e) {
+        echo '<div class="alert alert-warning">Run <code>results-workflow-migration.sql</code> first.</div>';
+        return;
+    }
+    ?>
+    <div class="card" style="border-radius:12px;">
+        <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center">
+            <h6 class="mb-0 fw-semibold"><i class="fas fa-globe me-2 text-muted"></i>Published Mark Sheets</h6>
+            <span class="badge bg-success"><?= count($sheets) ?></span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="px-4">#</th>
+                            <th>Subject</th>
+                            <th>Department / Program</th>
+                            <th>Semester</th>
+                            <th>Teacher</th>
+                            <th class="text-center">Students</th>
+                            <th class="text-end pe-4">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <?php if (empty($sheets)): ?>
+                        <tr><td colspan="7" class="text-center text-muted py-5">No published sheets yet.</td></tr>
+                    <?php else: ?>
+                        <?php foreach ($sheets as $i => $s): ?>
+                        <tr>
+                            <td class="px-4"><?= $i + 1 ?></td>
+                            <td>
+                                <div class="fw-medium"><?= h($s['subject_title']) ?></div>
+                                <?php if ($s['subject_code']): ?>
+                                <small class="text-muted"><?= h($s['subject_code']) ?></small>
+                                <?php endif; ?>
+                            </td>
+                            <td>
+                                <div><?= h($s['dept_name']) ?></div>
+                                <?php if ($s['program_name']): ?><small class="text-muted"><?= h($s['program_name']) ?></small><?php endif; ?>
+                            </td>
+                            <td><?= h($s['semester']) ?></td>
+                            <td><?= h($s['creator_name'] ?? '—') ?></td>
+                            <td class="text-center"><span class="badge bg-secondary"><?= (int)$s['student_count'] ?></span></td>
+                            <td class="text-end pe-4">
+                                <a href="<?= APP_URL ?>/results/sheet-print.php?id=<?= $s['id'] ?>" target="_blank"
+                                   class="btn btn-sm btn-outline-secondary" style="border-radius:7px;" title="Print">
+                                    <i class="fas fa-print"></i>
+                                </a>
                             </td>
                         </tr>
                         <?php endforeach; ?>
