@@ -690,6 +690,41 @@ $user       = auth_user();
                 </a>
             </li>
             <?php endif; ?>
+            <?php if (is_super_admin() || can_access('results-entry')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/results/mark-entry.php"
+                   class="<?= basename($current_path) === 'mark-entry.php' ? 'active' : '' ?>" style="padding-left:2.2rem;">
+                    <i class="fas fa-pen-nib"></i> Mark Entry
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php
+            // Workflow queue: shown if user is an approver in any active chain
+            // Count pending sheets for this user (chain-aware, no hard-coded roles)
+            require_once __DIR__ . '/../results/workflow-helpers.php';
+            try {
+                $_wf_queue_count = wf_has_approver_role() ? count(wf_get_approver_queue()) : 0;
+            } catch (Throwable $_e) { $_wf_queue_count = 0; }
+            if ($_wf_queue_count > 0 || wf_has_approver_role()):
+            ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/results/workflow-queue.php"
+                   class="<?= in_array(basename($current_path), ['workflow-queue.php','workflow-review.php'], true) ? 'active' : '' ?>" style="padding-left:2.2rem;">
+                    <i class="fas fa-tasks"></i> Workflow Queue
+                    <?php if ($_wf_queue_count > 0): ?>
+                    <span class="badge bg-primary ms-auto" style="font-size:.65rem;"><?= $_wf_queue_count ?></span>
+                    <?php endif; ?>
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('results-chains')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/results/chains/index.php"
+                   class="<?= strpos($current_path, '/results/chains/') !== false ? 'active' : '' ?>" style="padding-left:2.2rem;">
+                    <i class="fas fa-sitemap"></i> Workflow Chains
+                </a>
+            </li>
+            <?php endif; ?>
             <?php if (is_super_admin() || can_access('clubs')): ?>
             <li class="nav-item">
                 <a href="<?= APP_URL ?>/clubs/index.php"
