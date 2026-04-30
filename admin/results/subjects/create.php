@@ -295,15 +295,23 @@ document.getElementById('cc_picker').addEventListener('change', function () {
     $old_cat_names  = $_POST['cat_name']  ?? [];
     $old_cat_marks  = $_POST['cat_marks'] ?? [];
     $old_cat_orders = $_POST['cat_order'] ?? [];
-    if (!empty($old_cat_names)):
-        foreach ($old_cat_names as $ci => $cn):
-            $cn = addslashes(trim($cn));
-            $cm = (float)($old_cat_marks[$ci] ?? 0);
-            $co = (int)($old_cat_orders[$ci] ?? $ci);
-            if ($cn !== ''):
+    $restore_cats = [];
+    foreach ($old_cat_names as $ci => $cn) {
+        $cn = trim($cn);
+        if ($cn !== '') {
+            $restore_cats[] = [
+                'category_name' => $cn,
+                'max_marks'     => (float)($old_cat_marks[$ci] ?? 0),
+                'sort_order'    => (int)($old_cat_orders[$ci]  ?? $ci),
+            ];
+        }
+    }
     ?>
-    addRow('<?= $cn ?>', <?= $cm ?>, <?= $co ?>);
-    <?php endif; endforeach; endif; ?>
+    <?php if (!empty($restore_cats)): ?>
+    <?= json_encode($restore_cats) ?>.forEach(function (c) {
+        addRow(c.category_name, parseFloat(c.max_marks), c.sort_order);
+    });
+    <?php endif; ?>
 })();
 </script>
 

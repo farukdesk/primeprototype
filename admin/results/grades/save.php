@@ -39,6 +39,7 @@ $upsert = db()->prepare(
        (exam_id, subject_id, student_id, student_sid, student_name, marks, letter_grade, grade_point, marked_by, reviewed_by, approved_by)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE
+       id           = LAST_INSERT_ID(id),
        marks        = VALUES(marks),
        letter_grade = VALUES(letter_grade),
        grade_point  = VALUES(grade_point),
@@ -104,15 +105,8 @@ foreach ($subjects as $subj) {
             $total, $grade['letter'], $grade['point'],
             $marked_by ?: null, $reviewed_by ?: null, $approved_by ?: null,
         ]);
+        // LAST_INSERT_ID(id) in ON DUPLICATE KEY UPDATE ensures lastInsertId() always returns the correct id
         $grade_id = (int)db()->lastInsertId();
-        if (!$grade_id) {
-            // Was an UPDATE; fetch the id
-            $gid_stmt = db()->prepare(
-                'SELECT id FROM result_grades WHERE exam_id=? AND subject_id=? AND student_sid=? LIMIT 1'
-            );
-            $gid_stmt->execute([$exam_id, $subject_id, $sid_final]);
-            $grade_id = (int)($gid_stmt->fetchColumn() ?: 0);
-        }
 
         if ($grade_id) {
             $det_upsert = db()->prepare(
