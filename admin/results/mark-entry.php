@@ -137,7 +137,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $user['id'],
             ]);
             $sheet_id = (int)$db->lastInsertId();
-            _wf_log($sheet_id, 0, 'Teacher', 0, 'created', (int)$user['id']);
+            // Note: chain is not yet resolved for draft saves; history entry added at submit time
         }
 
         // ── Save grades ────────────────────────────────────────────────────────
@@ -178,7 +178,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                      WHERE id=?"
                 )->execute([$chain['id'], $next_step['step_order'], $sheet_id]);
                 _wf_log($sheet_id, (int)($entry_step['step_order'] ?? 1),
-                        $entry_step['step_label'] ?? 'Teacher',
+                        $entry_step['step_label'] ?? 'Entry',
                         (int)($entry_step['group_id'] ?? 0),
                         'submitted', (int)$user['id']);
             } else {
@@ -189,7 +189,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                      WHERE id=?"
                 )->execute([$chain['id'], $entry_step['step_order'] ?? 1, $sheet_id]);
                 _wf_log($sheet_id, (int)($entry_step['step_order'] ?? 1),
-                        $entry_step['step_label'] ?? 'Teacher',
+                        $entry_step['step_label'] ?? 'Entry',
                         (int)($entry_step['group_id'] ?? 0),
                         'published', (int)$user['id']);
             }

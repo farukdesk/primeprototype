@@ -8,12 +8,6 @@ csrf_check();
 $id = (int)($_POST['id'] ?? 0);
 
 // Check for active sheets using this chain
-$count = (int)db()->prepare(
-    'SELECT COUNT(*) FROM result_mark_sheets WHERE chain_id = ?'
-)->execute([$id]) ? db()->prepare(
-    'SELECT COUNT(*) FROM result_mark_sheets WHERE chain_id = ?'
-) : null;
-
 $stmt = db()->prepare('SELECT COUNT(*) FROM result_mark_sheets WHERE chain_id = ?');
 $stmt->execute([$id]);
 if ((int)$stmt->fetchColumn() > 0) {
