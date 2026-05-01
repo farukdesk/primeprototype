@@ -74,9 +74,11 @@ function cc_programs(int $dept_id): array
 function cc_get_curriculum(int $program_id, int $intake_id): array
 {
     $st = db()->prepare(
-        "SELECT * FROM course_curriculum
-          WHERE program_id = ? AND intake_id = ?
-          ORDER BY semester ASC, sort_order ASC, sl_no ASC, id ASC"
+        "SELECT c.*, df.name AS faculty_name
+           FROM course_curriculum c
+           LEFT JOIN dept_faculty df ON df.id = c.assigned_faculty_id
+          WHERE c.program_id = ? AND c.intake_id = ?
+          ORDER BY c.semester ASC, c.sort_order ASC, c.sl_no ASC, c.id ASC"
     );
     $st->execute([$program_id, $intake_id]);
     $rows = $st->fetchAll();
@@ -86,6 +88,47 @@ function cc_get_curriculum(int $program_id, int $intake_id): array
         $grouped[(int)$row['semester']][] = $row;
     }
     return $grouped;
+}
+
+/**
+ * Fetch all curriculum rows for a program (ignoring intake), keyed by semester.
+ * Used by the redesigned index that no longer requires an intake selection.
+ * Returns [ semester => [ rows… ], … ]
+ */
+function cc_get_curriculum_by_program(int $program_id): array
+{
+    $st = db()->prepare(
+        "SELECT c.*, df.name AS faculty_name
+           FROM course_curriculum c
+           LEFT JOIN dept_faculty df ON df.id = c.assigned_faculty_id
+          WHERE c.program_id = ?
+          ORDER BY c.semester ASC, c.sort_order ASC, c.sl_no ASC, c.id ASC"
+    );
+    $st->execute([$program_id]);
+    $rows = $st->fetchAll();
+
+    $grouped = [];
+    foreach ($rows as $row) {
+        $grouped[(int)$row['semester']][] = $row;
+    }
+    return $grouped;
+}
+
+/**
+ * Fetch active faculty for a given department, ordered by name.
+ * Includes only rows that have a linked user_id (real system users).
+ * Returns rows with: id, name, designation, user_id
+ */
+function cc_get_dept_faculty(int $dept_id): array
+{
+    $st = db()->prepare(
+        "SELECT id, name, designation
+           FROM dept_faculty
+          WHERE dept_id = ? AND is_active = 1
+          ORDER BY sort_order ASC, name ASC"
+    );
+    $st->execute([$dept_id]);
+    return $st->fetchAll();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

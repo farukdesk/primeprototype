@@ -20,6 +20,7 @@ $errors = [];
 $success = false;
 
 require_once __DIR__ . '/fp-helpers.php';
+require_once __DIR__ . '/../course-curriculum/helpers.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
@@ -141,7 +142,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+// ── Load subject assignments for this faculty member ──────────────────────────
+$subject_assignments = [];
+$available_subjects  = [];
+
+$my_dept_id = (int)($fp['dept_id'] ?? 0);
+
+$sa_st = db()->prepare(
+    "SELECT fsa.*,
+            cc.course_name, cc.course_code, cc.credit, cc.semester,
+            dap.program_name, d.name AS dept_name
+       FROM faculty_subject_assignments fsa
+       JOIN course_curriculum cc ON cc.id = fsa.course_id
+       JOIN dept_academic_programs dap ON dap.id = cc.program_id
+       JOIN dept_departments d ON d.id = dap.dept_id
+      WHERE fsa.faculty_user_id = ?
+      ORDER BY fsa.status ASC, cc.semester ASC, cc.course_name ASC"
+);
+$sa_st->execute([$user_id]);
+$subject_assignments = $sa_st->fetchAll();
+
+// Subjects available to assign (in this faculty's dept, not already requested)
+$already_ids = array_column($subject_assignments, 'course_id');
+if ($my_dept_id > 0) {
+    $av_st = db()->prepare(
+        "SELECT cc.id, cc.course_code, cc.course_name, cc.credit, cc.semester,
+                dap.program_name
+           FROM course_curriculum cc
+           JOIN dept_academic_programs dap ON dap.id = cc.program_id
+          WHERE dap.dept_id = ?
+          ORDER BY cc.semester ASC, cc.course_name ASC"
+    );
+    $av_st->execute([$my_dept_id]);
+    $all_subjects = $av_st->fetchAll();
+    // Filter out already-requested subjects
+    $available_subjects = array_filter($all_subjects, function ($s) use ($already_ids) {
+        return !in_array((int)$s['id'], array_map('intval', $already_ids), true);
+    });
+}
+
+// Active tab from hash (flash) — re-open subjects tab on redirect
+$open_subjects_tab = isset($_GET['tab']) && $_GET['tab'] === 'subjects';
+
 require_once __DIR__ . '/../includes/header.php';
+echo '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.min.css">';
+echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>';
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -171,6 +216,8 @@ require_once __DIR__ . '/../includes/header.php';
     <span>Your profile is visible on the public department page. Keep it up to date!</span>
 </div>
 
+<?php flash_show(); ?>
+
 <div class="card">
     <div class="card-header py-3 px-4">
         <h6 class="mb-0 fw-semibold"><i class="fas fa-id-card me-2 text-muted"></i>My Faculty Profile</h6>
@@ -181,18 +228,28 @@ require_once __DIR__ . '/../includes/header.php';
 
             <!-- Nav tabs -->
             <ul class="nav nav-tabs mb-4" id="profileTabs">
-                <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#tab-basic">Basic Info</a></li>
+                <li class="nav-item"><a class="nav-link <?= $open_subjects_tab ? '' : 'active' ?>" data-bs-toggle="tab" href="#tab-basic">Basic Info</a></li>
                 <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-academic">Academic</a></li>
                 <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-office">Office &amp; Contact</a></li>
                 <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-online">Online Presence</a></li>
                 <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-additional">Additional</a></li>
+                <li class="nav-item">
+                    <a class="nav-link <?= $open_subjects_tab ? 'active' : '' ?>" data-bs-toggle="tab" href="#tab-subjects">
+                        <i class="fas fa-book me-1"></i>Subjects
+                        <?php
+                        $pending_cnt = count(array_filter($subject_assignments, fn($a) => $a['status'] === 'pending'));
+                        if ($pending_cnt > 0): ?>
+                        <span class="badge bg-warning text-dark ms-1"><?= $pending_cnt ?></span>
+                        <?php endif; ?>
+                    </a>
+                </li>
                 <li class="nav-item"><a class="nav-link" href="<?= APP_URL ?>/faculty-profiles/files.php"><i class="fas fa-folder-open me-1"></i>Files</a></li>
             </ul>
 
             <div class="tab-content">
 
                 <!-- Tab 1: Basic Info -->
-                <div class="tab-pane fade show active" id="tab-basic">
+                <div class="tab-pane fade <?= $open_subjects_tab ? '' : 'show active' ?>" id="tab-basic">
                     <div class="row g-3">
                         <div class="col-md-6">
                             <label class="form-label fw-medium">Photo</label>
@@ -378,5 +435,152 @@ require_once __DIR__ . '/../includes/header.php';
         </form>
     </div>
 </div>
+
+<!-- ── Subjects Tab (outside main form so the nested forms work) ───────────── -->
+<div id="tab-subjects-outer" style="<?= $open_subjects_tab ? '' : 'display:none;' ?>">
+<div class="card mt-4">
+    <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center">
+        <h6 class="mb-0 fw-semibold"><i class="fas fa-book me-2 text-muted"></i>Subjects I Teach</h6>
+    </div>
+    <div class="card-body p-4">
+
+        <?php if ($my_dept_id <= 0): ?>
+        <div class="alert alert-warning">
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            Please set your <strong>Department</strong> in the Basic Info tab before adding subjects.
+        </div>
+        <?php else: ?>
+
+        <!-- Add Subject form -->
+        <?php if (!empty($available_subjects)): ?>
+        <form method="POST" action="<?= APP_URL ?>/faculty-profiles/subject-assign.php" class="mb-4" id="subject-add-form">
+            <?= csrf_field() ?>
+            <div class="row g-2 align-items-end">
+                <div class="col-12 col-md-8">
+                    <label class="form-label fw-medium">Add a Subject <span class="text-muted small">(from your department's curriculum)</span></label>
+                    <select name="course_id" id="subject_select" class="form-select" required>
+                        <option value="">— Select a subject to add —</option>
+                        <?php foreach ($available_subjects as $s):
+                            $sem_label = cc_semester_label((int)$s['semester']);
+                        ?>
+                        <option value="<?= $s['id'] ?>">
+                            <?= h(($s['course_code'] ? '[' . $s['course_code'] . '] ' : '') . $s['course_name'])
+                              . ' — ' . h($s['program_name'])
+                              . ' (' . h($sem_label) . ')' ?>
+                        </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-12 col-md-4">
+                    <button type="submit" class="btn btn-success w-100" style="border-radius:10px;">
+                        <i class="fas fa-plus me-1"></i> Request Teaching Assignment
+                    </button>
+                </div>
+            </div>
+            <div class="form-text mt-1">
+                <i class="fas fa-info-circle me-1 text-info"></i>
+                Your request will be sent to the Head of Department for approval.
+            </div>
+        </form>
+        <?php else: ?>
+        <div class="alert alert-info small mb-4">
+            <i class="fas fa-info-circle me-2"></i>
+            All available subjects in your department have already been requested or there are no subjects in the curriculum yet.
+        </div>
+        <?php endif; ?>
+
+        <!-- Assignments list -->
+        <?php if (empty($subject_assignments)): ?>
+        <div class="text-center text-muted py-4">
+            <i class="fas fa-book fa-2x mb-2 d-block" style="opacity:.3;"></i>
+            No subject assignments yet. Use the form above to request teaching assignment.
+        </div>
+        <?php else: ?>
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle" style="font-size:14px;">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width:40px;" class="px-3">#</th>
+                        <th>Subject</th>
+                        <th>Program</th>
+                        <th style="width:70px;" class="text-center">Credit</th>
+                        <th>Status</th>
+                        <th>Submitted</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($subject_assignments as $i => $asgn): ?>
+                <tr>
+                    <td class="px-3"><?= $i + 1 ?></td>
+                    <td>
+                        <?php if ($asgn['course_code']): ?>
+                        <span class="badge bg-light text-dark border me-1"><?= h($asgn['course_code']) ?></span>
+                        <?php endif; ?>
+                        <span class="fw-medium"><?= h($asgn['course_name']) ?></span>
+                        <div class="text-muted small"><?= h(cc_semester_label((int)$asgn['semester'])) ?></div>
+                    </td>
+                    <td><?= h($asgn['program_name']) ?></td>
+                    <td class="text-center">
+                        <?= $asgn['credit'] !== null
+                            ? '<span class="badge bg-secondary">' . h(number_format((float)$asgn['credit'], 2)) . '</span>'
+                            : '<span class="text-muted">—</span>' ?>
+                    </td>
+                    <td>
+                        <?php if ($asgn['status'] === 'approved'): ?>
+                        <span class="badge bg-success"><i class="fas fa-check me-1"></i>Approved</span>
+                        <?php elseif ($asgn['status'] === 'pending'): ?>
+                        <span class="badge bg-warning text-dark"><i class="fas fa-hourglass-half me-1"></i>Awaiting Approval</span>
+                        <?php else: ?>
+                        <span class="badge bg-danger"><i class="fas fa-times me-1"></i>Rejected</span>
+                        <?php if ($asgn['notes']): ?>
+                        <div class="text-muted small mt-1 fst-italic"><?= h(mb_strimwidth($asgn['notes'], 0, 80, '…')) ?></div>
+                        <?php endif; ?>
+                        <?php endif; ?>
+                    </td>
+                    <td class="small text-muted"><?= h(date('d M Y', strtotime($asgn['created_at']))) ?></td>
+                </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <?php endif; ?>
+
+        <?php endif; // end dept check ?>
+    </div>
+</div>
+</div><!-- /#tab-subjects-outer -->
+
+<script>
+(function () {
+    // Activate Subjects tab when clicking the nav link
+    var subjectsTabLink = document.querySelector('a[href="#tab-subjects"]');
+    var subjectsOuter   = document.getElementById('tab-subjects-outer');
+
+    if (subjectsTabLink && subjectsOuter) {
+        subjectsTabLink.addEventListener('shown.bs.tab', function () {
+            subjectsOuter.style.display = '';
+        });
+        subjectsTabLink.addEventListener('hide.bs.tab', function () {
+            subjectsOuter.style.display = 'none';
+        });
+    }
+
+    // Tom Select for subject dropdown
+    var subjectSel = document.getElementById('subject_select');
+    if (subjectSel) {
+        new TomSelect('#subject_select', {
+            placeholder: '— Select a subject to add —',
+            sortField: 'text',
+        });
+    }
+    <?php if ($open_subjects_tab): ?>
+    // Auto-activate subjects tab on page load if flag set
+    if (subjectsTabLink) {
+        var bsTab = bootstrap.Tab.getOrCreateInstance(subjectsTabLink);
+        bsTab.show();
+    }
+    <?php endif; ?>
+})();
+</script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
