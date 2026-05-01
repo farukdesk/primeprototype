@@ -3,6 +3,7 @@
  * Workflow Chain – Edit
  */
 require_once __DIR__ . '/../../includes/auth.php';
+require_once __DIR__ . '/chains-helpers.php';
 if (!is_super_admin() && !can_access('results-chains', 'can_edit')) {
     flash_set('error', 'Access denied.'); redirect(APP_URL . '/results/chains/index.php');
 }
