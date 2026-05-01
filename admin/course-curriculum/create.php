@@ -46,7 +46,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $credit_raw            = trim($_POST['credit']                ?? '');
     $sort_order            = max(0, (int)($_POST['sort_order']    ?? 0));
     $assigned_faculty_id   = (int)($_POST['assigned_faculty_id']  ?? 0) ?: null;
-    $sort_order            = max(0, (int)($_POST['sort_order']    ?? 0));
 
     if ($course_name === '')            $errors[] = 'Subject Title is required.';
     if (mb_strlen($course_name) > 300) $errors[] = 'Subject Title must be 300 characters or less.';
