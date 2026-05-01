@@ -115,6 +115,66 @@ function cc_get_curriculum_by_program(int $program_id): array
 }
 
 /**
+ * Fetch all curriculum rows for a program as a flat list (no semester grouping).
+ * Returns a plain array of rows ordered by sort_order, sl_no, id.
+ */
+function cc_get_subjects_flat(int $program_id): array
+{
+    $st = db()->prepare(
+        "SELECT c.*, df.name AS faculty_name
+           FROM course_curriculum c
+           LEFT JOIN dept_faculty df ON df.id = c.assigned_faculty_id
+          WHERE c.program_id = ?
+          ORDER BY c.sort_order ASC, c.sl_no ASC, c.id ASC"
+    );
+    $st->execute([$program_id]);
+    return $st->fetchAll();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Marking Distribution helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Fetch all marking distributions for a single curriculum subject.
+ */
+function cc_get_mark_distributions(int $curriculum_id): array
+{
+    $st = db()->prepare(
+        "SELECT * FROM cc_mark_distributions
+          WHERE curriculum_id = ?
+          ORDER BY sort_order ASC, id ASC"
+    );
+    $st->execute([$curriculum_id]);
+    return $st->fetchAll();
+}
+
+/**
+ * Fetch all marking distributions for a list of curriculum IDs,
+ * keyed by curriculum_id: [ curriculum_id => [ distribution, … ] ]
+ */
+function cc_get_all_mark_distributions(array $ids): array
+{
+    if (empty($ids)) {
+        return [];
+    }
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    $st = db()->prepare(
+        "SELECT * FROM cc_mark_distributions
+          WHERE curriculum_id IN ($placeholders)
+          ORDER BY curriculum_id ASC, sort_order ASC, id ASC"
+    );
+    $st->execute(array_values($ids));
+    $rows = $st->fetchAll();
+
+    $grouped = [];
+    foreach ($rows as $row) {
+        $grouped[(int)$row['curriculum_id']][] = $row;
+    }
+    return $grouped;
+}
+
+/**
  * Fetch active faculty for a given department, ordered by name.
  * Includes only rows that have a linked user_id (real system users).
  * Returns rows with: id, name, designation, user_id

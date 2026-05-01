@@ -26,13 +26,15 @@ if ($sel_program > 0 && $sel_dept > 0) {
     $program_row = $st->fetch() ?: null;
 }
 
-// Load curriculum directly for the selected program (no intake required)
-$curriculum = [];
+// Load flat subject list for the selected program
+$subjects = [];
+$distributions = [];
 if ($program_row) {
-    $curriculum = cc_get_curriculum_by_program($sel_program);
+    $subjects = cc_get_subjects_flat($sel_program);
+    if (!empty($subjects)) {
+        $distributions = cc_get_all_mark_distributions(array_column($subjects, 'id'));
+    }
 }
-
-$semester_labels = cc_semester_labels();
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -102,7 +104,7 @@ require_once __DIR__ . '/../includes/header.php';
 
 <?php if ($program_row): ?>
 <!-- ══════════════════════════════════════════════════════════════════════════
-     CURRICULUM VIEW — shown when a program is selected
+     CURRICULUM VIEW — flat subject list
      ══════════════════════════════════════════════════════════════════════════ -->
 
 <!-- Program header -->
@@ -130,28 +132,13 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <?php
-// Calculate totals
-$total_credits  = 0;
-$total_subjects = 0;
-foreach ($curriculum as $sem_rows) {
-    foreach ($sem_rows as $r) {
-        $total_credits  += (float)($r['credit'] ?? 0);
-        $total_subjects++;
-    }
-}
+$total_credits  = array_sum(array_column($subjects, 'credit'));
+$total_subjects = count($subjects);
 ?>
 
 <!-- Stats row -->
 <div class="row g-3 mb-4">
-    <div class="col-6 col-md-3">
-        <div class="card text-center border-0 shadow-sm" style="border-radius:10px;">
-            <div class="card-body py-3">
-                <div class="fw-bold fs-4" style="color:#002147;"><?= count($curriculum) ?></div>
-                <div class="small text-muted">Semesters with Subjects</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-md-3">
+    <div class="col-6 col-md-4">
         <div class="card text-center border-0 shadow-sm" style="border-radius:10px;">
             <div class="card-body py-3">
                 <div class="fw-bold fs-4" style="color:#002147;"><?= $total_subjects ?></div>
@@ -159,7 +146,7 @@ foreach ($curriculum as $sem_rows) {
             </div>
         </div>
     </div>
-    <div class="col-6 col-md-3">
+    <div class="col-6 col-md-4">
         <div class="card text-center border-0 shadow-sm" style="border-radius:10px;">
             <div class="card-body py-3">
                 <div class="fw-bold fs-4" style="color:#D21034;"><?= number_format($total_credits, 2) ?></div>
@@ -167,131 +154,120 @@ foreach ($curriculum as $sem_rows) {
             </div>
         </div>
     </div>
-    <div class="col-6 col-md-3">
-        <div class="card text-center border-0 shadow-sm" style="border-radius:10px;">
-            <div class="card-body py-3">
-                <div class="fw-bold fs-4" style="color:#002147;">12</div>
-                <div class="small text-muted">Total Semesters</div>
-            </div>
-        </div>
-    </div>
 </div>
 
-<!-- ── Semester sections ───────────────────────────────────────────────────── -->
-<?php foreach ($semester_labels as $sem_no => $sem_label): ?>
-<?php $rows = $curriculum[$sem_no] ?? []; ?>
-<div class="card mb-3" style="border-radius:12px;" id="sem-<?= $sem_no ?>">
-    <div class="card-header d-flex justify-content-between align-items-center px-4 py-3"
-         style="background-color:#002147; border-radius:12px 12px 0 0; cursor:pointer;"
-         data-bs-toggle="collapse" data-bs-target="#sem-body-<?= $sem_no ?>"
-         aria-expanded="<?= !empty($rows) ? 'true' : 'false' ?>">
-        <div class="d-flex align-items-center gap-3">
-            <span class="badge rounded-pill" style="background-color:#D21034; font-size:12px; min-width:28px;"><?= $sem_no ?></span>
-            <span class="fw-semibold text-white"><?= h($sem_label) ?></span>
-            <?php if (!empty($rows)): ?>
-            <span class="badge bg-light text-dark small">
-                <?= count($rows) ?> subject<?= count($rows) !== 1 ? 's' : '' ?>
-                &nbsp;·&nbsp;
-                <?= number_format(array_sum(array_column($rows, 'credit')), 2) ?> cr
+<!-- ── Subject table ──────────────────────────────────────────────────────── -->
+<div class="card" style="border-radius:12px;">
+    <div class="card-header px-4 py-3" style="background-color:#002147; border-radius:12px 12px 0 0;">
+        <span class="fw-semibold text-white">
+            <i class="fas fa-list me-2"></i>Subjects
+            <?php if ($total_subjects > 0): ?>
+            <span class="badge bg-light text-dark ms-2 small">
+                <?= $total_subjects ?> subject<?= $total_subjects !== 1 ? 's' : '' ?>
+                &nbsp;·&nbsp;<?= number_format($total_credits, 2) ?> cr
             </span>
-            <?php else: ?>
-            <span class="badge bg-secondary small">No subjects yet</span>
             <?php endif; ?>
-        </div>
+        </span>
+    </div>
+
+    <?php if (empty($subjects)): ?>
+    <div class="card-body text-center text-muted py-5">
+        <i class="fas fa-book-open fa-2x mb-3 d-block" style="opacity:.3;"></i>
+        No subjects added yet.
         <?php if (cc_is_staff()): ?>
-        <a href="<?= APP_URL ?>/course-curriculum/create.php?dept_id=<?= $sel_dept ?>&program_id=<?= $sel_program ?>&semester=<?= $sem_no ?>"
-           class="btn btn-sm btn-outline-light"
-           onclick="event.stopPropagation();"
-           title="Add subject to <?= h($sem_label) ?>">
-            <i class="fas fa-plus"></i>
-        </a>
+        <a href="<?= APP_URL ?>/course-curriculum/create.php?dept_id=<?= $sel_dept ?>&program_id=<?= $sel_program ?>">Add the first subject</a>
         <?php endif; ?>
     </div>
-    <div class="collapse <?= !empty($rows) ? 'show' : '' ?>" id="sem-body-<?= $sem_no ?>">
-        <?php if (empty($rows)): ?>
-        <div class="card-body text-center text-muted py-4 small">
-            No subjects added for this semester yet.
-            <?php if (cc_is_staff()): ?>
-            <a href="<?= APP_URL ?>/course-curriculum/create.php?dept_id=<?= $sel_dept ?>&program_id=<?= $sel_program ?>&semester=<?= $sem_no ?>">Add one</a>
-            <?php endif; ?>
-        </div>
-        <?php else: ?>
-        <div class="table-responsive">
-            <table class="table table-hover mb-0 align-middle" style="font-size:14px;">
-                <thead style="background-color:#F1F5F9;">
-                    <tr>
-                        <th style="width:50px;" class="ps-4">SL</th>
-                        <th style="width:110px;">Code</th>
-                        <th>Subject Title</th>
-                        <th style="width:70px;" class="text-center">Credit</th>
-                        <th style="width:180px;">Assigned Faculty</th>
-                        <?php if (cc_is_staff()): ?>
-                        <th style="width:100px;" class="text-end pe-4">Actions</th>
+    <?php else: ?>
+    <div class="table-responsive">
+        <table class="table table-hover mb-0 align-middle" style="font-size:14px;">
+            <thead style="background-color:#F1F5F9;">
+                <tr>
+                    <th style="width:50px;" class="ps-4">SL</th>
+                    <th style="width:110px;">Subject Code</th>
+                    <th>Title</th>
+                    <th style="width:180px;">Course Teacher</th>
+                    <th style="width:70px;" class="text-center">Total Credit</th>
+                    <th>Marking Distribution</th>
+                    <?php if (cc_is_staff()): ?>
+                    <th style="width:100px;" class="text-end pe-4">Actions</th>
+                    <?php endif; ?>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($subjects as $row): ?>
+                <?php $dists = $distributions[(int)$row['id']] ?? []; ?>
+                <tr>
+                    <td class="ps-4"><?= h($row['sl_no']) ?></td>
+                    <td><?= $row['course_code'] ? '<span class="badge bg-light text-dark border">' . h($row['course_code']) . '</span>' : '<span class="text-muted">—</span>' ?></td>
+                    <td class="fw-medium">
+                        <?= h($row['course_name']) ?>
+                        <?php if ($row['bnqf_code']): ?>
+                        <span class="text-muted small ms-1">(<?= h($row['bnqf_code']) ?>)</span>
                         <?php endif; ?>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($rows as $row): ?>
-                    <tr>
-                        <td class="ps-4"><?= h($row['sl_no']) ?></td>
-                        <td><?= $row['course_code'] ? '<span class="badge bg-light text-dark border">' . h($row['course_code']) . '</span>' : '<span class="text-muted">—</span>' ?></td>
-                        <td class="fw-medium">
-                            <?= h($row['course_name']) ?>
-                            <?php if ($row['bnqf_code']): ?>
-                            <span class="text-muted small ms-1">(<?= h($row['bnqf_code']) ?>)</span>
-                            <?php endif; ?>
-                        </td>
-                        <td class="text-center">
-                            <?= $row['credit'] !== null
-                                ? '<span class="badge" style="background-color:#002147;">' . h(rtrim(rtrim(number_format((float)$row['credit'], 2), '0'), '.')) . '</span>'
-                                : '<span class="text-muted">—</span>' ?>
-                        </td>
-                        <td>
-                            <?php if (!empty($row['faculty_name'])): ?>
-                            <span class="badge bg-info text-dark">
-                                <i class="fas fa-user-tie me-1"></i><?= h($row['faculty_name']) ?>
+                    </td>
+                    <td>
+                        <?php if (!empty($row['faculty_name'])): ?>
+                        <span class="badge bg-info text-dark">
+                            <i class="fas fa-user-tie me-1"></i><?= h($row['faculty_name']) ?>
+                        </span>
+                        <?php else: ?>
+                        <span class="text-muted small">— not assigned —</span>
+                        <?php endif; ?>
+                    </td>
+                    <td class="text-center">
+                        <?= $row['credit'] !== null
+                            ? '<span class="badge" style="background-color:#002147;">' . h(rtrim(rtrim(number_format((float)$row['credit'], 2), '0'), '.')) . '</span>'
+                            : '<span class="text-muted">—</span>' ?>
+                    </td>
+                    <td>
+                        <?php if (!empty($dists)): ?>
+                        <div class="d-flex flex-wrap gap-1">
+                            <?php foreach ($dists as $dist): ?>
+                            <span class="badge rounded-pill" style="background-color:#EEF2FF; color:#3730A3; font-size:11px;">
+                                <?= h($dist['distribution_name']) ?>:&nbsp;<?= h(rtrim(rtrim(number_format((float)$dist['max_marks'], 2), '0'), '.')) ?>
                             </span>
-                            <?php else: ?>
-                            <span class="text-muted small">— unassigned —</span>
-                            <?php endif; ?>
-                        </td>
-                        <?php if (cc_is_staff()): ?>
-                        <td class="text-end pe-4">
-                            <a href="<?= APP_URL ?>/course-curriculum/edit.php?id=<?= $row['id'] ?>&dept_id=<?= $sel_dept ?>&program_id=<?= $sel_program ?>"
-                               class="btn btn-sm btn-outline-primary me-1" title="Edit">
-                                <i class="fas fa-edit"></i>
-                            </a>
-                            <button type="button"
-                                    class="btn btn-sm btn-outline-danger"
-                                    title="Delete"
-                                    data-bs-toggle="modal" data-bs-target="#deleteModal"
-                                    data-id="<?= $row['id'] ?>"
-                                    data-name="<?= h($row['course_name']) ?>">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </td>
+                            <?php endforeach; ?>
+                        </div>
+                        <?php else: ?>
+                        <span class="text-muted small">— not set —</span>
                         <?php endif; ?>
-                    </tr>
-                    <?php endforeach; ?>
-                </tbody>
-                <tfoot style="background-color:#F8FAFC;">
-                    <tr>
-                        <td colspan="3" class="ps-4 text-muted small">
-                            <?= count($rows) ?> subject<?= count($rows) !== 1 ? 's' : '' ?>
-                        </td>
-                        <td class="text-center fw-bold small" style="color:#002147;">
-                            <?= number_format(array_sum(array_column($rows, 'credit')), 2) ?>
-                        </td>
-                        <td></td>
-                        <?php if (cc_is_staff()): ?><td></td><?php endif; ?>
-                    </tr>
-                </tfoot>
-            </table>
-        </div>
-        <?php endif; ?>
+                    </td>
+                    <?php if (cc_is_staff()): ?>
+                    <td class="text-end pe-4">
+                        <a href="<?= APP_URL ?>/course-curriculum/edit.php?id=<?= $row['id'] ?>&dept_id=<?= $sel_dept ?>&program_id=<?= $sel_program ?>"
+                           class="btn btn-sm btn-outline-primary me-1" title="Edit">
+                            <i class="fas fa-edit"></i>
+                        </a>
+                        <button type="button"
+                                class="btn btn-sm btn-outline-danger"
+                                title="Delete"
+                                data-bs-toggle="modal" data-bs-target="#deleteModal"
+                                data-id="<?= $row['id'] ?>"
+                                data-name="<?= h($row['course_name']) ?>">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                    <?php endif; ?>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+            <tfoot style="background-color:#F8FAFC;">
+                <tr>
+                    <td colspan="4" class="ps-4 text-muted small">
+                        <?= $total_subjects ?> subject<?= $total_subjects !== 1 ? 's' : '' ?>
+                    </td>
+                    <td class="text-center fw-bold small" style="color:#002147;">
+                        <?= number_format($total_credits, 2) ?>
+                    </td>
+                    <td></td>
+                    <?php if (cc_is_staff()): ?><td></td><?php endif; ?>
+                </tr>
+            </tfoot>
+        </table>
     </div>
+    <?php endif; ?>
 </div>
-<?php endforeach; ?>
 
 <?php if (cc_is_staff()): ?>
 <!-- Delete subject confirmation modal -->

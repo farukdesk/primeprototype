@@ -215,9 +215,9 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label fw-medium">Assigned Faculty</label>
+                        <label class="form-label fw-medium">Course Teacher</label>
                         <select name="assigned_faculty_id" id="faculty_select" class="form-select">
-                            <option value="">— Unassigned —</option>
+                            <option value="">— Not Assigned —</option>
                             <?php foreach ($dept_faculty as $f): ?>
                             <option value="<?= $f['id'] ?>"
                                 <?= (int)old('assigned_faculty_id', 0) == $f['id'] ? 'selected' : '' ?>>
@@ -225,7 +225,7 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                             </option>
                             <?php endforeach; ?>
                         </select>
-                        <div class="form-text">Type to search faculty by name or designation.</div>
+                        <div class="form-text">Type to search by name or designation.</div>
                     </div>
 
                     <div class="row g-3">
@@ -290,7 +290,7 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
 
 <script>
 new TomSelect('#faculty_select', {
-    placeholder: '— Unassigned —',
+    placeholder: '— Not Assigned —',
     allowEmptyOption: true,
     sortField: 'text',
 });

@@ -70,6 +70,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    // Marking distribution entries
+    $dist_names  = (array)($_POST['dist_name']  ?? []);
+    $dist_marks  = (array)($_POST['dist_marks'] ?? []);
+    $dist_orders = (array)($_POST['dist_order'] ?? []);
+
+    $valid_dists = [];
+    $dist_total  = 0;
+    foreach ($dist_names as $di => $dname) {
+        $dname  = trim($dname);
+        $dmarks = isset($dist_marks[$di]) ? (float)$dist_marks[$di] : 0;
+        if ($dname === '') continue;
+        if ($dmarks <= 0) { $errors[] = 'Each distribution entry must have max marks greater than 0.'; break; }
+        $dist_total += $dmarks;
+        $valid_dists[] = ['name' => $dname, 'marks' => $dmarks, 'order' => (int)($dist_orders[$di] ?? $di)];
+    }
+    if (!empty($valid_dists) && abs($dist_total - 100) > 0.01) {
+        $errors[] = 'Marking distribution totals must add up to 100 (currently ' . number_format($dist_total, 2) . ').';
+    }
+
     if (empty($errors)) {
         db()->prepare(
             "INSERT INTO course_curriculum
@@ -86,6 +105,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ]);
         $new_id = (int)db()->lastInsertId();
 
+        // Save marking distributions
+        if (!empty($valid_dists)) {
+            $dist_stmt = db()->prepare(
+                "INSERT INTO cc_mark_distributions (curriculum_id, distribution_name, max_marks, sort_order)
+                 VALUES (?, ?, ?, ?)"
+            );
+            foreach ($valid_dists as $dist) {
+                $dist_stmt->execute([$new_id, $dist['name'], $dist['marks'], $dist['order']]);
+            }
+        }
+
         log_change(
             'course-curriculum',
             'CREATE',
@@ -96,7 +126,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         );
 
         flash_set('success', 'Subject <strong>' . h($course_name) . '</strong> added.');
-        redirect(APP_URL . '/course-curriculum/index.php?dept_id=' . $dept_id . '&program_id=' . $program_id . '#sem-' . $semester);
+        redirect(APP_URL . '/course-curriculum/index.php?dept_id=' . $dept_id . '&program_id=' . $program_id);
     }
 
     save_old(compact('semester','sl_no','bnqf_code','course_code','course_name','credit_raw','sort_order','assigned_faculty_id'));
@@ -183,10 +213,10 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
 
                     <div class="mb-3">
                         <label class="form-label fw-medium">
-                            Assigned Faculty
+                            Course Teacher
                         </label>
                         <select name="assigned_faculty_id" id="faculty_select" class="form-select">
-                            <option value="">— Unassigned —</option>
+                            <option value="">— Not Assigned —</option>
                             <?php foreach ($dept_faculty as $f): ?>
                             <option value="<?= $f['id'] ?>"
                                 <?= (int)old('assigned_faculty_id', 0) == $f['id'] ? 'selected' : '' ?>>
@@ -194,7 +224,7 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                             </option>
                             <?php endforeach; ?>
                         </select>
-                        <div class="form-text">Type to search faculty by name or designation.</div>
+                        <div class="form-text">Type to search by name or designation.</div>
                     </div>
 
                     <div class="row g-3">
@@ -259,7 +289,7 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
 
 <script>
 new TomSelect('#faculty_select', {
-    placeholder: '— Unassigned —',
+    placeholder: '— Not Assigned —',
     allowEmptyOption: true,
     sortField: 'text',
 });
