@@ -171,8 +171,9 @@ require_once __DIR__ . '/../includes/header.php';
 
 <?php
 // $total_subjects and $total_credits are already set from the DB query above.
-$filtered_total = $filtered_result['total'];
-$total_pages    = (int)ceil($filtered_total / $per_page);
+$filtered_total   = $filtered_result['total'];
+$filtered_credits = (float)($filtered_result['total_credits'] ?? 0);
+$total_pages      = (int)ceil($filtered_total / $per_page);
 $has_filters    = ($search !== '' || $semester_filter !== 0 || $teacher_filter !== 0);
 // Build base URL for pagination/filter links
 $base_url_parts = ['dept_id' => $sel_dept, 'program_id' => $sel_program];
@@ -260,25 +261,25 @@ function cc_page_url(array $base, int $page): string {
     <div class="col-6 col-md-4">
         <div class="card text-center border-0 shadow-sm" style="border-radius:10px;">
             <div class="card-body py-3">
-                <div class="fw-bold fs-4" style="color:#002147;"><?= $total_subjects ?></div>
-                <div class="small text-muted">Total Subjects</div>
+                <div class="fw-bold fs-4" style="color:#002147;"><?= $has_filters ? $filtered_total : $total_subjects ?></div>
+                <div class="small text-muted"><?= $has_filters ? 'Filtered Subjects' : 'Total Subjects' ?></div>
             </div>
         </div>
     </div>
     <div class="col-6 col-md-4">
-        <div class="card text-center border-0 shadow-sm" style="border-radius:10px;">
+        <div class="card text-center border-0 shadow-sm" style="border-radius:10px; <?= $has_filters ? 'border:1px solid #c3d8f5;' : '' ?>">
             <div class="card-body py-3">
-                <div class="fw-bold fs-4" style="color:#D21034;"><?= number_format($total_credits, 2) ?></div>
-                <div class="small text-muted">Total Credits</div>
+                <div class="fw-bold fs-4" style="color:<?= $has_filters ? '#4f8ef7' : '#D21034' ?>;"><?= number_format($has_filters ? $filtered_credits : $total_credits, 2) ?></div>
+                <div class="small text-muted"><?= $has_filters ? 'Filtered Credits' : 'Total Credits' ?></div>
             </div>
         </div>
     </div>
     <?php if ($has_filters): ?>
     <div class="col-6 col-md-4">
-        <div class="card text-center border-0 shadow-sm" style="border-radius:10px; border:1px solid #c3d8f5;">
+        <div class="card text-center border-0 shadow-sm" style="border-radius:10px;">
             <div class="card-body py-3">
-                <div class="fw-bold fs-4" style="color:#4f8ef7;"><?= $filtered_total ?></div>
-                <div class="small text-muted">Filtered Results</div>
+                <div class="fw-bold fs-4" style="color:#002147;"><?= $total_subjects ?></div>
+                <div class="small text-muted">Total Subjects</div>
             </div>
         </div>
     </div>
@@ -293,9 +294,7 @@ function cc_page_url(array $base, int $page): string {
             <?php if ($filtered_total > 0): ?>
             <span class="badge bg-light text-dark ms-2 small">
                 <?= $filtered_total ?> subject<?= $filtered_total !== 1 ? 's' : '' ?>
-                <?php if (!$has_filters): ?>
-                &nbsp;·&nbsp;<?= number_format($total_credits, 2) ?> cr
-                <?php endif; ?>
+                &nbsp;·&nbsp;<?= number_format($has_filters ? $filtered_credits : $total_credits, 2) ?> cr
             </span>
             <?php endif; ?>
             <?php if ($has_filters): ?>
@@ -407,7 +406,7 @@ function cc_page_url(array $base, int $page): string {
                         <?php endif; ?>
                     </td>
                     <td class="text-center fw-bold small" style="color:#002147;">
-                        <?= number_format($total_credits, 2) ?>
+                        <?= number_format($has_filters ? $filtered_credits : $total_credits, 2) ?>
                     </td>
                     <td></td>
                     <?php if (cc_is_staff()): ?><td></td><?php endif; ?>

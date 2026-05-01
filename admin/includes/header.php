@@ -645,8 +645,21 @@ $user       = auth_user();
             <?php if (is_super_admin()): ?>
             <li class="nav-item">
                 <a href="<?= APP_URL ?>/faculty-profiles/index.php"
-                   class="<?= strpos($current_path, '/faculty-profiles/') !== false ? 'active' : '' ?>">
+                   class="<?= (strpos($current_path, '/faculty-profiles/') !== false && strpos($current_path, '/faculty-profiles/pending-subjects') === false) ? 'active' : '' ?>">
                     <i class="fas fa-chalkboard-teacher"></i> Faculty Profiles
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/faculty-profiles/pending-subjects.php"
+                   class="<?= strpos($current_path, '/faculty-profiles/pending-subjects') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-book-open"></i> Subject Approvals
+                    <?php
+                    try {
+                        $_sa_ps_cnt = (int)db()->query("SELECT COUNT(*) FROM faculty_subject_assignments WHERE status='pending'")->fetchColumn();
+                    } catch (Throwable $_e) { $_sa_ps_cnt = 0; }
+                    if ($_sa_ps_cnt > 0): ?>
+                    <span class="badge bg-danger ms-auto" style="font-size:.65rem;"><?= $_sa_ps_cnt ?></span>
+                    <?php endif; ?>
                 </a>
             </li>
             <?php endif; ?>
@@ -1462,10 +1475,47 @@ $user       = auth_user();
     <ul class="nav flex-column mt-2">
         <li class="nav-item">
             <a href="<?= APP_URL ?>/faculty-profiles/my-profile.php"
-               class="<?= strpos($current_path, '/faculty-profiles/') !== false ? 'active' : '' ?>">
+               class="<?= strpos($current_path, '/faculty-profiles/my-profile') !== false ? 'active' : '' ?>">
                 <i class="fas fa-id-card"></i> My Faculty Profile
             </a>
         </li>
+        <?php
+        // Show Subject Approvals link for faculty members who are Heads of Department
+        $_hod_link_user = auth_user();
+        $_is_hod_nav    = false;
+        $_hod_nav_cnt   = 0;
+        if ($_hod_link_user) {
+            try {
+                $_hod_nav_st = db()->prepare(
+                    "SELECT dept_id FROM dept_faculty WHERE user_id = ? AND is_head = 1 AND is_active = 1"
+                );
+                $_hod_nav_st->execute([$_hod_link_user['id']]);
+                $_hod_nav_depts = $_hod_nav_st->fetchAll(PDO::FETCH_COLUMN);
+                $_is_hod_nav    = !empty($_hod_nav_depts);
+                if ($_is_hod_nav) {
+                    $ph = implode(',', array_fill(0, count($_hod_nav_depts), '?'));
+                    $_hod_cnt_st = db()->prepare(
+                        "SELECT COUNT(*) FROM faculty_subject_assignments fsa
+                           JOIN course_curriculum cc ON cc.id = fsa.course_id
+                           JOIN dept_academic_programs dap ON dap.id = cc.program_id
+                          WHERE fsa.status = 'pending' AND dap.dept_id IN ($ph)"
+                    );
+                    $_hod_cnt_st->execute($_hod_nav_depts);
+                    $_hod_nav_cnt = (int)$_hod_cnt_st->fetchColumn();
+                }
+            } catch (Throwable $_hod_nav_ex) {}
+        }
+        if ($_is_hod_nav): ?>
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/faculty-profiles/pending-subjects.php"
+               class="<?= strpos($current_path, '/faculty-profiles/pending-subjects') !== false ? 'active' : '' ?>">
+                <i class="fas fa-book-open"></i> Subject Approvals
+                <?php if ($_hod_nav_cnt > 0): ?>
+                <span class="badge bg-danger ms-auto" style="font-size:.65rem;"><?= $_hod_nav_cnt ?></span>
+                <?php endif; ?>
+            </a>
+        </li>
+        <?php endif; ?>
     </ul>
     <?php endif; ?>
 

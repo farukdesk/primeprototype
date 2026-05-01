@@ -68,6 +68,39 @@ db()->prepare(
       WHERE id=?"
 )->execute([$new_status, $reviewer_id, $notes ?: null, $assignment_id]);
 
+// When approved, update course_curriculum.assigned_faculty_id to this faculty.
+// When rejected, clear the assignment only if it was set to this faculty.
+$df_st = db()->prepare(
+    "SELECT id FROM dept_faculty WHERE user_id = ? AND dept_id = ? AND is_active = 1 LIMIT 1"
+);
+$df_st->execute([(int)$asgn['faculty_user_id'], (int)$asgn['dept_id']]);
+$df_row = $df_st->fetch();
+
+if ($df_row) {
+    $df_id = (int)$df_row['id'];
+    if ($action === 'approve') {
+        db()->prepare(
+            "UPDATE course_curriculum SET assigned_faculty_id = ? WHERE id = ?"
+        )->execute([$df_id, (int)$asgn['course_id']]);
+    } else {
+        // Only remove the assignment if it currently belongs to this faculty member.
+        db()->prepare(
+            "UPDATE course_curriculum SET assigned_faculty_id = NULL
+              WHERE id = ? AND assigned_faculty_id = ?"
+        )->execute([(int)$asgn['course_id'], $df_id]);
+    }
+} elseif ($action === 'approve') {
+    // No active dept_faculty record found; mark the assignment back to pending and notify.
+    db()->prepare(
+        "UPDATE faculty_subject_assignments SET status='pending', reviewed_by=NULL, reviewed_at=NULL WHERE id=?"
+    )->execute([$assignment_id]);
+    flash_set('danger',
+        'Cannot approve: <strong>' . h($asgn['faculty_name']) . '</strong> does not have an active faculty record '
+        . 'in this department. Please add them to the department faculty list first.'
+    );
+    redirect(APP_URL . '/faculty-profiles/pending-subjects.php');
+}
+
 $label = trim(($asgn['course_code'] ? $asgn['course_code'] . ' – ' : '') . $asgn['course_name']);
 
 log_change(

@@ -278,10 +278,15 @@ function cc_get_subjects_filtered(int $program_id, array $filters = [], int $pag
 
     $whereSQL = 'WHERE ' . implode(' AND ', $where);
 
-    // Count total matching rows
-    $countSt = db()->prepare("SELECT COUNT(*) FROM course_curriculum c $whereSQL");
+    // Count total matching rows and sum their credits
+    $countSt = db()->prepare(
+        "SELECT COUNT(*) AS cnt, COALESCE(SUM(c.credit), 0) AS creds
+           FROM course_curriculum c $whereSQL"
+    );
     $countSt->execute($params);
-    $total = (int)$countSt->fetchColumn();
+    $agg           = $countSt->fetch(PDO::FETCH_ASSOC);
+    $total         = (int)$agg['cnt'];
+    $total_credits = (float)$agg['creds'];
 
     // Fetch the requested page
     $offset = max(0, $page - 1) * $per_page;
@@ -297,8 +302,9 @@ function cc_get_subjects_filtered(int $program_id, array $filters = [], int $pag
     $rowsSt->execute($params);
 
     return [
-        'rows'  => $rowsSt->fetchAll(),
-        'total' => $total,
+        'rows'         => $rowsSt->fetchAll(),
+        'total'        => $total,
+        'total_credits' => $total_credits,
     ];
 }
 
