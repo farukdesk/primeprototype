@@ -38,7 +38,7 @@ $dept_faculty = cc_get_dept_faculty($dept_id);
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
-    $semester              = max(1, min(12, (int)($_POST['semester'] ?? 1)));
+    $semester              = max(0, min(12, (int)($_POST['semester'] ?? 0)));
     $sl_no                 = max(1, (int)($_POST['sl_no'] ?? 1));
     $bnqf_code             = trim($_POST['bnqf_code']             ?? '');
     $course_code           = trim($_POST['course_code']           ?? '');
@@ -129,7 +129,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect(APP_URL . '/course-curriculum/index.php?dept_id=' . $dept_id . '&program_id=' . $program_id);
     }
 
-    save_old(compact('semester','sl_no','bnqf_code','course_code','course_name','credit_raw','sort_order','assigned_faculty_id'));
+    save_old(compact('semester','sl_no','bnqf_code','course_code','course_name','credit_raw','sort_order','assigned_faculty_id') + [
+        'dist_name'  => $dist_names,
+        'dist_marks' => $dist_marks,
+        'dist_order' => $dist_orders,
+    ]);
 }
 
 $semester_labels = cc_semester_labels();
@@ -264,14 +268,16 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                         <label class="form-label fw-medium">
                             Semester <span class="text-danger">*</span>
                         </label>
-                        <select name="semester" class="form-select" required>
+                        <select name="semester" class="form-select">
+                            <option value="0" <?= (int)old('semester', 0) === 0 ? 'selected' : '' ?>>— Not Assigned —</option>
                             <?php foreach ($semester_labels as $n => $lbl): ?>
                             <option value="<?= $n ?>"
-                                <?= (int)old('semester', $def_sem) === $n ? 'selected' : '' ?>>
+                                <?= (int)old('semester', 0) === $n ? 'selected' : '' ?>>
                                 <?= h($lbl) ?>
                             </option>
                             <?php endforeach; ?>
                         </select>
+                        <div class="form-text">Courses not assigned to a semester will not appear on the public program page.</div>
                     </div>
                     <div class="d-grid gap-2">
                         <button type="submit" class="btn btn-primary" style="border-radius:10px;">
@@ -285,6 +291,30 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
         </div>
 
     </div>
+
+    <!-- ── Marking Distribution ─────────────────────────────────────────────── -->
+    <div class="card mt-4" style="border-radius:12px;">
+        <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center">
+            <h6 class="mb-0 fw-semibold">
+                <i class="fas fa-chart-pie me-2 text-muted"></i>Marking Distribution
+                <small class="text-muted fw-normal ms-2">(optional — if entered, total must equal 100)</small>
+            </h6>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addDistRow()">
+                <i class="fas fa-plus me-1"></i> Add Entry
+            </button>
+        </div>
+        <div class="card-body p-4">
+            <div id="dist-rows"></div>
+            <p class="text-muted small mb-0" id="dist-empty-msg">No marking distribution entries yet. Click <strong>Add Entry</strong> to add one.</p>
+            <div id="dist-total-wrap" class="mt-3 pt-3 border-top" style="display:none;">
+                <span class="small">Total marks: <strong id="dist-total">0.00</strong> / 100</span>
+                <span class="text-danger ms-2 small" id="dist-total-warn" style="display:none;">
+                    <i class="fas fa-exclamation-triangle me-1"></i>Must equal 100
+                </span>
+            </div>
+        </div>
+    </div>
+
 </form>
 
 <script>
@@ -293,6 +323,76 @@ new TomSelect('#faculty_select', {
     allowEmptyOption: true,
     sortField: 'text',
 });
+
+// ── Marking Distribution dynamic rows ────────────────────────────────────────
+var distRowIndex = 0;
+var preloadDists = <?= json_encode(array_map(null, old_array('dist_name'), old_array('dist_marks'), old_array('dist_order')), JSON_HEX_TAG) ?>;
+
+function addDistRow(name, marks, order) {
+    var idx = distRowIndex++;
+    var n   = name  ?? '';
+    var m   = marks ?? '';
+    var o   = order ?? idx;
+    var row = document.createElement('div');
+    row.className = 'row g-2 align-items-end mb-2 dist-row';
+    row.dataset.idx = idx;
+    row.innerHTML =
+        '<div class="col">' +
+            '<label class="form-label small fw-medium mb-1">Distribution Name</label>' +
+            '<input type="text" name="dist_name[]" class="form-control form-control-sm dist-name" value="' + escHtml(n) + '" placeholder="e.g. Attendance, Mid Term, Final" maxlength="100">' +
+        '</div>' +
+        '<div class="col-auto" style="min-width:110px;">' +
+            '<label class="form-label small fw-medium mb-1">Max Marks</label>' +
+            '<input type="number" name="dist_marks[]" class="form-control form-control-sm dist-marks" value="' + escHtml(String(m)) + '" step="0.01" min="0.01" max="100" placeholder="e.g. 30">' +
+        '</div>' +
+        '<input type="hidden" name="dist_order[]" value="' + o + '">' +
+        '<div class="col-auto">' +
+            '<label class="form-label small d-block" style="opacity:0;">.</label>' +
+            '<button type="button" class="btn btn-sm btn-outline-danger" onclick="removeDistRow(this)" title="Remove"><i class="fas fa-times"></i></button>' +
+        '</div>';
+    row.querySelectorAll('.dist-name,.dist-marks').forEach(function(el) {
+        el.addEventListener('input', updateDistTotal);
+    });
+    document.getElementById('dist-rows').appendChild(row);
+    updateDistVisibility();
+    updateDistTotal();
+}
+
+function removeDistRow(btn) {
+    btn.closest('.dist-row').remove();
+    updateDistVisibility();
+    updateDistTotal();
+}
+
+function updateDistVisibility() {
+    var rows = document.querySelectorAll('.dist-row');
+    document.getElementById('dist-empty-msg').style.display  = rows.length === 0 ? '' : 'none';
+    document.getElementById('dist-total-wrap').style.display = rows.length === 0 ? 'none' : '';
+}
+
+function updateDistTotal() {
+    var total = 0;
+    document.querySelectorAll('.dist-marks').forEach(function(el) {
+        var v = parseFloat(el.value);
+        if (!isNaN(v)) total += v;
+    });
+    document.getElementById('dist-total').textContent = total.toFixed(2);
+    var warn = document.getElementById('dist-total-warn');
+    var hasRows = document.querySelectorAll('.dist-row').length > 0;
+    warn.style.display = (hasRows && Math.abs(total - 100) > 0.01) ? '' : 'none';
+}
+
+function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Pre-populate from old() data on validation failure
+preloadDists.forEach(function(entry) {
+    if (entry[0] !== undefined && entry[0] !== null && entry[0] !== '') {
+        addDistRow(entry[0], entry[1], entry[2]);
+    }
+});
+updateDistVisibility();
 </script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
