@@ -232,3 +232,98 @@ function cc_intake_seasons(): array
 {
     return ['Spring', 'Summer', 'Fall', 'Winter'];
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Search / Filter / Pagination helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Fetch filtered + paginated subjects for a program.
+ *
+ * Supported $filters keys:
+ *   search     (string)  – partial match on course_code or course_name
+ *   semester   (int)     – exact semester (0 = all, -1 = unassigned)
+ *   teacher_id (int)     – assigned_faculty_id (0 = all, -1 = unassigned/null)
+ *
+ * Returns ['rows' => [...], 'total' => int]
+ */
+function cc_get_subjects_filtered(int $program_id, array $filters = [], int $page = 1, int $per_page = 20): array
+{
+    $where  = ['c.program_id = ?'];
+    $params = [$program_id];
+
+    $search = trim($filters['search'] ?? '');
+    if ($search !== '') {
+        $where[]  = '(c.course_code LIKE ? OR c.course_name LIKE ?)';
+        $like     = '%' . $search . '%';
+        $params[] = $like;
+        $params[] = $like;
+    }
+
+    $semester = (int)($filters['semester'] ?? 0);
+    if ($semester === -1) {
+        $where[] = '(c.semester IS NULL OR c.semester = 0)';
+    } elseif ($semester > 0) {
+        $where[]  = 'c.semester = ?';
+        $params[] = $semester;
+    }
+
+    $teacher_id = (int)($filters['teacher_id'] ?? 0);
+    if ($teacher_id === -1) {
+        $where[] = 'c.assigned_faculty_id IS NULL';
+    } elseif ($teacher_id > 0) {
+        $where[]  = 'c.assigned_faculty_id = ?';
+        $params[] = $teacher_id;
+    }
+
+    $whereSQL = 'WHERE ' . implode(' AND ', $where);
+
+    // Count total matching rows
+    $countSt = db()->prepare("SELECT COUNT(*) FROM course_curriculum c $whereSQL");
+    $countSt->execute($params);
+    $total = (int)$countSt->fetchColumn();
+
+    // Fetch the requested page
+    $offset = max(0, $page - 1) * $per_page;
+    $limit  = (int)$per_page;
+    $off    = (int)$offset;
+    $sql    = "SELECT c.*, df.name AS faculty_name
+                 FROM course_curriculum c
+                 LEFT JOIN dept_faculty df ON df.id = c.assigned_faculty_id
+                $whereSQL
+                ORDER BY c.sort_order ASC, c.sl_no ASC, c.id ASC
+                LIMIT {$limit} OFFSET {$off}";
+    $rowsSt = db()->prepare($sql);
+    $rowsSt->execute($params);
+
+    return [
+        'rows'  => $rowsSt->fetchAll(),
+        'total' => $total,
+    ];
+}
+
+/**
+ * Teacher course-load report for a program.
+ *
+ * Returns rows ordered by course_count DESC:
+ *   faculty_id, faculty_name, designation, course_count, total_credits
+ *
+ * A NULL faculty_id row represents subjects with no assigned teacher.
+ */
+function cc_teacher_report(int $program_id): array
+{
+    $st = db()->prepare(
+        "SELECT df.id           AS faculty_id,
+                df.name         AS faculty_name,
+                df.designation,
+                COUNT(c.id)                AS course_count,
+                COALESCE(SUM(c.credit), 0) AS total_credits
+           FROM course_curriculum c
+           LEFT JOIN dept_faculty df ON df.id = c.assigned_faculty_id
+          WHERE c.program_id = ?
+          GROUP BY df.id, df.name, df.designation
+          ORDER BY course_count DESC, df.name ASC"
+    );
+    $st->execute([$program_id]);
+    return $st->fetchAll();
+}
