@@ -5,12 +5,18 @@
 
 -- 1. Add assigned_faculty_id to course_curriculum
 --    (FK → dept_faculty.id; NULL = no faculty assigned yet)
+--
+--    NOTE: ADD COLUMN IF NOT EXISTS / ADD KEY IF NOT EXISTS are split from
+--    ADD CONSTRAINT because MariaDB < 10.5.2 does not support
+--    "ADD CONSTRAINT IF NOT EXISTS" for foreign keys.
 ALTER TABLE `course_curriculum`
   ADD COLUMN IF NOT EXISTS `assigned_faculty_id` INT UNSIGNED DEFAULT NULL
     COMMENT 'FK to dept_faculty.id; faculty responsible for teaching this subject'
     AFTER `credit`,
-  ADD KEY IF NOT EXISTS `idx_cc_assigned_faculty` (`assigned_faculty_id`),
-  ADD CONSTRAINT IF NOT EXISTS `fk_cc_assigned_faculty`
+  ADD KEY IF NOT EXISTS `idx_cc_assigned_faculty` (`assigned_faculty_id`);
+
+ALTER TABLE `course_curriculum`
+  ADD CONSTRAINT `fk_cc_assigned_faculty`
     FOREIGN KEY (`assigned_faculty_id`) REFERENCES `dept_faculty` (`id`)
     ON DELETE SET NULL ON UPDATE CASCADE;
 
