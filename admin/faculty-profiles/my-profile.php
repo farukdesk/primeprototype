@@ -162,8 +162,49 @@ $sa_st = db()->prepare(
 $sa_st->execute([$user_id]);
 $subject_assignments = $sa_st->fetchAll();
 
-// Subjects available to assign (in this faculty's dept, not already requested)
-$already_ids = array_column($subject_assignments, 'course_id');
+// Also include courses admin-assigned directly via course_curriculum.assigned_faculty_id
+// (linked through dept_faculty.user_id to this faculty's user account)
+$aa_st = db()->prepare(
+    "SELECT cc.id AS course_id,
+            cc.course_name, cc.course_code, cc.credit, cc.semester,
+            dap.program_name, d.name AS dept_name
+       FROM course_curriculum cc
+       JOIN dept_academic_programs dap ON dap.id = cc.program_id
+       JOIN dept_departments d ON d.id = dap.dept_id
+       JOIN dept_faculty df ON df.id = cc.assigned_faculty_id
+      WHERE df.user_id = ?
+      ORDER BY cc.semester ASC, cc.course_name ASC"
+);
+$aa_st->execute([$user_id]);
+$admin_assigned_rows = $aa_st->fetchAll();
+
+// Merge admin-assigned courses not already tracked in faculty_subject_assignments
+$fsa_course_ids = array_flip(array_map('intval', array_column($subject_assignments, 'course_id')));
+foreach ($admin_assigned_rows as $row) {
+    if (!isset($fsa_course_ids[(int)$row['course_id']])) {
+        $subject_assignments[] = [
+            'id'              => null,
+            'faculty_user_id' => $user_id,
+            'course_id'       => $row['course_id'],
+            'status'          => 'approved',
+            'reviewed_by'     => null,
+            'reviewed_at'     => null,
+            'notes'           => null,
+            'created_at'      => null,
+            'course_name'     => $row['course_name'],
+            'course_code'     => $row['course_code'],
+            'credit'          => $row['credit'],
+            'semester'        => $row['semester'],
+            'program_name'    => $row['program_name'],
+            'dept_name'       => $row['dept_name'],
+            'admin_assigned'  => true,
+        ];
+        $fsa_course_ids[(int)$row['course_id']] = true;
+    }
+}
+
+// Subjects available to assign (in this faculty's dept, not already requested or admin-assigned)
+$already_ids = array_map('intval', array_column($subject_assignments, 'course_id'));
 if ($my_dept_id > 0) {
     $av_st = db()->prepare(
         "SELECT cc.id, cc.course_code, cc.course_name, cc.credit, cc.semester,
@@ -526,7 +567,10 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                             : '<span class="text-muted">—</span>' ?>
                     </td>
                     <td>
-                        <?php if ($asgn['status'] === 'approved'): ?>
+                        <?php if (!empty($asgn['admin_assigned'])): ?>
+                        <span class="badge bg-success"><i class="fas fa-check me-1"></i>Approved</span>
+                        <span class="badge bg-info text-dark ms-1" title="Assigned directly by administrator"><i class="fas fa-user-shield me-1"></i>Admin Assigned</span>
+                        <?php elseif ($asgn['status'] === 'approved'): ?>
                         <span class="badge bg-success"><i class="fas fa-check me-1"></i>Approved</span>
                         <?php elseif ($asgn['status'] === 'pending'): ?>
                         <span class="badge bg-warning text-dark"><i class="fas fa-hourglass-half me-1"></i>Awaiting Approval</span>
@@ -537,7 +581,9 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                         <?php endif; ?>
                         <?php endif; ?>
                     </td>
-                    <td class="small text-muted"><?= h(date('d M Y', strtotime($asgn['created_at']))) ?></td>
+                    <td class="small text-muted">
+                        <?= $asgn['created_at'] ? h(date('d M Y', strtotime($asgn['created_at']))) : '<span class="text-muted">—</span>' ?>
+                    </td>
                 </tr>
                 <?php endforeach; ?>
                 </tbody>
