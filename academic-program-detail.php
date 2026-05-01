@@ -56,7 +56,7 @@ try {
         $cst = $db2->prepare(
             "SELECT semester, sl_no, bnqf_code, course_code, course_name, credit
                FROM course_curriculum
-              WHERE program_id = ?
+              WHERE program_id = ? AND semester > 0
               ORDER BY semester ASC, sort_order ASC, sl_no ASC, id ASC"
         );
         $cst->execute([$id]);
