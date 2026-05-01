@@ -10,9 +10,8 @@ $page_title = 'Result Management';
 $active_tab = $_GET['tab'] ?? 'legacy';
 
 // ── Filters ───────────────────────────────────────────────────────────────────
-$f_dept    = (int)($_GET['dept_id']  ?? 0);
+$f_dept    = (int)($_GET['dept_id']    ?? 0);
 $f_program = (int)($_GET['program_id'] ?? 0);
-$f_batch   = trim($_GET['batch'] ?? '');
 $f_pub     = $_GET['published'] ?? '';
 $page      = max(1, (int)($_GET['page'] ?? 1));
 $per_page  = 20;
@@ -22,7 +21,6 @@ $params = [];
 
 if ($f_dept > 0)    { $where[] = 'e.dept_id = ?';    $params[] = $f_dept; }
 if ($f_program > 0) { $where[] = 'e.program_id = ?'; $params[] = $f_program; }
-if ($f_batch !== '') { $where[] = 'e.batch = ?';     $params[] = $f_batch; }
 if ($f_pub === '1') { $where[] = 'e.is_published = 1'; }
 if ($f_pub === '0') { $where[] = 'e.is_published = 0'; }
 
@@ -51,7 +49,6 @@ $stmt = db()->prepare(
     'SELECT e.*,
             d.name AS dept_name,
             p.program_name,
-            (SELECT COUNT(*) FROM result_subjects rs WHERE rs.exam_id = e.id) AS subject_count,
             (SELECT COUNT(DISTINCT rg.student_sid) FROM result_grades rg WHERE rg.exam_id = e.id) AS student_count
      FROM result_exams e
      JOIN dept_departments d ON d.id = e.dept_id
@@ -72,6 +69,11 @@ if ($dept_scope !== null) {
         fn($d) => in_array((int)$d['id'], $dept_scope, true)
     ));
 }
+
+// Programs list for filter (all active, client-side filtered by dept)
+$filter_programs = db()->query(
+    'SELECT id, program_name, dept_id FROM dept_academic_programs WHERE is_active = 1 ORDER BY program_name ASC'
+)->fetchAll();
 
 // ── Workflow counts (chain-aware) ─────────────────────────────────────────────
 $wf_counts  = ['my_sheets' => 0, 'queue' => 0, 'published' => 0];
@@ -246,7 +248,7 @@ function _wf_render_my_sheets(int $user_id, ?array $dept_scope): void
                             <th class="px-4">#</th>
                             <th>Subject</th>
                             <th>Department / Program</th>
-                            <th>Semester</th>
+                            <th>Batch</th>
                             <th class="text-center">Students</th>
                             <th>Status</th>
                             <th>Current Step</th>
@@ -371,7 +373,7 @@ function _wf_render_published(?array $dept_scope): void
                             <th class="px-4">#</th>
                             <th>Subject</th>
                             <th>Department / Program</th>
-                            <th>Semester</th>
+                            <th>Batch</th>
                             <th>Teacher</th>
                             <th class="text-center">Students</th>
                             <th class="text-end pe-4">Actions</th>
@@ -430,10 +432,18 @@ function _wf_render_published(?array $dept_scope): void
                     <?php endforeach; ?>
                 </select>
             </div>
-            <div class="col-6 col-md-2">
-                <label class="form-label fw-semibold" style="font-size:.8rem;">Batch</label>
-                <input type="text" name="batch" class="form-control form-control-sm"
-                       placeholder="e.g. 52nd" value="<?= h($f_batch) ?>">
+            <div class="col-6 col-md-3">
+                <label class="form-label fw-semibold" style="font-size:.8rem;">Program</label>
+                <select name="program_id" id="f_prog" class="form-select form-select-sm">
+                    <option value="">All Programs</option>
+                    <?php foreach ($filter_programs as $p): ?>
+                    <option value="<?= $p['id'] ?>"
+                            data-dept="<?= $p['dept_id'] ?>"
+                            <?= $f_program == $p['id'] ? 'selected' : '' ?>>
+                        <?= h($p['program_name']) ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
             </div>
             <div class="col-6 col-md-2">
                 <label class="form-label fw-semibold" style="font-size:.8rem;">Status</label>
@@ -454,6 +464,24 @@ function _wf_render_published(?array $dept_scope): void
         </form>
     </div>
 </div>
+<script>
+(function(){
+    var deptSel = document.getElementById('f_dept');
+    var progSel = document.getElementById('f_prog');
+    if (!deptSel || !progSel) return;
+    function filterProgs() {
+        var deptId = deptSel.value;
+        Array.from(progSel.options).forEach(function(o) {
+            o.style.display = (!deptId || !o.dataset.dept || o.dataset.dept == deptId || !o.value) ? '' : 'none';
+        });
+        // If current selection is hidden, reset it
+        var sel = progSel.options[progSel.selectedIndex];
+        if (sel && sel.value && sel.style.display === 'none') progSel.value = '';
+    }
+    deptSel.addEventListener('change', filterProgs);
+    filterProgs();
+})();
+</script>
 
 <!-- Table -->
 <div class="card">
@@ -469,8 +497,6 @@ function _wf_render_published(?array $dept_scope): void
                         <th class="px-4" style="width:40px;">#</th>
                         <th>Exam Title</th>
                         <th>Department / Program</th>
-                        <th>Batch</th>
-                        <th class="text-center">Subjects</th>
                         <th class="text-center">Students</th>
                         <th>Status</th>
                         <th class="text-end pe-4">Actions</th>
@@ -478,7 +504,7 @@ function _wf_render_published(?array $dept_scope): void
                 </thead>
                 <tbody>
                 <?php if (empty($exams)): ?>
-                    <tr><td colspan="8" class="text-center text-muted py-4">
+                    <tr><td colspan="6" class="text-center text-muted py-4">
                         No result exams found.
                         <?php if (rm_can_create()): ?>
                             <a href="<?= APP_URL ?>/results/create.php">Create the first one</a>.
@@ -499,10 +525,6 @@ function _wf_render_published(?array $dept_scope): void
                             <?php if ($ex['program_name']): ?>
                             <small class="text-muted"><?= h($ex['program_name']) ?></small>
                             <?php endif; ?>
-                        </td>
-                        <td><?= h($ex['batch'] ?? '—') ?></td>
-                        <td class="text-center">
-                            <span class="badge bg-info text-dark"><?= (int)$ex['subject_count'] ?></span>
                         </td>
                         <td class="text-center">
                             <span class="badge bg-secondary"><?= (int)$ex['student_count'] ?></span>
