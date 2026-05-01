@@ -48,6 +48,25 @@ if (is_super_admin()) {
     $departments = $ds->fetchAll();
 }
 
+// ── Auto-detect faculty's department ──────────────────────────────────────────
+// Prefer the dept_id from faculty_profiles; fall back to the single dept in
+// their creatable chains if unambiguous.
+$faculty_dept_id = 0;
+if (!is_super_admin()) {
+    try {
+        $fp_stmt = db()->prepare('SELECT dept_id FROM faculty_profiles WHERE user_id = ? LIMIT 1');
+        $fp_stmt->execute([$user['id']]);
+        $fp_row = $fp_stmt->fetch();
+        if ($fp_row && $fp_row['dept_id']) {
+            $faculty_dept_id = (int)$fp_row['dept_id'];
+        }
+    } catch (Throwable $_e) {}
+    // If faculty_profiles has no record, use the only chain dept (if unambiguous)
+    if (!$faculty_dept_id && count($departments) === 1) {
+        $faculty_dept_id = (int)$departments[0]['id'];
+    }
+}
+
 // ── Load existing sheet (edit mode) ──────────────────────────────────────────
 if ($sheet_id > 0) {
     $stmt = db()->prepare(
@@ -76,7 +95,6 @@ if ($sheet_id > 0) {
     $grades = wf_get_grades($sheet_id);
 }
 
-$semesters  = wf_semester_list();
 $page_title = $sheet ? 'Edit Mark Sheet' : 'New Mark Sheet';
 
 // ── POST handler ──────────────────────────────────────────────────────────────
@@ -86,15 +104,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action         = $_POST['action']         ?? 'save';
     $dept_id        = (int)($_POST['dept_id']        ?? 0);
     $program_id     = (int)($_POST['program_id']     ?? 0);
-    $semester       = trim($_POST['semester']        ?? '');
-    $academic_year  = trim($_POST['academic_year']   ?? '');
+    $batch          = trim($_POST['batch']           ?? '');
     $curriculum_id  = (int)($_POST['curriculum_id']  ?? 0);
     $subject_code   = trim($_POST['subject_code']    ?? '');
     $subject_title  = trim($_POST['subject_title']   ?? '');
     $credits        = trim($_POST['credits']         ?? '');
 
     if ($dept_id <= 0)        $errors[] = 'Department is required.';
-    if ($semester === '')     $errors[] = 'Semester is required.';
+    if ($batch === '')        $errors[] = 'Batch is required.';
     if ($subject_title === '') $errors[] = 'Subject title is required.';
 
     // Resolve chain on submit/save
@@ -113,12 +130,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Update existing sheet header
             $db->prepare(
                 'UPDATE result_mark_sheets SET
-                   dept_id=?, program_id=?, semester=?, academic_year=?,
+                   dept_id=?, program_id=?, semester=?,
                    curriculum_id=?, subject_code=?, subject_title=?, credits=?,
                    updated_at=NOW()
                  WHERE id=?'
             )->execute([
-                $dept_id, $program_id ?: null, $semester, $academic_year ?: null,
+                $dept_id, $program_id ?: null, $batch,
                 $curriculum_id ?: null, $subject_code ?: null, $subject_title,
                 $credits !== '' ? (float)$credits : null,
                 $sheet_id,
@@ -127,11 +144,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Insert new sheet (always starts as draft)
             $db->prepare(
                 'INSERT INTO result_mark_sheets
-                   (dept_id, program_id, semester, academic_year, curriculum_id,
+                   (dept_id, program_id, semester, curriculum_id,
                     subject_code, subject_title, credits, workflow_status, created_by)
-                 VALUES (?,?,?,?,?,?,?,?,\'draft\',?)'
+                 VALUES (?,?,?,?,?,?,?,\'draft\',?)'
             )->execute([
-                $dept_id, $program_id ?: null, $semester, $academic_year ?: null,
+                $dept_id, $program_id ?: null, $batch,
                 $curriculum_id ?: null, $subject_code ?: null, $subject_title,
                 $credits !== '' ? (float)$credits : null,
                 $user['id'],
@@ -202,16 +219,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect(APP_URL . '/results/index.php?tab=my_sheets');
     }
 
-    save_old(compact('dept_id','program_id','semester','academic_year',
+    save_old(compact('dept_id','program_id','batch',
                      'curriculum_id','subject_code','subject_title','credits'));
 }
 
 require_once __DIR__ . '/../includes/header.php';
 
-$v_dept_id       = $sheet ? $sheet['dept_id']       : old('dept_id');
+$v_dept_id       = $sheet ? $sheet['dept_id']       : (old('dept_id') ?: ($faculty_dept_id ?: null));
 $v_program_id    = $sheet ? $sheet['program_id']     : old('program_id');
-$v_semester      = $sheet ? $sheet['semester']       : old('semester');
-$v_academic_year = $sheet ? $sheet['academic_year']  : old('academic_year');
+$v_batch         = $sheet ? $sheet['semester']       : old('batch');
 $v_curriculum_id = $sheet ? $sheet['curriculum_id']  : old('curriculum_id');
 $v_subject_code  = $sheet ? $sheet['subject_code']   : old('subject_code');
 $v_subject_title = $sheet ? $sheet['subject_title']  : old('subject_title');
@@ -266,6 +282,12 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
                     <div class="row g-3 mb-3">
                         <div class="col-md-6">
                             <label class="form-label fw-medium">Department <span class="text-danger">*</span></label>
+                            <?php if (!is_super_admin() && $faculty_dept_id): ?>
+                            <?php $fd = array_values(array_filter($departments, fn($d) => (int)$d['id'] === $faculty_dept_id))[0] ?? null; ?>
+                            <input type="hidden" name="dept_id" id="dept_select" value="<?= $faculty_dept_id ?>">
+                            <input type="text" class="form-control" value="<?= h($fd['name'] ?? '') ?>" readonly
+                                   style="background:#f8f9fa;">
+                            <?php else: ?>
                             <select name="dept_id" id="dept_select" class="form-select" required>
                                 <option value="">— Select Department —</option>
                                 <?php foreach ($departments as $d): ?>
@@ -274,6 +296,7 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
                                 </option>
                                 <?php endforeach; ?>
                             </select>
+                            <?php endif; ?>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-medium">Program</label>
@@ -285,26 +308,18 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
 
                     <div class="row g-3 mb-3">
                         <div class="col-md-6">
-                            <label class="form-label fw-medium">Semester <span class="text-danger">*</span></label>
-                            <select name="semester" class="form-select" required>
-                                <option value="">— Select Semester —</option>
-                                <?php foreach ($semesters as $s): ?>
-                                <option value="<?= h($s) ?>" <?= $v_semester === $s ? 'selected' : '' ?>><?= h($s) ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-medium">Academic Year</label>
-                            <input type="text" name="academic_year" class="form-control"
-                                   value="<?= h($v_academic_year) ?>" placeholder="e.g. 2025-2026" maxlength="20">
+                            <label class="form-label fw-medium">Batch <span class="text-danger">*</span></label>
+                            <input type="text" name="batch" id="batch_input" class="form-control"
+                                   value="<?= h($v_batch ?? '') ?>" placeholder="e.g. 52nd" maxlength="50" required>
+                            <div class="form-text">Students will be auto-loaded when both batch and program are set.</div>
                         </div>
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label fw-medium">Subject from Curriculum</label>
+                        <label class="form-label fw-medium">Subject <?= (!is_super_admin() && !rm_can_create() && !rm_is_staff()) ? '<span class="badge bg-info text-dark ms-1" style="font-size:.7rem;">Your Subjects</span>' : '' ?> <span class="text-danger">*</span></label>
                         <select name="curriculum_id" id="curriculum_select" class="form-select"
                                 <?= ($v_dept_id && $v_program_id) ? '' : 'disabled' ?>>
-                            <option value="">— Select from Curriculum (optional) —</option>
+                            <option value="">— Select Subject —</option>
                         </select>
                         <div class="form-text">Selecting a subject auto-fills code, title, and credits below.</div>
                     </div>
@@ -408,7 +423,7 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
                                 <?php else: ?>
                                 <tr id="empty_row">
                                     <td colspan="11" class="text-center text-muted py-3">
-                                        Use "Load Students" or "Add Row" to add students.
+                                        Enter a batch and select a program — students load automatically. Use "Load Students" to reload or "Add Row" to add manually.
                                     </td>
                                 </tr>
                                 <?php endif; ?>
@@ -515,25 +530,28 @@ foreach ($creatable as $cr) {
 ?>
 <script>
 (function () {
-    var APP_URL    = '<?= APP_URL ?>';
-    var chainMap   = <?= json_encode($chain_map) ?>;
-    var deptSel    = document.getElementById('dept_select');
-    var progSel    = document.getElementById('prog_select');
-    var currSel    = document.getElementById('curriculum_select');
-    var subCode    = document.getElementById('subject_code');
-    var subTitle   = document.getElementById('subject_title');
-    var credits    = document.getElementById('credits_input');
-    var tbody      = document.getElementById('marks_tbody');
-    var emptyRow   = document.getElementById('empty_row');
-    var btnLoad    = document.getElementById('btn_load_students');
-    var btnAdd     = document.getElementById('btn_add_row');
-    var template   = document.getElementById('row_template');
-    var chainInfo  = document.getElementById('chain_info');
-    var chainText  = document.getElementById('chain_info_text');
+    var APP_URL       = '<?= APP_URL ?>';
+    var chainMap      = <?= json_encode($chain_map) ?>;
+    var deptSel       = document.getElementById('dept_select');
+    var progSel       = document.getElementById('prog_select');
+    var currSel       = document.getElementById('curriculum_select');
+    var batchInput    = document.getElementById('batch_input');
+    var subCode       = document.getElementById('subject_code');
+    var subTitle      = document.getElementById('subject_title');
+    var credits       = document.getElementById('credits_input');
+    var tbody         = document.getElementById('marks_tbody');
+    var emptyRow      = document.getElementById('empty_row');
+    var btnLoad       = document.getElementById('btn_load_students');
+    var btnAdd        = document.getElementById('btn_add_row');
+    var template      = document.getElementById('row_template');
+    var chainInfo     = document.getElementById('chain_info');
+    var chainText     = document.getElementById('chain_info_text');
 
-    var savedDept = <?= (int)$v_dept_id ?>;
-    var savedProg = <?= (int)$v_program_id ?>;
-    var savedCurr = <?= (int)$v_curriculum_id ?>;
+    var savedDept     = <?= (int)$v_dept_id ?>;
+    var savedProg     = <?= (int)$v_program_id ?>;
+    var savedCurr     = <?= (int)$v_curriculum_id ?>;
+    var savedBatch    = <?= json_encode($v_batch ?? '') ?>;
+    var facultyDeptId = <?= $faculty_dept_id ?>;
 
     var scale = [[80,Infinity,'A+'],[75,80,'A'],[70,75,'A-'],[65,70,'B+'],
                  [60,65,'B'],[55,60,'B-'],[50,55,'C+'],[45,50,'C'],[40,45,'D'],[0,40,'F']];
@@ -543,19 +561,23 @@ foreach ($creatable as $cr) {
     function updateChainInfo(deptId, progId) {
         var chains = chainMap[deptId] || chainMap['global'] || [];
         if (!chains.length) { chainInfo.style.display = 'none'; return; }
-        // Find best match
         var best = chains.find(function(c) { return (c.program_id == progId) || (!c.program_id); });
         if (!best) best = chains[0];
         chainInfo.style.display = '';
         chainText.textContent = 'Chain: ' + best.chain_name + ' — Entry: ' + best.step_label;
     }
 
+    function getDeptId() {
+        // For faculty, dept_select is a hidden input; for admin it's a select.
+        return deptSel ? deptSel.value : facultyDeptId;
+    }
+
     function loadPrograms(deptId, selectId) {
         progSel.innerHTML = '<option value="">— Select Program —</option>';
         progSel.disabled  = true;
-        currSel.innerHTML = '<option value="">—</option>';
+        currSel.innerHTML = '<option value="">— Select Subject —</option>';
         currSel.disabled  = true;
-        btnLoad.disabled  = true;
+        if (btnLoad) btnLoad.disabled = true;
         if (!deptId) { chainInfo.style.display='none'; return; }
         fetch(APP_URL + '/results/get-programs.php?dept_id=' + deptId)
             .then(function(r) { return r.json(); })
@@ -568,22 +590,36 @@ foreach ($creatable as $cr) {
                 });
                 progSel.disabled = false;
                 updateChainInfo(deptId, selectId);
-                if (selectId) { loadSubjects(selectId, savedCurr); btnLoad.disabled = false; }
+                if (selectId) {
+                    loadFacultySubjects(selectId, savedCurr);
+                    if (btnLoad) btnLoad.disabled = false;
+                    // Auto-load students if batch already set
+                    if (savedBatch) loadStudentsByBatch(false);
+                }
             });
     }
 
-    function loadSubjects(progId, selectId) {
-        currSel.innerHTML = '<option value="">— Select from Curriculum (optional) —</option>';
+    // Load subjects from faculty profile (or all for admin)
+    function loadFacultySubjects(progId, selectId) {
+        currSel.innerHTML = '<option value="">— Select Subject —</option>';
         currSel.disabled  = true;
         if (!progId) return;
-        fetch(APP_URL + '/results/get-subjects.php?program_id=' + progId)
+        fetch(APP_URL + '/results/get-faculty-subjects.php?program_id=' + progId)
             .then(function(r) { return r.json(); })
             .then(function(data) {
+                if (!data.length) {
+                    var o = document.createElement('option');
+                    o.value = ''; o.textContent = '— No subjects assigned —';
+                    o.disabled = true;
+                    currSel.appendChild(o);
+                }
                 data.forEach(function(s) {
                     var o = document.createElement('option');
                     o.value = s.id;
                     o.textContent = (s.course_code ? s.course_code + ' – ' : '') + s.course_name;
-                    o.dataset.code = s.course_code || ''; o.dataset.title = s.course_name; o.dataset.credits = s.credit || '';
+                    o.dataset.code    = s.course_code || '';
+                    o.dataset.title   = s.course_name;
+                    o.dataset.credits = s.credit || '';
                     if (s.id == selectId) o.selected = true;
                     currSel.appendChild(o);
                 });
@@ -595,29 +631,74 @@ foreach ($creatable as $cr) {
     function fillFromCurriculum() {
         var sel = currSel.options[currSel.selectedIndex];
         if (!sel || !sel.value) return;
-        subCode.value   = sel.dataset.code    || '';
-        subTitle.value  = sel.dataset.title   || '';
-        credits.value   = sel.dataset.credits || '';
+        subCode.value  = sel.dataset.code    || '';
+        subTitle.value = sel.dataset.title   || '';
+        credits.value  = sel.dataset.credits || '';
     }
 
-    deptSel.addEventListener('change', function() { loadPrograms(this.value, 0); updateChainInfo(this.value, 0); });
-    progSel.addEventListener('change', function() { loadSubjects(this.value, 0); btnLoad.disabled = !this.value; updateChainInfo(deptSel.value, this.value); });
-    currSel.addEventListener('change', fillFromCurriculum);
-    if (savedDept) loadPrograms(savedDept, savedProg);
-
-    // ── Load students ──────────────────────────────────────────────────────────
-    btnLoad.addEventListener('click', function() {
-        var deptId = deptSel.value, progId = progSel.value;
-        if (!progId) { alert('Please select a program first.'); return; }
-        fetch(APP_URL + '/results/get-students.php?load_all=1&dept_id=' + deptId + '&program_id=' + progId)
+    // ── Load students by batch ─────────────────────────────────────────────────
+    function loadStudentsByBatch(showAlert) {
+        var deptId = getDeptId();
+        var progId = progSel.value;
+        var batch  = batchInput ? batchInput.value.trim() : '';
+        if (!progId || !batch) return;
+        var url = APP_URL + '/results/get-students.php?load_all=1'
+            + '&dept_id='    + encodeURIComponent(deptId)
+            + '&program_id=' + encodeURIComponent(progId)
+            + '&batch='      + encodeURIComponent(batch);
+        fetch(url)
             .then(function(r) { return r.json(); })
             .then(function(data) {
-                if (!data.length) { alert('No students found for this program.'); return; }
+                if (!data.length) {
+                    if (showAlert) alert('No students found for batch "' + batch + '" in this program.');
+                    return;
+                }
                 clearRows();
                 data.forEach(function(s) { appendRow(s.student_id, s.full_name, s.id); });
                 renumber();
             });
+    }
+
+    // Dept change (only for admin – faculty has a hidden input)
+    if (deptSel && deptSel.tagName === 'SELECT') {
+        deptSel.addEventListener('change', function() {
+            loadPrograms(this.value, 0);
+            updateChainInfo(this.value, 0);
+        });
+    }
+
+    progSel.addEventListener('change', function() {
+        loadFacultySubjects(this.value, 0);
+        if (btnLoad) btnLoad.disabled = !this.value;
+        updateChainInfo(getDeptId(), this.value);
+        // Auto-load students if batch already filled
+        if (this.value && batchInput && batchInput.value.trim()) loadStudentsByBatch(false);
     });
+
+    currSel.addEventListener('change', fillFromCurriculum);
+
+    // Auto-load students when batch is entered
+    if (batchInput) {
+        batchInput.addEventListener('change', function() {
+            if (progSel.value && this.value.trim()) loadStudentsByBatch(false);
+        });
+    }
+
+    // Manual "Load Students" button – shows alert if nothing found
+    if (btnLoad) {
+        btnLoad.addEventListener('click', function() {
+            var progId = progSel.value;
+            var batch  = batchInput ? batchInput.value.trim() : '';
+            if (!progId) { alert('Please select a program first.'); return; }
+            if (!batch)  { alert('Please enter a batch first.'); return; }
+            loadStudentsByBatch(true);
+        });
+    }
+
+    // Initial load: programs (and subjects + students if editing)
+    var initDept = facultyDeptId || savedDept;
+    if (initDept) loadPrograms(initDept, savedProg);
+    if (!savedDept && !facultyDeptId) updateChainInfo(0, 0);
 
     function clearRows() {
         Array.from(tbody.querySelectorAll('tr.grade-row')).forEach(function(r) { r.remove(); });
@@ -673,7 +754,7 @@ foreach ($creatable as $cr) {
         });
     }
 
-    // Wire existing rows
+    // Wire existing rows (edit mode)
     Array.from(tbody.querySelectorAll('tr.grade-row')).forEach(wireRow);
 
     function renumber() {
