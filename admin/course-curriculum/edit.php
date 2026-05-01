@@ -2,14 +2,14 @@
 require_once __DIR__ . '/../includes/auth.php';
 auth_check();
 require_once __DIR__ . '/helpers.php';
+require_once __DIR__ . '/../change-log/helpers.php';
 if (!cc_is_staff()) { redirect(APP_URL . '/course-curriculum/index.php'); }
 
 $id         = (int)($_GET['id']         ?? 0);
 $dept_id    = (int)($_POST['dept_id']    ?? $_GET['dept_id']    ?? 0);
 $program_id = (int)($_POST['program_id'] ?? $_GET['program_id'] ?? 0);
-$intake_id  = (int)($_POST['intake_id']  ?? $_GET['intake_id']  ?? 0);
 
-$page_title = 'Edit Course';
+$page_title = 'Edit Subject';
 $errors     = [];
 clear_old();
 
@@ -21,16 +21,11 @@ if ($id > 0) {
     $course = $st->fetch() ?: null;
 }
 if (!$course) {
-    flash_set('danger', 'Course not found.');
+    flash_set('danger', 'Subject not found.');
     redirect(APP_URL . '/course-curriculum/index.php?dept_id=' . $dept_id . '&program_id=' . $program_id);
 }
 
-// Resolve intake_id from course row if not supplied
-if ($intake_id <= 0 && $course) {
-    $intake_id = (int)($course['intake_id'] ?? 0);
-}
-
-// Resolve program context (use course's program_id if not supplied in GET)
+// Resolve program context from course row if not supplied
 if ($program_id <= 0) $program_id = (int)$course['program_id'];
 $program_row = null;
 if ($program_id > 0) {
@@ -56,19 +51,23 @@ if (!$program_row) {
     redirect(APP_URL . '/course-curriculum/index.php');
 }
 
+// Load faculty for this department
+$dept_faculty = cc_get_dept_faculty($dept_id);
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
-    $semester    = max(1, min(12, (int)($_POST['semester'] ?? 1)));
-    $sl_no       = max(1, (int)($_POST['sl_no'] ?? 1));
-    $bnqf_code   = trim($_POST['bnqf_code']   ?? '');
-    $course_code = trim($_POST['course_code'] ?? '');
-    $course_name = trim($_POST['course_name'] ?? '');
-    $credit_raw  = trim($_POST['credit']      ?? '');
-    $sort_order  = max(0, (int)($_POST['sort_order'] ?? 0));
+    $semester              = max(1, min(12, (int)($_POST['semester'] ?? 1)));
+    $sl_no                 = max(1, (int)($_POST['sl_no'] ?? 1));
+    $bnqf_code             = trim($_POST['bnqf_code']            ?? '');
+    $course_code           = trim($_POST['course_code']          ?? '');
+    $course_name           = trim($_POST['course_name']          ?? '');
+    $credit_raw            = trim($_POST['credit']               ?? '');
+    $sort_order            = max(0, (int)($_POST['sort_order']   ?? 0));
+    $assigned_faculty_id   = (int)($_POST['assigned_faculty_id'] ?? 0) ?: null;
 
-    if ($course_name === '')           $errors[] = 'Course Name is required.';
-    if (mb_strlen($course_name) > 300) $errors[] = 'Course Name must be 300 characters or less.';
+    if ($course_name === '')            $errors[] = 'Subject Title is required.';
+    if (mb_strlen($course_name) > 300) $errors[] = 'Subject Title must be 300 characters or less.';
 
     $credit = null;
     if ($credit_raw !== '') {
@@ -79,10 +78,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    // Validate assigned_faculty_id belongs to this dept
+    if ($assigned_faculty_id !== null) {
+        $fv = db()->prepare(
+            "SELECT id FROM dept_faculty WHERE id = ? AND dept_id = ? LIMIT 1"
+        );
+        $fv->execute([$assigned_faculty_id, $dept_id]);
+        if (!$fv->fetch()) {
+            $assigned_faculty_id = null;
+        }
+    }
+
     if (empty($errors)) {
         db()->prepare(
             "UPDATE course_curriculum
-                SET semester=?, sl_no=?, bnqf_code=?, course_code=?, course_name=?, credit=?, sort_order=?
+                SET semester=?, sl_no=?, bnqf_code=?, course_code=?, course_name=?,
+                    credit=?, assigned_faculty_id=?, sort_order=?
               WHERE id=?"
         )->execute([
             $semester, $sl_no,
@@ -90,31 +101,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $course_code ?: null,
             $course_name,
             $credit,
+            $assigned_faculty_id,
             $sort_order,
             $id,
         ]);
 
-        flash_set('success', 'Course <strong>' . h($course_name) . '</strong> updated.');
-        redirect(APP_URL . '/course-curriculum/index.php?dept_id=' . $dept_id . '&program_id=' . $program_id . '&intake_id=' . $intake_id . '#sem-' . $semester);
+        log_change(
+            'course-curriculum',
+            'UPDATE',
+            $id,
+            $course_name,
+            null, null, null,
+            'Subject "' . $course_name . '" updated in program #' . $program_id
+        );
+
+        flash_set('success', 'Subject <strong>' . h($course_name) . '</strong> updated.');
+        redirect(APP_URL . '/course-curriculum/index.php?dept_id=' . $dept_id . '&program_id=' . $program_id . '#sem-' . $semester);
     }
 
-    save_old(compact('semester','sl_no','bnqf_code','course_code','course_name','credit_raw','sort_order'));
+    save_old(compact('semester','sl_no','bnqf_code','course_code','course_name','credit_raw','sort_order','assigned_faculty_id'));
 } else {
     // Pre-fill old() from existing row
     save_old([
-        'semester'    => $course['semester'],
-        'sl_no'       => $course['sl_no'],
-        'bnqf_code'   => $course['bnqf_code']   ?? '',
-        'course_code' => $course['course_code'] ?? '',
-        'course_name' => $course['course_name'],
-        'credit_raw'  => $course['credit'] !== null ? rtrim(rtrim(number_format((float)$course['credit'], 2), '0'), '.') : '',
-        'sort_order'  => $course['sort_order'],
+        'semester'              => $course['semester'],
+        'sl_no'                 => $course['sl_no'],
+        'bnqf_code'             => $course['bnqf_code']           ?? '',
+        'course_code'           => $course['course_code']         ?? '',
+        'course_name'           => $course['course_name'],
+        'credit_raw'            => $course['credit'] !== null ? rtrim(rtrim(number_format((float)$course['credit'], 2), '0'), '.') : '',
+        'sort_order'            => $course['sort_order'],
+        'assigned_faculty_id'   => $course['assigned_faculty_id'] ?? 0,
     ]);
 }
 
 $semester_labels = cc_semester_labels();
 
 require_once __DIR__ . '/../includes/header.php';
+echo '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.min.css">';
+echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>';
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -122,11 +146,11 @@ require_once __DIR__ . '/../includes/header.php';
         <ol class="breadcrumb mb-0">
             <li class="breadcrumb-item"><a href="<?= APP_URL ?>/index.php">Dashboard</a></li>
             <li class="breadcrumb-item">
-                <a href="<?= APP_URL ?>/course-curriculum/index.php?dept_id=<?= $dept_id ?>&program_id=<?= $program_id ?>&intake_id=<?= $intake_id ?>">
+                <a href="<?= APP_URL ?>/course-curriculum/index.php?dept_id=<?= $dept_id ?>&program_id=<?= $program_id ?>">
                     Course Curriculum
                 </a>
             </li>
-            <li class="breadcrumb-item active">Edit Course</li>
+            <li class="breadcrumb-item active">Edit Subject</li>
         </ol>
     </nav>
 </div>
@@ -145,12 +169,6 @@ require_once __DIR__ . '/../includes/header.php';
     <i class="fas fa-building me-1 text-muted"></i><?= h($program_row['dept_name']) ?>
     &nbsp;→&nbsp;
     <strong><?= h($program_row['program_name']) ?></strong>
-    <?php
-    $intake_ctx = $intake_id > 0 ? cc_get_intake($intake_id) : null;
-    if ($intake_ctx): ?>
-    &nbsp;→&nbsp;
-    <i class="fas fa-layer-group me-1 text-muted"></i><?= h($intake_ctx['batch_name']) ?>
-    <?php endif; ?>
     &nbsp;→&nbsp;
     <?= h(cc_semester_label((int)old('semester', $course['semester']))) ?>
 </div>
@@ -159,7 +177,6 @@ require_once __DIR__ . '/../includes/header.php';
     <?= csrf_field() ?>
     <input type="hidden" name="dept_id"    value="<?= $dept_id ?>">
     <input type="hidden" name="program_id" value="<?= $program_id ?>">
-    <input type="hidden" name="intake_id"  value="<?= $intake_id ?>">
 
     <div class="row g-4">
 
@@ -168,14 +185,14 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="card" style="border-radius:12px;">
                 <div class="card-header py-3 px-4">
                     <h6 class="mb-0 fw-semibold">
-                        <i class="fas fa-book me-2 text-muted"></i>Course Details
+                        <i class="fas fa-book me-2 text-muted"></i>Subject Details
                     </h6>
                 </div>
                 <div class="card-body p-4">
 
                     <div class="mb-3">
                         <label class="form-label fw-medium">
-                            Course Name <span class="text-danger">*</span>
+                            Subject Title <span class="text-danger">*</span>
                         </label>
                         <input type="text" name="course_name" class="form-control"
                                value="<?= old('course_name') ?>" maxlength="300"
@@ -184,32 +201,46 @@ require_once __DIR__ . '/../includes/header.php';
 
                     <div class="row g-3 mb-3">
                         <div class="col-md-6">
-                            <label class="form-label fw-medium">Course Code</label>
+                            <label class="form-label fw-medium">Subject Code</label>
                             <input type="text" name="course_code" class="form-control"
                                    value="<?= old('course_code') ?>" maxlength="50"
                                    placeholder="e.g. CSE 101">
                         </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-medium">Credit</label>
+                            <input type="number" name="credit" class="form-control"
+                                   value="<?= old('credit_raw') ?>" step="0.01" min="0"
+                                   placeholder="e.g. 3.00">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Assigned Faculty</label>
+                        <select name="assigned_faculty_id" id="faculty_select" class="form-select">
+                            <option value="">— Unassigned —</option>
+                            <?php foreach ($dept_faculty as $f): ?>
+                            <option value="<?= $f['id'] ?>"
+                                <?= (int)old('assigned_faculty_id', 0) == $f['id'] ? 'selected' : '' ?>>
+                                <?= h($f['name']) ?><?= $f['designation'] ? ' — ' . h($f['designation']) : '' ?>
+                            </option>
+                            <?php endforeach; ?>
+                        </select>
+                        <div class="form-text">Type to search faculty by name or designation.</div>
+                    </div>
+
+                    <div class="row g-3">
                         <div class="col-md-6">
                             <label class="form-label fw-medium">BNQF Code</label>
                             <input type="text" name="bnqf_code" class="form-control"
                                    value="<?= old('bnqf_code') ?>" maxlength="50"
                                    placeholder="e.g. BNQ-1234">
                         </div>
-                    </div>
-
-                    <div class="row g-3">
-                        <div class="col-md-4">
-                            <label class="form-label fw-medium">Credit</label>
-                            <input type="number" name="credit" class="form-control"
-                                   value="<?= old('credit_raw') ?>" step="0.01" min="0"
-                                   placeholder="e.g. 3.00">
-                        </div>
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <label class="form-label fw-medium">SL No.</label>
                             <input type="number" name="sl_no" class="form-control"
                                    value="<?= old('sl_no', 1) ?>" min="1" max="999">
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <label class="form-label fw-medium">Sort Order</label>
                             <input type="number" name="sort_order" class="form-control"
                                    value="<?= old('sort_order', 0) ?>" min="0">
@@ -245,9 +276,9 @@ require_once __DIR__ . '/../includes/header.php';
                     </div>
                     <div class="d-grid gap-2">
                         <button type="submit" class="btn btn-primary" style="border-radius:10px;">
-                            <i class="fas fa-save me-1"></i> Update Course
+                            <i class="fas fa-save me-1"></i> Update Subject
                         </button>
-                        <a href="<?= APP_URL ?>/course-curriculum/index.php?dept_id=<?= $dept_id ?>&program_id=<?= $program_id ?>&intake_id=<?= $intake_id ?>"
+                        <a href="<?= APP_URL ?>/course-curriculum/index.php?dept_id=<?= $dept_id ?>&program_id=<?= $program_id ?>"
                            class="btn btn-light" style="border-radius:10px;">Cancel</a>
                     </div>
                 </div>
@@ -256,5 +287,13 @@ require_once __DIR__ . '/../includes/header.php';
 
     </div>
 </form>
+
+<script>
+new TomSelect('#faculty_select', {
+    placeholder: '— Unassigned —',
+    allowEmptyOption: true,
+    sortField: 'text',
+});
+</script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>

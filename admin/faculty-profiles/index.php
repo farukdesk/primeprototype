@@ -73,6 +73,9 @@ if (fp_can_manage_pending()) {
     $pending_count = (int)($pcs ? $pcs->fetchColumn() : 0);
 }
 
+// Count pending subject assignments for badge
+$pending_subjects_count = fp_pending_subject_count();
+
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
@@ -83,6 +86,17 @@ require_once __DIR__ . '/../includes/header.php';
             <li class="breadcrumb-item active">Faculty Profiles</li>
         </ol>
     </nav>
+    <div class="d-flex gap-2 flex-wrap">
+    <?php if (fp_can_approve_subjects() && $pending_subjects_count > 0): ?>
+    <a href="<?= APP_URL ?>/faculty-profiles/pending-subjects.php" class="btn btn-outline-primary" style="border-radius:10px;font-size:.875rem;">
+        <i class="fas fa-book me-1"></i>Subject Approvals
+        <span class="badge bg-danger ms-1"><?= $pending_subjects_count ?></span>
+    </a>
+    <?php elseif (fp_can_approve_subjects()): ?>
+    <a href="<?= APP_URL ?>/faculty-profiles/pending-subjects.php" class="btn btn-outline-secondary" style="border-radius:10px;font-size:.875rem;">
+        <i class="fas fa-book me-1"></i>Subject Approvals
+    </a>
+    <?php endif; ?>
     <?php if (fp_can_manage_pending()): ?>
     <a href="<?= APP_URL ?>/faculty-profiles/pending.php" class="btn btn-outline-warning" style="border-radius:10px;font-size:.875rem;">
         <i class="fas fa-user-clock me-1"></i>Pending Registrations
@@ -91,6 +105,7 @@ require_once __DIR__ . '/../includes/header.php';
         <?php endif; ?>
     </a>
     <?php endif; ?>
+    </div>
 </div>
 
 <!-- Filters -->

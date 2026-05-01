@@ -33,7 +33,7 @@ function fp_is_register_office(): bool
 }
 
 /**
- * Returns true if current user can manage (add/delete) faculty files.
+ * Returns true if the current user can manage (add/delete) faculty files.
  * Only super admins and Register Office staff can manage files.
  */
 function fp_can_manage_files(): bool
@@ -85,6 +85,73 @@ function fp_can_delete_files(): bool
 function fp_can_manage_pending(): bool
 {
     return is_super_admin() || can_access('faculty-pending', 'can_edit');
+}
+
+/**
+ * Returns true if the current user can approve or reject faculty subject assignments.
+ * Allowed: super admins, users with 'faculty-subject-assignments' can_edit permission,
+ * or faculty members who are marked as head of department (is_head = 1 in dept_faculty).
+ */
+function fp_can_approve_subjects(): bool
+{
+    if (is_super_admin()) return true;
+    if (can_access('faculty-subject-assignments', 'can_edit')) return true;
+
+    // Check if the current user is a Head of Department
+    $user = auth_user();
+    if (!$user) return false;
+    $st = db()->prepare(
+        "SELECT id FROM dept_faculty WHERE user_id = ? AND is_head = 1 AND is_active = 1 LIMIT 1"
+    );
+    $st->execute([$user['id']]);
+    return (bool)$st->fetch();
+}
+
+/**
+ * Returns the dept_id values for which the current user is Head of Department.
+ * Super admins get null (= all departments).
+ */
+function fp_head_dept_ids(): ?array
+{
+    if (is_super_admin()) return null;
+    $user = auth_user();
+    if (!$user) return [];
+    $st = db()->prepare(
+        "SELECT dept_id FROM dept_faculty WHERE user_id = ? AND is_head = 1 AND is_active = 1"
+    );
+    $st->execute([$user['id']]);
+    $ids = $st->fetchAll(PDO::FETCH_COLUMN);
+    return $ids ?: [];
+}
+
+/**
+ * Returns pending subject assignment count visible to the current user.
+ */
+function fp_pending_subject_count(): int
+{
+    if (!fp_can_approve_subjects()) return 0;
+    $dept_ids = fp_head_dept_ids();
+
+    if ($dept_ids === null) {
+        // super admin — count all pending
+        $r = db()->query(
+            "SELECT COUNT(*) FROM faculty_subject_assignments WHERE status = 'pending'"
+        );
+    } elseif (empty($dept_ids)) {
+        return 0;
+    } else {
+        $ph = implode(',', array_fill(0, count($dept_ids), '?'));
+        $st = db()->prepare(
+            "SELECT COUNT(*)
+               FROM faculty_subject_assignments fsa
+               JOIN course_curriculum cc ON cc.id = fsa.course_id
+               JOIN dept_academic_programs dap ON dap.id = cc.program_id
+              WHERE fsa.status = 'pending' AND dap.dept_id IN ($ph)"
+        );
+        $st->execute($dept_ids);
+        $r = $st;
+    }
+    return (int)($r ? $r->fetchColumn() : 0);
 }
 
 // ── Upload helpers ────────────────────────────────────────────────────────────
