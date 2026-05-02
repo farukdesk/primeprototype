@@ -49,9 +49,9 @@ $page_title = h($sheet['subject_title']);
         .page { max-width: 1140px; margin: 0 auto; padding: 20px; }
 
         /* ── Header ── */
-        .header { display: flex; align-items: center; gap: 20px; border-bottom: 2px solid #002147; padding-bottom: 12px; margin-bottom: 14px; }
-        .header-logo { width: 200px; height: auto; object-fit: contain; flex-shrink: 0; }
-        .header-text { flex: 1; text-align: center; line-height: 1.6; }
+        .header { position: relative; display: flex; align-items: center; justify-content: center; border-bottom: 2px solid #002147; padding-bottom: 12px; margin-bottom: 14px; min-height: 80px; }
+        .header-logo { position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 180px; height: auto; object-fit: contain; }
+        .header-text { text-align: center; line-height: 1.6; }
         .header-text h2 { font-size: 20px; color: #002147; margin-bottom: 4px; font-weight: bold; }
         .header-text p  { font-size: 13px; color: #333; margin: 2px 0; }
         .header-text .sheet-title { font-size: 15px; font-weight: bold; margin-top: 8px; letter-spacing: 1px; color: #002147; text-transform: uppercase; }
