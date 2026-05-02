@@ -263,16 +263,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $db_existing_codes = [];
                 if (!empty($non_empty_codes)) {
                     $ph  = implode(',', array_fill(0, count($non_empty_codes), '?'));
-                    $lc_codes = array_map('mb_strtolower', $non_empty_codes);
                     $cst = db()->prepare(
-                        "SELECT DISTINCT LOWER(course_code) AS code
+                        "SELECT DISTINCT course_code AS code
                            FROM course_curriculum
                           WHERE course_code IS NOT NULL
-                            AND LOWER(course_code) IN ($ph)"
+                            AND course_code IN ($ph)"
                     );
-                    $cst->execute($lc_codes);
+                    $cst->execute($non_empty_codes);
                     foreach ($cst->fetchAll() as $cr) {
-                        $db_existing_codes[$cr['code']] = true;
+                        $db_existing_codes[mb_strtolower($cr['code'])] = true;
                     }
                 }
 
@@ -324,6 +323,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                  VALUES (?, ?, ?, ?)"
             );
 
+            // Batch check for codes already in DB before the import loop
+            $import_codes = array_values(array_unique(array_filter(
+                array_column($parsed_rows, 'subject_code'),
+                static fn($c) => $c !== ''
+            )));
+            $import_db_codes = [];
+            if (!empty($import_codes)) {
+                $iph = implode(',', array_fill(0, count($import_codes), '?'));
+                $ist = db()->prepare(
+                    "SELECT DISTINCT course_code FROM course_curriculum
+                      WHERE course_code IS NOT NULL AND course_code IN ($iph)"
+                );
+                $ist->execute($import_codes);
+                foreach ($ist->fetchAll() as $ir) {
+                    $import_db_codes[mb_strtolower($ir['course_code'])] = true;
+                }
+            }
+
             foreach ($parsed_rows as $row) {
                 if ($row['status'] === 'error') {
                     $skipped++;
@@ -331,15 +348,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 // Server-side guard: skip if course_code already in DB
-                if (!empty($row['subject_code'])) {
-                    $dup_st = db()->prepare(
-                        "SELECT id FROM course_curriculum WHERE course_code = ? LIMIT 1"
-                    );
-                    $dup_st->execute([$row['subject_code']]);
-                    if ($dup_st->fetch()) {
-                        $skipped++;
-                        continue;
-                    }
+                if (!empty($row['subject_code']) && isset($import_db_codes[mb_strtolower($row['subject_code'])])) {
+                    $skipped++;
+                    continue;
                 }
 
                 $insert_st->execute([
