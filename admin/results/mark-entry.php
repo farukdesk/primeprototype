@@ -813,7 +813,10 @@ foreach ($creatable as $cr) {
      */
     function buildMarkCells(savedMarks, isGlobalAbsent, absentFlags) {
         return currentDist.map(function(d, i) {
-            var isSegAbsent = isGlobalAbsent || !!(absentFlags && absentFlags[i]);
+            // Use per-segment flags when available; fall back to global flag only for legacy (no flags) data
+            var isSegAbsent = (absentFlags !== null && absentFlags !== undefined)
+                ? !!(absentFlags[i])
+                : isGlobalAbsent;
             var td = document.createElement('td');
             td.style.cssText = 'vertical-align:middle;padding:.2rem .25rem;';
 
@@ -836,7 +839,6 @@ foreach ($creatable as $cr) {
             segChk.setAttribute('data-dist-idx', i);
             segChk.style.cssText = 'transform:scale(0.75);cursor:pointer;';
             segChk.checked = isSegAbsent;
-            if (isGlobalAbsent) segChk.disabled = true;
             lbl.appendChild(segChk);
             var lblTxt = document.createElement('span');
             lblTxt.textContent = 'Abs';
