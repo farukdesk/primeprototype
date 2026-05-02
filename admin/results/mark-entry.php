@@ -115,6 +115,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($batch === '')        $errors[] = 'Batch is required.';
     if ($subject_title === '') $errors[] = 'Subject title is required.';
 
+    // Faculty: server-side check that the chosen curriculum subject is assigned to them
+    if ($curriculum_id > 0 && !is_super_admin() && !rm_can_create() && !rm_is_staff()) {
+        $fac_uid = (int)$user['id'];
+        $fa_stmt = db()->prepare(
+            "SELECT COUNT(*) FROM faculty_subject_assignments fsa
+              WHERE fsa.faculty_user_id = ? AND fsa.course_id = ? AND fsa.status = 'approved'"
+        );
+        $fa_stmt->execute([$fac_uid, $curriculum_id]);
+        $is_authorized = (int)$fa_stmt->fetchColumn() > 0;
+        if (!$is_authorized) {
+            $fa2 = db()->prepare(
+                "SELECT COUNT(*) FROM course_curriculum cc
+                   JOIN dept_faculty df ON df.id = cc.assigned_faculty_id
+                  WHERE df.user_id = ? AND cc.id = ?"
+            );
+            $fa2->execute([$fac_uid, $curriculum_id]);
+            $is_authorized = (int)$fa2->fetchColumn() > 0;
+        }
+        if (!$is_authorized) {
+            $errors[] = 'You are not authorized to submit results for this subject.';
+        }
+    }
+
     // Resolve chain on submit/save
     $chain = null;
     if ($action === 'submit') {
@@ -270,11 +293,11 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
 <form method="POST" id="markEntryForm" novalidate>
     <?= csrf_field() ?>
 
-    <div class="row g-4">
+    <div class="row g-4 mb-4">
 
-        <!-- Left: Sheet Info -->
-        <div class="col-lg-8">
-            <div class="card mb-4" style="border-radius:12px;">
+        <!-- Sheet Info -->
+        <div class="col-lg-9">
+            <div class="card" style="border-radius:12px;">
                 <div class="card-header py-3 px-4">
                     <h6 class="mb-0 fw-semibold"><i class="fas fa-university me-2 text-muted"></i>Department &amp; Subject</h6>
                 </div>
@@ -311,10 +334,10 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
                         <div class="col-md-6">
                             <label class="form-label fw-medium">Batch <span class="text-danger">*</span></label>
                             <input type="text" name="batch" id="batch_input" class="form-control"
-                                   value="<?= h($v_batch ?? '') ?>" placeholder="e.g. 52nd" maxlength="50"
-                                   list="batch_list" autocomplete="off" required>
+                                   value="<?= h($v_batch ?? '') ?>" placeholder="Type or select batch (e.g. 52nd)" maxlength="50"
+                                   list="batch_list" required>
                             <datalist id="batch_list"></datalist>
-                            <div class="form-text">Students auto-load when batch and program are set. Type to search existing batches.</div>
+                            <div class="form-text">Click the field or start typing to filter available batches.</div>
                         </div>
                     </div>
 
@@ -347,131 +370,10 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
 
                 </div>
             </div>
+        </div><!-- /col-lg-9 -->
 
-            <!-- Student Marks Table -->
-            <div class="card mb-4" style="border-radius:12px;">
-                <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center">
-                    <h6 class="mb-0 fw-semibold"><i class="fas fa-list me-2 text-muted"></i>Student Marks</h6>
-                    <div class="d-flex gap-2">
-                        <button type="button" id="btn_load_students" class="btn btn-sm btn-outline-primary"
-                                style="border-radius:8px;" disabled>
-                            <i class="fas fa-users me-1"></i> Load Students
-                        </button>
-                        <button type="button" id="btn_add_other_batch" class="btn btn-sm btn-outline-warning"
-                                style="border-radius:8px;" title="Add a student from a different batch">
-                            <i class="fas fa-user-plus me-1"></i> Other Batch
-                        </button>
-                        <button type="button" id="btn_add_row" class="btn btn-sm btn-outline-secondary"
-                                style="border-radius:8px;">
-                            <i class="fas fa-plus me-1"></i> Add Row
-                        </button>
-                    </div>
-                </div>
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-bordered table-hover mb-0" id="marks_table">
-                            <thead class="table-light">
-                                <tr>
-                                    <th class="ps-3" style="width:40px;">#</th>
-                                    <th style="min-width:130px;">Student ID</th>
-                                    <th style="min-width:180px;">Name</th>
-                                    <th class="text-center" style="width:70px;">Absent</th>
-                                    <th class="text-center" id="th_att" style="width:75px;">Att.<br><small class="text-muted">/10</small></th>
-                                    <th class="text-center" id="th_ct"  style="width:75px;">CT<br><small class="text-muted">/10</small></th>
-                                    <th class="text-center" id="th_mid" style="width:75px;">Mid<br><small class="text-muted">/30</small></th>
-                                    <th class="text-center" id="th_fin" style="width:75px;">Final<br><small class="text-muted">/50</small></th>
-                                    <th class="text-center" style="width:75px;">Total</th>
-                                    <th class="text-center" style="width:60px;">Grade</th>
-                                    <th style="width:40px;"></th>
-                                </tr>
-                            </thead>
-                            <tbody id="marks_tbody">
-                                <?php if (!empty($grades)): ?>
-                                <?php foreach ($grades as $idx => $g): ?>
-                                <tr class="grade-row <?= $g['is_absent'] ? 'table-warning' : '' ?>">
-                                    <td class="ps-3 row-num"><?= $idx + 1 ?></td>
-                                    <td>
-                                        <input type="hidden" name="student_id_pk[]" value="<?= (int)$g['student_id'] ?>">
-                                        <input type="text" name="student_sid[]" class="form-control form-control-sm"
-                                               value="<?= h($g['student_sid']) ?>" placeholder="Student ID" required>
-                                    </td>
-                                    <td>
-                                        <input type="text" name="student_name[]" class="form-control form-control-sm"
-                                               value="<?= h($g['student_name']) ?>" placeholder="Full Name">
-                                    </td>
-                                    <td class="text-center">
-                                        <input type="hidden" name="is_absent[]" class="absent-flag" value="<?= $g['is_absent'] ? '1' : '0' ?>">
-                                        <input type="checkbox" class="form-check-input absent-chk" <?= $g['is_absent'] ? 'checked' : '' ?>>
-                                    </td>
-                                    <td><input type="number" name="attendance[]" class="form-control form-control-sm marks-input att-input"
-                                               value="<?= $g['is_absent'] ? '' : h($g['attendance'] ?? '') ?>"
-                                               min="0" max="10" step="0.5" <?= $g['is_absent'] ? 'disabled' : '' ?>></td>
-                                    <td><input type="number" name="class_test[]" class="form-control form-control-sm marks-input ct-input"
-                                               value="<?= $g['is_absent'] ? '' : h($g['class_test'] ?? '') ?>"
-                                               min="0" max="10" step="0.5" <?= $g['is_absent'] ? 'disabled' : '' ?>></td>
-                                    <td><input type="number" name="mid_term[]" class="form-control form-control-sm marks-input mid-input"
-                                               value="<?= $g['is_absent'] ? '' : h($g['mid_term'] ?? '') ?>"
-                                               min="0" max="30" step="0.5" <?= $g['is_absent'] ? 'disabled' : '' ?>></td>
-                                    <td><input type="number" name="final_exam[]" class="form-control form-control-sm marks-input fin-input"
-                                               value="<?= $g['is_absent'] ? '' : h($g['final_exam'] ?? '') ?>"
-                                               min="0" max="50" step="0.5" <?= $g['is_absent'] ? 'disabled' : '' ?>></td>
-                                    <td class="text-center total-cell fw-semibold">
-                                        <?= $g['is_absent'] ? '<span class="text-danger">Abs</span>' : h($g['total_marks'] ?? '—') ?>
-                                    </td>
-                                    <td class="text-center grade-cell fw-bold">
-                                        <?= $g['is_absent'] ? '<span class="text-danger">F</span>' : h($g['letter_grade'] ?? '—') ?>
-                                    </td>
-                                    <td>
-                                        <button type="button" class="btn btn-sm btn-outline-danger btn-remove-row"
-                                                style="border-radius:6px;"><i class="fas fa-times"></i></button>
-                                    </td>
-                                </tr>
-                                <?php endforeach; ?>
-                                <?php else: ?>
-                                <tr id="empty_row">
-                                    <td colspan="11" class="text-center text-muted py-3">
-                                        Enter a batch and select a program — students load automatically. Use "Load Students" to reload or "Add Row" to add manually.
-                                    </td>
-                                </tr>
-                                <?php endif; ?>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-                <div id="other_batch_panel" class="px-3 pb-3" style="display:none;">
-                    <div class="card border-warning" style="border-radius:10px;">
-                        <div class="card-body p-3">
-                            <h6 class="fw-semibold mb-2" style="font-size:.85rem;">
-                                <i class="fas fa-user-plus me-1 text-warning"></i>
-                                Add Student from Another Batch
-                            </h6>
-                            <div class="row g-2 align-items-end">
-                                <div class="col-md-3">
-                                    <label class="form-label small mb-1">Batch</label>
-                                    <input type="text" id="other_batch_val" class="form-control form-control-sm"
-                                           list="other_batch_datalist" placeholder="e.g. 51st" autocomplete="off">
-                                    <datalist id="other_batch_datalist"></datalist>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label small mb-1">Search by Student ID or Name</label>
-                                    <input type="text" id="other_student_q" class="form-control form-control-sm"
-                                           placeholder="Type at least 2 charactersâ¦" autocomplete="off">
-                                </div>
-                                <div class="col-md-3">
-                                    <button type="button" id="btn_other_search" class="btn btn-warning btn-sm w-100">
-                                        <i class="fas fa-search me-1"></i> Search
-                                    </button>
-                                </div>
-                            </div>
-                            <div id="other_student_results" class="mt-2"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Right: Actions & Reference -->
-        <div class="col-lg-4">
+        <!-- Actions & Reference -->
+        <div class="col-lg-3">
             <div class="card mb-4" style="border-radius:12px;">
                 <div class="card-header py-3 px-4">
                     <h6 class="mb-0 fw-semibold"><i class="fas fa-paper-plane me-2 text-muted"></i>Actions</h6>
@@ -538,6 +440,127 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
             </div>
         </div>
     </div>
+    <!-- Student Marks Table -->
+    <div class="card mb-4" style="border-radius:12px;">
+        <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center">
+            <h6 class="mb-0 fw-semibold"><i class="fas fa-list me-2 text-muted"></i>Student Marks</h6>
+            <div class="d-flex gap-2">
+                <button type="button" id="btn_load_students" class="btn btn-sm btn-outline-primary"
+                        style="border-radius:8px;" disabled>
+                    <i class="fas fa-users me-1"></i> Load Students
+                </button>
+                <button type="button" id="btn_add_other_batch" class="btn btn-sm btn-outline-warning"
+                        style="border-radius:8px;" title="Add a student from a different batch">
+                    <i class="fas fa-user-plus me-1"></i> Other Batch
+                </button>
+                <button type="button" id="btn_add_row" class="btn btn-sm btn-outline-secondary"
+                        style="border-radius:8px;">
+                    <i class="fas fa-plus me-1"></i> Add Row
+                </button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover mb-0" id="marks_table">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-3" style="width:50px;">#</th>
+                            <th style="min-width:150px;">Student ID</th>
+                            <th style="min-width:220px;">Name</th>
+                            <th class="text-center" style="width:85px;">Absent</th>
+                            <th class="text-center" id="th_att" style="width:100px;">Att.<br><small class="text-muted">/10</small></th>
+                            <th class="text-center" id="th_ct"  style="width:100px;">CT<br><small class="text-muted">/10</small></th>
+                            <th class="text-center" id="th_mid" style="width:100px;">Mid<br><small class="text-muted">/30</small></th>
+                            <th class="text-center" id="th_fin" style="width:110px;">Final<br><small class="text-muted">/50</small></th>
+                            <th class="text-center" style="width:100px;">Total</th>
+                            <th class="text-center" style="width:80px;">Grade</th>
+                            <th style="width:50px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="marks_tbody">
+                        <?php if (!empty($grades)): ?>
+                        <?php foreach ($grades as $idx => $g): ?>
+                        <tr class="grade-row <?= $g['is_absent'] ? 'table-warning' : '' ?>">
+                            <td class="ps-3 row-num"><?= $idx + 1 ?></td>
+                            <td>
+                                <input type="hidden" name="student_id_pk[]" value="<?= (int)$g['student_id'] ?>">
+                                <input type="text" name="student_sid[]" class="form-control form-control-sm"
+                                       value="<?= h($g['student_sid']) ?>" placeholder="Student ID" required>
+                            </td>
+                            <td>
+                                <input type="text" name="student_name[]" class="form-control form-control-sm"
+                                       value="<?= h($g['student_name']) ?>" placeholder="Full Name">
+                            </td>
+                            <td class="text-center">
+                                <input type="hidden" name="is_absent[]" class="absent-flag" value="<?= $g['is_absent'] ? '1' : '0' ?>">
+                                <input type="checkbox" class="form-check-input absent-chk" <?= $g['is_absent'] ? 'checked' : '' ?>>
+                            </td>
+                            <td><input type="number" name="attendance[]" class="form-control form-control-sm marks-input att-input"
+                                       value="<?= $g['is_absent'] ? '' : h($g['attendance'] ?? '') ?>"
+                                       min="0" max="10" step="0.5" <?= $g['is_absent'] ? 'disabled' : '' ?>></td>
+                            <td><input type="number" name="class_test[]" class="form-control form-control-sm marks-input ct-input"
+                                       value="<?= $g['is_absent'] ? '' : h($g['class_test'] ?? '') ?>"
+                                       min="0" max="10" step="0.5" <?= $g['is_absent'] ? 'disabled' : '' ?>></td>
+                            <td><input type="number" name="mid_term[]" class="form-control form-control-sm marks-input mid-input"
+                                       value="<?= $g['is_absent'] ? '' : h($g['mid_term'] ?? '') ?>"
+                                       min="0" max="30" step="0.5" <?= $g['is_absent'] ? 'disabled' : '' ?>></td>
+                            <td><input type="number" name="final_exam[]" class="form-control form-control-sm marks-input fin-input"
+                                       value="<?= $g['is_absent'] ? '' : h($g['final_exam'] ?? '') ?>"
+                                       min="0" max="50" step="0.5" <?= $g['is_absent'] ? 'disabled' : '' ?>></td>
+                            <td class="text-center total-cell fw-semibold">
+                                <?= $g['is_absent'] ? '<span class="text-danger">Abs</span>' : h($g['total_marks'] ?? '—') ?>
+                            </td>
+                            <td class="text-center grade-cell fw-bold">
+                                <?= $g['is_absent'] ? '<span class="text-danger">F</span>' : h($g['letter_grade'] ?? '—') ?>
+                            </td>
+                            <td>
+                                <button type="button" class="btn btn-sm btn-outline-danger btn-remove-row"
+                                        style="border-radius:6px;"><i class="fas fa-times"></i></button>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                        <?php else: ?>
+                        <tr id="empty_row">
+                            <td colspan="11" class="text-center text-muted py-3">
+                                Enter a batch and select a program — students load automatically. Use "Load Students" to reload or "Add Row" to add manually.
+                            </td>
+                        </tr>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div id="other_batch_panel" class="px-3 pb-3" style="display:none;">
+            <div class="card border-warning" style="border-radius:10px;">
+                <div class="card-body p-3">
+                    <h6 class="fw-semibold mb-2" style="font-size:.85rem;">
+                        <i class="fas fa-user-plus me-1 text-warning"></i>
+                        Add Student from Another Batch
+                    </h6>
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-3">
+                            <label class="form-label small mb-1">Batch</label>
+                            <input type="text" id="other_batch_val" class="form-control form-control-sm"
+                                   list="other_batch_datalist" placeholder="e.g. 51st" autocomplete="off">
+                            <datalist id="other_batch_datalist"></datalist>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small mb-1">Search by Student ID or Name</label>
+                            <input type="text" id="other_student_q" class="form-control form-control-sm"
+                                   placeholder="Type at least 2 charactersâ¦" autocomplete="off">
+                        </div>
+                        <div class="col-md-3">
+                            <button type="button" id="btn_other_search" class="btn btn-warning btn-sm w-100">
+                                <i class="fas fa-search me-1"></i> Search
+                            </button>
+                        </div>
+                    </div>
+                    <div id="other_student_results" class="mt-2"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
 </form>
 
 <!-- Row template (hidden) -->
