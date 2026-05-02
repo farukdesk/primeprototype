@@ -599,7 +599,7 @@ if (!empty($grades)):
 else:
 ?>
                         <tr id="empty_row">
-                            <td colspan="8" class="text-center text-muted py-3" id="empty_colspan">
+                            <td colspan="11" class="text-center text-muted py-3" id="empty_colspan">
                                 Enter a batch and select a program — students load automatically. Use "Load Students" to reload or "Add Row" to add manually.
                             </td>
                         </tr>
@@ -1270,7 +1270,7 @@ foreach ($creatable as $cr) {
     }
     renumber();
 
-    // Apply initial default distribution so the table has mark columns right away
+    // Apply initial default distribution (4 components) so mark columns appear immediately
     applyMarkDistribution([]);
 })();
 </script>

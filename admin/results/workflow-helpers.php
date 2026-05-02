@@ -429,8 +429,9 @@ function wf_get_sheet_history(int $sheet_id): array
  * @param string $student_name
  * @param int    $is_absent
  * @param array  $marks  Indexed array of mark values (float|null) for each distribution component.
- *                       Index 0 → attendance (legacy), 1 → class_test, 2 → mid_term, 3 → final_exam.
- *                       For ≥5 distributions, extra values are stored only in marks_json.
+ *                       All values are stored in marks_json; the first 4 are also mapped to the
+ *                       legacy columns (attendance, class_test, mid_term, final_exam) for backward
+ *                       compatibility with older display code.
  */
 function wf_upsert_grade(
     int $sheet_id,
@@ -455,7 +456,7 @@ function wf_upsert_grade(
             if ($v === null) {
                 $clamped[$i] = null;
             } else {
-                $max = $maxes[$i] ?? PHP_INT_MAX;
+                $max = $maxes[$i] ?? WF_MAX_TOTAL; // cap extra components at total max
                 $clamped[$i] = min(max((float)$v, 0), $max);
             }
         }
