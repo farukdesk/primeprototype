@@ -478,8 +478,8 @@ function wf_upsert_grade(
         $absent_json = null;
     }
 
-    $all_null = (count(array_filter($clamped, fn($v) => $v !== null)) === 0);
-    if ($all_null) {
+    $no_valid_marks = (count(array_filter($clamped, fn($v) => $v !== null)) === 0);
+    if ($no_valid_marks) {
         $total = null; $letter = null; $point = null;
         $marks_json = null;
     } else {

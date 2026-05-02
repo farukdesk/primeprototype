@@ -157,7 +157,7 @@ $page_title = h($sheet['subject_title']);
                 <thead><tr><th>Marks Range</th><th>Grade</th><th>Point</th></tr></thead>
                 <tbody>
                 <?php foreach (wf_grading_scale() as [$min, $max, $letter, $point]):
-                    $range = ($max === PHP_INT_MAX) ? '≥' . $min . '%' : $min . '% – <' . $max . '%';
+                    $range = ($max === PHP_INT_MAX) ? '&ge;' . $min . '%' : $min . '% &ndash; &lt;' . $max . '%';
                 ?>
                 <tr><td><?= $range ?></td><td><strong><?= h($letter) ?></strong></td><td><?= number_format($point, 2) ?></td></tr>
                 <?php endforeach; ?>
@@ -244,7 +244,10 @@ $page_title = h($sheet['subject_title']);
                 }
             ?></td>
             <?php endforeach; ?>
-            <td><?= ($g['is_absent'] && empty($_abs_flags)) ? '—' : h($g['total_marks'] ?? '—') ?></td>
+            <td><?php
+                $is_fully_absent = $g['is_absent'] && empty($_abs_flags);
+                echo $is_fully_absent ? '&mdash;' : h($g['total_marks'] ?? '—');
+            ?></td>
             <td><strong><?= h($g['letter_grade'] ?? '—') ?></strong></td>
             <td><?= $g['grade_point'] !== null ? number_format((float)$g['grade_point'], 2) : '—' ?></td>
             <td style="text-align:left;font-size:10px;color:#c0392b;"><?= $_remarks ?></td>
