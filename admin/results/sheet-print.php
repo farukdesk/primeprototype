@@ -158,26 +158,33 @@ $page_title = h($sheet['subject_title']);
                 <th style="min-width:110px;">Student ID</th>
                 <th style="min-width:150px;">Name</th>
                 <th>Abs.</th>
-                <th>Att.<br>/10</th>
-                <th>CT<br>/10</th>
-                <th>Mid<br>/30</th>
-                <th>Final<br>/50</th>
+                <?php foreach ($mark_distribution as $_pd): ?>
+                <th><?= h($_pd['distribution_name']) ?><br>/<?= h($_pd['max_marks']) ?></th>
+                <?php endforeach; ?>
                 <th>Total</th>
                 <th>Grade</th>
                 <th>Point</th>
             </tr>
         </thead>
         <tbody>
-        <?php foreach ($grades as $idx => $g): ?>
+        <?php foreach ($grades as $idx => $g):
+            // Prefer marks_json; fall back to legacy columns
+            $_marks = null;
+            if (!empty($g['marks_json'])) {
+                $_marks = json_decode($g['marks_json'], true);
+            }
+            if (!is_array($_marks)) {
+                $_marks = [$g['attendance'] ?? null, $g['class_test'] ?? null, $g['mid_term'] ?? null, $g['final_exam'] ?? null];
+            }
+        ?>
         <tr class="<?= $g['is_absent'] ? 'absent-row' : '' ?>">
             <td><?= $idx + 1 ?></td>
             <td class="mono"><?= h($g['s_student_id'] ?? $g['student_sid']) ?></td>
             <td class="left"><?= h($g['s_full_name'] ?? $g['student_name']) ?></td>
             <td><?= $g['is_absent'] ? '✓' : '' ?></td>
-            <td><?= $g['is_absent'] ? '—' : h($g['attendance']  ?? '—') ?></td>
-            <td><?= $g['is_absent'] ? '—' : h($g['class_test']  ?? '—') ?></td>
-            <td><?= $g['is_absent'] ? '—' : h($g['mid_term']    ?? '—') ?></td>
-            <td><?= $g['is_absent'] ? '—' : h($g['final_exam']  ?? '—') ?></td>
+            <?php foreach ($mark_distribution as $di => $_pd): ?>
+            <td><?= $g['is_absent'] ? '—' : h($_marks[$di] ?? '—') ?></td>
+            <?php endforeach; ?>
             <td><?= $g['is_absent'] ? '—' : h($g['total_marks'] ?? '—') ?></td>
             <td><strong><?= h($g['letter_grade'] ?? '—') ?></strong></td>
             <td><?= $g['grade_point'] !== null ? number_format((float)$g['grade_point'], 2) : '—' ?></td>

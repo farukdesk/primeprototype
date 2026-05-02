@@ -32,32 +32,18 @@ if (is_super_admin() || rm_can_create() || rm_is_staff()) {
     exit;
 }
 
-// Faculty: fetch ALL subjects for the program
-$all_stmt = db()->prepare(
-    'SELECT cc.id, cc.course_code, cc.course_name, cc.credit
-     FROM course_curriculum cc
-     WHERE cc.program_id = ?
-     ORDER BY cc.semester ASC, cc.course_name ASC'
-);
-$all_stmt->execute([$program_id]);
-$all_subjects = $all_stmt->fetchAll(PDO::FETCH_ASSOC);
+// Faculty: fetch only subjects assigned/approved for this user
+$user_id = (int)auth_user()['id'];
 
-if (empty($all_subjects)) { echo '[]'; exit; }
-
-// Build set of assigned curriculum IDs for this user
-$user_id    = (int)auth_user()['id'];
-$assigned   = [];
-
-// 1. From faculty_subject_assignments (status = approved)
+// Collect assigned curriculum IDs from two sources:
+// 1. faculty_subject_assignments (status = approved)
 $st = db()->prepare(
     "SELECT fsa.course_id
        FROM faculty_subject_assignments fsa
       WHERE fsa.faculty_user_id = ? AND fsa.status = 'approved'"
 );
 $st->execute([$user_id]);
-foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $cid) {
-    $assigned[(int)$cid] = true;
-}
+$assigned_ids = $st->fetchAll(PDO::FETCH_COLUMN);
 
 // 2. Admin-assigned via course_curriculum.assigned_faculty_id → dept_faculty
 $st2 = db()->prepare(
@@ -68,20 +54,19 @@ $st2 = db()->prepare(
 );
 $st2->execute([$user_id]);
 foreach ($st2->fetchAll(PDO::FETCH_COLUMN) as $cid) {
-    $assigned[(int)$cid] = true;
+    $assigned_ids[] = $cid;
 }
 
-// Tag each subject and sort: assigned first, then alphabetical
-foreach ($all_subjects as &$row) {
-    $row['is_assigned'] = isset($assigned[(int)$row['id']]) ? 1 : 0;
-}
-unset($row);
+$assigned_ids = array_unique(array_map('intval', $assigned_ids));
 
-usort($all_subjects, function ($a, $b) {
-    if ($a['is_assigned'] !== $b['is_assigned']) {
-        return $a['is_assigned'] ? -1 : 1; // assigned first
-    }
-    return strcmp($a['course_name'], $b['course_name']);
-});
+if (empty($assigned_ids)) { echo '[]'; exit; }
 
-echo json_encode($all_subjects);
+$phs  = implode(',', array_fill(0, count($assigned_ids), '?'));
+$stmt = db()->prepare(
+    "SELECT cc.id, cc.course_code, cc.course_name, cc.credit, 1 AS is_assigned
+       FROM course_curriculum cc
+      WHERE cc.program_id = ? AND cc.id IN ($phs)
+      ORDER BY cc.semester ASC, cc.course_name ASC"
+);
+$stmt->execute(array_merge([$program_id], $assigned_ids));
+echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));

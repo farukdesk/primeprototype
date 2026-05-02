@@ -182,28 +182,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         // ── Save grades ────────────────────────────────────────────────────────
-        $sids        = (array)($_POST['student_sid']   ?? []);
-        $names       = (array)($_POST['student_name']  ?? []);
-        $id_pks      = (array)($_POST['student_id_pk'] ?? []);
-        $absents     = (array)($_POST['is_absent']     ?? []);
-        $attendances = (array)($_POST['attendance']    ?? []);
-        $class_tests = (array)($_POST['class_test']    ?? []);
-        $mid_terms   = (array)($_POST['mid_term']      ?? []);
-        $final_exams = (array)($_POST['final_exam']    ?? []);
+        $sids    = (array)($_POST['student_sid']   ?? []);
+        $names   = (array)($_POST['student_name']  ?? []);
+        $id_pks  = (array)($_POST['student_id_pk'] ?? []);
+        $absents = (array)($_POST['is_absent']     ?? []);
 
-        foreach ($sids as $idx => $sid) {
+        // Dynamic marks: $_POST['marks'] is a 2D array [dist_idx][row_idx]
+        $marks_by_dist = [];
+        foreach ($_POST['marks'] ?? [] as $dist_idx => $vals) {
+            $marks_by_dist[(int)$dist_idx] = (array)$vals;
+        }
+
+        foreach ($sids as $row_idx => $sid) {
             $sid = trim($sid);
             if ($sid === '') continue;
+
+            // Build marks array for this row across all distributions
+            $row_marks = [];
+            foreach ($marks_by_dist as $dist_idx => $vals) {
+                $v = $vals[$row_idx] ?? '';
+                $row_marks[$dist_idx] = ($v !== '') ? (float)$v : null;
+            }
+            // Ensure contiguous array (fill missing indices with null)
+            if (!empty($row_marks)) {
+                $max_idx = max(array_keys($row_marks));
+                for ($i = 0; $i <= $max_idx; $i++) {
+                    if (!array_key_exists($i, $row_marks)) $row_marks[$i] = null;
+                }
+                ksort($row_marks);
+                $row_marks = array_values($row_marks);
+            }
+
             wf_upsert_grade(
                 $sheet_id,
-                (int)($id_pks[$idx] ?? 0),
+                (int)($id_pks[$row_idx] ?? 0),
                 $sid,
-                trim($names[$idx] ?? ''),
-                ($absents[$idx] ?? '0') === '1' ? 1 : 0,
-                isset($attendances[$idx]) && $attendances[$idx] !== '' ? (float)$attendances[$idx] : null,
-                isset($class_tests[$idx]) && $class_tests[$idx]  !== '' ? (float)$class_tests[$idx]  : null,
-                isset($mid_terms[$idx])   && $mid_terms[$idx]    !== '' ? (float)$mid_terms[$idx]    : null,
-                isset($final_exams[$idx]) && $final_exams[$idx]  !== '' ? (float)$final_exams[$idx]  : null
+                trim($names[$row_idx] ?? ''),
+                ($absents[$row_idx] ?? '0') === '1' ? 1 : 0,
+                $row_marks
             );
         }
 
@@ -358,7 +374,7 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
                         </select>
                         <div class="form-text" id="subject_hint">
                             <?= (!is_super_admin() && !rm_can_create() && !rm_is_staff())
-                                ? 'Greyed-out subjects are not assigned to your profile.'
+                                ? 'Only subjects approved for your profile are shown.'
                                 : 'Selecting a subject auto-fills code, title, and credits below.' ?>
                         </div>
                     </div>
@@ -513,25 +529,41 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
         <div class="card-body p-0">
             <div class="table-responsive">
                 <table class="table table-bordered table-hover mb-0" id="marks_table">
-                    <thead class="table-light">
+                    <thead class="table-light" id="marks_thead">
                         <tr>
                             <th class="ps-2 text-center" style="width:36px;">#</th>
                             <th style="min-width:105px;">Student ID</th>
                             <th style="min-width:150px;">Name</th>
                             <th class="text-center" style="width:60px;">Absent</th>
-                            <th class="text-center" id="th_att" style="width:72px;">Att.<br><small class="text-muted">/10</small></th>
-                            <th class="text-center" id="th_ct"  style="width:72px;">CT<br><small class="text-muted">/10</small></th>
-                            <th class="text-center" id="th_mid" style="width:78px;">Mid<br><small class="text-muted">/30</small></th>
-                            <th class="text-center" id="th_fin" style="width:82px;">Final<br><small class="text-muted">/50</small></th>
+                            <!-- dynamic mark-column headers inserted by JS -->
                             <th class="text-center" style="width:68px;">Total</th>
                             <th class="text-center" style="width:58px;">Grade</th>
                             <th style="width:36px;"></th>
                         </tr>
                     </thead>
                     <tbody id="marks_tbody">
-                        <?php if (!empty($grades)): ?>
-                        <?php foreach ($grades as $idx => $g): ?>
-                        <tr class="grade-row <?= $g['is_absent'] ? 'table-warning' : '' ?>">
+<?php
+// Output existing rows (edit mode) with saved mark values as data attributes.
+// Mark cells are injected by JS after the distribution loads.
+if (!empty($grades)):
+    foreach ($grades as $idx => $g):
+        // Prefer marks_json for edit-mode pre-population; fall back to 4 legacy columns.
+        $saved_marks = null;
+        if (!empty($g['marks_json'])) {
+            $saved_marks = json_decode($g['marks_json'], true);
+        }
+        if (!is_array($saved_marks)) {
+            $saved_marks = [
+                $g['is_absent'] ? null : ($g['attendance'] ?? null),
+                $g['is_absent'] ? null : ($g['class_test'] ?? null),
+                $g['is_absent'] ? null : ($g['mid_term']   ?? null),
+                $g['is_absent'] ? null : ($g['final_exam'] ?? null),
+            ];
+        }
+?>
+                        <tr class="grade-row <?= $g['is_absent'] ? 'table-warning' : '' ?>"
+                            data-saved-marks="<?= h(json_encode($saved_marks)) ?>"
+                            data-is-absent="<?= $g['is_absent'] ? '1' : '0' ?>">
                             <td class="text-center row-num" style="font-size:.8rem;"><?= $idx + 1 ?></td>
                             <td>
                                 <input type="hidden" name="student_id_pk[]" value="<?= (int)$g['student_id'] ?>">
@@ -548,22 +580,7 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
                                 <input type="hidden" name="is_absent[]" class="absent-flag" value="<?= $g['is_absent'] ? '1' : '0' ?>">
                                 <input type="checkbox" class="form-check-input absent-chk" <?= $g['is_absent'] ? 'checked' : '' ?>>
                             </td>
-                            <td><input type="number" name="attendance[]" class="form-control form-control-sm marks-input att-input"
-                                       value="<?= $g['is_absent'] ? '' : h($g['attendance'] ?? '') ?>"
-                                       min="0" max="10" step="0.5" <?= $g['is_absent'] ? 'disabled' : '' ?>
-                                       style="font-size:.78rem;padding:.2rem .3rem;text-align:center;"></td>
-                            <td><input type="number" name="class_test[]" class="form-control form-control-sm marks-input ct-input"
-                                       value="<?= $g['is_absent'] ? '' : h($g['class_test'] ?? '') ?>"
-                                       min="0" max="10" step="0.5" <?= $g['is_absent'] ? 'disabled' : '' ?>
-                                       style="font-size:.78rem;padding:.2rem .3rem;text-align:center;"></td>
-                            <td><input type="number" name="mid_term[]" class="form-control form-control-sm marks-input mid-input"
-                                       value="<?= $g['is_absent'] ? '' : h($g['mid_term'] ?? '') ?>"
-                                       min="0" max="30" step="0.5" <?= $g['is_absent'] ? 'disabled' : '' ?>
-                                       style="font-size:.78rem;padding:.2rem .3rem;text-align:center;"></td>
-                            <td><input type="number" name="final_exam[]" class="form-control form-control-sm marks-input fin-input"
-                                       value="<?= $g['is_absent'] ? '' : h($g['final_exam'] ?? '') ?>"
-                                       min="0" max="50" step="0.5" <?= $g['is_absent'] ? 'disabled' : '' ?>
-                                       style="font-size:.78rem;padding:.2rem .3rem;text-align:center;"></td>
+                            <!-- mark cells injected by JS -->
                             <td class="text-center total-cell fw-semibold" style="font-size:.8rem;">
                                 <?= $g['is_absent'] ? '<span class="text-danger">Abs</span>' : h($g['total_marks'] ?? '—') ?>
                             </td>
@@ -577,14 +594,16 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
                                 </button>
                             </td>
                         </tr>
-                        <?php endforeach; ?>
-                        <?php else: ?>
+<?php
+    endforeach;
+else:
+?>
                         <tr id="empty_row">
-                            <td colspan="11" class="text-center text-muted py-3">
+                            <td colspan="11" class="text-center text-muted py-3" id="empty_colspan">
                                 Enter a batch and select a program — students load automatically. Use "Load Students" to reload or "Add Row" to add manually.
                             </td>
                         </tr>
-                        <?php endif; ?>
+<?php endif; ?>
                     </tbody>
                 </table>
             </div>
@@ -622,7 +641,7 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
 
 </form>
 
-<!-- Row template (hidden) -->
+<!-- Row template (hidden) – mark cells are injected dynamically by JS -->
 <template id="row_template">
     <tr class="grade-row">
         <td class="text-center row-num" style="font-size:.8rem;"></td>
@@ -637,14 +656,7 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
             <input type="hidden" name="is_absent[]" class="absent-flag" value="0">
             <input type="checkbox" class="form-check-input absent-chk">
         </td>
-        <td><input type="number" name="attendance[]" class="form-control form-control-sm marks-input att-input" min="0" max="10" step="0.5"
-                   style="font-size:.78rem;padding:.2rem .3rem;text-align:center;"></td>
-        <td><input type="number" name="class_test[]" class="form-control form-control-sm marks-input ct-input"  min="0" max="10" step="0.5"
-                   style="font-size:.78rem;padding:.2rem .3rem;text-align:center;"></td>
-        <td><input type="number" name="mid_term[]"   class="form-control form-control-sm marks-input mid-input" min="0" max="30" step="0.5"
-                   style="font-size:.78rem;padding:.2rem .3rem;text-align:center;"></td>
-        <td><input type="number" name="final_exam[]" class="form-control form-control-sm marks-input fin-input" min="0" max="50" step="0.5"
-                   style="font-size:.78rem;padding:.2rem .3rem;text-align:center;"></td>
+        <!-- mark cells injected by JS -->
         <td class="text-center total-cell fw-semibold" style="font-size:.8rem;">—</td>
         <td class="text-center grade-cell fw-bold" style="font-size:.8rem;">—</td>
         <td class="text-center">
@@ -702,26 +714,105 @@ foreach ($creatable as $cr) {
                  [60,65,'B'],[55,60,'B-'],[50,55,'C+'],[45,50,'C'],[40,45,'D'],[0,40,'F']];
     function grade(t) { for (var i=0;i<scale.length;i++) if (t>=scale[i][0]&&t<scale[i][1]) return scale[i][2]; return 'F'; }
 
+    // HTML escape helper for safe DOM construction
+    function escHtml(str) {
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    // ── Dynamic mark column helpers ───────────────────────────────────────────
+
+    /**
+     * Rebuild the <thead> mark columns to match currentDist.
+     * We keep the first 4 static cols (#, Student ID, Name, Absent) and
+     * the last 3 static cols (Total, Grade, Delete). Mark columns go between.
+     */
+    function rebuildTableHeader() {
+        var thead = document.getElementById('marks_thead');
+        if (!thead) return;
+        var tr = thead.querySelector('tr');
+        if (!tr) return;
+
+        // Remove existing mark-col <th> elements
+        Array.from(tr.querySelectorAll('th.mark-col')).forEach(function(th) { th.remove(); });
+
+        // Reference to "Total" th (second-to-last static th before delete)
+        var totalTh = tr.querySelector('th:nth-last-child(3)'); // Total
+        currentDist.forEach(function(d) {
+            var th = document.createElement('th');
+            th.className = 'text-center mark-col';
+            th.style.width = '72px';
+            th.innerHTML = escHtml(d.name) + '<br><small class="text-muted">/' + d.max + '</small>';
+            tr.insertBefore(th, totalTh);
+        });
+
+        // Update colspan of empty-row placeholder
+        var emptyTd = document.getElementById('empty_colspan');
+        if (emptyTd) emptyTd.setAttribute('colspan', String(4 + currentDist.length + 3));
+    }
+
+    /**
+     * Build the mark-input <td> elements for a row using currentDist.
+     * Returns an array of <td> elements to be inserted before the Total <td>.
+     * @param {Array|null} savedMarks  pre-filled mark values (indexed by dist position)
+     * @param {boolean}    isAbsent
+     */
+    function buildMarkCells(savedMarks, isAbsent) {
+        return currentDist.map(function(d, i) {
+            var td = document.createElement('td');
+            var inp = document.createElement('input');
+            inp.type = 'number';
+            inp.name = 'marks[' + i + '][]';
+            inp.className = 'form-control form-control-sm marks-input';
+            inp.setAttribute('data-dist-idx', i);
+            inp.min = '0';
+            inp.max = String(d.max);
+            inp.step = '0.5';
+            inp.style.cssText = 'font-size:.78rem;padding:.2rem .3rem;text-align:center;';
+            if (isAbsent) inp.disabled = true;
+            var sv = savedMarks ? savedMarks[i] : null;
+            if (sv !== null && sv !== undefined && !isAbsent) inp.value = sv;
+            td.appendChild(inp);
+            return td;
+        });
+    }
+
+    /**
+     * Inject mark cells into every existing grade-row, preserving saved values.
+     * Called after `rebuildTableHeader()` when distribution changes.
+     */
+    function rebuildRowMarkCells() {
+        Array.from(tbody.querySelectorAll('tr.grade-row')).forEach(function(tr) {
+            // Remove old mark-col tds
+            Array.from(tr.querySelectorAll('td.mark-col')).forEach(function(td) { td.remove(); });
+
+            var isAbsent = (tr.querySelector('.absent-flag') || {}).value === '1';
+            var savedAttr = tr.getAttribute('data-saved-marks');
+            var savedMarks = null;
+            try { if (savedAttr) savedMarks = JSON.parse(savedAttr); } catch(e) {}
+
+            var totalTd = tr.querySelector('.total-cell');
+            buildMarkCells(savedMarks, isAbsent).forEach(function(td) {
+                td.classList.add('mark-col');
+                tr.insertBefore(td, totalTd);
+            });
+
+            // Re-wire inputs
+            wireMarkInputs(tr);
+        });
+    }
+
     // ── Apply mark distribution ───────────────────────────────────────────────
     function applyMarkDistribution(dists) {
-        currentDist = defaultDist.slice();
         var fromCurriculum = dists && dists.length > 0;
-        if (fromCurriculum) {
-            dists.slice(0, 4).forEach(function(d, i) {
-                currentDist[i] = { name: d.distribution_name, max: parseFloat(d.max_marks) };
-            });
-        }
-        var thIds  = ['th_att', 'th_ct', 'th_mid', 'th_fin'];
-        var inpCls = ['.att-input', '.ct-input', '.mid-input', '.fin-input'];
-        thIds.forEach(function(id, i) {
-            var th = document.getElementById(id);
-            if (th) th.innerHTML = currentDist[i].name + '<br><small class="text-muted">/' + currentDist[i].max + '</small>';
-        });
-        inpCls.forEach(function(cls, i) {
-            document.querySelectorAll(cls).forEach(function(inp) { inp.max = currentDist[i].max; });
-            var tplInp = template ? template.content.querySelector(cls) : null;
-            if (tplInp) tplInp.max = currentDist[i].max;
-        });
+        currentDist = fromCurriculum
+            ? dists.map(function(d) { return { name: d.distribution_name, max: parseFloat(d.max_marks) }; })
+            : defaultDist.slice();
+
+        // Update sidebar reference panel (show ALL distributions, no limit)
         var refNote = document.getElementById('dist_ref_note');
         var refBody = document.getElementById('dist_ref_tbody');
         if (refBody) {
@@ -741,6 +832,10 @@ foreach ($creatable as $cr) {
             if (fromCurriculum) { refNote.classList.remove('d-none'); }
             else                { refNote.classList.add('d-none'); }
         }
+
+        // Rebuild table header and existing row cells
+        rebuildTableHeader();
+        rebuildRowMarkCells();
     }
 
     function loadMarkDistribution(curriculumId) {
@@ -752,15 +847,6 @@ foreach ($creatable as $cr) {
 
     // ── Batch combobox ────────────────────────────────────────────────────────
     var batchAllValues = [];
-
-    // HTML escape helper for safe DOM construction
-    function escHtml(str) {
-        return String(str)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;');
-    }
 
     function renderBatchDropdown(filter) {
         if (!batchDropdown) return;
@@ -901,36 +987,20 @@ foreach ($creatable as $cr) {
             .then(function(data) {
                 if (!data.length) {
                     var o = document.createElement('option');
-                    o.value = ''; o.textContent = '— No subjects found —';
+                    o.value = ''; o.textContent = '— No assigned subjects found —';
                     o.disabled = true;
                     currSel.appendChild(o);
                     currSel.disabled = false;
                     return;
                 }
 
-                var hasUnassigned = data.some(function(s) { return !s.is_assigned; });
-                var addedSeparator = false;
-
                 data.forEach(function(s) {
-                    // Add a visual separator before unassigned group
-                    if (hasUnassigned && !s.is_assigned && !addedSeparator) {
-                        var sep = document.createElement('option');
-                        sep.disabled  = true;
-                        sep.textContent = '— Not assigned to you —';
-                        currSel.appendChild(sep);
-                        addedSeparator = true;
-                    }
                     var o = document.createElement('option');
                     o.value = s.id;
                     o.textContent = (s.course_code ? s.course_code + ' – ' : '') + s.course_name;
                     o.dataset.code    = s.course_code || '';
                     o.dataset.title   = s.course_name;
                     o.dataset.credits = s.credit || '';
-                    o.dataset.assigned = s.is_assigned ? '1' : '0';
-                    if (!s.is_assigned) {
-                        o.disabled = true;
-                        o.style.color = '#aaa';
-                    }
                     if (s.id == selectId) o.selected = true;
                     currSel.appendChild(o);
                 });
@@ -1074,49 +1144,86 @@ foreach ($creatable as $cr) {
         Array.from(tbody.querySelectorAll('tr.grade-row')).forEach(function(r) { r.remove(); });
         if (emptyRow) emptyRow.style.display = '';
     }
-    function appendRow(sid, name, idPk) {
+
+    /**
+     * Append a student row with mark cells for the current distribution.
+     * @param {string} sid
+     * @param {string} name
+     * @param {number|string} idPk
+     * @param {Array|null} savedMarks  pre-filled mark values
+     */
+    function appendRow(sid, name, idPk, savedMarks) {
         if (emptyRow) emptyRow.style.display = 'none';
         var clone = template.content.cloneNode(true);
         var tr    = clone.querySelector('tr');
         tr.querySelector('[name="student_id_pk[]"]').value = idPk || 0;
         tr.querySelector('[name="student_sid[]"]').value   = sid  || '';
         tr.querySelector('[name="student_name[]"]').value  = name || '';
+
+        // Inject mark cells before Total
+        var totalTd = tr.querySelector('.total-cell');
+        buildMarkCells(savedMarks || null, false).forEach(function(td) {
+            td.classList.add('mark-col');
+            tr.insertBefore(td, totalTd);
+        });
+
         wireRow(tr);
         tbody.appendChild(tr);
     }
+
     btnAdd.addEventListener('click', function() {
         if (emptyRow) emptyRow.style.display = 'none';
-        var clone = template.content.cloneNode(true);
-        wireRow(clone.querySelector('tr'));
-        tbody.appendChild(clone);
+        appendRow('', '', 0, null);
         renumber();
     });
 
+    /**
+     * Wire up absent-checkbox, mark-input events, and remove-button for a row.
+     * Call this after mark cells have been injected.
+     */
     function wireRow(tr) {
-        var flag   = tr.querySelector('.absent-flag');
-        var chk    = tr.querySelector('.absent-chk');
-        var inputs = tr.querySelectorAll('.marks-input');
-        var total  = tr.querySelector('.total-cell');
-        var grd    = tr.querySelector('.grade-cell');
+        var flag  = tr.querySelector('.absent-flag');
+        var chk   = tr.querySelector('.absent-chk');
+        var total = tr.querySelector('.total-cell');
+        var grd   = tr.querySelector('.grade-cell');
+
+        function getMarkInputs() {
+            return Array.from(tr.querySelectorAll('.marks-input'));
+        }
 
         function updateTotal() {
-            if (chk && chk.checked) { total.innerHTML='<span class="text-danger">Abs</span>'; grd.innerHTML='<span class="text-danger">F</span>'; return; }
-            var att=parseFloat(tr.querySelector('.att-input').value)||0;
-            var ct =parseFloat(tr.querySelector('.ct-input').value) ||0;
-            var mid=parseFloat(tr.querySelector('.mid-input').value)||0;
-            var fin=parseFloat(tr.querySelector('.fin-input').value)||0;
-            var sum=att+ct+mid+fin;
-            if(!sum&&!att&&!ct&&!mid&&!fin){total.textContent='—';grd.textContent='—';return;}
-            total.textContent=sum.toFixed(1); grd.textContent=grade(sum);
+            var inputs = getMarkInputs();
+            if (chk && chk.checked) {
+                total.innerHTML = '<span class="text-danger">Abs</span>';
+                grd.innerHTML   = '<span class="text-danger">F</span>';
+                return;
+            }
+            var hasAny = false;
+            var sum    = 0;
+            inputs.forEach(function(inp) {
+                var v = parseFloat(inp.value);
+                if (!isNaN(v)) { sum += v; hasAny = true; }
+            });
+            if (!hasAny) { total.textContent = '—'; grd.textContent = '—'; return; }
+            total.textContent = sum.toFixed(1);
+            grd.textContent   = grade(sum);
         }
+
         if (chk && flag) {
             chk.addEventListener('change', function() {
                 flag.value = this.checked ? '1' : '0';
-                inputs.forEach(function(i) { i.disabled = chk.checked; });
+                tr.classList.toggle('table-warning', this.checked);
+                getMarkInputs().forEach(function(inp) { inp.disabled = chk.checked; });
                 updateTotal();
             });
         }
-        inputs.forEach(function(i) { i.addEventListener('input', updateTotal); });
+
+        // Wire current mark inputs
+        function wireMarkInputs_local() {
+            getMarkInputs().forEach(function(inp) { inp.addEventListener('input', updateTotal); });
+        }
+        wireMarkInputs_local();
+
         var btn = tr.querySelector('.btn-remove-row');
         if (btn) btn.addEventListener('click', function() {
             tr.remove(); renumber();
@@ -1124,7 +1231,36 @@ foreach ($creatable as $cr) {
         });
     }
 
-    // Wire existing rows (edit mode)
+    /**
+     * Re-wire mark-input change listeners on a row (called after distribution rebuild).
+     */
+    function wireMarkInputs(tr) {
+        var total = tr.querySelector('.total-cell');
+        var grd   = tr.querySelector('.grade-cell');
+        var chk   = tr.querySelector('.absent-chk');
+
+        function updateTotal() {
+            var inputs = Array.from(tr.querySelectorAll('.marks-input'));
+            if (chk && chk.checked) {
+                total.innerHTML = '<span class="text-danger">Abs</span>';
+                grd.innerHTML   = '<span class="text-danger">F</span>';
+                return;
+            }
+            var hasAny = false, sum = 0;
+            inputs.forEach(function(inp) {
+                var v = parseFloat(inp.value);
+                if (!isNaN(v)) { sum += v; hasAny = true; }
+            });
+            if (!hasAny) { total.textContent = '—'; grd.textContent = '—'; return; }
+            total.textContent = sum.toFixed(1);
+            grd.textContent   = grade(sum);
+        }
+        Array.from(tr.querySelectorAll('.marks-input')).forEach(function(inp) {
+            inp.addEventListener('input', updateTotal);
+        });
+    }
+
+    // Wire existing rows (edit mode) – mark cells will be injected when distribution loads
     Array.from(tbody.querySelectorAll('tr.grade-row')).forEach(wireRow);
 
     function renumber() {
@@ -1133,6 +1269,9 @@ foreach ($creatable as $cr) {
         });
     }
     renumber();
+
+    // Apply initial default distribution (4 components) so mark columns appear immediately
+    applyMarkDistribution([]);
 })();
 </script>
 
