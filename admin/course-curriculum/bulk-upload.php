@@ -44,9 +44,9 @@ if (isset($_GET['download_sample'])) {
     header('Content-Type: text/csv; charset=utf-8');
     header('Content-Disposition: attachment; filename="course_curriculum_sample.csv"');
     $out = fopen('php://output', 'w');
-    fputcsv($out, $sample_headers);
+    fputcsv($out, $sample_headers, ',', '"', '\\');
     foreach ($sample_data as $r) {
-        fputcsv($out, $r);
+        fputcsv($out, $r, ',', '"', '\\');
     }
     fclose($out);
     exit;
