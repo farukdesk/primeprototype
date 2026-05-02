@@ -29,7 +29,7 @@ if (empty($_dist)) {
     ];
 }
 $_dist_count = count($_dist);
-// Total static cols: #, Student ID, Name, Absent, [dynamic mark cols], Total, Grade, Point = 7 + N
+// Total static cols: #, Student ID, Name, [dynamic mark cols], Total, Grade, Point, Remarks = 7 + N
 $_total_cols = 7 + $_dist_count;
 
 /**
@@ -72,9 +72,8 @@ function _gr_get_absent_flags(array $g): array {
                 <thead class="table-light">
                     <tr>
                         <th class="px-3" style="width:40px;">#</th>
-                        <th style="min-width:120px;">Student ID</th>
-                        <th style="min-width:180px;">Name</th>
-                        <th class="text-center" style="width:70px;">Absent</th>
+                        <th style="min-width:90px;">Student ID</th>
+                        <th style="min-width:150px;">Name</th>
                         <?php foreach ($_dist as $_d): ?>
                         <th class="text-center" style="width:70px;">
                             <?= h($_d['distribution_name']) ?><br>
@@ -84,6 +83,7 @@ function _gr_get_absent_flags(array $g): array {
                         <th class="text-center" style="width:70px;">Total</th>
                         <th class="text-center" style="width:60px;">Grade</th>
                         <th class="text-center" style="width:60px;">Point</th>
+                        <th style="min-width:160px;">Remarks</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -92,17 +92,22 @@ function _gr_get_absent_flags(array $g): array {
                 <?php else: ?>
                     <?php foreach ($grades as $idx => $g): ?>
                     <?php $_marks = _gr_get_marks($g); $_abs_flags = _gr_get_absent_flags($g); ?>
+                    <?php
+                    // Compute remarks from per-segment absent flags for high-value (≥ WF_HIGH_VALUE_THRESHOLD) distributions
+                    $_remarks_parts = [];
+                    foreach ($_dist as $di => $_d) {
+                        if ((float)$_d['max_marks'] >= WF_HIGH_VALUE_THRESHOLD && !empty($_abs_flags[$di])) {
+                            $_remarks_parts[] = h($_d['distribution_name']) . ' marked as absent';
+                        }
+                    }
+                    if ($g['is_absent'] && empty($_remarks_parts)) {
+                        $_remarks_parts[] = 'Marked as absent';
+                    }
+                    ?>
                     <tr class="<?= $g['is_absent'] ? 'table-warning' : '' ?>">
                         <td class="px-3"><?= $idx + 1 ?></td>
                         <td><code><?= h($g['s_student_id'] ?? $g['student_sid']) ?></code></td>
                         <td><?= h($g['s_full_name'] ?? $g['student_name']) ?></td>
-                        <td class="text-center">
-                            <?php if ($g['is_absent']): ?>
-                            <span class="badge bg-danger">Absent</span>
-                            <?php else: ?>
-                            <span class="text-muted">—</span>
-                            <?php endif; ?>
-                        </td>
                         <?php foreach ($_dist as $di => $_d): ?>
                         <td class="text-center">
                             <?php if ($g['is_absent']): ?>
@@ -117,6 +122,13 @@ function _gr_get_absent_flags(array $g): array {
                         <td class="text-center fw-semibold"><?= $g['is_absent'] ? '—' : h($g['total_marks'] ?? '—') ?></td>
                         <td class="text-center fw-bold"><?= h($g['letter_grade'] ?? '—') ?></td>
                         <td class="text-center"><?= $g['grade_point'] !== null ? number_format((float)$g['grade_point'], 2) : '—' ?></td>
+                        <td>
+                            <?php if (!empty($_remarks_parts)): ?>
+                            <small class="text-danger"><?= implode('; ', $_remarks_parts) ?> – no grade shown</small>
+                            <?php else: ?>
+                            <span class="text-muted">—</span>
+                            <?php endif; ?>
+                        </td>
                     </tr>
                     <?php endforeach; ?>
                 <?php endif; ?>

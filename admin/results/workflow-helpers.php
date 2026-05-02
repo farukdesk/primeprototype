@@ -18,6 +18,9 @@ const WF_MAX_MID_TERM   = 30;
 const WF_MAX_FINAL_EXAM = 50;
 const WF_MAX_TOTAL      = 100;
 
+/** Min max_marks for a distribution component to be considered "high-value" (triggers Incom when absent). */
+const WF_HIGH_VALUE_THRESHOLD = 30;
+
 function wf_grading_scale(): array
 {
     return [
@@ -442,7 +445,8 @@ function wf_upsert_grade(
     string $student_name,
     int $is_absent,
     array $marks,
-    array $absent_flags = []
+    array $absent_flags = [],
+    array $dist_maxes = []  // per-distribution max marks for server-side clamping
 ): void {
     if ($is_absent) {
         $total       = null;
@@ -453,15 +457,18 @@ function wf_upsert_grade(
         // Keep legacy columns null
         $att = $ct = $mid = $fin = null;
     } else {
-        // Clamp each mark to its max (use WF constants for first 4; no hard limit for extras)
-        $maxes = [WF_MAX_ATTENDANCE, WF_MAX_CLASS_TEST, WF_MAX_MID_TERM, WF_MAX_FINAL_EXAM];
+        // Clamp each mark to its per-distribution max.
+        // Prefer $dist_maxes when provided; fall back to WF legacy constants for first 4.
+        $legacy_maxes = [WF_MAX_ATTENDANCE, WF_MAX_CLASS_TEST, WF_MAX_MID_TERM, WF_MAX_FINAL_EXAM];
         $clamped = [];
         foreach ($marks as $i => $v) {
             if ($v === null || ($absent_flags[$i] ?? false)) {
                 // null mark or absent for this segment → store null (counts as 0 in total)
                 $clamped[$i] = null;
             } else {
-                $max = $maxes[$i] ?? WF_MAX_TOTAL; // cap extra components at total max
+                // Use dist_maxes if available, otherwise fall back to legacy constants
+                $max = !empty($dist_maxes[$i]) ? (float)$dist_maxes[$i]
+                     : ($legacy_maxes[$i] ?? WF_MAX_TOTAL);
                 $clamped[$i] = min(max((float)$v, 0), $max);
             }
         }
