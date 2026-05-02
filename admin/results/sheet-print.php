@@ -49,12 +49,12 @@ $page_title = h($sheet['subject_title']);
         .page { max-width: 1140px; margin: 0 auto; padding: 20px; }
 
         /* ── Header ── */
-        .header { display: flex; align-items: center; gap: 16px; border-bottom: 2px solid #002147; padding-bottom: 10px; margin-bottom: 12px; }
-        .header-logo { width: 64px; height: 64px; object-fit: contain; flex-shrink: 0; }
-        .header-text { flex: 1; text-align: center; }
-        .header-text h2 { font-size: 17px; color: #002147; margin-bottom: 2px; }
-        .header-text p  { font-size: 11px; color: #333; margin: 1px 0; }
-        .header-text .sheet-title { font-size: 13px; font-weight: bold; margin-top: 5px; letter-spacing: .5px; color: #002147; }
+        .header { display: flex; align-items: center; gap: 20px; border-bottom: 2px solid #002147; padding-bottom: 12px; margin-bottom: 14px; }
+        .header-logo { width: 200px; height: auto; object-fit: contain; flex-shrink: 0; }
+        .header-text { flex: 1; text-align: center; line-height: 1.6; }
+        .header-text h2 { font-size: 20px; color: #002147; margin-bottom: 4px; font-weight: bold; }
+        .header-text p  { font-size: 13px; color: #333; margin: 2px 0; }
+        .header-text .sheet-title { font-size: 15px; font-weight: bold; margin-top: 8px; letter-spacing: 1px; color: #002147; text-transform: uppercase; }
 
         /* ── Info grid ── */
         .info-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px 16px; margin-bottom: 10px; font-size: 11px; }
@@ -87,7 +87,7 @@ $page_title = h($sheet['subject_title']);
         .abs-cell { color: #c0392b; font-weight: bold; font-size: 10px; }
 
         /* ── Signoff ── */
-        .signoff { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 16px; font-size: 11px; }
+        .signoff { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; font-size: 11px; }
         .signoff-box { border-top: 1px solid #999; padding-top: 6px; text-align: center; }
         .signoff-box .lbl { font-weight: bold; color: #002147; }
 
@@ -224,9 +224,9 @@ $page_title = h($sheet['subject_title']);
                             $absent_names[] = h($_pd['distribution_name']);
                         }
                     }
-                    $_remarks = $absent_names ? implode(', ', $absent_names) . ' – Absent' : 'Absent';
+                    $_remarks = $absent_names ? 'Absent from ' . implode(', ', $absent_names) . ' examination' : 'Absent from examination';
                 } else {
-                    $_remarks = 'Absent from exam';
+                    $_remarks = 'Absent from examination';
                 }
             }
         ?>
@@ -264,14 +264,6 @@ $page_title = h($sheet['subject_title']);
             <div style="height:35px;"></div>
             <div class="lbl">Course Teacher</div>
             <div style="margin-top:3px;"><?= h($sheet['creator_name'] ?? '') ?></div>
-        </div>
-        <div class="signoff-box">
-            <div style="height:35px;"></div>
-            <div class="lbl">Reviewer</div>
-            <div style="margin-top:3px;"><?= h($signoffs['reviewer_name'] ?? '') ?></div>
-            <?php if ($signoffs['reviewed_at'] ?? null): ?>
-            <div style="color:#555;font-size:10px;"><?= date('d M Y', strtotime($signoffs['reviewed_at'])) ?></div>
-            <?php endif; ?>
         </div>
         <div class="signoff-box">
             <div style="height:35px;"></div>
