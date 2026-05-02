@@ -2,10 +2,9 @@
 /**
  * AJAX: return curriculum courses for the mark-entry subject selector.
  *
- * Admin / staff (can_create)  → all curriculum courses, all marked is_assigned=true.
- * Faculty                     → all curriculum courses; is_assigned=true only for
- *                               their approved / admin-assigned subjects.
- *                               Assigned subjects sort first.
+ * Super admin / pure admin staff (can_create, no faculty profile) → all curriculum courses.
+ * Faculty (any user with a faculty_profiles record)             → only their approved /
+ *                                                                  admin-assigned subjects.
  *
  * GET params:
  *   program_id  (int, required)
@@ -19,8 +18,20 @@ header('Content-Type: application/json');
 $program_id = (int)($_GET['program_id'] ?? 0);
 if ($program_id <= 0) { echo '[]'; exit; }
 
-// Admins / staff with create rights see all subjects as fully assigned
-if (is_super_admin() || rm_can_create() || rm_is_staff()) {
+$user_id = (int)auth_user()['id'];
+
+// Determine whether this user is a faculty member (has a faculty_profiles record).
+// Faculty members always see only their approved subjects, even if they also have
+// results admin permissions (can_create / can_edit).
+$is_faculty_member = false;
+if (!is_super_admin()) {
+    $fac_check = db()->prepare('SELECT id FROM faculty_profiles WHERE user_id = ? LIMIT 1');
+    $fac_check->execute([$user_id]);
+    $is_faculty_member = (bool)$fac_check->fetch();
+}
+
+// Pure admins / staff with create rights and no faculty profile see all subjects
+if ((is_super_admin() || rm_can_create() || rm_is_staff()) && !$is_faculty_member) {
     $stmt = db()->prepare(
         'SELECT cc.id, cc.course_code, cc.course_name, cc.credit, 1 AS is_assigned
          FROM course_curriculum cc
@@ -33,8 +44,6 @@ if (is_super_admin() || rm_can_create() || rm_is_staff()) {
 }
 
 // Faculty: fetch only subjects assigned/approved for this user
-$user_id = (int)auth_user()['id'];
-
 // Collect assigned curriculum IDs from two sources:
 // 1. faculty_subject_assignments (status = approved)
 $st = db()->prepare(
