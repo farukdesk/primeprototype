@@ -304,7 +304,7 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
                 <div class="card-body p-4">
 
                     <div class="row g-3 mb-3">
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <label class="form-label fw-medium">Department <span class="text-danger">*</span></label>
                             <?php if (!is_super_admin() && $faculty_dept_id): ?>
                             <?php $fd = array_values(array_filter($departments, fn($d) => (int)$d['id'] === $faculty_dept_id))[0] ?? null; ?>
@@ -322,17 +322,14 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
                             </select>
                             <?php endif; ?>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <label class="form-label fw-medium">Program</label>
                             <select name="program_id" id="prog_select" class="form-select" <?= $v_dept_id ? '' : 'disabled' ?>>
                                 <option value="">— Select Program —</option>
                             </select>
                         </div>
-                    </div>
-
-                    <div class="row g-3 mb-3">
-                        <div class="col-md-6">
-                            <label class="form-label fw-medium">Batch <span class="text-danger">*</span></label>
+                        <div class="col-md-4">
+                            <label class="form-label fw-medium">Batch / Semester <span class="text-danger">*</span></label>
                             <!-- Custom searchable combobox for batch -->
                             <div class="position-relative" id="batch_combobox_wrap">
                                 <input type="text" name="batch" id="batch_input" class="form-control"
@@ -343,7 +340,7 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
                                      style="display:none;z-index:1050;max-height:220px;overflow-y:auto;top:100%;left:0;">
                                 </div>
                             </div>
-                            <div class="form-text">Type to filter or enter a new batch value.</div>
+                            <div class="form-text">Select an existing batch or type a new one.</div>
                         </div>
                     </div>
 
@@ -388,72 +385,110 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
             </div>
         </div><!-- /col-lg-9 -->
 
-        <!-- Actions & Reference -->
+        <!-- Actions & Reference (sticky, no gap below left card) -->
         <div class="col-lg-3">
-            <div class="card mb-4" style="border-radius:12px;">
-                <div class="card-header py-3 px-4">
-                    <h6 class="mb-0 fw-semibold"><i class="fas fa-paper-plane me-2 text-muted"></i>Actions</h6>
-                </div>
-                <div class="card-body p-4">
-                    <?php if ($sheet): ?>
-                    <div class="mb-3 p-2 bg-light rounded small">
-                        <div><strong>Status:</strong> <?= wf_status_badge($sheet['workflow_status']) ?></div>
-                        <div class="mt-1"><strong>Created:</strong> <?= date('d M Y', strtotime($sheet['created_at'])) ?></div>
-                    </div>
-                    <?php endif; ?>
-                    <div class="d-grid gap-2">
-                        <button type="submit" name="action" value="save" class="btn btn-outline-primary" style="border-radius:10px;">
-                            <i class="fas fa-save me-1"></i> Save Draft
-                        </button>
-                        <button type="submit" name="action" value="submit" id="btn_submit"
-                                class="btn btn-success" style="border-radius:10px;"
-                                onclick="return confirm('Submit this mark sheet for review? It will be locked for editing after submission.');">
-                            <i class="fas fa-paper-plane me-1"></i> Submit for Review
-                        </button>
-                        <a href="<?= APP_URL ?>/results/index.php" class="btn btn-light" style="border-radius:10px;">Cancel</a>
-                    </div>
+            <div style="position:sticky;top:16px;">
 
-                    <!-- Chain info (shown once dept is selected) -->
-                    <div id="chain_info" class="mt-3 p-2 border rounded small text-muted" style="display:none;">
-                        <i class="fas fa-sitemap me-1"></i>
-                        <span id="chain_info_text">Workflow chain will be shown here.</span>
+                <!-- Actions card -->
+                <div class="card mb-3" style="border-radius:12px;">
+                    <div class="card-header py-2 px-3">
+                        <h6 class="mb-0 fw-semibold" style="font-size:.82rem;">
+                            <i class="fas fa-paper-plane me-1 text-muted"></i>Actions
+                        </h6>
+                    </div>
+                    <div class="card-body p-3">
+                        <?php if ($sheet): ?>
+                        <div class="mb-2 p-2 bg-light rounded" style="font-size:.78rem;">
+                            <div><strong>Status:</strong> <?= wf_status_badge($sheet['workflow_status']) ?></div>
+                            <div class="mt-1 text-muted">Created: <?= date('d M Y', strtotime($sheet['created_at'])) ?></div>
+                        </div>
+                        <?php endif; ?>
+                        <div class="d-grid gap-2">
+                            <button type="submit" name="action" value="save" class="btn btn-sm btn-outline-primary" style="border-radius:8px;">
+                                <i class="fas fa-save me-1"></i> Save Draft
+                            </button>
+                            <button type="submit" name="action" value="submit" id="btn_submit"
+                                    class="btn btn-sm btn-success" style="border-radius:8px;"
+                                    onclick="return confirm('Submit this mark sheet for review? It will be locked for editing after submission.');">
+                                <i class="fas fa-paper-plane me-1"></i> Submit for Review
+                            </button>
+                            <a href="<?= APP_URL ?>/results/index.php" class="btn btn-sm btn-light" style="border-radius:8px;">Cancel</a>
+                        </div>
+                        <div id="chain_info" class="mt-2 px-2 py-1 border rounded text-muted" style="display:none;font-size:.72rem;">
+                            <i class="fas fa-sitemap me-1"></i>
+                            <span id="chain_info_text"></span>
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Grading reference -->
-            <div class="card mb-4" style="border-radius:12px;">
-                <div class="card-header py-3 px-4">
-                    <h6 class="mb-0 fw-semibold"><i class="fas fa-star me-2 text-muted"></i>Mark Distribution</h6>
-                </div>
-                <div class="card-body p-3">
-                    <div id="dist_ref_wrap">
-                        <table class="table table-sm mb-3" id="dist_ref_table" style="font-size:.8rem;">
-                            <thead class="table-light"><tr><th>Component</th><th>Max</th></tr></thead>
-                            <tbody id="dist_ref_tbody">
-                                <tr><td>Attendance</td><td>10</td></tr>
-                                <tr><td>Class Test</td><td>10</td></tr>
-                                <tr><td>Mid Term</td><td>30</td></tr>
-                                <tr><td>Final Exam</td><td>50</td></tr>
-                                <tr class="fw-semibold"><td>Total</td><td>100</td></tr>
-                            </tbody>
-                        </table>
-                        <small class="text-muted" id="dist_ref_note" style="display:none;">
-                            <i class="fas fa-info-circle me-1"></i>Distribution from course curriculum.
+                <!-- Mark Distribution – loaded from curriculum when subject is selected -->
+                <div class="card mb-3" style="border-radius:12px;">
+                    <div class="card-header py-2 px-3 d-flex align-items-center justify-content-between"
+                         style="background:#0d6efd;border-radius:12px 12px 0 0;">
+                        <h6 class="mb-0 fw-semibold text-white" style="font-size:.82rem;">
+                            <i class="fas fa-chart-bar me-1"></i>Mark Distribution
+                        </h6>
+                        <small id="dist_ref_note" class="text-white-50 d-none" style="font-size:.68rem;">
+                            <i class="fas fa-check-circle me-1"></i>From curriculum
                         </small>
                     </div>
-                    <table class="table table-sm mb-0" style="font-size:.78rem;">
-                        <thead class="table-light"><tr><th>Marks</th><th>Grade</th><th>GPA</th></tr></thead>
-                        <tbody>
-                            <?php foreach (wf_grading_scale() as [$min, $max, $letter, $point]):
-                                $range = ($max === PHP_INT_MAX) ? '≥'.$min : $min.'–<'.$max; ?>
-                            <tr><td><?= $range ?></td><td><strong><?= h($letter) ?></strong></td><td><?= number_format($point,2) ?></td></tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                    </div><!-- /dist_ref_wrap -->
+                    <div class="card-body p-0" id="dist_ref_wrap">
+                        <table class="table table-sm mb-0" id="dist_ref_table" style="font-size:.8rem;">
+                            <thead style="background:#e8f0ff;">
+                                <tr>
+                                    <th class="ps-3 py-1" style="border-bottom:1px solid #c9d9f8;">Component</th>
+                                    <th class="text-end pe-3 py-1" style="border-bottom:1px solid #c9d9f8;">Max</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dist_ref_tbody">
+                                <tr><td class="ps-3 py-1">Attendance</td><td class="text-end pe-3 py-1">10</td></tr>
+                                <tr><td class="ps-3 py-1">Class Test</td><td class="text-end pe-3 py-1">10</td></tr>
+                                <tr><td class="ps-3 py-1">Mid Term</td><td class="text-end pe-3 py-1">30</td></tr>
+                                <tr><td class="ps-3 py-1">Final Exam</td><td class="text-end pe-3 py-1">50</td></tr>
+                                <tr style="background:#f0f4ff;border-top:2px solid #0d6efd;">
+                                    <td class="ps-3 py-1 fw-semibold">Total</td>
+                                    <td class="text-end pe-3 py-1 fw-bold text-primary">100</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-            </div>
+
+                <!-- Grading Scale – collapsible to save vertical space -->
+                <div class="card" style="border-radius:12px;">
+                    <button type="button"
+                            class="card-header py-2 px-3 d-flex align-items-center justify-content-between w-100 text-start border-0 bg-transparent"
+                            style="border-radius:12px;cursor:pointer;"
+                            data-bs-toggle="collapse" data-bs-target="#grading_scale_body" aria-expanded="false">
+                        <h6 class="mb-0 fw-semibold" style="font-size:.82rem;">
+                            <i class="fas fa-star me-1 text-warning"></i>Grading Scale
+                        </h6>
+                        <i class="fas fa-chevron-down small text-muted"></i>
+                    </button>
+                    <div id="grading_scale_body" class="collapse">
+                        <table class="table table-sm mb-0" style="font-size:.75rem;border-top:1px solid #dee2e6;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-3">Range</th>
+                                    <th class="text-center">Grade</th>
+                                    <th class="text-end pe-3">GPA</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach (wf_grading_scale() as [$min, $max, $letter, $point]):
+                                    $range = ($max === PHP_INT_MAX) ? '≥'.$min : $min.'–<'.$max; ?>
+                                <tr>
+                                    <td class="ps-3"><?= $range ?></td>
+                                    <td class="text-center"><strong><?= h($letter) ?></strong></td>
+                                    <td class="text-end pe-3"><?= number_format($point,2) ?></td>
+                                </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div><!-- /sticky wrapper -->
         </div>
     </div>
     <!-- Student Marks Table -->
@@ -480,32 +515,34 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
                 <table class="table table-bordered table-hover mb-0" id="marks_table">
                     <thead class="table-light">
                         <tr>
-                            <th class="ps-3" style="width:50px;">#</th>
-                            <th style="min-width:150px;">Student ID</th>
-                            <th style="min-width:220px;">Name</th>
-                            <th class="text-center" style="width:85px;">Absent</th>
-                            <th class="text-center" id="th_att" style="width:100px;">Att.<br><small class="text-muted">/10</small></th>
-                            <th class="text-center" id="th_ct"  style="width:100px;">CT<br><small class="text-muted">/10</small></th>
-                            <th class="text-center" id="th_mid" style="width:100px;">Mid<br><small class="text-muted">/30</small></th>
-                            <th class="text-center" id="th_fin" style="width:110px;">Final<br><small class="text-muted">/50</small></th>
-                            <th class="text-center" style="width:100px;">Total</th>
-                            <th class="text-center" style="width:80px;">Grade</th>
-                            <th style="width:50px;"></th>
+                            <th class="ps-2 text-center" style="width:36px;">#</th>
+                            <th style="min-width:105px;">Student ID</th>
+                            <th style="min-width:150px;">Name</th>
+                            <th class="text-center" style="width:60px;">Absent</th>
+                            <th class="text-center" id="th_att" style="width:72px;">Att.<br><small class="text-muted">/10</small></th>
+                            <th class="text-center" id="th_ct"  style="width:72px;">CT<br><small class="text-muted">/10</small></th>
+                            <th class="text-center" id="th_mid" style="width:78px;">Mid<br><small class="text-muted">/30</small></th>
+                            <th class="text-center" id="th_fin" style="width:82px;">Final<br><small class="text-muted">/50</small></th>
+                            <th class="text-center" style="width:68px;">Total</th>
+                            <th class="text-center" style="width:58px;">Grade</th>
+                            <th style="width:36px;"></th>
                         </tr>
                     </thead>
                     <tbody id="marks_tbody">
                         <?php if (!empty($grades)): ?>
                         <?php foreach ($grades as $idx => $g): ?>
                         <tr class="grade-row <?= $g['is_absent'] ? 'table-warning' : '' ?>">
-                            <td class="ps-3 row-num"><?= $idx + 1 ?></td>
+                            <td class="text-center row-num" style="font-size:.8rem;"><?= $idx + 1 ?></td>
                             <td>
                                 <input type="hidden" name="student_id_pk[]" value="<?= (int)$g['student_id'] ?>">
                                 <input type="text" name="student_sid[]" class="form-control form-control-sm"
-                                       value="<?= h($g['student_sid']) ?>" placeholder="Student ID" required>
+                                       value="<?= h($g['student_sid']) ?>" placeholder="ID" required
+                                       style="font-size:.78rem;padding:.2rem .4rem;">
                             </td>
                             <td>
                                 <input type="text" name="student_name[]" class="form-control form-control-sm"
-                                       value="<?= h($g['student_name']) ?>" placeholder="Full Name">
+                                       value="<?= h($g['student_name']) ?>" placeholder="Full Name"
+                                       style="font-size:.78rem;padding:.2rem .4rem;">
                             </td>
                             <td class="text-center">
                                 <input type="hidden" name="is_absent[]" class="absent-flag" value="<?= $g['is_absent'] ? '1' : '0' ?>">
@@ -513,25 +550,31 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
                             </td>
                             <td><input type="number" name="attendance[]" class="form-control form-control-sm marks-input att-input"
                                        value="<?= $g['is_absent'] ? '' : h($g['attendance'] ?? '') ?>"
-                                       min="0" max="10" step="0.5" <?= $g['is_absent'] ? 'disabled' : '' ?>></td>
+                                       min="0" max="10" step="0.5" <?= $g['is_absent'] ? 'disabled' : '' ?>
+                                       style="font-size:.78rem;padding:.2rem .3rem;text-align:center;"></td>
                             <td><input type="number" name="class_test[]" class="form-control form-control-sm marks-input ct-input"
                                        value="<?= $g['is_absent'] ? '' : h($g['class_test'] ?? '') ?>"
-                                       min="0" max="10" step="0.5" <?= $g['is_absent'] ? 'disabled' : '' ?>></td>
+                                       min="0" max="10" step="0.5" <?= $g['is_absent'] ? 'disabled' : '' ?>
+                                       style="font-size:.78rem;padding:.2rem .3rem;text-align:center;"></td>
                             <td><input type="number" name="mid_term[]" class="form-control form-control-sm marks-input mid-input"
                                        value="<?= $g['is_absent'] ? '' : h($g['mid_term'] ?? '') ?>"
-                                       min="0" max="30" step="0.5" <?= $g['is_absent'] ? 'disabled' : '' ?>></td>
+                                       min="0" max="30" step="0.5" <?= $g['is_absent'] ? 'disabled' : '' ?>
+                                       style="font-size:.78rem;padding:.2rem .3rem;text-align:center;"></td>
                             <td><input type="number" name="final_exam[]" class="form-control form-control-sm marks-input fin-input"
                                        value="<?= $g['is_absent'] ? '' : h($g['final_exam'] ?? '') ?>"
-                                       min="0" max="50" step="0.5" <?= $g['is_absent'] ? 'disabled' : '' ?>></td>
-                            <td class="text-center total-cell fw-semibold">
+                                       min="0" max="50" step="0.5" <?= $g['is_absent'] ? 'disabled' : '' ?>
+                                       style="font-size:.78rem;padding:.2rem .3rem;text-align:center;"></td>
+                            <td class="text-center total-cell fw-semibold" style="font-size:.8rem;">
                                 <?= $g['is_absent'] ? '<span class="text-danger">Abs</span>' : h($g['total_marks'] ?? '—') ?>
                             </td>
-                            <td class="text-center grade-cell fw-bold">
+                            <td class="text-center grade-cell fw-bold" style="font-size:.8rem;">
                                 <?= $g['is_absent'] ? '<span class="text-danger">F</span>' : h($g['letter_grade'] ?? '—') ?>
                             </td>
-                            <td>
-                                <button type="button" class="btn btn-sm btn-outline-danger btn-remove-row"
-                                        style="border-radius:6px;"><i class="fas fa-times"></i></button>
+                            <td class="text-center">
+                                <button type="button" class="btn btn-sm btn-outline-danger btn-remove-row p-0"
+                                        style="width:24px;height:24px;line-height:1;border-radius:5px;">
+                                    <i class="fas fa-times" style="font-size:.65rem;"></i>
+                                </button>
                             </td>
                         </tr>
                         <?php endforeach; ?>
@@ -563,7 +606,7 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
                         <div class="col-md-6">
                             <label class="form-label small mb-1">Search by Student ID or Name</label>
                             <input type="text" id="other_student_q" class="form-control form-control-sm"
-                                   placeholder="Type at least 2 charactersâ¦" autocomplete="off">
+                                   placeholder="Type at least 2 characters…" autocomplete="off">
                         </div>
                         <div class="col-md-3">
                             <button type="button" id="btn_other_search" class="btn btn-warning btn-sm w-100">
@@ -582,23 +625,34 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
 <!-- Row template (hidden) -->
 <template id="row_template">
     <tr class="grade-row">
-        <td class="ps-3 row-num"></td>
+        <td class="text-center row-num" style="font-size:.8rem;"></td>
         <td>
             <input type="hidden" name="student_id_pk[]" value="0">
-            <input type="text" name="student_sid[]" class="form-control form-control-sm" placeholder="Student ID" required>
+            <input type="text" name="student_sid[]" class="form-control form-control-sm" placeholder="ID" required
+                   style="font-size:.78rem;padding:.2rem .4rem;">
         </td>
-        <td><input type="text" name="student_name[]" class="form-control form-control-sm" placeholder="Full Name"></td>
+        <td><input type="text" name="student_name[]" class="form-control form-control-sm" placeholder="Full Name"
+                   style="font-size:.78rem;padding:.2rem .4rem;"></td>
         <td class="text-center">
             <input type="hidden" name="is_absent[]" class="absent-flag" value="0">
             <input type="checkbox" class="form-check-input absent-chk">
         </td>
-        <td><input type="number" name="attendance[]" class="form-control form-control-sm marks-input att-input" min="0" max="10" step="0.5"></td>
-        <td><input type="number" name="class_test[]" class="form-control form-control-sm marks-input ct-input"  min="0" max="10" step="0.5"></td>
-        <td><input type="number" name="mid_term[]"   class="form-control form-control-sm marks-input mid-input" min="0" max="30" step="0.5"></td>
-        <td><input type="number" name="final_exam[]" class="form-control form-control-sm marks-input fin-input" min="0" max="50" step="0.5"></td>
-        <td class="text-center total-cell fw-semibold">—</td>
-        <td class="text-center grade-cell fw-bold">—</td>
-        <td><button type="button" class="btn btn-sm btn-outline-danger btn-remove-row" style="border-radius:6px;"><i class="fas fa-times"></i></button></td>
+        <td><input type="number" name="attendance[]" class="form-control form-control-sm marks-input att-input" min="0" max="10" step="0.5"
+                   style="font-size:.78rem;padding:.2rem .3rem;text-align:center;"></td>
+        <td><input type="number" name="class_test[]" class="form-control form-control-sm marks-input ct-input"  min="0" max="10" step="0.5"
+                   style="font-size:.78rem;padding:.2rem .3rem;text-align:center;"></td>
+        <td><input type="number" name="mid_term[]"   class="form-control form-control-sm marks-input mid-input" min="0" max="30" step="0.5"
+                   style="font-size:.78rem;padding:.2rem .3rem;text-align:center;"></td>
+        <td><input type="number" name="final_exam[]" class="form-control form-control-sm marks-input fin-input" min="0" max="50" step="0.5"
+                   style="font-size:.78rem;padding:.2rem .3rem;text-align:center;"></td>
+        <td class="text-center total-cell fw-semibold" style="font-size:.8rem;">—</td>
+        <td class="text-center grade-cell fw-bold" style="font-size:.8rem;">—</td>
+        <td class="text-center">
+            <button type="button" class="btn btn-sm btn-outline-danger btn-remove-row p-0"
+                    style="width:24px;height:24px;line-height:1;border-radius:5px;">
+                <i class="fas fa-times" style="font-size:.65rem;"></i>
+            </button>
+        </td>
     </tr>
 </template>
 
@@ -674,11 +728,19 @@ foreach ($creatable as $cr) {
             var total = 0;
             currentDist.forEach(function(d) { total += d.max; });
             var rows = '';
-            currentDist.forEach(function(d) { rows += '<tr><td>' + d.name + '</td><td>' + d.max + '</td></tr>'; });
-            rows += '<tr class="fw-semibold"><td>Total</td><td>' + total + '</td></tr>';
+            currentDist.forEach(function(d) {
+                rows += '<tr><td class="ps-3 py-1">' + escHtml(d.name) + '</td>'
+                      + '<td class="text-end pe-3 py-1">' + escHtml(String(d.max)) + '</td></tr>';
+            });
+            rows += '<tr style="background:#f0f4ff;border-top:2px solid #0d6efd;">'
+                  + '<td class="ps-3 py-1 fw-semibold">Total</td>'
+                  + '<td class="text-end pe-3 py-1 fw-bold text-primary">' + escHtml(String(total)) + '</td></tr>';
             refBody.innerHTML = rows;
         }
-        if (refNote) refNote.style.display = fromCurriculum ? '' : 'none';
+        if (refNote) {
+            if (fromCurriculum) { refNote.classList.remove('d-none'); }
+            else                { refNote.classList.add('d-none'); }
+        }
     }
 
     function loadMarkDistribution(curriculumId) {
