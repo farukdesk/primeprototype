@@ -21,13 +21,22 @@ $valid_categories = ['Hardware','Software','Network','Email','Other'];
 $where  = [];
 $params = [];
 
-// Non-staff see only their own tickets, plus tickets where they are tagged or mentioned
-if (!$is_staff) {
-    $mention_pattern = '%@' . addcslashes($user['username'], '%_') . '%';
-    $where[]  = '(t.created_by = ? OR EXISTS (SELECT 1 FROM support_ticket_user_tags st WHERE st.ticket_id = t.id AND st.user_id = ?) OR EXISTS (SELECT 1 FROM support_ticket_comments sc WHERE sc.ticket_id = t.id AND sc.comment LIKE ?))';
-    $params[] = $user['id'];
-    $params[] = $user['id'];
-    $params[] = $mention_pattern;
+// Super admins see all tickets.
+// Staff (non-super-admin) see only tickets created by, assigned to, or tagged to them.
+// Non-staff see only tickets created by them, tagged, or where they are @mentioned.
+$mention_pattern = '%@' . addcslashes($user['username'], '%_') . '%';
+if (!is_super_admin()) {
+    if ($is_staff) {
+        $where[]  = '(t.created_by = ? OR t.assigned_to = ? OR EXISTS (SELECT 1 FROM support_ticket_user_tags st WHERE st.ticket_id = t.id AND st.user_id = ?))';
+        $params[] = $user['id'];
+        $params[] = $user['id'];
+        $params[] = $user['id'];
+    } else {
+        $where[]  = '(t.created_by = ? OR EXISTS (SELECT 1 FROM support_ticket_user_tags st WHERE st.ticket_id = t.id AND st.user_id = ?) OR EXISTS (SELECT 1 FROM support_ticket_comments sc WHERE sc.ticket_id = t.id AND sc.comment LIKE ?))';
+        $params[] = $user['id'];
+        $params[] = $user['id'];
+        $params[] = $mention_pattern;
+    }
 }
 
 if ($search !== '') {
@@ -66,14 +75,20 @@ $stmt->execute($params);
 $tickets = $stmt->fetchAll();
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
-if (!$is_staff) {
+if (is_super_admin()) {
+    $stats_stmt = db()->query('SELECT status, COUNT(*) AS cnt FROM support_tickets GROUP BY status');
+} elseif ($is_staff) {
+    $stats_sql = 'SELECT status, COUNT(*) AS cnt FROM support_tickets t
+                  WHERE (t.created_by = ? OR t.assigned_to = ? OR EXISTS (SELECT 1 FROM support_ticket_user_tags st WHERE st.ticket_id = t.id AND st.user_id = ?))
+                  GROUP BY status';
+    $stats_stmt = db()->prepare($stats_sql);
+    $stats_stmt->execute([$user['id'], $user['id'], $user['id']]);
+} else {
     $stats_sql = 'SELECT status, COUNT(*) AS cnt FROM support_tickets t
                   WHERE (t.created_by = ? OR EXISTS (SELECT 1 FROM support_ticket_user_tags st WHERE st.ticket_id = t.id AND st.user_id = ?) OR EXISTS (SELECT 1 FROM support_ticket_comments sc WHERE sc.ticket_id = t.id AND sc.comment LIKE ?))
                   GROUP BY status';
     $stats_stmt = db()->prepare($stats_sql);
     $stats_stmt->execute([$user['id'], $user['id'], $mention_pattern]);
-} else {
-    $stats_stmt = db()->query('SELECT status, COUNT(*) AS cnt FROM support_tickets GROUP BY status');
 }
 $stats    = array_column($stats_stmt->fetchAll(), 'cnt', 'status');
 $total    = array_sum($stats);
@@ -82,19 +97,26 @@ $prog_cnt = $stats['In Progress'] ?? 0;
 $done_cnt = ($stats['Resolved'] ?? 0) + ($stats['Closed'] ?? 0);
 
 // Overdue count
-if (!$is_staff) {
+if (is_super_admin()) {
+    $od_sql = 'SELECT COUNT(*) FROM support_tickets
+               WHERE deadline IS NOT NULL AND deadline < NOW()
+                 AND status NOT IN (\'Resolved\',\'Closed\')';
+    $od_stmt = db()->prepare($od_sql);
+    $od_stmt->execute([]);
+} elseif ($is_staff) {
+    $od_sql = 'SELECT COUNT(*) FROM support_tickets t
+               WHERE deadline IS NOT NULL AND deadline < NOW()
+                 AND status NOT IN (\'Resolved\',\'Closed\')
+                 AND (t.created_by = ? OR t.assigned_to = ? OR EXISTS (SELECT 1 FROM support_ticket_user_tags st WHERE st.ticket_id = t.id AND st.user_id = ?))';
+    $od_stmt = db()->prepare($od_sql);
+    $od_stmt->execute([$user['id'], $user['id'], $user['id']]);
+} else {
     $od_sql = 'SELECT COUNT(*) FROM support_tickets t
                WHERE deadline IS NOT NULL AND deadline < NOW()
                  AND status NOT IN (\'Resolved\',\'Closed\')
                  AND (t.created_by = ? OR EXISTS (SELECT 1 FROM support_ticket_user_tags st WHERE st.ticket_id = t.id AND st.user_id = ?) OR EXISTS (SELECT 1 FROM support_ticket_comments sc WHERE sc.ticket_id = t.id AND sc.comment LIKE ?))';
     $od_stmt = db()->prepare($od_sql);
     $od_stmt->execute([$user['id'], $user['id'], $mention_pattern]);
-} else {
-    $od_sql = 'SELECT COUNT(*) FROM support_tickets
-               WHERE deadline IS NOT NULL AND deadline < NOW()
-                 AND status NOT IN (\'Resolved\',\'Closed\')';
-    $od_stmt = db()->prepare($od_sql);
-    $od_stmt->execute([]);
 }
 $overdue_cnt = (int)$od_stmt->fetchColumn();
 
