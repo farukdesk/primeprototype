@@ -594,6 +594,58 @@ function _wf_log(
 
 // ── UI helpers ────────────────────────────────────────────────────────────────
 
+/**
+ * Get signoff data for the print view from wf_sheet_history.
+ * Returns reviewer, HOD and publisher names/timestamps (based on
+ * sequential 'approved'/'published' actions in the history).
+ *
+ * Keys: reviewer_name, reviewed_at, hod_name, hod_approved_at,
+ *       publisher_name, published_at
+ */
+function wf_get_sheet_signoffs(int $sheet_id): array
+{
+    $stmt = db()->prepare(
+        "SELECT h.action, h.acted_at, h.step_label, h.step_order,
+                u.username AS actor_name
+           FROM wf_sheet_history h
+           LEFT JOIN users u ON u.id = h.acted_by
+          WHERE h.sheet_id = ?
+          ORDER BY h.acted_at ASC, h.id ASC"
+    );
+    $stmt->execute([$sheet_id]);
+    $rows = $stmt->fetchAll();
+
+    $signoffs = [
+        'reviewer_name'   => null,
+        'reviewed_at'     => null,
+        'hod_name'        => null,
+        'hod_approved_at' => null,
+        'publisher_name'  => null,
+        'published_at'    => null,
+    ];
+
+    $approvals = [];
+    foreach ($rows as $h) {
+        if ($h['action'] === 'approved') {
+            $approvals[] = $h;
+        } elseif ($h['action'] === 'published') {
+            $signoffs['publisher_name'] = $h['actor_name'];
+            $signoffs['published_at']   = $h['acted_at'];
+        }
+    }
+
+    if (isset($approvals[0])) {
+        $signoffs['reviewer_name'] = $approvals[0]['actor_name'];
+        $signoffs['reviewed_at']   = $approvals[0]['acted_at'];
+    }
+    if (isset($approvals[1])) {
+        $signoffs['hod_name']        = $approvals[1]['actor_name'];
+        $signoffs['hod_approved_at'] = $approvals[1]['acted_at'];
+    }
+
+    return $signoffs;
+}
+
 function wf_status_badge(string $status, string $step_label = ''): string
 {
     $map = [

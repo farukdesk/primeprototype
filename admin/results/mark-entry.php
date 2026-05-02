@@ -333,21 +333,37 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
                     <div class="row g-3 mb-3">
                         <div class="col-md-6">
                             <label class="form-label fw-medium">Batch <span class="text-danger">*</span></label>
-                            <input type="text" name="batch" id="batch_input" class="form-control"
-                                   value="<?= h($v_batch ?? '') ?>" placeholder="Type or select batch (e.g. 52nd)" maxlength="50"
-                                   list="batch_list" required>
-                            <datalist id="batch_list"></datalist>
-                            <div class="form-text">Click the field or start typing to filter available batches.</div>
+                            <!-- Custom searchable combobox for batch -->
+                            <div class="position-relative" id="batch_combobox_wrap">
+                                <input type="text" name="batch" id="batch_input" class="form-control"
+                                       value="<?= h($v_batch ?? '') ?>" placeholder="Type or search batch…"
+                                       maxlength="50" autocomplete="off" required>
+                                <div id="batch_dropdown"
+                                     class="position-absolute w-100 bg-white border rounded shadow-sm"
+                                     style="display:none;z-index:1050;max-height:220px;overflow-y:auto;top:100%;left:0;">
+                                </div>
+                            </div>
+                            <div class="form-text">Type to filter or enter a new batch value.</div>
                         </div>
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label fw-medium">Subject <?= (!is_super_admin() && !rm_can_create() && !rm_is_staff()) ? '<span class="badge bg-info text-dark ms-1" style="font-size:.7rem;">Your Subjects</span>' : '' ?> <span class="text-danger">*</span></label>
+                        <label class="form-label fw-medium">
+                            Subject
+                            <?= (!is_super_admin() && !rm_can_create() && !rm_is_staff())
+                                ? '<span class="badge bg-info text-dark ms-1" style="font-size:.7rem;"><i class="fas fa-lock me-1"></i>Assigned Only</span>'
+                                : '' ?>
+                            <span class="text-danger">*</span>
+                        </label>
                         <select name="curriculum_id" id="curriculum_select" class="form-select"
                                 <?= ($v_dept_id && $v_program_id) ? '' : 'disabled' ?>>
                             <option value="">— Select Subject —</option>
                         </select>
-                        <div class="form-text">Selecting a subject auto-fills code, title, and credits below.</div>
+                        <div class="form-text" id="subject_hint">
+                            <?= (!is_super_admin() && !rm_can_create() && !rm_is_staff())
+                                ? 'Greyed-out subjects are not assigned to your profile.'
+                                : 'Selecting a subject auto-fills code, title, and credits below.' ?>
+                        </div>
                     </div>
 
                     <div class="row g-3">
@@ -601,7 +617,7 @@ foreach ($creatable as $cr) {
     var progSel       = document.getElementById('prog_select');
     var currSel       = document.getElementById('curriculum_select');
     var batchInput    = document.getElementById('batch_input');
-    var batchList     = document.getElementById('batch_list');
+    var batchDropdown = document.getElementById('batch_dropdown');
     var subCode       = document.getElementById('subject_code');
     var subTitle      = document.getElementById('subject_title');
     var credits       = document.getElementById('credits_input');
@@ -619,7 +635,7 @@ foreach ($creatable as $cr) {
     var savedBatch    = <?= json_encode($v_batch ?? '') ?>;
     var facultyDeptId = <?= $faculty_dept_id ?>;
 
-    // ── Mark distribution defaults (used when curriculum has no config) ─────────
+    // ── Mark distribution defaults ────────────────────────────────────────────
     var defaultDist = [
         { name: 'Att.',  max: 10 },
         { name: 'CT',    max: 10 },
@@ -632,7 +648,7 @@ foreach ($creatable as $cr) {
                  [60,65,'B'],[55,60,'B-'],[50,55,'C+'],[45,50,'C'],[40,45,'D'],[0,40,'F']];
     function grade(t) { for (var i=0;i<scale.length;i++) if (t>=scale[i][0]&&t<scale[i][1]) return scale[i][2]; return 'F'; }
 
-    // ── Apply mark distribution (from curriculum or defaults) ─────────────────
+    // ── Apply mark distribution ───────────────────────────────────────────────
     function applyMarkDistribution(dists) {
         currentDist = defaultDist.slice();
         var fromCurriculum = dists && dists.length > 0;
@@ -641,8 +657,8 @@ foreach ($creatable as $cr) {
                 currentDist[i] = { name: d.distribution_name, max: parseFloat(d.max_marks) };
             });
         }
-        var thIds    = ['th_att', 'th_ct', 'th_mid', 'th_fin'];
-        var inpCls   = ['.att-input', '.ct-input', '.mid-input', '.fin-input'];
+        var thIds  = ['th_att', 'th_ct', 'th_mid', 'th_fin'];
+        var inpCls = ['.att-input', '.ct-input', '.mid-input', '.fin-input'];
         thIds.forEach(function(id, i) {
             var th = document.getElementById(id);
             if (th) th.innerHTML = currentDist[i].name + '<br><small class="text-muted">/' + currentDist[i].max + '</small>';
@@ -652,7 +668,6 @@ foreach ($creatable as $cr) {
             var tplInp = template ? template.content.querySelector(cls) : null;
             if (tplInp) tplInp.max = currentDist[i].max;
         });
-        // Update reference panel
         var refNote = document.getElementById('dist_ref_note');
         var refBody = document.getElementById('dist_ref_tbody');
         if (refBody) {
@@ -673,21 +688,70 @@ foreach ($creatable as $cr) {
             .then(function(data) { applyMarkDistribution(data); });
     }
 
-    // ── Batch datalist population ─────────────────────────────────────────────
+    // ── Batch combobox ────────────────────────────────────────────────────────
+    var batchAllValues = [];
+
+    function renderBatchDropdown(filter) {
+        if (!batchDropdown) return;
+        var q    = (filter || '').toLowerCase().trim();
+        var list = q ? batchAllValues.filter(function(b) { return b.toLowerCase().indexOf(q) !== -1; })
+                     : batchAllValues;
+        if (!list.length) {
+            batchDropdown.innerHTML = '<div class="px-3 py-2 text-muted small">No existing batches found. You may type a new one.</div>';
+        } else {
+            batchDropdown.innerHTML = list.map(function(b) {
+                return '<button type="button" class="batch-opt d-block w-100 text-start px-3 py-1 border-0 bg-transparent"'
+                     + ' style="font-size:.9rem;cursor:pointer;" data-val="' + b.replace(/"/g, '&quot;') + '">'
+                     + b + '</button>';
+            }).join('');
+            batchDropdown.querySelectorAll('.batch-opt').forEach(function(btn) {
+                btn.addEventListener('mousedown', function(e) {
+                    e.preventDefault(); // keep focus on input
+                    batchInput.value = this.dataset.val;
+                    hideBatchDropdown();
+                    // Trigger student load when batch is picked from list
+                    if (progSel.value && batchInput.value.trim()) loadStudentsByBatch(false);
+                });
+            });
+        }
+        batchDropdown.style.display = '';
+    }
+
+    function hideBatchDropdown() {
+        if (batchDropdown) batchDropdown.style.display = 'none';
+    }
+
     function loadBatches(deptId, progId) {
-        if (!batchList) return;
         var url = APP_URL + '/results/get-batches.php?dept_id=' + (deptId || 0)
                           + '&program_id=' + (progId || 0);
         fetch(url)
             .then(function(r) { return r.json(); })
-            .then(function(batches) {
-                batchList.innerHTML = '';
-                batches.forEach(function(b) {
-                    var opt = document.createElement('option');
-                    opt.value = b;
-                    batchList.appendChild(opt);
-                });
-            });
+            .then(function(batches) { batchAllValues = batches || []; });
+    }
+
+    if (batchInput) {
+        batchInput.addEventListener('focus', function() {
+            renderBatchDropdown(this.value);
+        });
+        batchInput.addEventListener('input', function() {
+            renderBatchDropdown(this.value);
+        });
+        batchInput.addEventListener('change', function() {
+            hideBatchDropdown();
+            if (progSel.value && this.value.trim()) loadStudentsByBatch(false);
+        });
+        batchInput.addEventListener('blur', function() {
+            // Small delay so mousedown on options fires first
+            setTimeout(hideBatchDropdown, 200);
+        });
+        batchInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') { hideBatchDropdown(); }
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                hideBatchDropdown();
+                if (progSel.value && this.value.trim()) loadStudentsByBatch(false);
+            }
+        });
     }
 
     // ── Load all batches for "other batch" datalist ───────────────────────────
@@ -706,7 +770,14 @@ foreach ($creatable as $cr) {
             });
     }
 
-    // Show chain info for selected dept
+    // Close batch dropdown when clicking outside
+    document.addEventListener('click', function(e) {
+        if (batchDropdown && !batchDropdown.contains(e.target) && e.target !== batchInput) {
+            hideBatchDropdown();
+        }
+    });
+
+    // ── Chain info display ────────────────────────────────────────────────────
     function updateChainInfo(deptId, progId) {
         var chains = chainMap[deptId] || chainMap['global'] || [];
         if (!chains.length) { chainInfo.style.display = 'none'; return; }
@@ -748,7 +819,7 @@ foreach ($creatable as $cr) {
             });
     }
 
-    // Load subjects from faculty profile (or all for admin)
+    // ── Subject selector (with is_assigned support) ───────────────────────────
     function loadFacultySubjects(progId, selectId) {
         currSel.innerHTML = '<option value="">— Select Subject —</option>';
         currSel.disabled  = true;
@@ -759,17 +830,36 @@ foreach ($creatable as $cr) {
             .then(function(data) {
                 if (!data.length) {
                     var o = document.createElement('option');
-                    o.value = ''; o.textContent = '— No subjects assigned —';
+                    o.value = ''; o.textContent = '— No subjects found —';
                     o.disabled = true;
                     currSel.appendChild(o);
+                    currSel.disabled = false;
+                    return;
                 }
+
+                var hasUnassigned = data.some(function(s) { return !s.is_assigned; });
+                var addedSeparator = false;
+
                 data.forEach(function(s) {
+                    // Add a visual separator before unassigned group
+                    if (hasUnassigned && !s.is_assigned && !addedSeparator) {
+                        var sep = document.createElement('option');
+                        sep.disabled  = true;
+                        sep.textContent = '── Not assigned to you ──';
+                        currSel.appendChild(sep);
+                        addedSeparator = true;
+                    }
                     var o = document.createElement('option');
                     o.value = s.id;
                     o.textContent = (s.course_code ? s.course_code + ' – ' : '') + s.course_name;
                     o.dataset.code    = s.course_code || '';
                     o.dataset.title   = s.course_name;
                     o.dataset.credits = s.credit || '';
+                    o.dataset.assigned = s.is_assigned ? '1' : '0';
+                    if (!s.is_assigned) {
+                        o.disabled = true;
+                        o.style.color = '#aaa';
+                    }
                     if (s.id == selectId) o.selected = true;
                     currSel.appendChild(o);
                 });
@@ -787,7 +877,7 @@ foreach ($creatable as $cr) {
         loadMarkDistribution(sel.value);
     }
 
-    // ── Load students by batch ─────────────────────────────────────────────────
+    // ── Load students by batch ────────────────────────────────────────────────
     function loadStudentsByBatch(showAlert) {
         var deptId = getDeptId();
         var progId = progSel.value;
@@ -810,7 +900,7 @@ foreach ($creatable as $cr) {
             });
     }
 
-    // Dept change (only for admin – faculty has a hidden input)
+    // Dept change (admin only)
     if (deptSel && deptSel.tagName === 'SELECT') {
         deptSel.addEventListener('change', function() {
             loadPrograms(this.value, 0);
@@ -829,14 +919,7 @@ foreach ($creatable as $cr) {
 
     currSel.addEventListener('change', fillFromCurriculum);
 
-    // Auto-load students when batch is entered
-    if (batchInput) {
-        batchInput.addEventListener('change', function() {
-            if (progSel.value && this.value.trim()) loadStudentsByBatch(false);
-        });
-    }
-
-    // Manual "Load Students" button – shows alert if nothing found
+    // Manual "Load Students" button
     if (btnLoad) {
         btnLoad.addEventListener('click', function() {
             var progId = progSel.value;
