@@ -9,6 +9,7 @@
  *      /results/mark-entry.php?id=X     (edit draft/returned sheet)
  */
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/workflow-helpers.php';
 
 auth_check();
