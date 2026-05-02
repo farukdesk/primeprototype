@@ -95,6 +95,10 @@ require_once __DIR__ . '/../includes/header.php';
                                    class="btn btn-sm btn-outline-primary" title="Edit" style="border-radius:7px;">
                                     <i class="fas fa-edit"></i>
                                 </a>
+                                <a href="<?= APP_URL ?>/departments/merge.php?id=<?= $dept['id'] ?>"
+                                   class="btn btn-sm btn-outline-warning" title="Merge into another department" style="border-radius:7px;">
+                                    <i class="fas fa-code-merge"></i>
+                                </a>
                                 <form method="POST" action="<?= APP_URL ?>/departments/delete.php"
                                       onsubmit="return confirm('Delete department &quot;<?= h(addslashes($dept['name'])) ?>&quot;? This will delete ALL related data.');">
                                     <?= csrf_field() ?>
