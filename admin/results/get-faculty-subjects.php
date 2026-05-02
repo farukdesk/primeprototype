@@ -79,7 +79,7 @@ unset($row);
 
 usort($all_subjects, function ($a, $b) {
     if ($a['is_assigned'] !== $b['is_assigned']) {
-        return $b['is_assigned'] - $a['is_assigned']; // assigned first
+        return $a['is_assigned'] ? -1 : 1; // assigned first
     }
     return strcmp($a['course_name'], $b['course_name']);
 });

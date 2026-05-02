@@ -691,6 +691,15 @@ foreach ($creatable as $cr) {
     // ── Batch combobox ────────────────────────────────────────────────────────
     var batchAllValues = [];
 
+    // HTML escape helper for safe DOM construction
+    function escHtml(str) {
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
     function renderBatchDropdown(filter) {
         if (!batchDropdown) return;
         var q    = (filter || '').toLowerCase().trim();
@@ -701,8 +710,8 @@ foreach ($creatable as $cr) {
         } else {
             batchDropdown.innerHTML = list.map(function(b) {
                 return '<button type="button" class="batch-opt d-block w-100 text-start px-3 py-1 border-0 bg-transparent"'
-                     + ' style="font-size:.9rem;cursor:pointer;" data-val="' + b.replace(/"/g, '&quot;') + '">'
-                     + b + '</button>';
+                     + ' style="font-size:.9rem;cursor:pointer;" data-val="' + escHtml(b) + '">'
+                     + escHtml(b) + '</button>';
             }).join('');
             batchDropdown.querySelectorAll('.batch-opt').forEach(function(btn) {
                 btn.addEventListener('mousedown', function(e) {
@@ -845,7 +854,7 @@ foreach ($creatable as $cr) {
                     if (hasUnassigned && !s.is_assigned && !addedSeparator) {
                         var sep = document.createElement('option');
                         sep.disabled  = true;
-                        sep.textContent = '── Not assigned to you ──';
+                        sep.textContent = '— Not assigned to you —';
                         currSel.appendChild(sep);
                         addedSeparator = true;
                     }
