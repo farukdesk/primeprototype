@@ -228,7 +228,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $parsed_rows = [];
                 $csv_row_num = 0;
                 $header_skipped = false;
-                while (($cols = fgetcsv($handle, 0, ',')) !== false) {
+                while (($cols = fgetcsv($handle, 0, ',', '"', '\\')) !== false) {
                     $csv_row_num++;
                     if (!$header_skipped) {
                         $header_skipped = true;
@@ -243,6 +243,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $parsed_rows[] = $parsed;
                 }
                 fclose($handle);
+
+                // ── Duplicate course-code checks ─────────────────────────────
+                // 1) Detect codes that appear more than once in the uploaded CSV
+                $csv_code_counts = [];
+                foreach ($parsed_rows as $r) {
+                    if ($r['subject_code'] !== '') {
+                        $lc = mb_strtolower($r['subject_code']);
+                        $csv_code_counts[$lc] = ($csv_code_counts[$lc] ?? 0) + 1;
+                    }
+                }
+                $csv_dup_codes = array_keys(array_filter($csv_code_counts, static fn($c) => $c > 1));
+
+                // 2) Check which codes already exist in the database
+                $non_empty_codes = array_values(array_unique(array_filter(
+                    array_column($parsed_rows, 'subject_code'),
+                    static fn($c) => $c !== ''
+                )));
+                $db_existing_codes = [];
+                if (!empty($non_empty_codes)) {
+                    $ph  = implode(',', array_fill(0, count($non_empty_codes), '?'));
+                    $cst = db()->prepare(
+                        "SELECT DISTINCT course_code AS code
+                           FROM course_curriculum
+                          WHERE course_code IS NOT NULL
+                            AND course_code IN ($ph)"
+                    );
+                    $cst->execute($non_empty_codes);
+                    foreach ($cst->fetchAll() as $cr) {
+                        $db_existing_codes[mb_strtolower($cr['code'])] = true;
+                    }
+                }
+
+                // 3) Mark affected rows as errors
+                foreach ($parsed_rows as &$row) {
+                    if ($row['subject_code'] === '') {
+                        continue;
+                    }
+                    $lc = mb_strtolower($row['subject_code']);
+                    if (isset($db_existing_codes[$lc])) {
+                        $row['row_errors'][] = 'Course code "' . $row['subject_code'] . '" already exists in the database';
+                        $row['status'] = 'error';
+                    } elseif (in_array($lc, $csv_dup_codes, true)) {
+                        $row['row_errors'][] = 'Course code "' . $row['subject_code'] . '" appears more than once in this upload';
+                        $row['status'] = 'error';
+                    }
+                }
+                unset($row);
+                // ─────────────────────────────────────────────────────────────
 
                 if (empty($parsed_rows)) {
                     $errors[] = 'The CSV file contains no data rows (or only a header).';
@@ -275,8 +323,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                  VALUES (?, ?, ?, ?)"
             );
 
+            // Batch check for codes already in DB before the import loop
+            $import_codes = array_values(array_unique(array_filter(
+                array_column($parsed_rows, 'subject_code'),
+                static fn($c) => $c !== ''
+            )));
+            $import_db_codes = [];
+            if (!empty($import_codes)) {
+                $iph = implode(',', array_fill(0, count($import_codes), '?'));
+                $ist = db()->prepare(
+                    "SELECT DISTINCT course_code FROM course_curriculum
+                      WHERE course_code IS NOT NULL AND course_code IN ($iph)"
+                );
+                $ist->execute($import_codes);
+                foreach ($ist->fetchAll() as $ir) {
+                    $import_db_codes[mb_strtolower($ir['course_code'])] = true;
+                }
+            }
+
             foreach ($parsed_rows as $row) {
                 if ($row['status'] === 'error') {
+                    $skipped++;
+                    continue;
+                }
+
+                // Server-side guard: skip if course_code already in DB
+                if (!empty($row['subject_code']) && isset($import_db_codes[mb_strtolower($row['subject_code'])])) {
                     $skipped++;
                     continue;
                 }
