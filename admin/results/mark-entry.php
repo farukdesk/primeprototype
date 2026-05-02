@@ -187,6 +187,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $id_pks  = (array)($_POST['student_id_pk'] ?? []);
         $absents = (array)($_POST['is_absent']     ?? []);
 
+        // Fetch distribution max-marks for the selected curriculum (for is_absent + clamping)
+        $curriculum_dist = [];
+        if ($curriculum_id > 0) {
+            try {
+                $dist_st = db()->prepare(
+                    'SELECT distribution_name, max_marks FROM cc_mark_distributions
+                      WHERE curriculum_id = ? ORDER BY sort_order ASC, id ASC'
+                );
+                $dist_st->execute([$curriculum_id]);
+                $curriculum_dist = $dist_st->fetchAll(PDO::FETCH_ASSOC);
+            } catch (Throwable $_e) {}
+        }
+        // Fallback legacy max values when no curriculum distribution is found
+        $dist_max_values = !empty($curriculum_dist)
+            ? array_map('floatval', array_column($curriculum_dist, 'max_marks'))
+            : [(float)WF_MAX_ATTENDANCE, (float)WF_MAX_CLASS_TEST, (float)WF_MAX_MID_TERM, (float)WF_MAX_FINAL_EXAM];
+
         // Dynamic marks: $_POST['marks'] is a 2D array [dist_idx][row_idx]
         $marks_by_dist = [];
         foreach ($_POST['marks'] ?? [] as $dist_idx => $vals) {
@@ -234,14 +251,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $row_absent_flags = array_values($row_absent_flags);
             }
 
+            // Derive is_absent: true if any absent segment has max_marks >= WF_HIGH_VALUE_THRESHOLD
+            $derived_absent = 0;
+            foreach ($row_absent_flags as $i => $flag) {
+                if ($flag && ($dist_max_values[$i] ?? 0) >= WF_HIGH_VALUE_THRESHOLD) {
+                    $derived_absent = 1;
+                    break;
+                }
+            }
+
             wf_upsert_grade(
                 $sheet_id,
                 (int)($id_pks[$row_idx] ?? 0),
                 $sid,
                 trim($names[$row_idx] ?? ''),
-                ($absents[$row_idx] ?? '0') === '1' ? 1 : 0,
+                $derived_absent,
                 $row_marks,
-                $row_absent_flags
+                $row_absent_flags,
+                $dist_max_values
             );
         }
 
@@ -554,12 +581,12 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
                     <thead class="table-light" id="marks_thead">
                         <tr>
                             <th class="ps-2 text-center" style="width:36px;">#</th>
-                            <th style="min-width:105px;">Student ID</th>
-                            <th style="min-width:150px;">Name</th>
-                            <th class="text-center" style="width:60px;">Absent</th>
+                            <th style="min-width:80px;">Student ID</th>
+                            <th style="min-width:120px;">Name</th>
                             <!-- dynamic mark-column headers inserted by JS -->
-                            <th class="text-center" style="width:68px;">Total</th>
+                            <th class="text-center col-total" style="width:68px;">Total</th>
                             <th class="text-center" style="width:58px;">Grade</th>
+                            <th class="text-center" style="min-width:150px;">Remarks</th>
                             <th style="width:36px;"></th>
                         </tr>
                     </thead>
@@ -595,6 +622,7 @@ if (!empty($grades)):
                             <td class="text-center row-num" style="font-size:.8rem;"><?= $idx + 1 ?></td>
                             <td>
                                 <input type="hidden" name="student_id_pk[]" value="<?= (int)$g['student_id'] ?>">
+                                <input type="hidden" name="is_absent[]" class="absent-flag" value="<?= $g['is_absent'] ? '1' : '0' ?>">
                                 <input type="text" name="student_sid[]" class="form-control form-control-sm"
                                        value="<?= h($g['student_sid']) ?>" placeholder="ID" required
                                        style="font-size:.78rem;padding:.2rem .4rem;">
@@ -604,17 +632,10 @@ if (!empty($grades)):
                                        value="<?= h($g['student_name']) ?>" placeholder="Full Name"
                                        style="font-size:.78rem;padding:.2rem .4rem;">
                             </td>
-                            <td class="text-center">
-                                <input type="hidden" name="is_absent[]" class="absent-flag" value="<?= $g['is_absent'] ? '1' : '0' ?>">
-                                <input type="checkbox" class="form-check-input absent-chk" <?= $g['is_absent'] ? 'checked' : '' ?>>
-                            </td>
                             <!-- mark cells injected by JS -->
-                            <td class="text-center total-cell fw-semibold" style="font-size:.8rem;">
-                                <?= $g['is_absent'] ? '<span class="text-danger">Abs</span>' : h($g['total_marks'] ?? '—') ?>
-                            </td>
-                            <td class="text-center grade-cell fw-bold" style="font-size:.8rem;">
-                                <?= $g['is_absent'] ? '<span class="text-warning">Incom</span>' : h($g['letter_grade'] ?? '—') ?>
-                            </td>
+                            <td class="text-center total-cell fw-semibold" style="font-size:.8rem;">—</td>
+                            <td class="text-center grade-cell fw-bold" style="font-size:.8rem;">—</td>
+                            <td class="text-center remarks-cell" style="font-size:.75rem;">—</td>
                             <td class="text-center">
                                 <button type="button" class="btn btn-sm btn-outline-danger btn-remove-row p-0"
                                         style="width:24px;height:24px;line-height:1;border-radius:5px;">
@@ -675,18 +696,16 @@ else:
         <td class="text-center row-num" style="font-size:.8rem;"></td>
         <td>
             <input type="hidden" name="student_id_pk[]" value="0">
+            <input type="hidden" name="is_absent[]" class="absent-flag" value="0">
             <input type="text" name="student_sid[]" class="form-control form-control-sm" placeholder="ID" required
                    style="font-size:.78rem;padding:.2rem .4rem;">
         </td>
         <td><input type="text" name="student_name[]" class="form-control form-control-sm" placeholder="Full Name"
                    style="font-size:.78rem;padding:.2rem .4rem;"></td>
-        <td class="text-center">
-            <input type="hidden" name="is_absent[]" class="absent-flag" value="0">
-            <input type="checkbox" class="form-check-input absent-chk">
-        </td>
         <!-- mark cells injected by JS -->
         <td class="text-center total-cell fw-semibold" style="font-size:.8rem;">—</td>
         <td class="text-center grade-cell fw-bold" style="font-size:.8rem;">—</td>
+        <td class="text-center remarks-cell" style="font-size:.75rem;">—</td>
         <td class="text-center">
             <button type="button" class="btn btn-sm btn-outline-danger btn-remove-row p-0"
                     style="width:24px;height:24px;line-height:1;border-radius:5px;">
@@ -730,6 +749,8 @@ foreach ($creatable as $cr) {
     var facultyDeptId = <?= $faculty_dept_id ?>;
 
     // ── Mark distribution defaults ────────────────────────────────────────────
+    /** Minimum component max-marks to be considered "high-value" (absent → Incom). */
+    var HIGH_VALUE_THRESHOLD = <?= WF_HIGH_VALUE_THRESHOLD ?>;
     var defaultDist = [
         { name: 'Att.',  max: 10 },
         { name: 'CT',    max: 10 },
@@ -755,8 +776,8 @@ foreach ($creatable as $cr) {
 
     /**
      * Rebuild the <thead> mark columns to match currentDist.
-     * We keep the first 4 static cols (#, Student ID, Name, Absent) and
-     * the last 3 static cols (Total, Grade, Delete). Mark columns go between.
+     * Static cols before marks: #, Student ID, Name (3).
+     * Static cols after marks: Total, Grade, Remarks, Delete (4).
      */
     function rebuildTableHeader() {
         var thead = document.getElementById('marks_thead');
@@ -767,8 +788,8 @@ foreach ($creatable as $cr) {
         // Remove existing mark-col <th> elements
         Array.from(tr.querySelectorAll('th.mark-col')).forEach(function(th) { th.remove(); });
 
-        // Reference to "Total" th (second-to-last static th before delete)
-        var totalTh = tr.querySelector('th:nth-last-child(3)'); // Total
+        // Reference to "Total" th (use class for reliability)
+        var totalTh = tr.querySelector('th.col-total');
         currentDist.forEach(function(d) {
             var th = document.createElement('th');
             th.className = 'text-center mark-col';
@@ -779,7 +800,7 @@ foreach ($creatable as $cr) {
 
         // Update colspan of empty-row placeholder
         var emptyTd = document.getElementById('empty_colspan');
-        if (emptyTd) emptyTd.setAttribute('colspan', String(4 + currentDist.length + 3));
+        if (emptyTd) emptyTd.setAttribute('colspan', String(3 + currentDist.length + 4));
     }
 
     /**
@@ -835,6 +856,16 @@ foreach ($creatable as $cr) {
                 inp.disabled = true;
                 inp.placeholder = 'Abs';
             }
+            // Enforce max: clamp value to [0, d.max] on input
+            (function(maxVal) {
+                inp.addEventListener('input', function() {
+                    var v = parseFloat(this.value);
+                    if (!isNaN(v)) {
+                        if (v > maxVal) { this.value = maxVal; }
+                        else if (v < 0) { this.value = 0; }
+                    }
+                });
+            })(d.max);
             var sv = savedMarks ? savedMarks[i] : null;
             if (sv !== null && sv !== undefined && !isSegAbsent) inp.value = sv;
             td.appendChild(inp);
@@ -1260,13 +1291,44 @@ foreach ($creatable as $cr) {
 
         function updateTotal() {
             var inputs = getMarkInputs();
-            if (chk && chk.checked) {
-                total.innerHTML = '<span class="text-danger">Abs</span>';
-                grd.innerHTML   = '<span class="text-warning">Incom</span>';
+            var remarksCell = tr.querySelector('.remarks-cell');
+
+            // Check if any high-value (max >= HIGH_VALUE_THRESHOLD) distribution segment is absent
+            var absentNames = [];
+            currentDist.forEach(function(d, i) {
+                if (d.max >= HIGH_VALUE_THRESHOLD) {
+                    var segFlag = tr.querySelector('.dist-absent-flag[data-dist-idx="' + i + '"]');
+                    if (segFlag && segFlag.value === '1') {
+                        absentNames.push(d.name);
+                    }
+                }
+            });
+
+            if (absentNames.length > 0) {
+                // High-value segment absent → Incom
+                if (flag) flag.value = '1';
+                total.innerHTML = '<span class="text-muted">—</span>';
+                grd.innerHTML   = '<span class="text-warning fw-bold">Incom</span>';
+                if (remarksCell) {
+                    var txt = absentNames.join(', ') + ' marked as absent – no grade shown';
+                    remarksCell.innerHTML = '<small class="text-danger">' + escHtml(txt) + '</small>';
+                }
                 return;
             }
-            var hasEnteredMark = false; // true if at least one non-absent segment has a value
-            var hasAnyData     = false; // true if row has any mark or absent-segment data
+
+            // Legacy: row was globally marked absent in older data
+            if (flag && flag.value === '1') {
+                total.innerHTML = '<span class="text-muted">—</span>';
+                grd.innerHTML   = '<span class="text-warning fw-bold">Incom</span>';
+                if (remarksCell) remarksCell.innerHTML = '<small class="text-danger">Marked as absent – no grade shown</small>';
+                return;
+            }
+
+            if (flag) flag.value = '0';
+            if (remarksCell) remarksCell.textContent = '—';
+
+            var hasEnteredMark = false;
+            var hasAnyData     = false;
             var sum            = 0;
             inputs.forEach(function(inp) {
                 if (inp.disabled) { hasAnyData = true; return; } // absent segment contributes 0
@@ -1278,12 +1340,11 @@ foreach ($creatable as $cr) {
             grd.textContent   = grade(sum);
         }
 
-        // Global absent checkbox: disable/enable all segment controls
+        // Global absent checkbox: removed from UI; handler kept for safety (chk is null for new rows)
         if (chk && flag) {
             chk.addEventListener('change', function() {
                 flag.value = this.checked ? '1' : '0';
                 tr.classList.toggle('table-warning', this.checked);
-                // Disable/enable all mark inputs and per-segment abs checkboxes
                 tr.querySelectorAll('.marks-input').forEach(function(inp) { inp.disabled = chk.checked; });
                 tr.querySelectorAll('.dist-absent-chk').forEach(function(sc) { sc.disabled = chk.checked; });
                 updateTotal();
@@ -1326,22 +1387,53 @@ foreach ($creatable as $cr) {
 
     /**
      * Re-wire mark-input change listeners on a row (called after distribution rebuild).
+     * Also triggers an immediate updateTotal so Remarks/Grade cells are up-to-date.
      */
     function wireMarkInputs(tr) {
         var total = tr.querySelector('.total-cell');
         var grd   = tr.querySelector('.grade-cell');
         var chk   = tr.querySelector('.absent-chk');
+        var flag  = tr.querySelector('.absent-flag');
+        var remarksCell = tr.querySelector('.remarks-cell');
 
         function updateTotal() {
             var inputs = Array.from(tr.querySelectorAll('.marks-input'));
-            if (chk && chk.checked) {
-                total.innerHTML = '<span class="text-danger">Abs</span>';
-                grd.innerHTML   = '<span class="text-warning">Incom</span>';
+
+            // Check if any high-value (max >= HIGH_VALUE_THRESHOLD) distribution segment is absent
+            var absentNames = [];
+            currentDist.forEach(function(d, i) {
+                if (d.max >= HIGH_VALUE_THRESHOLD) {
+                    var segFlag = tr.querySelector('.dist-absent-flag[data-dist-idx="' + i + '"]');
+                    if (segFlag && segFlag.value === '1') {
+                        absentNames.push(d.name);
+                    }
+                }
+            });
+
+            if (absentNames.length > 0) {
+                if (flag) flag.value = '1';
+                total.innerHTML = '<span class="text-muted">—</span>';
+                grd.innerHTML   = '<span class="text-warning fw-bold">Incom</span>';
+                if (remarksCell) {
+                    var txt = absentNames.join(', ') + ' marked as absent – no grade shown';
+                    remarksCell.innerHTML = '<small class="text-danger">' + escHtml(txt) + '</small>';
+                }
                 return;
             }
+
+            // Legacy: row was globally marked absent (older data with is_absent=1)
+            if (flag && flag.value === '1') {
+                total.innerHTML = '<span class="text-muted">—</span>';
+                grd.innerHTML   = '<span class="text-warning fw-bold">Incom</span>';
+                if (remarksCell) remarksCell.innerHTML = '<small class="text-danger">Marked as absent – no grade shown</small>';
+                return;
+            }
+
+            if (remarksCell) remarksCell.textContent = '—';
+
             var hasEnteredMark = false, hasAnyData = false, sum = 0;
             inputs.forEach(function(inp) {
-                if (inp.disabled) { hasAnyData = true; return; } // absent segment contributes 0
+                if (inp.disabled) { hasAnyData = true; return; }
                 var v = parseFloat(inp.value);
                 if (!isNaN(v)) { sum += v; hasEnteredMark = true; hasAnyData = true; }
             });
@@ -1352,6 +1444,8 @@ foreach ($creatable as $cr) {
         Array.from(tr.querySelectorAll('.marks-input')).forEach(function(inp) {
             inp.addEventListener('input', updateTotal);
         });
+        // Initialise display immediately after wiring
+        updateTotal();
     }
 
     // Wire existing rows (edit mode) – mark cells will be injected when distribution loads
