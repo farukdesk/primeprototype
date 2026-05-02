@@ -730,11 +730,11 @@ foreach ($creatable as $cr) {
             var rows = '';
             currentDist.forEach(function(d) {
                 rows += '<tr><td class="ps-3 py-1">' + escHtml(d.name) + '</td>'
-                      + '<td class="text-end pe-3 py-1">' + d.max + '</td></tr>';
+                      + '<td class="text-end pe-3 py-1">' + escHtml(String(d.max)) + '</td></tr>';
             });
             rows += '<tr style="background:#f0f4ff;border-top:2px solid #0d6efd;">'
                   + '<td class="ps-3 py-1 fw-semibold">Total</td>'
-                  + '<td class="text-end pe-3 py-1 fw-bold text-primary">' + total + '</td></tr>';
+                  + '<td class="text-end pe-3 py-1 fw-bold text-primary">' + escHtml(String(total)) + '</td></tr>';
             refBody.innerHTML = rows;
         }
         if (refNote) {
