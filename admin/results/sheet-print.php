@@ -176,6 +176,12 @@ $page_title = h($sheet['subject_title']);
             if (!is_array($_marks)) {
                 $_marks = [$g['attendance'] ?? null, $g['class_test'] ?? null, $g['mid_term'] ?? null, $g['final_exam'] ?? null];
             }
+            // Per-segment absent flags
+            $_abs_flags = [];
+            if (!empty($g['absent_json'])) {
+                $decoded = json_decode($g['absent_json'], true);
+                if (is_array($decoded)) $_abs_flags = $decoded;
+            }
         ?>
         <tr class="<?= $g['is_absent'] ? 'absent-row' : '' ?>">
             <td><?= $idx + 1 ?></td>
@@ -183,7 +189,11 @@ $page_title = h($sheet['subject_title']);
             <td class="left"><?= h($g['s_full_name'] ?? $g['student_name']) ?></td>
             <td><?= $g['is_absent'] ? '✓' : '' ?></td>
             <?php foreach ($mark_distribution as $di => $_pd): ?>
-            <td><?= $g['is_absent'] ? '—' : h($_marks[$di] ?? '—') ?></td>
+            <td><?php
+                if ($g['is_absent']) echo '—';
+                elseif (!empty($_abs_flags[$di])) echo 'Abs';
+                else echo h($_marks[$di] ?? '—');
+            ?></td>
             <?php endforeach; ?>
             <td><?= $g['is_absent'] ? '—' : h($g['total_marks'] ?? '—') ?></td>
             <td><strong><?= h($g['letter_grade'] ?? '—') ?></strong></td>

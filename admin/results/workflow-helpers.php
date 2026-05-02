@@ -427,11 +427,13 @@ function wf_get_sheet_history(int $sheet_id): array
  * @param int    $student_id_pk
  * @param string $student_sid
  * @param string $student_name
- * @param int    $is_absent
- * @param array  $marks  Indexed array of mark values (float|null) for each distribution component.
- *                       All values are stored in marks_json; the first 4 are also mapped to the
- *                       legacy columns (attendance, class_test, mid_term, final_exam) for backward
- *                       compatibility with older display code.
+ * @param int    $is_absent     Global absent flag (1 = student absent from entire exam).
+ * @param array  $marks         Indexed array of mark values (float|null) for each distribution
+ *                              component. All values are stored in marks_json; the first 4 are also
+ *                              mapped to legacy columns for backward compatibility.
+ * @param array  $absent_flags  Per-segment absent flags (bool[]), indexed by distribution position.
+ *                              true = student absent for that specific component.
+ *                              Stored in absent_json; absent segments contribute 0 to total.
  */
 function wf_upsert_grade(
     int $sheet_id,
@@ -439,13 +441,15 @@ function wf_upsert_grade(
     string $student_sid,
     string $student_name,
     int $is_absent,
-    array $marks
+    array $marks,
+    array $absent_flags = []
 ): void {
     if ($is_absent) {
-        $total      = null;
-        $letter     = 'Incom';
-        $point      = 0.00;
-        $marks_json = null;
+        $total       = null;
+        $letter      = 'Incom';
+        $point       = 0.00;
+        $marks_json  = null;
+        $absent_json = null;
         // Keep legacy columns null
         $att = $ct = $mid = $fin = null;
     } else {
@@ -453,12 +457,27 @@ function wf_upsert_grade(
         $maxes = [WF_MAX_ATTENDANCE, WF_MAX_CLASS_TEST, WF_MAX_MID_TERM, WF_MAX_FINAL_EXAM];
         $clamped = [];
         foreach ($marks as $i => $v) {
-            if ($v === null) {
+            if ($v === null || ($absent_flags[$i] ?? false)) {
+                // null mark or absent for this segment → store null (counts as 0 in total)
                 $clamped[$i] = null;
             } else {
                 $max = $maxes[$i] ?? WF_MAX_TOTAL; // cap extra components at total max
                 $clamped[$i] = min(max((float)$v, 0), $max);
             }
+        }
+
+        // Store per-segment absent flags only when at least one segment is absent
+        $has_seg_absent = !empty(array_filter($absent_flags));
+        if ($has_seg_absent) {
+            // Normalise to a contiguous 0-indexed boolean array aligned with marks count
+            $flags_out = [];
+            $num_flags = max(count($marks), count($absent_flags));
+            for ($i = 0; $i < $num_flags; $i++) {
+                $flags_out[] = (bool)($absent_flags[$i] ?? false);
+            }
+            $absent_json = json_encode($flags_out);
+        } else {
+            $absent_json = null;
         }
 
         $all_null = (count(array_filter($clamped, fn($v) => $v !== null)) === 0);
@@ -487,8 +506,8 @@ function wf_upsert_grade(
         'INSERT INTO result_sheet_grades
            (sheet_id, student_id, student_sid, student_name,
             is_absent, attendance, class_test, mid_term, final_exam,
-            marks_json, total_marks, letter_grade, grade_point)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+            marks_json, absent_json, total_marks, letter_grade, grade_point)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
          ON DUPLICATE KEY UPDATE
            student_name  = VALUES(student_name),
            is_absent     = VALUES(is_absent),
@@ -497,6 +516,7 @@ function wf_upsert_grade(
            mid_term      = VALUES(mid_term),
            final_exam    = VALUES(final_exam),
            marks_json    = VALUES(marks_json),
+           absent_json   = VALUES(absent_json),
            total_marks   = VALUES(total_marks),
            letter_grade  = VALUES(letter_grade),
            grade_point   = VALUES(grade_point)'
@@ -508,6 +528,7 @@ function wf_upsert_grade(
         $is_absent ? 1 : 0,
         $att, $ct, $mid, $fin,
         $marks_json,
+        $absent_json,
         $is_absent ? null    : $total,
         $is_absent ? 'Incom' : $letter,
         $is_absent ? 0.00    : $point,
