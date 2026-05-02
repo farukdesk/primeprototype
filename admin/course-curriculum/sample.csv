@@ -1,0 +1,6 @@
+sl_no,subject_title,subject_code,credit,bnqf_code,semester,course_teacher,sort_order,dist1_name,dist1_marks,dist2_name,dist2_marks,dist3_name,dist3_marks,dist4_name,dist4_marks,dist5_name,dist5_marks
+1,Introduction to Computer Science,CSE 101,3.00,BNQ-1001,1st Year 1st Semester,Dr. John Smith,1,Attendance,10,Class Test,20,Mid Term,30,Final,40,,
+2,Mathematics I,MAT 101,3.00,BNQ-1002,1st Year 1st Semester,Prof. Jane Doe,2,Attendance,10,Class Test,20,Mid Term,30,Final,40,,
+3,English Language Skills,ENG 101,2.00,,1st Year 1st Semester,,3,,,,,,,,,,
+4,Physics Lab,PHY 101L,1.50,,1st Year 2nd Semester,,4,Lab Work,40,Lab Report,60,,,,,,
+5,Data Structures,CSE 201,3.00,BNQ-2001,2nd Year 1st Semester,Dr. John Smith,5,Attendance,10,Class Test,20,Mid Term,30,Final,40,,
