@@ -86,10 +86,16 @@ require_once __DIR__ . '/../includes/header.php';
         </ol>
     </nav>
     <?php if ($program_row && cc_is_staff()): ?>
-    <a href="<?= APP_URL ?>/course-curriculum/create.php?dept_id=<?= $sel_dept ?>&program_id=<?= $sel_program ?>"
-       class="btn btn-primary btn-sm">
-        <i class="fas fa-plus me-1"></i> Add Subject
-    </a>
+    <div class="d-flex gap-2">
+        <a href="<?= APP_URL ?>/course-curriculum/bulk-upload.php?dept_id=<?= $sel_dept ?>&program_id=<?= $sel_program ?>"
+           class="btn btn-outline-primary btn-sm">
+            <i class="fas fa-upload me-1"></i> Bulk Upload
+        </a>
+        <a href="<?= APP_URL ?>/course-curriculum/create.php?dept_id=<?= $sel_dept ?>&program_id=<?= $sel_program ?>"
+           class="btn btn-primary btn-sm">
+            <i class="fas fa-plus me-1"></i> Add Subject
+        </a>
+    </div>
     <?php endif; ?>
 </div>
 
@@ -161,10 +167,16 @@ require_once __DIR__ . '/../includes/header.php';
             </span>
         </div>
         <?php if (cc_is_staff()): ?>
-        <a href="<?= APP_URL ?>/course-curriculum/create.php?dept_id=<?= $sel_dept ?>&program_id=<?= $sel_program ?>"
-           class="btn btn-success btn-sm">
-            <i class="fas fa-plus me-1"></i> Add Subject
-        </a>
+        <div class="d-flex gap-2">
+            <a href="<?= APP_URL ?>/course-curriculum/bulk-upload.php?dept_id=<?= $sel_dept ?>&program_id=<?= $sel_program ?>"
+               class="btn btn-outline-success btn-sm">
+                <i class="fas fa-upload me-1"></i> Bulk Upload
+            </a>
+            <a href="<?= APP_URL ?>/course-curriculum/create.php?dept_id=<?= $sel_dept ?>&program_id=<?= $sel_program ?>"
+               class="btn btn-success btn-sm">
+                <i class="fas fa-plus me-1"></i> Add Subject
+            </a>
+        </div>
         <?php endif; ?>
     </div>
 </div>
