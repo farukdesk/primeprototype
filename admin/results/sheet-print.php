@@ -6,9 +6,34 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/workflow-helpers.php';
 
-$id     = (int)($_GET['id'] ?? 0);
-$sheet  = wf_get_sheet($id);
-$grades = wf_get_grades($id);
+$id       = (int)($_GET['id'] ?? 0);
+$sheet    = wf_get_sheet($id);
+$grades   = wf_get_grades($id);
+$signoffs = wf_get_sheet_signoffs($id);
+
+// Mark distribution: prefer curriculum config, fall back to legacy defaults
+$mark_distribution = [];
+if (!empty($sheet['curriculum_id'])) {
+    try {
+        $md_stmt = db()->prepare(
+            'SELECT distribution_name, max_marks
+               FROM cc_mark_distributions
+              WHERE curriculum_id = ?
+              ORDER BY sort_order ASC, id ASC'
+        );
+        $md_stmt->execute([$sheet['curriculum_id']]);
+        $mark_distribution = $md_stmt->fetchAll();
+    } catch (Throwable $_e) {}
+}
+if (empty($mark_distribution)) {
+    $mark_distribution = [
+        ['distribution_name' => 'Attendance', 'max_marks' => 10],
+        ['distribution_name' => 'Class Test',  'max_marks' => 10],
+        ['distribution_name' => 'Mid Term',    'max_marks' => 30],
+        ['distribution_name' => 'Final Exam',  'max_marks' => 50],
+    ];
+}
+$dist_total = array_sum(array_column($mark_distribution, 'max_marks'));
 
 $page_title = h($sheet['subject_title']);
 ?>
@@ -114,11 +139,10 @@ $page_title = h($sheet['subject_title']);
     <table class="scale-table" style="width:auto; margin-bottom:14px;">
         <thead><tr><th>Component</th><th>Max Marks</th></tr></thead>
         <tbody>
-            <tr><td>Attendance</td><td>10</td></tr>
-            <tr><td>Class Test</td><td>10</td></tr>
-            <tr><td>Mid Term</td><td>30</td></tr>
-            <tr><td>Final Exam</td><td>50</td></tr>
-            <tr><td><strong>Total</strong></td><td><strong>100</strong></td></tr>
+            <?php foreach ($mark_distribution as $dist): ?>
+            <tr><td><?= h($dist['distribution_name']) ?></td><td><?= h($dist['max_marks']) ?></td></tr>
+            <?php endforeach; ?>
+            <tr><td><strong>Total</strong></td><td><strong><?= $dist_total ?></strong></td></tr>
         </tbody>
     </table>
 
@@ -173,25 +197,25 @@ $page_title = h($sheet['subject_title']);
         <div class="signoff-box">
             <div style="height:35px;"></div>
             <div class="lbl">Reviewer</div>
-            <div><?= h($sheet['reviewer_name'] ?? '') ?></div>
-            <?php if ($sheet['reviewed_at']): ?>
-            <div style="color:#555;"><?= date('d M Y', strtotime($sheet['reviewed_at'])) ?></div>
+            <div><?= h($signoffs['reviewer_name'] ?? '') ?></div>
+            <?php if ($signoffs['reviewed_at'] ?? null): ?>
+            <div style="color:#555;"><?= date('d M Y', strtotime($signoffs['reviewed_at'])) ?></div>
             <?php endif; ?>
         </div>
         <div class="signoff-box">
             <div style="height:35px;"></div>
             <div class="lbl">Head of Department</div>
-            <div><?= h($sheet['hod_name'] ?? '') ?></div>
-            <?php if ($sheet['hod_approved_at']): ?>
-            <div style="color:#555;"><?= date('d M Y', strtotime($sheet['hod_approved_at'])) ?></div>
+            <div><?= h($signoffs['hod_name'] ?? '') ?></div>
+            <?php if ($signoffs['hod_approved_at'] ?? null): ?>
+            <div style="color:#555;"><?= date('d M Y', strtotime($signoffs['hod_approved_at'])) ?></div>
             <?php endif; ?>
         </div>
         <div class="signoff-box">
             <div style="height:35px;"></div>
             <div class="lbl">Controller of Examinations</div>
-            <div><?= h($sheet['publisher_name'] ?? '') ?></div>
-            <?php if ($sheet['published_at']): ?>
-            <div style="color:#555;"><?= date('d M Y', strtotime($sheet['published_at'])) ?></div>
+            <div><?= h($signoffs['publisher_name'] ?? '') ?></div>
+            <?php if ($signoffs['published_at'] ?? null): ?>
+            <div style="color:#555;"><?= date('d M Y', strtotime($signoffs['published_at'])) ?></div>
             <?php endif; ?>
         </div>
     </div>
