@@ -193,6 +193,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $marks_by_dist[(int)$dist_idx] = (array)$vals;
         }
 
+        // Per-segment absent: $_POST['dist_absent'] is a 2D array [dist_idx][row_idx]
+        $dist_absent_by_dist = [];
+        foreach ($_POST['dist_absent'] ?? [] as $dist_idx => $vals) {
+            $dist_absent_by_dist[(int)$dist_idx] = (array)$vals;
+        }
+
         foreach ($sids as $row_idx => $sid) {
             $sid = trim($sid);
             if ($sid === '') continue;
@@ -213,13 +219,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $row_marks = array_values($row_marks);
             }
 
+            // Build per-segment absent flags for this row
+            $row_absent_flags = [];
+            foreach ($dist_absent_by_dist as $dist_idx => $vals) {
+                $row_absent_flags[$dist_idx] = ($vals[$row_idx] ?? '0') === '1';
+            }
+            // Ensure contiguous array
+            if (!empty($row_absent_flags)) {
+                $max_idx = max(array_keys($row_absent_flags));
+                for ($i = 0; $i <= $max_idx; $i++) {
+                    if (!array_key_exists($i, $row_absent_flags)) $row_absent_flags[$i] = false;
+                }
+                ksort($row_absent_flags);
+                $row_absent_flags = array_values($row_absent_flags);
+            }
+
             wf_upsert_grade(
                 $sheet_id,
                 (int)($id_pks[$row_idx] ?? 0),
                 $sid,
                 trim($names[$row_idx] ?? ''),
                 ($absents[$row_idx] ?? '0') === '1' ? 1 : 0,
-                $row_marks
+                $row_marks,
+                $row_absent_flags
             );
         }
 
@@ -560,10 +582,16 @@ if (!empty($grades)):
                 $g['is_absent'] ? null : ($g['final_exam'] ?? null),
             ];
         }
+        // Per-segment absent flags (absent_json column)
+        $saved_absent_flags = null;
+        if (!empty($g['absent_json'])) {
+            $saved_absent_flags = json_decode($g['absent_json'], true);
+        }
 ?>
                         <tr class="grade-row <?= $g['is_absent'] ? 'table-warning' : '' ?>"
                             data-saved-marks="<?= h(json_encode($saved_marks)) ?>"
-                            data-is-absent="<?= $g['is_absent'] ? '1' : '0' ?>">
+                            data-is-absent="<?= $g['is_absent'] ? '1' : '0' ?>"
+                            data-absent-flags="<?= h(json_encode($saved_absent_flags)) ?>">
                             <td class="text-center row-num" style="font-size:.8rem;"><?= $idx + 1 ?></td>
                             <td>
                                 <input type="hidden" name="student_id_pk[]" value="<?= (int)$g['student_id'] ?>">
@@ -757,12 +785,43 @@ foreach ($creatable as $cr) {
     /**
      * Build the mark-input <td> elements for a row using currentDist.
      * Returns an array of <td> elements to be inserted before the Total <td>.
-     * @param {Array|null} savedMarks  pre-filled mark values (indexed by dist position)
-     * @param {boolean}    isAbsent
+     * @param {Array|null}  savedMarks   pre-filled mark values (indexed by dist position)
+     * @param {boolean}     isGlobalAbsent  row is globally absent (all cells disabled)
+     * @param {Array|null}  absentFlags  per-segment absent booleans (indexed by dist position)
      */
-    function buildMarkCells(savedMarks, isAbsent) {
+    function buildMarkCells(savedMarks, isGlobalAbsent, absentFlags) {
         return currentDist.map(function(d, i) {
+            var isSegAbsent = isGlobalAbsent || !!(absentFlags && absentFlags[i]);
             var td = document.createElement('td');
+            td.style.cssText = 'vertical-align:middle;padding:.2rem .25rem;';
+
+            // Hidden flag for this segment's absent state
+            var segFlag = document.createElement('input');
+            segFlag.type = 'hidden';
+            segFlag.name = 'dist_absent[' + i + '][]';
+            segFlag.className = 'dist-absent-flag';
+            segFlag.setAttribute('data-dist-idx', i);
+            segFlag.value = isSegAbsent ? '1' : '0';
+            td.appendChild(segFlag);
+
+            // Small "Abs" checkbox label
+            var lbl = document.createElement('label');
+            lbl.style.cssText = 'font-size:.65rem;display:flex;align-items:center;gap:2px;cursor:pointer;'
+                              + 'color:' + (isSegAbsent ? '#dc3545' : '#aaa') + ';margin-bottom:2px;white-space:nowrap;';
+            var segChk = document.createElement('input');
+            segChk.type = 'checkbox';
+            segChk.className = 'dist-absent-chk';
+            segChk.setAttribute('data-dist-idx', i);
+            segChk.style.cssText = 'transform:scale(0.75);cursor:pointer;';
+            segChk.checked = isSegAbsent;
+            if (isGlobalAbsent) segChk.disabled = true;
+            lbl.appendChild(segChk);
+            var lblTxt = document.createElement('span');
+            lblTxt.textContent = 'Abs';
+            lbl.appendChild(lblTxt);
+            td.appendChild(lbl);
+
+            // Mark number input
             var inp = document.createElement('input');
             inp.type = 'number';
             inp.name = 'marks[' + i + '][]';
@@ -772,9 +831,12 @@ foreach ($creatable as $cr) {
             inp.max = String(d.max);
             inp.step = '0.5';
             inp.style.cssText = 'font-size:.78rem;padding:.2rem .3rem;text-align:center;';
-            if (isAbsent) inp.disabled = true;
+            if (isSegAbsent) {
+                inp.disabled = true;
+                inp.placeholder = 'Abs';
+            }
             var sv = savedMarks ? savedMarks[i] : null;
-            if (sv !== null && sv !== undefined && !isAbsent) inp.value = sv;
+            if (sv !== null && sv !== undefined && !isSegAbsent) inp.value = sv;
             td.appendChild(inp);
             return td;
         });
@@ -794,8 +856,12 @@ foreach ($creatable as $cr) {
             var savedMarks = null;
             try { if (savedAttr) savedMarks = JSON.parse(savedAttr); } catch(e) {}
 
+            var absentFlagsAttr = tr.getAttribute('data-absent-flags');
+            var absentFlags = null;
+            try { if (absentFlagsAttr && absentFlagsAttr !== 'null') absentFlags = JSON.parse(absentFlagsAttr); } catch(e) {}
+
             var totalTd = tr.querySelector('.total-cell');
-            buildMarkCells(savedMarks, isAbsent).forEach(function(td) {
+            buildMarkCells(savedMarks, isAbsent, absentFlags).forEach(function(td) {
                 td.classList.add('mark-col');
                 tr.insertBefore(td, totalTd);
             });
@@ -1147,12 +1213,13 @@ foreach ($creatable as $cr) {
 
     /**
      * Append a student row with mark cells for the current distribution.
-     * @param {string} sid
-     * @param {string} name
+     * @param {string}      sid
+     * @param {string}      name
      * @param {number|string} idPk
-     * @param {Array|null} savedMarks  pre-filled mark values
+     * @param {Array|null}  savedMarks    pre-filled mark values
+     * @param {Array|null}  absentFlags   per-segment absent flags
      */
-    function appendRow(sid, name, idPk, savedMarks) {
+    function appendRow(sid, name, idPk, savedMarks, absentFlags) {
         if (emptyRow) emptyRow.style.display = 'none';
         var clone = template.content.cloneNode(true);
         var tr    = clone.querySelector('tr');
@@ -1162,7 +1229,7 @@ foreach ($creatable as $cr) {
 
         // Inject mark cells before Total
         var totalTd = tr.querySelector('.total-cell');
-        buildMarkCells(savedMarks || null, false).forEach(function(td) {
+        buildMarkCells(savedMarks || null, false, absentFlags || null).forEach(function(td) {
             td.classList.add('mark-col');
             tr.insertBefore(td, totalTd);
         });
@@ -1198,25 +1265,51 @@ foreach ($creatable as $cr) {
                 grd.innerHTML   = '<span class="text-warning">Incom</span>';
                 return;
             }
-            var hasAny = false;
-            var sum    = 0;
+            var hasEnteredMark = false; // true if at least one non-absent segment has a value
+            var hasAnyData     = false; // true if row has any mark or absent-segment data
+            var sum            = 0;
             inputs.forEach(function(inp) {
+                if (inp.disabled) { hasAnyData = true; return; } // absent segment contributes 0
                 var v = parseFloat(inp.value);
-                if (!isNaN(v)) { sum += v; hasAny = true; }
+                if (!isNaN(v)) { sum += v; hasEnteredMark = true; hasAnyData = true; }
             });
-            if (!hasAny) { total.textContent = '—'; grd.textContent = '—'; return; }
-            total.textContent = sum.toFixed(1);
+            if (!hasAnyData) { total.textContent = '—'; grd.textContent = '—'; return; }
+            total.textContent = hasEnteredMark ? sum.toFixed(1) : '0.0';
             grd.textContent   = grade(sum);
         }
 
+        // Global absent checkbox: disable/enable all segment controls
         if (chk && flag) {
             chk.addEventListener('change', function() {
                 flag.value = this.checked ? '1' : '0';
                 tr.classList.toggle('table-warning', this.checked);
-                getMarkInputs().forEach(function(inp) { inp.disabled = chk.checked; });
+                // Disable/enable all mark inputs and per-segment abs checkboxes
+                tr.querySelectorAll('.marks-input').forEach(function(inp) { inp.disabled = chk.checked; });
+                tr.querySelectorAll('.dist-absent-chk').forEach(function(sc) { sc.disabled = chk.checked; });
                 updateTotal();
             });
         }
+
+        // Per-segment absent checkboxes (wired via event delegation on tr)
+        tr.addEventListener('change', function(e) {
+            if (!e.target.classList.contains('dist-absent-chk')) return;
+            var segChk  = e.target;
+            var distIdx = segChk.getAttribute('data-dist-idx');
+            // Update hidden flag
+            var segFlag = tr.querySelector('.dist-absent-flag[data-dist-idx="' + distIdx + '"]');
+            if (segFlag) segFlag.value = segChk.checked ? '1' : '0';
+            // Update label colour
+            var lbl = segChk.closest('label');
+            if (lbl) lbl.style.color = segChk.checked ? '#dc3545' : '#aaa';
+            // Disable/enable the corresponding mark input
+            var inp = tr.querySelector('.marks-input[data-dist-idx="' + distIdx + '"]');
+            if (inp) {
+                inp.disabled    = segChk.checked;
+                inp.placeholder = segChk.checked ? 'Abs' : '';
+                if (segChk.checked) inp.value = '';
+            }
+            updateTotal();
+        });
 
         // Wire current mark inputs
         function wireMarkInputs_local() {
@@ -1246,13 +1339,14 @@ foreach ($creatable as $cr) {
                 grd.innerHTML   = '<span class="text-warning">Incom</span>';
                 return;
             }
-            var hasAny = false, sum = 0;
+            var hasEnteredMark = false, hasAnyData = false, sum = 0;
             inputs.forEach(function(inp) {
+                if (inp.disabled) { hasAnyData = true; return; } // absent segment contributes 0
                 var v = parseFloat(inp.value);
-                if (!isNaN(v)) { sum += v; hasAny = true; }
+                if (!isNaN(v)) { sum += v; hasEnteredMark = true; hasAnyData = true; }
             });
-            if (!hasAny) { total.textContent = '—'; grd.textContent = '—'; return; }
-            total.textContent = sum.toFixed(1);
+            if (!hasAnyData) { total.textContent = '—'; grd.textContent = '—'; return; }
+            total.textContent = hasEnteredMark ? sum.toFixed(1) : '0.0';
             grd.textContent   = grade(sum);
         }
         Array.from(tr.querySelectorAll('.marks-input')).forEach(function(inp) {

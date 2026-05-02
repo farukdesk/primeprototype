@@ -48,6 +48,18 @@ function _gr_get_marks(array $g): array {
         $g['final_exam'] ?? null,
     ];
 }
+
+/**
+ * Extract per-segment absent flags array from a grade row.
+ * Returns array of booleans (indexed by dist position) or empty array.
+ */
+function _gr_get_absent_flags(array $g): array {
+    if (!empty($g['absent_json'])) {
+        $flags = json_decode($g['absent_json'], true);
+        if (is_array($flags)) return $flags;
+    }
+    return [];
+}
 ?>
 <div class="card" style="border-radius:12px;">
     <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center">
@@ -79,7 +91,7 @@ function _gr_get_marks(array $g): array {
                     <tr><td colspan="<?= $_total_cols ?>" class="text-center text-muted py-4">No grades entered yet.</td></tr>
                 <?php else: ?>
                     <?php foreach ($grades as $idx => $g): ?>
-                    <?php $_marks = _gr_get_marks($g); ?>
+                    <?php $_marks = _gr_get_marks($g); $_abs_flags = _gr_get_absent_flags($g); ?>
                     <tr class="<?= $g['is_absent'] ? 'table-warning' : '' ?>">
                         <td class="px-3"><?= $idx + 1 ?></td>
                         <td><code><?= h($g['s_student_id'] ?? $g['student_sid']) ?></code></td>
@@ -93,7 +105,13 @@ function _gr_get_marks(array $g): array {
                         </td>
                         <?php foreach ($_dist as $di => $_d): ?>
                         <td class="text-center">
-                            <?= $g['is_absent'] ? '—' : h($_marks[$di] ?? '—') ?>
+                            <?php if ($g['is_absent']): ?>
+                            —
+                            <?php elseif (!empty($_abs_flags[$di])): ?>
+                            <span class="badge bg-warning text-dark" title="Absent for this component">Abs</span>
+                            <?php else: ?>
+                            <?= h($_marks[$di] ?? '—') ?>
+                            <?php endif; ?>
                         </td>
                         <?php endforeach; ?>
                         <td class="text-center fw-semibold"><?= $g['is_absent'] ? '—' : h($g['total_marks'] ?? '—') ?></td>
