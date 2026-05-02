@@ -585,7 +585,7 @@ if (!empty($grades)):
                                 <?= $g['is_absent'] ? '<span class="text-danger">Abs</span>' : h($g['total_marks'] ?? '—') ?>
                             </td>
                             <td class="text-center grade-cell fw-bold" style="font-size:.8rem;">
-                                <?= $g['is_absent'] ? '<span class="text-danger">F</span>' : h($g['letter_grade'] ?? '—') ?>
+                                <?= $g['is_absent'] ? '<span class="text-warning">Incom</span>' : h($g['letter_grade'] ?? '—') ?>
                             </td>
                             <td class="text-center">
                                 <button type="button" class="btn btn-sm btn-outline-danger btn-remove-row p-0"
@@ -1195,7 +1195,7 @@ foreach ($creatable as $cr) {
             var inputs = getMarkInputs();
             if (chk && chk.checked) {
                 total.innerHTML = '<span class="text-danger">Abs</span>';
-                grd.innerHTML   = '<span class="text-danger">F</span>';
+                grd.innerHTML   = '<span class="text-warning">Incom</span>';
                 return;
             }
             var hasAny = false;
@@ -1243,7 +1243,7 @@ foreach ($creatable as $cr) {
             var inputs = Array.from(tr.querySelectorAll('.marks-input'));
             if (chk && chk.checked) {
                 total.innerHTML = '<span class="text-danger">Abs</span>';
-                grd.innerHTML   = '<span class="text-danger">F</span>';
+                grd.innerHTML   = '<span class="text-warning">Incom</span>';
                 return;
             }
             var hasAny = false, sum = 0;

@@ -443,7 +443,7 @@ function wf_upsert_grade(
 ): void {
     if ($is_absent) {
         $total      = null;
-        $letter     = 'F';
+        $letter     = 'Incom';
         $point      = 0.00;
         $marks_json = null;
         // Keep legacy columns null
@@ -508,9 +508,9 @@ function wf_upsert_grade(
         $is_absent ? 1 : 0,
         $att, $ct, $mid, $fin,
         $marks_json,
-        $is_absent ? null  : $total,
-        $is_absent ? 'F'   : $letter,
-        $is_absent ? 0.00  : $point,
+        $is_absent ? null    : $total,
+        $is_absent ? 'Incom' : $letter,
+        $is_absent ? 0.00    : $point,
     ]);
 }
 
