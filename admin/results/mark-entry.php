@@ -747,6 +747,7 @@ foreach ($creatable as $cr) {
     var savedCurr     = <?= (int)$v_curriculum_id ?>;
     var savedBatch    = <?= json_encode($v_batch ?? '') ?>;
     var facultyDeptId = <?= $faculty_dept_id ?>;
+    var isEditMode    = <?= $is_edit ? 'true' : 'false' ?>;
 
     // ── Mark distribution defaults ────────────────────────────────────────────
     /** Minimum component max-marks to be considered "high-value" (absent → Incom). */
@@ -1068,7 +1069,9 @@ foreach ($creatable as $cr) {
                 if (selectId) {
                     loadFacultySubjects(selectId, savedCurr);
                     if (btnLoad) btnLoad.disabled = false;
-                    if (savedBatch) loadStudentsByBatch(false);
+                    // In edit mode the saved rows are already rendered by PHP – do NOT
+                    // auto-load students here because clearRows() would wipe them.
+                    if (savedBatch && !isEditMode) loadStudentsByBatch(false);
                 }
             });
     }

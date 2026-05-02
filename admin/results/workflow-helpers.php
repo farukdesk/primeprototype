@@ -335,7 +335,7 @@ function wf_get_approver_queue(): array
                     d.name          AS dept_name,
                     p.program_name,
                     c.name          AS chain_name,
-                    u.username      AS creator_name,
+                    u.full_name     AS creator_name,
                     s.step_label    AS current_step_label,
                     s.group_id      AS current_group_id,
                     g.name          AS current_group_name,
@@ -369,7 +369,7 @@ function wf_get_sheet(int $id): array
                 d.faculty_label,
                 p.program_name,
                 c.name           AS chain_name,
-                u.username       AS creator_name,
+                u.full_name      AS creator_name,
                 s.step_label     AS current_step_label,
                 s.group_id       AS current_group_id,
                 g.name           AS current_group_name,
@@ -410,7 +410,7 @@ function wf_get_grades(int $sheet_id): array
 function wf_get_sheet_history(int $sheet_id): array
 {
     $stmt = db()->prepare(
-        'SELECT h.*, u.username AS actor_name, g.name AS group_name
+        'SELECT h.*, u.full_name AS actor_name, g.name AS group_name
          FROM wf_sheet_history h
          LEFT JOIN users u         ON u.id = h.acted_by
          LEFT JOIN user_groups g   ON g.id = h.group_id
@@ -448,66 +448,61 @@ function wf_upsert_grade(
     array $absent_flags = [],
     array $dist_maxes = []  // per-distribution max marks for server-side clamping
 ): void {
-    if ($is_absent) {
-        $total       = null;
-        $letter      = 'Incom';
-        $point       = 0.00;
-        $marks_json  = null;
-        $absent_json = null;
-        // Keep legacy columns null
-        $att = $ct = $mid = $fin = null;
+    // Clamp each mark to its per-distribution max.
+    // Prefer $dist_maxes when provided; fall back to WF legacy constants for first 4.
+    $legacy_maxes = [WF_MAX_ATTENDANCE, WF_MAX_CLASS_TEST, WF_MAX_MID_TERM, WF_MAX_FINAL_EXAM];
+    $clamped = [];
+    foreach ($marks as $i => $v) {
+        if ($v === null || ($absent_flags[$i] ?? false)) {
+            // null mark or absent for this segment → store null (counts as 0 in total)
+            $clamped[$i] = null;
+        } else {
+            // Use dist_maxes if available, otherwise fall back to legacy constants
+            $max = !empty($dist_maxes[$i]) ? (float)$dist_maxes[$i]
+                 : ($legacy_maxes[$i] ?? WF_MAX_TOTAL);
+            $clamped[$i] = min(max((float)$v, 0), $max);
+        }
+    }
+
+    // Store per-segment absent flags only when at least one segment is absent
+    $has_seg_absent = !empty(array_filter($absent_flags));
+    if ($has_seg_absent) {
+        // Normalise to a contiguous 0-indexed boolean array aligned with marks count
+        $flags_out = [];
+        $num_flags = max(count($marks), count($absent_flags));
+        for ($i = 0; $i < $num_flags; $i++) {
+            $flags_out[] = (bool)($absent_flags[$i] ?? false);
+        }
+        $absent_json = json_encode($flags_out);
     } else {
-        // Clamp each mark to its per-distribution max.
-        // Prefer $dist_maxes when provided; fall back to WF legacy constants for first 4.
-        $legacy_maxes = [WF_MAX_ATTENDANCE, WF_MAX_CLASS_TEST, WF_MAX_MID_TERM, WF_MAX_FINAL_EXAM];
-        $clamped = [];
-        foreach ($marks as $i => $v) {
-            if ($v === null || ($absent_flags[$i] ?? false)) {
-                // null mark or absent for this segment → store null (counts as 0 in total)
-                $clamped[$i] = null;
-            } else {
-                // Use dist_maxes if available, otherwise fall back to legacy constants
-                $max = !empty($dist_maxes[$i]) ? (float)$dist_maxes[$i]
-                     : ($legacy_maxes[$i] ?? WF_MAX_TOTAL);
-                $clamped[$i] = min(max((float)$v, 0), $max);
-            }
-        }
+        $absent_json = null;
+    }
 
-        // Store per-segment absent flags only when at least one segment is absent
-        $has_seg_absent = !empty(array_filter($absent_flags));
-        if ($has_seg_absent) {
-            // Normalise to a contiguous 0-indexed boolean array aligned with marks count
-            $flags_out = [];
-            $num_flags = max(count($marks), count($absent_flags));
-            for ($i = 0; $i < $num_flags; $i++) {
-                $flags_out[] = (bool)($absent_flags[$i] ?? false);
-            }
-            $absent_json = json_encode($flags_out);
+    $no_valid_marks = (count(array_filter($clamped, fn($v) => $v !== null)) === 0);
+    if ($no_valid_marks) {
+        $total = null; $letter = null; $point = null;
+        $marks_json = null;
+    } else {
+        $marks_json = json_encode(array_values($clamped));
+        if ($is_absent) {
+            // Per-segment absence: keep marks for non-absent components but force Incom
+            $total  = null;
+            $letter = 'Incom';
+            $point  = 0.00;
         } else {
-            $absent_json = null;
-        }
-
-        $all_null = (count(array_filter($clamped, fn($v) => $v !== null)) === 0);
-        if ($all_null) {
-            $total = null; $letter = null; $point = null;
-            $marks_json = null;
-        } else {
-            $sum   = array_sum(array_map(fn($v) => $v ?? 0, $clamped));
-            $total = min($sum, WF_MAX_TOTAL);
-            $g     = wf_compute_grade($total);
+            $sum    = array_sum(array_map(fn($v) => $v ?? 0, $clamped));
+            $total  = min($sum, WF_MAX_TOTAL);
+            $g      = wf_compute_grade($total);
             $letter = $g['letter'];
             $point  = $g['point'];
-            // Always store full marks as JSON (re-encodes for accuracy)
-            $marks_json = json_encode(array_values($clamped));
         }
-
-        // Map first 4 into legacy columns
-        $att = $clamped[0] ?? null;
-        $ct  = $clamped[1] ?? null;
-        $mid = $clamped[2] ?? null;
-        $fin = $clamped[3] ?? null;
-        $marks = $clamped;
     }
+
+    // Map first 4 into legacy columns
+    $att = $clamped[0] ?? null;
+    $ct  = $clamped[1] ?? null;
+    $mid = $clamped[2] ?? null;
+    $fin = $clamped[3] ?? null;
 
     db()->prepare(
         'INSERT INTO result_sheet_grades
@@ -536,9 +531,9 @@ function wf_upsert_grade(
         $att, $ct, $mid, $fin,
         $marks_json,
         $absent_json,
-        $is_absent ? null    : $total,
-        $is_absent ? 'Incom' : $letter,
-        $is_absent ? 0.00    : $point,
+        $total,
+        $letter,
+        $point,
     ]);
 }
 
@@ -667,7 +662,7 @@ function wf_get_sheet_signoffs(int $sheet_id): array
 {
     $stmt = db()->prepare(
         "SELECT h.action, h.acted_at, h.step_label, h.step_order,
-                u.username AS actor_name
+                u.full_name AS actor_name
            FROM wf_sheet_history h
            LEFT JOIN users u ON u.id = h.acted_by
           WHERE h.sheet_id = ?
