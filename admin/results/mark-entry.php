@@ -304,7 +304,7 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
                 <div class="card-body p-4">
 
                     <div class="row g-3 mb-3">
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <label class="form-label fw-medium">Department <span class="text-danger">*</span></label>
                             <?php if (!is_super_admin() && $faculty_dept_id): ?>
                             <?php $fd = array_values(array_filter($departments, fn($d) => (int)$d['id'] === $faculty_dept_id))[0] ?? null; ?>
@@ -322,17 +322,14 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
                             </select>
                             <?php endif; ?>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <label class="form-label fw-medium">Program</label>
                             <select name="program_id" id="prog_select" class="form-select" <?= $v_dept_id ? '' : 'disabled' ?>>
                                 <option value="">— Select Program —</option>
                             </select>
                         </div>
-                    </div>
-
-                    <div class="row g-3 mb-3">
-                        <div class="col-md-6">
-                            <label class="form-label fw-medium">Batch <span class="text-danger">*</span></label>
+                        <div class="col-md-4">
+                            <label class="form-label fw-medium">Batch / Semester <span class="text-danger">*</span></label>
                             <!-- Custom searchable combobox for batch -->
                             <div class="position-relative" id="batch_combobox_wrap">
                                 <input type="text" name="batch" id="batch_input" class="form-control"
@@ -343,7 +340,7 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
                                      style="display:none;z-index:1050;max-height:220px;overflow-y:auto;top:100%;left:0;">
                                 </div>
                             </div>
-                            <div class="form-text">Type to filter or enter a new batch value.</div>
+                            <div class="form-text">Select an existing batch or type a new one.</div>
                         </div>
                     </div>
 
@@ -563,7 +560,7 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
                         <div class="col-md-6">
                             <label class="form-label small mb-1">Search by Student ID or Name</label>
                             <input type="text" id="other_student_q" class="form-control form-control-sm"
-                                   placeholder="Type at least 2 charactersâ¦" autocomplete="off">
+                                   placeholder="Type at least 2 characters…" autocomplete="off">
                         </div>
                         <div class="col-md-3">
                             <button type="button" id="btn_other_search" class="btn btn-warning btn-sm w-100">
