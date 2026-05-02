@@ -109,6 +109,14 @@ if ($active_tab === 'queue' && wf_has_approver_role()) {
     redirect(APP_URL . '/results/workflow-queue.php');
 }
 
+// Faculty-only: can create sheets but cannot manage exams or is not admin/staff
+$is_faculty_only = !is_super_admin() && !rm_can_create() && !rm_is_staff() && wf_can_create_sheet();
+
+// Redirect faculty from legacy tab to my_sheets
+if ($is_faculty_only && $active_tab === 'legacy') {
+    redirect(APP_URL . '/results/index.php?tab=my_sheets');
+}
+
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
@@ -172,11 +180,13 @@ require_once __DIR__ . '/../includes/header.php';
             <?php endif; ?>
         </a>
     </li>
+    <?php if (!$is_faculty_only): ?>
     <li class="nav-item">
         <a class="nav-link <?= $active_tab === 'legacy' ? 'active' : '' ?>" href="?tab=legacy">
             <i class="fas fa-archive me-1"></i> Legacy Exams
         </a>
     </li>
+    <?php endif; ?>
 </ul>
 <?php endif; ?>
 
@@ -418,6 +428,7 @@ function _wf_render_published(?array $dept_scope): void
 ?>
 
 <!-- Filters -->
+<?php if (!$is_faculty_only): ?>
 <div class="card mb-4">
     <div class="card-body py-3 px-4">
         <form method="GET" action="" class="row g-2 align-items-end">
@@ -598,6 +609,7 @@ function _wf_render_published(?array $dept_scope): void
     </div>
     <?php endif; ?>
 </div>
+<?php endif; // !$is_faculty_only ?>
 
 
 <?php if (rm_can_create()): ?>

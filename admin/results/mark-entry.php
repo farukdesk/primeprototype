@@ -310,8 +310,10 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
                         <div class="col-md-6">
                             <label class="form-label fw-medium">Batch <span class="text-danger">*</span></label>
                             <input type="text" name="batch" id="batch_input" class="form-control"
-                                   value="<?= h($v_batch ?? '') ?>" placeholder="e.g. 52nd" maxlength="50" required>
-                            <div class="form-text">Students will be auto-loaded when both batch and program are set.</div>
+                                   value="<?= h($v_batch ?? '') ?>" placeholder="e.g. 52nd" maxlength="50"
+                                   list="batch_list" autocomplete="off" required>
+                            <datalist id="batch_list"></datalist>
+                            <div class="form-text">Students auto-load when batch and program are set. Type to search existing batches.</div>
                         </div>
                     </div>
 
@@ -354,6 +356,10 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
                                 style="border-radius:8px;" disabled>
                             <i class="fas fa-users me-1"></i> Load Students
                         </button>
+                        <button type="button" id="btn_add_other_batch" class="btn btn-sm btn-outline-warning"
+                                style="border-radius:8px;" title="Add a student from a different batch">
+                            <i class="fas fa-user-plus me-1"></i> Other Batch
+                        </button>
                         <button type="button" id="btn_add_row" class="btn btn-sm btn-outline-secondary"
                                 style="border-radius:8px;">
                             <i class="fas fa-plus me-1"></i> Add Row
@@ -369,10 +375,10 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
                                     <th style="min-width:130px;">Student ID</th>
                                     <th style="min-width:180px;">Name</th>
                                     <th class="text-center" style="width:70px;">Absent</th>
-                                    <th class="text-center" style="width:75px;">Att.<br><small class="text-muted">/10</small></th>
-                                    <th class="text-center" style="width:75px;">CT<br><small class="text-muted">/10</small></th>
-                                    <th class="text-center" style="width:75px;">Mid<br><small class="text-muted">/30</small></th>
-                                    <th class="text-center" style="width:75px;">Final<br><small class="text-muted">/50</small></th>
+                                    <th class="text-center" id="th_att" style="width:75px;">Att.<br><small class="text-muted">/10</small></th>
+                                    <th class="text-center" id="th_ct"  style="width:75px;">CT<br><small class="text-muted">/10</small></th>
+                                    <th class="text-center" id="th_mid" style="width:75px;">Mid<br><small class="text-muted">/30</small></th>
+                                    <th class="text-center" id="th_fin" style="width:75px;">Final<br><small class="text-muted">/50</small></th>
                                     <th class="text-center" style="width:75px;">Total</th>
                                     <th class="text-center" style="width:60px;">Grade</th>
                                     <th style="width:40px;"></th>
@@ -431,6 +437,35 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
                         </table>
                     </div>
                 </div>
+                <div id="other_batch_panel" class="px-3 pb-3" style="display:none;">
+                    <div class="card border-warning" style="border-radius:10px;">
+                        <div class="card-body p-3">
+                            <h6 class="fw-semibold mb-2" style="font-size:.85rem;">
+                                <i class="fas fa-user-plus me-1 text-warning"></i>
+                                Add Student from Another Batch
+                            </h6>
+                            <div class="row g-2 align-items-end">
+                                <div class="col-md-3">
+                                    <label class="form-label small mb-1">Batch</label>
+                                    <input type="text" id="other_batch_val" class="form-control form-control-sm"
+                                           list="other_batch_datalist" placeholder="e.g. 51st" autocomplete="off">
+                                    <datalist id="other_batch_datalist"></datalist>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small mb-1">Search by Student ID or Name</label>
+                                    <input type="text" id="other_student_q" class="form-control form-control-sm"
+                                           placeholder="Type at least 2 charactersâ¦" autocomplete="off">
+                                </div>
+                                <div class="col-md-3">
+                                    <button type="button" id="btn_other_search" class="btn btn-warning btn-sm w-100">
+                                        <i class="fas fa-search me-1"></i> Search
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="other_student_results" class="mt-2"></div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -473,16 +508,21 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
                     <h6 class="mb-0 fw-semibold"><i class="fas fa-star me-2 text-muted"></i>Mark Distribution</h6>
                 </div>
                 <div class="card-body p-3">
-                    <table class="table table-sm mb-3" style="font-size:.8rem;">
-                        <thead class="table-light"><tr><th>Component</th><th>Max</th></tr></thead>
-                        <tbody>
-                            <tr><td>Attendance</td><td>10</td></tr>
-                            <tr><td>Class Test</td><td>10</td></tr>
-                            <tr><td>Mid Term</td><td>30</td></tr>
-                            <tr><td>Final Exam</td><td>50</td></tr>
-                            <tr class="fw-semibold"><td>Total</td><td>100</td></tr>
-                        </tbody>
-                    </table>
+                    <div id="dist_ref_wrap">
+                        <table class="table table-sm mb-3" id="dist_ref_table" style="font-size:.8rem;">
+                            <thead class="table-light"><tr><th>Component</th><th>Max</th></tr></thead>
+                            <tbody id="dist_ref_tbody">
+                                <tr><td>Attendance</td><td>10</td></tr>
+                                <tr><td>Class Test</td><td>10</td></tr>
+                                <tr><td>Mid Term</td><td>30</td></tr>
+                                <tr><td>Final Exam</td><td>50</td></tr>
+                                <tr class="fw-semibold"><td>Total</td><td>100</td></tr>
+                            </tbody>
+                        </table>
+                        <small class="text-muted" id="dist_ref_note" style="display:none;">
+                            <i class="fas fa-info-circle me-1"></i>Distribution from course curriculum.
+                        </small>
+                    </div>
                     <table class="table table-sm mb-0" style="font-size:.78rem;">
                         <thead class="table-light"><tr><th>Marks</th><th>Grade</th><th>GPA</th></tr></thead>
                         <tbody>
@@ -492,6 +532,7 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
                             <?php endforeach; ?>
                         </tbody>
                     </table>
+                    </div><!-- /dist_ref_wrap -->
                 </div>
             </div>
         </div>
@@ -536,6 +577,7 @@ foreach ($creatable as $cr) {
     var progSel       = document.getElementById('prog_select');
     var currSel       = document.getElementById('curriculum_select');
     var batchInput    = document.getElementById('batch_input');
+    var batchList     = document.getElementById('batch_list');
     var subCode       = document.getElementById('subject_code');
     var subTitle      = document.getElementById('subject_title');
     var credits       = document.getElementById('credits_input');
@@ -553,9 +595,92 @@ foreach ($creatable as $cr) {
     var savedBatch    = <?= json_encode($v_batch ?? '') ?>;
     var facultyDeptId = <?= $faculty_dept_id ?>;
 
+    // ── Mark distribution defaults (used when curriculum has no config) ─────────
+    var defaultDist = [
+        { name: 'Att.',  max: 10 },
+        { name: 'CT',    max: 10 },
+        { name: 'Mid',   max: 30 },
+        { name: 'Final', max: 50 },
+    ];
+    var currentDist = defaultDist.slice();
+
     var scale = [[80,Infinity,'A+'],[75,80,'A'],[70,75,'A-'],[65,70,'B+'],
                  [60,65,'B'],[55,60,'B-'],[50,55,'C+'],[45,50,'C'],[40,45,'D'],[0,40,'F']];
     function grade(t) { for (var i=0;i<scale.length;i++) if (t>=scale[i][0]&&t<scale[i][1]) return scale[i][2]; return 'F'; }
+
+    // ── Apply mark distribution (from curriculum or defaults) ─────────────────
+    function applyMarkDistribution(dists) {
+        currentDist = defaultDist.slice();
+        var fromCurriculum = dists && dists.length > 0;
+        if (fromCurriculum) {
+            dists.slice(0, 4).forEach(function(d, i) {
+                currentDist[i] = { name: d.distribution_name, max: parseFloat(d.max_marks) };
+            });
+        }
+        var thIds    = ['th_att', 'th_ct', 'th_mid', 'th_fin'];
+        var inpCls   = ['.att-input', '.ct-input', '.mid-input', '.fin-input'];
+        thIds.forEach(function(id, i) {
+            var th = document.getElementById(id);
+            if (th) th.innerHTML = currentDist[i].name + '<br><small class="text-muted">/' + currentDist[i].max + '</small>';
+        });
+        inpCls.forEach(function(cls, i) {
+            document.querySelectorAll(cls).forEach(function(inp) { inp.max = currentDist[i].max; });
+            var tplInp = template ? template.content.querySelector(cls) : null;
+            if (tplInp) tplInp.max = currentDist[i].max;
+        });
+        // Update reference panel
+        var refNote = document.getElementById('dist_ref_note');
+        var refBody = document.getElementById('dist_ref_tbody');
+        if (refBody) {
+            var total = 0;
+            currentDist.forEach(function(d) { total += d.max; });
+            var rows = '';
+            currentDist.forEach(function(d) { rows += '<tr><td>' + d.name + '</td><td>' + d.max + '</td></tr>'; });
+            rows += '<tr class="fw-semibold"><td>Total</td><td>' + total + '</td></tr>';
+            refBody.innerHTML = rows;
+        }
+        if (refNote) refNote.style.display = fromCurriculum ? '' : 'none';
+    }
+
+    function loadMarkDistribution(curriculumId) {
+        if (!curriculumId) { applyMarkDistribution([]); return; }
+        fetch(APP_URL + '/results/get-mark-distribution.php?curriculum_id=' + curriculumId)
+            .then(function(r) { return r.json(); })
+            .then(function(data) { applyMarkDistribution(data); });
+    }
+
+    // ── Batch datalist population ─────────────────────────────────────────────
+    function loadBatches(deptId, progId) {
+        if (!batchList) return;
+        var url = APP_URL + '/results/get-batches.php?dept_id=' + (deptId || 0)
+                          + '&program_id=' + (progId || 0);
+        fetch(url)
+            .then(function(r) { return r.json(); })
+            .then(function(batches) {
+                batchList.innerHTML = '';
+                batches.forEach(function(b) {
+                    var opt = document.createElement('option');
+                    opt.value = b;
+                    batchList.appendChild(opt);
+                });
+            });
+    }
+
+    // ── Load all batches for "other batch" datalist ───────────────────────────
+    function loadOtherBatchList(deptId) {
+        var dl = document.getElementById('other_batch_datalist');
+        if (!dl || !deptId) return;
+        fetch(APP_URL + '/results/get-batches.php?dept_id=' + deptId)
+            .then(function(r) { return r.json(); })
+            .then(function(batches) {
+                dl.innerHTML = '';
+                batches.forEach(function(b) {
+                    var opt = document.createElement('option');
+                    opt.value = b;
+                    dl.appendChild(opt);
+                });
+            });
+    }
 
     // Show chain info for selected dept
     function updateChainInfo(deptId, progId) {
@@ -568,7 +693,6 @@ foreach ($creatable as $cr) {
     }
 
     function getDeptId() {
-        // For faculty, dept_select is a hidden input; for admin it's a select.
         return deptSel ? deptSel.value : facultyDeptId;
     }
 
@@ -590,10 +714,11 @@ foreach ($creatable as $cr) {
                 });
                 progSel.disabled = false;
                 updateChainInfo(deptId, selectId);
+                loadBatches(deptId, selectId);
+                loadOtherBatchList(deptId);
                 if (selectId) {
                     loadFacultySubjects(selectId, savedCurr);
                     if (btnLoad) btnLoad.disabled = false;
-                    // Auto-load students if batch already set
                     if (savedBatch) loadStudentsByBatch(false);
                 }
             });
@@ -604,6 +729,7 @@ foreach ($creatable as $cr) {
         currSel.innerHTML = '<option value="">— Select Subject —</option>';
         currSel.disabled  = true;
         if (!progId) return;
+        loadBatches(getDeptId(), progId);
         fetch(APP_URL + '/results/get-faculty-subjects.php?program_id=' + progId)
             .then(function(r) { return r.json(); })
             .then(function(data) {
@@ -630,10 +756,11 @@ foreach ($creatable as $cr) {
 
     function fillFromCurriculum() {
         var sel = currSel.options[currSel.selectedIndex];
-        if (!sel || !sel.value) return;
+        if (!sel || !sel.value) { applyMarkDistribution([]); return; }
         subCode.value  = sel.dataset.code    || '';
         subTitle.value = sel.dataset.title   || '';
         credits.value  = sel.dataset.credits || '';
+        loadMarkDistribution(sel.value);
     }
 
     // ── Load students by batch ─────────────────────────────────────────────────
@@ -664,6 +791,7 @@ foreach ($creatable as $cr) {
         deptSel.addEventListener('change', function() {
             loadPrograms(this.value, 0);
             updateChainInfo(this.value, 0);
+            loadOtherBatchList(this.value);
         });
     }
 
@@ -671,7 +799,7 @@ foreach ($creatable as $cr) {
         loadFacultySubjects(this.value, 0);
         if (btnLoad) btnLoad.disabled = !this.value;
         updateChainInfo(getDeptId(), this.value);
-        // Auto-load students if batch already filled
+        loadBatches(getDeptId(), this.value);
         if (this.value && batchInput && batchInput.value.trim()) loadStudentsByBatch(false);
     });
 
@@ -695,10 +823,74 @@ foreach ($creatable as $cr) {
         });
     }
 
+    // ── "Other Batch" panel toggle ────────────────────────────────────────────
+    var btnOtherBatch   = document.getElementById('btn_add_other_batch');
+    var otherBatchPanel = document.getElementById('other_batch_panel');
+    var otherBatchVal   = document.getElementById('other_batch_val');
+    var otherStudentQ   = document.getElementById('other_student_q');
+    var btnOtherSearch  = document.getElementById('btn_other_search');
+    var otherResults    = document.getElementById('other_student_results');
+
+    if (btnOtherBatch) {
+        btnOtherBatch.addEventListener('click', function() {
+            var visible = otherBatchPanel.style.display !== 'none';
+            otherBatchPanel.style.display = visible ? 'none' : '';
+            if (!visible) loadOtherBatchList(getDeptId());
+        });
+    }
+
+    function doOtherSearch() {
+        var batch = otherBatchVal ? otherBatchVal.value.trim() : '';
+        var q     = otherStudentQ ? otherStudentQ.value.trim() : '';
+        if (!q || q.length < 2) { otherResults.innerHTML = '<small class="text-danger">Enter at least 2 characters.</small>'; return; }
+        var deptId = getDeptId();
+        var url = APP_URL + '/results/get-students.php?q=' + encodeURIComponent(q)
+                          + '&dept_id=' + encodeURIComponent(deptId);
+        if (batch) url += '&batch=' + encodeURIComponent(batch);
+        otherResults.innerHTML = '<small class="text-muted">Searching…</small>';
+        fetch(url)
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data.length) { otherResults.innerHTML = '<small class="text-warning">No students found.</small>'; return; }
+                var html = '<div class="list-group list-group-flush mt-1" style="max-height:180px;overflow-y:auto;">';
+                data.forEach(function(s) {
+                    html += '<button type="button" class="list-group-item list-group-item-action py-1 px-2 other-add-btn"'
+                          + ' data-sid="' + (s.student_id||'') + '"'
+                          + ' data-name="' + (s.full_name||'').replace(/"/g,'&quot;') + '"'
+                          + ' data-pk="'  + (s.id||0) + '" style="font-size:.82rem;">'
+                          + '<strong>' + (s.student_id||'') + '</strong> — ' + (s.full_name||'')
+                          + (s.batch ? ' <span class="badge bg-secondary ms-1">' + s.batch + '</span>' : '')
+                          + (s.program_name ? ' <small class="text-muted ms-1">' + s.program_name + '</small>' : '')
+                          + '</button>';
+                });
+                html += '</div>';
+                otherResults.innerHTML = html;
+                otherResults.querySelectorAll('.other-add-btn').forEach(function(btn) {
+                    btn.addEventListener('click', function() {
+                        appendRow(this.dataset.sid, this.dataset.name, this.dataset.pk);
+                        renumber();
+                        this.classList.add('active');
+                        this.disabled = true;
+                        this.textContent = '✓ Added';
+                    });
+                });
+            });
+    }
+
+    if (btnOtherSearch) btnOtherSearch.addEventListener('click', doOtherSearch);
+    if (otherStudentQ) {
+        otherStudentQ.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); doOtherSearch(); } });
+    }
+
     // Initial load: programs (and subjects + students if editing)
     var initDept = facultyDeptId || savedDept;
-    if (initDept) loadPrograms(initDept, savedProg);
+    if (initDept) {
+        loadPrograms(initDept, savedProg);
+        loadOtherBatchList(initDept);
+    }
     if (!savedDept && !facultyDeptId) updateChainInfo(0, 0);
+    // Load mark distribution for existing sheet (edit mode)
+    if (savedCurr) loadMarkDistribution(savedCurr);
 
     function clearRows() {
         Array.from(tbody.querySelectorAll('tr.grade-row')).forEach(function(r) { r.remove(); });
