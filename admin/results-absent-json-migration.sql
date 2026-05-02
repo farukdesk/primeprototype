@@ -7,6 +7,6 @@
 -- ─────────────────────────────────────────────────────────────────────────────
 
 ALTER TABLE `result_sheet_grades`
-  ADD COLUMN `absent_json` JSON DEFAULT NULL
+  ADD COLUMN IF NOT EXISTS `absent_json` JSON DEFAULT NULL
     COMMENT 'JSON boolean array of per-segment absent flags [false,false,true,...]; null means no per-segment absents'
   AFTER `marks_json`;

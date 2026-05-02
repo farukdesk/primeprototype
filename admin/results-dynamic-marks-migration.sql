@@ -6,6 +6,6 @@
 -- ─────────────────────────────────────────────────────────────────────────────
 
 ALTER TABLE `result_sheet_grades`
-  ADD COLUMN `marks_json` JSON DEFAULT NULL
+  ADD COLUMN IF NOT EXISTS `marks_json` JSON DEFAULT NULL
     COMMENT 'JSON array of mark values by distribution index [val0, val1, ...]; takes precedence over legacy columns when set'
   AFTER `final_exam`;

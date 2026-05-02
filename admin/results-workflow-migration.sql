@@ -93,6 +93,8 @@ CREATE TABLE IF NOT EXISTS `result_sheet_grades` (
   `class_test`   DECIMAL(5,2)   DEFAULT NULL,
   `mid_term`     DECIMAL(5,2)   DEFAULT NULL,
   `final_exam`   DECIMAL(5,2)   DEFAULT NULL,
+  `marks_json`   JSON           DEFAULT NULL  COMMENT 'JSON array of mark values by distribution index [val0, val1, ...]; takes precedence over legacy columns when set',
+  `absent_json`  JSON           DEFAULT NULL  COMMENT 'JSON boolean array of per-segment absent flags [false,false,true,...]; null means no per-segment absents',
   `total_marks`  DECIMAL(5,2)   DEFAULT NULL,
   `letter_grade` VARCHAR(10)    DEFAULT NULL,
   `grade_point`  DECIMAL(4,2)   DEFAULT NULL,
