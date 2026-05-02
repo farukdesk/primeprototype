@@ -94,9 +94,10 @@ $page_title = h($sheet['subject_title']);
         .footer { margin-top: 12px; border-top: 1px solid #ccc; padding-top: 6px; font-size: 10px; color: #666; text-align: right; }
 
         @media print {
+            @page { size: A4; margin: 12mm 12mm 12mm 12mm; }
             body { font-size: 10.5px; }
             .no-print { display: none !important; }
-            .page { padding: 0; }
+            .page { max-width: 100%; padding: 0; }
         }
     </style>
 </head>
@@ -114,7 +115,7 @@ $page_title = h($sheet['subject_title']);
 
     <!-- University Header with Logo -->
     <div class="header">
-        <img src="<?= APP_URL ?>/assets/img/logo/logo-black.png" alt="Prime University Logo" class="header-logo">
+        <img src="<?= APP_URL ?>/../assets/img/logo/logo-black.png" alt="Prime University Logo" class="header-logo">
         <div class="header-text">
             <h2>Prime University</h2>
             <?php if ($sheet['faculty_label'] ?? ''): ?>
@@ -237,7 +238,7 @@ $page_title = h($sheet['subject_title']);
             <td><?php
                 if (!empty($_abs_flags[$di])) {
                     echo '<span class="abs-cell">Abs</span>';
-                } elseif ($_marks[$di] !== null && $_marks[$di] !== '') {
+                } elseif (isset($_marks[$di]) && $_marks[$di] !== null && $_marks[$di] !== '') {
                     echo h($_marks[$di]);
                 } else {
                     echo '—';
