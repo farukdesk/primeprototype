@@ -71,6 +71,77 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         redirect(APP_URL . '/students/view.php?id=' . $id . '#comments');
     }
+
+    // ── Create portal account ─────────────────────────────────────────────
+    if ($action === 'create_portal_account' && $is_staff) {
+        if ($student['user_id']) {
+            flash_set('error', 'This student already has a portal account.');
+        } else {
+            $portal_uid = sm_create_student_portal_user(
+                $id,
+                $student['student_id'],
+                $student['full_name'],
+                $student['email'] ?: null,
+                $student['phone'] ?: null
+            );
+            if ($portal_uid) {
+                log_change('students', 'UPDATE', $id,
+                    $student['full_name'] . ' (' . $student['student_id'] . ')',
+                    'portal_account', null, (string)$portal_uid,
+                    'Portal account created: ' . $student['student_id']);
+                flash_set('success', 'Portal account created — username: <strong>' . h($student['student_id']) . '</strong>. Initial password is the Student ID.');
+            } else {
+                flash_set('error', 'Could not create portal account. The username or email may already be in use.');
+            }
+        }
+        redirect(APP_URL . '/students/view.php?id=' . $id . '#portal');
+    }
+
+    // ── Reset portal password ─────────────────────────────────────────────
+    if ($action === 'reset_portal_password' && $is_staff) {
+        $new_pw  = trim($_POST['new_password'] ?? '');
+        $new_pw2 = trim($_POST['new_password2'] ?? '');
+        if (!$student['user_id']) {
+            flash_set('error', 'No portal account linked to this student.');
+        } elseif ($new_pw === '') {
+            flash_set('error', 'New password is required.');
+        } elseif (strlen($new_pw) < 6) {
+            flash_set('error', 'Password must be at least 6 characters.');
+        } elseif ($new_pw !== $new_pw2) {
+            flash_set('error', 'Passwords do not match.');
+        } else {
+            $hash = password_hash($new_pw, PASSWORD_BCRYPT, ['cost' => BCRYPT_COST]);
+            db()->prepare('UPDATE users SET password = ? WHERE id = ?')
+                ->execute([$hash, $student['user_id']]);
+            log_change('students', 'UPDATE', $id,
+                $student['full_name'] . ' (' . $student['student_id'] . ')',
+                'portal_password', null, null,
+                'Portal password reset by ' . $user['full_name']);
+            flash_set('success', 'Portal password updated successfully.');
+        }
+        redirect(APP_URL . '/students/view.php?id=' . $id . '#portal');
+    }
+
+    // ── Toggle portal active ──────────────────────────────────────────────
+    if ($action === 'toggle_portal_active' && $is_staff) {
+        if (!$student['user_id']) {
+            flash_set('error', 'No portal account linked to this student.');
+        } else {
+            $cur = db()->prepare('SELECT is_active FROM users WHERE id = ?');
+            $cur->execute([$student['user_id']]);
+            $cur_active = (int)($cur->fetchColumn() ?? 1);
+            $new_active = $cur_active ? 0 : 1;
+            db()->prepare('UPDATE users SET is_active = ? WHERE id = ?')
+                ->execute([$new_active, $student['user_id']]);
+            $label = $new_active ? 'activated' : 'deactivated';
+            log_change('students', 'UPDATE', $id,
+                $student['full_name'] . ' (' . $student['student_id'] . ')',
+                'portal_active', (string)$cur_active, (string)$new_active,
+                'Portal account ' . $label);
+            flash_set('success', 'Portal account <strong>' . $label . '</strong>.');
+        }
+        redirect(APP_URL . '/students/view.php?id=' . $id . '#portal');
+    }
 }
 
 // ── Fetch related data ────────────────────────────────────────────────────────
@@ -114,6 +185,16 @@ $results_stmt = db()->prepare(
 );
 $results_stmt->execute([$id]);
 $results = $results_stmt->fetchAll();
+
+// ── Fetch portal user ─────────────────────────────────────────────────────────
+$portal_user = null;
+// Re-fetch student to pick up user_id if it was just created
+$student = sm_get_student($id);
+if (!empty($student['user_id'])) {
+    $pu = db()->prepare('SELECT id, username, email, is_active, created_at FROM users WHERE id = ?');
+    $pu->execute([$student['user_id']]);
+    $portal_user = $pu->fetch() ?: null;
+}
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -623,6 +704,103 @@ if ($has_fee):
             <?php endforeach; ?>
             </tbody>
         </table>
+    </div>
+</div>
+<?php endif; ?>
+
+<!-- ══════════════════════════════════════════════════════════
+     PORTAL CREDENTIALS
+═══════════════════════════════════════════════════════════ -->
+<?php if ($is_staff): ?>
+<div class="card mb-5" id="portal">
+    <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between">
+        <h6 class="mb-0 fw-semibold">
+            <i class="fas fa-key me-2 text-muted"></i>Student Portal Credentials
+        </h6>
+        <?php if ($portal_user): ?>
+        <span class="badge <?= $portal_user['is_active'] ? 'bg-success' : 'bg-secondary' ?>">
+            <?= $portal_user['is_active'] ? 'Active' : 'Inactive' ?>
+        </span>
+        <?php endif; ?>
+    </div>
+    <div class="card-body px-4 py-4">
+
+        <?php if (!$portal_user): ?>
+        <!-- No account yet -->
+        <p class="text-muted mb-3">No portal account has been created for this student yet.</p>
+        <form method="POST" action="<?= APP_URL ?>/students/view.php?id=<?= $id ?>#portal">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="create_portal_account">
+            <button type="submit" class="btn btn-primary btn-sm" style="border-radius:8px;"
+                    onclick="return confirm('Create a portal account for this student?\nUsername: <?= h($student['student_id']) ?>\nInitial password: Student ID');">
+                <i class="fas fa-user-plus me-1"></i> Create Portal Account
+            </button>
+            <small class="text-muted ms-2">Username will be the Student ID. Initial password = Student ID.</small>
+        </form>
+
+        <?php else: ?>
+        <!-- Account exists -->
+        <div class="row g-3 mb-4">
+            <div class="col-md-4">
+                <div class="fw-semibold" style="font-size:.8rem;color:#6b7280;">Username</div>
+                <code style="font-size:.95rem;"><?= h($portal_user['username']) ?></code>
+            </div>
+            <div class="col-md-4">
+                <div class="fw-semibold" style="font-size:.8rem;color:#6b7280;">Email (login)</div>
+                <span style="font-size:.875rem;"><?= $portal_user['email'] ? h($portal_user['email']) : '<span class="text-muted">—</span>' ?></span>
+            </div>
+            <div class="col-md-4">
+                <div class="fw-semibold" style="font-size:.8rem;color:#6b7280;">Account Created</div>
+                <span style="font-size:.875rem;"><?= date('M d, Y', strtotime($portal_user['created_at'])) ?></span>
+            </div>
+        </div>
+
+        <!-- Reset password -->
+        <div class="border rounded p-3 mb-3" style="border-radius:10px!important;background:#fafafa;">
+            <h6 class="fw-semibold mb-3" style="font-size:.875rem;">
+                <i class="fas fa-lock me-1 text-muted"></i> Reset Portal Password
+            </h6>
+            <form method="POST" action="<?= APP_URL ?>/students/view.php?id=<?= $id ?>#portal">
+                <?= csrf_field() ?>
+                <input type="hidden" name="action" value="reset_portal_password">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-4">
+                        <label class="form-label fw-medium" style="font-size:.8rem;">New Password <span class="text-danger">*</span></label>
+                        <input type="password" name="new_password" class="form-control form-control-sm"
+                               required minlength="6" autocomplete="new-password">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-medium" style="font-size:.8rem;">Confirm Password <span class="text-danger">*</span></label>
+                        <input type="password" name="new_password2" class="form-control form-control-sm"
+                               required minlength="6" autocomplete="new-password">
+                    </div>
+                    <div class="col-md-4">
+                        <button type="submit" class="btn btn-warning btn-sm" style="border-radius:8px;">
+                            <i class="fas fa-key me-1"></i> Reset Password
+                        </button>
+                    </div>
+                </div>
+                <small class="text-muted">Minimum 6 characters.</small>
+            </form>
+        </div>
+
+        <!-- Toggle active -->
+        <form method="POST" action="<?= APP_URL ?>/students/view.php?id=<?= $id ?>#portal"
+              onsubmit="return confirm('<?= $portal_user['is_active'] ? 'Deactivate' : 'Activate' ?> portal access for this student?');">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="toggle_portal_active">
+            <?php if ($portal_user['is_active']): ?>
+            <button type="submit" class="btn btn-outline-secondary btn-sm" style="border-radius:8px;">
+                <i class="fas fa-ban me-1"></i> Deactivate Portal Access
+            </button>
+            <?php else: ?>
+            <button type="submit" class="btn btn-outline-success btn-sm" style="border-radius:8px;">
+                <i class="fas fa-check me-1"></i> Activate Portal Access
+            </button>
+            <?php endif; ?>
+        </form>
+        <?php endif; ?>
+
     </div>
 </div>
 <?php endif; ?>

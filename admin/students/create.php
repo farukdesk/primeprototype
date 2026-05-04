@@ -269,7 +269,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                    null, null, null,
                    'New student added: ' . $full_name);
 
-        flash_set('success', 'Student <strong>' . h($full_name) . '</strong> added successfully.');
+        // Auto-create portal account (username = student_id, password = student_id, group = Students)
+        $portal_uid = sm_create_student_portal_user($new_id, $student_id, $full_name, $email ?: null, $phone ?: null);
+        if ($portal_uid) {
+            log_change('students', 'UPDATE', $new_id, $full_name . ' (' . $student_id . ')',
+                       'portal_account', null, (string)$portal_uid,
+                       'Portal account auto-created: ' . $student_id);
+            flash_set('success', 'Student <strong>' . h($full_name) . '</strong> added. Portal account created — username: <strong>' . h($student_id) . '</strong>. Initial password is the Student ID.');
+        } else {
+            flash_set('success', 'Student <strong>' . h($full_name) . '</strong> added successfully. (Portal account could not be auto-created — username may already exist.)');
+        }
+
         redirect(APP_URL . '/students/view.php?id=' . $new_id);
     }
 

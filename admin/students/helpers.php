@@ -539,3 +539,81 @@ function sm_get_student(int $id): array
 
     return $student;
 }
+
+// ── Student portal account helpers ───────────────────────────────────────────
+
+const SM_PORTAL_EMAIL_DOMAIN = '@student.portal';
+
+/**
+ * Returns the ID of the "Students" user group, creating it if needed.
+ */
+function sm_get_students_group_id(): int
+{
+    $row = db()->query("SELECT id FROM user_groups WHERE name = 'Students' LIMIT 1")->fetch();
+    if ($row) return (int)$row['id'];
+
+    db()->prepare(
+        "INSERT INTO user_groups (name, description, is_super, is_active) VALUES ('Students', 'Student portal user group', 0, 1)"
+    )->execute();
+    return (int)db()->lastInsertId();
+}
+
+/**
+ * Create a portal user account for a student and link it.
+ *
+ * Username  = student_id
+ * Password  = student_id (initial; admin can reset later)
+ * Group     = "Students"
+ *
+ * Returns the new user_id on success, or false if the username is already taken.
+ */
+function sm_create_student_portal_user(
+    int     $student_db_id,
+    string  $student_id,
+    string  $full_name,
+    ?string $email = null,
+    ?string $phone = null
+): int|false {
+    $group_id = sm_get_students_group_id();
+    $username = $student_id;
+
+    // Abort if username already claimed
+    $chk = db()->prepare('SELECT id FROM users WHERE username = ?');
+    $chk->execute([$username]);
+    if ($chk->fetch()) return false;
+
+    // Resolve email: prefer student's own email; fall back to a portal placeholder
+    $placeholder_email = $student_id . SM_PORTAL_EMAIL_DOMAIN;
+    $use_email = ($email !== null && $email !== '') ? $email : $placeholder_email;
+
+    // If that email is already registered, try the placeholder
+    $chk2 = db()->prepare('SELECT id FROM users WHERE email = ?');
+    $chk2->execute([$use_email]);
+    if ($chk2->fetch()) {
+        $use_email = $placeholder_email;
+        // If even the placeholder is taken, bail out
+        $chk3 = db()->prepare('SELECT id FROM users WHERE email = ?');
+        $chk3->execute([$use_email]);
+        if ($chk3->fetch()) return false;
+    }
+
+    $hash = password_hash($student_id, PASSWORD_BCRYPT, ['cost' => BCRYPT_COST]);
+
+    $pdo = db();
+    $pdo->prepare(
+        'INSERT INTO users (group_id, username, email, password, full_name, phone, is_active)
+         VALUES (?,?,?,?,?,?,1)'
+    )->execute([$group_id, $username, $use_email, $hash, $full_name, $phone]);
+    $user_id = (int)$pdo->lastInsertId();
+
+    // Multi-group assignment
+    $pdo->prepare(
+        'INSERT IGNORE INTO user_group_assignments (user_id, group_id, is_primary) VALUES (?,?,1)'
+    )->execute([$user_id, $group_id]);
+
+    // Link portal account to student record
+    $pdo->prepare('UPDATE students SET user_id = ? WHERE id = ?')
+        ->execute([$user_id, $student_db_id]);
+
+    return $user_id;
+}
