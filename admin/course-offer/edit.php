@@ -23,13 +23,15 @@ clear_old();
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
-    $dept_id       = (int)($_POST['dept_id']       ?? 0);
-    $program_id    = (int)($_POST['program_id']     ?? 0);
-    $batch_id      = (int)($_POST['batch_id']       ?? 0);
-    $curriculum_id = (int)($_POST['curriculum_id']  ?? 0);
-    $teacher_ids   = array_map('intval', (array)($_POST['teacher_ids'] ?? []));
-    $teacher_ids   = array_values(array_filter($teacher_ids));
-    $status        = $_POST['status'] === 'inactive' ? 'inactive' : 'active';
+    $dept_id         = (int)($_POST['dept_id']         ?? 0);
+    $program_id      = (int)($_POST['program_id']      ?? 0);
+    $batch_id        = (int)($_POST['batch_id']        ?? 0);
+    $curriculum_id   = (int)($_POST['curriculum_id']   ?? 0);
+    $semester        = trim($_POST['semester']         ?? '');
+    $academic_intake = trim($_POST['academic_intake']  ?? '');
+    $teacher_ids     = array_map('intval', (array)($_POST['teacher_ids'] ?? []));
+    $teacher_ids     = array_values(array_filter($teacher_ids));
+    $status          = ($_POST['status'] ?? '') === 'inactive' ? 'inactive' : 'active';
 
     // ── Validation ─────────────────────────────────────────────────────────
     if ($dept_id <= 0)       $errors[] = 'Please select a department.';
@@ -45,12 +47,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$chk->fetch()) $errors[] = 'Selected program does not belong to the selected department.';
     }
 
-    if ($program_id > 0 && $batch_id > 0) {
-        $chk = db()->prepare(
-            "SELECT id FROM course_curriculum_intakes WHERE id = ? AND program_id = ? LIMIT 1"
-        );
-        $chk->execute([$batch_id, $program_id]);
-        if (!$chk->fetch()) $errors[] = 'Selected batch does not belong to the selected program.';
+    if ($batch_id > 0) {
+        $chk = db()->prepare("SELECT id FROM student_batches WHERE id = ? LIMIT 1");
+        $chk->execute([$batch_id]);
+        if (!$chk->fetch()) $errors[] = 'Selected batch does not exist.';
     }
 
     if ($curriculum_id > 0) {
@@ -59,7 +59,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$chk->fetch()) $errors[] = 'Selected subject does not exist.';
     }
 
-    // Uniqueness check (exclude current offer)
+    // Uniqueness (exclude current offer)
     if (empty($errors)) {
         $dup = db()->prepare(
             "SELECT id FROM co_offers WHERE batch_id = ? AND curriculum_id = ? AND id != ? LIMIT 1"
@@ -73,9 +73,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($errors)) {
         db()->prepare(
             "UPDATE co_offers
-                SET dept_id = ?, program_id = ?, batch_id = ?, curriculum_id = ?, status = ?
+                SET dept_id = ?, program_id = ?, batch_id = ?, curriculum_id = ?,
+                    semester = ?, academic_intake = ?, status = ?
               WHERE id = ?"
-        )->execute([$dept_id, $program_id, $batch_id, $curriculum_id, $status, $id]);
+        )->execute([$dept_id, $program_id, $batch_id, $curriculum_id,
+                    $semester ?: null, $academic_intake ?: null, $status, $id]);
 
         co_save_teachers($id, $teacher_ids);
 
@@ -91,31 +93,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     save_old([
-        'dept_id'       => $dept_id,
-        'program_id'    => $program_id,
-        'batch_id'      => $batch_id,
-        'curriculum_id' => $curriculum_id,
-        'teacher_ids'   => $teacher_ids,
-        'status'        => $status,
+        'dept_id'         => $dept_id,
+        'program_id'      => $program_id,
+        'batch_id'        => $batch_id,
+        'curriculum_id'   => $curriculum_id,
+        'semester'        => $semester,
+        'academic_intake' => $academic_intake,
+        'teacher_ids'     => $teacher_ids,
+        'status'          => $status,
     ]);
 
-    // Reload offer with current (unsaved) values for the form
     $offer = array_merge($offer, [
-        'dept_id'       => $dept_id,
-        'program_id'    => $program_id,
-        'batch_id'      => $batch_id,
-        'curriculum_id' => $curriculum_id,
-        'status'        => $status,
+        'dept_id'         => $dept_id,
+        'program_id'      => $program_id,
+        'batch_id'        => $batch_id,
+        'curriculum_id'   => $curriculum_id,
+        'semester'        => $semester,
+        'academic_intake' => $academic_intake,
+        'status'          => $status,
     ]);
 }
 
 // ── Form data ─────────────────────────────────────────────────────────────────
-$departments = co_departments();
-$programs    = co_programs((int)$offer['dept_id']);
-$batches     = co_batches((int)$offer['program_id']);
+$departments   = co_departments();
+$all_batches   = co_student_batches();
+$semester_opts = co_semester_options();
+$intake_opts   = co_academic_intake_options();
+$programs      = co_programs((int)$offer['dept_id']);
+
 $cur_teachers = !empty($_SESSION['old']['teacher_ids'])
     ? array_map('intval', (array)$_SESSION['old']['teacher_ids'])
     : array_column(co_get_teachers($id), 'id');
+
+$cur_semester = $_SESSION['old']['semester']        ?? ($offer['semester']        ?? '');
+$cur_intake   = $_SESSION['old']['academic_intake'] ?? ($offer['academic_intake'] ?? '');
 
 // Subject for pre-load
 $pre_subject = null;
@@ -135,8 +146,8 @@ if ($sub_id > 0) {
 // Teachers for pre-load
 $pre_teachers = [];
 if (!empty($cur_teachers)) {
-    $ph  = implode(',', array_fill(0, count($cur_teachers), '?'));
-    $st  = db()->prepare(
+    $ph = implode(',', array_fill(0, count($cur_teachers), '?'));
+    $st = db()->prepare(
         "SELECT f.id, f.name, f.designation, d.name AS dept_name
            FROM dept_faculty f JOIN dept_departments d ON d.id = f.dept_id
           WHERE f.id IN ($ph) ORDER BY f.name ASC"
@@ -178,7 +189,7 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
         <!-- ── Main column ──────────────────────────────────────────────────── -->
         <div class="col-lg-8">
 
-            <!-- Department / Program / Batch cascade -->
+            <!-- Department / Program / Batch -->
             <div class="card mb-4" style="border-radius:12px;">
                 <div class="card-header py-3 px-4">
                     <h6 class="mb-0 fw-semibold">
@@ -222,15 +233,63 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                         </label>
                         <select name="batch_id" id="sel-batch" class="form-select" required>
                             <option value="">— Select Batch —</option>
-                            <?php foreach ($batches as $b): ?>
+                            <?php foreach ($all_batches as $b): ?>
                             <option value="<?= $b['id'] ?>" <?= $offer['batch_id'] == $b['id'] ? 'selected' : '' ?>>
-                                <?= h(co_batch_label($b)) ?>
+                                <?= h($b['name']) ?>
                             </option>
                             <?php endforeach; ?>
                         </select>
-                        <div class="form-text">Select a program first.</div>
+                        <div class="form-text">Batches from the Student Batches registry.</div>
                     </div>
 
+                </div>
+            </div>
+
+            <!-- Semester & Academic Intake -->
+            <div class="card mb-4" style="border-radius:12px;">
+                <div class="card-header py-3 px-4">
+                    <h6 class="mb-0 fw-semibold">
+                        <i class="fas fa-calendar-alt me-2 text-muted"></i>Semester &amp; Academic Intake
+                    </h6>
+                </div>
+                <div class="card-body p-4">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-medium">Semester</label>
+                            <input type="hidden" name="semester" id="semester-input"
+                                   value="<?= h($cur_semester) ?>">
+                            <select id="sel-semester" class="form-select">
+                                <option value="">— Select or type semester —</option>
+                                <?php foreach ($semester_opts as $s): ?>
+                                <option value="<?= h($s) ?>"
+                                    <?= $cur_semester === $s ? 'selected' : '' ?>>
+                                    <?= h($s) ?>
+                                </option>
+                                <?php endforeach; ?>
+                                <?php if ($cur_semester && !in_array($cur_semester, $semester_opts)): ?>
+                                <option value="<?= h($cur_semester) ?>" selected>
+                                    <?= h($cur_semester) ?>
+                                </option>
+                                <?php endif; ?>
+                            </select>
+                            <div class="form-text">e.g. Spring 2026, Summer 2026. Type to create custom.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-medium">Academic Intake</label>
+                            <input type="hidden" name="academic_intake" id="intake-input"
+                                   value="<?= h($cur_intake) ?>">
+                            <select id="sel-intake" class="form-select">
+                                <option value="">— Select academic intake —</option>
+                                <?php foreach ($intake_opts as $ai): ?>
+                                <option value="<?= h($ai) ?>"
+                                    <?= $cur_intake === $ai ? 'selected' : '' ?>>
+                                    <?= h($ai) ?>
+                                </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <div class="form-text">e.g. 1st Year 1st Semester.</div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -243,14 +302,17 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                     </h6>
                 </div>
                 <div class="card-body p-4">
-                    <input type="hidden" name="curriculum_id" id="curriculum_id_input" value="<?= h($offer['curriculum_id']) ?>">
+                    <input type="hidden" name="curriculum_id" id="curriculum_id_input"
+                           value="<?= h($offer['curriculum_id']) ?>">
                     <select id="sel-subject" class="form-select">
                         <option value="">— Type to search subject —</option>
                         <?php if ($pre_subject): ?>
                         <option value="<?= $pre_subject['id'] ?>" selected>
                             <?php
                             $code = $pre_subject['course_code'] ? '[' . $pre_subject['course_code'] . '] ' : '';
-                            echo h($code . $pre_subject['course_name'] . ' — ' . $pre_subject['program_name'] . ' (' . $pre_subject['dept_name'] . ')');
+                            echo h($code . $pre_subject['course_name']
+                                . ' — ' . $pre_subject['program_name']
+                                . ' (' . $pre_subject['dept_name'] . ')');
                             ?>
                         </option>
                         <?php endif; ?>
@@ -264,7 +326,7 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                 <div class="card-header py-3 px-4">
                     <h6 class="mb-0 fw-semibold">
                         <i class="fas fa-chalkboard-teacher me-2 text-muted"></i>Course Teacher(s)
-                        <small class="fw-normal text-muted ms-1">— searchable across all departments, multiple allowed</small>
+                        <small class="fw-normal text-muted ms-1">— searchable, multiple allowed</small>
                     </h6>
                 </div>
                 <div class="card-body p-4">
@@ -284,13 +346,11 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
 
         </div>
 
-        <!-- ── Sidebar column ───────────────────────────────────────────────── -->
+        <!-- ── Sidebar ───────────────────────────────────────────────────────── -->
         <div class="col-lg-4">
             <div class="card" style="border-radius:12px;">
                 <div class="card-header py-3 px-4">
-                    <h6 class="mb-0 fw-semibold">
-                        <i class="fas fa-cog me-2 text-muted"></i>Settings
-                    </h6>
+                    <h6 class="mb-0 fw-semibold"><i class="fas fa-cog me-2 text-muted"></i>Settings</h6>
                 </div>
                 <div class="card-body p-4">
                     <div class="mb-4">
@@ -319,12 +379,10 @@ var APP_URL = <?= json_encode(APP_URL) ?>;
 
 var deptSelect    = document.getElementById('sel-dept');
 var programSelect = document.getElementById('sel-program');
-var batchSelect   = document.getElementById('sel-batch');
 
 deptSelect.addEventListener('change', function() {
     var deptId = this.value;
     programSelect.innerHTML = '<option value="">— Select Program —</option>';
-    batchSelect.innerHTML   = '<option value="">— Select Batch —</option>';
     if (!deptId) return;
     fetch(APP_URL + '/course-offer/get-programs.php?dept_id=' + encodeURIComponent(deptId))
         .then(r => r.json())
@@ -337,39 +395,41 @@ deptSelect.addEventListener('change', function() {
             tsProgram.addOption({value: '', text: '— Select Program —'});
             data.forEach(function(p) { tsProgram.addOption({value: p.id, text: p.program_name}); });
             tsProgram.setValue('', true);
-            tsBatch.clear(true); tsBatch.clearOptions();
-            tsBatch.addOption({value: '', text: '— Select Batch —'});
-            tsBatch.setValue('', true);
-        });
-});
-
-programSelect.addEventListener('change', function() {
-    var programId = this.value;
-    batchSelect.innerHTML = '<option value="">— Select Batch —</option>';
-    if (!programId) return;
-    fetch(APP_URL + '/course-offer/get-batches.php?program_id=' + encodeURIComponent(programId))
-        .then(r => r.json())
-        .then(function(data) {
-            data.forEach(function(b) { var opt = new Option(b.label, b.id); batchSelect.appendChild(opt); });
-            tsBatch.clear(true); tsBatch.clearOptions();
-            tsBatch.addOption({value: '', text: '— Select Batch —'});
-            data.forEach(function(b) { tsBatch.addOption({value: b.id, text: b.label}); });
-            tsBatch.setValue('', true);
         });
 });
 
 new TomSelect('#sel-dept', { allowEmptyOption: true, sortField: 'text' });
 
 var tsProgram = new TomSelect('#sel-program', { allowEmptyOption: true, sortField: 'text' });
-var tsBatch   = new TomSelect('#sel-batch',   { allowEmptyOption: true, sortField: 'text' });
 
+new TomSelect('#sel-batch', { allowEmptyOption: true, sortField: 'text' });
+
+// ── TomSelect: Semester ───────────────────────────────────────────────────────
+var semesterInput = document.getElementById('semester-input');
+new TomSelect('#sel-semester', {
+    allowEmptyOption: true,
+    create: true,
+    sortField: 'text',
+    onChange: function(value) { semesterInput.value = value || ''; },
+});
+
+// ── TomSelect: Academic Intake ────────────────────────────────────────────────
+var intakeInput = document.getElementById('intake-input');
+new TomSelect('#sel-intake', {
+    allowEmptyOption: true,
+    create: true,
+    sortField: 'text',
+    onChange: function(value) { intakeInput.value = value || ''; },
+});
+
+// ── TomSelect: Subject ────────────────────────────────────────────────────────
 var curriculumInput = document.getElementById('curriculum_id_input');
 new TomSelect('#sel-subject', {
-    valueField:  'id',
-    labelField:  'text',
-    searchField: ['text'],
+    valueField:      'id',
+    labelField:      'text',
+    searchField:     ['text'],
     allowEmptyOption: true,
-    placeholder: 'Type to search…',
+    placeholder:     'Type to search…',
     load: function(query, callback) {
         if (!query.length) return callback();
         fetch(APP_URL + '/course-offer/get-subjects.php?q=' + encodeURIComponent(query))
@@ -390,6 +450,7 @@ new TomSelect('#sel-subject', {
     <?php endif; ?>
 });
 
+// ── TomSelect: Teachers ───────────────────────────────────────────────────────
 new TomSelect('#sel-teachers', {
     valueField:  'id',
     labelField:  'text',

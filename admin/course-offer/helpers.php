@@ -50,30 +50,56 @@ function co_programs(int $dept_id): array
 }
 
 /**
- * Batches (intakes) for a given program, newest first.
+ * All active student batches ordered by sort_order, name.
+ * (Replaces program-scoped intake lookup — student profiles use student_batches.)
  */
-function co_batches(int $program_id): array
+function co_student_batches(): array
 {
-    $st = db()->prepare(
-        "SELECT id, batch_name, intake_year, intake_season
-           FROM course_curriculum_intakes
-          WHERE program_id = ?
-          ORDER BY intake_year DESC, id DESC"
-    );
-    $st->execute([$program_id]);
-    return $st->fetchAll();
+    return db()
+        ->query("SELECT id, name FROM student_batches WHERE is_active = 1 ORDER BY sort_order ASC, name ASC")
+        ->fetchAll();
 }
 
 /**
- * Return a formatted batch label: "Batch Name (Season Year)" or just "Batch Name".
+ * Return the batch display label from a row that contains a `batch_name` key.
  */
 function co_batch_label(array $batch): string
 {
-    $parts = [];
-    if ($batch['intake_season']) $parts[] = $batch['intake_season'];
-    if ($batch['intake_year'])   $parts[] = $batch['intake_year'];
-    $suffix = $parts ? ' (' . implode(' ', $parts) . ')' : '';
-    return $batch['batch_name'] . $suffix;
+    return $batch['batch_name'] ?? '';
+}
+
+/**
+ * Predefined semester options (current year ± 1, three seasons each).
+ */
+function co_semester_options(): array
+{
+    $year  = (int)date('Y');
+    $opts  = [];
+    foreach ([$year - 1, $year, $year + 1] as $y) {
+        $opts[] = "Spring $y";
+        $opts[] = "Summer $y";
+        $opts[] = "Fall $y";
+    }
+    return $opts;
+}
+
+/**
+ * Predefined academic intake options.
+ */
+function co_academic_intake_options(): array
+{
+    return [
+        '1st Year 1st Semester',
+        '1st Year 2nd Semester',
+        '2nd Year 1st Semester',
+        '2nd Year 2nd Semester',
+        '3rd Year 1st Semester',
+        '3rd Year 2nd Semester',
+        '4th Year 1st Semester',
+        '4th Year 2nd Semester',
+        '5th Year 1st Semester',
+        '5th Year 2nd Semester',
+    ];
 }
 
 // ── Offer record helpers ──────────────────────────────────────────────────────
@@ -87,14 +113,14 @@ function co_get_offer(int $id): ?array
         "SELECT o.*,
                 d.name          AS dept_name,
                 p.program_name,
-                b.batch_name, b.intake_year, b.intake_season,
-                c.course_code,  c.course_name, c.credit, c.semester,
+                b.name          AS batch_name,
+                c.course_code,  c.course_name, c.credit, c.semester AS curriculum_semester,
                 cd.name         AS subject_dept_name,
                 cp.program_name AS subject_program_name
            FROM co_offers o
            JOIN dept_departments        d  ON d.id  = o.dept_id
            JOIN dept_academic_programs  p  ON p.id  = o.program_id
-           JOIN course_curriculum_intakes b ON b.id = o.batch_id
+           JOIN student_batches         b  ON b.id  = o.batch_id
            JOIN course_curriculum        c  ON c.id = o.curriculum_id
            JOIN dept_academic_programs  cp ON cp.id = c.program_id
            JOIN dept_departments        cd ON cd.id = cp.dept_id
@@ -163,6 +189,14 @@ function co_get_offers_filtered(array $filters = [], int $page = 1, int $per_pag
         $where[]  = 'o.batch_id = ?';
         $params[] = (int)$filters['batch_id'];
     }
+    if (!empty($filters['semester'])) {
+        $where[]  = 'o.semester = ?';
+        $params[] = $filters['semester'];
+    }
+    if (!empty($filters['academic_intake'])) {
+        $where[]  = 'o.academic_intake = ?';
+        $params[] = $filters['academic_intake'];
+    }
     if (!empty($filters['status'])) {
         $where[]  = 'o.status = ?';
         $params[] = $filters['status'];
@@ -189,22 +223,22 @@ function co_get_offers_filtered(array $filters = [], int $page = 1, int $per_pag
     $limit_val  = (int)$per_page;
     $offset_val = (int)max(0, $page - 1) * $limit_val;
     $rowsSt = db()->prepare(
-        "SELECT o.id, o.status, o.created_at,
+        "SELECT o.id, o.status, o.semester, o.academic_intake, o.created_at, o.batch_id,
                 d.name          AS dept_name,
                 p.program_name,
-                b.batch_name, b.intake_year, b.intake_season,
+                b.name          AS batch_name,
                 c.course_code,  c.course_name, c.credit,
                 cd.name         AS subject_dept_name,
                 cp.program_name AS subject_program_name
            FROM co_offers o
            JOIN dept_departments        d  ON d.id  = o.dept_id
            JOIN dept_academic_programs  p  ON p.id  = o.program_id
-           JOIN course_curriculum_intakes b ON b.id = o.batch_id
+           JOIN student_batches         b  ON b.id  = o.batch_id
            JOIN course_curriculum        c  ON c.id = o.curriculum_id
            JOIN dept_academic_programs  cp ON cp.id = c.program_id
            JOIN dept_departments        cd ON cd.id = cp.dept_id
           WHERE $whereSQL
-          ORDER BY o.created_at DESC, o.id DESC
+          ORDER BY b.sort_order ASC, b.name ASC, o.id ASC
           LIMIT {$limit_val} OFFSET {$offset_val}"
     );
     $rowsSt->execute($params);
