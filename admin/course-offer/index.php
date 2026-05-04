@@ -43,26 +43,9 @@ $all_batches      = co_student_batches();
 $semester_opts    = co_semester_options();
 $intake_opts      = co_academic_intake_options();
 
-// Pre-load teacher names for each offer row
-$offer_ids   = array_column($offers, 'id');
-$teacher_map = [];
-if (!empty($offer_ids)) {
-    $ph  = implode(',', array_fill(0, count($offer_ids), '?'));
-    $tst = db()->prepare(
-        "SELECT t.offer_id, f.name, f.designation
-           FROM co_offer_teachers t
-           JOIN dept_faculty f ON f.id = t.faculty_id
-          WHERE t.offer_id IN ($ph)
-          ORDER BY t.sort_order ASC, f.name ASC"
-    );
-    $tst->execute($offer_ids);
-    foreach ($tst->fetchAll() as $tr) {
-        $teacher_map[(int)$tr['offer_id']][] = [
-            'name'        => $tr['name'],
-            'designation' => $tr['designation'],
-        ];
-    }
-}
+// Pre-load subjects+teachers for each offer
+$offer_ids    = array_column($offers, 'id');
+$subjects_map = co_get_subjects_map($offer_ids);
 
 // Group rows by batch for the grouped display
 $grouped = [];
@@ -208,7 +191,7 @@ require_once __DIR__ . '/../includes/header.php';
             <?= h($group['batch_name']) ?>
         </span>
         <span class="badge bg-primary-subtle text-primary-emphasis border border-primary-subtle ms-1" style="font-size:.72rem;">
-            <?= count($group['rows']) ?> subject<?= count($group['rows']) != 1 ? 's' : '' ?>
+            <?= count($group['rows']) ?> offer<?= count($group['rows']) != 1 ? 's' : '' ?>
         </span>
     </div>
 
@@ -217,50 +200,27 @@ require_once __DIR__ . '/../includes/header.php';
             <thead class="table-light">
                 <tr>
                     <th style="width:2.5rem;">#</th>
-                    <th>Subject</th>
-                    <th style="width:4rem;" class="text-center">Credit</th>
+                    <th>Offering Dept / Program</th>
                     <th>Semester</th>
                     <th>Academic Intake</th>
-                    <th>Offering Dept / Program</th>
-                    <th>Teacher(s)</th>
                     <th style="width:5rem;" class="text-center">Status</th>
                     <th class="text-end" style="width:6rem;">Actions</th>
                 </tr>
             </thead>
             <tbody>
-            <?php foreach ($group['rows'] as $row): ?>
-            <tr>
-                <td class="text-muted"><?= $global_row++ ?></td>
+            <?php foreach ($group['rows'] as $row):
+                  $offer_subjects = $subjects_map[(int)$row['id']] ?? []; ?>
+            <tr class="align-top">
+                <td class="text-muted pt-3"><?= $global_row++ ?></td>
 
-                <!-- Subject code + name -->
-                <td>
-                    <?php if ($row['course_code']): ?>
-                    <span class="badge bg-light text-dark border me-1"
-                          style="font-size:.68rem;font-family:monospace;">
-                        <?= h($row['course_code']) ?>
-                    </span>
-                    <?php endif; ?>
-                    <strong><?= h($row['course_name']) ?></strong>
-                    <?php if (!empty($row['subject_dept_name'])): ?>
-                    <div class="text-muted" style="font-size:.75rem;">
-                        <?= h($row['subject_dept_name']) ?> &rsaquo; <?= h($row['subject_program_name']) ?>
-                    </div>
-                    <?php endif; ?>
-                </td>
-
-                <!-- Credit -->
-                <td class="text-center">
-                    <?php if ($row['credit']): ?>
-                    <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle">
-                        <?= h($row['credit']) ?> cr
-                    </span>
-                    <?php else: ?>
-                    <span class="text-muted">—</span>
-                    <?php endif; ?>
+                <!-- Offering dept / program -->
+                <td class="pt-3">
+                    <span class="fw-medium"><?= h($row['dept_name']) ?></span><br>
+                    <span class="text-muted small"><?= h($row['program_name']) ?></span>
                 </td>
 
                 <!-- Semester -->
-                <td>
+                <td class="pt-3">
                     <?php if ($row['semester']): ?>
                     <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle"
                           style="font-size:.72rem;">
@@ -272,7 +232,7 @@ require_once __DIR__ . '/../includes/header.php';
                 </td>
 
                 <!-- Academic Intake -->
-                <td>
+                <td class="pt-3">
                     <?php if ($row['academic_intake']): ?>
                     <span class="badge bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle"
                           style="font-size:.72rem;">
@@ -283,34 +243,8 @@ require_once __DIR__ . '/../includes/header.php';
                     <?php endif; ?>
                 </td>
 
-                <!-- Offering dept / program -->
-                <td class="small">
-                    <?= h($row['dept_name']) ?><br>
-                    <span class="text-muted"><?= h($row['program_name']) ?></span>
-                </td>
-
-                <!-- Teachers -->
-                <td>
-                    <?php $teachers = $teacher_map[(int)$row['id']] ?? []; ?>
-                    <?php if (empty($teachers)): ?>
-                    <span class="text-muted small">—</span>
-                    <?php else: ?>
-                    <div class="d-flex flex-wrap gap-1">
-                    <?php foreach ($teachers as $t): ?>
-                    <span class="badge bg-primary-subtle text-primary-emphasis border border-primary-subtle"
-                          style="font-size:.7rem;">
-                        <i class="fas fa-chalkboard-teacher me-1 opacity-75"></i><?= h($t['name']) ?>
-                        <?php if ($t['designation']): ?>
-                        <span class="opacity-75">(<?= h($t['designation']) ?>)</span>
-                        <?php endif; ?>
-                    </span>
-                    <?php endforeach; ?>
-                    </div>
-                    <?php endif; ?>
-                </td>
-
                 <!-- Status -->
-                <td class="text-center">
+                <td class="text-center pt-3">
                     <?php if ($row['status'] === 'active'): ?>
                     <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle">Active</span>
                     <?php else: ?>
@@ -319,7 +253,7 @@ require_once __DIR__ . '/../includes/header.php';
                 </td>
 
                 <!-- Actions -->
-                <td class="text-end">
+                <td class="text-end pt-3">
                     <?php if (co_is_staff()): ?>
                     <a href="<?= APP_URL ?>/course-offer/edit.php?id=<?= $row['id'] ?>"
                        class="btn btn-sm btn-outline-secondary me-1" title="Edit">
@@ -329,12 +263,84 @@ require_once __DIR__ . '/../includes/header.php';
                     <?php if (co_can_delete()): ?>
                     <a href="<?= APP_URL ?>/course-offer/delete.php?id=<?= $row['id'] ?>"
                        class="btn btn-sm btn-outline-danger" title="Delete"
-                       onclick="return confirm('Delete this course offer? This cannot be undone.')">
+                       onclick="return confirm('Delete this course offer and all its subjects? This cannot be undone.')">
                         <i class="fas fa-trash"></i>
                     </a>
                     <?php endif; ?>
                 </td>
             </tr>
+
+            <?php if (!empty($offer_subjects)): ?>
+            <tr>
+                <td colspan="6" class="p-0 pb-2">
+                    <div class="mx-3">
+                        <table class="table table-sm table-bordered mb-0"
+                               style="font-size:.8rem; background:#fafbfc;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width:1.5rem;" class="text-center text-muted">#</th>
+                                    <th>Subject</th>
+                                    <th style="width:3.5rem;" class="text-center">Credit</th>
+                                    <th>Teacher(s)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            <?php foreach ($offer_subjects as $si => $sub): ?>
+                            <tr>
+                                <td class="text-center text-muted"><?= $si + 1 ?></td>
+                                <td>
+                                    <?php if ($sub['course_code']): ?>
+                                    <span class="badge bg-light text-dark border me-1"
+                                          style="font-size:.65rem;font-family:monospace;">
+                                        <?= h($sub['course_code']) ?>
+                                    </span>
+                                    <?php endif; ?>
+                                    <strong><?= h($sub['course_name']) ?></strong>
+                                    <div class="text-muted" style="font-size:.72rem;">
+                                        <?= h($sub['dept_name']) ?> &rsaquo; <?= h($sub['program_name']) ?>
+                                    </div>
+                                </td>
+                                <td class="text-center">
+                                    <?php if ($sub['credit']): ?>
+                                    <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle">
+                                        <?= h($sub['credit']) ?> cr
+                                    </span>
+                                    <?php else: ?>
+                                    <span class="text-muted">—</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <?php if (empty($sub['teachers'])): ?>
+                                    <span class="text-muted">—</span>
+                                    <?php else: ?>
+                                    <div class="d-flex flex-wrap gap-1">
+                                    <?php foreach ($sub['teachers'] as $t): ?>
+                                    <span class="badge bg-primary-subtle text-primary-emphasis border border-primary-subtle"
+                                          style="font-size:.67rem;">
+                                        <i class="fas fa-chalkboard-teacher me-1 opacity-75"></i><?= h($t['name']) ?>
+                                        <?php if ($t['designation']): ?>
+                                        <span class="opacity-75">(<?= h($t['designation']) ?>)</span>
+                                        <?php endif; ?>
+                                    </span>
+                                    <?php endforeach; ?>
+                                    </div>
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </td>
+            </tr>
+            <?php else: ?>
+            <tr>
+                <td colspan="6" class="pb-2">
+                    <div class="mx-3 text-muted small fst-italic">No subjects added yet.</div>
+                </td>
+            </tr>
+            <?php endif; ?>
+
             <?php endforeach; ?>
             </tbody>
         </table>
