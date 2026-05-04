@@ -57,11 +57,27 @@ FROM `co_offers`
 WHERE `curriculum_id` IS NOT NULL;
 
 -- ── 4. Migrate: co_offer_teachers → co_offer_subject_teachers ────────────────
-INSERT IGNORE INTO `co_offer_subject_teachers` (`offer_subject_id`, `faculty_id`, `sort_order`)
-SELECT cos.`id`, cot.`faculty_id`, cot.`sort_order`
-FROM `co_offer_subjects` cos
-JOIN `co_offers` o   ON o.`id`  = cos.`offer_id`
-JOIN `co_offer_teachers` cot ON cot.`offer_id` = o.`id`;
+-- Wrapped in a procedure so the INSERT is skipped if co_offer_teachers no
+-- longer exists (e.g. the migration is re-run or was partially applied).
+DROP PROCEDURE IF EXISTS `_co_migrate_teachers`;
+DELIMITER ;;
+CREATE PROCEDURE `_co_migrate_teachers`()
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.TABLES
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME   = 'co_offer_teachers'
+  ) THEN
+    INSERT IGNORE INTO `co_offer_subject_teachers` (`offer_subject_id`, `faculty_id`, `sort_order`)
+    SELECT cos.`id`, cot.`faculty_id`, cot.`sort_order`
+    FROM `co_offer_subjects` cos
+    JOIN `co_offers` o            ON o.`id`  = cos.`offer_id`
+    JOIN `co_offer_teachers` cot  ON cot.`offer_id` = o.`id`;
+  END IF;
+END;;
+DELIMITER ;
+CALL `_co_migrate_teachers`();
+DROP PROCEDURE IF EXISTS `_co_migrate_teachers`;
 
 -- ── 5. Drop co_offer_teachers ─────────────────────────────────────────────────
 DROP TABLE IF EXISTS `co_offer_teachers`;
