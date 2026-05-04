@@ -179,6 +179,7 @@ require_once __DIR__ . '/../includes/header.php';
     </small>
 </div>
 
+// Global row counter across all batch groups, starting at the page offset.
 <?php $global_row = ($cur_page - 1) * $per_page + 1; ?>
 <?php foreach ($grouped as $batch_id => $group): ?>
 <div class="card mb-4" style="border-radius:12px; overflow:hidden;">

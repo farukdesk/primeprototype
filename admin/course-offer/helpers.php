@@ -249,8 +249,9 @@ function co_get_subjects_map(array $offer_ids): array
  * $rows is an array of:
  *   ['curriculum_id' => int, 'teacher_ids' => int[]]
  *
- * Runs inside a transaction; any existing co_offer_subjects (and their
- * cascaded co_offer_subject_teachers) are replaced.
+ * Any existing co_offer_subjects (and their cascaded co_offer_subject_teachers)
+ * are deleted first, then the new rows are inserted. The caller is responsible
+ * for wrapping this in a transaction when atomicity is required.
  */
 function co_save_subjects_teachers(int $offer_id, array $rows): void
 {
