@@ -26,18 +26,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $dept_id         = (int)($_POST['dept_id']         ?? 0);
     $program_id      = (int)($_POST['program_id']      ?? 0);
     $batch_id        = (int)($_POST['batch_id']        ?? 0);
-    $curriculum_id   = (int)($_POST['curriculum_id']   ?? 0);
     $semester        = trim($_POST['semester']         ?? '');
     $academic_intake = trim($_POST['academic_intake']  ?? '');
-    $teacher_ids     = array_map('intval', (array)($_POST['teacher_ids'] ?? []));
-    $teacher_ids     = array_values(array_filter($teacher_ids));
     $status          = ($_POST['status'] ?? '') === 'inactive' ? 'inactive' : 'active';
 
+    // Parse subject rows
+    $rows_raw = (array)($_POST['rows'] ?? []);
+    $rows     = [];
+    foreach ($rows_raw as $row) {
+        $cid  = (int)($row['curriculum_id'] ?? 0);
+        $tids = array_values(array_filter(array_map('intval', (array)($row['teacher_ids'] ?? []))));
+        if ($cid > 0) {
+            $rows[] = ['curriculum_id' => $cid, 'teacher_ids' => $tids];
+        }
+    }
+
     // ── Validation ─────────────────────────────────────────────────────────
-    if ($dept_id <= 0)       $errors[] = 'Please select a department.';
-    if ($program_id <= 0)    $errors[] = 'Please select a program.';
-    if ($batch_id <= 0)      $errors[] = 'Please select a batch.';
-    if ($curriculum_id <= 0) $errors[] = 'Please choose a subject.';
+    if ($dept_id <= 0)    $errors[] = 'Please select a department.';
+    if ($program_id <= 0) $errors[] = 'Please select a program.';
+    if ($batch_id <= 0)   $errors[] = 'Please select a batch.';
+    if (empty($rows))     $errors[] = 'Please add at least one subject row.';
 
     if ($dept_id > 0 && $program_id > 0) {
         $chk = db()->prepare(
@@ -53,40 +61,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$chk->fetch()) $errors[] = 'Selected batch does not exist.';
     }
 
-    if ($curriculum_id > 0) {
+    $seen_cids = [];
+    foreach ($rows as &$row) {
+        $cid = $row['curriculum_id'];
+        if (in_array($cid, $seen_cids, true)) {
+            $errors[] = 'Duplicate subject selected. Each subject may appear only once.';
+            break;
+        }
+        $seen_cids[] = $cid;
         $chk = db()->prepare("SELECT id FROM course_curriculum WHERE id = ? LIMIT 1");
-        $chk->execute([$curriculum_id]);
-        if (!$chk->fetch()) $errors[] = 'Selected subject does not exist.';
-    }
-
-    // Uniqueness (exclude current offer)
-    if (empty($errors)) {
-        $dup = db()->prepare(
-            "SELECT id FROM co_offers WHERE batch_id = ? AND curriculum_id = ? AND id != ? LIMIT 1"
-        );
-        $dup->execute([$batch_id, $curriculum_id, $id]);
-        if ($dup->fetch()) {
-            $errors[] = 'This subject is already offered for the selected batch.';
+        $chk->execute([$cid]);
+        if (!$chk->fetch()) {
+            $errors[] = "Subject ID $cid does not exist.";
         }
     }
+    unset($row);
 
     if (empty($errors)) {
         db()->prepare(
             "UPDATE co_offers
-                SET dept_id = ?, program_id = ?, batch_id = ?, curriculum_id = ?,
+                SET dept_id = ?, program_id = ?, batch_id = ?,
                     semester = ?, academic_intake = ?, status = ?
               WHERE id = ?"
-        )->execute([$dept_id, $program_id, $batch_id, $curriculum_id,
+        )->execute([$dept_id, $program_id, $batch_id,
                     $semester ?: null, $academic_intake ?: null, $status, $id]);
 
-        co_save_teachers($id, $teacher_ids);
+        co_save_subjects_teachers($id, $rows);
 
-        $sub = db()->prepare("SELECT course_name FROM course_curriculum WHERE id = ? LIMIT 1");
-        $sub->execute([$curriculum_id]);
-        $sub_name = $sub->fetchColumn() ?: 'Subject #' . $curriculum_id;
-
-        log_change('course-offer', 'UPDATE', $id, $sub_name, null, null, null,
-            'Course offer #' . $id . ' updated');
+        log_change('course-offer', 'UPDATE', $id, 'Offer #' . $id, null, null, null,
+            'Course offer #' . $id . ' updated with ' . count($rows) . ' subject(s)');
 
         flash_set('success', 'Course offer updated.');
         redirect(APP_URL . '/course-offer/index.php');
@@ -96,10 +99,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'dept_id'         => $dept_id,
         'program_id'      => $program_id,
         'batch_id'        => $batch_id,
-        'curriculum_id'   => $curriculum_id,
         'semester'        => $semester,
         'academic_intake' => $academic_intake,
-        'teacher_ids'     => $teacher_ids,
+        'rows'            => $rows,
         'status'          => $status,
     ]);
 
@@ -107,7 +109,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'dept_id'         => $dept_id,
         'program_id'      => $program_id,
         'batch_id'        => $batch_id,
-        'curriculum_id'   => $curriculum_id,
         'semester'        => $semester,
         'academic_intake' => $academic_intake,
         'status'          => $status,
@@ -121,39 +122,58 @@ $semester_opts = co_semester_options();
 $intake_opts   = co_academic_intake_options();
 $programs      = co_programs((int)$offer['dept_id']);
 
-$cur_teachers = !empty($_SESSION['old']['teacher_ids'])
-    ? array_map('intval', (array)$_SESSION['old']['teacher_ids'])
-    : array_column(co_get_teachers($id), 'id');
-
 $cur_semester = $_SESSION['old']['semester']        ?? ($offer['semester']        ?? '');
 $cur_intake   = $_SESSION['old']['academic_intake'] ?? ($offer['academic_intake'] ?? '');
 
-// Subject for pre-load
-$pre_subject = null;
-$sub_id = (int)$offer['curriculum_id'];
-if ($sub_id > 0) {
-    $st = db()->prepare(
-        "SELECT c.id, c.course_code, c.course_name, c.credit, p.program_name, d.name AS dept_name
-           FROM course_curriculum c
-           JOIN dept_academic_programs p ON p.id = c.program_id
-           JOIN dept_departments       d ON d.id = p.dept_id
-          WHERE c.id = ? LIMIT 1"
-    );
-    $st->execute([$sub_id]);
-    $pre_subject = $st->fetch() ?: null;
-}
-
-// Teachers for pre-load
-$pre_teachers = [];
-if (!empty($cur_teachers)) {
-    $ph = implode(',', array_fill(0, count($cur_teachers), '?'));
-    $st = db()->prepare(
-        "SELECT f.id, f.name, f.designation, d.name AS dept_name
-           FROM dept_faculty f JOIN dept_departments d ON d.id = f.dept_id
-          WHERE f.id IN ($ph) ORDER BY f.name ASC"
-    );
-    $st->execute($cur_teachers);
-    $pre_teachers = $st->fetchAll();
+// Build row list: prefer session-old (after validation error), else load from DB
+if (!empty($_SESSION['old']['rows'])) {
+    $raw_rows = (array)$_SESSION['old']['rows'];
+    $pre_rows = [];
+    foreach ($raw_rows as $row) {
+        $cid  = (int)($row['curriculum_id'] ?? 0);
+        if ($cid <= 0) continue;
+        $tids = array_values(array_filter(array_map('intval', (array)($row['teacher_ids'] ?? []))));
+        $st = db()->prepare(
+            "SELECT c.id, c.course_code, c.course_name, c.credit, p.program_name, d.name AS dept_name
+               FROM course_curriculum c
+               JOIN dept_academic_programs p ON p.id = c.program_id
+               JOIN dept_departments       d ON d.id = p.dept_id
+              WHERE c.id = ? LIMIT 1"
+        );
+        $st->execute([$cid]);
+        $sub = $st->fetch() ?: null;
+        $pre_teachers = [];
+        if (!empty($tids)) {
+            $ph = implode(',', array_fill(0, count($tids), '?'));
+            $ts = db()->prepare(
+                "SELECT f.id, f.name, f.designation, d.name AS dept_name
+                   FROM dept_faculty f JOIN dept_departments d ON d.id = f.dept_id
+                  WHERE f.id IN ($ph) ORDER BY f.name ASC"
+            );
+            $ts->execute($tids);
+            $pre_teachers = $ts->fetchAll();
+        }
+        $pre_rows[] = ['subject' => $sub, 'teacher_ids' => $tids, 'teachers' => $pre_teachers];
+    }
+} else {
+    // Load from DB
+    $db_subjects = co_get_subjects_with_teachers($id);
+    $pre_rows = [];
+    foreach ($db_subjects as $sub) {
+        $tids = array_column($sub['teachers'], 'id');
+        $pre_rows[] = [
+            'subject'    => [
+                'id'           => $sub['curriculum_id'],
+                'course_code'  => $sub['course_code'],
+                'course_name'  => $sub['course_name'],
+                'credit'       => $sub['credit'],
+                'program_name' => $sub['program_name'],
+                'dept_name'    => $sub['dept_name'],
+            ],
+            'teacher_ids' => $tids,
+            'teachers'    => $sub['teachers'],
+        ];
+    }
 }
 
 require_once __DIR__ . '/../includes/header.php';
@@ -293,54 +313,73 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                 </div>
             </div>
 
-            <!-- Subject -->
-            <div class="card mb-4" style="border-radius:12px;">
-                <div class="card-header py-3 px-4">
-                    <h6 class="mb-0 fw-semibold">
-                        <i class="fas fa-book me-2 text-muted"></i>Subject
-                        <small class="fw-normal text-muted ms-1">— searchable across all departments &amp; programs</small>
-                    </h6>
-                </div>
-                <div class="card-body p-4">
-                    <input type="hidden" name="curriculum_id" id="curriculum_id_input"
-                           value="<?= h($offer['curriculum_id']) ?>">
-                    <select id="sel-subject" class="form-select">
-                        <option value="">— Type to search subject —</option>
-                        <?php if ($pre_subject): ?>
-                        <option value="<?= $pre_subject['id'] ?>" selected>
-                            <?php
-                            $code = $pre_subject['course_code'] ? '[' . $pre_subject['course_code'] . '] ' : '';
-                            echo h($code . $pre_subject['course_name']
-                                . ' — ' . $pre_subject['program_name']
-                                . ' (' . $pre_subject['dept_name'] . ')');
-                            ?>
-                        </option>
-                        <?php endif; ?>
-                    </select>
-                    <div class="form-text">Search by subject code or name.</div>
-                </div>
-            </div>
-
-            <!-- Teachers -->
+            <!-- Subjects & Teachers -->
             <div class="card" style="border-radius:12px;">
-                <div class="card-header py-3 px-4">
+                <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center">
                     <h6 class="mb-0 fw-semibold">
-                        <i class="fas fa-chalkboard-teacher me-2 text-muted"></i>Course Teacher(s)
-                        <small class="fw-normal text-muted ms-1">— searchable, multiple allowed</small>
+                        <i class="fas fa-book me-2 text-muted"></i>Subjects &amp; Teachers
+                        <small class="fw-normal text-muted ms-1">— one row per subject</small>
                     </h6>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="btn-add-row"
+                            style="border-radius:8px;">
+                        <i class="fas fa-plus me-1"></i>Add Row
+                    </button>
                 </div>
-                <div class="card-body p-4">
-                    <select name="teacher_ids[]" id="sel-teachers" class="form-select" multiple>
-                        <?php foreach ($pre_teachers as $t): ?>
-                        <option value="<?= $t['id'] ?>" selected>
-                            <?php
-                            $desig = $t['designation'] ? ', ' . $t['designation'] : '';
-                            echo h($t['name'] . $desig . ' (' . $t['dept_name'] . ')');
-                            ?>
-                        </option>
-                        <?php endforeach; ?>
-                    </select>
-                    <div class="form-text">Type a name or department to search. You may assign more than one teacher.</div>
+                <div class="card-body p-3">
+                    <div class="table-responsive">
+                        <table class="table table-bordered align-middle mb-2" id="subjects-table"
+                               style="font-size:.875rem;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width:44%;">Subject <span class="text-danger">*</span></th>
+                                    <th>Assigned Teacher(s)</th>
+                                    <th style="width:2.5rem;"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="subjects-tbody">
+                                <?php foreach ($pre_rows as $ri => $pr): ?>
+                                <tr class="subject-row" data-row="<?= $ri ?>">
+                                    <td>
+                                        <input type="hidden"
+                                               name="rows[<?= $ri ?>][curriculum_id]"
+                                               class="curriculum-id-input"
+                                               value="<?= (int)($pr['subject']['id'] ?? 0) ?>">
+                                        <select class="form-select form-select-sm subject-select">
+                                            <option value="">— Type to search subject —</option>
+                                            <?php if ($pr['subject']): $sub = $pr['subject'];
+                                                $code = $sub['course_code'] ? '[' . $sub['course_code'] . '] ' : ''; ?>
+                                            <option value="<?= $sub['id'] ?>" selected>
+                                                <?= h($code . $sub['course_name'] . ' — ' . $sub['program_name'] . ' (' . $sub['dept_name'] . ')') ?>
+                                            </option>
+                                            <?php endif; ?>
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <select name="rows[<?= $ri ?>][teacher_ids][]"
+                                                class="form-select form-select-sm teacher-select" multiple>
+                                            <?php foreach ($pr['teachers'] as $t):
+                                                $desig = $t['designation'] ? ', ' . $t['designation'] : ''; ?>
+                                            <option value="<?= $t['id'] ?>" selected>
+                                                <?= h($t['name'] . $desig . ' (' . $t['dept_name'] . ')') ?>
+                                            </option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </td>
+                                    <td class="text-center">
+                                        <button type="button" class="btn btn-sm btn-outline-danger btn-remove-row"
+                                                title="Remove row" style="border-radius:6px;">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="text-muted small ps-1" id="no-rows-hint"
+                         <?= !empty($pre_rows) ? 'style="display:none;"' : '' ?>>
+                        Click <strong>Add Row</strong> to add a subject.
+                    </div>
                 </div>
             </div>
 
@@ -374,8 +413,28 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
     </div>
 </form>
 
+<?php $pre_rows_json = json_encode(array_map(function($pr, $i) {
+    $sub = $pr['subject'];
+    $code = ($sub && $sub['course_code']) ? '[' . $sub['course_code'] . '] ' : '';
+    return [
+        'ri'          => $i,
+        'cid'         => $sub ? (int)$sub['id'] : 0,
+        'ctext'       => $sub ? ($code . $sub['course_name'] . ' — ' . $sub['program_name'] . ' (' . $sub['dept_name'] . ')') : '',
+        'teacher_ids' => $pr['teacher_ids'],
+        'teachers'    => array_map(function($t) {
+            $desig = $t['designation'] ? ', ' . $t['designation'] : '';
+            return ['id' => (int)$t['id'], 'text' => $t['name'] . $desig . ' (' . $t['dept_name'] . ')'];
+        }, $pr['teachers']),
+    ];
+}, $pre_rows, array_keys($pre_rows))); ?>
+
 <script>
-var APP_URL = <?= json_encode(APP_URL) ?>;
+var APP_URL    = <?= json_encode(APP_URL) ?>;
+var PRE_ROWS   = <?= $pre_rows_json ?>;
+var rowCounter = <?= count($pre_rows) ?>;
+
+var tsSubjectMap = {};
+var tsTeacherMap = {};
 
 var deptSelect    = document.getElementById('sel-dept');
 var programSelect = document.getElementById('sel-program');
@@ -387,10 +446,6 @@ deptSelect.addEventListener('change', function() {
     fetch(APP_URL + '/course-offer/get-programs.php?dept_id=' + encodeURIComponent(deptId))
         .then(r => r.json())
         .then(function(data) {
-            data.forEach(function(p) {
-                var opt = new Option(p.program_name, p.id);
-                programSelect.appendChild(opt);
-            });
             tsProgram.clear(true); tsProgram.clearOptions();
             tsProgram.addOption({value: '', text: '— Select Program —'});
             data.forEach(function(p) { tsProgram.addOption({value: p.id, text: p.program_name}); });
@@ -398,79 +453,111 @@ deptSelect.addEventListener('change', function() {
         });
 });
 
-new TomSelect('#sel-dept', { allowEmptyOption: true, sortField: 'text' });
-
+new TomSelect('#sel-dept',    { allowEmptyOption: true, sortField: 'text' });
 var tsProgram = new TomSelect('#sel-program', { allowEmptyOption: true, sortField: 'text' });
+new TomSelect('#sel-batch',   { allowEmptyOption: true, sortField: 'text' });
 
-new TomSelect('#sel-batch', { allowEmptyOption: true, sortField: 'text' });
-
-// ── TomSelect: Semester ───────────────────────────────────────────────────────
 var semesterInput = document.getElementById('semester-input');
 new TomSelect('#sel-semester', {
-    allowEmptyOption: true,
-    create: true,
-    sortField: 'text',
-    onChange: function(value) { semesterInput.value = value || ''; },
+    allowEmptyOption: true, create: true, sortField: 'text',
+    onChange: function(v) { semesterInput.value = v || ''; },
 });
 
-// ── TomSelect: Academic Intake ────────────────────────────────────────────────
 var intakeInput = document.getElementById('intake-input');
 new TomSelect('#sel-intake', {
-    allowEmptyOption: true,
-    create: true,
-    sortField: 'text',
-    onChange: function(value) { intakeInput.value = value || ''; },
+    allowEmptyOption: true, create: true, sortField: 'text',
+    onChange: function(v) { intakeInput.value = v || ''; },
 });
 
-// ── TomSelect: Subject ────────────────────────────────────────────────────────
-var curriculumInput = document.getElementById('curriculum_id_input');
-new TomSelect('#sel-subject', {
-    valueField:      'id',
-    labelField:      'text',
-    searchField:     ['text'],
-    allowEmptyOption: true,
-    placeholder:     'Type to search…',
-    load: function(query, callback) {
-        if (!query.length) return callback();
-        fetch(APP_URL + '/course-offer/get-subjects.php?q=' + encodeURIComponent(query))
-            .then(r => r.json()).then(callback).catch(function() { callback(); });
-    },
-    onChange: function(value) { curriculumInput.value = value || ''; },
-    <?php if ($pre_subject): ?>
-    items:   [<?= json_encode($sub_id) ?>],
-    options: [{
-        id:   <?= json_encode($sub_id) ?>,
-        text: <?= json_encode(
-            ($pre_subject['course_code'] ? '[' . $pre_subject['course_code'] . '] ' : '')
-            . $pre_subject['course_name']
-            . ' — ' . $pre_subject['program_name']
-            . ' (' . $pre_subject['dept_name'] . ')'
-        ) ?>
-    }],
-    <?php endif; ?>
+function buildSubjectSelect(ri, cid, ctext) {
+    var el = document.querySelector('[data-row="' + ri + '"] .subject-select');
+    var hiddenEl = document.querySelector('[data-row="' + ri + '"] .curriculum-id-input');
+    var opts = { valueField: 'id', labelField: 'text', searchField: ['text'],
+        allowEmptyOption: true, placeholder: 'Type to search subject\u2026',
+        load: function(q, cb) {
+            if (!q.length) return cb();
+            fetch(APP_URL + '/course-offer/get-subjects.php?q=' + encodeURIComponent(q))
+                .then(r => r.json()).then(cb).catch(function() { cb(); });
+        },
+        onChange: function(v) { hiddenEl.value = v || ''; },
+    };
+    if (cid) { opts.items = [String(cid)]; opts.options = [{id: cid, text: ctext}]; }
+    tsSubjectMap[ri] = new TomSelect(el, opts);
+}
+
+function buildTeacherSelect(ri, tids, teachers) {
+    var el = document.querySelector('[data-row="' + ri + '"] .teacher-select');
+    var opts = { valueField: 'id', labelField: 'text', searchField: ['text'],
+        maxItems: null, placeholder: 'Type to search teacher\u2026',
+        plugins: ['remove_button'],
+        load: function(q, cb) {
+            if (!q.length) return cb();
+            fetch(APP_URL + '/course-offer/get-faculty.php?q=' + encodeURIComponent(q))
+                .then(r => r.json()).then(cb).catch(function() { cb(); });
+        },
+    };
+    if (tids && tids.length) {
+        opts.items   = tids.map(String);
+        opts.options = teachers;
+    }
+    tsTeacherMap[ri] = new TomSelect(el, opts);
+}
+
+function addRow(cid, ctext, tids, teachers) {
+    var ri = rowCounter++;
+    var noHint = document.getElementById('no-rows-hint');
+    if (noHint) noHint.style.display = 'none';
+
+    var tr = document.createElement('tr');
+    tr.className = 'subject-row';
+    tr.setAttribute('data-row', ri);
+    tr.innerHTML =
+        '<td>' +
+            '<input type="hidden" name="rows[' + ri + '][curriculum_id]" class="curriculum-id-input" value="' + (cid || '') + '">' +
+            '<select class="form-select form-select-sm subject-select">' +
+                '<option value="">— Type to search subject —</option>' +
+            '</select>' +
+        '</td>' +
+        '<td>' +
+            '<select name="rows[' + ri + '][teacher_ids][]" class="form-select form-select-sm teacher-select" multiple></select>' +
+        '</td>' +
+        '<td class="text-center">' +
+            '<button type="button" class="btn btn-sm btn-outline-danger btn-remove-row" title="Remove row" style="border-radius:6px;">' +
+                '<i class="fas fa-times"></i>' +
+            '</button>' +
+        '</td>';
+
+    document.getElementById('subjects-tbody').appendChild(tr);
+    buildSubjectSelect(ri, cid || 0, ctext || '');
+    buildTeacherSelect(ri, tids || [], teachers || []);
+}
+
+function removeRow(btn) {
+    var tr = btn.closest('tr.subject-row');
+    var ri = parseInt(tr.getAttribute('data-row'));
+    if (tsSubjectMap[ri]) { tsSubjectMap[ri].destroy(); delete tsSubjectMap[ri]; }
+    if (tsTeacherMap[ri]) { tsTeacherMap[ri].destroy(); delete tsTeacherMap[ri]; }
+    tr.remove();
+    var tbody = document.getElementById('subjects-tbody');
+    var noHint = document.getElementById('no-rows-hint');
+    if (noHint) noHint.style.display = tbody.children.length === 0 ? '' : 'none';
+}
+
+document.getElementById('subjects-tbody').addEventListener('click', function(e) {
+    var btn = e.target.closest('.btn-remove-row');
+    if (btn) removeRow(btn);
 });
 
-// ── TomSelect: Teachers ───────────────────────────────────────────────────────
-new TomSelect('#sel-teachers', {
-    valueField:  'id',
-    labelField:  'text',
-    searchField: ['text'],
-    maxItems:    null,
-    placeholder: 'Type to search teacher…',
-    plugins:     ['remove_button'],
-    load: function(query, callback) {
-        if (!query.length) return callback();
-        fetch(APP_URL + '/course-offer/get-faculty.php?q=' + encodeURIComponent(query))
-            .then(r => r.json()).then(callback).catch(function() { callback(); });
-    },
-    <?php if (!empty($pre_teachers)): ?>
-    items:   <?= json_encode(array_column($pre_teachers, 'id')) ?>,
-    options: <?= json_encode(array_map(function($t) {
-        $desig = $t['designation'] ? ', ' . $t['designation'] : '';
-        return ['id' => $t['id'], 'text' => $t['name'] . $desig . ' (' . $t['dept_name'] . ')'];
-    }, $pre_teachers)) ?>,
-    <?php endif; ?>
+document.getElementById('btn-add-row').addEventListener('click', function() {
+    addRow();
 });
+
+PRE_ROWS.forEach(function(pr) {
+    buildSubjectSelect(pr.ri, pr.cid, pr.ctext);
+    buildTeacherSelect(pr.ri, pr.teacher_ids, pr.teachers);
+});
+
+if (PRE_ROWS.length === 0) addRow();
 </script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
