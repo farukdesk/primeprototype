@@ -305,7 +305,7 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                     </button>
                 </div>
                 <div class="card-body p-3">
-                    <div class="table-responsive">
+                    <div style="overflow: visible;">
                         <table class="table table-bordered align-middle mb-2" id="subjects-table"
                                style="font-size:.875rem;">
                             <thead class="table-light">
@@ -459,6 +459,7 @@ function buildSubjectSelect(ri, cid, ctext) {
     var hiddenEl = document.querySelector('[data-row="' + ri + '"] .curriculum-id-input');
     var opts = { valueField: 'id', labelField: 'text', searchField: ['text'],
         allowEmptyOption: true, placeholder: 'Type to search subject…',
+        dropdownParent: 'body',
         load: function(q, cb) {
             if (!q.length) return cb();
             fetch(APP_URL + '/course-offer/get-subjects.php?q=' + encodeURIComponent(q))
@@ -475,6 +476,7 @@ function buildTeacherSelect(ri, tids, teachers) {
     var opts = { valueField: 'id', labelField: 'text', searchField: ['text'],
         maxItems: null, placeholder: 'Type to search teacher…',
         plugins: ['remove_button'],
+        dropdownParent: 'body',
         load: function(q, cb) {
             if (!q.length) return cb();
             fetch(APP_URL + '/course-offer/get-faculty.php?q=' + encodeURIComponent(q))
