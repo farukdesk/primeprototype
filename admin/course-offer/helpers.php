@@ -186,7 +186,8 @@ function co_get_offers_filtered(array $filters = [], int $page = 1, int $per_pag
     $countSt->execute($params);
     $total = (int)$countSt->fetchColumn();
 
-    $offset = max(0, $page - 1) * $per_page;
+    $limit_val  = (int)$per_page;
+    $offset_val = (int)max(0, $page - 1) * $limit_val;
     $rowsSt = db()->prepare(
         "SELECT o.id, o.status, o.created_at,
                 d.name          AS dept_name,
@@ -204,7 +205,7 @@ function co_get_offers_filtered(array $filters = [], int $page = 1, int $per_pag
            JOIN dept_departments        cd ON cd.id = cp.dept_id
           WHERE $whereSQL
           ORDER BY o.created_at DESC, o.id DESC
-          LIMIT {$per_page} OFFSET {$offset}"
+          LIMIT {$limit_val} OFFSET {$offset_val}"
     );
     $rowsSt->execute($params);
 

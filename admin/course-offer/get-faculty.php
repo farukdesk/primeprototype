@@ -32,8 +32,9 @@ $st = db()->prepare(
        JOIN dept_departments  d ON d.id = f.dept_id
       WHERE $where
       ORDER BY d.name ASC, f.sort_order ASC, f.name ASC
-      LIMIT {$limit}"
+      LIMIT ?"
 );
+$params[] = $limit;
 $st->execute($params);
 $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 

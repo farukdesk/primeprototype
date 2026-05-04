@@ -390,7 +390,7 @@ deptSelect.addEventListener('change', function() {
         tsBatch.clearOptions();
         tsBatch.addOption({value: '', text: '— Select Batch —'});
         tsBatch.setValue('', true);
-    }, 100);
+    }, 150); // allow fetch to populate the underlying <select> first
 });
 
 programSelect.addEventListener('change', function() {
@@ -402,7 +402,7 @@ programSelect.addEventListener('change', function() {
             if (o.value) tsBatch.addOption({value: o.value, text: o.text});
         });
         tsBatch.setValue('', true);
-    }, 150);
+    }, 150); // allow fetch to populate the underlying <select> first
 });
 
 // ── TomSelect: Subject (server-side AJAX search) ──────────────────────────────
