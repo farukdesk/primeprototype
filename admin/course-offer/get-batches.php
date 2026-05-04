@@ -1,6 +1,7 @@
 <?php
 /**
- * AJAX – batches (intakes) for a given program_id.
+ * AJAX – all active student batches (independent of program).
+ * Student profiles use student_batches, so course offers do too.
  */
 require_once __DIR__ . '/../includes/auth.php';
 auth_check();
@@ -8,14 +9,11 @@ require_once __DIR__ . '/helpers.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
-$program_id = (int)($_GET['program_id'] ?? 0);
-if ($program_id <= 0) { echo '[]'; exit; }
+$batches = co_student_batches();
 
-$batches = co_batches($program_id);
-
-// Enrich with a formatted label for the UI
+// Normalise to a label key that the JS expects
 foreach ($batches as &$b) {
-    $b['label'] = co_batch_label($b);
+    $b['label'] = $b['name'];
 }
 unset($b);
 
