@@ -396,17 +396,6 @@ new TomSelect('#sel-dept', { allowEmptyOption: true, sortField: 'text' });
 // ── TomSelect: Program (rebuilt on dept change) ───────────────────────────────
 var tsProgram = new TomSelect('#sel-program', { allowEmptyOption: true, sortField: 'text' });
 
-deptSelect.addEventListener('change', function() {
-    setTimeout(function() {
-        tsProgram.clear(true); tsProgram.clearOptions();
-        tsProgram.addOption({value: '', text: '— Select Program —'});
-        Array.from(programSelect.options).forEach(function(o) {
-            if (o.value) tsProgram.addOption({value: o.value, text: o.text});
-        });
-        tsProgram.setValue('', true);
-    }, 150);
-});
-
 // ── TomSelect: Batch (all student batches, searchable) ────────────────────────
 new TomSelect('#sel-batch', { allowEmptyOption: true, sortField: 'text' });
 

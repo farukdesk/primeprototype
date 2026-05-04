@@ -100,7 +100,7 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="col-md-2">
                 <label class="form-label small fw-medium mb-1">Department</label>
                 <select name="dept_id" id="f-dept" class="form-select form-select-sm"
-                        onchange="loadFilterPrograms(this.value)">
+                        onchange="loadPrograms(this.value)">
                     <option value="">All Departments</option>
                     <?php foreach ($departments as $d): ?>
                     <option value="<?= $d['id'] ?>" <?= $f_dept_id == $d['id'] ? 'selected' : '' ?>>
@@ -196,6 +196,8 @@ require_once __DIR__ . '/../includes/header.php';
     </small>
 </div>
 
+// Global row counter across all batch groups, starting at the page offset.
+<?php $global_row = ($cur_page - 1) * $per_page + 1; ?>
 <?php foreach ($grouped as $batch_id => $group): ?>
 <div class="card mb-4" style="border-radius:12px; overflow:hidden;">
     <!-- Batch header -->
@@ -226,9 +228,9 @@ require_once __DIR__ . '/../includes/header.php';
                 </tr>
             </thead>
             <tbody>
-            <?php $i = 1; foreach ($group['rows'] as $row): ?>
+            <?php foreach ($group['rows'] as $row): ?>
             <tr>
-                <td class="text-muted"><?= $i++ ?></td>
+                <td class="text-muted"><?= $global_row++ ?></td>
 
                 <!-- Subject code + name -->
                 <td>
@@ -366,7 +368,7 @@ require_once __DIR__ . '/../includes/header.php';
 <?php endif; ?>
 
 <script>
-function loadFilterPrograms(deptId) {
+function loadPrograms(deptId) {
     var sel = document.getElementById('f-program');
     sel.innerHTML = '<option value="">All Programs</option>';
     if (!deptId) return;
