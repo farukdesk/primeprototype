@@ -63,6 +63,7 @@ function sc_type_badge(string $type): string
     return match ($type) {
         'gpa_based'    => '<span class="badge bg-info text-dark">GPA-Based</span>',
         'merit_based'  => '<span class="badge bg-primary">Merit-Based</span>',
+        'flat'         => '<span class="badge bg-success">Flat Discount</span>',
         default        => '<span class="badge bg-secondary">' . h($type) . '</span>',
     };
 }
