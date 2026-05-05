@@ -128,7 +128,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'uploa
             $errors[] = 'Could not read the uploaded file.';
         } else {
             $rows = [];
-            while (($row = fgetcsv($handle, 0, ',')) !== false) {
+            while (($row = fgetcsv($handle, 0, ',', '"', '\\')) !== false) {
                 $rows[] = $row;
             }
             fclose($handle);
