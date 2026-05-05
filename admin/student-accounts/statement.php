@@ -123,33 +123,33 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
     <title><?= h($page_title) ?></title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: Arial, sans-serif; font-size: 12px; background: #f0f2f5; color: #222; }
+        body { font-family: Arial, sans-serif; font-size: 10px; background: #f0f2f5; color: #222; }
 
         /* ── Screen toolbar ── */
         .screen-controls {
             position: fixed; top: 0; left: 0; right: 0; z-index: 999;
-            background: #1e3a5f; color: #fff; padding: 10px 20px;
+            background: #1e3a5f; color: #fff; padding: 8px 20px;
             display: flex; align-items: center; gap: 12px;
             box-shadow: 0 2px 8px rgba(0,0,0,.25);
         }
         .screen-controls button, .screen-controls a {
             background: #2563eb; color: #fff; border: none;
-            padding: 6px 18px; border-radius: 5px; cursor: pointer;
-            font-size: 13px; text-decoration: none;
+            padding: 5px 14px; border-radius: 5px; cursor: pointer;
+            font-size: 12px; text-decoration: none;
             display: inline-flex; align-items: center; gap: 6px;
         }
         .screen-controls a.back-btn { background: #64748b; }
-        .screen-controls span { font-size: 13px; opacity: 0.85; }
+        .screen-controls span { font-size: 12px; opacity: 0.85; }
 
-        .print-wrapper { padding: 70px 20px 40px; }
+        .print-wrapper { padding: 52px 16px 20px; }
 
         /* ── Statement page ── */
         .statement-page {
             background: #fff;
             width: 794px;
             min-height: 1123px;
-            padding: 36px 48px 40px;
-            margin: 0 auto 30px;
+            padding: 18px 30px 16px;
+            margin: 0 auto 20px;
             box-shadow: 0 2px 12px rgba(0,0,0,.15);
         }
 
@@ -157,91 +157,97 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
         .univ-header {
             text-align: center;
             border-bottom: 2px solid #1e3a5f;
-            padding-bottom: 10px;
-            margin-bottom: 14px;
+            padding-bottom: 6px;
+            margin-bottom: 8px;
         }
         .univ-header img.logo {
-            height: 52px; margin-bottom: 4px; display: block; margin-left: auto; margin-right: auto;
+            height: 42px; margin-bottom: 3px; display: block; margin-left: auto; margin-right: auto;
         }
         .univ-name {
-            font-size: 17px; font-weight: 700; text-transform: uppercase;
+            font-size: 14px; font-weight: 700; text-transform: uppercase;
             letter-spacing: .05em; color: #1e3a5f;
         }
-        .univ-sub { font-size: 10px; color: #555; margin-top: 2px; }
-        .fee-table tr.visual-sep td { padding: 0; height: 4px; background: #f8f8f8; border: none; }
+        .univ-sub { font-size: 9px; color: #555; margin-top: 1px; }
+        .fee-table tr.visual-sep td { padding: 0; height: 2px; background: #f8f8f8; border: none; }
 
         .doc-title {
-            text-align: center; font-size: 14px; font-weight: 700;
+            text-align: center; font-size: 12px; font-weight: 700;
             text-transform: uppercase; letter-spacing: .08em;
             background: #1e3a5f; color: #fff;
-            padding: 7px 0; margin-bottom: 16px;
+            padding: 5px 0; margin-bottom: 8px;
         }
 
         /* ── Student info grid ── */
-        .student-info-table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 11px; }
-        .student-info-table td { padding: 3px 6px; border: 1px solid #ddd; vertical-align: top; }
+        .student-info-table { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 9.5px; }
+        .student-info-table td { padding: 2px 5px; border: 1px solid #ddd; vertical-align: top; }
         .student-info-table td.lbl { background: #eef2f8; color: #1e3a5f; font-weight: 700; width: 30%; }
         .student-info-table td.val { font-weight: 500; }
         .manual-field { border-bottom: 1px solid #999; display: inline-block; min-width: 100px; }
 
         /* ── Section heading ── */
         .sec-heading {
-            font-size: 11px; font-weight: 700; text-transform: uppercase;
+            font-size: 9.5px; font-weight: 700; text-transform: uppercase;
             letter-spacing: .06em; background: #eef2f8; color: #1e3a5f;
-            padding: 5px 8px; margin: 14px 0 6px;
+            padding: 3px 7px; margin: 8px 0 3px;
             border-left: 3px solid #2563eb;
         }
 
         /* ── Fee table ── */
-        .fee-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 4px; }
-        .fee-table th { background: #1e3a5f; color: #fff; padding: 5px 8px; text-align: left; border: 1px solid #1e3a5f; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+        .fee-table { width: 100%; border-collapse: collapse; font-size: 9.5px; margin-top: 2px; }
+        .fee-table th { background: #1e3a5f; color: #fff; padding: 3px 7px; text-align: left; border: 1px solid #1e3a5f; font-size: 8.5px; text-transform: uppercase; letter-spacing: .04em; }
         .fee-table th.amt { text-align: right; }
-        .fee-table td { border: 1px solid #ddd; padding: 5px 8px; vertical-align: middle; }
+        .fee-table td { border: 1px solid #ddd; padding: 3px 7px; vertical-align: middle; }
         .fee-table td.amt { text-align: right; font-weight: 500; }
         .fee-table tr.subtotal td { background: #eef2f8; font-weight: 700; }
-        .fee-table tr.total-row td { background: #1e3a5f; color: #fff; font-weight: 700; font-size: 12px; }
+        .fee-table tr.total-row td { background: #1e3a5f; color: #fff; font-weight: 700; font-size: 10px; }
         .fee-table tr.total-row td.amt { text-align: right; }
         .fee-table tr.highlight td { background: #fff8e1; font-weight: 600; }
-        .fee-table td.serial { color: #555; width: 28px; text-align: center; }
-        .fee-table td.indent { padding-left: 20px; }
+        .fee-table td.serial { color: #555; width: 22px; text-align: center; }
+        .fee-table td.indent { padding-left: 16px; }
         .fee-table .sc-badge {
             display: inline-block; background: #fef2f2; color: #dc2626;
             border: 1px solid #fca5a5; border-radius: 3px;
-            padding: 1px 5px; font-size: 9.5px; font-weight: 600;
+            padding: 1px 4px; font-size: 8.5px; font-weight: 600;
         }
         .neg { color: #dc2626; }
 
         /* ── Note box ── */
         .note-box {
-            border: 1px solid #e5e7eb; padding: 8px 12px; margin-top: 10px;
-            font-size: 10.5px; color: #374151; background: #fafafa;
-            line-height: 1.6;
+            border: 1px solid #e5e7eb; padding: 5px 10px; margin-top: 7px;
+            font-size: 9px; color: #374151; background: #fafafa;
+            line-height: 1.5;
         }
         .note-box strong { color: #1e3a5f; }
 
         /* ── Signature section ── */
         .sig-section {
-            margin-top: 30px;
-            display: flex; justify-content: space-between; gap: 10px;
+            margin-top: 12px;
+            display: flex; justify-content: space-between; gap: 8px;
         }
         .sig-block { text-align: center; flex: 1; }
         .sig-line {
             border-top: 1px solid #555;
-            margin-top: 42px; padding-top: 4px;
-            font-size: 10px; color: #374151; font-weight: 600;
+            margin-top: 26px; padding-top: 3px;
+            font-size: 9px; color: #374151; font-weight: 600;
         }
-        .sig-subtitle { font-size: 9.5px; color: #6b7280; margin-top: 2px; }
+        .sig-subtitle { font-size: 8.5px; color: #6b7280; margin-top: 2px; }
 
         .date-issued-top {
-            text-align: right; font-size: 10.5px; color: #444; font-weight: 600;
-            margin-bottom: 12px;
+            text-align: right; font-size: 9.5px; color: #444; font-weight: 600;
+            margin-bottom: 6px;
         }
 
         @media print {
+            @page { size: A4 portrait; margin: 0; }
             .screen-controls { display: none !important; }
             body { background: #fff; }
             .print-wrapper { padding: 0; }
-            .statement-page { box-shadow: none; margin: 0; min-height: unset; }
+            .statement-page {
+                box-shadow: none; margin: 0;
+                min-height: unset;
+                width: 210mm;
+                padding: 11mm 14mm 8mm;
+            }
         }
     </style>
 </head>
