@@ -22,7 +22,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $is_published    = isset($_POST['is_published']) ? 1 : 0;
         $adm_fee_base    = max(0, (int)($_POST['admission_fee_base']   ?? 10000));
         $reg_fee_sem     = max(0, (int)($_POST['reg_fee_per_semester'] ?? 1000));
+        $reg_fee_total   = max(0, (int)($_POST['reg_fee_total']        ?? 12000));
         $form_id_fee     = max(0, (int)($_POST['form_id_fee']          ?? 1000));
+        $id_card_fee     = max(0, (int)($_POST['id_card_fee']          ?? 500));
+        $admission_form_fee = max(0, (int)($_POST['admission_form_fee'] ?? 500));
 
         if ($page_title_val === '') $errors[] = 'Page title is required.';
         if ($session_label  === '') $errors[] = 'Session label is required.';
@@ -30,9 +33,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (empty($errors)) {
             $db->prepare(
                 'UPDATE cf_settings SET page_title=?, session_label=?, disclaimer=?, is_published=?,
-                 admission_fee_base=?, reg_fee_per_semester=?, form_id_fee=? WHERE id=1'
+                 admission_fee_base=?, reg_fee_per_semester=?, reg_fee_total=?, form_id_fee=?,
+                 id_card_fee=?, admission_form_fee=? WHERE id=1'
             )->execute([$page_title_val, $session_label, $disclaimer ?: null, $is_published,
-                        $adm_fee_base, $reg_fee_sem, $form_id_fee]);
+                        $adm_fee_base, $reg_fee_sem, $reg_fee_total, $form_id_fee,
+                        $id_card_fee, $admission_form_fee]);
 
             log_change('course-fees', 'UPDATE', 1, 'Settings', null, null, null, 'Global settings updated.');
             flash_set('success', 'Settings saved.');
@@ -112,7 +117,7 @@ require_once __DIR__ . '/../includes/header.php';
                     </div>
                     <hr>
                     <p class="fw-semibold text-muted small mb-3">Global Fee Constants (BDT)</p>
-                    <div class="row g-3 mb-4">
+                    <div class="row g-3 mb-3">
                         <div class="col-md-4">
                             <label class="form-label small fw-semibold">Admission Fee (one-time)</label>
                             <input type="number" name="admission_fee_base" class="form-control form-control-sm"
@@ -124,10 +129,30 @@ require_once __DIR__ . '/../includes/header.php';
                                    value="<?= (int)($settings['reg_fee_per_semester'] ?? 1000) ?>" min="0" required>
                         </div>
                         <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Registration Fees Total</label>
+                            <input type="number" name="reg_fee_total" class="form-control form-control-sm"
+                                   value="<?= (int)($settings['reg_fee_total'] ?? 12000) ?>" min="0" required>
+                            <div class="form-text">Total registration fees across all semesters.</div>
+                        </div>
+                    </div>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4">
                             <label class="form-label small fw-semibold">Admission Form + ID Card</label>
                             <input type="number" name="form_id_fee" class="form-control form-control-sm"
                                    value="<?= (int)($settings['form_id_fee'] ?? 1000) ?>" min="0" required>
                             <div class="form-text">One-time. Shown as "Extra" on the calculator.</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">ID Card Fees</label>
+                            <input type="number" name="id_card_fee" class="form-control form-control-sm"
+                                   value="<?= (int)($settings['id_card_fee'] ?? 500) ?>" min="0" required>
+                            <div class="form-text">One-time ID card fee.</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Admission Form Fees</label>
+                            <input type="number" name="admission_form_fee" class="form-control form-control-sm"
+                                   value="<?= (int)($settings['admission_form_fee'] ?? 500) ?>" min="0" required>
+                            <div class="form-text">One-time admission form fee.</div>
                         </div>
                     </div>
                     <div class="d-flex gap-2 align-items-center">

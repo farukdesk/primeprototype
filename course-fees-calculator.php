@@ -44,9 +44,12 @@ $session_label = $settings['session_label'] ?? 'Summer 2026';
 $page_title    = ($settings['page_title']   ?? 'Course Fee Calculator') . ' – Prime University';
 $disclaimer    = $settings['disclaimer']    ?? '';
 $is_published  = (bool)($settings['is_published'] ?? true);
-$adm_fee_base  = (int)($settings['admission_fee_base']   ?? 10000);
-$reg_fee_sem   = (int)($settings['reg_fee_per_semester'] ?? 1000);
-$form_id_fee   = (int)($settings['form_id_fee']          ?? 1000);
+$adm_fee_base       = (int)($settings['admission_fee_base']   ?? 10000);
+$reg_fee_sem        = (int)($settings['reg_fee_per_semester'] ?? 1000);
+$reg_fee_total      = (int)($settings['reg_fee_total']        ?? 12000);
+$form_id_fee        = (int)($settings['form_id_fee']          ?? 1000);
+$id_card_fee        = (int)($settings['id_card_fee']          ?? 500);
+$admission_form_fee = (int)($settings['admission_form_fee']   ?? 500);
 
 // ── Build JS data from DB ─────────────────────────────────────────────────────
 $degree_subjects = [];
@@ -553,9 +556,12 @@ var SESSION_LABEL = <?= json_encode($session_label) ?>;
 
 // Global fee constants (configurable via admin Settings)
 var GLOBAL_FEES = {
-    ADM_FEE_BASE  : <?= $adm_fee_base ?>,
-    REG_FEE_SEM   : <?= $reg_fee_sem ?>,
-    FORM_ID_FEE   : <?= $form_id_fee ?>
+    ADM_FEE_BASE       : <?= $adm_fee_base ?>,
+    REG_FEE_SEM        : <?= $reg_fee_sem ?>,
+    REG_FEE_TOTAL      : <?= $reg_fee_total ?>,
+    FORM_ID_FEE        : <?= $form_id_fee ?>,
+    ID_CARD_FEE        : <?= $id_card_fee ?>,
+    ADMISSION_FORM_FEE : <?= $admission_form_fee ?>
 };
 
 var DEGREE_SUBJECTS = <?= json_encode($degree_subjects, JSON_UNESCAPED_UNICODE) ?>;
@@ -892,7 +898,10 @@ function generatePreviewHTML(combinedGPA, subject) {
         (c.ENGLISH_COURSE_FEE > 0 ? '<div class="rr"><span class="rl">English Course:</span><span class="rv">' + fmtBDT(c.ENGLISH_COURSE_FEE) + '</span></div>' : '') +
         '<div class="rr"><span class="rl">Admission Fee (One-time):</span><span class="rv">' + fmtBDT(GLOBAL_FEES.ADM_FEE_BASE) + '</span></div>' +
         '<div class="rr"><span class="rl">Registration Fees (' + c.TOTAL_SEMESTERS + ' Semesters x ' + GLOBAL_FEES.REG_FEE_SEM.toLocaleString() + '):</span><span class="rv">' + fmtBDT(c.TOTAL_SEMESTERS * GLOBAL_FEES.REG_FEE_SEM) + '</span></div>' +
+        '<div class="rr"><span class="rl">Registration Fees Total:</span><span class="rv">' + fmtBDT(GLOBAL_FEES.REG_FEE_TOTAL) + '</span></div>' +
         '<div class="rr"><span class="rl">Admission Form + ID Card (Extra):</span><span class="rv">' + fmtBDT(GLOBAL_FEES.FORM_ID_FEE) + '</span></div>' +
+        '<div class="rr indent"><span class="rl">ID Card Fees:</span><span class="rv">' + fmtBDT(GLOBAL_FEES.ID_CARD_FEE) + '</span></div>' +
+        '<div class="rr indent"><span class="rl">Admission Form Fees:</span><span class="rv">' + fmtBDT(GLOBAL_FEES.ADMISSION_FORM_FEE) + '</span></div>' +
         '<div class="rr total"><span class="rl">Total Regular Program Cost:</span><span class="rv">' + fmtBDT(c.STANDARD_TUITION_FULL + c.FIXED_INSTITUTIONAL_FEES + c.ENGLISH_COURSE_FEE + GLOBAL_FEES.ADM_FEE_BASE + c.TOTAL_SEMESTERS * GLOBAL_FEES.REG_FEE_SEM) + '</span></div>' +
         '<div class="info-box" style="margin-top:10px;"><p>Admission Form + ID Card (' + fmtBDT(GLOBAL_FEES.FORM_ID_FEE) + ') is <strong>not included</strong> in the Total Regular Program Cost above. Payable separately at admission.</p></div>' +
         '</div>' +
@@ -902,6 +911,8 @@ function generatePreviewHTML(combinedGPA, subject) {
         '<div class="rr indent"><span class="rl">Admission Fee:</span><span class="rv">' + fmtBDT(GLOBAL_FEES.ADM_FEE_BASE) + '</span></div>' +
         '<div class="rr indent"><span class="rl">Registration Fee (1st Semester):</span><span class="rv">' + fmtBDT(GLOBAL_FEES.REG_FEE_SEM) + '</span></div>' +
         '<div class="rr indent"><span class="rl">Admission Form + ID Card:</span><span class="rv">' + fmtBDT(GLOBAL_FEES.FORM_ID_FEE) + '</span></div>' +
+        '<div class="rr indent"><span class="rl">ID Card Fees:</span><span class="rv">' + fmtBDT(GLOBAL_FEES.ID_CARD_FEE) + '</span></div>' +
+        '<div class="rr indent"><span class="rl">Admission Form Fees:</span><span class="rv">' + fmtBDT(GLOBAL_FEES.ADMISSION_FORM_FEE) + '</span></div>' +
         '<div class="rr total"><span class="rl">Total Admission Day Payment:</span><span class="rv">' + fmtBDT(c.ADMISSION_FEES) + '</span></div>' +
         '</div>' +
 
@@ -948,7 +959,10 @@ function generateForecastHTML(combinedGPA, expectedGPA, maintainsAttendance, bd,
         '<div class="rc-title">Total ' + c.DURATION_YEARS + '-Year Forecast</div>' +
         '<div class="rr"><span class="rl">Admission Fee (One-time):</span><span class="rv">' + fmtBDT(GLOBAL_FEES.ADM_FEE_BASE) + '</span></div>' +
         '<div class="rr"><span class="rl">Registration Fees (' + c.TOTAL_SEMESTERS + ' x ' + GLOBAL_FEES.REG_FEE_SEM.toLocaleString() + '):</span><span class="rv">' + fmtBDT(totalReg) + '</span></div>' +
+        '<div class="rr"><span class="rl">Registration Fees Total:</span><span class="rv">' + fmtBDT(GLOBAL_FEES.REG_FEE_TOTAL) + '</span></div>' +
         (!dp ? '<div class="rr"><span class="rl">Admission Form + ID Card (Extra):</span><span class="rv">' + fmtBDT(GLOBAL_FEES.FORM_ID_FEE) + '</span></div>' : '') +
+        (!dp ? '<div class="rr indent"><span class="rl">ID Card Fees:</span><span class="rv">' + fmtBDT(GLOBAL_FEES.ID_CARD_FEE) + '</span></div>' : '') +
+        (!dp ? '<div class="rr indent"><span class="rl">Admission Form Fees:</span><span class="rv">' + fmtBDT(GLOBAL_FEES.ADMISSION_FORM_FEE) + '</span></div>' : '') +
         '<div class="rr"><span class="rl">Total Administrative Fees:</span><span class="rv">' + fmtBDT(totalInstitutional) + '</span></div>' +
         '<div class="rr indent"><span class="rl">Fixed Institutional Fees:</span><span class="rv">' + fmtBDT(c.FIXED_INSTITUTIONAL_FEES || 0) + '</span></div>' +
         (c.ENGLISH_COURSE_FEE > 0 ? '<div class="rr indent"><span class="rl">English Course Fee:</span><span class="rv">' + fmtBDT(c.ENGLISH_COURSE_FEE) + '</span></div>' : '') +
