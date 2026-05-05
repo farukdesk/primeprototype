@@ -131,6 +131,48 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
+<!-- Global Fee Settings Summary -->
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center py-3">
+        <span class="fw-semibold">
+            <i class="fas fa-money-bill-wave me-2 text-success"></i>Global Fee Settings
+        </span>
+        <?php if (cf_can_edit()): ?>
+        <a href="<?= APP_URL ?>/course-fees/settings.php" class="btn btn-sm btn-outline-secondary">
+            <i class="fas fa-cog me-1"></i> Edit
+        </a>
+        <?php endif; ?>
+    </div>
+    <div class="card-body py-3">
+        <div class="row g-3">
+            <div class="col-6 col-md-2">
+                <div class="small text-muted mb-1">Admission Fee</div>
+                <div class="fw-semibold">৳ <?= number_format((int)($settings['admission_fee_base'] ?? 10000)) ?></div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="small text-muted mb-1">Registration / Semester</div>
+                <div class="fw-semibold">৳ <?= number_format((int)($settings['reg_fee_per_semester'] ?? 1000)) ?></div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="small text-muted mb-1">Registration Fees Total</div>
+                <div class="fw-semibold">৳ <?= number_format((int)($settings['reg_fee_total'] ?? 12000)) ?></div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="small text-muted mb-1">Admission Form Fees</div>
+                <div class="fw-semibold">৳ <?= number_format((int)($settings['admission_form_fee'] ?? 500)) ?></div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="small text-muted mb-1">ID Card Fees</div>
+                <div class="fw-semibold">৳ <?= number_format((int)($settings['id_card_fee'] ?? 500)) ?></div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="small text-muted mb-1">Form + ID (Legacy)</div>
+                <div class="fw-semibold">৳ <?= number_format((int)($settings['form_id_fee'] ?? 1000)) ?></div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Filters -->
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-body py-3">
