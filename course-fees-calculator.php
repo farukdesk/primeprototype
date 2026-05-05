@@ -897,20 +897,16 @@ function generatePreviewHTML(combinedGPA, subject) {
         '<div class="rr"><span class="rl">Administrative Fees:</span><span class="rv">' + fmtBDT(c.FIXED_INSTITUTIONAL_FEES) + '</span></div>' +
         (c.ENGLISH_COURSE_FEE > 0 ? '<div class="rr"><span class="rl">English Course:</span><span class="rv">' + fmtBDT(c.ENGLISH_COURSE_FEE) + '</span></div>' : '') +
         '<div class="rr"><span class="rl">Admission Fee (One-time):</span><span class="rv">' + fmtBDT(GLOBAL_FEES.ADM_FEE_BASE) + '</span></div>' +
-        '<div class="rr"><span class="rl">Registration Fees (' + c.TOTAL_SEMESTERS + ' Semesters x ' + GLOBAL_FEES.REG_FEE_SEM.toLocaleString() + '):</span><span class="rv">' + fmtBDT(c.TOTAL_SEMESTERS * GLOBAL_FEES.REG_FEE_SEM) + '</span></div>' +
-        '<div class="rr"><span class="rl">Registration Fees Total:</span><span class="rv">' + fmtBDT(GLOBAL_FEES.REG_FEE_TOTAL) + '</span></div>' +
-        '<div class="rr"><span class="rl">Admission Form + ID Card (Extra):</span><span class="rv">' + fmtBDT(GLOBAL_FEES.FORM_ID_FEE) + '</span></div>' +
-        '<div class="rr indent"><span class="rl">ID Card Fees:</span><span class="rv">' + fmtBDT(GLOBAL_FEES.ID_CARD_FEE) + '</span></div>' +
-        '<div class="rr indent"><span class="rl">Admission Form Fees:</span><span class="rv">' + fmtBDT(GLOBAL_FEES.ADMISSION_FORM_FEE) + '</span></div>' +
-        '<div class="rr total"><span class="rl">Total Regular Program Cost:</span><span class="rv">' + fmtBDT(c.STANDARD_TUITION_FULL + c.FIXED_INSTITUTIONAL_FEES + c.ENGLISH_COURSE_FEE + GLOBAL_FEES.ADM_FEE_BASE + c.TOTAL_SEMESTERS * GLOBAL_FEES.REG_FEE_SEM) + '</span></div>' +
-        '<div class="info-box" style="margin-top:10px;"><p>Admission Form + ID Card (' + fmtBDT(GLOBAL_FEES.FORM_ID_FEE) + ') is <strong>not included</strong> in the Total Regular Program Cost above. Payable separately at admission.</p></div>' +
+        '<div class="rr"><span class="rl">Registration Fees Total (' + c.TOTAL_SEMESTERS + ' Semesters x ' + GLOBAL_FEES.REG_FEE_SEM.toLocaleString() + '):</span><span class="rv">' + fmtBDT(GLOBAL_FEES.REG_FEE_TOTAL) + '</span></div>' +
+        '<div class="rr"><span class="rl">ID Card Fees:</span><span class="rv">' + fmtBDT(GLOBAL_FEES.ID_CARD_FEE) + '</span></div>' +
+        '<div class="rr"><span class="rl">Admission Form Fees:</span><span class="rv">' + fmtBDT(GLOBAL_FEES.ADMISSION_FORM_FEE) + '</span></div>' +
+        '<div class="rr total"><span class="rl">Total Regular Program Cost:</span><span class="rv">' + fmtBDT(c.STANDARD_TUITION_FULL + c.FIXED_INSTITUTIONAL_FEES + c.ENGLISH_COURSE_FEE + GLOBAL_FEES.ADM_FEE_BASE + GLOBAL_FEES.REG_FEE_TOTAL + GLOBAL_FEES.ID_CARD_FEE + GLOBAL_FEES.ADMISSION_FORM_FEE) + '</span></div>' +
         '</div>' +
 
         '<div class="rc orange panel-reveal">' +
         '<div class="rc-title">Admission Day Payment</div>' +
         '<div class="rr indent"><span class="rl">Admission Fee:</span><span class="rv">' + fmtBDT(GLOBAL_FEES.ADM_FEE_BASE) + '</span></div>' +
         '<div class="rr indent"><span class="rl">Registration Fee (1st Semester):</span><span class="rv">' + fmtBDT(GLOBAL_FEES.REG_FEE_SEM) + '</span></div>' +
-        '<div class="rr indent"><span class="rl">Admission Form + ID Card:</span><span class="rv">' + fmtBDT(GLOBAL_FEES.FORM_ID_FEE) + '</span></div>' +
         '<div class="rr indent"><span class="rl">ID Card Fees:</span><span class="rv">' + fmtBDT(GLOBAL_FEES.ID_CARD_FEE) + '</span></div>' +
         '<div class="rr indent"><span class="rl">Admission Form Fees:</span><span class="rv">' + fmtBDT(GLOBAL_FEES.ADMISSION_FORM_FEE) + '</span></div>' +
         '<div class="rr total"><span class="rl">Total Admission Day Payment:</span><span class="rv">' + fmtBDT(c.ADMISSION_FEES) + '</span></div>' +
@@ -933,9 +929,9 @@ function generateForecastHTML(combinedGPA, expectedGPA, maintainsAttendance, bd,
     var c  = CONSTANTS[subject];
     var dp = isDiploma(subject);
 
-    var totalReg           = c.TOTAL_SEMESTERS * GLOBAL_FEES.REG_FEE_SEM;
+    var totalReg           = GLOBAL_FEES.REG_FEE_TOTAL;
     var totalInstitutional = (c.FIXED_INSTITUTIONAL_FEES || 0) + (c.ENGLISH_COURSE_FEE || 0);
-    var grandTotal         = GLOBAL_FEES.ADM_FEE_BASE + totalReg + (dp ? 0 : GLOBAL_FEES.FORM_ID_FEE) + totalInstitutional + bd.totalTuition;
+    var grandTotal         = GLOBAL_FEES.ADM_FEE_BASE + totalReg + (dp ? 0 : GLOBAL_FEES.ID_CARD_FEE + GLOBAL_FEES.ADMISSION_FORM_FEE) + totalInstitutional + bd.totalTuition;
     var firstSemMonths     = Math.round(c.TOTAL_MONTHS / c.TOTAL_SEMESTERS);
     var remainingMonths    = c.TOTAL_MONTHS - firstSemMonths;
     var monthlyAvg         = totalInstitutional / c.TOTAL_MONTHS
@@ -958,11 +954,9 @@ function generateForecastHTML(combinedGPA, expectedGPA, maintainsAttendance, bd,
         '<div class="rc violet panel-reveal">' +
         '<div class="rc-title">Total ' + c.DURATION_YEARS + '-Year Forecast</div>' +
         '<div class="rr"><span class="rl">Admission Fee (One-time):</span><span class="rv">' + fmtBDT(GLOBAL_FEES.ADM_FEE_BASE) + '</span></div>' +
-        '<div class="rr"><span class="rl">Registration Fees (' + c.TOTAL_SEMESTERS + ' x ' + GLOBAL_FEES.REG_FEE_SEM.toLocaleString() + '):</span><span class="rv">' + fmtBDT(totalReg) + '</span></div>' +
-        '<div class="rr"><span class="rl">Registration Fees Total:</span><span class="rv">' + fmtBDT(GLOBAL_FEES.REG_FEE_TOTAL) + '</span></div>' +
-        (!dp ? '<div class="rr"><span class="rl">Admission Form + ID Card (Extra):</span><span class="rv">' + fmtBDT(GLOBAL_FEES.FORM_ID_FEE) + '</span></div>' : '') +
-        (!dp ? '<div class="rr indent"><span class="rl">ID Card Fees:</span><span class="rv">' + fmtBDT(GLOBAL_FEES.ID_CARD_FEE) + '</span></div>' : '') +
-        (!dp ? '<div class="rr indent"><span class="rl">Admission Form Fees:</span><span class="rv">' + fmtBDT(GLOBAL_FEES.ADMISSION_FORM_FEE) + '</span></div>' : '') +
+        '<div class="rr"><span class="rl">Registration Fees Total (' + c.TOTAL_SEMESTERS + ' x ' + GLOBAL_FEES.REG_FEE_SEM.toLocaleString() + '):</span><span class="rv">' + fmtBDT(GLOBAL_FEES.REG_FEE_TOTAL) + '</span></div>' +
+        (!dp ? '<div class="rr"><span class="rl">ID Card Fees:</span><span class="rv">' + fmtBDT(GLOBAL_FEES.ID_CARD_FEE) + '</span></div>' : '') +
+        (!dp ? '<div class="rr"><span class="rl">Admission Form Fees:</span><span class="rv">' + fmtBDT(GLOBAL_FEES.ADMISSION_FORM_FEE) + '</span></div>' : '') +
         '<div class="rr"><span class="rl">Total Administrative Fees:</span><span class="rv">' + fmtBDT(totalInstitutional) + '</span></div>' +
         '<div class="rr indent"><span class="rl">Fixed Institutional Fees:</span><span class="rv">' + fmtBDT(c.FIXED_INSTITUTIONAL_FEES || 0) + '</span></div>' +
         (c.ENGLISH_COURSE_FEE > 0 ? '<div class="rr indent"><span class="rl">English Course Fee:</span><span class="rv">' + fmtBDT(c.ENGLISH_COURSE_FEE) + '</span></div>' : '') +
