@@ -132,6 +132,10 @@ require_once __DIR__ . '/../includes/header.php';
                            class="btn btn-outline-primary btn-sm">
                             <i class="fas fa-eye me-1"></i>View
                         </a>
+                        <a href="<?= APP_URL ?>/student-accounts/statement.php?id=<?= $pkg['id'] ?>"
+                           class="btn btn-outline-success btn-sm" target="_blank">
+                            <i class="fas fa-file-invoice me-1"></i>Statement
+                        </a>
                         <?php if (sfp_can_delete()): ?>
                         <form method="post" action="<?= APP_URL ?>/student-accounts/delete.php"
                               class="d-inline"
