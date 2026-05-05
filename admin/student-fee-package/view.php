@@ -342,6 +342,76 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <!-- ══════════════════════════════════════════════════════════
+     MONTHLY BREAKDOWN – SEMESTER 1 (ACTIVE SEMESTER)
+═══════════════════════════════════════════════════════════ -->
+<?php
+$first_sem         = !empty($semester_fees) ? $semester_fees[0] : null;
+$months_per_sem    = (float)$pkg['months_per_semester'];
+$num_months        = ($months_per_sem > 0) ? (int)round($months_per_sem) : 0;
+$monthly_tuition   = ($num_months > 0 && $first_sem) ? ((float)$first_sem['tuition_payable'] / $months_per_sem) : 0.0;
+$monthly_fixed     = (float)$pkg['monthly_fixed_fee'];
+$monthly_english   = (float)$pkg['monthly_english_fee'];
+$monthly_total     = $monthly_tuition + $monthly_fixed + $monthly_english;
+$first_sem_label   = ($first_sem && $first_sem['semester_label']) ? $first_sem['semester_label'] : 'Semester 1';
+?>
+<div class="card mt-4">
+    <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h6 class="mb-0 fw-semibold">
+            <i class="fas fa-calendar-alt me-2 text-muted"></i>Month-wise Breakdown
+            <span class="text-muted fw-normal">– <?= h($first_sem_label) ?> <span class="badge bg-success ms-1" style="font-size:.65rem;">Active Semester</span></span>
+        </h6>
+        <span class="badge bg-secondary"><?= $num_months ?> months</span>
+    </div>
+    <div class="card-body p-0">
+        <?php if (!$first_sem || $num_months < 1): ?>
+        <p class="text-muted px-4 py-3 mb-0">No semester data available.</p>
+        <?php else: ?>
+        <div class="table-responsive">
+            <table class="table table-hover mb-0" style="font-size:.875rem;">
+                <thead>
+                    <tr>
+                        <th style="width:45px;">#</th>
+                        <th>Month</th>
+                        <th class="text-end">Tuition Payable</th>
+                        <th class="text-end">Fixed Fees</th>
+                        <th class="text-end">English Fee</th>
+                        <th class="text-end fw-bold">Monthly Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php for ($m = 1; $m <= $num_months; $m++): ?>
+                <tr>
+                    <td class="fw-semibold text-muted"><?= $m ?></td>
+                    <td>Month <?= $m ?></td>
+                    <td class="text-end"><?= sfp_money($monthly_tuition) ?></td>
+                    <td class="text-end"><?= sfp_money($monthly_fixed) ?></td>
+                    <td class="text-end"><?= sfp_money($monthly_english) ?></td>
+                    <td class="text-end fw-bold text-success"><?= sfp_money($monthly_total) ?></td>
+                </tr>
+                <?php endfor; ?>
+                </tbody>
+                <tfoot class="table-light fw-bold">
+                    <tr>
+                        <td colspan="2" class="text-end">Semester 1 Total →</td>
+                        <td class="text-end"><?= sfp_money($monthly_tuition * $num_months) ?></td>
+                        <td class="text-end"><?= sfp_money($monthly_fixed * $num_months) ?></td>
+                        <td class="text-end"><?= sfp_money($monthly_english * $num_months) ?></td>
+                        <td class="text-end text-success fs-6"><?= sfp_money($monthly_total * $num_months) ?></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+        <div class="px-4 py-2 text-muted" style="font-size:.75rem;">
+            <i class="fas fa-info-circle me-1"></i>
+            Monthly amounts are derived by dividing the semester fees over <?= $num_months ?> months
+            (<?= number_format($months_per_sem, 2) ?> months/semester).
+            Fixed &amp; English fees are programme-wide constants spread equally per month.
+        </div>
+        <?php endif; ?>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
      ADD SCHOLARSHIP MODAL
 ═══════════════════════════════════════════════════════════ -->
 <div class="modal fade" id="addScModal" tabindex="-1" aria-labelledby="addScModalLabel" aria-hidden="true">
