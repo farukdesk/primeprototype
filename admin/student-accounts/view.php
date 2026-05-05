@@ -25,12 +25,16 @@ $sem_fixed_portion   = sfp_semester_fixed_portion($pkg);
 $sem_english_portion = sfp_semester_english_portion($pkg);
 
 // Totals
-$total_tuition_payable = 0.0;
-$total_fixed_all       = (float)$pkg['fixed_institutional_fees'];
-$total_english_all     = (float)$pkg['english_course_fee'];
+$total_tuition_payable   = 0.0;
+$total_fixed_discounts   = 0.0;
+$total_english_discounts = 0.0;
 foreach ($semester_fees as $sf) {
-    $total_tuition_payable += (float)$sf['tuition_payable'];
+    $total_tuition_payable   += (float)$sf['tuition_payable'];
+    $total_fixed_discounts   += (float)($sf['fixed_discount_amount']   ?? 0);
+    $total_english_discounts += (float)($sf['english_discount_amount'] ?? 0);
 }
+$total_fixed_all   = max(0.0, (float)$pkg['fixed_institutional_fees'] - $total_fixed_discounts);
+$total_english_all = max(0.0, (float)$pkg['english_course_fee']       - $total_english_discounts);
 $total_cost = $total_tuition_payable + $total_fixed_all + $total_english_all;
 
 require_once __DIR__ . '/../includes/header.php';
@@ -221,8 +225,8 @@ require_once __DIR__ . '/../includes/header.php';
                     $sf_id_row       = (int)$sf['id'];
                     $tuition_fee_row = (float)$sf['tuition_fee'];
                     $tuition_payable = (float)$sf['tuition_payable'];
-                    $fixed_amt       = $sem_fixed_portion;
-                    $english_amt     = $sem_english_portion;
+                    $fixed_amt       = max(0.0, $sem_fixed_portion  - (float)($sf['fixed_discount_amount']   ?? 0));
+                    $english_amt     = max(0.0, $sem_english_portion - (float)($sf['english_discount_amount'] ?? 0));
                     $total_sem       = $tuition_payable + $fixed_amt + $english_amt;
                     $grand_tuition_payable += $tuition_payable;
                     $grand_fixed           += $fixed_amt;
@@ -266,6 +270,21 @@ require_once __DIR__ . '/../includes/header.php';
                             <span class="badge rounded-pill bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25"
                                   style="font-size:.72rem;font-weight:500;">
                                 <?= h($sc['label']) ?>&nbsp;(<?= number_format((float)$sc['discount_pct'], 1) ?>%)
+                                <?php if ((int)$sc['applies_to_fixed']): ?>
+                                <span class="badge bg-warning text-dark ms-1" style="font-size:.6rem;vertical-align:middle;">+Fixed</span>
+                                <?php endif; ?>
+                                <?php if ((int)$sc['applies_to_english']): ?>
+                                <span class="badge bg-info text-dark ms-1" style="font-size:.6rem;vertical-align:middle;">+ENG</span>
+                                <?php endif; ?>
+                                <?php if ($sc['doc_stored_name']): ?>
+                                <a href="<?= UPLOAD_URL ?>/students/files/<?= rawurlencode($sc['doc_stored_name']) ?>"
+                                   target="_blank"
+                                   class="ms-1 text-danger text-opacity-75"
+                                   title="Supporting doc: <?= h($sc['doc_original_name']) ?>"
+                                   style="font-size:.7rem;">
+                                    <i class="fas fa-paperclip"></i>
+                                </a>
+                                <?php endif; ?>
                                 <?php if (sfp_can_edit()): ?>
                                 <form method="post" action="<?= APP_URL ?>/student-accounts/delete-scholarship.php"
                                       class="d-inline"
@@ -419,7 +438,8 @@ $first_sem_label   = ($first_sem && $first_sem['semester_label']) ? $first_sem['
 ═══════════════════════════════════════════════════════════ -->
 <div class="modal fade" id="addScModal" tabindex="-1" aria-labelledby="addScModalLabel" aria-hidden="true">
     <div class="modal-dialog">
-        <form method="post" action="<?= APP_URL ?>/student-accounts/add-scholarship.php" novalidate>
+        <form method="post" action="<?= APP_URL ?>/student-accounts/add-scholarship.php"
+              enctype="multipart/form-data" novalidate>
             <?= csrf_field() ?>
             <input type="hidden" name="package_id" value="<?= $id ?>">
             <input type="hidden" name="sf_id" id="asc-sf-id" value="">
@@ -445,7 +465,9 @@ $first_sem_label   = ($first_sem && $first_sem['semester_label']) ? $first_sem['
                             <?php foreach ($sc_policies as $spol): ?>
                             <option value="<?= $spol['id'] ?>"
                                     data-name="<?= h($spol['name']) ?>"
-                                    data-tiers="<?= h(json_encode($spol['tiers'])) ?>">
+                                    data-tiers="<?= h(json_encode($spol['tiers'])) ?>"
+                                    data-applies-to-fixed="<?= (int)($spol['applies_to_fixed'] ?? 0) ?>"
+                                    data-applies-to-english="<?= (int)($spol['applies_to_english'] ?? 0) ?>">
                                 <?= h($spol['name']) ?>
                                 (<?= $spol['type'] === 'gpa_based' ? 'GPA-Based' : 'Merit-Based' ?>)
                                 <?php if (!empty($spol['tiers'])): ?>
@@ -497,6 +519,41 @@ $first_sem_label   = ($first_sem && $first_sem['semester_label']) ? $first_sem['
                         <textarea name="sc_note" id="asc-note" class="form-control" rows="2"
                                   placeholder="Optional note about this scholarship"></textarea>
                     </div>
+
+                    <!-- Fee scope: which fee types this discount covers -->
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small">Also apply discount to:</label>
+                        <div class="d-flex gap-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="applies_to_fixed" value="1"
+                                       id="asc-applies-fixed">
+                                <label class="form-check-label small" for="asc-applies-fixed">
+                                    Fixed Institutional Fees
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="applies_to_english" value="1"
+                                       id="asc-applies-english">
+                                <label class="form-check-label small" for="asc-applies-english">
+                                    English Course Fee
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Supporting document (required for non-policy / manual scholarships) -->
+                    <div class="mb-3" id="asc-doc-wrap">
+                        <label class="form-label fw-semibold">
+                            Supporting Document <span class="text-danger">*</span>
+                        </label>                        <input type="file" name="support_doc" id="asc-support-doc" class="form-control"
+                               accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.txt">
+                        <div class="form-text">
+                            <i class="fas fa-info-circle me-1"></i>
+                            Required for non-policy scholarships. Max 20 MB.
+                            Allowed: images, PDF, Word, Excel, PPT, ZIP, TXT.
+                        </div>
+                    </div>
+                    <input type="hidden" name="is_from_policy" id="asc-is-from-policy" value="0">
 
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" name="apply_to_all" value="1"
@@ -592,12 +649,21 @@ document.querySelectorAll('.add-sc-btn').forEach(function(btn) {
         document.getElementById('asc-note').value   = '';
         document.getElementById('asc-amount').value = '0.00';
 
+        // Reset new fields
+        var fixedCb   = document.getElementById('asc-applies-fixed');
+        var engCb     = document.getElementById('asc-applies-english');
+        var docInput  = document.getElementById('asc-support-doc');
+        if (fixedCb)  fixedCb.checked  = false;
+        if (engCb)    engCb.checked    = false;
+        if (docInput) docInput.value   = '';
+
         // Reset policy/tier selectors
         var polSel = document.getElementById('asc-policy-select');
         if (polSel) {
             polSel.value = '';
             ascResetTierWrap();
         }
+        ascUpdateDocField(); // show doc upload by default (no policy selected)
         var applyAll = document.getElementById('asc-apply-all');
         if (applyAll) applyAll.checked = false;
 
@@ -606,6 +672,26 @@ document.querySelectorAll('.add-sc-btn').forEach(function(btn) {
         setTimeout(function(){ document.getElementById('asc-label').focus(); }, 400);
     });
 });
+
+// ── Doc field visibility: required only when no policy is selected ────────────
+function ascUpdateDocField() {
+    var polSel   = document.getElementById('asc-policy-select');
+    var docWrap  = document.getElementById('asc-doc-wrap');
+    var docInput = document.getElementById('asc-support-doc');
+    var fromPol  = document.getElementById('asc-is-from-policy');
+    if (!docWrap || !docInput) return;
+
+    var policyChosen = polSel && polSel.value !== '';
+    if (policyChosen) {
+        docWrap.classList.add('d-none');
+        docInput.removeAttribute('required');
+        if (fromPol) fromPol.value = '1';
+    } else {
+        docWrap.classList.remove('d-none');
+        docInput.setAttribute('required', 'required');
+        if (fromPol) fromPol.value = '0';
+    }
+}
 
 // ── Policy / tier quick-fill ──────────────────────────────────────────────────
 function ascResetTierWrap() {
@@ -630,8 +716,15 @@ var ascPolicySel = document.getElementById('asc-policy-select');
 if (ascPolicySel) {
     ascPolicySel.addEventListener('change', function() {
         ascResetTierWrap();
+        ascUpdateDocField();
         var opt = this.options[this.selectedIndex];
         if (!this.value) return;
+
+        // Pre-check applies_to_fixed / applies_to_english from policy flags
+        var fixedCb = document.getElementById('asc-applies-fixed');
+        var engCb   = document.getElementById('asc-applies-english');
+        if (fixedCb) fixedCb.checked = opt.dataset.appliesToFixed === '1';
+        if (engCb)   engCb.checked   = opt.dataset.appliesToEnglish === '1';
 
         var tiers = [];
         try { tiers = JSON.parse(opt.dataset.tiers || '[]'); } catch(e) {}
