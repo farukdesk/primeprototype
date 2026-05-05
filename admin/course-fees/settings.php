@@ -31,17 +31,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($session_label  === '') $errors[] = 'Session label is required.';
 
         if (empty($errors)) {
-            $db->prepare(
-                'UPDATE cf_settings SET page_title=?, session_label=?, disclaimer=?, is_published=?,
-                 admission_fee_base=?, reg_fee_per_semester=?, reg_fee_total=?, form_id_fee=?,
-                 id_card_fee=?, admission_form_fee=? WHERE id=1'
-            )->execute([$page_title_val, $session_label, $disclaimer ?: null, $is_published,
-                        $adm_fee_base, $reg_fee_sem, $reg_fee_total, $form_id_fee,
-                        $id_card_fee, $admission_form_fee]);
+            try {
+                $db->prepare(
+                    'UPDATE cf_settings SET page_title=?, session_label=?, disclaimer=?, is_published=?,
+                     admission_fee_base=?, reg_fee_per_semester=?, reg_fee_total=?, form_id_fee=?,
+                     id_card_fee=?, admission_form_fee=? WHERE id=1'
+                )->execute([$page_title_val, $session_label, $disclaimer ?: null, $is_published,
+                            $adm_fee_base, $reg_fee_sem, $reg_fee_total, $form_id_fee,
+                            $id_card_fee, $admission_form_fee]);
 
-            log_change('course-fees', 'UPDATE', 1, 'Settings', null, null, null, 'Global settings updated.');
-            flash_set('success', 'Settings saved.');
-            redirect(APP_URL . '/course-fees/settings.php');
+                log_change('course-fees', 'UPDATE', 1, 'Settings', null, null, null, 'Global settings updated.');
+                flash_set('success', 'Settings saved.');
+                redirect(APP_URL . '/course-fees/settings.php');
+            } catch (PDOException $e) {
+                if (strpos($e->getMessage(), 'reg_fee_total') !== false
+                    || strpos($e->getMessage(), 'id_card_fee') !== false
+                    || strpos($e->getMessage(), 'admission_form_fee') !== false) {
+                    $errors[] = 'Database migration required: please run <code>admin/course-fees-v4-extra-fees.sql</code> to add the new fee columns before saving.';
+                } else {
+                    $errors[] = 'Database error: ' . htmlspecialchars($e->getMessage());
+                }
+            }
         }
 
     } elseif ($action === 'degree_type_toggle') {
