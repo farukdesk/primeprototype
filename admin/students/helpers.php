@@ -58,6 +58,18 @@ function sm_semester_list(): array
     return $list;
 }
 
+/**
+ * Returns a human-readable label for a semester_type value.
+ */
+function sm_semester_type_label(string $type, bool $short = false): string
+{
+    $labels = [
+        'bi_semester' => $short ? 'Bi Sem'   : 'Bi Semester (Spring / Fall)',
+        'trimester'   => $short ? 'Trimester' : 'Trimester (Spring / Summer / Fall)',
+    ];
+    return $labels[$type] ?? $type;
+}
+
 // ── Student ID generator ──────────────────────────────────────────────────────
 
 /**

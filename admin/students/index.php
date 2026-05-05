@@ -296,8 +296,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <td>
                             <?= h($s['admitted_semester']) ?>
                             <?php if (!empty($s['semester_type'])): ?>
-                            <?php $stl = ['bi_semester' => 'Bi Sem', 'trimester' => 'Tri']; ?>
-                            <br><small class="text-muted"><?= h($stl[$s['semester_type']] ?? $s['semester_type']) ?></small>
+                            <br><small class="text-muted"><?= h(sm_semester_type_label($s['semester_type'], true)) ?></small>
                             <?php endif; ?>
                         </td>
                         <td>
