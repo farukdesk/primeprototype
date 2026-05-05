@@ -1,6 +1,6 @@
 <?php
 /**
- * Student Fee Package – Shared Helpers
+ * Student Accounts – Shared Helpers
  */
 
 require_once __DIR__ . '/../includes/auth.php';
@@ -10,17 +10,17 @@ require_once __DIR__ . '/../change-log/helpers.php';
 
 function sfp_can_edit(): bool
 {
-    return is_super_admin() || can_access('student-fee-package', 'can_edit');
+    return is_super_admin() || can_access('student-accounts', 'can_edit');
 }
 
 function sfp_can_create(): bool
 {
-    return is_super_admin() || can_access('student-fee-package', 'can_create');
+    return is_super_admin() || can_access('student-accounts', 'can_create');
 }
 
 function sfp_can_delete(): bool
 {
-    return is_super_admin() || can_access('student-fee-package', 'can_delete');
+    return is_super_admin() || can_access('student-accounts', 'can_delete');
 }
 
 // ── Money format ──────────────────────────────────────────────────────────────

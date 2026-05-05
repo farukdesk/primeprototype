@@ -1,9 +1,9 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
-require_access('student-fee-package');
+require_access('student-accounts');
 require_once __DIR__ . '/helpers.php';
 
-$page_title = 'Student Fee Packages';
+$page_title = 'Student Accounts';
 $db         = db();
 
 // ── Filters ───────────────────────────────────────────────────────────────────
@@ -56,11 +56,11 @@ require_once __DIR__ . '/../includes/header.php';
 
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <div>
-        <h1 class="h3 mb-0"><i class="fas fa-file-invoice-dollar me-2 text-success"></i>Student Fee Packages</h1>
+        <h1 class="h3 mb-0"><i class="fas fa-file-invoice-dollar me-2 text-success"></i>Student Accounts</h1>
         <p class="text-muted mb-0 small">Snapshotted fee structures assigned to students.</p>
     </div>
     <?php if (sfp_can_create()): ?>
-    <a href="<?= APP_URL ?>/student-fee-package/create.php" class="btn btn-success btn-sm">
+    <a href="<?= APP_URL ?>/student-accounts/create.php" class="btn btn-success btn-sm">
         <i class="fas fa-plus me-1"></i> Assign Package
     </a>
     <?php endif; ?>
@@ -79,7 +79,7 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="col-auto">
                 <button class="btn btn-primary btn-sm" type="submit"><i class="fas fa-search me-1"></i>Search</button>
                 <?php if ($search !== ''): ?>
-                <a href="<?= APP_URL ?>/student-fee-package/index.php" class="btn btn-outline-secondary btn-sm">Clear</a>
+                <a href="<?= APP_URL ?>/student-accounts/index.php" class="btn btn-outline-secondary btn-sm">Clear</a>
                 <?php endif; ?>
             </div>
         </form>
@@ -92,7 +92,7 @@ require_once __DIR__ . '/../includes/header.php';
         <?php if (empty($packages)): ?>
         <div class="text-center text-muted py-5">
             <i class="fas fa-file-invoice-dollar fa-3x mb-3 opacity-25"></i>
-            <p class="mb-0">No fee packages found.</p>
+            <p class="mb-0">No student accounts found.</p>
         </div>
         <?php else: ?>
         <div class="table-responsive">
@@ -128,14 +128,14 @@ require_once __DIR__ . '/../includes/header.php';
                         <small class="text-muted"><?= date('d M Y', strtotime($pkg['created_at'])) ?></small>
                     </td>
                     <td class="text-end">
-                        <a href="<?= APP_URL ?>/student-fee-package/view.php?id=<?= $pkg['id'] ?>"
+                        <a href="<?= APP_URL ?>/student-accounts/view.php?id=<?= $pkg['id'] ?>"
                            class="btn btn-outline-primary btn-sm">
                             <i class="fas fa-eye me-1"></i>View
                         </a>
                         <?php if (sfp_can_delete()): ?>
-                        <form method="post" action="<?= APP_URL ?>/student-fee-package/delete.php"
+                        <form method="post" action="<?= APP_URL ?>/student-accounts/delete.php"
                               class="d-inline"
-                              onsubmit="return confirm('Delete this fee package? This cannot be undone.');">
+                              onsubmit="return confirm('Delete this student account? This cannot be undone.');">
                             <?= csrf_field() ?>
                             <input type="hidden" name="id" value="<?= $pkg['id'] ?>">
                             <button class="btn btn-outline-danger btn-sm">

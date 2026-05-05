@@ -1,9 +1,9 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
-require_access('student-fee-package', 'can_create');
+require_access('student-accounts', 'can_create');
 require_once __DIR__ . '/helpers.php';
 
-$page_title = 'Assign Fee Package';
+$page_title = 'Assign Student Account';
 $errors     = [];
 $db         = db();
 
@@ -77,7 +77,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $dup = $db->prepare('SELECT id FROM sfp_packages WHERE student_id = ? LIMIT 1');
         $dup->execute([$student_id]);
         if ($dup->fetchColumn()) {
-            $errors[] = 'This student already has a fee package assigned. Delete the existing package first.';
+            $errors[] = 'This student already has a student account assigned. Delete the existing package first.';
         }
     }
 
@@ -127,10 +127,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         sfp_generate_semester_fees($package_id, $total_semesters, $tuition_per_semester);
 
         $label = ($student['full_name'] ?? '') . ' – ' . $program_name;
-        log_change('student-fee-package', 'CREATE', $package_id, $label, null, null, null, 'Fee package assigned.');
+        log_change('student-accounts', 'CREATE', $package_id, $label, null, null, null, 'Student account assigned.');
 
-        flash_set('success', 'Fee package assigned to <strong>' . h($student['full_name']) . '</strong> successfully.');
-        redirect(APP_URL . '/student-fee-package/view.php?id=' . $package_id);
+        flash_set('success', 'Student account assigned to <strong>' . h($student['full_name']) . '</strong> successfully.');
+        redirect(APP_URL . '/student-accounts/view.php?id=' . $package_id);
     }
 
     save_old($_POST);
@@ -141,14 +141,14 @@ require_once __DIR__ . '/../includes/header.php';
 
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <div>
-        <h1 class="h3 mb-0"><i class="fas fa-plus-circle me-2 text-success"></i>Assign Fee Package</h1>
+        <h1 class="h3 mb-0"><i class="fas fa-plus-circle me-2 text-success"></i>Assign Student Account</h1>
         <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small">
             <li class="breadcrumb-item"><a href="<?= APP_URL ?>/index.php">Dashboard</a></li>
-            <li class="breadcrumb-item"><a href="<?= APP_URL ?>/student-fee-package/index.php">Fee Packages</a></li>
+            <li class="breadcrumb-item"><a href="<?= APP_URL ?>/student-accounts/index.php">Student Accounts</a></li>
             <li class="breadcrumb-item active">Assign</li>
         </ol></nav>
     </div>
-    <a href="<?= APP_URL ?>/student-fee-package/index.php" class="btn btn-outline-secondary btn-sm">
+    <a href="<?= APP_URL ?>/student-accounts/index.php" class="btn btn-outline-secondary btn-sm">
         <i class="fas fa-arrow-left me-1"></i> Back
     </a>
 </div>
@@ -375,7 +375,7 @@ require_once __DIR__ . '/../includes/header.php';
         <button type="submit" class="btn btn-success btn-lg">
             <i class="fas fa-check me-1"></i> Assign Package &amp; Generate Semester Fees
         </button>
-        <a href="<?= APP_URL ?>/student-fee-package/index.php" class="btn btn-outline-secondary btn-lg">Cancel</a>
+        <a href="<?= APP_URL ?>/student-accounts/index.php" class="btn btn-outline-secondary btn-lg">Cancel</a>
     </div>
 </form>
 
@@ -395,7 +395,7 @@ searchInput.addEventListener('input', function () {
     var q = this.value.trim();
     if (q.length < 2) { suggestions.style.display = 'none'; return; }
     searchTimer = setTimeout(function () {
-        fetch('<?= APP_URL ?>/student-fee-package/student-search.php?q=' + encodeURIComponent(q))
+        fetch('<?= APP_URL ?>/student-accounts/student-search.php?q=' + encodeURIComponent(q))
             .then(function(r){ return r.json(); })
             .then(function(data) {
                 suggestions.innerHTML = '';

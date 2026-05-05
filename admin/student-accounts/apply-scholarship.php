@@ -5,11 +5,11 @@
  * use add-scholarship.php to add and delete-scholarship.php to remove individual entries.
  */
 require_once __DIR__ . '/../includes/auth.php';
-require_access('student-fee-package', 'can_edit');
+require_access('student-accounts', 'can_edit');
 require_once __DIR__ . '/helpers.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    redirect(APP_URL . '/student-fee-package/index.php');
+    redirect(APP_URL . '/student-accounts/index.php');
 }
 
 csrf_check();
