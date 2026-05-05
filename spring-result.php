@@ -564,9 +564,7 @@ function pub_cgpa(array $entries): ?float
          <div class="badge-pill wow fadeInUp" data-wow-delay=".05s">
             <i class="fas fa-poll"></i> Official Result Portal
          </div>
-         <h1 class="wow fadeInUp" data-wow-delay=".1s">
-            <?= $filter_result_id > 0 ? 'Semester Result' : 'Semester Result' ?>
-         </h1>
+         <h1 class="wow fadeInUp" data-wow-delay=".1s">Semester Result</h1>
          <p class="tagline wow fadeInUp" data-wow-delay=".2s">
             Enter your Student ID below to view your published semester results,
             course grades, and grade points from Prime University.
