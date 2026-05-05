@@ -14,7 +14,10 @@ if (!$pkg) {
 $page_title    = 'Fee Package – ' . $pkg['student_name'];
 $semester_fees = sfp_get_semester_fees($id);
 
-// Per-semester fixed / English portions
+// All individual scholarships for this package, keyed by sf_id
+$all_scholarships = sfp_get_all_semester_scholarships($id);
+
+// Per-semester fixed / English portions (for display in semester table)
 $sem_fixed_portion   = sfp_semester_fixed_portion($pkg);
 $sem_english_portion = sfp_semester_english_portion($pkg);
 
@@ -64,43 +67,44 @@ require_once __DIR__ . '/../includes/header.php';
 
 <!-- ══════════════════════════════════════════════════════════
      PACKAGE SUMMARY CARDS
+     Formula: Standard Tuition (Full) + Fixed Institutional Fees (total) + English Course Fee (total)
 ═══════════════════════════════════════════════════════════ -->
 <div class="row g-3 mb-4">
     <div class="col-md-3">
         <div class="card h-100 border-start border-4 border-primary">
             <div class="card-body">
-                <div class="text-muted small mb-1">Tuition Per Semester</div>
-                <div class="fw-bold fs-5"><?= sfp_money((float)$pkg['tuition_per_semester']) ?></div>
+                <div class="text-muted small mb-1">Standard Tuition (Full)</div>
+                <div class="fw-bold fs-5"><?= sfp_money((float)$pkg['standard_tuition_full']) ?></div>
+                <div class="text-muted" style="font-size:.75rem;">
+                    <?= sfp_money((float)$pkg['tuition_per_semester']) ?> &times; <?= (int)$pkg['total_semesters'] ?> semesters (base rate)
+                </div>
             </div>
         </div>
     </div>
     <div class="col-md-3">
         <div class="card h-100 border-start border-4 border-warning">
             <div class="card-body">
-                <div class="text-muted small mb-1">Monthly Fixed Institutional</div>
-                <div class="fw-bold fs-5"><?= sfp_money((float)$pkg['monthly_fixed_fee']) ?></div>
-                <div class="text-muted" style="font-size:.75rem;">
-                    <?= sfp_money((float)$pkg['fixed_institutional_fees']) ?> ÷ <?= (int)$pkg['total_months'] ?> months
-                </div>
+                <div class="text-muted small mb-1">Fixed Institutional Fees</div>
+                <div class="fw-bold fs-5"><?= sfp_money((float)$pkg['fixed_institutional_fees']) ?></div>
+                <div class="text-muted" style="font-size:.75rem;">Total for <?= (int)$pkg['total_months'] ?> months</div>
             </div>
         </div>
     </div>
     <div class="col-md-3">
         <div class="card h-100 border-start border-4 border-info">
             <div class="card-body">
-                <div class="text-muted small mb-1">Monthly English Fee</div>
-                <div class="fw-bold fs-5"><?= sfp_money((float)$pkg['monthly_english_fee']) ?></div>
-                <div class="text-muted" style="font-size:.75rem;">
-                    <?= sfp_money((float)$pkg['english_course_fee']) ?> ÷ <?= (int)$pkg['total_months'] ?> months
-                </div>
+                <div class="text-muted small mb-1">English Course Fee</div>
+                <div class="fw-bold fs-5"><?= sfp_money((float)$pkg['english_course_fee']) ?></div>
+                <div class="text-muted" style="font-size:.75rem;">Total for programme</div>
             </div>
         </div>
     </div>
     <div class="col-md-3">
         <div class="card h-100 border-start border-4 border-success">
             <div class="card-body">
-                <div class="text-muted small mb-1">Est. Total Cost (excl. admission)</div>
+                <div class="text-muted small mb-1">Est. Total Payable</div>
                 <div class="fw-bold fs-5"><?= sfp_money($total_cost) ?></div>
+                <div class="text-muted" style="font-size:.75rem;">After scholarship deductions</div>
             </div>
         </div>
     </div>
@@ -123,7 +127,7 @@ require_once __DIR__ . '/../includes/header.php';
                     'Total Months'               => $pkg['total_months'],
                     'Months / Semester'          => number_format((float)$pkg['months_per_semester'], 2),
                     'Standard Tuition (Full)'    => sfp_money((float)$pkg['standard_tuition_full']),
-                    'Tuition Per Semester'        => sfp_money((float)$pkg['tuition_per_semester']),
+                    'Base Tuition / Semester'    => sfp_money((float)$pkg['tuition_per_semester']),
                     'Admission Fees (paid separately)' => sfp_money((float)$pkg['admission_fees']),
                     'Fixed Institutional Fees'   => sfp_money((float)$pkg['fixed_institutional_fees']),
                     'English Course Fee'         => sfp_money((float)$pkg['english_course_fee']),
@@ -194,15 +198,14 @@ require_once __DIR__ . '/../includes/header.php';
             <table class="table table-hover mb-0" style="font-size:.875rem;">
                 <thead>
                     <tr>
-                        <th style="width:60px;">#</th>
+                        <th style="width:45px;">#</th>
                         <th>Semester</th>
-                        <th class="text-end">Tuition</th>
-                        <th class="text-end">Scholarship</th>
+                        <th class="text-end">Tuition Fee</th>
+                        <th>Scholarships</th>
                         <th class="text-end">Tuition Payable</th>
-                        <th class="text-end">Fixed Fees<br><small class="fw-normal text-muted">(for semester)</small></th>
-                        <th class="text-end">English Fee<br><small class="fw-normal text-muted">(for semester)</small></th>
+                        <th class="text-end">Fixed Fees<br><small class="fw-normal text-muted">(per semester)</small></th>
+                        <th class="text-end">English Fee<br><small class="fw-normal text-muted">(per semester)</small></th>
                         <th class="text-end fw-bold">Total Payable</th>
-                        <th style="width:100px;"></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -212,6 +215,8 @@ require_once __DIR__ . '/../includes/header.php';
                 $grand_english         = 0.0;
                 $grand_total           = 0.0;
                 foreach ($semester_fees as $sf):
+                    $sf_id_row       = (int)$sf['id'];
+                    $tuition_fee_row = (float)$sf['tuition_fee'];
                     $tuition_payable = (float)$sf['tuition_payable'];
                     $fixed_amt       = $sem_fixed_portion;
                     $english_amt     = $sem_english_portion;
@@ -220,63 +225,105 @@ require_once __DIR__ . '/../includes/header.php';
                     $grand_fixed           += $fixed_amt;
                     $grand_english         += $english_amt;
                     $grand_total           += $total_sem;
+                    $sem_scholarships = $all_scholarships[$sf_id_row] ?? [];
                 ?>
                 <tr>
-                    <td><?= (int)$sf['semester_number'] ?></td>
+                    <td class="fw-semibold text-muted"><?= (int)$sf['semester_number'] ?></td>
                     <td>
-                        <?= h($sf['semester_label'] ?: '—') ?>
+                        <span class="fw-semibold"><?= h($sf['semester_label'] ?: '—') ?></span>
                         <?php if (sfp_can_edit()): ?>
                         <button type="button"
                                 class="btn btn-link btn-sm p-0 ms-1 text-muted set-label-btn"
                                 style="font-size:.7rem;"
-                                data-sf-id="<?= $sf['id'] ?>"
+                                data-sf-id="<?= $sf_id_row ?>"
                                 data-current="<?= h($sf['semester_label'] ?? '') ?>"
                                 title="Set semester label">
                             <i class="fas fa-pen"></i>
                         </button>
                         <?php endif; ?>
                     </td>
-                    <td class="text-end text-muted"><?= sfp_money((float)$sf['tuition_fee']) ?></td>
                     <td class="text-end">
-                        <?php if ((float)$sf['scholarship_discount_pct'] > 0): ?>
-                        <span class="text-danger">
-                            −<?= sfp_money((float)$sf['scholarship_amount']) ?>
-                            <small class="text-muted">(<?= number_format((float)$sf['scholarship_discount_pct'], 2) ?>%)</small>
-                        </span>
+                        <span class="text-muted"><?= sfp_money($tuition_fee_row) ?></span>
+                        <?php if (sfp_can_edit()): ?>
+                        <button type="button"
+                                class="btn btn-link btn-sm p-0 ms-1 text-muted edit-tuition-btn"
+                                style="font-size:.7rem;"
+                                data-sf-id="<?= $sf_id_row ?>"
+                                data-sem-num="<?= $sf['semester_number'] ?>"
+                                data-tuition="<?= $tuition_fee_row ?>"
+                                title="Edit tuition fee">
+                            <i class="fas fa-pen"></i>
+                        </button>
+                        <?php endif; ?>
+                    </td>
+                    <td>
+                        <?php if (!empty($sem_scholarships)): ?>
+                        <div class="d-flex flex-wrap gap-1 align-items-center">
+                            <?php foreach ($sem_scholarships as $sc): ?>
+                            <span class="badge rounded-pill bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25"
+                                  style="font-size:.72rem;font-weight:500;">
+                                <?= h($sc['label']) ?>&nbsp;(<?= number_format((float)$sc['discount_pct'], 1) ?>%)
+                                <?php if (sfp_can_edit()): ?>
+                                <form method="post" action="<?= APP_URL ?>/student-fee-package/delete-scholarship.php"
+                                      class="d-inline"
+                                      onsubmit="return confirm('Remove scholarship \'<?= h(addslashes($sc['label'])) ?>\'?');">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="scholarship_id" value="<?= $sc['id'] ?>">
+                                    <input type="hidden" name="package_id" value="<?= $id ?>">
+                                    <button type="submit" class="btn p-0 border-0 bg-transparent text-danger ms-1"
+                                            style="font-size:.65rem;line-height:1;vertical-align:middle;"
+                                            title="Remove this scholarship">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </form>
+                                <?php endif; ?>
+                            </span>
+                            <?php endforeach; ?>
+                            <?php if (sfp_can_edit()): ?>
+                            <button type="button"
+                                    class="btn btn-outline-warning btn-sm add-sc-btn"
+                                    style="font-size:.7rem;padding:1px 6px;"
+                                    data-sf-id="<?= $sf_id_row ?>"
+                                    data-sem-num="<?= $sf['semester_number'] ?>"
+                                    data-sem-label="<?= h($sf['semester_label'] ?? 'Semester ' . $sf['semester_number']) ?>"
+                                    data-tuition="<?= $tuition_fee_row ?>"
+                                    title="Add another scholarship">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                            <?php if ((float)$sf['scholarship_amount'] > 0): ?>
+                            <form method="post" action="<?= APP_URL ?>/student-fee-package/remove-scholarship.php"
+                                  class="d-inline"
+                                  onsubmit="return confirm('Remove ALL scholarships from this semester?');">
+                                <?= csrf_field() ?>
+                                <input type="hidden" name="sf_id" value="<?= $sf_id_row ?>">
+                                <input type="hidden" name="package_id" value="<?= $id ?>">
+                                <button class="btn btn-outline-secondary btn-sm" style="font-size:.7rem;padding:1px 6px;" title="Clear all scholarships">
+                                    <i class="fas fa-trash-alt"></i>
+                                </button>
+                            </form>
+                            <?php endif; ?>
+                            <?php endif; ?>
+                        </div>
                         <?php else: ?>
                         <span class="text-muted">—</span>
+                        <?php if (sfp_can_edit()): ?>
+                        <button type="button"
+                                class="btn btn-outline-warning btn-sm add-sc-btn ms-1"
+                                style="font-size:.7rem;padding:1px 6px;"
+                                data-sf-id="<?= $sf_id_row ?>"
+                                data-sem-num="<?= $sf['semester_number'] ?>"
+                                data-sem-label="<?= h($sf['semester_label'] ?? 'Semester ' . $sf['semester_number']) ?>"
+                                data-tuition="<?= $tuition_fee_row ?>"
+                                title="Add scholarship">
+                            <i class="fas fa-plus me-1"></i><span style="font-size:.7rem;">Add</span>
+                        </button>
+                        <?php endif; ?>
                         <?php endif; ?>
                     </td>
                     <td class="text-end fw-semibold"><?= sfp_money($tuition_payable) ?></td>
                     <td class="text-end"><?= sfp_money($fixed_amt) ?></td>
                     <td class="text-end"><?= sfp_money($english_amt) ?></td>
                     <td class="text-end fw-bold text-success"><?= sfp_money($total_sem) ?></td>
-                    <td class="text-end">
-                        <?php if (sfp_can_edit()): ?>
-                        <button type="button"
-                                class="btn btn-outline-warning btn-sm apply-sc-btn"
-                                data-sf-id="<?= $sf['id'] ?>"
-                                data-sem-num="<?= $sf['semester_number'] ?>"
-                                data-sem-label="<?= h($sf['semester_label'] ?? 'Semester ' . $sf['semester_number']) ?>"
-                                data-current-pct="<?= number_format((float)$sf['scholarship_discount_pct'], 2) ?>"
-                                data-current-note="<?= h($sf['note'] ?? '') ?>"
-                                title="Apply / Update Scholarship">
-                            <i class="fas fa-percentage"></i>
-                        </button>
-                        <?php if ((float)$sf['scholarship_discount_pct'] > 0): ?>
-                        <form method="post" action="<?= APP_URL ?>/student-fee-package/remove-scholarship.php"
-                              class="d-inline"
-                              onsubmit="return confirm('Remove scholarship from this semester?');">
-                            <?= csrf_field() ?>
-                            <input type="hidden" name="sf_id" value="<?= $sf['id'] ?>">
-                            <input type="hidden" name="package_id" value="<?= $id ?>">
-                            <button class="btn btn-outline-secondary btn-sm" title="Remove Scholarship">
-                                <i class="fas fa-times"></i>
-                            </button>
-                        </form>
-                        <?php endif; ?>
-                        <?php endif; ?>
-                    </td>
                 </tr>
                 <?php endforeach; ?>
                 </tbody>
@@ -287,7 +334,6 @@ require_once __DIR__ . '/../includes/header.php';
                         <td class="text-end"><?= sfp_money($grand_fixed) ?></td>
                         <td class="text-end"><?= sfp_money($grand_english) ?></td>
                         <td class="text-end text-success fs-6"><?= sfp_money($grand_total) ?></td>
-                        <td></td>
                     </tr>
                 </tfoot>
             </table>
@@ -296,34 +342,40 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <!-- ══════════════════════════════════════════════════════════
-     APPLY SCHOLARSHIP MODAL
+     ADD SCHOLARSHIP MODAL
 ═══════════════════════════════════════════════════════════ -->
-<div class="modal fade" id="applyScModal" tabindex="-1" aria-labelledby="applyScModalLabel" aria-hidden="true">
+<div class="modal fade" id="addScModal" tabindex="-1" aria-labelledby="addScModalLabel" aria-hidden="true">
     <div class="modal-dialog">
-        <form method="post" action="<?= APP_URL ?>/student-fee-package/apply-scholarship.php" novalidate>
+        <form method="post" action="<?= APP_URL ?>/student-fee-package/add-scholarship.php" novalidate>
             <?= csrf_field() ?>
             <input type="hidden" name="package_id" value="<?= $id ?>">
-            <input type="hidden" name="sf_id"      id="modal-sf-id" value="">
+            <input type="hidden" name="sf_id" id="asc-sf-id" value="">
             <div class="modal-content">
                 <div class="modal-header bg-warning text-dark">
-                    <h5 class="modal-title" id="applyScModalLabel">
-                        <i class="fas fa-percentage me-2"></i>Apply Scholarship
+                    <h5 class="modal-title" id="addScModalLabel">
+                        <i class="fas fa-graduation-cap me-2"></i>Add Scholarship
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <p class="mb-3 text-muted small" id="modal-sem-info"></p>
+                    <p class="mb-3 text-muted small" id="asc-sem-info"></p>
 
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Tuition Fee (this semester)</label>
-                        <input type="text" id="modal-tuition-display" class="form-control bg-light" readonly>
+                        <input type="text" id="asc-tuition-display" class="form-control bg-light" readonly>
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Scholarship Discount % <span class="text-danger">*</span></label>
+                        <label class="form-label fw-semibold">Scholarship Type / Label <span class="text-danger">*</span></label>
+                        <input type="text" name="sc_label" id="asc-label" class="form-control"
+                               placeholder="e.g. Initial Waiver, Sports Scholarship, Freedom Fighter" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Discount % <span class="text-danger">*</span></label>
                         <div class="input-group">
-                            <input type="number" name="discount_pct" id="modal-discount"
-                                   class="form-control" step="0.01" min="0" max="100" required>
+                            <input type="number" name="discount_pct" id="asc-pct"
+                                   class="form-control" step="0.01" min="0.01" max="100" required>
                             <span class="input-group-text">%</span>
                         </div>
                     </div>
@@ -331,29 +383,52 @@ require_once __DIR__ . '/../includes/header.php';
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Scholarship Amount (auto-calculated)</label>
                         <div class="input-group">
-                            <input type="text" id="modal-sc-amount" class="form-control bg-light" readonly>
-                            <span class="input-group-text">BDT</span>
-                        </div>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Tuition Payable after Discount</label>
-                        <div class="input-group">
-                            <input type="text" id="modal-tuition-payable" class="form-control bg-light" readonly>
+                            <input type="text" id="asc-amount" class="form-control bg-light" readonly>
                             <span class="input-group-text">BDT</span>
                         </div>
                     </div>
 
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Note</label>
-                        <textarea name="sc_note" id="modal-note" class="form-control" rows="2"></textarea>
+                        <textarea name="sc_note" id="asc-note" class="form-control" rows="2"
+                                  placeholder="Optional note about this scholarship"></textarea>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-warning text-dark">
-                        <i class="fas fa-check me-1"></i> Apply
+                        <i class="fas fa-plus me-1"></i> Add Scholarship
                     </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     EDIT TUITION MODAL
+     (for semesters after the initial fixed period)
+═══════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="editTuitionModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+        <form method="post" action="<?= APP_URL ?>/student-fee-package/update-tuition.php" novalidate>
+            <?= csrf_field() ?>
+            <input type="hidden" name="package_id" value="<?= $id ?>">
+            <input type="hidden" name="sf_id" id="et-sf-id" value="">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" style="font-size:.95rem;" id="et-title">Edit Tuition Fee</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-3" id="et-info"></p>
+                    <label class="form-label fw-semibold small">Tuition Fee (BDT)</label>
+                    <input type="number" name="tuition_fee" id="et-tuition" class="form-control"
+                           min="0" step="0.01" required>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm">Save</button>
                 </div>
             </div>
         </form>
@@ -389,51 +464,62 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <script>
-// Semester fee amounts indexed by sf_id
-var semFees = {};
-<?php foreach ($semester_fees as $sf): ?>
-semFees[<?= $sf['id'] ?>] = { tuition: <?= (float)$sf['tuition_fee'] ?> };
-<?php endforeach; ?>
-
-// ── Apply scholarship modal ───────────────────────────────────────────────────
-document.querySelectorAll('.apply-sc-btn').forEach(function(btn) {
+// ── Add Scholarship modal ─────────────────────────────────────────────────────
+document.querySelectorAll('.add-sc-btn').forEach(function(btn) {
     btn.addEventListener('click', function() {
-        var sfId   = this.dataset.sfId;
-        var semLbl = this.dataset.semLabel || ('Semester ' + this.dataset.semNum);
-        var pct    = this.dataset.currentPct;
-        var note   = this.dataset.currentNote;
-        var tuition = semFees[sfId] ? semFees[sfId].tuition : 0;
+        var sfId    = this.dataset.sfId;
+        var semLbl  = this.dataset.semLabel || ('Semester ' + this.dataset.semNum);
+        var tuition = parseFloat(this.dataset.tuition) || 0;
 
-        document.getElementById('modal-sf-id').value      = sfId;
-        document.getElementById('modal-sem-info').textContent = 'Applying to: ' + semLbl;
-        document.getElementById('modal-tuition-display').value = tuition.toLocaleString('en-BD', {minimumFractionDigits:2});
-        document.getElementById('modal-discount').value   = pct;
-        document.getElementById('modal-note').value       = note;
-        calcModal(tuition, parseFloat(pct) || 0);
+        document.getElementById('asc-sf-id').value        = sfId;
+        document.getElementById('asc-sem-info').textContent = 'Adding to: ' + semLbl;
+        document.getElementById('asc-tuition-display').value =
+            tuition.toLocaleString('en-BD', {minimumFractionDigits:2});
+        document.getElementById('asc-pct').value  = '';
+        document.getElementById('asc-label').value = '';
+        document.getElementById('asc-note').value  = '';
+        document.getElementById('asc-amount').value = '0.00';
 
-        var modal = new bootstrap.Modal(document.getElementById('applyScModal'));
+        var modal = new bootstrap.Modal(document.getElementById('addScModal'));
         modal.show();
+        setTimeout(function(){ document.getElementById('asc-label').focus(); }, 400);
     });
 });
 
-document.getElementById('modal-discount').addEventListener('input', function() {
-    var sfId = document.getElementById('modal-sf-id').value;
-    var tuition = semFees[sfId] ? semFees[sfId].tuition : 0;
-    calcModal(tuition, parseFloat(this.value) || 0);
+document.getElementById('asc-pct').addEventListener('input', function() {
+    var tuition = parseFloat(
+        document.getElementById('asc-tuition-display').value.replace(/,/g, '')
+    ) || 0;
+    var pct    = parseFloat(this.value) || 0;
+    var amount = tuition * pct / 100;
+    document.getElementById('asc-amount').value =
+        amount.toLocaleString('en-BD', {minimumFractionDigits:2});
 });
 
-function calcModal(tuition, pct) {
-    var sc  = tuition * pct / 100;
-    var pay = tuition - sc;
-    document.getElementById('modal-sc-amount').value      = sc.toLocaleString('en-BD', {minimumFractionDigits:2});
-    document.getElementById('modal-tuition-payable').value = pay.toLocaleString('en-BD', {minimumFractionDigits:2});
-}
+// ── Edit Tuition modal ────────────────────────────────────────────────────────
+document.querySelectorAll('.edit-tuition-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        var sfId    = this.dataset.sfId;
+        var semNum  = this.dataset.semNum;
+        var tuition = this.dataset.tuition;
+
+        document.getElementById('et-sf-id').value    = sfId;
+        document.getElementById('et-title').textContent = 'Edit Tuition – Semester #' + semNum;
+        document.getElementById('et-info').textContent  =
+            'Update the tuition fee for semester #' + semNum + '. Scholarship amounts will be recalculated.';
+        document.getElementById('et-tuition').value  = tuition;
+
+        var modal = new bootstrap.Modal(document.getElementById('editTuitionModal'));
+        modal.show();
+        setTimeout(function(){ document.getElementById('et-tuition').focus(); }, 400);
+    });
+});
 
 // ── Set semester label modal ──────────────────────────────────────────────────
 document.querySelectorAll('.set-label-btn').forEach(function(btn) {
     btn.addEventListener('click', function() {
-        document.getElementById('lbl-sf-id').value  = this.dataset.sfId;
-        document.getElementById('lbl-input').value  = this.dataset.current;
+        document.getElementById('lbl-sf-id').value = this.dataset.sfId;
+        document.getElementById('lbl-input').value = this.dataset.current;
         var modal = new bootstrap.Modal(document.getElementById('setLabelModal'));
         modal.show();
     });

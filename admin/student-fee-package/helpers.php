@@ -115,3 +115,90 @@ function sfp_semester_english_portion(array $pkg): float
     if ($months <= 0) return 0.0;
     return (float)$pkg['english_course_fee'] / $months * (float)$pkg['months_per_semester'];
 }
+
+// ── Individual scholarships for a single semester row ────────────────────────
+
+function sfp_get_semester_scholarships(int $sf_id): array
+{
+    $stmt = db()->prepare(
+        'SELECT ss.*, u.full_name AS created_by_name
+         FROM sfp_semester_scholarships ss
+         LEFT JOIN users u ON u.id = ss.created_by
+         WHERE ss.sf_id = ?
+         ORDER BY ss.created_at ASC'
+    );
+    $stmt->execute([$sf_id]);
+    return $stmt->fetchAll();
+}
+
+// ── All individual scholarships for a package, keyed by sf_id ────────────────
+
+function sfp_get_all_semester_scholarships(int $package_id): array
+{
+    $stmt = db()->prepare(
+        'SELECT ss.*
+         FROM sfp_semester_scholarships ss
+         JOIN sfp_semester_fees sf ON sf.id = ss.sf_id
+         WHERE sf.package_id = ?
+         ORDER BY ss.sf_id, ss.created_at ASC'
+    );
+    $stmt->execute([$package_id]);
+    $rows = $stmt->fetchAll();
+
+    $map = [];
+    foreach ($rows as $row) {
+        $map[$row['sf_id']][] = $row;
+    }
+    return $map;
+}
+
+// ── Re-aggregate scholarship totals into sfp_semester_fees ───────────────────
+// Call after any insert / delete in sfp_semester_scholarships.
+
+function sfp_recalculate_semester(int $sf_id, int $updated_by): void
+{
+    $db = db();
+
+    // Fetch the current tuition_fee for this semester
+    $sf_stmt = $db->prepare('SELECT tuition_fee FROM sfp_semester_fees WHERE id = ?');
+    $sf_stmt->execute([$sf_id]);
+    $sf = $sf_stmt->fetch();
+    if (!$sf) return;
+
+    $tuition_fee = (float)$sf['tuition_fee'];
+
+    // Sum up all individual scholarship percentages and amounts
+    $agg = $db->prepare(
+        'SELECT COALESCE(SUM(discount_pct), 0) AS total_pct,
+                COALESCE(SUM(amount), 0)        AS total_amount
+         FROM sfp_semester_scholarships
+         WHERE sf_id = ?'
+    );
+    $agg->execute([$sf_id]);
+    $agg_row = $agg->fetch();
+
+    $total_pct    = (float)$agg_row['total_pct'];
+    $total_amount = (float)$agg_row['total_amount'];
+
+    // Cap scholarship at the full tuition fee
+    if ($total_amount > $tuition_fee) {
+        $total_amount = $tuition_fee;
+    }
+    $tuition_payable = max(0.0, $tuition_fee - $total_amount);
+
+    $db->prepare(
+        'UPDATE sfp_semester_fees
+         SET scholarship_discount_pct = ?,
+             scholarship_amount       = ?,
+             tuition_payable          = ?,
+             updated_by               = ?,
+             updated_at               = NOW()
+         WHERE id = ?'
+    )->execute([
+        round($total_pct, 2),
+        round($total_amount, 2),
+        round($tuition_payable, 2),
+        $updated_by,
+        $sf_id,
+    ]);
+}
