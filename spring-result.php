@@ -91,16 +91,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function pub_grade_badge(string $grade): string
 {
-    $cls = match (strtoupper(trim($grade))) {
+    $upper = strtoupper(trim($grade));
+    $cls = match ($upper) {
         'A+', 'A'  => 'rp-grade--a-plus',
         'A-', 'B+' => 'rp-grade--a',
         'B', 'B-'  => 'rp-grade--b',
         'C+', 'C'  => 'rp-grade--c',
         'D'        => 'rp-grade--d',
         'F'        => 'rp-grade--f',
+        'INCOM'    => 'rp-grade--other',
         default    => 'rp-grade--other',
     };
-    return '<span class="rp-grade ' . $cls . '">' . fh($grade) . '</span>';
+    $display = ($upper === 'INCOM') ? 'Incom' : fh($grade);
+    return '<span class="rp-grade ' . $cls . '">' . $display . '</span>';
 }
 
 function pub_gp_color(float $gp): string
@@ -662,7 +665,6 @@ function pub_cgpa(array $entries): ?float
                   <?php foreach ($result_sets as $idx => $rs):
                      $res     = $rs['result'];
                      $entries = $rs['entries'];
-                     $avg_gp  = pub_cgpa($entries);
                   ?>
                   <div class="rp-result-card wow fadeInUp" data-wow-delay="<?= .1 + $idx * .05 ?>s">
 
@@ -713,36 +715,29 @@ function pub_cgpa(array $entries): ?float
                                  <td style="text-align:center;">
                                     <?= pub_grade_badge($e['letter_grade']) ?>
                                  </td>
-                                 <td style="text-align:center;">
-                                    <?php if ($e['grade_point'] !== null): ?>
-                                    <span class="rp-gp" style="color:<?= pub_gp_color((float)$e['grade_point']) ?>;">
-                                       <?= number_format((float)$e['grade_point'], 2) ?>
-                                    </span>
-                                    <?php else: ?>
-                                    <span style="color:#d1d5db;">—</span>
-                                    <?php endif; ?>
-                                 </td>
-                              </tr>
-                              <?php endforeach; ?>
-                           </tbody>
-                        </table>
-                     </div>
+                                  <td style="text-align:center;">
+                                     <?php if (strtoupper($e['letter_grade']) === 'INCOM'): ?>
+                                     <span class="rp-gp" style="color:#6b7280;font-style:italic;">Incom</span>
+                                     <?php elseif ($e['grade_point'] !== null): ?>
+                                     <span class="rp-gp" style="color:<?= pub_gp_color((float)$e['grade_point']) ?>;">
+                                        <?= number_format((float)$e['grade_point'], 2) ?>
+                                     </span>
+                                     <?php else: ?>
+                                     <span style="color:#d1d5db;">—</span>
+                                     <?php endif; ?>
+                                  </td>
+                               </tr>
+                               <?php endforeach; ?>
+                            </tbody>
+                         </table>
+                      </div>
 
-                     <!-- Card footer: summary -->
-                     <div class="rp-card-footer">
-                        <div class="rp-avg">
-                           <?php if ($avg_gp !== null): ?>
-                           Semester Average GPA:&nbsp;
-                           <strong style="color:<?= pub_gp_color($avg_gp) ?>;"><?= number_format($avg_gp, 2) ?></strong>
-                           &nbsp;/ 4.00
-                           <?php else: ?>
-                           <span style="color:#9ca3af;">GPA not available</span>
-                           <?php endif; ?>
-                        </div>
-                        <div style="font-size:.8rem;color:#9ca3af;">
-                           <i class="fas fa-check-circle me-1" style="color:#16a34a;"></i> Published
-                        </div>
-                     </div>
+                      <!-- Card footer: published indicator -->
+                      <div class="rp-card-footer">
+                         <div style="font-size:.8rem;color:#9ca3af;">
+                            <i class="fas fa-check-circle me-1" style="color:#16a34a;"></i> Published
+                         </div>
+                      </div>
 
                   </div><!-- /.rp-result-card -->
                   <?php endforeach; ?>

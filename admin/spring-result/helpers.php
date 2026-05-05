@@ -29,7 +29,7 @@ function sr_can_delete(): bool
 
 // ── Grade validation ──────────────────────────────────────────────────────────
 
-const SR_VALID_GRADES = ['A+','A','A-','B+','B','B-','C+','C','D','F'];
+const SR_VALID_GRADES = ['A+','A','A-','B+','B','B-','C+','C','D','F','INCOM'];
 
 function sr_valid_letter_grade(string $g): bool
 {
@@ -39,16 +39,17 @@ function sr_valid_letter_grade(string $g): bool
 function sr_grade_point_from_letter(string $g): ?float
 {
     return match (strtoupper(trim($g))) {
-        'A+'  => 4.00,
-        'A'   => 3.75,
-        'A-'  => 3.50,
-        'B+'  => 3.25,
-        'B'   => 3.00,
-        'B-'  => 2.75,
-        'C+'  => 2.50,
-        'C'   => 2.25,
-        'D'   => 2.00,
-        'F'   => 0.00,
+        'A+'    => 4.00,
+        'A'     => 3.75,
+        'A-'    => 3.50,
+        'B+'    => 3.25,
+        'B'     => 3.00,
+        'B-'    => 2.75,
+        'C+'    => 2.50,
+        'C'     => 2.25,
+        'D'     => 2.00,
+        'F'     => 0.00,
+        'INCOM' => null,
         default => null,
     };
 }

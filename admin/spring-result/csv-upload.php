@@ -67,6 +67,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
             $letter_grade = strtoupper(trim($row[$map['letter_grade']] ?? ''));
             $grade_point  = trim($row[$map['grade_point']]  ?? '');
 
+            // X in CSV means Incomplete; also normalise explicit INCOM to display form
+            if ($letter_grade === 'X' || $letter_grade === 'INCOM') {
+                $letter_grade = 'Incom';
+            }
+
             if ($student_id === '' || $course_title === '') {
                 $skipped++;
                 continue;
@@ -77,7 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                 continue;
             }
 
-            $gp = ($grade_point !== '') ? (float)$grade_point : sr_grade_point_from_letter($letter_grade);
+            $gp = ($grade_point !== '' && strtoupper($letter_grade) !== 'INCOM') ? (float)$grade_point : sr_grade_point_from_letter($letter_grade);
 
             try {
                 $stmt->execute([
@@ -272,6 +277,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <i class="fas fa-info-circle me-1"></i>
                     Grade Point is auto-calculated from Letter Grade if not provided.
                     Valid grades: A+, A, A-, B+, B, B-, C+, C, D, F.
+                    Use <strong>X</strong> for Incomplete (stored as <em>Incom</em>).
                 </div>
             </div>
         </div>
