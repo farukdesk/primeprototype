@@ -225,8 +225,8 @@ require_once __DIR__ . '/../includes/header.php';
                     $sf_id_row       = (int)$sf['id'];
                     $tuition_fee_row = (float)$sf['tuition_fee'];
                     $tuition_payable = (float)$sf['tuition_payable'];
-                    $fixed_amt       = max(0.0, $sem_fixed_portion   - (float)($sf['fixed_discount_amount']   ?? 0));
-                    $english_amt     = max(0.0, $sem_english_portion  - (float)($sf['english_discount_amount'] ?? 0));
+                    $fixed_amt       = max(0.0, $sem_fixed_portion  - (float)($sf['fixed_discount_amount']   ?? 0));
+                    $english_amt     = max(0.0, $sem_english_portion - (float)($sf['english_discount_amount'] ?? 0));
                     $total_sem       = $tuition_payable + $fixed_amt + $english_amt;
                     $grand_tuition_payable += $tuition_payable;
                     $grand_fixed           += $fixed_amt;
@@ -544,9 +544,8 @@ $first_sem_label   = ($first_sem && $first_sem['semester_label']) ? $first_sem['
                     <!-- Supporting document (required for non-policy / manual scholarships) -->
                     <div class="mb-3" id="asc-doc-wrap">
                         <label class="form-label fw-semibold">
-                            Supporting Document <span class="text-danger" id="asc-doc-required-star">*</span>
-                        </label>
-                        <input type="file" name="support_doc" id="asc-support-doc" class="form-control"
+                            Supporting Document <span class="text-danger">*</span>
+                        </label>                        <input type="file" name="support_doc" id="asc-support-doc" class="form-control"
                                accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.txt">
                         <div class="form-text">
                             <i class="fas fa-info-circle me-1"></i>

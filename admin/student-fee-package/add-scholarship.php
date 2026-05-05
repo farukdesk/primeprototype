@@ -57,7 +57,7 @@ if (empty($errors)) {
         } else {
             $user = auth_user();
             // Derive a descriptive file name for the student files record
-            $doc_file_name = 'Scholarship Support – ' . $label;
+            $doc_file_name = 'Scholarship Support - ' . $label;
 
             db()->prepare(
                 'INSERT INTO student_files
