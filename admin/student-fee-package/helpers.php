@@ -154,6 +154,8 @@ function sfp_get_all_semester_scholarships(int $package_id): array
 
 // ── Re-aggregate scholarship totals into sfp_semester_fees ───────────────────
 // Call after any insert / delete in sfp_semester_scholarships.
+// Each scholarship is applied to the *remaining* balance after previous
+// scholarships, not the original tuition fee (cascading / stacking).
 
 function sfp_recalculate_semester(int $sf_id, int $updated_by): void
 {
@@ -167,24 +169,34 @@ function sfp_recalculate_semester(int $sf_id, int $updated_by): void
 
     $tuition_fee = (float)$sf['tuition_fee'];
 
-    // Sum up all individual scholarship percentages and amounts
-    $agg = $db->prepare(
-        'SELECT COALESCE(SUM(discount_pct), 0) AS total_pct,
-                COALESCE(SUM(amount), 0)        AS total_amount
+    // Fetch all scholarship rows ordered by creation date (oldest first)
+    $rows_stmt = $db->prepare(
+        'SELECT id, discount_pct
          FROM sfp_semester_scholarships
-         WHERE sf_id = ?'
+         WHERE sf_id = ?
+         ORDER BY created_at ASC, id ASC'
     );
-    $agg->execute([$sf_id]);
-    $agg_row = $agg->fetch();
+    $rows_stmt->execute([$sf_id]);
+    $scholarships = $rows_stmt->fetchAll();
 
-    $total_pct    = (float)$agg_row['total_pct'];
-    $total_amount = (float)$agg_row['total_amount'];
+    // Cascading calculation: each discount applies to the running remaining balance.
+    // Update each row's stored amount so the view shows correct per-scholarship amounts.
+    $update_stmt  = $db->prepare('UPDATE sfp_semester_scholarships SET amount = ? WHERE id = ?');
+    $running_bal  = $tuition_fee;
+    $total_pct    = 0.0;
+    $total_amount = 0.0;
 
-    // Cap scholarship at the full tuition fee
-    if ($total_amount > $tuition_fee) {
-        $total_amount = $tuition_fee;
+    foreach ($scholarships as $sc) {
+        $pct    = (float)$sc['discount_pct'];
+        $amount = round($running_bal * $pct / 100, 2);
+        $amount = min($amount, $running_bal); // never exceed remaining balance
+        $update_stmt->execute([$amount, $sc['id']]);
+        $running_bal  -= $amount;
+        $total_amount += $amount;
+        $total_pct    += $pct;
     }
-    $tuition_payable = max(0.0, $tuition_fee - $total_amount);
+
+    $tuition_payable = max(0.0, $running_bal);
 
     $db->prepare(
         'UPDATE sfp_semester_fees
