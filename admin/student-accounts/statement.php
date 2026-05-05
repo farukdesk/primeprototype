@@ -21,10 +21,10 @@ if (!$pkg) {
 $student_stmt = db()->prepare(
     'SELECT s.*,
             d.name          AS dept_name,
-            d.short_name    AS dept_short,
+            d.code          AS dept_short,
             sb.name         AS batch_name
      FROM students s
-     LEFT JOIN departments d  ON d.id = s.department_id
+     LEFT JOIN dept_departments d  ON d.id = s.dept_id
      LEFT JOIN student_batches sb ON sb.id = s.batch_id
      WHERE s.id = ?'
 );
