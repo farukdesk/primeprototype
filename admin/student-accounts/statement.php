@@ -70,8 +70,14 @@ $fixed_total       = (float)$pkg['fixed_institutional_fees'];
 // "So total" = sum of all the five fee lines
 $grand_total_fees  = $admission_fee + $reg_fee_total + $english_fee_total + $tuition_total + $fixed_total;
 
-// Regular semester payable per semester (tuition + reg fee per semester portion)
-$regular_payable_per_sem = (float)$pkg['tuition_per_semester'] + $reg_fee_1st_sem;
+// Per-semester fixed/English portions
+$months = (float)$pkg['total_months'];
+$mps    = (float)$pkg['months_per_semester'];
+$fixed_per_sem_gross   = ($months > 0) ? round($fixed_total / $months * $mps, 2) : 0.0;
+$english_per_sem_gross = ($months > 0) ? round($english_fee_total / $months * $mps, 2) : 0.0;
+
+// Regular semester payable per semester (all four components)
+$regular_payable_per_sem = (float)$pkg['tuition_per_semester'] + $fixed_per_sem_gross + $english_per_sem_gross + $reg_fee_1st_sem;
 
 // First-semester scholarship & discount
 $first_sem_scholarship_pct    = $sf1 ? (float)$sf1['scholarship_discount_pct'] : 0.0;
@@ -81,12 +87,6 @@ $first_sem_english_discount   = $sf1 ? (float)($sf1['english_discount_amount'] ?
 
 $total_discount_first_sem     = $first_sem_scholarship_amount + $first_sem_fixed_discount + $first_sem_english_discount;
 $first_sem_tuition_payable    = $sf1 ? (float)$sf1['tuition_payable'] : (float)$pkg['tuition_per_semester'];
-
-// Per-semester fixed/English portions
-$months = (float)$pkg['total_months'];
-$mps    = (float)$pkg['months_per_semester'];
-$fixed_per_sem_gross   = ($months > 0) ? round($fixed_total / $months * $mps, 2) : 0.0;
-$english_per_sem_gross = ($months > 0) ? round($english_fee_total / $months * $mps, 2) : 0.0;
 
 $first_sem_fixed_payable   = max(0.0, $fixed_per_sem_gross   - $first_sem_fixed_discount);
 $first_sem_english_payable = max(0.0, $english_per_sem_gross - $first_sem_english_discount);
@@ -168,6 +168,7 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
             letter-spacing: .05em; color: #1e3a5f;
         }
         .univ-sub { font-size: 10px; color: #555; margin-top: 2px; }
+        .fee-table tr.visual-sep td { padding: 0; height: 4px; background: #f8f8f8; border: none; }
 
         .doc-title {
             text-align: center; font-size: 14px; font-weight: 700;
@@ -231,7 +232,10 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
         }
         .sig-subtitle { font-size: 9.5px; color: #6b7280; margin-top: 2px; }
 
-        .date-issued { font-size: 10px; color: #666; margin-top: 16px; }
+        .date-issued-top {
+            text-align: right; font-size: 10.5px; color: #444; font-weight: 600;
+            margin-bottom: 12px;
+        }
 
         @media print {
             .screen-controls { display: none !important; }
@@ -257,11 +261,13 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
     <div class="univ-header">
         <img src="<?= LOGO_URL ?>" alt="Prime University Logo" class="logo"
              onerror="this.style.display='none'">
-        <div class="univ-name">Prime University</div>
-        <div class="univ-sub">House 28, Road 6, Mirpur-2, Dhaka-1216 | primeuniversity.ac.bd</div>
+        <div class="univ-sub">114/116 Mazar Road, Mirpur-1, Dhaka 1216, Bangladesh | www.primeuniversity.ac.bd</div>
     </div>
 
     <div class="doc-title">Statement of Payment</div>
+
+    <!-- ── Date of Issue (top-right) ── -->
+    <div class="date-issued-top">Date of Issue: <?= $date_today ?></div>
 
     <!-- ── Student Information ── -->
     <table class="student-info-table">
@@ -283,13 +289,7 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
         </tr>
         <tr>
             <td class="lbl">Enrolled Semester</td>
-            <td class="val"><?= h($pkg['admitted_semester'] ?? '') ?></td>
-            <td class="lbl">Total No. of Courses</td>
-            <td class="val"><span class="manual-field">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></td>
-        </tr>
-        <tr>
-            <td class="lbl">Course Waiver (If Any)</td>
-            <td class="val" colspan="3"><span class="manual-field">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></td>
+            <td class="val" colspan="3"><?= h($pkg['admitted_semester'] ?? '') ?></td>
         </tr>
     </table>
 
@@ -336,45 +336,99 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
                 <td class="amt"><?= number_format($fixed_total, 2) ?></td>
             </tr>
             <tr class="total-row">
-                <td colspan="2"><strong>So Total</strong></td>
+                <td colspan="2"><strong>Total Regular Cost</strong></td>
                 <td class="amt"><strong><?= number_format($grand_total_fees, 2) ?></strong></td>
             </tr>
         </tbody>
     </table>
 
     <!-- ══════════════════════════════════════
-         SECTION 2 — REGULAR SEMESTER PAYMENT
+         SECTION 2 — REGULAR & FIRST SEMESTER
     ══════════════════════════════════════ -->
     <div class="sec-heading">Regular Semester &amp; First Semester Payment Details</div>
     <table class="fee-table">
-        <tbody>
-            <tr class="highlight">
-                <td colspan="2">Regular Semester Payable per Semester</td>
-                <td class="amt"><?= number_format($regular_payable_per_sem, 2) ?></td>
+        <thead>
+            <tr>
+                <th style="width:26px;">#</th>
+                <th>Description</th>
+                <th class="amt" style="width:130px;">Amount (BDT)</th>
             </tr>
+        </thead>
+        <tbody>
+            <!-- Per-semester breakdown (regular / gross) -->
+            <tr>
+                <td class="serial">1</td>
+                <td>Per Semester Tuition Fee</td>
+                <td class="amt"><?= number_format((float)$pkg['tuition_per_semester'], 2) ?></td>
+            </tr>
+            <tr>
+                <td class="serial">2</td>
+                <td>Per Semester Institutional &amp; Development Fee</td>
+                <td class="amt"><?= number_format($fixed_per_sem_gross, 2) ?></td>
+            </tr>
+            <tr>
+                <td class="serial">3</td>
+                <td>Per Semester English Language Fee</td>
+                <td class="amt"><?= number_format($english_per_sem_gross, 2) ?></td>
+            </tr>
+            <tr>
+                <td class="serial">4</td>
+                <td>Per Semester Registration Fee</td>
+                <td class="amt"><?= number_format($reg_fee_1st_sem, 2) ?></td>
+            </tr>
+            <tr class="subtotal">
+                <td colspan="2"><strong>Total Regular Payable per Semester</strong></td>
+                <td class="amt"><strong><?= number_format($regular_payable_per_sem, 2) ?></strong></td>
+            </tr>
+
+            <!-- Scholarship / discount applied in first semester -->
+            <tr class="visual-sep"><td colspan="3"></td></tr>
             <?php if (!empty($scholarships_1st)): ?>
             <tr>
-                <td colspan="2">
-                    All Applied Scholarship(s) in First Semester:
+                <td class="indent" colspan="2">
+                    Scholarship(s) Applied in First Semester:
                     <?php foreach ($scholarships_1st as $sc): ?>
                     <span class="sc-badge"><?= h($sc['label']) ?> (<?= number_format((float)$sc['discount_pct'], 1) ?>%)</span>
                     <?php endforeach; ?>
                 </td>
-                <td class="amt neg">− <?= number_format($total_discount_first_sem, 2) ?></td>
+                <td class="amt neg">− <?= number_format($first_sem_scholarship_amount, 2) ?></td>
             </tr>
+            <?php if ($first_sem_fixed_discount > 0): ?>
+            <tr>
+                <td class="indent" colspan="2">Scholarship on Institutional &amp; Development Fee</td>
+                <td class="amt neg">− <?= number_format($first_sem_fixed_discount, 2) ?></td>
+            </tr>
+            <?php endif; ?>
+            <?php if ($first_sem_english_discount > 0): ?>
+            <tr>
+                <td class="indent" colspan="2">Scholarship on English Language Fee</td>
+                <td class="amt neg">− <?= number_format($first_sem_english_discount, 2) ?></td>
+            </tr>
+            <?php endif; ?>
             <?php else: ?>
             <tr>
-                <td colspan="2">All Applied Scholarship(s) in First Semester</td>
+                <td class="indent" colspan="2">Scholarship(s) Applied in First Semester</td>
                 <td class="amt">—</td>
             </tr>
             <?php endif; ?>
             <tr>
-                <td colspan="2">Discounted Amount in Total</td>
+                <td class="indent" colspan="2">Total Scholarship Discount (First Semester)</td>
                 <td class="amt neg">− <?= number_format($total_discount_first_sem, 2) ?></td>
             </tr>
             <tr class="subtotal">
-                <td colspan="2"><strong>Total Payable in First Semester After Discount</strong></td>
+                <td colspan="2"><strong>Total Payable in First Semester (After Scholarship)</strong></td>
                 <td class="amt"><strong><?= number_format($total_payable_first_sem, 2) ?></strong></td>
+            </tr>
+
+            <!-- Monthly installment -->
+            <tr class="visual-sep"><td colspan="3"></td></tr>
+            <tr class="highlight">
+                <td colspan="2"><strong>First Semester Monthly Installment per Month</strong>
+                    <span style="font-size:9.5px; color:#92400e; font-weight:400;">
+                        (<?= number_format($total_payable_first_sem, 2) ?> − <?= number_format($total_paid_at_admission, 2) ?> paid at admission) ÷ <?= (int)$mps ?> months
+                    </span>
+                </td>
+                <td class="amt"><strong><?= number_format($monthly_installment, 2) ?></strong></td>
             </tr>
         </tbody>
     </table>
@@ -408,27 +462,6 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
             <tr class="total-row">
                 <td colspan="2"><strong>Total Amount Paid (During Admission)</strong></td>
                 <td class="amt"><strong><?= number_format($total_paid_at_admission, 2) ?></strong></td>
-            </tr>
-        </tbody>
-    </table>
-
-    <!-- ══════════════════════════════════════
-         SECTION 4 — OUTSTANDING & INSTALLMENT
-    ══════════════════════════════════════ -->
-    <div class="sec-heading">Outstanding &amp; Monthly Installment</div>
-    <table class="fee-table">
-        <tbody>
-            <tr>
-                <td style="width:60%;">Admission Outstanding (If Any)</td>
-                <td class="amt"><span class="manual-field">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></td>
-            </tr>
-            <tr>
-                <td>Registration Fees Outstanding</td>
-                <td class="amt"><span class="manual-field">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></td>
-            </tr>
-            <tr class="highlight">
-                <td><strong>1st Semester Monthly Installment per Month</strong></td>
-                <td class="amt"><strong><?= number_format($monthly_installment, 2) ?></strong></td>
             </tr>
         </tbody>
     </table>
@@ -470,8 +503,6 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
             <div class="sig-subtitle"><?= h($pkg['student_name']) ?></div>
         </div>
     </div>
-
-    <div class="date-issued">Date of Issue: <?= $date_today ?></div>
 
 </div>
 </div>
