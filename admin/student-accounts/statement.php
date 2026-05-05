@@ -96,8 +96,8 @@ $total_payable_first_sem = $first_sem_tuition_payable + $first_sem_fixed_payable
 // Payment made at admission
 $admission_payment_admission = $admission_fee;
 $admission_payment_reg       = $reg_fee_1st_sem;
-// form + ID card are bundled in form_id_fee; split for display
-$admission_form_fee = round($form_id_fee / 2, 2);
+// form + ID card are bundled in form_id_fee; split evenly for display
+$admission_form_fee = (int)floor($form_id_fee / 2);
 $admission_id_fee   = $form_id_fee - $admission_form_fee;
 $total_paid_at_admission = $admission_payment_admission + $admission_payment_reg + $form_id_fee;
 
@@ -439,7 +439,9 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
         <ul style="margin: 4px 0 0 16px; padding: 0;">
             <li>Monthly payment must be made on or before the <strong>10th of each month</strong>.</li>
             <li>Duration of payment:
-                <?php if ($total_semesters <= 8): ?>
+                <?php
+                // Bi-semester programmes run 8 semesters; trimester programmes run 12 semesters.
+                if ($total_semesters <= 8): ?>
                 <strong><?= $total_semesters ?> semesters (Bi-Semester)</strong>, <?= $payment_months ?> months total.
                 <?php else: ?>
                 <strong><?= $total_semesters ?> semesters (Trimester)</strong>, <?= $payment_months ?> months total.
