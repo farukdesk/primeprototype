@@ -433,7 +433,6 @@ require_once __DIR__ . '/../includes/header.php';
     <a href="#sec-enrollment"><i class="fas fa-id-badge me-1"></i>Enrollment</a>
     <a href="#sec-personal"><i class="fas fa-user me-1"></i>Personal</a>
     <a href="#sec-parents"><i class="fas fa-users me-1"></i>Parents</a>
-    <a href="#sec-fees"><i class="fas fa-money-bill-wave me-1"></i>Fees</a>
     <a href="#sec-quals"><i class="fas fa-graduation-cap me-1"></i>Qualifications</a>
 </div>
 
@@ -581,6 +580,9 @@ require_once __DIR__ . '/../includes/header.php';
                     <input type="hidden" name="batch" id="batch_text" value="<?= old('batch') ?>">
                     <div class="ss-list" id="batch_list">
                         <div class="ss-item" data-value="" data-label="">— None —</div>
+                        <div class="ss-item" data-value="" data-label="Internal Batch" data-internal="1">
+                            Internal Batch
+                        </div>
                         <?php foreach ($batches as $b): ?>
                         <div class="ss-item" data-value="<?= $b['id'] ?>" data-label="<?= h($b['name']) ?>">
                             <?= h($b['name']) ?>
@@ -846,116 +848,7 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <!-- ══════════════════════════════════════════════════════════
-     SECTION 4 – QUOTA & FEE INFORMATION
-═══════════════════════════════════════════════════════════ -->
-<div class="card form-section sec-fees" id="sec-fees">
-    <div class="card-header">
-        <div class="section-icon"><i class="fas fa-money-bill-wave"></i></div>
-        <span class="section-title">Quota &amp; Fee Information</span>
-    </div>
-    <div class="card-body">
-        <!-- Quota toggles -->
-        <div class="mb-4 p-3" style="background:#fffbeb;border-radius:10px;border:1px solid #fde68a;">
-            <div class="fw-semibold mb-2" style="font-size:.82rem;color:#92400e;">SPECIAL QUOTA</div>
-            <div class="d-flex gap-4 flex-wrap">
-                <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" name="poor_meritorious" id="poor_meritorious"
-                           value="1" <?= old('poor_meritorious') ? 'checked' : '' ?>>
-                    <label class="form-check-label" for="poor_meritorious" style="font-size:.875rem;">Poor / Meritorious Quota</label>
-                </div>
-                <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" name="freedom_fighter_quota" id="freedom_fighter_quota"
-                           value="1" <?= old('freedom_fighter_quota') ? 'checked' : '' ?>>
-                    <label class="form-check-label" for="freedom_fighter_quota" style="font-size:.875rem;">Freedom Fighter Family Quota</label>
-                </div>
-            </div>
-        </div>
-
-        <!-- Fee fields grid -->
-        <div class="row g-3">
-            <div class="col-12"><div class="fw-semibold mb-1" style="font-size:.82rem;color:#92400e;text-transform:uppercase;letter-spacing:.05em;">Fee Breakdown</div></div>
-            <div class="col-6 col-md-2">
-                <label class="form-label">Form Fee</label>
-                <div class="input-group">
-                    <span class="input-group-text taka-prefix">৳</span>
-                    <input type="number" class="form-control" name="form_fee" value="<?= old('form_fee') ?>" min="0" placeholder="0">
-                </div>
-            </div>
-            <div class="col-6 col-md-2">
-                <label class="form-label">Reg. Fee</label>
-                <div class="input-group">
-                    <span class="input-group-text taka-prefix">৳</span>
-                    <input type="number" class="form-control" name="regi_fee" value="<?= old('regi_fee') ?>" min="0" placeholder="0">
-                </div>
-            </div>
-            <div class="col-6 col-md-2">
-                <label class="form-label">Tuition Fee</label>
-                <div class="input-group">
-                    <span class="input-group-text taka-prefix">৳</span>
-                    <input type="number" class="form-control" name="tuition_fee" value="<?= old('tuition_fee') ?>" min="0" placeholder="0">
-                </div>
-            </div>
-            <div class="col-6 col-md-2">
-                <label class="form-label">Misc Fee</label>
-                <div class="input-group">
-                    <span class="input-group-text taka-prefix">৳</span>
-                    <input type="text" class="form-control" name="misc_fee" value="<?= old('misc_fee') ?>" maxlength="50" placeholder="0">
-                </div>
-            </div>
-            <div class="col-6 col-md-2">
-                <label class="form-label">Project Fee</label>
-                <div class="input-group">
-                    <span class="input-group-text taka-prefix">৳</span>
-                    <input type="number" class="form-control" name="project_fee" value="<?= old('project_fee') ?>" min="0" placeholder="0">
-                </div>
-            </div>
-            <div class="col-6 col-md-2">
-                <label class="form-label">Total Fee</label>
-                <div class="input-group">
-                    <span class="input-group-text taka-prefix">৳</span>
-                    <input type="number" class="form-control" name="total_fee" value="<?= old('total_fee') ?>" min="0" placeholder="0">
-                </div>
-            </div>
-
-            <div class="col-12"><hr class="my-1" style="border-color:#e8eaf0;"><div class="fw-semibold mb-1 mt-1" style="font-size:.82rem;color:#92400e;text-transform:uppercase;letter-spacing:.05em;">Waiver &amp; Payable</div></div>
-            <div class="col-6 col-md-2">
-                <label class="form-label">Waiver %</label>
-                <div class="input-group">
-                    <input type="text" class="form-control" name="waiver_percent" value="<?= old('waiver_percent') ?>" maxlength="10" placeholder="e.g. 25">
-                    <span class="input-group-text">%</span>
-                </div>
-            </div>
-            <div class="col-6 col-md-2">
-                <label class="form-label">Waiver Amount</label>
-                <div class="input-group">
-                    <span class="input-group-text taka-prefix">৳</span>
-                    <input type="number" class="form-control" name="waiver_amount" value="<?= old('waiver_amount') ?>" min="0" placeholder="0">
-                </div>
-            </div>
-            <div class="col-6 col-md-3">
-                <label class="form-label">Total Payable</label>
-                <div class="input-group">
-                    <span class="input-group-text taka-prefix">৳</span>
-                    <input type="text" class="form-control" name="total_payable" value="<?= old('total_payable') ?>" maxlength="50" placeholder="0">
-                </div>
-            </div>
-            <div class="col-6 col-md-3">
-                <label class="form-label">Monthly Installment</label>
-                <div class="input-group">
-                    <span class="input-group-text taka-prefix">৳</span>
-                    <input type="text" class="form-control" name="monthly_installment" value="<?= old('monthly_installment') ?>" maxlength="50" placeholder="0">
-                </div>
-            </div>
-            <div class="col-12 col-md-4">
-                <label class="form-label">Ref / Receipt Number</label>
-                <input type="text" class="form-control" name="ref_number" value="<?= old('ref_number') ?>" maxlength="100" placeholder="Receipt or reference number">
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- ══════════════════════════════════════════════════════════
-     SECTION 5 – ACADEMIC QUALIFICATIONS
+     SECTION 4 – ACADEMIC QUALIFICATIONS
 ═══════════════════════════════════════════════════════════ -->
 <div class="card form-section sec-quals" id="sec-quals">
     <div class="card-header">

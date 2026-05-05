@@ -470,6 +470,9 @@ require_once __DIR__ . '/../includes/header.php';
                     <input type="hidden" name="batch" id="batch_text" value="<?= h($student['batch'] ?? '') ?>">
                     <div class="ss-list" id="batch_list">
                         <div class="ss-item" data-value="" data-label="">— None —</div>
+                        <div class="ss-item" data-value="" data-label="Internal Batch" data-internal="1">
+                            Internal Batch
+                        </div>
                         <?php foreach ($batches as $b): ?>
                         <div class="ss-item" data-value="<?= $b['id'] ?>" data-label="<?= h($b['name']) ?>">
                             <?= h($b['name']) ?>
@@ -726,91 +729,7 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <!-- ══════════════════════════════════════════════════════════
-     SECTION 5b – QUOTA & FEE INFORMATION
-═══════════════════════════════════════════════════════════ -->
-<div class="card mb-4">
-    <div class="card-header py-3 px-4">
-        <h6 class="mb-0 fw-semibold"><i class="fas fa-money-bill-wave me-2 text-muted"></i>Quota &amp; Fee Information</h6>
-    </div>
-    <div class="card-body px-4 py-3">
-        <div class="row g-3 mb-3">
-            <div class="col-auto">
-                <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" name="poor_meritorious" id="poor_meritorious"
-                           value="1" <?= !empty($student['poor_meritorious']) ? 'checked' : '' ?>>
-                    <label class="form-check-label" for="poor_meritorious">Poor / Meritorious Quota</label>
-                </div>
-            </div>
-            <div class="col-auto">
-                <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" name="freedom_fighter_quota" id="freedom_fighter_quota"
-                           value="1" <?= !empty($student['freedom_fighter_quota']) ? 'checked' : '' ?>>
-                    <label class="form-check-label" for="freedom_fighter_quota">Freedom Fighter Family Quota</label>
-                </div>
-            </div>
-        </div>
-        <div class="row g-3">
-            <div class="col-6 col-md-2">
-                <label class="form-label fw-semibold">Waiver %</label>
-                <input type="text" class="form-control" name="waiver_percent"
-                       value="<?= h($student['waiver_percent'] ?? '') ?>" maxlength="10">
-            </div>
-            <div class="col-6 col-md-2">
-                <label class="form-label fw-semibold">Waiver Amount</label>
-                <input type="number" class="form-control" name="waiver_amount"
-                       value="<?= h($student['waiver_amount'] ?? '') ?>" min="0">
-            </div>
-            <div class="col-6 col-md-2">
-                <label class="form-label fw-semibold">Form Fee</label>
-                <input type="number" class="form-control" name="form_fee"
-                       value="<?= h($student['form_fee'] ?? '') ?>" min="0">
-            </div>
-            <div class="col-6 col-md-2">
-                <label class="form-label fw-semibold">Regi. Fee</label>
-                <input type="number" class="form-control" name="regi_fee"
-                       value="<?= h($student['regi_fee'] ?? '') ?>" min="0">
-            </div>
-            <div class="col-6 col-md-2">
-                <label class="form-label fw-semibold">Tuition Fee</label>
-                <input type="number" class="form-control" name="tuition_fee"
-                       value="<?= h($student['tuition_fee'] ?? '') ?>" min="0">
-            </div>
-            <div class="col-6 col-md-2">
-                <label class="form-label fw-semibold">Misc Fee</label>
-                <input type="text" class="form-control" name="misc_fee"
-                       value="<?= h($student['misc_fee'] ?? '') ?>" maxlength="50">
-            </div>
-            <div class="col-6 col-md-2">
-                <label class="form-label fw-semibold">Project Fee</label>
-                <input type="number" class="form-control" name="project_fee"
-                       value="<?= h($student['project_fee'] ?? '') ?>" min="0">
-            </div>
-            <div class="col-6 col-md-2">
-                <label class="form-label fw-semibold">Total Fee</label>
-                <input type="number" class="form-control" name="total_fee"
-                       value="<?= h($student['total_fee'] ?? '') ?>" min="0">
-            </div>
-            <div class="col-6 col-md-3">
-                <label class="form-label fw-semibold">Total Payable</label>
-                <input type="text" class="form-control" name="total_payable"
-                       value="<?= h($student['total_payable'] ?? '') ?>" maxlength="50">
-            </div>
-            <div class="col-6 col-md-3">
-                <label class="form-label fw-semibold">Monthly Installment</label>
-                <input type="text" class="form-control" name="monthly_installment"
-                       value="<?= h($student['monthly_installment'] ?? '') ?>" maxlength="50">
-            </div>
-            <div class="col-12 col-md-4">
-                <label class="form-label fw-semibold">Ref / Receipt Number</label>
-                <input type="text" class="form-control" name="ref_number"
-                       value="<?= h($student['ref_number'] ?? '') ?>" maxlength="100">
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- ══════════════════════════════════════════════════════════
-     SECTION 6 – ACADEMIC QUALIFICATIONS
+     SECTION 5b – ACADEMIC QUALIFICATIONS
 ═══════════════════════════════════════════════════════════ -->
 <div class="card mb-4">
     <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between">
