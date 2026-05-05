@@ -151,7 +151,7 @@ require_once __DIR__ . '/../includes/header.php';
                                 <?= h($e['letter_grade']) ?>
                             </span>
                         </td>
-                        <td class="text-center"><?= $e['grade_point'] !== null ? number_format((float)$e['grade_point'], 2) : '—' ?></td>
+                        <td class="text-center"><?= (strtoupper($e['letter_grade']) === 'INCOM') ? '<span class="text-muted fst-italic">Incom</span>' : ($e['grade_point'] !== null ? number_format((float)$e['grade_point'], 2) : '—') ?></td>
                         <?php if (sr_can_edit() || sr_can_delete()): ?>
                         <td class="text-end pe-4">
                             <div class="d-flex gap-1 justify-content-end">
@@ -227,7 +227,7 @@ require_once __DIR__ . '/../includes/header.php';
                             <select name="letter_grade" id="m_letter_grade" class="form-select" required>
                                 <option value="">— Select —</option>
                                 <?php foreach (SR_VALID_GRADES as $g): ?>
-                                <option value="<?= $g ?>"><?= $g ?></option>
+                                <option value="<?= ($g === 'INCOM') ? 'Incom' : $g ?>"><?= ($g === 'INCOM') ? 'Incom (Incomplete)' : $g ?></option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
@@ -264,8 +264,14 @@ require_once __DIR__ . '/../includes/header.php';
     var gpInp = document.getElementById('m_grade_point');
     if (lgSel) {
         lgSel.addEventListener('change', function () {
-            var pt = gradePoints[this.value];
-            gpInp.value = (pt !== undefined) ? pt.toFixed(2) : '';
+            if (this.value === 'Incom') {
+                gpInp.value = '';
+                gpInp.placeholder = 'N/A (Incomplete)';
+            } else {
+                gpInp.placeholder = 'Auto-filled';
+                var pt = gradePoints[this.value];
+                gpInp.value = (pt !== undefined) ? pt.toFixed(2) : '';
+            }
         });
     }
 
@@ -329,6 +335,7 @@ function sr_grade_badge_class(string $grade): string
         'C+', 'C'  => 'bg-warning text-dark',
         'D'        => 'bg-orange text-dark',
         'F'        => 'bg-danger',
+        'INCOM'    => 'bg-secondary',
         default    => 'bg-secondary',
     };
 }

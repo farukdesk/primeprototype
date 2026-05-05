@@ -22,6 +22,10 @@ $student_name = trim($_POST['student_name'] ?? '');
 $course_code  = trim($_POST['course_code']  ?? '');
 $course_title = trim($_POST['course_title'] ?? '');
 $letter_grade = strtoupper(trim($_POST['letter_grade'] ?? ''));
+// Normalize Incomplete grade to display form
+if ($letter_grade === 'INCOM') {
+    $letter_grade = 'Incom';
+}
 $grade_point  = trim($_POST['grade_point']  ?? '');
 
 $errors = [];
