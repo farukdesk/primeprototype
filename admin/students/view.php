@@ -364,6 +364,10 @@ $statusChipClass = match($student['status']) {
 
         <!-- Actions -->
         <div class="sv-hero-actions align-self-start ms-auto flex-shrink-0">
+            <a href="<?= APP_URL ?>/students/statement.php?id=<?= $id ?>" target="_blank" class="btn-hero"
+               title="Download / Print student enrollment statement">
+                <i class="fas fa-file-download"></i> Statement
+            </a>
             <?php if (is_super_admin() || can_access('student-verification', 'can_create')): ?>
             <a href="<?= APP_URL ?>/student-verification/verify.php?student_id=<?= $id ?>" class="btn-hero">
                 <i class="fas fa-shield-alt"></i> Verify
