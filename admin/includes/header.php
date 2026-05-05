@@ -290,7 +290,7 @@ $user       = auth_user();
     $is_seo_active      = strpos($current_path, '/seo/') !== false;
     $is_accounting_active = strpos($current_path, '/accounting/') !== false;
     $is_scholarship_active = strpos($current_path, '/scholarship/') !== false;
-    $is_fee_package_active = strpos($current_path, '/student-fee-package/') !== false;
+    $is_fee_package_active = strpos($current_path, '/student-accounts/') !== false;
     $is_medical_active = strpos($current_path, '/medical-center/') !== false;
     ?>
 
@@ -1297,27 +1297,27 @@ $user       = auth_user();
     </div>
     <?php endif; ?>
 
-    <!-- ── Student Fee Package ── -->
-    <?php if (is_super_admin() || can_access('student-fee-package')): ?>
+    <!-- ── Student Accounts ── -->
+    <?php if (is_super_admin() || can_access('student-accounts')): ?>
     <button class="nav-group-toggle <?= $is_fee_package_active ? '' : 'collapsed' ?>"
             data-bs-toggle="collapse" data-bs-target="#grp-fee-package"
             aria-expanded="<?= $is_fee_package_active ? 'true' : 'false' ?>">
         <i class="fas fa-file-invoice-dollar grp-icon" style="color:#10b981"></i>
-        Student Fee Package
+        Student Accounts
         <i class="fas fa-chevron-down toggle-icon"></i>
     </button>
     <div class="collapse <?= $is_fee_package_active ? 'show' : '' ?>" id="grp-fee-package">
         <ul class="nav flex-column grp-items">
             <li class="nav-item">
-                <a href="<?= APP_URL ?>/student-fee-package/index.php"
+                <a href="<?= APP_URL ?>/student-accounts/index.php"
                    class="<?= ($is_fee_package_active && strpos($current_path, '/create') === false) ? 'active' : '' ?>">
-                    <i class="fas fa-list"></i> All Packages
+                    <i class="fas fa-list"></i> All Accounts
                 </a>
             </li>
-            <?php if (is_super_admin() || can_access('student-fee-package', 'can_create')): ?>
+            <?php if (is_super_admin() || can_access('student-accounts', 'can_create')): ?>
             <li class="nav-item">
-                <a href="<?= APP_URL ?>/student-fee-package/create.php"
-                   class="<?= strpos($current_path, '/student-fee-package/create') !== false ? 'active' : '' ?>">
+                <a href="<?= APP_URL ?>/student-accounts/create.php"
+                   class="<?= strpos($current_path, '/student-accounts/create') !== false ? 'active' : '' ?>">
                     <i class="fas fa-plus"></i> Assign Package
                 </a>
             </li>

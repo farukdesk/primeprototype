@@ -6,11 +6,11 @@
  * proportionally and totals are written back to sfp_semester_fees.
  */
 require_once __DIR__ . '/../includes/auth.php';
-require_access('student-fee-package', 'can_edit');
+require_access('student-accounts', 'can_edit');
 require_once __DIR__ . '/helpers.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    redirect(APP_URL . '/student-fee-package/index.php');
+    redirect(APP_URL . '/student-accounts/index.php');
 }
 
 csrf_check();
@@ -60,7 +60,7 @@ if (empty($errors)) {
     sfp_recalculate_semester($sf_id, $user['id']);
 
     log_change(
-        'student-fee-package', 'UPDATE', $package_id,
+        'student-accounts', 'UPDATE', $package_id,
         'Semester #' . $sf['semester_number'],
         'tuition_fee',
         $old_tuition,
@@ -78,4 +78,4 @@ if (!empty($errors)) {
     flash_set('error', implode(' ', $errors));
 }
 
-redirect(APP_URL . '/student-fee-package/view.php?id=' . $package_id);
+redirect(APP_URL . '/student-accounts/view.php?id=' . $package_id);

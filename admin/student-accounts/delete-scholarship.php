@@ -4,11 +4,11 @@
  * Totals in sfp_semester_fees are recalculated after deletion.
  */
 require_once __DIR__ . '/../includes/auth.php';
-require_access('student-fee-package', 'can_edit');
+require_access('student-accounts', 'can_edit');
 require_once __DIR__ . '/helpers.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    redirect(APP_URL . '/student-fee-package/index.php');
+    redirect(APP_URL . '/student-accounts/index.php');
 }
 
 csrf_check();
@@ -38,7 +38,7 @@ if ($scholarship_id > 0 && $package_id > 0) {
         sfp_recalculate_semester($sf_id, $user['id']);
 
         log_change(
-            'student-fee-package', 'UPDATE', $package_id,
+            'student-accounts', 'UPDATE', $package_id,
             'Semester #' . $sc['semester_number'],
             'scholarship_removed',
             $sc['label'] . ' (' . number_format((float)$sc['discount_pct'], 2) . '%)',
@@ -57,4 +57,4 @@ if ($scholarship_id > 0 && $package_id > 0) {
     flash_set('error', 'Invalid request.');
 }
 
-redirect(APP_URL . '/student-fee-package/view.php?id=' . $package_id);
+redirect(APP_URL . '/student-accounts/view.php?id=' . $package_id);

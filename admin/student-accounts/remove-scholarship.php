@@ -5,11 +5,11 @@
  * resets the aggregate columns in sfp_semester_fees.
  */
 require_once __DIR__ . '/../includes/auth.php';
-require_access('student-fee-package', 'can_edit');
+require_access('student-accounts', 'can_edit');
 require_once __DIR__ . '/helpers.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    redirect(APP_URL . '/student-fee-package/index.php');
+    redirect(APP_URL . '/student-accounts/index.php');
 }
 
 csrf_check();
@@ -33,7 +33,7 @@ if ($sf_id > 0 && $package_id > 0) {
         sfp_recalculate_semester($sf_id, $user['id']);
 
         log_change(
-            'student-fee-package', 'UPDATE', $package_id,
+            'student-accounts', 'UPDATE', $package_id,
             'Semester #' . $sf['semester_number'],
             'scholarship_discount_pct',
             $sf['scholarship_discount_pct'],
@@ -47,4 +47,4 @@ if ($sf_id > 0 && $package_id > 0) {
     }
 }
 
-redirect(APP_URL . '/student-fee-package/view.php?id=' . $package_id);
+redirect(APP_URL . '/student-accounts/view.php?id=' . $package_id);

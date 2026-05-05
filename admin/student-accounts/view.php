@@ -1,17 +1,17 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
-require_access('student-fee-package');
+require_access('student-accounts');
 require_once __DIR__ . '/helpers.php';
 
 $id  = (int)($_GET['id'] ?? 0);
 $pkg = sfp_get_package($id);
 
 if (!$pkg) {
-    flash_set('error', 'Fee package not found.');
-    redirect(APP_URL . '/student-fee-package/index.php');
+    flash_set('error', 'Student account not found.');
+    redirect(APP_URL . '/student-accounts/index.php');
 }
 
-$page_title    = 'Fee Package – ' . $pkg['student_name'];
+$page_title    = 'Student Account – ' . $pkg['student_name'];
 $semester_fees = sfp_get_semester_fees($id);
 
 // Active scholarship policies (with tiers) for the Add Scholarship modal
@@ -40,11 +40,11 @@ require_once __DIR__ . '/../includes/header.php';
     <div>
         <h1 class="h3 mb-0">
             <i class="fas fa-file-invoice-dollar me-2 text-success"></i>
-            Fee Package – <?= h($pkg['student_name']) ?>
+            Student Account – <?= h($pkg['student_name']) ?>
         </h1>
         <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small">
             <li class="breadcrumb-item"><a href="<?= APP_URL ?>/index.php">Dashboard</a></li>
-            <li class="breadcrumb-item"><a href="<?= APP_URL ?>/student-fee-package/index.php">Fee Packages</a></li>
+            <li class="breadcrumb-item"><a href="<?= APP_URL ?>/student-accounts/index.php">Student Accounts</a></li>
             <li class="breadcrumb-item active"><?= h($pkg['student_name']) ?></li>
         </ol></nav>
     </div>
@@ -54,8 +54,8 @@ require_once __DIR__ . '/../includes/header.php';
             <i class="fas fa-user-graduate me-1"></i> Student Profile
         </a>
         <?php if (sfp_can_delete()): ?>
-        <form method="post" action="<?= APP_URL ?>/student-fee-package/delete.php"
-              onsubmit="return confirm('Delete this fee package? All semester fee records will be lost.');">
+        <form method="post" action="<?= APP_URL ?>/student-accounts/delete.php"
+              onsubmit="return confirm('Delete this student account? All semester fee records will be lost.');">
             <?= csrf_field() ?>
             <input type="hidden" name="id" value="<?= $id ?>">
             <button class="btn btn-outline-danger btn-sm">
@@ -267,7 +267,7 @@ require_once __DIR__ . '/../includes/header.php';
                                   style="font-size:.72rem;font-weight:500;">
                                 <?= h($sc['label']) ?>&nbsp;(<?= number_format((float)$sc['discount_pct'], 1) ?>%)
                                 <?php if (sfp_can_edit()): ?>
-                                <form method="post" action="<?= APP_URL ?>/student-fee-package/delete-scholarship.php"
+                                <form method="post" action="<?= APP_URL ?>/student-accounts/delete-scholarship.php"
                                       class="d-inline"
                                       onsubmit="return confirm('Remove scholarship \'<?= h(addslashes($sc['label'])) ?>\'?');">
                                     <?= csrf_field() ?>
@@ -294,7 +294,7 @@ require_once __DIR__ . '/../includes/header.php';
                                 <i class="fas fa-plus"></i>
                             </button>
                             <?php if ((float)$sf['scholarship_amount'] > 0): ?>
-                            <form method="post" action="<?= APP_URL ?>/student-fee-package/remove-scholarship.php"
+                            <form method="post" action="<?= APP_URL ?>/student-accounts/remove-scholarship.php"
                                   class="d-inline"
                                   onsubmit="return confirm('Remove ALL scholarships from this semester?');">
                                 <?= csrf_field() ?>
@@ -419,7 +419,7 @@ $first_sem_label   = ($first_sem && $first_sem['semester_label']) ? $first_sem['
 ═══════════════════════════════════════════════════════════ -->
 <div class="modal fade" id="addScModal" tabindex="-1" aria-labelledby="addScModalLabel" aria-hidden="true">
     <div class="modal-dialog">
-        <form method="post" action="<?= APP_URL ?>/student-fee-package/add-scholarship.php" novalidate>
+        <form method="post" action="<?= APP_URL ?>/student-accounts/add-scholarship.php" novalidate>
             <?= csrf_field() ?>
             <input type="hidden" name="package_id" value="<?= $id ?>">
             <input type="hidden" name="sf_id" id="asc-sf-id" value="">
@@ -523,7 +523,7 @@ $first_sem_label   = ($first_sem && $first_sem['semester_label']) ? $first_sem['
 ═══════════════════════════════════════════════════════════ -->
 <div class="modal fade" id="editTuitionModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-sm">
-        <form method="post" action="<?= APP_URL ?>/student-fee-package/update-tuition.php" novalidate>
+        <form method="post" action="<?= APP_URL ?>/student-accounts/update-tuition.php" novalidate>
             <?= csrf_field() ?>
             <input type="hidden" name="package_id" value="<?= $id ?>">
             <input type="hidden" name="sf_id" id="et-sf-id" value="">
@@ -552,7 +552,7 @@ $first_sem_label   = ($first_sem && $first_sem['semester_label']) ? $first_sem['
 ═══════════════════════════════════════════════════════════ -->
 <div class="modal fade" id="setLabelModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-sm">
-        <form method="post" action="<?= APP_URL ?>/student-fee-package/set-semester-label.php" novalidate>
+        <form method="post" action="<?= APP_URL ?>/student-accounts/set-semester-label.php" novalidate>
             <?= csrf_field() ?>
             <input type="hidden" name="package_id" value="<?= $id ?>">
             <input type="hidden" name="sf_id" id="lbl-sf-id" value="">
