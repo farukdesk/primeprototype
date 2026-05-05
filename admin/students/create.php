@@ -68,6 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $dob                  = trim($_POST['dob']                  ?? '');
     $blood_group          = trim($_POST['blood_group']          ?? '');
     $nid                  = trim($_POST['nid']                  ?? '');
+    $semester_type        = trim($_POST['semester_type']        ?? '');
     $batch                = trim($_POST['batch']                ?? '');
     $batch_id             = (int)($_POST['batch_id']            ?? 0);
     $year                 = trim($_POST['year']                 ?? '');
@@ -131,6 +132,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $valid_statuses = ['Active', 'Inactive', 'Graduated', 'Dropped'];
     if (!in_array($status, $valid_statuses, true)) $status = 'Active';
 
+    $valid_semester_types = ['bi_semester', 'trimester', ''];
+    if (!in_array($semester_type, $valid_semester_types, true)) $semester_type = '';
+
     $valid_sexes = ['Male', 'Female', 'Other'];
     if (!in_array($sex, $valid_sexes, true)) $sex = '';
 
@@ -176,7 +180,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo = db();
         $pdo->prepare(
             'INSERT INTO students
-               (student_id, dept_id, program_id, admitted_semester, batch, batch_id, year, shift,
+               (student_id, dept_id, program_id, admitted_semester, semester_type, batch, batch_id, year, shift,
                 full_name, father_name, father_phone, father_occupation, father_yearly_income,
                 mother_name, mother_phone, mother_occupation, mother_yearly_income,
                 present_address, permanent_address, nationality, country,
@@ -188,12 +192,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 waiver_percent, form_fee, regi_fee, tuition_fee, misc_fee,
                 project_fee, total_fee, waiver_amount, total_payable, monthly_installment,
                 ref_number, status, created_by)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
         )->execute([
             $student_id,
             $dept_id,
             $program_id ?: null,
             $admitted_sem,
+            $semester_type    ?: null,
             $batch          ?: null,
             $batch_id       ?: null,
             $year           ?: null,
@@ -556,6 +561,15 @@ require_once __DIR__ . '/../includes/header.php';
                         <?php endforeach; ?>
                     </div>
                 </div>
+            </div>
+            <!-- Semester Type -->
+            <div class="col-12 col-md-4">
+                <label class="form-label">Semester Type</label>
+                <select name="semester_type" class="form-select">
+                    <option value="">— Select —</option>
+                    <option value="bi_semester"  <?= old('semester_type') === 'bi_semester'  ? 'selected' : '' ?>>Bi Semester (Spring / Fall)</option>
+                    <option value="trimester"    <?= old('semester_type') === 'trimester'    ? 'selected' : '' ?>>Trimester (Spring / Summer / Fall)</option>
+                </select>
             </div>
             <!-- Batch -->
             <div class="col-12 col-md-4">

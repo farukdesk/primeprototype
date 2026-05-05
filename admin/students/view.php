@@ -192,6 +192,10 @@ require_once __DIR__ . '/../includes/header.php';
                         <?php endif; ?>
                     <?php endif; ?>
                     &nbsp;·&nbsp; Admitted: <?= h($student['admitted_semester']) ?>
+                    <?php if (!empty($student['semester_type'])): ?>
+                        <?php $st_labels = ['bi_semester' => 'Bi Semester', 'trimester' => 'Trimester']; ?>
+                        &nbsp;<span class="badge bg-secondary bg-opacity-15 text-secondary" style="font-size:.7rem;"><?= h($st_labels[$student['semester_type']] ?? $student['semester_type']) ?></span>
+                    <?php endif; ?>
                     <?php
                     // Batch: prefer batch_name from JOIN, fall back to text
                     $batchLabel = $student['batch_name'] ?? $student['batch'] ?? null;
