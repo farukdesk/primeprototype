@@ -39,8 +39,10 @@ if (empty($errors)) {
 }
 
 if (empty($errors)) {
-    $tuition_fee = (float)$sf['tuition_fee'];
-    $amount      = round($tuition_fee * $discount_pct / 100, 2);
+    // Apply discount to the *remaining* payable balance, not the original tuition fee.
+    // sfp_recalculate_semester() will also recompute cascaded amounts for all rows.
+    $tuition_payable = (float)$sf['tuition_payable'];
+    $amount          = round($tuition_payable * $discount_pct / 100, 2);
     $user        = auth_user();
 
     db()->prepare(
