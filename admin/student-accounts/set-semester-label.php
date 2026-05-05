@@ -3,11 +3,11 @@
  * Set a human-readable label on a single semester fee row (e.g. "Summer 2026").
  */
 require_once __DIR__ . '/../includes/auth.php';
-require_access('student-fee-package', 'can_edit');
+require_access('student-accounts', 'can_edit');
 require_once __DIR__ . '/helpers.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    redirect(APP_URL . '/student-fee-package/index.php');
+    redirect(APP_URL . '/student-accounts/index.php');
 }
 
 csrf_check();
@@ -33,4 +33,4 @@ if ($sf_id > 0 && $package_id > 0) {
     }
 }
 
-redirect(APP_URL . '/student-fee-package/view.php?id=' . $package_id);
+redirect(APP_URL . '/student-accounts/view.php?id=' . $package_id);
