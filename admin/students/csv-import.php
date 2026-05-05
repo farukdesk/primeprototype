@@ -565,7 +565,7 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
                 <div class="col-md-6">
                     <ul class="mb-1">
-                        <li><code>Mobile_Number</code> – Student mobile/phone (optional)</li>
+                        <li><code>Mobile_Number</code> – Student mobile/phone (also accepted as <code>Mobile</code>) (optional)</li>
                         <li><code>Email</code> – Email address (optional)</li>
                         <li><code>Blood_Group</code> – e.g. A+, B-, O+ (optional)</li>
                         <li><code>Department</code> – Dept name or code <span class="text-danger">*</span></li>
@@ -708,9 +708,27 @@ $invalid_count = count($preview_rows) - $valid_count;
                             <span class="text-muted">—</span>
                         <?php endif; ?>
                     </td>
-                    <td><?= $r['mobile'] !== '' ? htmlspecialchars($r['mobile'], ENT_QUOTES, 'UTF-8') : '<span class="text-muted">—</span>' ?></td>
-                    <td><?= $r['email']  !== '' ? htmlspecialchars($r['email'],  ENT_QUOTES, 'UTF-8') : '<span class="text-muted">—</span>' ?></td>
-                    <td><?= $r['blood_group'] !== '' ? htmlspecialchars($r['blood_group'], ENT_QUOTES, 'UTF-8') : '<span class="text-muted">—</span>' ?></td>
+                    <td>
+                        <?php if ($r['mobile'] !== ''): ?>
+                            <?= htmlspecialchars($r['mobile'], ENT_QUOTES, 'UTF-8') ?>
+                        <?php else: ?>
+                            <span class="text-muted">—</span>
+                        <?php endif; ?>
+                    </td>
+                    <td>
+                        <?php if ($r['email'] !== ''): ?>
+                            <?= htmlspecialchars($r['email'], ENT_QUOTES, 'UTF-8') ?>
+                        <?php else: ?>
+                            <span class="text-muted">—</span>
+                        <?php endif; ?>
+                    </td>
+                    <td>
+                        <?php if ($r['blood_group'] !== ''): ?>
+                            <?= htmlspecialchars($r['blood_group'], ENT_QUOTES, 'UTF-8') ?>
+                        <?php else: ?>
+                            <span class="text-muted">—</span>
+                        <?php endif; ?>
+                    </td>
                     <td>
                         <?php if ($r['dept']): ?>
                             <?= htmlspecialchars($r['dept']['name'], ENT_QUOTES, 'UTF-8') ?>
