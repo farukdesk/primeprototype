@@ -121,9 +121,12 @@ function sfp_semester_english_portion(array $pkg): float
 function sfp_get_semester_scholarships(int $sf_id): array
 {
     $stmt = db()->prepare(
-        'SELECT ss.*, u.full_name AS created_by_name
+        'SELECT ss.*, u.full_name AS created_by_name,
+                stf.stored_name   AS doc_stored_name,
+                stf.original_name AS doc_original_name
          FROM sfp_semester_scholarships ss
-         LEFT JOIN users u ON u.id = ss.created_by
+         LEFT JOIN users u        ON u.id   = ss.created_by
+         LEFT JOIN student_files stf ON stf.id = ss.support_doc_id
          WHERE ss.sf_id = ?
          ORDER BY ss.created_at ASC'
     );
@@ -136,9 +139,12 @@ function sfp_get_semester_scholarships(int $sf_id): array
 function sfp_get_all_semester_scholarships(int $package_id): array
 {
     $stmt = db()->prepare(
-        'SELECT ss.*
+        'SELECT ss.*,
+                stf.stored_name   AS doc_stored_name,
+                stf.original_name AS doc_original_name
          FROM sfp_semester_scholarships ss
-         JOIN sfp_semester_fees sf ON sf.id = ss.sf_id
+         JOIN sfp_semester_fees sf  ON sf.id   = ss.sf_id
+         LEFT JOIN student_files stf ON stf.id = ss.support_doc_id
          WHERE sf.package_id = ?
          ORDER BY ss.sf_id, ss.created_at ASC'
     );
@@ -158,7 +164,7 @@ function sfp_get_all_semester_scholarships(int $package_id): array
 function sfp_get_active_sc_policies_with_tiers(): array
 {
     $policies = db()->query(
-        'SELECT id, name, type, description
+        'SELECT id, name, type, description, applies_to_fixed, applies_to_english
          FROM sc_policies
          WHERE is_active = 1
          ORDER BY sort_order, name'
@@ -196,22 +202,35 @@ function sfp_get_active_sc_policies_with_tiers(): array
 // Call after any insert / delete in sfp_semester_scholarships.
 // Each scholarship is applied to the *remaining* balance after previous
 // scholarships, not the original tuition fee (cascading / stacking).
+// Scholarships with applies_to_fixed / applies_to_english also cascade
+// against the per-semester fixed / English fee portions.
 
 function sfp_recalculate_semester(int $sf_id, int $updated_by): void
 {
     $db = db();
 
-    // Fetch the current tuition_fee for this semester
-    $sf_stmt = $db->prepare('SELECT tuition_fee FROM sfp_semester_fees WHERE id = ?');
+    // Fetch the current tuition_fee plus package fixed/English per-semester portions
+    $sf_stmt = $db->prepare(
+        'SELECT sf.tuition_fee,
+                p.fixed_institutional_fees, p.english_course_fee,
+                p.total_months, p.months_per_semester
+         FROM sfp_semester_fees sf
+         JOIN sfp_packages p ON p.id = sf.package_id
+         WHERE sf.id = ?'
+    );
     $sf_stmt->execute([$sf_id]);
     $sf = $sf_stmt->fetch();
     if (!$sf) return;
 
     $tuition_fee = (float)$sf['tuition_fee'];
+    $months      = (float)$sf['total_months'];
+    $mps         = (float)$sf['months_per_semester'];
+    $fixed_per_sem   = ($months > 0) ? round((float)$sf['fixed_institutional_fees'] / $months * $mps, 2) : 0.0;
+    $english_per_sem = ($months > 0) ? round((float)$sf['english_course_fee']        / $months * $mps, 2) : 0.0;
 
     // Fetch all scholarship rows ordered by creation date (oldest first)
     $rows_stmt = $db->prepare(
-        'SELECT id, discount_pct
+        'SELECT id, discount_pct, applies_to_fixed, applies_to_english
          FROM sfp_semester_scholarships
          WHERE sf_id = ?
          ORDER BY created_at ASC, id ASC'
@@ -226,14 +245,38 @@ function sfp_recalculate_semester(int $sf_id, int $updated_by): void
     $total_pct    = 0.0;
     $total_amount = 0.0;
 
+    // Cascading for fixed and English fee portions
+    $running_fixed   = $fixed_per_sem;
+    $running_english = $english_per_sem;
+    $total_fixed_discount   = 0.0;
+    $total_english_discount = 0.0;
+
     foreach ($scholarships as $sc) {
         $pct    = (float)$sc['discount_pct'];
+
+        // Tuition discount
         $amount = round($running_bal * $pct / 100, 2);
-        $amount = min($amount, $running_bal); // never exceed remaining balance
+        $amount = min($amount, $running_bal);
         $update_stmt->execute([$amount, $sc['id']]);
         $running_bal  -= $amount;
         $total_amount += $amount;
         $total_pct    += $pct;
+
+        // Fixed institutional fee discount
+        if ((int)$sc['applies_to_fixed'] && $running_fixed > 0) {
+            $fixed_amt = round($running_fixed * $pct / 100, 2);
+            $fixed_amt = min($fixed_amt, $running_fixed);
+            $running_fixed        -= $fixed_amt;
+            $total_fixed_discount += $fixed_amt;
+        }
+
+        // English course fee discount
+        if ((int)$sc['applies_to_english'] && $running_english > 0) {
+            $eng_amt = round($running_english * $pct / 100, 2);
+            $eng_amt = min($eng_amt, $running_english);
+            $running_english        -= $eng_amt;
+            $total_english_discount += $eng_amt;
+        }
     }
 
     $tuition_payable = max(0.0, $running_bal);
@@ -243,6 +286,8 @@ function sfp_recalculate_semester(int $sf_id, int $updated_by): void
          SET scholarship_discount_pct = ?,
              scholarship_amount       = ?,
              tuition_payable          = ?,
+             fixed_discount_amount    = ?,
+             english_discount_amount  = ?,
              updated_by               = ?,
              updated_at               = NOW()
          WHERE id = ?'
@@ -250,6 +295,8 @@ function sfp_recalculate_semester(int $sf_id, int $updated_by): void
         round($total_pct, 2),
         round($total_amount, 2),
         round($tuition_payable, 2),
+        round($total_fixed_discount, 2),
+        round($total_english_discount, 2),
         $updated_by,
         $sf_id,
     ]);
