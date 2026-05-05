@@ -301,9 +301,9 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
         </tr>
         <tr>
             <td class="lbl">Total No. of Courses</td>
-            <td class="val"><span class="manual-field">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></td>
+            <td class="val"><span class="manual-field" style="min-width:120px;">&nbsp;</span></td>
             <td class="lbl">Course Waive</td>
-            <td class="val"><span class="manual-field">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></td>
+            <td class="val"><span class="manual-field" style="min-width:120px;">&nbsp;</span></td>
         </tr>
     </table>
 
@@ -588,7 +588,7 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
         <strong>Note:</strong>
         <ul style="margin: 4px 0 0 16px; padding: 0;">
             <li>Monthly payment must be made on or before the <strong>10th of each month</strong>.</li>
-            <li>Registration fees for each semester must be paid before registering to the semester.</li>
+            <li>Registration fees for each semester must be paid before registering for the semester.</li>
             <li>Duration of payment:
                 <?php
                 // Bi-semester programmes run 8 semesters; trimester programmes run 12 semesters.
