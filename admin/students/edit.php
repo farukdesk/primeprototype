@@ -352,10 +352,10 @@ require_once __DIR__ . '/../includes/header.php';
         <div class="row g-3 mb-3">
             <div class="col-12 col-md-4">
                 <label class="form-label fw-semibold">Student ID <span class="text-danger">*</span>
-                    <small class="text-muted fw-normal">(12 digits)</small>
+                    <small class="text-muted fw-normal">(max 20 chars)</small>
                 </label>
                 <input type="text" class="form-control" name="student_id"
-                       maxlength="12" pattern="\d{12}"
+                       maxlength="20" pattern="[a-zA-Z0-9\-]{1,20}"
                        value="<?= h($student['student_id']) ?>" required>
             </div>
             <div class="col-12 col-md-3">
