@@ -101,10 +101,12 @@ $admission_form_fee = (int)floor($form_id_fee / 2);
 $admission_id_fee   = $form_id_fee - $admission_form_fee;
 $total_paid_at_admission = $admission_payment_admission + $admission_payment_reg + $form_id_fee;
 
-// Monthly installment = (Total payable in first semester − amount already paid at admission time)
-// Remaining balance after admission day payment / months_per_semester
-$first_sem_remaining = max(0.0, $total_payable_first_sem - $total_paid_at_admission);
-$monthly_installment = ($mps > 0) ? round($first_sem_remaining / $mps, 2) : 0.0;
+// Monthly installment = (Total payable in first semester − fees already collected at registration)
+// Admission Fee is a separate one-time charge and is NOT deducted from the installment base.
+// Only the Registration Fee and Form/ID-card fee collected at admission day are deducted.
+$first_sem_paid_upfront = $reg_fee_1st_sem + $form_id_fee;
+$first_sem_remaining    = max(0.0, $total_payable_first_sem - $first_sem_paid_upfront);
+$monthly_installment    = ($mps > 0) ? (int)round($first_sem_remaining / $mps) : 0;
 
 // Duration of payment
 $payment_months = (int)$pkg['total_months'];
@@ -297,6 +299,12 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
             <td class="lbl">Enrolled Semester</td>
             <td class="val" colspan="3"><?= h($pkg['admitted_semester'] ?? '') ?></td>
         </tr>
+        <tr>
+            <td class="lbl">Total No. of Courses</td>
+            <td class="val"><span class="manual-field" style="min-width:120px;">&nbsp;</span></td>
+            <td class="lbl">Course Waive</td>
+            <td class="val"><span class="manual-field" style="min-width:120px;">&nbsp;</span></td>
+        </tr>
     </table>
 
     <!-- ══════════════════════════════════════
@@ -389,28 +397,131 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
 
             <!-- Scholarship / discount applied in first semester -->
             <tr class="visual-sep"><td colspan="3"></td></tr>
-            <?php if (!empty($scholarships_1st)): ?>
+            <?php
+            // Pre-compute cascading scholarship steps for display
+            $sc_calc         = [];
+            $has_fixed_sc    = false;
+            $has_english_sc  = false;
+            if (!empty($scholarships_1st)) {
+                $run_t = (float)$pkg['tuition_per_semester'];
+                $run_f = $fixed_per_sem_gross;
+                $run_e = $english_per_sem_gross;
+                foreach ($scholarships_1st as $sc) {
+                    $pct  = (float)$sc['discount_pct'];
+                    $step = [
+                        'sc'              => $sc,
+                        'pct'             => $pct,
+                        'applies_fixed'   => (int)$sc['applies_to_fixed'],
+                        'applies_english' => (int)$sc['applies_to_english'],
+                    ];
+                    // Tuition
+                    $t_disc          = round(min($run_t, $run_t * $pct / 100), 2);
+                    $step['t_before'] = $run_t;
+                    $step['t_disc']   = $t_disc;
+                    $run_t           -= $t_disc;
+                    $step['t_after']  = $run_t;
+                    // Fixed institutional fee
+                    if ($step['applies_fixed'] && $run_f > 0) {
+                        $f_disc          = round(min($run_f, $run_f * $pct / 100), 2);
+                        $step['f_before'] = $run_f;
+                        $step['f_disc']   = $f_disc;
+                        $run_f           -= $f_disc;
+                        $step['f_after']  = $run_f;
+                        $has_fixed_sc     = true;
+                    }
+                    // English course fee
+                    if ($step['applies_english'] && $run_e > 0) {
+                        $e_disc          = round(min($run_e, $run_e * $pct / 100), 2);
+                        $step['e_before'] = $run_e;
+                        $step['e_disc']   = $e_disc;
+                        $run_e           -= $e_disc;
+                        $step['e_after']  = $run_e;
+                        $has_english_sc   = true;
+                    }
+                    $sc_calc[] = $step;
+                }
+            }
+            ?>
+            <?php if (!empty($sc_calc)): ?>
             <tr>
-                <td class="indent" colspan="2">
-                    Scholarship(s) Applied in First Semester:
-                    <?php foreach ($scholarships_1st as $sc): ?>
-                    <span class="sc-badge"><?= h($sc['label']) ?> (<?= number_format((float)$sc['discount_pct'], 1) ?>%)</span>
-                    <?php endforeach; ?>
+                <td class="indent" colspan="2"><strong>Scholarship(s) Applied in First Semester</strong></td>
+                <td class="amt"></td>
+            </tr>
+            <!-- Tuition fee cascading -->
+            <tr>
+                <td></td>
+                <td class="indent" style="padding-left:22px;">Tuition Fee (1st Semester)</td>
+                <td class="amt"><?= number_format((float)$pkg['tuition_per_semester'], 2) ?></td>
+            </tr>
+            <?php foreach ($sc_calc as $i => $step):
+                // Build scope label
+                $scope_parts = ['Tuition Fee'];
+                if ($step['applies_fixed'])   $scope_parts[] = 'Institutional &amp; Dev. Fee';
+                if ($step['applies_english'])  $scope_parts[] = 'English Language Fee';
+                $scope_on = count($scope_parts) > 1
+                    ? 'on Overall Cost (' . implode(' + ', $scope_parts) . ')'
+                    : 'on Tuition Fee only';
+            ?>
+            <tr>
+                <td></td>
+                <td class="indent" style="padding-left:22px;">
+                    <span class="neg">−</span>
+                    <span class="sc-badge"><?= h($step['sc']['label']) ?> (<?= number_format($step['pct'], 1) ?>%)</span>
+                    — <?= $scope_on ?>
                 </td>
-                <td class="amt neg">− <?= number_format($first_sem_scholarship_amount, 2) ?></td>
+                <td class="amt neg">− <?= number_format($step['t_disc'], 2) ?></td>
             </tr>
-            <?php if ($first_sem_fixed_discount > 0): ?>
+            <?php if ($i < count($sc_calc) - 1): ?>
             <tr>
-                <td class="indent" colspan="2">Scholarship on Institutional &amp; Development Fee</td>
-                <td class="amt neg">− <?= number_format($first_sem_fixed_discount, 2) ?></td>
+                <td></td>
+                <td class="indent" style="padding-left:22px; color:#6b7280; font-style:italic;">
+                    Tuition balance after <?= h($step['sc']['label']) ?>
+                </td>
+                <td class="amt" style="color:#6b7280;"><?= number_format($step['t_after'], 2) ?></td>
             </tr>
             <?php endif; ?>
-            <?php if ($first_sem_english_discount > 0): ?>
+            <?php endforeach; ?>
+
+            <?php if ($has_fixed_sc): ?>
+            <!-- Institutional fee cascading -->
             <tr>
-                <td class="indent" colspan="2">Scholarship on English Language Fee</td>
-                <td class="amt neg">− <?= number_format($first_sem_english_discount, 2) ?></td>
+                <td></td>
+                <td class="indent" style="padding-left:22px;">Institutional &amp; Dev. Fee (1st Semester)</td>
+                <td class="amt"><?= number_format($fixed_per_sem_gross, 2) ?></td>
             </tr>
+            <?php foreach ($sc_calc as $i => $step):
+                if (!$step['applies_fixed'] || !isset($step['f_disc'])) continue; ?>
+            <tr>
+                <td></td>
+                <td class="indent" style="padding-left:22px;">
+                    <span class="neg">−</span>
+                    <span class="sc-badge"><?= h($step['sc']['label']) ?> (<?= number_format($step['pct'], 1) ?>%)</span>
+                </td>
+                <td class="amt neg">− <?= number_format($step['f_disc'], 2) ?></td>
+            </tr>
+            <?php endforeach; ?>
             <?php endif; ?>
+
+            <?php if ($has_english_sc): ?>
+            <!-- English fee cascading -->
+            <tr>
+                <td></td>
+                <td class="indent" style="padding-left:22px;">English Language Fee (1st Semester)</td>
+                <td class="amt"><?= number_format($english_per_sem_gross, 2) ?></td>
+            </tr>
+            <?php foreach ($sc_calc as $i => $step):
+                if (!$step['applies_english'] || !isset($step['e_disc'])) continue; ?>
+            <tr>
+                <td></td>
+                <td class="indent" style="padding-left:22px;">
+                    <span class="neg">−</span>
+                    <span class="sc-badge"><?= h($step['sc']['label']) ?> (<?= number_format($step['pct'], 1) ?>%)</span>
+                </td>
+                <td class="amt neg">− <?= number_format($step['e_disc'], 2) ?></td>
+            </tr>
+            <?php endforeach; ?>
+            <?php endif; ?>
+
             <?php else: ?>
             <tr>
                 <td class="indent" colspan="2">Scholarship(s) Applied in First Semester</td>
@@ -431,10 +542,10 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
             <tr class="highlight">
                 <td colspan="2"><strong>First Semester Monthly Installment per Month</strong>
                     <span style="font-size:9.5px; color:#92400e; font-weight:400;">
-                        (<?= number_format($total_payable_first_sem, 2) ?> − <?= number_format($total_paid_at_admission, 2) ?> paid at admission) ÷ <?= (int)$mps ?> months
+                        (<?= number_format($total_payable_first_sem, 2) ?> − <?= number_format($first_sem_paid_upfront, 2) ?> paid at registration) ÷ <?= (int)$mps ?> months
                     </span>
                 </td>
-                <td class="amt"><strong><?= number_format($monthly_installment, 2) ?></strong></td>
+                <td class="amt"><strong><?= number_format($monthly_installment) ?></strong></td>
             </tr>
         </tbody>
     </table>
@@ -477,6 +588,7 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
         <strong>Note:</strong>
         <ul style="margin: 4px 0 0 16px; padding: 0;">
             <li>Monthly payment must be made on or before the <strong>10th of each month</strong>.</li>
+            <li>Registration fees for each semester must be paid before registering for the semester.</li>
             <li>Duration of payment:
                 <?php
                 // Bi-semester programmes run 8 semesters; trimester programmes run 12 semesters.
