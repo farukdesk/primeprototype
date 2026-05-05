@@ -368,19 +368,19 @@ $date_today = date('d F Y');
             <?php if ($student['form_fee']): ?>
             <tr>
                 <td>Form / Admission Fee</td>
-                <td class="amt"><?= number_format((int)$student['form_fee']) ?></td>
+                <td class="amt"><?= number_format((float)$student['form_fee']) ?></td>
             </tr>
             <?php endif; ?>
             <?php if ($student['regi_fee']): ?>
             <tr>
                 <td>Registration Fee</td>
-                <td class="amt"><?= number_format((int)$student['regi_fee']) ?></td>
+                <td class="amt"><?= number_format((float)$student['regi_fee']) ?></td>
             </tr>
             <?php endif; ?>
             <?php if ($student['tuition_fee']): ?>
             <tr>
                 <td>Tuition Fee</td>
-                <td class="amt"><?= number_format((int)$student['tuition_fee']) ?></td>
+                <td class="amt"><?= number_format((float)$student['tuition_fee']) ?></td>
             </tr>
             <?php endif; ?>
             <?php if ($student['misc_fee']): ?>
@@ -392,13 +392,13 @@ $date_today = date('d F Y');
             <?php if ($student['project_fee']): ?>
             <tr>
                 <td>Project / Lab Fee</td>
-                <td class="amt"><?= number_format((int)$student['project_fee']) ?></td>
+                <td class="amt"><?= number_format((float)$student['project_fee']) ?></td>
             </tr>
             <?php endif; ?>
             <?php if ($student['total_fee']): ?>
             <tr class="total-row">
                 <td><strong>Total Fee</strong></td>
-                <td class="amt"><strong><?= number_format((int)$student['total_fee']) ?></strong></td>
+                <td class="amt"><strong><?= number_format((float)$student['total_fee']) ?></strong></td>
             </tr>
             <?php endif; ?>
             <?php if ($student['waiver_amount'] || $student['waiver_percent']): ?>
@@ -412,7 +412,7 @@ $date_today = date('d F Y');
                     )</span>
                     <?php endif; ?>
                 </td>
-                <td class="amt"><?= $student['waiver_amount'] ? '− ' . number_format((int)$student['waiver_amount']) : '—' ?></td>
+                <td class="amt"><?= $student['waiver_amount'] ? '− ' . number_format((float)$student['waiver_amount']) : '—' ?></td>
             </tr>
             <?php endif; ?>
             <?php if ($student['total_payable']): ?>
