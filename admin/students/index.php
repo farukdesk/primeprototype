@@ -16,10 +16,12 @@ $search   = trim($_GET['search']   ?? '');
 $f_dept   = (int)($_GET['dept']    ?? 0);
 $f_status = $_GET['status']        ?? '';
 $f_sem    = trim($_GET['semester'] ?? '');
+$f_sem_type = trim($_GET['sem_type'] ?? '');
 $page     = max(1, (int)($_GET['page'] ?? 1));
 $per_page = 20;
 
-$valid_statuses = ['Active', 'Inactive', 'Graduated', 'Dropped'];
+$valid_statuses  = ['Active', 'Inactive', 'Graduated', 'Dropped'];
+$valid_sem_types = ['bi_semester', 'trimester'];
 
 $where  = [];
 $params = [];
@@ -43,6 +45,10 @@ if (in_array($f_status, $valid_statuses, true)) {
 if ($f_sem !== '') {
     $where[]  = 's.admitted_semester = ?';
     $params[] = $f_sem;
+}
+if (in_array($f_sem_type, $valid_sem_types, true)) {
+    $where[]  = 's.semester_type = ?';
+    $params[] = $f_sem_type;
 }
 
 // Apply department scope restriction for non-super-admins
@@ -221,6 +227,14 @@ require_once __DIR__ . '/../includes/header.php';
                 <input type="text" name="semester" class="form-control form-control-sm"
                        placeholder="e.g. Fall 2025" value="<?= h($f_sem) ?>">
             </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold" style="font-size:.8rem;">Semester Type</label>
+                <select name="sem_type" class="form-select form-select-sm">
+                    <option value="">All Types</option>
+                    <option value="bi_semester" <?= $f_sem_type === 'bi_semester' ? 'selected' : '' ?>>Bi Semester</option>
+                    <option value="trimester"   <?= $f_sem_type === 'trimester'   ? 'selected' : '' ?>>Trimester</option>
+                </select>
+            </div>
             <div class="col-6 col-md-2 d-flex gap-2">
                 <button type="submit" class="btn btn-primary btn-sm flex-fill" style="border-radius:7px;">
                     <i class="fas fa-search me-1"></i> Filter
@@ -279,7 +293,12 @@ require_once __DIR__ . '/../includes/header.php';
                             <small class="text-muted"><?= h($s['program_name']) ?></small>
                             <?php endif; ?>
                         </td>
-                        <td><?= h($s['admitted_semester']) ?></td>
+                        <td>
+                            <?= h($s['admitted_semester']) ?>
+                            <?php if (!empty($s['semester_type'])): ?>
+                            <br><small class="text-muted"><?= h(sm_semester_type_label($s['semester_type'], true)) ?></small>
+                            <?php endif; ?>
+                        </td>
                         <td>
                             <?php if ($s['phone']): ?>
                             <div><i class="fas fa-phone fa-xs text-muted me-1"></i><?= h($s['phone']) ?></div>

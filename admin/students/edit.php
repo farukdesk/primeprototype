@@ -73,6 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $dob                  = trim($_POST['dob']                  ?? '');
     $blood_group          = trim($_POST['blood_group']          ?? '');
     $nid                  = trim($_POST['nid']                  ?? '');
+    $semester_type        = trim($_POST['semester_type']        ?? '');
     $batch                = trim($_POST['batch']                ?? '');
     $batch_id             = (int)($_POST['batch_id']            ?? 0);
     $year                 = trim($_POST['year']                 ?? '');
@@ -138,6 +139,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $valid_statuses = ['Active', 'Inactive', 'Graduated', 'Dropped'];
     if (!in_array($status, $valid_statuses, true)) $status = 'Active';
 
+    $valid_semester_types = ['bi_semester', 'trimester', ''];
+    if (!in_array($semester_type, $valid_semester_types, true)) $semester_type = '';
+
     $valid_sexes = ['Male', 'Female', 'Other'];
     if (!in_array($sex, $valid_sexes, true)) $sex = '';
 
@@ -186,6 +190,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->prepare(
             'UPDATE students SET
                student_id = ?, dept_id = ?, program_id = ?, admitted_semester = ?,
+               semester_type = ?,
                batch = ?, batch_id = ?, year = ?, shift = ?,
                full_name = ?, father_name = ?, father_phone = ?, father_occupation = ?,
                father_yearly_income = ?,
@@ -208,6 +213,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $dept_id,
             $program_id ?: null,
             $admitted_sem,
+            $semester_type    ?: null,
             $batch          ?: null,
             $batch_id       ?: null,
             $year           ?: null,
@@ -439,6 +445,15 @@ require_once __DIR__ . '/../includes/header.php';
                         <?php endforeach; ?>
                     </div>
                 </div>
+            </div>
+            <!-- Semester Type -->
+            <div class="col-12 col-md-4">
+                <label class="form-label fw-semibold">Semester Type</label>
+                <select name="semester_type" class="form-select">
+                    <option value="">— Select —</option>
+                    <option value="bi_semester"  <?= ($student['semester_type'] ?? '') === 'bi_semester'  ? 'selected' : '' ?>>Bi Semester (Spring / Fall)</option>
+                    <option value="trimester"    <?= ($student['semester_type'] ?? '') === 'trimester'    ? 'selected' : '' ?>>Trimester (Spring / Summer / Fall)</option>
+                </select>
             </div>
         </div>
         <div class="row g-3 mt-1">
