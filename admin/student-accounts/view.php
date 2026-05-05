@@ -57,6 +57,10 @@ require_once __DIR__ . '/../includes/header.php';
            class="btn btn-outline-secondary btn-sm">
             <i class="fas fa-user-graduate me-1"></i> Student Profile
         </a>
+        <a href="<?= APP_URL ?>/student-accounts/statement.php?id=<?= $id ?>"
+           class="btn btn-outline-success btn-sm" target="_blank">
+            <i class="fas fa-file-invoice me-1"></i> Download Statement
+        </a>
         <?php if (sfp_can_delete()): ?>
         <form method="post" action="<?= APP_URL ?>/student-accounts/delete.php"
               onsubmit="return confirm('Delete this student account? All semester fee records will be lost.');">
