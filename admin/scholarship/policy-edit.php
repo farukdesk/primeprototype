@@ -31,35 +31,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $tier_discounts   = $_POST['tier_discount']     ?? [];
     $tier_sorts       = $_POST['tier_sort']         ?? [];
 
-    if (!in_array($type, ['gpa_based', 'merit_based'], true)) $type = 'gpa_based';
+    $flat_discount    = trim($_POST['flat_discount'] ?? '');
+
+    if (!in_array($type, ['gpa_based', 'merit_based', 'flat'], true)) $type = 'gpa_based';
     if ($name === '') $errors[] = 'Policy name is required.';
 
     $valid_tiers = [];
-    foreach ($tier_labels as $idx => $lbl) {
-        $min = trim($tier_min_gpas[$idx] ?? '');
-        $max = trim($tier_max_gpas[$idx] ?? '');
-        $dis = trim($tier_discounts[$idx] ?? '');
-        if ($min === '' && $max === '' && $dis === '') continue;
-        if (!is_numeric($min) || !is_numeric($max) || !is_numeric($dis)) {
-            $errors[] = 'All tier GPA and discount values must be numeric.';
-            break;
+
+    if ($type === 'flat') {
+        if (!is_numeric($flat_discount) || (float)$flat_discount < 0 || (float)$flat_discount > 100) {
+            $errors[] = 'Flat discount must be a number between 0 and 100.';
+        } else {
+            $valid_tiers[] = [
+                'id'               => (int)($tier_ids[0] ?? 0),
+                'label'            => 'Flat',
+                'min_gpa'          => null,
+                'max_gpa'          => null,
+                'discount_percent' => (float)$flat_discount,
+                'sort_order'       => 0,
+            ];
         }
-        if ((float)$min > (float)$max) {
-            $errors[] = 'Tier min GPA cannot be greater than max GPA.';
-            break;
+    } else {
+        foreach ($tier_labels as $idx => $lbl) {
+            $min = trim($tier_min_gpas[$idx] ?? '');
+            $max = trim($tier_max_gpas[$idx] ?? '');
+            $dis = trim($tier_discounts[$idx] ?? '');
+            if ($min === '' && $max === '' && $dis === '') continue;
+            if (!is_numeric($min) || !is_numeric($max) || !is_numeric($dis)) {
+                $errors[] = 'All tier GPA and discount values must be numeric.';
+                break;
+            }
+            if ((float)$min > (float)$max) {
+                $errors[] = 'Tier min GPA cannot be greater than max GPA.';
+                break;
+            }
+            if ((float)$dis < 0 || (float)$dis > 100) {
+                $errors[] = 'Tier discount must be between 0 and 100.';
+                break;
+            }
+            $valid_tiers[] = [
+                'id'               => (int)($tier_ids[$idx] ?? 0),
+                'label'            => trim($lbl),
+                'min_gpa'          => (float)$min,
+                'max_gpa'          => (float)$max,
+                'discount_percent' => (float)$dis,
+                'sort_order'       => (int)($tier_sorts[$idx] ?? $idx),
+            ];
         }
-        if ((float)$dis < 0 || (float)$dis > 100) {
-            $errors[] = 'Tier discount must be between 0 and 100.';
-            break;
-        }
-        $valid_tiers[] = [
-            'id'               => (int)($tier_ids[$idx] ?? 0),
-            'label'            => trim($lbl),
-            'min_gpa'          => (float)$min,
-            'max_gpa'          => (float)$max,
-            'discount_percent' => (float)$dis,
-            'sort_order'       => (int)($tier_sorts[$idx] ?? $idx),
-        ];
     }
 
     if (empty($errors)) {
@@ -73,6 +91,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                ->execute([...$deleted_tier_ids, $id]);
         }
 
+        // For flat type, delete any extra tiers (keep only 1)
+        if ($type === 'flat') {
+            $db->prepare("DELETE FROM sc_tiers WHERE policy_id = ? AND id != COALESCE(?, 0)")
+               ->execute([$id, $valid_tiers[0]['id'] ?? 0]);
+        }
+
         $upd = $db->prepare(
             'UPDATE sc_tiers SET label=?, min_gpa=?, max_gpa=?, discount_percent=?, sort_order=? WHERE id=? AND policy_id=?'
         );
@@ -84,8 +108,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($tier['id'] > 0) {
                 $upd->execute([
                     $tier['label'] ?: null,
-                    $tier['min_gpa'],
-                    $tier['max_gpa'],
+                    $tier['min_gpa'] ?? null,
+                    $tier['max_gpa'] ?? null,
                     $tier['discount_percent'],
                     $tier['sort_order'],
                     $tier['id'],
@@ -95,8 +119,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $ins->execute([
                     $id,
                     $tier['label'] ?: null,
-                    $tier['min_gpa'],
-                    $tier['max_gpa'],
+                    $tier['min_gpa'] ?? null,
+                    $tier['max_gpa'] ?? null,
                     $tier['discount_percent'],
                     $tier['sort_order'],
                 ]);
@@ -160,9 +184,9 @@ require_once __DIR__ . '/../includes/header.php';
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Type <span class="text-danger">*</span></label>
-                        <div class="d-flex gap-4 mt-1">
+                        <div class="d-flex gap-4 mt-1 flex-wrap">
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="type" id="type_gpa" value="gpa_based"
+                                <input class="form-check-input policy-type-radio" type="radio" name="type" id="type_gpa" value="gpa_based"
                                        <?= $fv['type'] === 'gpa_based' ? 'checked' : '' ?>>
                                 <label class="form-check-label" for="type_gpa">
                                     <span class="badge bg-info text-dark me-1">GPA-Based</span>
@@ -170,11 +194,19 @@ require_once __DIR__ . '/../includes/header.php';
                                 </label>
                             </div>
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="type" id="type_merit" value="merit_based"
+                                <input class="form-check-input policy-type-radio" type="radio" name="type" id="type_merit" value="merit_based"
                                        <?= $fv['type'] === 'merit_based' ? 'checked' : '' ?>>
                                 <label class="form-check-label" for="type_merit">
                                     <span class="badge bg-primary me-1">Merit-Based</span>
                                     Continuing students (previous semester CGPA)
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input policy-type-radio" type="radio" name="type" id="type_flat" value="flat"
+                                       <?= $fv['type'] === 'flat' ? 'checked' : '' ?>>
+                                <label class="form-check-label" for="type_flat">
+                                    <span class="badge bg-success me-1">Flat Discount</span>
+                                    Fixed discount for all qualifying students
                                 </label>
                             </div>
                         </div>
@@ -186,8 +218,33 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
             </div>
 
+            <!-- Flat Discount -->
+            <?php $flat_tier = ($fv['type'] === 'flat' && !empty($tiers)) ? $tiers[0] : null; ?>
+            <div class="card border-0 shadow-sm mb-4" id="flat-discount-section" style="display:none;">
+                <div class="card-header fw-semibold py-3">
+                    <i class="fas fa-tag me-2 text-success"></i>Flat Discount
+                </div>
+                <div class="card-body">
+                    <div class="row g-3 align-items-end">
+                        <div class="col-sm-4">
+                            <label class="form-label fw-semibold">Discount % <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <?php if ($flat_tier): ?>
+                                <input type="hidden" name="tier_id[]" value="<?= $flat_tier['id'] ?>">
+                                <?php endif; ?>
+                                <input type="number" name="flat_discount" id="flat_discount" class="form-control"
+                                       value="<?= h(old('flat_discount', $flat_tier ? $flat_tier['discount_percent'] : '')) ?>"
+                                       step="0.01" min="0" max="100" placeholder="e.g. 25.00">
+                                <span class="input-group-text">%</span>
+                            </div>
+                            <div class="form-text">Fixed discount applied to all qualifying students.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Tiers -->
-            <div class="card border-0 shadow-sm">
+            <div class="card border-0 shadow-sm" id="tiers-section">
                 <div class="card-header fw-semibold py-3 d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-layer-group me-2 text-warning"></i>GPA / CGPA Tiers</span>
                     <button type="button" class="btn btn-sm btn-outline-warning" id="add-tier-row">
@@ -252,6 +309,17 @@ require_once __DIR__ . '/../includes/header.php';
 <script>
 var tierIdx = <?= count($tiers) ?>;
 var deletedTierIds = [];
+
+function togglePolicySections() {
+    var type = document.querySelector('input[name="type"]:checked')?.value;
+    var isFlat = type === 'flat';
+    document.getElementById('flat-discount-section').style.display = isFlat ? '' : 'none';
+    document.getElementById('tiers-section').style.display          = isFlat ? 'none' : '';
+}
+document.querySelectorAll('.policy-type-radio').forEach(function (r) {
+    r.addEventListener('change', togglePolicySections);
+});
+togglePolicySections();
 
 document.getElementById('add-tier-row').addEventListener('click', function () {
     var tbody = document.getElementById('tiers-body');
