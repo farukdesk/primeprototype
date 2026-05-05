@@ -24,6 +24,14 @@ $all_scholarships = sfp_get_all_semester_scholarships($id);
 $sem_fixed_portion   = sfp_semester_fixed_portion($pkg);
 $sem_english_portion = sfp_semester_english_portion($pkg);
 
+// Registration fee per semester (from cf_settings)
+$cf_settings         = db()->query('SELECT reg_fee_per_semester FROM cf_settings WHERE id = 1')->fetch();
+$reg_fee_per_sem     = $cf_settings ? (float)$cf_settings['reg_fee_per_semester'] : 0.0;
+$total_reg_fees      = $reg_fee_per_sem * count($semester_fees);
+
+// Admission fee (one-time, shown separately)
+$admission_fee       = (float)$pkg['admission_fees'];
+
 // Totals
 $total_tuition_payable   = 0.0;
 $total_fixed_discounts   = 0.0;
@@ -35,7 +43,7 @@ foreach ($semester_fees as $sf) {
 }
 $total_fixed_all   = max(0.0, (float)$pkg['fixed_institutional_fees'] - $total_fixed_discounts);
 $total_english_all = max(0.0, (float)$pkg['english_course_fee']       - $total_english_discounts);
-$total_cost = $total_tuition_payable + $total_fixed_all + $total_english_all;
+$total_cost = $total_tuition_payable + $total_fixed_all + $total_english_all + $total_reg_fees + $admission_fee;
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -216,6 +224,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <th class="text-end">Tuition Payable</th>
                         <th class="text-end">Fixed Fees<br><small class="fw-normal text-muted">(per semester)</small></th>
                         <th class="text-end">English Fee<br><small class="fw-normal text-muted">(per semester)</small></th>
+                        <th class="text-end">Registration Fee<br><small class="fw-normal text-muted">(per semester)</small></th>
                         <th class="text-end fw-bold">Total Payable</th>
                     </tr>
                 </thead>
@@ -231,7 +240,7 @@ require_once __DIR__ . '/../includes/header.php';
                     $tuition_payable = (float)$sf['tuition_payable'];
                     $fixed_amt       = max(0.0, $sem_fixed_portion  - (float)($sf['fixed_discount_amount']   ?? 0));
                     $english_amt     = max(0.0, $sem_english_portion - (float)($sf['english_discount_amount'] ?? 0));
-                    $total_sem       = $tuition_payable + $fixed_amt + $english_amt;
+                    $total_sem       = $tuition_payable + $fixed_amt + $english_amt + $reg_fee_per_sem;
                     $grand_tuition_payable += $tuition_payable;
                     $grand_fixed           += $fixed_amt;
                     $grand_english         += $english_amt;
@@ -349,6 +358,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <td class="text-end fw-semibold"><?= sfp_money($tuition_payable) ?></td>
                     <td class="text-end"><?= sfp_money($fixed_amt) ?></td>
                     <td class="text-end"><?= sfp_money($english_amt) ?></td>
+                    <td class="text-end"><?= sfp_money($reg_fee_per_sem) ?></td>
                     <td class="text-end fw-bold text-success"><?= sfp_money($total_sem) ?></td>
                 </tr>
                 <?php endforeach; ?>
@@ -359,7 +369,16 @@ require_once __DIR__ . '/../includes/header.php';
                         <td class="text-end"><?= sfp_money($grand_tuition_payable) ?></td>
                         <td class="text-end"><?= sfp_money($grand_fixed) ?></td>
                         <td class="text-end"><?= sfp_money($grand_english) ?></td>
+                        <td class="text-end"><?= sfp_money($total_reg_fees) ?></td>
                         <td class="text-end text-success fs-6"><?= sfp_money($grand_total) ?></td>
+                    </tr>
+                    <tr class="table-warning">
+                        <td colspan="8" class="text-end">Admission Fees (one-time) →</td>
+                        <td class="text-end text-warning-emphasis fs-6"><?= sfp_money($admission_fee) ?></td>
+                    </tr>
+                    <tr class="table-success">
+                        <td colspan="8" class="text-end fw-bold">Grand Total (incl. Admission Fees) →</td>
+                        <td class="text-end fw-bold text-success fs-5"><?= sfp_money($grand_total + $admission_fee) ?></td>
                     </tr>
                 </tfoot>
             </table>
