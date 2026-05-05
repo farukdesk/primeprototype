@@ -67,8 +67,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
             $letter_grade = strtoupper(trim($row[$map['letter_grade']] ?? ''));
             $grade_point  = trim($row[$map['grade_point']]  ?? '');
 
-            // X in CSV means Incomplete
-            if ($letter_grade === 'X') {
+            // X in CSV means Incomplete; also normalise explicit INCOM to display form
+            if ($letter_grade === 'X' || $letter_grade === 'INCOM') {
                 $letter_grade = 'Incom';
             }
 
