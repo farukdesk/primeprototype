@@ -152,6 +152,46 @@ function sfp_get_all_semester_scholarships(int $package_id): array
     return $map;
 }
 
+// ── Fetch active scholarship policies with their GPA tiers ───────────────
+// Used by the Add Scholarship modal to allow quick-fill from a policy.
+
+function sfp_get_active_sc_policies_with_tiers(): array
+{
+    $policies = db()->query(
+        'SELECT id, name, type, description
+         FROM sc_policies
+         WHERE is_active = 1
+         ORDER BY sort_order, name'
+    )->fetchAll();
+
+    if (empty($policies)) {
+        return [];
+    }
+
+    $ids          = array_map('intval', array_column($policies, 'id'));
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    $stmt         = db()->prepare(
+        'SELECT id, policy_id, label, min_gpa, max_gpa, discount_percent
+         FROM sc_tiers
+         WHERE policy_id IN (' . $placeholders . ')
+         ORDER BY policy_id, sort_order, min_gpa'
+    );
+    $stmt->execute($ids);
+    $tiers = $stmt->fetchAll();
+
+    $tiers_map = [];
+    foreach ($tiers as $t) {
+        $tiers_map[(int)$t['policy_id']][] = $t;
+    }
+
+    foreach ($policies as &$pol) {
+        $pol['tiers'] = $tiers_map[(int)$pol['id']] ?? [];
+    }
+    unset($pol);
+
+    return $policies;
+}
+
 // ── Re-aggregate scholarship totals into sfp_semester_fees ───────────────────
 // Call after any insert / delete in sfp_semester_scholarships.
 // Each scholarship is applied to the *remaining* balance after previous

@@ -14,6 +14,9 @@ if (!$pkg) {
 $page_title    = 'Fee Package – ' . $pkg['student_name'];
 $semester_fees = sfp_get_semester_fees($id);
 
+// Active scholarship policies (with tiers) for the Add Scholarship modal
+$sc_policies = sfp_get_active_sc_policies_with_tiers();
+
 // All individual scholarships for this package, keyed by sf_id
 $all_scholarships = sfp_get_all_semester_scholarships($id);
 
@@ -430,6 +433,37 @@ $first_sem_label   = ($first_sem && $first_sem['semester_label']) ? $first_sem['
                 <div class="modal-body">
                     <p class="mb-3 text-muted small" id="asc-sem-info"></p>
 
+                    <?php if (!empty($sc_policies)): ?>
+                    <!-- Quick-fill from scholarship policy -->
+                    <div class="mb-3 p-3 bg-light rounded border">
+                        <div class="fw-semibold small mb-2 text-secondary">
+                            <i class="fas fa-magic me-1"></i>Quick-fill from Policy
+                            <span class="text-muted fw-normal">(optional)</span>
+                        </div>
+                        <select id="asc-policy-select" class="form-select form-select-sm mb-2">
+                            <option value="">— Choose a scholarship policy —</option>
+                            <?php foreach ($sc_policies as $spol): ?>
+                            <option value="<?= $spol['id'] ?>"
+                                    data-name="<?= h($spol['name']) ?>"
+                                    data-tiers="<?= h(json_encode($spol['tiers'])) ?>">
+                                <?= h($spol['name']) ?>
+                                (<?= $spol['type'] === 'gpa_based' ? 'GPA-Based' : 'Merit-Based' ?>)
+                                <?php if (!empty($spol['tiers'])): ?>
+                                – <?= count($spol['tiers']) ?> tier<?= count($spol['tiers']) !== 1 ? 's' : '' ?>
+                                <?php endif; ?>
+                            </option>
+                            <?php endforeach; ?>
+                        </select>
+                        <div class="d-none" id="asc-tier-wrap">
+                            <select id="asc-tier-select" class="form-select form-select-sm">
+                                <option value="">— Select a tier —</option>
+                            </select>
+                            <div class="form-text mt-1" id="asc-tier-info"></div>
+                        </div>
+                    </div>
+                    <hr class="my-2">
+                    <?php endif; ?>
+
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Tuition Fee (this semester)</label>
                         <input type="text" id="asc-tuition-display" class="form-control bg-light" readonly>
@@ -462,6 +496,14 @@ $first_sem_label   = ($first_sem && $first_sem['semester_label']) ? $first_sem['
                         <label class="form-label fw-semibold">Note</label>
                         <textarea name="sc_note" id="asc-note" class="form-control" rows="2"
                                   placeholder="Optional note about this scholarship"></textarea>
+                    </div>
+
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="apply_to_all" value="1"
+                               id="asc-apply-all">
+                        <label class="form-check-label small" for="asc-apply-all">
+                            Apply this scholarship to <strong>all semesters</strong> in the package
+                        </label>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -541,14 +583,23 @@ document.querySelectorAll('.add-sc-btn').forEach(function(btn) {
         var semLbl  = this.dataset.semLabel || ('Semester ' + this.dataset.semNum);
         var tuition = parseFloat(this.dataset.tuition) || 0;
 
-        document.getElementById('asc-sf-id').value        = sfId;
+        document.getElementById('asc-sf-id').value          = sfId;
         document.getElementById('asc-sem-info').textContent = 'Adding to: ' + semLbl;
         document.getElementById('asc-tuition-display').value =
             tuition.toLocaleString('en-BD', {minimumFractionDigits:2});
-        document.getElementById('asc-pct').value  = '';
-        document.getElementById('asc-label').value = '';
-        document.getElementById('asc-note').value  = '';
+        document.getElementById('asc-pct').value   = '';
+        document.getElementById('asc-label').value  = '';
+        document.getElementById('asc-note').value   = '';
         document.getElementById('asc-amount').value = '0.00';
+
+        // Reset policy/tier selectors
+        var polSel = document.getElementById('asc-policy-select');
+        if (polSel) {
+            polSel.value = '';
+            ascResetTierWrap();
+        }
+        var applyAll = document.getElementById('asc-apply-all');
+        if (applyAll) applyAll.checked = false;
 
         var modal = new bootstrap.Modal(document.getElementById('addScModal'));
         modal.show();
@@ -556,15 +607,79 @@ document.querySelectorAll('.add-sc-btn').forEach(function(btn) {
     });
 });
 
-document.getElementById('asc-pct').addEventListener('input', function() {
+// ── Policy / tier quick-fill ──────────────────────────────────────────────────
+function ascResetTierWrap() {
+    var tierWrap = document.getElementById('asc-tier-wrap');
+    if (!tierWrap) return;
+    tierWrap.classList.add('d-none');
+    var tierSel = document.getElementById('asc-tier-select');
+    tierSel.innerHTML = '<option value="">— Select a tier —</option>';
+    document.getElementById('asc-tier-info').textContent = '';
+}
+
+function ascRecalcAmount() {
     var tuition = parseFloat(
         document.getElementById('asc-tuition-display').value.replace(/,/g, '')
     ) || 0;
-    var pct    = parseFloat(this.value) || 0;
-    var amount = tuition * pct / 100;
+    var pct = parseFloat(document.getElementById('asc-pct').value) || 0;
     document.getElementById('asc-amount').value =
-        amount.toLocaleString('en-BD', {minimumFractionDigits:2});
-});
+        (tuition * pct / 100).toLocaleString('en-BD', {minimumFractionDigits:2});
+}
+
+var ascPolicySel = document.getElementById('asc-policy-select');
+if (ascPolicySel) {
+    ascPolicySel.addEventListener('change', function() {
+        ascResetTierWrap();
+        var opt = this.options[this.selectedIndex];
+        if (!this.value) return;
+
+        var tiers = [];
+        try { tiers = JSON.parse(opt.dataset.tiers || '[]'); } catch(e) {}
+        var polName = opt.dataset.name || '';
+
+        if (tiers.length > 0) {
+            // Show tier dropdown
+            var tierWrap = document.getElementById('asc-tier-wrap');
+            tierWrap.classList.remove('d-none');
+            var tierSel = document.getElementById('asc-tier-select');
+            tiers.forEach(function(t) {
+                var lbl = t.label || ('GPA ' + t.min_gpa + '–' + t.max_gpa);
+                var opt2 = document.createElement('option');
+                opt2.value = t.id;
+                opt2.textContent = lbl + ' (' + parseFloat(t.discount_percent).toFixed(2) + '%)';
+                opt2.dataset.label   = lbl;
+                opt2.dataset.polName = polName;
+                opt2.dataset.pct     = t.discount_percent;
+                opt2.dataset.minGpa  = t.min_gpa;
+                opt2.dataset.maxGpa  = t.max_gpa;
+                tierSel.appendChild(opt2);
+            });
+        } else {
+            // No tiers – fill label with policy name only; leave discount empty
+            document.getElementById('asc-label').value = polName;
+            document.getElementById('asc-pct').value   = '';
+            document.getElementById('asc-amount').value = '0.00';
+        }
+    });
+}
+
+var ascTierSel = document.getElementById('asc-tier-select');
+if (ascTierSel) {
+    ascTierSel.addEventListener('change', function() {
+        var opt = this.options[this.selectedIndex];
+        if (!this.value) return;
+        var pct  = parseFloat(opt.dataset.pct) || 0;
+        var lbl  = opt.dataset.label || '';
+        var pol  = opt.dataset.polName || '';
+        var info = 'GPA range: ' + opt.dataset.minGpa + ' – ' + opt.dataset.maxGpa;
+        document.getElementById('asc-label').value = pol + (lbl ? ' – ' + lbl : '');
+        document.getElementById('asc-pct').value   = pct.toFixed(2);
+        document.getElementById('asc-tier-info').textContent = info;
+        ascRecalcAmount();
+    });
+}
+
+document.getElementById('asc-pct').addEventListener('input', ascRecalcAmount);
 
 // ── Edit Tuition modal ────────────────────────────────────────────────────────
 document.querySelectorAll('.edit-tuition-btn').forEach(function(btn) {
