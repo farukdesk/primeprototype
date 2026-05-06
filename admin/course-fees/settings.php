@@ -26,8 +26,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $form_id_fee     = max(0, (int)($_POST['form_id_fee']          ?? 1000));
         $id_card_fee     = max(0, (int)($_POST['id_card_fee']          ?? 500));
         $admission_form_fee = max(0, (int)($_POST['admission_form_fee'] ?? 500));
-        $bi_semester_start_month  = cf_validate_month((int)($_POST['bi_semester_start_month']  ?? 1));
-        $tri_semester_start_month = cf_validate_month((int)($_POST['tri_semester_start_month'] ?? 1));
+        $bi_semester_start_month  = cf_validate_month((int)($_POST['bi_semester_start_month']  ?? CF_DEFAULT_START_MONTH));
+        $tri_semester_start_month = cf_validate_month((int)($_POST['tri_semester_start_month'] ?? CF_DEFAULT_START_MONTH));
 
         if ($page_title_val === '') $errors[] = 'Page title is required.';
         if ($session_label  === '') $errors[] = 'Session label is required.';
@@ -126,8 +126,8 @@ require_once __DIR__ . '/../includes/header.php';
                     <?php
                     // Calculate start month values with fallback to legacy start_month field
                     $months = cf_get_months();
-                    $bi_start_month = (int)($settings['bi_semester_start_month'] ?? $settings['start_month'] ?? 1);
-                    $tri_start_month = (int)($settings['tri_semester_start_month'] ?? $settings['start_month'] ?? 1);
+                    $bi_start_month = (int)($settings['bi_semester_start_month'] ?? $settings['start_month'] ?? CF_DEFAULT_START_MONTH);
+                    $tri_start_month = (int)($settings['tri_semester_start_month'] ?? $settings['start_month'] ?? CF_DEFAULT_START_MONTH);
                     ?>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Bi-Semester Start Month</label>

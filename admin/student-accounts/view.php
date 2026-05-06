@@ -33,15 +33,16 @@ $form_id_fee         = $cf_settings ? (float)$cf_settings['form_id_fee']        
 $is_bi_semester_program = ($pkg['total_semesters'] ?? 0) <= SFP_MAX_BI_SEMESTER_COUNT;
 if ($cf_settings) {
     // Use new fields if available and valid, otherwise fall back to legacy start_month
-    if ($cf_settings['bi_semester_start_month'] !== null && $cf_settings['tri_semester_start_month'] !== null) {
-        $start_month = $is_bi_semester_program 
-            ? (int)$cf_settings['bi_semester_start_month'] 
-            : (int)$cf_settings['tri_semester_start_month'];
+    $bi_month = $cf_settings['bi_semester_start_month'] ?? null;
+    $tri_month = $cf_settings['tri_semester_start_month'] ?? null;
+    
+    if ($bi_month !== null && $tri_month !== null) {
+        $start_month = $is_bi_semester_program ? (int)$bi_month : (int)$tri_month;
     } else {
-        $start_month = (int)($cf_settings['start_month'] ?? 1);
+        $start_month = (int)($cf_settings['start_month'] ?? CF_DEFAULT_START_MONTH);
     }
 } else {
-    $start_month = 1;
+    $start_month = CF_DEFAULT_START_MONTH;
 }
 
 // Semester 1 reg fee is now shown in the registration column together with all other semesters.

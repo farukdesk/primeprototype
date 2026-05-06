@@ -31,7 +31,7 @@ admin/course-fees-start-month-v2.sql
 This migration will:
 - Add a new `bi_semester_start_month` field
 - Add a new `tri_semester_start_month` field
-- Copy the existing `start_month` value to both new fields
+- Set both new fields to the existing `start_month` value (if they are NULL)
 - Preserve the original `start_month` field for backward compatibility
 
 ### 2. Configure Start Months

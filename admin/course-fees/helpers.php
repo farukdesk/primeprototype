@@ -80,6 +80,11 @@ function cf_get_months(): array {
 }
 
 // ── Month validation ──────────────────────────────────────────────────────────
+/**
+ * Default start month (January)
+ */
+define('CF_DEFAULT_START_MONTH', 1);
+
 function cf_validate_month(int $month): int {
     return max(1, min(12, $month));
 }
