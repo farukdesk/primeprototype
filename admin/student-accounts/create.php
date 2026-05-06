@@ -21,6 +21,7 @@ foreach ($cf_programs as $prog) {
         'standard_tuition_full'    => (int)$prog['standard_tuition_full'],
         'tuition_per_semester'     => (float)$prog['tuition_per_semester'],
         'admission_fees'           => (int)$prog['admission_fees'],
+        'admission_fee_m'          => (int)($prog['admission_fee_m'] ?? 0),
         'fixed_institutional_fees' => (int)$prog['fixed_institutional_fees'],
         'english_course_fee'       => (int)$prog['english_course_fee'],
         'safety_net_cap'           => (int)$prog['safety_net_cap'],
@@ -455,7 +456,7 @@ document.getElementById('cf-program-select').addEventListener('change', function
     document.getElementById('f-total-months').value               = p.total_months;
     document.getElementById('f-std-tuition').value                = p.standard_tuition_full;
     document.getElementById('f-tuition-sem').value                = p.tuition_per_semester;
-    document.getElementById('f-admission').value                  = p.admission_fees;
+    document.getElementById('f-admission').value                  = p.admission_fee_m;
     document.getElementById('f-fixed-inst').value                 = p.fixed_institutional_fees;
     document.getElementById('f-english').value                    = p.english_course_fee;
     document.getElementById('f-snc').value                        = p.safety_net_cap;

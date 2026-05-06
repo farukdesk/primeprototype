@@ -72,7 +72,7 @@ function sfp_get_cf_programs(): array
         'SELECT p.id, p.program_name, p.program_slug,
                 p.total_semesters, p.total_months,
                 p.standard_tuition_full, p.tuition_per_semester,
-                p.admission_fees, p.fixed_institutional_fees, p.english_course_fee,
+                p.admission_fees, p.admission_fee_m, p.fixed_institutional_fees, p.english_course_fee,
                 p.safety_net_cap, p.safety_net_per_semester,
                 p.attendance_requirement, p.safety_net_gpa_threshold,
                 dt.name AS degree_type_name, dt.slug AS degree_type_slug
