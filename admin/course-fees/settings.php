@@ -123,14 +123,16 @@ require_once __DIR__ . '/../includes/header.php';
                         <textarea name="disclaimer" class="form-control" rows="4"><?= h($settings['disclaimer'] ?? '') ?></textarea>
                         <div class="form-text">Shown at the bottom of the public calculator page.</div>
                     </div>
+                    <?php
+                    // Calculate start month values with fallback to legacy start_month field
+                    $months = cf_get_months();
+                    $bi_start_month = (int)($settings['bi_semester_start_month'] ?? $settings['start_month'] ?? 1);
+                    $tri_start_month = (int)($settings['tri_semester_start_month'] ?? $settings['start_month'] ?? 1);
+                    ?>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Bi-Semester Start Month</label>
                         <select name="bi_semester_start_month" class="form-select">
-                            <?php
-                            $months = cf_get_months();
-                            $bi_start_month = (int)($settings['bi_semester_start_month'] ?? $settings['start_month'] ?? 1);
-                            foreach ($months as $num => $name):
-                            ?>
+                            <?php foreach ($months as $num => $name): ?>
                             <option value="<?= $num ?>" <?= $num === $bi_start_month ? 'selected' : '' ?>>
                                 <?= h($name) ?>
                             </option>
@@ -141,10 +143,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Tri-Semester Start Month</label>
                         <select name="tri_semester_start_month" class="form-select">
-                            <?php
-                            $tri_start_month = (int)($settings['tri_semester_start_month'] ?? $settings['start_month'] ?? 1);
-                            foreach ($months as $num => $name):
-                            ?>
+                            <?php foreach ($months as $num => $name): ?>
                             <option value="<?= $num ?>" <?= $num === $tri_start_month ? 'selected' : '' ?>>
                                 <?= h($name) ?>
                             </option>
