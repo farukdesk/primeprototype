@@ -21,7 +21,7 @@ foreach ($cf_programs as $prog) {
         'standard_tuition_full'    => (int)$prog['standard_tuition_full'],
         'tuition_per_semester'     => (float)$prog['tuition_per_semester'],
         'admission_fees'           => (int)$prog['admission_fees'],
-        'admission_fee_m'          => (int)($prog['admission_fee_m'] ?? $prog['admission_fees']),
+        'admission_fee_m'          => (int)($prog['admission_fee_m'] ?? 0),
         'fixed_institutional_fees' => (int)$prog['fixed_institutional_fees'],
         'english_course_fee'       => (int)$prog['english_course_fee'],
         'safety_net_cap'           => (int)$prog['safety_net_cap'],
