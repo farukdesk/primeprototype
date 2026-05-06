@@ -73,6 +73,9 @@ foreach ($thanas as $t) {
 
 const CI_BLOOD_GROUPS = ['A+','A-','B+','B-','AB+','AB-','O+','O-'];
 
+// Batch size for chunked database queries to avoid exceeding SQL parameter limits
+const CI_STUDENT_ID_BATCH_SIZE = 500;
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /**
@@ -181,6 +184,9 @@ function ci_read_spreadsheet(string $tmp_path, string $extension): array {
  *   'mobile'      => string
  *   'email'       => string
  *   'blood_group' => string
+ *
+ * Note: Duplicate checking is NOT performed here. The caller is responsible
+ * for checking duplicates against the database and within the CSV file.
  */
 function ci_validate_row(
     array $row,
@@ -217,7 +223,7 @@ function ci_validate_row(
             $errors[] = 'ID_No "' . htmlspecialchars($id_raw, ENT_QUOTES, 'UTF-8') . '" is invalid (1–20 alphanumeric/hyphen chars).';
             $id_raw = '';
         }
-        // Duplicate check is deferred to import phase to avoid redundant queries during preview.
+        // Note: Duplicate checking is performed by the caller using batch queries for performance
     }
 
     // --- Department ---
@@ -362,34 +368,94 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     } else {
                         $preview_rows = [];
                         $row_num = 1;
-                        foreach ($all_rows as $raw) {
-                            $row_num++;
-                            // Skip completely blank rows
-                            if (count(array_filter(array_map('trim', $raw))) === 0) {
-                                continue;
-                            }
-                            // Map header keys → values
-                            $assoc = [];
-                            foreach ($header as $i => $key) {
-                                $assoc[$key] = $raw[$i] ?? '';
-                            }
-                            $validated = ci_validate_row(
-                                $assoc,
-                                $dept_by_name, $dept_by_code,
-                                $prog_by_name, $batch_by_name,
-                                $district_by_name, $thana_by_did_name
-                            );
-                            $validated['row_num'] = $row_num;
-                            $preview_rows[] = $validated;
-                        }
-
-                        if (empty($preview_rows)) {
-                            $parse_error  = 'The file contains no data rows.';
-                            $preview_rows = null;
+                        $pdo = db(); // Get database connection for duplicate checking
+                        
+                        // Validate database connection
+                        if (!$pdo) {
+                            $parse_error = 'Database connection failed. Please check your database configuration or contact support.';
                         } else {
-                            $step = 'preview';
-                            // Encode preview rows in session for the confirm step
-                            $_SESSION['csv_import_rows'] = $preview_rows;
+                            // First pass: collect all student IDs from CSV for batch duplicate checking
+                            $csv_student_ids = [];
+                            $temp_rows = [];
+                            foreach ($all_rows as $raw) {
+                                $row_num++;
+                                // Skip completely blank rows
+                                if (count(array_filter(array_map('trim', $raw))) === 0) {
+                                    continue;
+                                }
+                                // Map header keys → values
+                                $assoc = [];
+                                foreach ($header as $i => $key) {
+                                    $assoc[$key] = $raw[$i] ?? '';
+                                }
+                                $temp_rows[] = ['row_num' => $row_num, 'assoc' => $assoc];
+                                
+                                $sid = trim($assoc['id_no'] ?? '');
+                                if ($sid !== '') {
+                                    $csv_student_ids[] = $sid;
+                                }
+                            }
+                            
+                            // Remove duplicates within CSV list to optimize database queries
+                            $csv_student_ids = array_unique($csv_student_ids);
+                            
+                            // Batch check for existing student IDs in database (chunked to avoid SQL limits)
+                            $existing_ids = [];
+                            if (!empty($csv_student_ids)) {
+                                // Chunk into batches to avoid exceeding database placeholder limits
+                                $chunks = array_chunk($csv_student_ids, CI_STUDENT_ID_BATCH_SIZE);
+                                foreach ($chunks as $chunk) {
+                                    $placeholders = implode(',', array_fill(0, count($chunk), '?'));
+                                    $stmt = $pdo->prepare("SELECT student_id FROM students WHERE student_id IN ($placeholders)");
+                                    $stmt->execute($chunk);
+                                    // Fetch all at once and convert to associative array for O(1) lookup
+                                    $existing_in_chunk = $stmt->fetchAll(PDO::FETCH_COLUMN);
+                                    foreach ($existing_in_chunk as $sid) {
+                                        $existing_ids[$sid] = true;
+                                    }
+                                }
+                            }
+                            
+                            // Second pass: validate rows with pre-loaded duplicate info
+                            $seen_student_ids = []; // Track student IDs within this CSV file
+                            foreach ($temp_rows as $temp) {
+                                $assoc = $temp['assoc'];
+                                $row_num = $temp['row_num'];
+                                
+                                $validated = ci_validate_row(
+                                    $assoc,
+                                    $dept_by_name, $dept_by_code,
+                                    $prog_by_name, $batch_by_name,
+                                    $district_by_name, $thana_by_did_name
+                                );
+                                
+                                // Check for duplicates using pre-loaded data
+                                $sid = trim($assoc['id_no'] ?? '');
+                                if ($sid !== '') {
+                                    // Check against database
+                                    if (isset($existing_ids[$sid])) {
+                                        $validated['errors'][] = 'Student ID "' . htmlspecialchars($sid, ENT_QUOTES, 'UTF-8') . '" already exists in database.';
+                                    }
+                                    // Check within CSV file
+                                    if (isset($seen_student_ids[$sid])) {
+                                        $validated['errors'][] = 'Student ID "' . htmlspecialchars($sid, ENT_QUOTES, 'UTF-8') . '" appears multiple times in this CSV file (first seen in row ' . $seen_student_ids[$sid] . ').';
+                                    } else {
+                                        $seen_student_ids[$sid] = $row_num;
+                                    }
+                                }
+                                
+                                $validated['row_num'] = $row_num;
+                                $preview_rows[] = $validated;
+                            }
+
+                            if (empty($preview_rows)) {
+                                $parse_error  = 'The file contains no data rows.';
+                                $preview_rows = null;
+                            } else {
+                                $step = 'preview';
+                                // Encode preview rows in session for the confirm step
+                                $_SESSION['csv_import_rows'] = $preview_rows;
+                            }
                         }
                     }
                 }
