@@ -101,18 +101,20 @@ $admission_form_fee = (int)floor($form_id_fee / 2);
 $admission_id_fee   = $form_id_fee - $admission_form_fee;
 $total_paid_at_admission = $admission_payment_admission + $admission_payment_reg + $form_id_fee;
 
-// Monthly installment = (Total payable in first semester − fees already collected at registration)
-// Admission Fee is a separate one-time charge and is NOT deducted from the installment base.
-// Only the Registration Fee and Form/ID-card fee collected at admission day are deducted.
-$first_sem_paid_upfront = $reg_fee_1st_sem + $form_id_fee;
-$first_sem_remaining    = max(0.0, $total_payable_first_sem - $first_sem_paid_upfront);
-$monthly_installment    = ($mps > 0) ? (int)round($first_sem_remaining / $mps) : 0;
-
 // Duration of payment
 $payment_months = (int)$pkg['total_months'];
 
 // Semester type detection: 8 semesters → bi-semester (48 months), 12 semesters → trimester
 $total_semesters = (int)$pkg['total_semesters'];
+
+// Monthly installment base = tuition payable + fixed payable + english payable (registration fee excluded)
+$monthly_installment_base = $first_sem_tuition_payable + $first_sem_fixed_payable + $first_sem_english_payable;
+$monthly_installment      = ($mps > 0) ? (int)round($monthly_installment_base / $mps) : 0;
+
+// Semester type label for display
+$sem_type_months_label = ($total_semesters <= 8)
+    ? 'Bi-Semester – 6 months'
+    : 'Trimester – 4 months';
 
 $date_today   = date('d F Y');
 $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
@@ -529,20 +531,40 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
             </tr>
             <?php endif; ?>
             <tr>
-                <td class="indent" colspan="2">Total Scholarship Discount (First Semester)</td>
+                <td class="indent" colspan="2">Total Scholarship (First Semester)</td>
                 <td class="amt neg">− <?= number_format($total_discount_first_sem, 2) ?></td>
             </tr>
+
+            <!-- Post-scholarship breakdown for first semester -->
+            <tr>
+                <td class="indent" colspan="2">Total Payable Tuition Fees (After All Scholarship)</td>
+                <td class="amt"><?= number_format($first_sem_tuition_payable, 2) ?></td>
+            </tr>
+            <tr>
+                <td class="indent" colspan="2">Per Semester Institutional &amp; Development Fee</td>
+                <td class="amt"><?= number_format($first_sem_fixed_payable, 2) ?></td>
+            </tr>
+            <tr>
+                <td class="indent" colspan="2">Per Semester English Language Fee</td>
+                <td class="amt"><?= number_format($first_sem_english_payable, 2) ?></td>
+            </tr>
+            <tr>
+                <td class="indent" colspan="2">Per Semester Registration Fee</td>
+                <td class="amt"><?= number_format($reg_fee_1st_sem, 2) ?></td>
+            </tr>
+
             <tr class="subtotal">
-                <td colspan="2"><strong>Total Payable in First Semester (After Scholarship)</strong></td>
+                <td colspan="2"><strong>Total First Semester Payable Amount</strong></td>
                 <td class="amt"><strong><?= number_format($total_payable_first_sem, 2) ?></strong></td>
             </tr>
 
             <!-- Monthly installment -->
             <tr class="visual-sep"><td colspan="3"></td></tr>
             <tr class="highlight">
-                <td colspan="2"><strong>First Semester Monthly Installment per Month</strong>
+                <td colspan="2"><strong>First Semester Monthly Payment</strong>
                     <span style="font-size:9.5px; color:#92400e; font-weight:400;">
-                        (<?= number_format($total_payable_first_sem, 2) ?> − <?= number_format($first_sem_paid_upfront, 2) ?> paid at registration) ÷ <?= (int)$mps ?> months
+                        (<?= number_format($first_sem_tuition_payable, 2) ?> Tuition + <?= number_format($first_sem_fixed_payable, 2) ?> Institutional &amp; Dev. Fee + <?= number_format($first_sem_english_payable, 2) ?> English Fee) ÷ <?= (int)$mps ?> months
+                        &nbsp;|&nbsp; <em><?= h($sem_type_months_label) ?></em>
                     </span>
                 </td>
                 <td class="amt"><strong><?= number_format($monthly_installment) ?></strong></td>
