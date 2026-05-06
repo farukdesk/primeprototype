@@ -48,7 +48,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ]);
         $sale_id = (int)db()->lastInsertId();
 
-        log_change('admissions', 'CREATE', $sale_id, 'Form Sale ' . $form_number);
+        log_change(
+            'admissions', 'CREATE', $sale_id,
+            'Form Sale ' . $form_number,
+            null,
+            null,
+            null,
+            'Form sold – buyer: ' . $buyer_name
+            . ' | mobile: ' . $buyer_mobile
+            . ($buyer_email ? ' | email: ' . $buyer_email : '')
+            . ' | price: ' . number_format((float)$form_price, 2) . ' BDT'
+        );
 
         // ── Notifications ─────────────────────────────────────────────────────
         $notif_vars = [

@@ -26,6 +26,15 @@ db()->prepare(
     'UPDATE adm_form_sales SET status = ? WHERE id = ?'
 )->execute(['cancelled', $id]);
 
-log_change('admissions', 'DELETE', $id, 'Form Sale ' . $sale['form_number']);
+log_change(
+    'admissions', 'DELETE', $id,
+    'Form Sale ' . $sale['form_number'],
+    'status',
+    'pending',
+    'cancelled',
+    'Form sale cancelled – buyer: ' . $sale['buyer_name']
+    . ' | mobile: ' . $sale['buyer_mobile']
+    . ' | price: ' . number_format((float)$sale['form_price'], 2) . ' BDT'
+);
 flash_set('success', 'Form sale ' . $sale['form_number'] . ' has been cancelled.');
 redirect(APP_URL . '/admissions/form-sale-index.php');
