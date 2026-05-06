@@ -15,7 +15,16 @@
  */
 function captcha_get_setting(string $key, string $default = ''): string
 {
-    $db = front_db();
+    // Use the appropriate database function based on context
+    // Admin context uses db(), front-end context uses front_db()
+    if (function_exists('db')) {
+        $db = db();
+    } elseif (function_exists('front_db')) {
+        $db = front_db();
+    } else {
+        return $default;
+    }
+    
     if (!$db) return $default;
     
     try {
