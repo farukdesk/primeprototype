@@ -213,8 +213,12 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <script>
+'use strict';
 function toggleCaptchaFields(enabled) {
-    document.getElementById('captcha_fields').style.display = enabled ? '' : 'none';
+    const captchaFields = document.getElementById('captcha_fields');
+    if (captchaFields) {
+        captchaFields.style.display = enabled ? '' : 'none';
+    }
 }
 </script>
 

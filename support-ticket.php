@@ -91,18 +91,28 @@ function pub_verify_recaptcha(string $response, string $secret_key): bool
             'header'  => "Content-Type: application/x-www-form-urlencoded\r\n",
             'method'  => 'POST',
             'content' => http_build_query($data),
-            'timeout' => 10,
+            'timeout' => 5,
         ],
     ];
 
     $context = stream_context_create($options);
-    $result = @file_get_contents($verify_url, false, $context);
+    $result = file_get_contents($verify_url, false, $context);
 
     if ($result === false) {
+        // Log the error for debugging
+        $error = error_get_last();
+        error_log('reCAPTCHA verification failed: ' . ($error['message'] ?? 'Unknown error'));
         return false;
     }
 
     $json = json_decode($result, true);
+    
+    if ($json === null) {
+        // JSON decode failed - log the raw response for debugging
+        error_log('reCAPTCHA JSON decode failed. Response: ' . substr($result, 0, 200));
+        return false;
+    }
+    
     return isset($json['success']) && $json['success'] === true;
 }
 
