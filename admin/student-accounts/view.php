@@ -24,13 +24,17 @@ $all_scholarships = sfp_get_all_semester_scholarships($id);
 $sem_fixed_portion   = sfp_semester_fixed_portion($pkg);
 $sem_english_portion = sfp_semester_english_portion($pkg);
 
-// Registration fee per semester (from cf_settings)
-$cf_settings         = db()->query('SELECT reg_fee_per_semester FROM cf_settings WHERE id = 1')->fetch();
+// Registration fee per semester and form/ID-card fee (from cf_settings)
+$cf_settings         = db()->query('SELECT reg_fee_per_semester, form_id_fee FROM cf_settings WHERE id = 1')->fetch();
 $reg_fee_per_sem     = $cf_settings ? (float)$cf_settings['reg_fee_per_semester'] : 0.0;
-$total_reg_fees      = $reg_fee_per_sem * count($semester_fees);
+$form_id_fee         = $cf_settings ? (float)$cf_settings['form_id_fee']           : 0.0;
 
-// Admission fee (one-time, shown separately)
-$admission_fee       = (float)$pkg['admission_fees'];
+// Semester 1 reg fee is collected on admission day, so the running reg-fee total
+// covers semesters 2 onward (max 0 when there is only one semester).
+$total_reg_fees      = $reg_fee_per_sem * max(0, count($semester_fees) - 1);
+
+// Total admission day payment = base admission fee + 1st-semester reg fee + form/ID-card fee
+$admission_fee       = (float)$pkg['admission_fees'] + $reg_fee_per_sem + $form_id_fee;
 
 // Totals
 $total_tuition_payable   = 0.0;
@@ -147,7 +151,7 @@ require_once __DIR__ . '/../includes/header.php';
                     'Months / Semester'          => number_format((float)$pkg['months_per_semester'], 2),
                     'Standard Tuition (Full)'    => sfp_money((float)$pkg['standard_tuition_full']),
                     'Base Tuition / Semester'    => sfp_money((float)$pkg['tuition_per_semester']),
-                    'Admission Fees (paid separately)' => sfp_money((float)$pkg['admission_fees']),
+                    'Admission Day Payment (one-time)' => sfp_money($admission_fee),
                     'Fixed Institutional Fees'   => sfp_money((float)$pkg['fixed_institutional_fees']),
                     'English Course Fee'         => sfp_money((float)$pkg['english_course_fee']),
                 ];
@@ -240,7 +244,9 @@ require_once __DIR__ . '/../includes/header.php';
                     $tuition_payable = (float)$sf['tuition_payable'];
                     $fixed_amt       = max(0.0, $sem_fixed_portion  - (float)($sf['fixed_discount_amount']   ?? 0));
                     $english_amt     = max(0.0, $sem_english_portion - (float)($sf['english_discount_amount'] ?? 0));
-                    $total_sem       = $tuition_payable + $fixed_amt + $english_amt + $reg_fee_per_sem;
+                    // Semester 1 reg fee is collected on admission day; exclude it from the per-semester total
+                    $sem_reg         = ((int)$sf['semester_number'] === 1) ? 0.0 : $reg_fee_per_sem;
+                    $total_sem       = $tuition_payable + $fixed_amt + $english_amt + $sem_reg;
                     $grand_tuition_payable += $tuition_payable;
                     $grand_fixed           += $fixed_amt;
                     $grand_english         += $english_amt;
@@ -358,7 +364,13 @@ require_once __DIR__ . '/../includes/header.php';
                     <td class="text-end fw-semibold"><?= sfp_money($tuition_payable) ?></td>
                     <td class="text-end"><?= sfp_money($fixed_amt) ?></td>
                     <td class="text-end"><?= sfp_money($english_amt) ?></td>
-                    <td class="text-end"><?= sfp_money($reg_fee_per_sem) ?></td>
+                    <td class="text-end">
+                        <?php if ($sem_reg > 0): ?>
+                            <?= sfp_money($sem_reg) ?>
+                        <?php else: ?>
+                            <span class="text-muted" style="font-size:.75rem;" title="Paid on admission day">—</span>
+                        <?php endif; ?>
+                    </td>
                     <td class="text-end fw-bold text-success"><?= sfp_money($total_sem) ?></td>
                 </tr>
                 <?php endforeach; ?>
@@ -373,11 +385,11 @@ require_once __DIR__ . '/../includes/header.php';
                         <td class="text-end text-success fs-6"><?= sfp_money($grand_total) ?></td>
                     </tr>
                     <tr class="table-warning">
-                        <td colspan="8" class="text-end">Admission Fees (one-time) →</td>
+                        <td colspan="8" class="text-end">Admission Day Payment (one-time) →</td>
                         <td class="text-end text-warning-emphasis fs-6"><?= sfp_money($admission_fee) ?></td>
                     </tr>
                     <tr class="table-success">
-                        <td colspan="8" class="text-end fw-bold">Grand Total (incl. Admission Fees) →</td>
+                        <td colspan="8" class="text-end fw-bold">Grand Total (incl. Admission Day Payment) →</td>
                         <td class="text-end fw-bold text-success fs-5"><?= sfp_money($grand_total + $admission_fee) ?></td>
                     </tr>
                 </tfoot>
