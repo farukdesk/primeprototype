@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
 auth_check();
+require_once __DIR__ . '/../includes/captcha-helpers.php';
 
 // Only super users or users with system settings access can manage CAPTCHA
 if (!$_SESSION['is_super']) {
@@ -48,23 +49,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Get current settings
-function get_global_setting(string $key, string $default = ''): string
-{
-    $db = db();
-    try {
-        $stmt = $db->prepare("SELECT `value` FROM global_settings WHERE `key` = ? LIMIT 1");
-        $stmt->execute([$key]);
-        $row = $stmt->fetchColumn();
-        return $row !== false ? (string)$row : $default;
-    } catch (Throwable $e) {
-        return $default;
-    }
-}
-
-$captcha_enabled    = get_global_setting('captcha_enabled', '0');
-$captcha_site_key   = get_global_setting('captcha_site_key', '');
-$captcha_secret_key = get_global_setting('captcha_secret_key', '');
+// Use helper function instead of duplicating
+$captcha_enabled    = captcha_get_setting('captcha_enabled', '0');
+$captcha_site_key   = captcha_get_setting('captcha_site_key', '');
+$captcha_secret_key = captcha_get_setting('captcha_secret_key', '');
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
