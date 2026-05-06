@@ -512,7 +512,7 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                             ?>
                             <tr class="acad-row">
                                 <td>
-                                    <select name="exam_name[]" class="acad-exam-sel" style="width:130px">
+                                    <select name="exam_name[]" class="acad-exam-sel" style="width:100%">
                                         <option value="">— Select —</option>
                                         <?php foreach (['SSC','Dakhil','O Level','SSC (Vocational)','HSC','Alim','A Level'] as $en): ?>
                                         <option value="<?= h($en) ?>" <?= h($ar['exam_name']) === $en ? 'selected' : '' ?>><?= h($en) ?></option>
@@ -524,7 +524,7 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                                 </td>
                                 <td><input type="text" name="acad_session[]" class="form-control form-control-sm" value="<?= h($ar['session']) ?>"></td>
                                 <td class="acad-group-td">
-                                    <select name="group_name[]" class="acad-group-sel" style="width:130px">
+                                    <select name="group_name[]" class="acad-group-sel" style="width:100%">
                                         <option value="">— Select —</option>
                                         <?php if ($ar['group_name'] !== ''): ?>
                                         <option value="<?= h($ar['group_name']) ?>" selected><?= h($ar['group_name']) ?></option>
@@ -532,7 +532,7 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                                     </select>
                                 </td>
                                 <td>
-                                    <select name="board_university[]" class="acad-board-sel" style="width:170px">
+                                    <select name="board_university[]" class="acad-board-sel" style="width:100%">
                                         <option value="">— Select —</option>
                                         <?php if ($ar['board_university'] !== ''): ?>
                                         <option value="<?= h($ar['board_university']) ?>" selected><?= h($ar['board_university']) ?></option>
@@ -903,13 +903,13 @@ document.getElementById('addAcadRow').addEventListener('click', function() {
     var tr = document.createElement('tr');
     tr.className = 'acad-row';
     tr.innerHTML = '<td>'
-        + '<select name="exam_name[]" class="acad-exam-sel" style="width:130px">'
+        + '<select name="exam_name[]" class="acad-exam-sel" style="width:100%">'
         + '<option value="">— Select —</option>'
         + ['SSC','Dakhil','O Level','SSC (Vocational)','HSC','Alim','A Level'].map(function(e){return '<option value="'+e+'">'+e+'</option>';}).join('')
         + '</select></td>'
         + '<td><input type="text" name="acad_session[]" class="form-control form-control-sm"></td>'
-        + '<td class="acad-group-td"><select name="group_name[]" class="acad-group-sel" style="width:130px"><option value="">— Select —</option></select></td>'
-        + '<td><select name="board_university[]" class="acad-board-sel" style="width:170px"><option value="">— Select —</option></select></td>'
+        + '<td class="acad-group-td"><select name="group_name[]" class="acad-group-sel" style="width:100%"><option value="">— Select —</option></select></td>'
+        + '<td><select name="board_university[]" class="acad-board-sel" style="width:100%"><option value="">— Select —</option></select></td>'
         + '<td><input type="text" name="year_of_passing[]" class="form-control form-control-sm" style="width:70px"></td>'
         + '<td><input type="text" name="division_grade[]" class="form-control form-control-sm"></td>'
         + '<td><input type="text" name="total_marks_cgpa[]" class="form-control form-control-sm"></td>'
