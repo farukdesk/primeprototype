@@ -18,6 +18,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
     $fee_type        = trim($_POST['fee_type']           ?? '');
     $semester_fee_id = (int)($_POST['semester_fee_id']  ?? 0) ?: null;
     $semester_number = (int)($_POST['semester_number']  ?? 0) ?: null;
+    $month_number    = (int)($_POST['month_number']      ?? 0) ?: null;
     $amount          = (float)($_POST['amount']         ?? 0);
     $cash_account_id   = (int)($_POST['cash_account_id']   ?? 0);
     $income_account_id = (int)($_POST['income_account_id'] ?? 0);
@@ -39,7 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
         try {
             $vid = acc_collect_student_fee(
                 $student_id, $package_id, $fee_type,
-                $semester_fee_id, $semester_number,
+                $semester_fee_id, $semester_number, $month_number,
                 $amount, $cash_account_id, $income_account_id,
                 $date, $reference, $narration
             );
@@ -384,6 +385,33 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
         </div>
 
+        <!-- Transaction History -->
+        <div class="card border-0 shadow-sm mb-4" id="transactionHistoryCard" style="display:none;">
+            <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between">
+                <span class="fw-semibold"><i class="fas fa-history me-2 text-info"></i>Payment Transaction History</span>
+                <span class="badge bg-info-subtle text-info border border-info-subtle px-3 py-2" id="transactionCount"></span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-4">Date</th>
+                                <th>Fee Type</th>
+                                <th>Semester</th>
+                                <th>Month</th>
+                                <th class="text-end">Amount</th>
+                                <th>Voucher #</th>
+                                <th>Collected By</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="transactionTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
         <!-- Payment form (shown when user clicks Collect) -->
         <div id="paymentFormCard" style="display:none;">
             <div class="card border-0 shadow-sm border-start border-success border-3">
@@ -401,6 +429,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <input type="hidden" name="fee_type"        id="hFeeType">
                         <input type="hidden" name="semester_fee_id" id="hSemFeeId">
                         <input type="hidden" name="semester_number" id="hSemNumber">
+                        <input type="hidden" name="month_number"    id="hMonthNumber">
                         <input type="hidden" name="income_account_id" id="hIncomeAccountId">
 
                         <div class="row g-3">
@@ -624,7 +653,18 @@ require_once __DIR__ . '/../includes/header.php';
             Total: <strong id="admFeeTotal">—</strong>
         </div>
 
+        <!-- Already collected banner (shown when status = admission_complete) -->
+        <div class="alert alert-success border d-flex align-items-center gap-2 mb-3" id="admAlreadyCollectedBanner" style="display:none;">
+            <i class="fas fa-check-circle fa-2x text-success"></i>
+            <div>
+                <div class="fw-semibold">Admission Fee Already Collected</div>
+                <div class="small">This applicant's admission fee has been collected and their status is <strong>Admission Complete</strong>.
+                    Their student record has been created in the Student module.</div>
+            </div>
+        </div>
+
         <!-- Payment collection form -->
+        <div id="admPayFormWrap">
         <div class="card border-0 shadow-sm border-start border-primary border-3">
             <div class="card-header py-3 px-4 bg-primary bg-opacity-10">
                 <span class="fw-semibold text-primary">
@@ -704,6 +744,7 @@ require_once __DIR__ . '/../includes/header.php';
                 </form>
             </div>
         </div>
+        </div><!-- /admPayFormWrap -->
     </div><!-- /admDetailWrap -->
 
 </div><!-- /tab-pane admission -->
@@ -832,28 +873,38 @@ require_once __DIR__ . '/../includes/header.php';
 
         let grandDue  = 0, grandPaid = 0, grandOut = 0;
 
-        // Helper to add a row
-        function addRow(label, due, paid, out, feeType, semFeeId, semNumber, semLabel) {
+        // Add a thin section-header row to visually group rows
+        function addSectionRow(label) {
+            const tr = document.createElement('tr');
+            tr.className = 'table-secondary';
+            tr.innerHTML = `<td colspan="5" class="ps-4 py-1 small fw-semibold text-muted">
+                <i class="fas fa-chevron-right me-1"></i>${label}
+            </td>`;
+            tbody.appendChild(tr);
+        }
+
+        // Add a fee data row (monthNumber optional – null for non-monthly fees)
+        function addRow(label, due, paid, out, feeType, semFeeId, semNumber, semLabel, monthNumber) {
             grandDue  += due;
             grandPaid += paid;
             grandOut  += out;
 
-            const tr = document.createElement('tr');
-            const pct = out > 0 ? Math.round((out / due) * 100) : 0;
+            const tr  = document.createElement('tr');
+            const pct = (due > 0 && out > 0) ? Math.round((out / due) * 100) : 0;
 
             tr.innerHTML = `
                 <td class="ps-4">
-                    <div class="fw-semibold small">${label}</div>
+                    <div class="small">${label}</div>
                     ${due > 0 && out > 0
-                        ? `<div class="progress mt-1" style="height:4px;width:120px;">
-                               <div class="progress-bar bg-warning" style="width:${100-pct}%"></div>
+                        ? `<div class="progress mt-1" style="height:3px;width:100px;">
+                               <div class="progress-bar bg-success" style="width:${100-pct}%"></div>
                                <div class="progress-bar bg-danger opacity-50" style="width:${pct}%"></div>
                            </div>`
-                        : (due > 0 ? '<div class="badge bg-success-subtle text-success border border-success-subtle mt-1" style="font-size:10px;">Fully Paid</div>' : '')}
+                        : ''}
                 </td>
                 <td class="text-end small">${due > 0 ? fmt(due) : '—'}</td>
                 <td class="text-end small text-success">${paid > 0 ? fmt(paid) : '—'}</td>
-                <td class="text-end small fw-bold ${out > 0 ? 'text-danger' : 'text-muted'}">${out > 0 ? fmt(out) : '—'}</td>
+                <td class="text-end small fw-semibold ${out > 0 ? 'text-danger' : 'text-success'}">${out > 0 ? fmt(out) : (due > 0 ? '<i class="fas fa-check-circle"></i> Paid' : '—')}</td>
                 <td class="text-center">
                     ${out > 0
                         ? `<button type="button" class="btn btn-sm btn-outline-success py-0 px-2 collectBtn"
@@ -861,56 +912,51 @@ require_once __DIR__ . '/../includes/header.php';
                                 data-sem-fee-id="${semFeeId ?? ''}"
                                 data-sem-number="${semNumber ?? ''}"
                                 data-sem-label="${semLabel ?? ''}"
+                                data-month-number="${monthNumber ?? ''}"
                                 data-outstanding="${out}"
                                 data-label="${label}">
                                <i class="fas fa-hand-holding-usd me-1"></i>Collect
                            </button>`
-                        : '<span class="badge bg-success-subtle text-success border border-success-subtle"><i class="fas fa-check me-1"></i>Paid</span>'}
+                        : (due > 0 ? '<span class="badge bg-success-subtle text-success border border-success-subtle"><i class="fas fa-check me-1"></i>Paid</span>' : '—')}
                 </td>`;
             tbody.appendChild(tr);
         }
 
         const t = s.totals;
 
-        // Admission fee
+        // ── Admission Fee ────────────────────────────────────────────────────
+        addSectionRow('Admission');
         addRow('Admission Fee', t.admission.due, t.admission.paid, t.admission.out,
-               'admission', null, null, null);
+               'admission', null, null, null, null);
 
-        // Registration fees
-        addRow(
-            'Registration Fees (' + s.semesters.length + ' semester' + (s.semesters.length > 1 ? 's' : '') +
-            ' × ' + fmt(s.cf_settings.reg_fee_per_semester) + ')',
-            t.registration.due, t.registration.paid, t.registration.out,
-            'registration', null, null, null
-        );
-
-        // Semester tuition (one row per semester)
+        // ── Per-semester: Registration + Monthly overall fees ────────────────
         s.semesters.forEach(sf => {
-            const label = sf.semester_label
-                ? sf.semester_label + ' Tuition'
-                : 'Semester ' + sf.semester_number + ' Tuition';
-            addRow(label, sf.tuition_due, sf.tuition_paid, sf.tuition_out,
-                   'semester_tuition', sf.id, sf.semester_number, sf.semester_label ?? 'Semester ' + sf.semester_number);
+            const semLabel = sf.semester_label || ('Semester ' + sf.semester_number);
+            addSectionRow(semLabel);
+
+            // Registration fee for this semester
+            addRow(
+                semLabel + ' – Registration Fee',
+                sf.reg_fee, sf.reg_paid, sf.reg_out,
+                'registration', sf.id, sf.semester_number, semLabel, null
+            );
+
+            // Monthly overall fees (tuition + fixed + English portion / months)
+            sf.monthly_rows.forEach(mr => {
+                addRow(
+                    semLabel + ' – Month ' + mr.month_number + ' Overall Fee',
+                    mr.due, mr.paid, mr.out,
+                    'semester_tuition', sf.id, sf.semester_number, semLabel, mr.month_number
+                );
+            });
         });
-
-        // Fixed institutional fee
-        if (t.fixed.due > 0) {
-            addRow('Fixed Institutional Fee', t.fixed.due, t.fixed.paid, t.fixed.out,
-                   'fixed_fee', null, null, null);
-        }
-
-        // English course fee
-        if (t.english.due > 0) {
-            addRow('English Course Fee', t.english.due, t.english.paid, t.english.out,
-                   'english_fee', null, null, null);
-        }
 
         // Footer totals
         document.getElementById('footTotalDue').textContent  = fmt(grandDue);
         document.getElementById('footTotalPaid').textContent = fmt(grandPaid);
         document.getElementById('footTotalOut').textContent  = fmt(grandOut);
 
-        // Badge
+        // Outstanding badge
         document.getElementById('totalOutstandingBadge').textContent =
             'Outstanding: ' + fmt(grandOut);
 
@@ -918,32 +964,75 @@ require_once __DIR__ . '/../includes/header.php';
         tbody.querySelectorAll('.collectBtn').forEach(btn => {
             btn.addEventListener('click', () => openPayForm(btn));
         });
+
+        // Render transaction history
+        renderTransactionHistory(data.payments || []);
+    }
+
+    // ── Render transaction history ────────────────────────────────────────────
+    function renderTransactionHistory(payments) {
+        const card       = document.getElementById('transactionHistoryCard');
+        const tbody      = document.getElementById('transactionTableBody');
+        const countBadge = document.getElementById('transactionCount');
+
+        tbody.innerHTML = '';
+        countBadge.textContent = payments.length + ' transaction' + (payments.length !== 1 ? 's' : '');
+
+        if (payments.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3 small"><i class="fas fa-info-circle me-1"></i>No transactions recorded yet.</td></tr>';
+        } else {
+            payments.forEach(p => {
+                const feeLabel  = feeTypeLabel(p.fee_type);
+                const semText   = p.semester_number ? ('Semester ' + p.semester_number) : '—';
+                const monText   = p.month_number    ? ('Month ' + p.month_number) : (p.fee_type === 'semester_tuition' ? 'Lump sum' : '—');
+                const statusBadge = p.voucher_status === 'posted'
+                    ? '<span class="badge bg-success-subtle text-success border border-success-subtle">Posted</span>'
+                    : '<span class="badge bg-warning text-dark">' + p.voucher_status + '</span>';
+                const dateStr = p.voucher_date
+                    ? new Date(p.voucher_date + 'T00:00:00').toLocaleDateString('en-BD', {day: '2-digit', month: 'short', year: 'numeric'})
+                    : '—';
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="ps-4 small">${dateStr}</td>
+                    <td class="small">${feeLabel}</td>
+                    <td class="small">${semText}</td>
+                    <td class="small">${monText}</td>
+                    <td class="text-end small fw-semibold text-success">${fmt(p.amount)}</td>
+                    <td class="small"><a href="${APP_URL}/accounting/voucher-view.php?id=${p.voucher_id}" target="_blank" rel="noopener noreferrer" class="text-decoration-none">${p.voucher_number ?? '—'}</a></td>
+                    <td class="small">${p.collected_by_name}</td>
+                    <td>${statusBadge}</td>`;
+                tbody.appendChild(tr);
+            });
+        }
+        card.style.display = '';
     }
 
     // ── Open payment form for a specific fee ─────────────────────────────────
     function openPayForm(btn) {
         const feeType   = btn.dataset.feeType;
-        const semFeeId  = btn.dataset.semFeeId  || '';
-        const semNumber = btn.dataset.semNumber || '';
-        const semLabel  = btn.dataset.semLabel  || '';
+        const semFeeId  = btn.dataset.semFeeId   || '';
+        const semNumber = btn.dataset.semNumber  || '';
+        const semLabel  = btn.dataset.semLabel   || '';
+        const monthNum  = btn.dataset.monthNumber || '';
         const out       = parseFloat(btn.dataset.outstanding);
         const label     = btn.dataset.label;
 
-        document.getElementById('hStudentId').value   = currentStudent.id;
-        document.getElementById('hPackageId').value   = currentStudent.package_id;
-        document.getElementById('hFeeType').value     = feeType;
-        document.getElementById('hSemFeeId').value    = semFeeId;
-        document.getElementById('hSemNumber').value   = semNumber;
+        document.getElementById('hStudentId').value    = currentStudent.id;
+        document.getElementById('hPackageId').value    = currentStudent.package_id;
+        document.getElementById('hFeeType').value      = feeType;
+        document.getElementById('hSemFeeId').value     = semFeeId;
+        document.getElementById('hSemNumber').value    = semNumber;
+        document.getElementById('hMonthNumber').value  = monthNum;
         document.getElementById('hIncomeAccountId').value = incomeAccountsMap[feeType] ?? '';
 
-        document.getElementById('payAmount').value    = out.toFixed(2);
+        document.getElementById('payAmount').value     = out.toFixed(2);
         document.getElementById('payOutstanding').textContent = fmt(out);
         document.getElementById('payFormFeeLabel').textContent = label;
 
         // Auto-fill narration
-        const pkg = currentSummary.package;
-        let narr  = label + ' – ' + pkg.student_name + ' (' + currentStudent.student_id + ')';
-        if (semLabel) narr += ' – ' + semLabel;
+        const pkg  = currentSummary.package;
+        const narr = label + ' – ' + pkg.student_name + ' (' + currentStudent.student_id + ')';
         document.getElementById('payNarration').value = narr;
 
         // Show income account label for the info box
@@ -1041,6 +1130,17 @@ require_once __DIR__ . '/../includes/header.php';
                     admFeeBreakdown.style.display = '';
                 } else {
                     admFeeBreakdown.style.display = 'none';
+                }
+
+                // Show "already collected" banner if fee is fully paid / status is admission_complete
+                const alreadyCollectedBanner = document.getElementById('admAlreadyCollectedBanner');
+                const admPayFormWrap         = document.getElementById('admPayFormWrap');
+                if (ap.status === 'admission_complete' || data.already_paid >= data.suggested_fee) {
+                    alreadyCollectedBanner.style.display = '';
+                    admPayFormWrap.style.display         = 'none';
+                } else {
+                    alreadyCollectedBanner.style.display = 'none';
+                    admPayFormWrap.style.display         = '';
                 }
 
                 // Fee amounts

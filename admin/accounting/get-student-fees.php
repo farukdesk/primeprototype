@@ -42,6 +42,25 @@ $income_accounts = [
     'other'            => acc_income_account_id_by_code('4700'), // Miscellaneous Income
 ];
 
+// Payment transaction history for this student
+$raw_payments = acc_get_student_payments((int)$student['package_id']);
+$payments = array_map(function ($p) {
+    return [
+        'id'                => (int)$p['id'],
+        'voucher_id'        => (int)$p['voucher_id'],
+        'collected_at'      => $p['collected_at'],
+        'voucher_date'      => $p['voucher_date'],
+        'voucher_number'    => $p['voucher_number'],
+        'voucher_status'    => $p['voucher_status'],
+        'fee_type'          => $p['fee_type'],
+        'semester_number'   => $p['semester_number'] ?? null,
+        'month_number'      => $p['month_number']    ?? null,
+        'amount'            => (float)$p['amount'],
+        'note'              => $p['note'] ?? '',
+        'collected_by_name' => $p['collected_by_name'] ?? '—',
+    ];
+}, $raw_payments);
+
 echo json_encode([
     'student'         => [
         'id'         => $student['id'],
@@ -51,4 +70,5 @@ echo json_encode([
     ],
     'summary'         => $summary,
     'income_accounts' => $income_accounts,
+    'payments'        => $payments,
 ]);
