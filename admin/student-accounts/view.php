@@ -25,9 +25,10 @@ $sem_fixed_portion   = sfp_semester_fixed_portion($pkg);
 $sem_english_portion = sfp_semester_english_portion($pkg);
 
 // Registration fee per semester and form/ID-card fee (from cf_settings)
-$cf_settings         = db()->query('SELECT reg_fee_per_semester, form_id_fee FROM cf_settings WHERE id = 1')->fetch();
+$cf_settings         = db()->query('SELECT reg_fee_per_semester, form_id_fee, start_month FROM cf_settings WHERE id = 1')->fetch();
 $reg_fee_per_sem     = $cf_settings ? (float)$cf_settings['reg_fee_per_semester'] : 0.0;
 $form_id_fee         = $cf_settings ? (float)$cf_settings['form_id_fee']           : 0.0;
+$start_month         = $cf_settings ? (int)$cf_settings['start_month']             : 1;
 
 // Semester 1 reg fee is now shown in the registration column together with all other semesters.
 $total_reg_fees      = $reg_fee_per_sem * count($semester_fees);
@@ -261,6 +262,7 @@ require_once __DIR__ . '/../includes/header.php';
                                 class="btn btn-link btn-sm p-0 ms-1 text-muted set-label-btn"
                                 style="font-size:.7rem;"
                                 data-sf-id="<?= $sf_id_row ?>"
+                                data-sem-num="<?= (int)$sf['semester_number'] ?>"
                                 data-current="<?= h($sf['semester_label'] ?? '') ?>"
                                 title="Set semester label">
                             <i class="fas fa-pen"></i>
@@ -436,9 +438,10 @@ $first_sem_label   = ($first_sem && $first_sem['semester_label']) ? $first_sem['
                 </thead>
                 <tbody>
                 <?php for ($m = 1; $m <= $num_months; $m++): ?>
+                <?php $month_name = sfp_get_month_name($m, $start_month); ?>
                 <tr>
                     <td class="fw-semibold text-muted"><?= $m ?></td>
-                    <td>Month <?= $m ?></td>
+                    <td>Month <?= $m ?><?= $month_name ? ' (' . h($month_name) . ')' : '' ?></td>
                     <td class="text-end"><?= sfp_money($monthly_tuition) ?></td>
                     <td class="text-end"><?= sfp_money($monthly_fixed) ?></td>
                     <td class="text-end"><?= sfp_money($monthly_english) ?></td>
@@ -656,6 +659,12 @@ $first_sem_label   = ($first_sem && $first_sem['semester_label']) ? $first_sem['
                     <label class="form-label fw-semibold small">Label (e.g. Summer 2026)</label>
                     <input type="text" name="semester_label" id="lbl-input" class="form-control"
                            placeholder="Summer 2026">
+                    <div class="form-check mt-3" id="lbl-auto-fill-wrap" style="display:none;">
+                        <input class="form-check-input" type="checkbox" name="auto_fill" value="1" id="lbl-auto-fill">
+                        <label class="form-check-label small" for="lbl-auto-fill">
+                            Auto-fill remaining semesters based on student's semester type
+                        </label>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
@@ -830,8 +839,23 @@ document.querySelectorAll('.edit-tuition-btn').forEach(function(btn) {
 // ── Set semester label modal ──────────────────────────────────────────────────
 document.querySelectorAll('.set-label-btn').forEach(function(btn) {
     btn.addEventListener('click', function() {
+        var semNum = parseInt(this.dataset.semNum) || 0;
         document.getElementById('lbl-sf-id').value = this.dataset.sfId;
         document.getElementById('lbl-input').value = this.dataset.current;
+        
+        // Show auto-fill checkbox only for semester 1
+        var autoFillWrap = document.getElementById('lbl-auto-fill-wrap');
+        var autoFillCheck = document.getElementById('lbl-auto-fill');
+        if (autoFillWrap) {
+            if (semNum === 1) {
+                autoFillWrap.style.display = 'block';
+                if (autoFillCheck) autoFillCheck.checked = true; // default checked
+            } else {
+                autoFillWrap.style.display = 'none';
+                if (autoFillCheck) autoFillCheck.checked = false;
+            }
+        }
+        
         var modal = new bootstrap.Modal(document.getElementById('setLabelModal'));
         modal.show();
     });

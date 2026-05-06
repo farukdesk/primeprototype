@@ -26,6 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $form_id_fee     = max(0, (int)($_POST['form_id_fee']          ?? 1000));
         $id_card_fee     = max(0, (int)($_POST['id_card_fee']          ?? 500));
         $admission_form_fee = max(0, (int)($_POST['admission_form_fee'] ?? 500));
+        $start_month     = max(1, min(12, (int)($_POST['start_month']  ?? 1)));
 
         if ($page_title_val === '') $errors[] = 'Page title is required.';
         if ($session_label  === '') $errors[] = 'Session label is required.';
@@ -35,10 +36,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $db->prepare(
                     'UPDATE cf_settings SET page_title=?, session_label=?, disclaimer=?, is_published=?,
                      admission_fee_base=?, reg_fee_per_semester=?, reg_fee_total=?, form_id_fee=?,
-                     id_card_fee=?, admission_form_fee=? WHERE id=1'
+                     id_card_fee=?, admission_form_fee=?, start_month=? WHERE id=1'
                 )->execute([$page_title_val, $session_label, $disclaimer ?: null, $is_published,
                             $adm_fee_base, $reg_fee_sem, $reg_fee_total, $form_id_fee,
-                            $id_card_fee, $admission_form_fee]);
+                            $id_card_fee, $admission_form_fee, $start_month]);
 
                 log_change('course-fees', 'UPDATE', 1, 'Settings', null, null, null, 'Global settings updated.');
                 flash_set('success', 'Settings saved.');
@@ -48,6 +49,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     || strpos($e->getMessage(), 'id_card_fee') !== false
                     || strpos($e->getMessage(), 'admission_form_fee') !== false) {
                     $errors[] = 'Database migration required: please run <code>admin/course-fees-v4-extra-fees.sql</code> to add the new fee columns before saving.';
+                } elseif (strpos($e->getMessage(), 'start_month') !== false) {
+                    $errors[] = 'Database migration required: please run <code>admin/course-fees-start-month.sql</code> to add the start_month column before saving.';
                 } else {
                     $errors[] = 'Database error: ' . htmlspecialchars($e->getMessage());
                 }
@@ -117,6 +120,25 @@ require_once __DIR__ . '/../includes/header.php';
                         <label class="form-label fw-semibold">Disclaimer Text</label>
                         <textarea name="disclaimer" class="form-control" rows="4"><?= h($settings['disclaimer'] ?? '') ?></textarea>
                         <div class="form-text">Shown at the bottom of the public calculator page.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Semester Start Month</label>
+                        <select name="start_month" class="form-select">
+                            <?php
+                            $months = [
+                                1 => 'January', 2 => 'February', 3 => 'March', 4 => 'April',
+                                5 => 'May', 6 => 'June', 7 => 'July', 8 => 'August',
+                                9 => 'September', 10 => 'October', 11 => 'November', 12 => 'December'
+                            ];
+                            $current_start_month = (int)($settings['start_month'] ?? 1);
+                            foreach ($months as $num => $name):
+                            ?>
+                            <option value="<?= $num ?>" <?= $num === $current_start_month ? 'selected' : '' ?>>
+                                <?= h($name) ?>
+                            </option>
+                            <?php endforeach; ?>
+                        </select>
+                        <div class="form-text">Starting month for the semester. Used to display month names in the student fee breakdown.</div>
                     </div>
                     <div class="mb-4">
                         <div class="form-check form-switch">
