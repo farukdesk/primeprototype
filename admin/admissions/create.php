@@ -878,13 +878,13 @@ function initAcadRow(tr) {
         tsGroup.clearOptions();
         tsGroup.addOption({ value: '', text: '— Select —' });
         data.groups.forEach(function(g) { tsGroup.addOption({ value: g, text: g }); });
-        if (savedGroup) tsGroup.addOption({ value: savedGroup, text: savedGroup });
+        if (savedGroup && data.groups.indexOf(savedGroup) === -1) tsGroup.addOption({ value: savedGroup, text: savedGroup });
         tsGroup.setValue(savedGroup, true);
 
         tsBoard.clearOptions();
         tsBoard.addOption({ value: '', text: '— Select —' });
         data.boards.forEach(function(b) { tsBoard.addOption({ value: b, text: b }); });
-        if (savedBoard) tsBoard.addOption({ value: savedBoard, text: savedBoard });
+        if (savedBoard && data.boards.indexOf(savedBoard) === -1) tsBoard.addOption({ value: savedBoard, text: savedBoard });
         tsBoard.setValue(savedBoard, true);
 
         var groupTd = tr.querySelector('.acad-group-td');
