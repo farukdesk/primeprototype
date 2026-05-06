@@ -13,11 +13,12 @@ $f_dept   = (int)($_GET['dept']  ?? 0);
 $page     = max(1, (int)($_GET['page'] ?? 1));
 $per_page = 20;
 
-$valid_statuses = ['ready_for_admission', 'draft', 'cancelled'];
+$valid_statuses = ['ready_for_admission', 'draft', 'cancelled', 'admission_complete'];
 $status_labels  = [
     'ready_for_admission' => 'Ready for Admission',
     'draft'               => 'Draft',
     'cancelled'           => 'Cancelled',
+    'admission_complete'  => 'Admission Complete',
 ];
 
 $where  = [];
