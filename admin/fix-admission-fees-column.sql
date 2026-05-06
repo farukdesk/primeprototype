@@ -18,7 +18,7 @@ SET @preparedStatement = (SELECT IF(
       AND (table_schema = @dbname)
       AND (column_name = @columnname)
   ) > 0,
-  "SELECT 1",
+  "SELECT 'admission_fees column already exists' AS status",
   CONCAT("ALTER TABLE ", @tablename, " ADD COLUMN ", @columnname, " INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'One-time admission day cost; already paid separately – stored for reference' AFTER tuition_per_semester")
 ));
 PREPARE alterIfNotExists FROM @preparedStatement;
