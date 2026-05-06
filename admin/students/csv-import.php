@@ -408,8 +408,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                                     $placeholders = implode(',', array_fill(0, count($chunk), '?'));
                                     $stmt = $pdo->prepare("SELECT student_id FROM students WHERE student_id IN ($placeholders)");
                                     $stmt->execute($chunk);
-                                    while ($row = $stmt->fetch(PDO::FETCH_COLUMN)) {
-                                        $existing_ids[$row] = true;
+                                    // Fetch all at once and convert to associative array for O(1) lookup
+                                    $existing_in_chunk = $stmt->fetchAll(PDO::FETCH_COLUMN);
+                                    foreach ($existing_in_chunk as $sid) {
+                                        $existing_ids[$sid] = true;
                                     }
                                 }
                             }
