@@ -110,6 +110,80 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
     }
 }
 
+// ── POST: process an admission-applicant fee payment ─────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'admission') {
+    csrf_check();
+    require_once __DIR__ . '/../admissions/helpers.php';
+
+    $app_id            = (int)($_POST['application_id']    ?? 0);
+    $amount            = (float)($_POST['amount']          ?? 0);
+    $cash_account_id   = (int)($_POST['cash_account_id']   ?? 0);
+    $income_account_id = (int)($_POST['income_account_id'] ?? 0);
+    $date              = trim($_POST['voucher_date']        ?? date('Y-m-d'));
+    $reference         = trim($_POST['reference']          ?? '');
+    $narration         = trim($_POST['narration']          ?? '');
+    $assign_sid        = ($_POST['assign_student_id'] ?? '0') === '1';
+
+    if (!$app_id)            $errors[] = 'Invalid application.';
+    if ($amount <= 0)        $errors[] = 'Amount must be greater than zero.';
+    if (!$cash_account_id)   $errors[] = 'Please select the received-into account.';
+    if (!$income_account_id) $errors[] = 'Please select the income account.';
+    if (!$date)              $errors[] = 'Date is required.';
+
+    // Load applicant to validate and get details
+    $applicant = null;
+    if (empty($errors) && $app_id) {
+        $app_stmt = db()->prepare(
+            'SELECT a.*, d.name AS dept_name, p.program_name
+             FROM admissions_applications a
+             LEFT JOIN dept_departments d       ON d.id = a.dept_id
+             LEFT JOIN dept_academic_programs p ON p.id = a.program_id
+             WHERE a.id = ?'
+        );
+        $app_stmt->execute([$app_id]);
+        $applicant = $app_stmt->fetch();
+        if (!$applicant) $errors[] = 'Application not found.';
+    }
+
+    if (empty($errors)) {
+        try {
+            $vid = acc_collect_applicant_admission_fee(
+                $app_id, $amount, $cash_account_id, $income_account_id,
+                $date, $reference, $narration
+            );
+
+            $voucher        = acc_get_voucher($vid);
+            $voucher_number = $voucher['voucher_number'] ?? '—';
+            $currency       = acc_currency();
+
+            // Assign student ID if requested and not yet assigned
+            $assigned_sid = '';
+            if ($assign_sid && !empty($applicant['program_id']) && empty($applicant['office_student_id'])) {
+                $assigned_sid = adm_sid_generate((int)$applicant['program_id']);
+                if ($assigned_sid !== '') {
+                    db()->prepare(
+                        'UPDATE admissions_applications SET office_student_id = ? WHERE id = ?'
+                    )->execute([$assigned_sid, $app_id]);
+                }
+            }
+
+            $success_msg = 'Admission fee of ' . $currency . ' ' . number_format($amount, 2) .
+                ' collected for <strong>' . h($applicant['student_name']) . '</strong>. ' .
+                '<a href="' . APP_URL . '/accounting/voucher-view.php?id=' . $vid .
+                '" class="alert-link">View Voucher #' . h($voucher_number) . '</a>';
+
+            if ($assigned_sid !== '') {
+                $success_msg .= ' — Student ID assigned: <strong>' . h($assigned_sid) . '</strong>';
+            }
+
+            flash_set('success', $success_msg);
+            redirect(APP_URL . '/accounting/collect-payment.php');
+        } catch (RuntimeException $e) {
+            $errors[] = $e->getMessage();
+        }
+    }
+}
+
 // ── POST: process a general payment ──────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'general') {
     csrf_check();
@@ -138,7 +212,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'general
     }
 }
 
-$active_tab = ($_POST['mode'] ?? 'student') === 'general' ? 'general' : 'student';
+$active_tab = 'student';
+if (($_POST['mode'] ?? '') === 'general')    $active_tab = 'general';
+if (($_POST['mode'] ?? '') === 'admission')  $active_tab = 'admission';
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -177,6 +253,13 @@ require_once __DIR__ . '/../includes/header.php';
                 id="tab-general" data-bs-toggle="tab" data-bs-target="#pane-general"
                 type="button" role="tab">
             <i class="fas fa-coins me-1"></i> General Receipt
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link <?= $active_tab === 'admission' ? 'active' : '' ?>"
+                id="tab-admission" data-bs-toggle="tab" data-bs-target="#pane-admission"
+                type="button" role="tab">
+            <i class="fas fa-user-plus me-1"></i> Admission Fee (Pre-Enrolment)
         </button>
     </li>
 </ul>
@@ -437,6 +520,157 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
 </div><!-- /tab-pane general -->
 
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- TAB 3 – Admission Fee Collection (Pre-Enrolment Applicant)              -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<div class="tab-pane fade <?= $active_tab === 'admission' ? 'show active' : '' ?>"
+     id="pane-admission" role="tabpanel">
+
+    <!-- Applicant search ─────────────────────────────────────────────────── -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header py-3 px-4">
+            <span class="fw-semibold">
+                <i class="fas fa-search me-2 text-primary"></i>Find Applicant by Form / Application Number
+            </span>
+        </div>
+        <div class="card-body p-4">
+            <p class="text-muted small mb-3">
+                <i class="fas fa-info-circle me-1 text-primary"></i>
+                Use this tab to collect the <strong>admission fee</strong> for applicants who have
+                submitted an application form but have not yet been assigned a Student&nbsp;ID.
+            </p>
+            <div class="row g-3 align-items-end">
+                <div class="col-md-5">
+                    <label class="form-label fw-semibold">Application / Form Number</label>
+                    <input type="text" id="admAppNumber" class="form-control"
+                           placeholder="e.g. 1001" autocomplete="off">
+                </div>
+                <div class="col-md-3">
+                    <button type="button" id="btnLoadApplicant" class="btn btn-primary w-100">
+                        <i class="fas fa-search me-1"></i> Find Applicant
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Applicant details + payment form (shown after successful lookup) ── -->
+    <div id="admDetailWrap" style="display:none;">
+
+        <!-- Applicant info strip -->
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-body py-3 px-4 d-flex align-items-center gap-3 flex-wrap">
+                <div class="rounded-circle bg-primary bg-opacity-10 text-primary d-flex align-items-center justify-content-center"
+                     style="width:48px;height:48px;flex-shrink:0;">
+                    <i class="fas fa-user-plus fa-lg"></i>
+                </div>
+                <div>
+                    <div class="fw-bold fs-6" id="admInfoName"></div>
+                    <div class="small text-muted" id="admInfoMeta"></div>
+                </div>
+                <div class="ms-auto d-flex gap-2 align-items-center flex-wrap">
+                    <span id="admSidBadge"></span>
+                    <span class="badge bg-warning text-dark border border-warning-subtle px-3 py-2" id="admStatusBadge"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Payment collection form -->
+        <div class="card border-0 shadow-sm border-start border-primary border-3">
+            <div class="card-header py-3 px-4 bg-primary bg-opacity-10">
+                <span class="fw-semibold text-primary">
+                    <i class="fas fa-hand-holding-usd me-2"></i>Collect Admission Fee
+                </span>
+            </div>
+            <div class="card-body p-4">
+                <form method="post" id="admPayForm">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="mode"           value="admission">
+                    <input type="hidden" name="application_id" id="hAdmAppId">
+                    <input type="hidden" name="income_account_id" id="hAdmIncomeId">
+
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Date <span class="text-danger">*</span></label>
+                            <input type="date" name="voucher_date" class="form-control"
+                                   value="<?= date('Y-m-d') ?>" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">
+                                Amount (<?= acc_currency() ?>) <span class="text-danger">*</span>
+                            </label>
+                            <input type="number" name="amount" id="admAmount" class="form-control"
+                                   step="0.01" min="0.01" required>
+                            <div class="form-text">
+                                Suggested: <strong id="admSuggestedFee">—</strong>
+                                &nbsp;|&nbsp; Already paid: <strong id="admAlreadyPaid">—</strong>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Received Into <span class="text-danger">*</span></label>
+                            <select name="cash_account_id" class="form-select" required>
+                                <option value="">— Select Account —</option>
+                                <?php foreach ($cash_accounts as $a): ?>
+                                <option value="<?= $a['id'] ?>"
+                                    <?= ($a['code'] == $default_cash) ? 'selected' : '' ?>>
+                                    <?= h($a['code'] . ' – ' . $a['name']) ?>
+                                </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">
+                                Reference <small class="text-muted fw-normal">(optional)</small>
+                            </label>
+                            <input type="text" name="reference" class="form-control"
+                                   placeholder="e.g. Receipt #, Challan #">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">
+                                Note <small class="text-muted fw-normal">(optional)</small>
+                            </label>
+                            <input type="text" name="narration" id="admNarration" class="form-control"
+                                   placeholder="Additional note">
+                        </div>
+
+                        <!-- Assign Student ID option (shown only when possible) -->
+                        <div class="col-12" id="admSidOption" style="display:none;">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" role="switch"
+                                       name="assign_student_id" id="chkAssignSid" value="1" checked>
+                                <label class="form-check-label fw-semibold" for="chkAssignSid">
+                                    <i class="fas fa-id-card me-1 text-success"></i>
+                                    Generate &amp; assign a Student ID to this applicant after fee collection
+                                </label>
+                            </div>
+                            <div class="form-text text-muted ms-4 ps-2">
+                                A unique Student ID will be auto-generated from the program's ID settings
+                                and saved to the admission application record.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-light border mt-3 small">
+                        <i class="fas fa-info-circle text-primary me-1"></i>
+                        <strong>Accounting entry:</strong>
+                        <span class="text-success">Debit</span> the received-into account &amp;
+                        <span class="text-danger">Credit</span> <span id="admIncomeLabel">the Admission Fees income account</span> automatically.
+                    </div>
+
+                    <div class="d-flex gap-2 mt-3">
+                        <button type="submit" class="btn btn-success px-4">
+                            <i class="fas fa-check me-1"></i> Post &amp; Collect
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" id="btnAdmCancel">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div><!-- /admDetailWrap -->
+
+</div><!-- /tab-pane admission -->
+
 </div><!-- /tab-content -->
 
 <!-- ── JavaScript ──────────────────────────────────────────────────────── -->
@@ -690,6 +924,107 @@ require_once __DIR__ . '/../includes/header.php';
 
     document.getElementById('btnCancelPay').addEventListener('click', () => {
         document.getElementById('paymentFormCard').style.display = 'none';
+    });
+
+    // ════════════════════════════════════════════════════════════════════════
+    // Tab 3 – Admission Applicant logic
+    // ════════════════════════════════════════════════════════════════════════
+
+    const admAppNumberInput = document.getElementById('admAppNumber');
+    const btnLoadApplicant  = document.getElementById('btnLoadApplicant');
+    const admDetailWrap     = document.getElementById('admDetailWrap');
+    const incomeAccLabel    = <?= json_encode(
+        array_column(array_map(fn($a) => ['id' => $a['id'], 'label' => $a['code'] . ' – ' . $a['name']], $income_accounts), 'label', 'id')
+    ) ?>;
+
+    function fmtAdm(n) {
+        return CURRENCY + ' ' + Number(n).toLocaleString('en-BD', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    }
+
+    // Allow pressing Enter in the app number box to trigger search
+    admAppNumberInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); btnLoadApplicant.click(); }
+    });
+
+    btnLoadApplicant.addEventListener('click', function () {
+        const appNo = admAppNumberInput.value.trim();
+        if (!appNo) { admAppNumberInput.focus(); return; }
+
+        btnLoadApplicant.disabled = true;
+        btnLoadApplicant.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Searching…';
+        admDetailWrap.style.display = 'none';
+
+        fetch(APP_URL + '/accounting/get-applicant-fees.php?app_number=' + encodeURIComponent(appNo))
+            .then(r => r.json())
+            .then(data => {
+                btnLoadApplicant.disabled = false;
+                btnLoadApplicant.innerHTML = '<i class="fas fa-search me-1"></i> Find Applicant';
+
+                if (data.error) {
+                    alert(data.error);
+                    return;
+                }
+
+                const ap  = data.applicant;
+
+                // Info strip
+                document.getElementById('admInfoName').textContent =
+                    ap.student_name;
+                document.getElementById('admInfoMeta').textContent =
+                    'Form #: ' + ap.app_number +
+                    (ap.program_name ? '   |   ' + ap.program_name : '') +
+                    (ap.dept_name    ? '   |   ' + ap.dept_name    : '') +
+                    (ap.present_contact ? '   |   ' + ap.present_contact : '');
+
+                // Status badge
+                document.getElementById('admStatusBadge').textContent =
+                    ap.status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+                // Student ID badge (if already assigned)
+                const sidBadge = document.getElementById('admSidBadge');
+                if (ap.office_student_id) {
+                    sidBadge.className = 'badge bg-success px-3 py-2';
+                    sidBadge.textContent = 'Student ID: ' + ap.office_student_id;
+                } else {
+                    sidBadge.className = 'badge bg-secondary-subtle text-secondary border border-secondary-subtle px-3 py-2';
+                    sidBadge.textContent = 'No Student ID yet';
+                }
+
+                // Hidden fields
+                document.getElementById('hAdmAppId').value  = ap.id;
+                document.getElementById('hAdmIncomeId').value = data.income_account_id;
+
+                // Fee amounts
+                document.getElementById('admSuggestedFee').textContent  = fmtAdm(data.suggested_fee);
+                document.getElementById('admAlreadyPaid').textContent   = fmtAdm(data.already_paid);
+                document.getElementById('admAmount').value = (data.suggested_fee - data.already_paid).toFixed(2);
+
+                // Income account label
+                const incLbl = incomeAccLabel[data.income_account_id] || 'Admission Fees income account';
+                document.getElementById('admIncomeLabel').textContent = incLbl;
+
+                // Auto-fill narration
+                document.getElementById('admNarration').value =
+                    'Admission Fee – ' + ap.student_name + ' (Form #' + ap.app_number + ')';
+
+                // Show/hide "Assign Student ID" option
+                const sidOption = document.getElementById('admSidOption');
+                sidOption.style.display = data.can_assign_sid ? '' : 'none';
+
+                admDetailWrap.style.display = '';
+                admDetailWrap.scrollIntoView({behavior: 'smooth', block: 'start'});
+            })
+            .catch(() => {
+                btnLoadApplicant.disabled = false;
+                btnLoadApplicant.innerHTML = '<i class="fas fa-search me-1"></i> Find Applicant';
+                alert('Network error. Please try again.');
+            });
+    });
+
+    document.getElementById('btnAdmCancel').addEventListener('click', () => {
+        admDetailWrap.style.display = 'none';
+        admAppNumberInput.value = '';
+        admAppNumberInput.focus();
     });
 
 })();
