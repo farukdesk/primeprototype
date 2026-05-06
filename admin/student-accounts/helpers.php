@@ -301,3 +301,83 @@ function sfp_recalculate_semester(int $sf_id, int $updated_by): void
         $sf_id,
     ]);
 }
+
+// ── Generate semester names based on semester type and starting semester ────
+/**
+ * Generates semester names based on semester type.
+ * 
+ * @param string $semester_type 'bi_semester' or 'trimester'
+ * @param string $first_semester The first semester name (e.g., "Spring 2026")
+ * @param int $total_semesters Total number of semesters
+ * @return array Array of semester names
+ */
+function sfp_generate_semester_names(string $semester_type, string $first_semester, int $total_semesters): array
+{
+    $names = [];
+    
+    // Parse the first semester to get the starting season and year
+    $parts = explode(' ', trim($first_semester));
+    if (count($parts) < 2) {
+        // Invalid format, return empty array
+        return array_fill(0, $total_semesters, '');
+    }
+    
+    $season = strtolower($parts[0]);
+    $year = (int)$parts[1];
+    
+    // Define semester sequences
+    if ($semester_type === 'trimester') {
+        // Tri-semester: Spring, Summer, Fall
+        $seasons = ['spring', 'summer', 'fall'];
+    } else {
+        // Bi-semester: Spring, Fall (Summer is skipped)
+        $seasons = ['spring', 'fall'];
+    }
+    
+    // Find the starting position in the sequence
+    $season_index = array_search($season, $seasons);
+    if ($season_index === false) {
+        // Invalid season, return empty array
+        return array_fill(0, $total_semesters, '');
+    }
+    
+    // Generate semester names
+    $current_year = $year;
+    $current_season_index = $season_index;
+    
+    for ($i = 0; $i < $total_semesters; $i++) {
+        $names[] = ucfirst($seasons[$current_season_index]) . ' ' . $current_year;
+        
+        // Move to next semester
+        $current_season_index++;
+        if ($current_season_index >= count($seasons)) {
+            $current_season_index = 0;
+            $current_year++;
+        }
+    }
+    
+    return $names;
+}
+
+// ── Get month name from month number ────────────────────────────────────────
+/**
+ * Returns the month name for a given month number.
+ * 
+ * @param int $month_num Month number (1-12)
+ * @param int $start_month Starting month of the semester (1-12)
+ * @return string Month name
+ */
+function sfp_get_month_name(int $month_num, int $start_month): string
+{
+    $months = [
+        1 => 'January', 2 => 'February', 3 => 'March', 4 => 'April',
+        5 => 'May', 6 => 'June', 7 => 'July', 8 => 'August',
+        9 => 'September', 10 => 'October', 11 => 'November', 12 => 'December'
+    ];
+    
+    // Calculate actual month based on start month and month number
+    $actual_month = (($start_month - 1 + $month_num - 1) % 12) + 1;
+    
+    return $months[$actual_month] ?? '';
+}
+
