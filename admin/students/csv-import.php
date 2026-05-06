@@ -218,7 +218,7 @@ function ci_validate_row(
             $errors[] = 'ID_No "' . htmlspecialchars($id_raw, ENT_QUOTES, 'UTF-8') . '" is invalid (1–20 alphanumeric/hyphen chars).';
             $id_raw = '';
         } elseif ($pdo !== null) {
-            // Check for duplicate student ID in database during preview
+            // Legacy: Check for duplicate student ID in database (now handled in batch for performance)
             $chk = $pdo->prepare('SELECT id FROM students WHERE student_id = ?');
             $chk->execute([$id_raw]);
             if ($chk->fetchColumn()) {
@@ -370,7 +370,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                         $preview_rows = [];
                         $row_num = 1;
                         $pdo = db(); // Get database connection for duplicate checking
-                        $seen_student_ids = []; // Track student IDs within this CSV file
+                        
+                        // First pass: collect all student IDs from CSV for batch duplicate checking
+                        $csv_student_ids = [];
+                        $temp_rows = [];
                         foreach ($all_rows as $raw) {
                             $row_num++;
                             // Skip completely blank rows
@@ -382,20 +385,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                             foreach ($header as $i => $key) {
                                 $assoc[$key] = $raw[$i] ?? '';
                             }
+                            $temp_rows[] = ['row_num' => $row_num, 'assoc' => $assoc];
+                            
+                            $sid = trim($assoc['id_no'] ?? '');
+                            if ($sid !== '') {
+                                $csv_student_ids[] = $sid;
+                            }
+                        }
+                        
+                        // Batch check for existing student IDs in database
+                        $existing_ids = [];
+                        if (!empty($csv_student_ids)) {
+                            $placeholders = implode(',', array_fill(0, count($csv_student_ids), '?'));
+                            $stmt = $pdo->prepare("SELECT student_id FROM students WHERE student_id IN ($placeholders)");
+                            $stmt->execute($csv_student_ids);
+                            while ($row = $stmt->fetch(PDO::FETCH_COLUMN)) {
+                                $existing_ids[$row] = true;
+                            }
+                        }
+                        
+                        // Second pass: validate rows with pre-loaded duplicate info
+                        $seen_student_ids = []; // Track student IDs within this CSV file
+                        foreach ($temp_rows as $temp) {
+                            $assoc = $temp['assoc'];
+                            $row_num = $temp['row_num'];
+                            
                             $validated = ci_validate_row(
                                 $assoc,
                                 $dept_by_name, $dept_by_code,
                                 $prog_by_name, $batch_by_name,
                                 $district_by_name, $thana_by_did_name,
-                                $pdo
+                                null // Don't pass PDO since we already did batch check
                             );
                             
-                            // Check for duplicates within the CSV file itself
+                            // Check for duplicates using pre-loaded data
                             $sid = trim($assoc['id_no'] ?? '');
-                            if ($sid !== '' && isset($seen_student_ids[$sid])) {
-                                $validated['errors'][] = 'Student ID "' . htmlspecialchars($sid, ENT_QUOTES, 'UTF-8') . '" appears multiple times in this CSV file (duplicate in row ' . $seen_student_ids[$sid] . ').';
-                            } elseif ($sid !== '') {
-                                $seen_student_ids[$sid] = $row_num;
+                            if ($sid !== '') {
+                                // Check against database
+                                if (isset($existing_ids[$sid])) {
+                                    $validated['errors'][] = 'Student ID "' . htmlspecialchars($sid, ENT_QUOTES, 'UTF-8') . '" already exists in database (duplicate).';
+                                }
+                                // Check within CSV file
+                                if (isset($seen_student_ids[$sid])) {
+                                    $validated['errors'][] = 'Student ID "' . htmlspecialchars($sid, ENT_QUOTES, 'UTF-8') . '" appears multiple times in this CSV file (first seen in row ' . $seen_student_ids[$sid] . ').';
+                                } else {
+                                    $seen_student_ids[$sid] = $row_num;
+                                }
                             }
                             
                             $validated['row_num'] = $row_num;
