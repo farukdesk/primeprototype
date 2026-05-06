@@ -977,3 +977,153 @@ function acc_income_account_id_by_code(string $code): int
     $stmt->execute([$code]);
     return (int)($stmt->fetchColumn() ?: 0);
 }
+
+// ── SMS & Email notification helpers ─────────────────────────────────────────
+
+/**
+ * Send a fee-payment SMS via FastSMS BD.
+ * Reads sms_enabled / sms_api_key / sms_sender_id / sms_template from acc_settings.
+ */
+function acc_send_fee_sms(string $mobile, array $vars): bool
+{
+    if (acc_setting('sms_enabled', '0') !== '1') {
+        return false;
+    }
+    $api_key   = acc_setting('sms_api_key', '');
+    $sender_id = acc_setting('sms_sender_id', '');
+    if ($api_key === '' || $sender_id === '' || $mobile === '') {
+        return false;
+    }
+
+    $template = acc_setting('sms_template', 'Dear {{student_name}}, your payment of {{currency}}{{amount}} has been received. Voucher: {{voucher_number}}. Thank you.');
+
+    // Replace {{placeholders}}
+    $search  = [];
+    $replace = [];
+    foreach ($vars as $key => $val) {
+        $search[]  = '{{' . $key . '}}';
+        $replace[] = (string)$val;
+    }
+    $message = str_replace($search, $replace, $template);
+
+    // Normalize to 880… format
+    $mobile = preg_replace('/\D/', '', $mobile);
+    if (str_starts_with($mobile, '0')) {
+        $mobile = '880' . substr($mobile, 1);
+    }
+
+    $url = 'https://smsapi.fastsmsbd.com/smsapiv3?' . http_build_query([
+        'apikey'  => $api_key,
+        'sender'  => $sender_id,
+        'msisdn'  => $mobile,
+        'smstext' => $message,
+    ]);
+
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+    $response = curl_exec($ch);
+    $errno    = curl_errno($ch);
+    curl_close($ch);
+
+    return ($errno === 0 && $response !== false);
+}
+
+/**
+ * Send a fee payment invoice email using the 'fee_payment_invoice' email template.
+ *
+ * @param array $student     Row from students table (full_name, email, student_id, dept_name etc.)
+ * @param array $payment_info Associative array with payment details for the template vars
+ */
+function acc_send_fee_invoice_email(array $student, array $payment_info): bool
+{
+    if (acc_setting('email_invoice', '1') !== '1') {
+        return false;
+    }
+    if (empty($student['email'])) {
+        return false;
+    }
+
+    require_once __DIR__ . '/../includes/mailer.php';
+
+    $currency = acc_currency();
+
+    $narration_row = '';
+    if (!empty($payment_info['narration'])) {
+        $narration_row = '<p style="margin:4px 0 0;font-size:13px;color:#6b7280;">Note: ' . htmlspecialchars($payment_info['narration'], ENT_QUOTES, 'UTF-8') . '</p>';
+    }
+
+    $vars = [
+        'student_name'     => $student['full_name'],
+        'student_sid'      => $student['student_id'],
+        'department'       => $student['dept_name'] ?? '',
+        'voucher_number'   => $payment_info['voucher_number'],
+        'payment_date'     => date('d M Y', strtotime($payment_info['payment_date'])),
+        'fee_type_label'   => $payment_info['fee_type_label'],
+        'semester_label'   => !empty($payment_info['semester_label']) ? ' – ' . $payment_info['semester_label'] : '',
+        'currency'         => $currency,
+        'amount'           => number_format((float)$payment_info['amount'], 2),
+        'outstanding_total'=> number_format((float)$payment_info['outstanding_total'], 2),
+        'reference'        => $payment_info['reference'] ?: '—',
+        'narration_row'    => $narration_row,
+    ];
+
+    return send_template_email(
+        'fee_payment_invoice',
+        $student['email'],
+        $student['full_name'],
+        $vars
+    );
+}
+
+/**
+ * Human-readable label for each sfp_payments fee_type.
+ */
+function acc_fee_type_label(string $fee_type): string
+{
+    return match ($fee_type) {
+        'admission'        => 'Admission Fee',
+        'registration'     => 'Registration Fee',
+        'semester_tuition' => 'Semester Tuition Fee',
+        'fixed_fee'        => 'Fixed Institutional Fee',
+        'english_fee'      => 'English Course Fee',
+        'other'            => 'Other Fee',
+        default            => ucfirst(str_replace('_', ' ', $fee_type)),
+    };
+}
+
+/**
+ * Compute total outstanding balance across ALL fee types for a student's package.
+ * Used by the invoice email so the student can see remaining balance.
+ */
+function acc_total_outstanding(int $package_id): float
+{
+    $db = db();
+
+    $pkg_stmt = $db->prepare('SELECT * FROM sfp_packages WHERE id = ?');
+    $pkg_stmt->execute([$package_id]);
+    $pkg = $pkg_stmt->fetch();
+    if (!$pkg) return 0.0;
+
+    $cf      = $db->query('SELECT reg_fee_per_semester FROM cf_settings WHERE id = 1')->fetch();
+    $reg_fee = $cf ? (float)$cf['reg_fee_per_semester'] : 0.0;
+
+    $sem_stmt = $db->prepare('SELECT COUNT(*), COALESCE(SUM(tuition_payable),0) FROM sfp_semester_fees WHERE package_id = ?');
+    $sem_stmt->execute([$package_id]);
+    $sem_row = $sem_stmt->fetch(PDO::FETCH_NUM);
+    $num_sems      = (int)($sem_row[0] ?? 0);
+    $tuition_total = (float)($sem_row[1] ?? 0);
+
+    $total_due = (float)$pkg['admission_fees']
+               + ($reg_fee * $num_sems)
+               + (float)$pkg['fixed_institutional_fees']
+               + (float)$pkg['english_course_fee']
+               + $tuition_total;
+
+    $paid_stmt = $db->prepare('SELECT COALESCE(SUM(amount),0) FROM sfp_payments WHERE package_id = ?');
+    $paid_stmt->execute([$package_id]);
+    $total_paid = (float)$paid_stmt->fetchColumn();
+
+    return max(0.0, $total_due - $total_paid);
+}
