@@ -189,7 +189,8 @@ function ci_validate_row(
     array $prog_by_name,
     array $batch_by_name,
     array $district_by_name,
-    array $thana_by_did_name
+    array $thana_by_did_name,
+    ?PDO $pdo = null
 ): array {
     $errors   = [];
     $warnings = [];
@@ -216,8 +217,14 @@ function ci_validate_row(
         if (!preg_match('/^[a-zA-Z0-9\-]{1,20}$/', $id_raw)) {
             $errors[] = 'ID_No "' . htmlspecialchars($id_raw, ENT_QUOTES, 'UTF-8') . '" is invalid (1–20 alphanumeric/hyphen chars).';
             $id_raw = '';
+        } elseif ($pdo !== null) {
+            // Check for duplicate student ID in database during preview
+            $chk = $pdo->prepare('SELECT id FROM students WHERE student_id = ?');
+            $chk->execute([$id_raw]);
+            if ($chk->fetchColumn()) {
+                $errors[] = 'Student ID "' . htmlspecialchars($id_raw, ENT_QUOTES, 'UTF-8') . '" already exists in database (duplicate).';
+            }
         }
-        // Duplicate check is deferred to import phase to avoid redundant queries during preview.
     }
 
     // --- Department ---
@@ -362,6 +369,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     } else {
                         $preview_rows = [];
                         $row_num = 1;
+                        $pdo = db(); // Get database connection for duplicate checking
                         foreach ($all_rows as $raw) {
                             $row_num++;
                             // Skip completely blank rows
@@ -377,7 +385,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                                 $assoc,
                                 $dept_by_name, $dept_by_code,
                                 $prog_by_name, $batch_by_name,
-                                $district_by_name, $thana_by_did_name
+                                $district_by_name, $thana_by_did_name,
+                                $pdo
                             );
                             $validated['row_num'] = $row_num;
                             $preview_rows[] = $validated;
