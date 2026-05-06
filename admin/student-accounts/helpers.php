@@ -6,6 +6,15 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../change-log/helpers.php';
 
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+/**
+ * Maximum number of semesters for bi-semester programs.
+ * Programs with total_semesters <= this value are considered bi-semester (2 semesters/year).
+ * Programs with total_semesters > this value are considered tri-semester (3 semesters/year).
+ */
+define('SFP_MAX_BI_SEMESTER_COUNT', 8);
+
 // ── Permission helpers ────────────────────────────────────────────────────────
 
 function sfp_can_edit(): bool

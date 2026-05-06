@@ -104,7 +104,7 @@ $total_paid_at_admission = $admission_payment_admission + $admission_payment_reg
 // Duration of payment
 $payment_months = (int)$pkg['total_months'];
 
-// Semester type detection: 8 semesters → bi-semester (48 months), 12 semesters → trimester
+// Semester type detection
 $total_semesters = (int)$pkg['total_semesters'];
 
 // Monthly installment base = tuition payable + fixed payable + english payable (registration fee excluded)
@@ -112,7 +112,7 @@ $monthly_installment_base = $first_sem_tuition_payable + $first_sem_fixed_payabl
 $monthly_installment      = ($mps > 0) ? (int)round($monthly_installment_base / $mps) : 0;
 
 // Semester type label for display
-$sem_type_months_label = ($total_semesters <= 8)
+$sem_type_months_label = ($total_semesters <= SFP_MAX_BI_SEMESTER_COUNT)
     ? 'Bi-Semester – 6 months'
     : 'Trimester – 4 months';
 
@@ -613,8 +613,8 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
             <li>Registration fees for each semester must be paid before registering for the semester.</li>
             <li>Duration of payment:
                 <?php
-                // Bi-semester programmes run 8 semesters; trimester programmes run 12 semesters.
-                if ($total_semesters <= 8): ?>
+                // Programs are classified as bi-semester or trimester based on total semesters
+                if ($total_semesters <= SFP_MAX_BI_SEMESTER_COUNT): ?>
                 <strong><?= $total_semesters ?> semesters (Bi-Semester)</strong>, <?= $payment_months ?> months total.
                 <?php else: ?>
                 <strong><?= $total_semesters ?> semesters (Trimester)</strong>, <?= $payment_months ?> months total.
