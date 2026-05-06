@@ -194,6 +194,8 @@ $v = function(string $key) use ($app): string {
 $saved_semesters = array_map('trim', explode(',', $app['semester'] ?? ''));
 
 require_once __DIR__ . '/../includes/header.php';
+echo '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.min.css">';
+echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>';
 ?>
 
 <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
@@ -371,11 +373,35 @@ require_once __DIR__ . '/../includes/header.php';
                             $rows_to_render = !empty($acad_records) ? $acad_records : [[]];
                             foreach ($rows_to_render as $ar):
                             ?>
-                            <tr>
-                                <td><input type="text" name="exam_name[]" class="form-control form-control-sm" value="<?= h($ar['exam_name'] ?? '') ?>" placeholder="SSC/HSC/BSc…"></td>
+                            <tr class="acad-row">
+                                <td>
+                                    <select name="exam_name[]" class="acad-exam-sel" style="width:130px">
+                                        <option value="">— Select —</option>
+                                        <?php foreach (['SSC','Dakhil','O Level','SSC (Vocational)','HSC','Alim','A Level'] as $en): ?>
+                                        <option value="<?= h($en) ?>" <?= ($ar['exam_name'] ?? '') === $en ? 'selected' : '' ?>><?= h($en) ?></option>
+                                        <?php endforeach; ?>
+                                        <?php if (!empty($ar['exam_name']) && !in_array($ar['exam_name'], ['SSC','Dakhil','O Level','SSC (Vocational)','HSC','Alim','A Level'])): ?>
+                                        <option value="<?= h($ar['exam_name']) ?>" selected><?= h($ar['exam_name']) ?></option>
+                                        <?php endif; ?>
+                                    </select>
+                                </td>
                                 <td><input type="text" name="acad_session[]" class="form-control form-control-sm" value="<?= h($ar['session'] ?? '') ?>"></td>
-                                <td><input type="text" name="group_name[]" class="form-control form-control-sm" value="<?= h($ar['group_name'] ?? '') ?>"></td>
-                                <td><input type="text" name="board_university[]" class="form-control form-control-sm" value="<?= h($ar['board_university'] ?? '') ?>"></td>
+                                <td class="acad-group-td">
+                                    <select name="group_name[]" class="acad-group-sel" style="width:130px">
+                                        <option value="">— Select —</option>
+                                        <?php if (!empty($ar['group_name'])): ?>
+                                        <option value="<?= h($ar['group_name']) ?>" selected><?= h($ar['group_name']) ?></option>
+                                        <?php endif; ?>
+                                    </select>
+                                </td>
+                                <td>
+                                    <select name="board_university[]" class="acad-board-sel" style="width:170px">
+                                        <option value="">— Select —</option>
+                                        <?php if (!empty($ar['board_university'])): ?>
+                                        <option value="<?= h($ar['board_university']) ?>" selected><?= h($ar['board_university']) ?></option>
+                                        <?php endif; ?>
+                                    </select>
+                                </td>
                                 <td><input type="text" name="year_of_passing[]" class="form-control form-control-sm" value="<?= h($ar['year_of_passing'] ?? '') ?>" style="width:70px"></td>
                                 <td><input type="text" name="division_grade[]" class="form-control form-control-sm" value="<?= h($ar['division_grade'] ?? '') ?>"></td>
                                 <td><input type="text" name="total_marks_cgpa[]" class="form-control form-control-sm" value="<?= h($ar['total_marks_cgpa'] ?? '') ?>"></td>
@@ -549,18 +575,140 @@ document.getElementById('dept_id').addEventListener('change', function() {
     }
 })();
 
+// ── Academic Qualifications: exam/group/board data ───────────────────────────
+var ACAD_DATA = {
+    'SSC': {
+        groups: ['Science','Arts','Commerce'],
+        boards: ['Barisal','Chattogram','Cumilla','Dhaka','Dinajpur','Jashore','Mymensingh','Rajshahi','Sylhet'],
+        defaultBoard: null, showGroup: true
+    },
+    'Dakhil': {
+        groups: ['Science','Arts','Commerce'],
+        boards: ['Bangladesh Madrasah Education Board'],
+        defaultBoard: 'Bangladesh Madrasah Education Board', showGroup: true
+    },
+    'O Level': {
+        groups: [],
+        boards: ['Cambridge','Edexcel'],
+        defaultBoard: null, showGroup: false
+    },
+    'SSC (Vocational)': {
+        groups: ['Electrical','Mechanical','Computer','Civil','Electronics','Refrigeration & Air Conditioning','Welding & Fabrication','Auto Mechanic','Drafting (Civil)','Drafting (Mechanical)'],
+        boards: ['Bangladesh Technical Education Board'],
+        defaultBoard: 'Bangladesh Technical Education Board', showGroup: true
+    },
+    'HSC': {
+        groups: ['Science','Arts','Commerce'],
+        boards: ['Barisal','Chattogram','Cumilla','Dhaka','Dinajpur','Jashore','Mymensingh','Rajshahi','Sylhet','Madrasah Education Board','Technical Education Board'],
+        defaultBoard: null, showGroup: true
+    },
+    'Alim': {
+        groups: ['Science','Arts','Commerce'],
+        boards: ['Bangladesh Madrasah Education Board'],
+        defaultBoard: 'Bangladesh Madrasah Education Board', showGroup: true
+    },
+    'A Level': {
+        groups: [],
+        boards: ['Cambridge','Edexcel'],
+        defaultBoard: null, showGroup: false
+    }
+};
+
+function acadUpdateGroupBoard(tr, newExam, setDefault) {
+    var data     = ACAD_DATA[newExam] || { groups: [], boards: [], defaultBoard: null, showGroup: true };
+    var tsGroup  = tr._tsGroup;
+    var tsBoard  = tr._tsBoard;
+    var groupTd  = tr.querySelector('.acad-group-td');
+
+    tsGroup.clearOptions();
+    tsGroup.addOption({ value: '', text: '— Select —' });
+    data.groups.forEach(function(g) { tsGroup.addOption({ value: g, text: g }); });
+    if (!data.showGroup) {
+        tsGroup.setValue('', true);
+        if (groupTd) groupTd.style.opacity = '0.35';
+    } else {
+        if (groupTd) groupTd.style.opacity = '';
+    }
+
+    tsBoard.clearOptions();
+    tsBoard.addOption({ value: '', text: '— Select —' });
+    data.boards.forEach(function(b) { tsBoard.addOption({ value: b, text: b }); });
+    if (setDefault && data.defaultBoard) {
+        tsBoard.setValue(data.defaultBoard, true);
+    }
+}
+
+function initAcadRow(tr) {
+    var examSel  = tr.querySelector('select.acad-exam-sel');
+    var groupSel = tr.querySelector('select.acad-group-sel');
+    var boardSel = tr.querySelector('select.acad-board-sel');
+    if (!examSel || !groupSel || !boardSel) return;
+
+    var savedExam  = examSel.value;
+    var savedGroup = groupSel.value;
+    var savedBoard = boardSel.value;
+
+    var tsExam = new TomSelect(examSel, {
+        create: true, allowEmptyOption: true, maxOptions: 20,
+        plugins: ['clear_button'],
+        placeholder: '— Select / Type —'
+    });
+    var tsGroup = new TomSelect(groupSel, {
+        create: true, allowEmptyOption: true, maxOptions: 30,
+        plugins: ['clear_button'],
+        placeholder: '— Select / Type —'
+    });
+    var tsBoard = new TomSelect(boardSel, {
+        create: true, allowEmptyOption: true, maxOptions: 20,
+        plugins: ['clear_button'],
+        placeholder: '— Select / Type —'
+    });
+
+    tr._tsExam  = tsExam;
+    tr._tsGroup = tsGroup;
+    tr._tsBoard = tsBoard;
+
+    if (savedExam) {
+        var data = ACAD_DATA[savedExam] || { groups: [], boards: [], defaultBoard: null, showGroup: true };
+        tsGroup.clearOptions();
+        tsGroup.addOption({ value: '', text: '— Select —' });
+        data.groups.forEach(function(g) { tsGroup.addOption({ value: g, text: g }); });
+        if (savedGroup && data.groups.indexOf(savedGroup) === -1) tsGroup.addOption({ value: savedGroup, text: savedGroup });
+        tsGroup.setValue(savedGroup, true);
+
+        tsBoard.clearOptions();
+        tsBoard.addOption({ value: '', text: '— Select —' });
+        data.boards.forEach(function(b) { tsBoard.addOption({ value: b, text: b }); });
+        if (savedBoard && data.boards.indexOf(savedBoard) === -1) tsBoard.addOption({ value: savedBoard, text: savedBoard });
+        tsBoard.setValue(savedBoard, true);
+
+        var groupTd = tr.querySelector('.acad-group-td');
+        if (!data.showGroup && groupTd) groupTd.style.opacity = '0.35';
+    }
+
+    tsExam.on('change', function(val) {
+        acadUpdateGroupBoard(tr, val, true);
+    });
+}
+
 document.getElementById('addAcadRow').addEventListener('click', function() {
     var tbody = document.getElementById('acadBody');
     var tr = document.createElement('tr');
-    tr.innerHTML = '<td><input type="text" name="exam_name[]" class="form-control form-control-sm" placeholder="SSC/HSC/BSc…"></td>'
-                 + '<td><input type="text" name="acad_session[]" class="form-control form-control-sm"></td>'
-                 + '<td><input type="text" name="group_name[]" class="form-control form-control-sm"></td>'
-                 + '<td><input type="text" name="board_university[]" class="form-control form-control-sm"></td>'
-                 + '<td><input type="text" name="year_of_passing[]" class="form-control form-control-sm" style="width:70px"></td>'
-                 + '<td><input type="text" name="division_grade[]" class="form-control form-control-sm"></td>'
-                 + '<td><input type="text" name="total_marks_cgpa[]" class="form-control form-control-sm"></td>'
-                 + '<td><button type="button" class="btn btn-sm btn-outline-danger removeRow"><i class="fas fa-times"></i></button></td>';
+    tr.className = 'acad-row';
+    tr.innerHTML = '<td>'
+        + '<select name="exam_name[]" class="acad-exam-sel" style="width:130px">'
+        + '<option value="">— Select —</option>'
+        + ['SSC','Dakhil','O Level','SSC (Vocational)','HSC','Alim','A Level'].map(function(e){return '<option value="'+e+'">'+e+'</option>';}).join('')
+        + '</select></td>'
+        + '<td><input type="text" name="acad_session[]" class="form-control form-control-sm"></td>'
+        + '<td class="acad-group-td"><select name="group_name[]" class="acad-group-sel" style="width:130px"><option value="">— Select —</option></select></td>'
+        + '<td><select name="board_university[]" class="acad-board-sel" style="width:170px"><option value="">— Select —</option></select></td>'
+        + '<td><input type="text" name="year_of_passing[]" class="form-control form-control-sm" style="width:70px"></td>'
+        + '<td><input type="text" name="division_grade[]" class="form-control form-control-sm"></td>'
+        + '<td><input type="text" name="total_marks_cgpa[]" class="form-control form-control-sm"></td>'
+        + '<td><button type="button" class="btn btn-sm btn-outline-danger removeRow"><i class="fas fa-times"></i></button></td>';
     tbody.appendChild(tr);
+    initAcadRow(tr);
 });
 
 document.getElementById('acadBody').addEventListener('click', function(e) {
@@ -570,6 +718,10 @@ document.getElementById('acadBody').addEventListener('click', function(e) {
             row.remove();
         }
     }
+});
+
+document.querySelectorAll('#acadBody tr.acad-row').forEach(function(tr) {
+    initAcadRow(tr);
 });
 
 document.getElementById('photoInput').addEventListener('change', function() {
