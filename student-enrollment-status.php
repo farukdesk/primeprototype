@@ -563,13 +563,11 @@ function ses_ordinal(int $n): string
                            maxlength="30"
                            autocomplete="off"
                            spellcheck="false">
-                        <button type="submit" class="ses-search-btn">
+                        <?php captcha_render_widget(); ?>
+                        <button type="submit" class="ses-search-btn" style="margin-top: 15px;">
                            <i class="fas fa-search"></i>
                            <span>Check Status</span>
                         </button>
-                     </div>
-                     <div style="margin-top: 15px;">
-                        <?php captcha_render_widget(); ?>
                      </div>
                   </form>
                </div>

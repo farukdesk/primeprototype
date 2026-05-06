@@ -863,13 +863,11 @@ function cert_photo_url(?string $photo): string
                                   maxlength="25"
                                   autocomplete="off"
                                   spellcheck="false">
-                           <button type="submit" class="cv-verify-btn">
+                           <?php captcha_render_widget(); ?>
+                           <button type="submit" class="cv-verify-btn" style="margin-top: 15px;">
                               <i class="fas fa-search"></i>
                               <span>Verify</span>
                            </button>
-                        </div>
-                        <div style="margin-top: 15px;">
-                           <?php captcha_render_widget(); ?>
                         </div>
                      </div>
 
