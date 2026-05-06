@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
 auth_check();
-require_once __DIR__ . '/../includes/captcha-helpers.php';
+require_once __DIR__ . '/../../includes/captcha-helpers.php';
 
 // Only super users or users with system settings access can manage CAPTCHA
 if (!$_SESSION['is_super']) {
