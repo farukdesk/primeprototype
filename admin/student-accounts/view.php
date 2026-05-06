@@ -503,7 +503,7 @@ $first_sem_label   = ($first_sem && $first_sem['semester_label']) ? $first_sem['
                                     data-applies-to-fixed="<?= (int)($spol['applies_to_fixed'] ?? 0) ?>"
                                     data-applies-to-english="<?= (int)($spol['applies_to_english'] ?? 0) ?>">
                                 <?= h($spol['name']) ?>
-                                (<?= $spol['type'] === 'gpa_based' ? 'GPA-Based' : 'Merit-Based' ?>)
+                                (<?= $spol['type'] === 'gpa_based' ? 'GPA-Based' : ($spol['type'] === 'flat' ? 'Flat Discount' : 'Merit-Based') ?>)
                                 <?php if (!empty($spol['tiers'])): ?>
                                 – <?= count($spol['tiers']) ?> tier<?= count($spol['tiers']) !== 1 ? 's' : '' ?>
                                 <?php endif; ?>
@@ -535,7 +535,7 @@ $first_sem_label   = ($first_sem && $first_sem['semester_label']) ? $first_sem['
                         <label class="form-label fw-semibold">Discount % <span class="text-danger">*</span></label>
                         <div class="input-group">
                             <input type="number" name="discount_pct" id="asc-pct"
-                                   class="form-control" step="0.01" min="0.01" max="100" required>
+                                   class="form-control" step="0.0001" min="0.0001" max="100" required>
                             <span class="input-group-text">%</span>
                         </div>
                     </div>
@@ -773,7 +773,7 @@ if (ascPolicySel) {
                 var lbl = t.label || ('GPA ' + t.min_gpa + '–' + t.max_gpa);
                 var opt2 = document.createElement('option');
                 opt2.value = t.id;
-                opt2.textContent = lbl + ' (' + parseFloat(t.discount_percent).toFixed(2) + '%)';
+                opt2.textContent = lbl + ' (' + parseFloat(t.discount_percent).toFixed(4) + '%)';
                 opt2.dataset.label   = lbl;
                 opt2.dataset.polName = polName;
                 opt2.dataset.pct     = t.discount_percent;
@@ -800,7 +800,7 @@ if (ascTierSel) {
         var pol  = opt.dataset.polName || '';
         var info = 'GPA range: ' + opt.dataset.minGpa + ' – ' + opt.dataset.maxGpa;
         document.getElementById('asc-label').value = pol + (lbl ? ' – ' + lbl : '');
-        document.getElementById('asc-pct').value   = pct.toFixed(2);
+        document.getElementById('asc-pct').value   = pct.toFixed(4);
         document.getElementById('asc-tier-info').textContent = info;
         ascRecalcAmount();
     });

@@ -190,7 +190,7 @@ require_once __DIR__ . '/../includes/header.php';
                             <div class="input-group">
                                 <input type="number" name="flat_discount" id="flat_discount" class="form-control"
                                        value="<?= h(old('flat_discount', '')) ?>"
-                                       step="0.01" min="0" max="100" placeholder="e.g. 25.00">
+                                       step="0.0001" min="0" max="100" placeholder="e.g. 25.0000">
                                 <span class="input-group-text">%</span>
                             </div>
                             <div class="form-text">Fixed discount applied to all qualifying students.</div>
@@ -235,7 +235,7 @@ require_once __DIR__ . '/../includes/header.php';
                                     <td class="px-3"><input type="text" name="tier_label[]" class="form-control form-control-sm" value="<?= h($old_tier_labels[$ri] ?? '') ?>" placeholder="e.g. Gold"></td>
                                     <td><input type="number" name="tier_min_gpa[]" class="form-control form-control-sm" value="<?= h($old_tier_mins[$ri] ?? '') ?>" step="0.01" min="0" placeholder="0.00"></td>
                                     <td><input type="number" name="tier_max_gpa[]" class="form-control form-control-sm" value="<?= h($old_tier_maxs[$ri] ?? '') ?>" step="0.01" min="0" placeholder="10.00"></td>
-                                    <td><input type="number" name="tier_discount[]" class="form-control form-control-sm" value="<?= h($old_tier_discounts[$ri] ?? '') ?>" step="0.01" min="0" max="100" placeholder="50.00"></td>
+                                    <td><input type="number" name="tier_discount[]" class="form-control form-control-sm" value="<?= h($old_tier_discounts[$ri] ?? '') ?>" step="0.0001" min="0" max="100" placeholder="50.0000"></td>
                                     <td><input type="number" name="tier_sort[]" class="form-control form-control-sm" value="<?= h($old_tier_sorts[$ri] ?? $ri) ?>" min="0" style="width:70px;"></td>
                                     <td><button type="button" class="btn btn-sm btn-outline-danger remove-tier-row"><i class="fas fa-times"></i></button></td>
                                 </tr>
@@ -245,7 +245,7 @@ require_once __DIR__ . '/../includes/header.php';
                                     <td class="px-3"><input type="text" name="tier_label[]" class="form-control form-control-sm" value="Gold" placeholder="e.g. Gold"></td>
                                     <td><input type="number" name="tier_min_gpa[]" class="form-control form-control-sm" value="9.00" step="0.01" min="0"></td>
                                     <td><input type="number" name="tier_max_gpa[]" class="form-control form-control-sm" value="10.00" step="0.01" min="0"></td>
-                                    <td><input type="number" name="tier_discount[]" class="form-control form-control-sm" value="50.00" step="0.01" min="0" max="100"></td>
+                                    <td><input type="number" name="tier_discount[]" class="form-control form-control-sm" value="50.00" step="0.0001" min="0" max="100"></td>
                                     <td><input type="number" name="tier_sort[]" class="form-control form-control-sm" value="0" min="0" style="width:70px;"></td>
                                     <td><button type="button" class="btn btn-sm btn-outline-danger remove-tier-row"><i class="fas fa-times"></i></button></td>
                                 </tr>
@@ -253,7 +253,7 @@ require_once __DIR__ . '/../includes/header.php';
                                     <td class="px-3"><input type="text" name="tier_label[]" class="form-control form-control-sm" value="Silver" placeholder="e.g. Silver"></td>
                                     <td><input type="number" name="tier_min_gpa[]" class="form-control form-control-sm" value="7.00" step="0.01" min="0"></td>
                                     <td><input type="number" name="tier_max_gpa[]" class="form-control form-control-sm" value="8.99" step="0.01" min="0"></td>
-                                    <td><input type="number" name="tier_discount[]" class="form-control form-control-sm" value="25.00" step="0.01" min="0" max="100"></td>
+                                    <td><input type="number" name="tier_discount[]" class="form-control form-control-sm" value="25.00" step="0.0001" min="0" max="100"></td>
                                     <td><input type="number" name="tier_sort[]" class="form-control form-control-sm" value="1" min="0" style="width:70px;"></td>
                                     <td><button type="button" class="btn btn-sm btn-outline-danger remove-tier-row"><i class="fas fa-times"></i></button></td>
                                 </tr>
@@ -310,7 +310,7 @@ document.getElementById('add-tier-row').addEventListener('click', function () {
         <td class="px-3"><input type="text" name="tier_label[]" class="form-control form-control-sm" placeholder="e.g. Gold"></td>
         <td><input type="number" name="tier_min_gpa[]" class="form-control form-control-sm" step="0.01" min="0" placeholder="0.00"></td>
         <td><input type="number" name="tier_max_gpa[]" class="form-control form-control-sm" step="0.01" min="0" placeholder="10.00"></td>
-        <td><input type="number" name="tier_discount[]" class="form-control form-control-sm" step="0.01" min="0" max="100" placeholder="50.00"></td>
+        <td><input type="number" name="tier_discount[]" class="form-control form-control-sm" step="0.0001" min="0" max="100" placeholder="50.0000"></td>
         <td><input type="number" name="tier_sort[]" class="form-control form-control-sm" value="${tierIdx}" min="0" style="width:70px;"></td>
         <td><button type="button" class="btn btn-sm btn-outline-danger remove-tier-row"><i class="fas fa-times"></i></button></td>`;
     tbody.appendChild(tr);
