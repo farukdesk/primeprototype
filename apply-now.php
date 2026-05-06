@@ -6,6 +6,7 @@
 
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/includes/config.php';
+require_once __DIR__ . '/includes/captcha-helpers.php';
 
 $page_title = 'Apply Now – Prime University';
 
@@ -104,6 +105,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (empty($form_errors)) {
         $old = $_POST;
+
+        // CAPTCHA verification
+        if (!captcha_verify_request()) {
+            $form_errors[] = 'CAPTCHA verification failed. Please verify that you are not a robot.';
+        }
 
         $first_name = trim($_POST['first_name'] ?? '');
         $last_name = trim($_POST['last_name'] ?? '');
@@ -647,6 +653,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <?php if ($form_success): ?>
 <script>fbq('track', 'Lead');</script>
 <?php endif; ?>
+<?php captcha_render_script(); ?>
 </head>
 <body id="body" class="it-magic-cursor">
    <div id="preloader">
@@ -917,6 +924,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                            </div>
 
                            <div class="pu-action-row">
+                              <?php captcha_render_widget(); ?>
                               <a href="/" class="pu-back-link"><i class="fas fa-arrow-left"></i> Back to Home</a>
                               <button type="submit" class="pu-submit-btn"><i class="fas fa-paper-plane"></i> Submit Application</button>
                            </div>

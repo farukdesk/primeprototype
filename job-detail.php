@@ -2,6 +2,7 @@
 if (session_status() === PHP_SESSION_NONE) session_start();
 
 require_once __DIR__ . '/includes/config.php';
+require_once __DIR__ . '/includes/captcha-helpers.php';
 
 // ── Fetch job by slug ─────────────────────────────────────────────────────────
 $slug = trim($_GET['slug'] ?? '');
@@ -54,6 +55,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $job) {
         $email        = trim($_POST['email']        ?? '');
         $phone        = trim($_POST['phone']        ?? '');
         $cover_letter = trim($_POST['cover_letter'] ?? '');
+
+        // CAPTCHA verification
+        if (!captcha_verify_request()) {
+            $form_errors[] = 'CAPTCHA verification failed. Please verify that you are not a robot.';
+        }
 
         if ($full_name === '')                    $form_errors[] = 'Full name is required.';
         if ($email === '')                         $form_errors[] = 'Email address is required.';
@@ -167,6 +173,7 @@ $type_badge = [
    <link rel="stylesheet" href="/assets/css/spacing.css">
    <link rel="stylesheet" href="/assets/css/main.css">
 <?php include __DIR__ . '/includes/meta-pixel.php'; ?>
+<?php captcha_render_script(); ?>
 </head>
 
 <body id="body" class="it-magic-cursor">
@@ -698,7 +705,8 @@ $type_badge = [
                            </div>
 
                            <div class="d-grid mt-4">
-                              <button type="submit" class="jd-submit-btn">
+                              <?php captcha_render_widget(); ?>
+                              <button type="submit" class="jd-submit-btn" style="margin-top: 15px;">
                                  <i class="fas fa-paper-plane"></i>
                                  Submit Application
                               </button>

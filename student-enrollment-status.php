@@ -7,6 +7,7 @@
 
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/seo.php';
+require_once __DIR__ . '/includes/captcha-helpers.php';
 
 $page_title = 'Student Enrollment Status – Prime University';
 
@@ -475,6 +476,7 @@ function ses_ordinal(int $n): string
    }
    </style>
 <?php include __DIR__ . '/includes/meta-pixel.php'; ?>
+<?php captcha_render_script(); ?>
 </head>
 <body id="body" class="it-magic-cursor">
 
@@ -561,7 +563,8 @@ function ses_ordinal(int $n): string
                            maxlength="30"
                            autocomplete="off"
                            spellcheck="false">
-                        <button type="submit" class="ses-search-btn">
+                        <?php captcha_render_widget(); ?>
+                        <button type="submit" class="ses-search-btn" style="margin-top: 15px;">
                            <i class="fas fa-search"></i>
                            <span>Check Status</span>
                         </button>

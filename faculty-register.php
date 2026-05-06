@@ -6,6 +6,7 @@
 
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/includes/config.php';
+require_once __DIR__ . '/includes/captcha-helpers.php';
 
 $page_title = 'Faculty Registration – Prime University';
 
@@ -88,6 +89,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['_action'] ?? '') === 'facu
         $dept_id   = (int)($_POST['dept_id']  ?? 0) ?: null;
 
         $old = compact('full_name', 'email', 'phone', 'dept_id');
+
+        // CAPTCHA verification
+        if (!captcha_verify_request()) {
+            $form_errors[] = 'CAPTCHA verification failed. Please verify that you are not a robot.';
+        }
 
         if ($full_name === '')                               $form_errors[] = 'Full name is required.';
         if (!filter_var($email, FILTER_VALIDATE_EMAIL))     $form_errors[] = 'A valid email address is required.';
@@ -291,6 +297,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['_action'] ?? '') === 'facu
    .upload-hint { font-size: .8rem; color: #6b7280; margin-top: 4px; }
    </style>
 <?php include __DIR__ . '/includes/meta-pixel.php'; ?>
+<?php captcha_render_script(); ?>
 </head>
 <body>
 <?php
@@ -431,6 +438,7 @@ require_once __DIR__ . '/includes/nav-menu.php';
                   <hr class="my-4">
 
                   <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                     <?php captcha_render_widget(); ?>
                      <a href="/" style="color:#6b7280;font-size:.9rem;text-decoration:none;">
                         <i class="fas fa-arrow-left me-1"></i>Back to Home
                      </a>
