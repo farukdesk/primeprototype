@@ -728,3 +728,402 @@ function acc_fiscal_year_end(): string
     $start = acc_fiscal_year_start();
     return date('Y-m-d', strtotime($start . ' +1 year -1 day'));
 }
+
+// ── Student Fee Payment Helpers ───────────────────────────────────────────────
+
+/**
+ * Fetch a student record by their alphanumeric student_id (e.g. "20210101001").
+ * Returns the students row joined with their fee package (if any),
+ * or null if the student does not exist.
+ */
+function acc_get_student_by_sid(string $student_sid): ?array
+{
+    $stmt = db()->prepare(
+        'SELECT s.id, s.student_id, s.full_name, s.dept_id, s.status,
+                p.id AS package_id
+         FROM students s
+         LEFT JOIN sfp_packages p ON p.student_id = s.id
+         WHERE s.student_id = ?
+         LIMIT 1'
+    );
+    $stmt->execute([trim($student_sid)]);
+    return $stmt->fetch() ?: null;
+}
+
+/**
+ * Build a full fee-obligation summary for a student's fee package.
+ *
+ * Returns an array with keys:
+ *   package       – sfp_packages row
+ *   cf_settings   – cf_settings row (reg_fee_per_semester, form_id_fee)
+ *   semesters     – array of semester rows enriched with paid/outstanding
+ *   totals        – grand-total obligation, paid, outstanding per fee type
+ *
+ * Outstanding = obligation − paid (floor at 0).
+ */
+function acc_student_fee_summary(int $student_id): ?array
+{
+    $db = db();
+
+    // Load package
+    $pkg_stmt = $db->prepare(
+        'SELECT p.*, s.full_name AS student_name, s.student_id AS student_sid
+         FROM sfp_packages p
+         JOIN students s ON s.id = p.student_id
+         WHERE p.student_id = ?'
+    );
+    $pkg_stmt->execute([$student_id]);
+    $pkg = $pkg_stmt->fetch();
+    if (!$pkg) return null;
+
+    $package_id = (int)$pkg['id'];
+
+    // Course-fee global settings
+    $cf = $db->query('SELECT reg_fee_per_semester, form_id_fee FROM cf_settings WHERE id = 1')->fetch();
+    $reg_fee     = $cf ? (float)$cf['reg_fee_per_semester'] : 0.0;
+    $form_id_fee = $cf ? (float)$cf['form_id_fee'] : 0.0;
+
+    // Semester fee rows
+    $sf_stmt = $db->prepare(
+        'SELECT * FROM sfp_semester_fees WHERE package_id = ? ORDER BY semester_number ASC'
+    );
+    $sf_stmt->execute([$package_id]);
+    $semester_fees = $sf_stmt->fetchAll();
+    $num_semesters = count($semester_fees);
+
+    // Paid amounts per fee_type and per semester_fee_id
+    $paid_stmt = $db->prepare(
+        'SELECT fee_type, semester_fee_id, COALESCE(SUM(amount),0) AS paid
+         FROM sfp_payments
+         WHERE package_id = ?
+         GROUP BY fee_type, semester_fee_id'
+    );
+    $paid_stmt->execute([$package_id]);
+    $paid_rows = $paid_stmt->fetchAll();
+
+    // Build lookup: [fee_type][semester_fee_id|'total'] => paid_amount
+    $paid_map = [];
+    foreach ($paid_rows as $row) {
+        $key = $row['semester_fee_id'] ?? 'total';
+        $paid_map[$row['fee_type']][$key] = (float)$row['paid'];
+    }
+
+    // Helper: total paid for a fee_type (all semester_fee_ids combined)
+    $total_paid_for = function (string $type) use ($paid_map): float {
+        if (!isset($paid_map[$type])) return 0.0;
+        return array_sum($paid_map[$type]);
+    };
+
+    // ── Obligations ────────────────────────────────────────────────────────────
+
+    // Admission (one-time)
+    $admission_due  = (float)$pkg['admission_fees'];
+    $admission_paid = $total_paid_for('admission');
+
+    // Registration (per semester)
+    $reg_due  = $reg_fee * $num_semesters;
+    $reg_paid = $total_paid_for('registration');
+
+    // Fixed institutional fee total (minus any discounts already baked into semester rows)
+    $fixed_due  = (float)$pkg['fixed_institutional_fees'];
+    $fixed_paid = $total_paid_for('fixed_fee');
+
+    // English course fee total
+    $english_due  = (float)$pkg['english_course_fee'];
+    $english_paid = $total_paid_for('english_fee');
+
+    // Per-semester tuition
+    $months = (float)($pkg['total_months'] ?? 0);
+    $mps    = (float)($pkg['months_per_semester'] ?? 0);
+
+    $semesters_enriched = [];
+    foreach ($semester_fees as $sf) {
+        $sf_id = (int)$sf['id'];
+        $tuition_due  = (float)$sf['tuition_payable'];
+        $tuition_paid = (float)($paid_map['semester_tuition'][$sf_id] ?? 0);
+
+        // Per-semester portions of fixed and English fees
+        $fixed_per_sem   = ($months > 0 && $mps > 0)
+            ? round((float)$pkg['fixed_institutional_fees'] / $months * $mps, 2) : 0.0;
+        $english_per_sem = ($months > 0 && $mps > 0)
+            ? round((float)$pkg['english_course_fee']        / $months * $mps, 2) : 0.0;
+
+        // Apply any per-semester fixed/English discounts stored in sfp_semester_fees
+        $fixed_per_sem   = max(0.0, $fixed_per_sem   - (float)($sf['fixed_discount_amount']   ?? 0));
+        $english_per_sem = max(0.0, $english_per_sem - (float)($sf['english_discount_amount'] ?? 0));
+
+        $semesters_enriched[] = array_merge($sf, [
+            'tuition_due'     => $tuition_due,
+            'tuition_paid'    => $tuition_paid,
+            'tuition_out'     => max(0.0, $tuition_due - $tuition_paid),
+            'fixed_per_sem'   => $fixed_per_sem,
+            'english_per_sem' => $english_per_sem,
+            'reg_fee'         => $reg_fee,
+        ]);
+    }
+
+    $total_tuition_due  = array_sum(array_column($semesters_enriched, 'tuition_due'));
+    $total_tuition_paid = $total_paid_for('semester_tuition');
+
+    return [
+        'package'    => $pkg,
+        'cf_settings' => ['reg_fee_per_semester' => $reg_fee, 'form_id_fee' => $form_id_fee],
+        'semesters'  => $semesters_enriched,
+        'totals'     => [
+            'admission'  => ['due' => $admission_due,       'paid' => $admission_paid,       'out' => max(0.0, $admission_due - $admission_paid)],
+            'registration'=> ['due' => $reg_due,            'paid' => $reg_paid,             'out' => max(0.0, $reg_due - $reg_paid)],
+            'tuition'    => ['due' => $total_tuition_due,   'paid' => $total_tuition_paid,   'out' => max(0.0, $total_tuition_due - $total_tuition_paid)],
+            'fixed'      => ['due' => $fixed_due,           'paid' => $fixed_paid,           'out' => max(0.0, $fixed_due - $fixed_paid)],
+            'english'    => ['due' => $english_due,         'paid' => $english_paid,         'out' => max(0.0, $english_due - $english_paid)],
+        ],
+    ];
+}
+
+/**
+ * Collect a student fee payment.
+ *
+ * Posts a receipt voucher (debit cash/bank, credit income account) and
+ * records a row in sfp_payments for payment-history tracking.
+ *
+ * @param  int    $student_id        students.id (PK)
+ * @param  int    $package_id        sfp_packages.id
+ * @param  string $fee_type          One of the sfp_payments.fee_type ENUM values
+ * @param  int|null $semester_fee_id sfp_semester_fees.id (for semester_tuition / fixed_fee / english_fee)
+ * @param  int|null $semester_number Semester number (mirrors semester_fee_id's semester_number)
+ * @param  float  $amount            Amount received
+ * @param  int    $cash_account_id   acc_accounts.id  (debit – cash or bank)
+ * @param  int    $income_account_id acc_accounts.id  (credit – income type)
+ * @param  string $date              Y-m-d
+ * @param  string $reference         Free-text reference
+ * @param  string $narration         Voucher narration
+ *
+ * @return int  New acc_vouchers.id
+ * @throws RuntimeException on over-payment or accounting failure
+ */
+function acc_collect_student_fee(
+    int    $student_id,
+    int    $package_id,
+    string $fee_type,
+    ?int   $semester_fee_id,
+    ?int   $semester_number,
+    float  $amount,
+    int    $cash_account_id,
+    int    $income_account_id,
+    string $date,
+    string $reference  = '',
+    string $narration  = ''
+): int {
+    if ($amount <= 0) {
+        throw new RuntimeException('Payment amount must be greater than zero.');
+    }
+
+    $db = db();
+
+    // Post the receipt voucher
+    $voucher_id = acc_post_voucher('receipt', $date, [
+        ['account_id' => $cash_account_id,   'debit' => $amount, 'credit' => 0,       'description' => $narration],
+        ['account_id' => $income_account_id, 'debit' => 0,       'credit' => $amount, 'description' => $narration],
+    ], $narration, $reference);
+
+    // Record the payment in sfp_payments
+    $user = auth_user();
+    $db->prepare(
+        'INSERT INTO sfp_payments
+            (student_id, package_id, semester_fee_id, fee_type, semester_number, amount, voucher_id, note, collected_by)
+         VALUES (?,?,?,?,?,?,?,?,?)'
+    )->execute([
+        $student_id,
+        $package_id,
+        $semester_fee_id,
+        $fee_type,
+        $semester_number,
+        round($amount, 2),
+        $voucher_id,
+        $narration ?: null,
+        $user['id'] ?? null,
+    ]);
+
+    return $voucher_id;
+}
+
+/**
+ * Fetch payment history for a student's package (most recent first).
+ */
+function acc_get_student_payments(int $package_id): array
+{
+    $stmt = db()->prepare(
+        'SELECT sp.*,
+                v.voucher_number, v.voucher_date, v.status AS voucher_status,
+                u.full_name AS collected_by_name
+         FROM sfp_payments sp
+         JOIN acc_vouchers v ON v.id = sp.voucher_id
+         LEFT JOIN users u   ON u.id = sp.collected_by
+         WHERE sp.package_id = ?
+         ORDER BY sp.collected_at DESC, sp.id DESC'
+    );
+    $stmt->execute([$package_id]);
+    return $stmt->fetchAll();
+}
+
+/**
+ * Look up an income account by its COA code.
+ * Returns the account id or 0 if not found.
+ */
+function acc_income_account_id_by_code(string $code): int
+{
+    $stmt = db()->prepare(
+        "SELECT id FROM acc_accounts WHERE code = ? AND type = 'income' AND is_active = 1 LIMIT 1"
+    );
+    $stmt->execute([$code]);
+    return (int)($stmt->fetchColumn() ?: 0);
+}
+
+// ── SMS & Email notification helpers ─────────────────────────────────────────
+
+/**
+ * Send a fee-payment SMS via FastSMS BD.
+ * Reads sms_enabled / sms_api_key / sms_sender_id / sms_template from acc_settings.
+ */
+function acc_send_fee_sms(string $mobile, array $vars): bool
+{
+    if (acc_setting('sms_enabled', '0') !== '1') {
+        return false;
+    }
+    $api_key   = acc_setting('sms_api_key', '');
+    $sender_id = acc_setting('sms_sender_id', '');
+    if ($api_key === '' || $sender_id === '' || $mobile === '') {
+        return false;
+    }
+
+    $template = acc_setting('sms_template', 'Dear {{student_name}}, your payment of {{currency}}{{amount}} has been received. Voucher: {{voucher_number}}. Thank you.');
+
+    // Replace {{placeholders}}
+    $search  = [];
+    $replace = [];
+    foreach ($vars as $key => $val) {
+        $search[]  = '{{' . $key . '}}';
+        $replace[] = (string)$val;
+    }
+    $message = str_replace($search, $replace, $template);
+
+    // Normalize to 880… format
+    $mobile = preg_replace('/\D/', '', $mobile);
+    if (str_starts_with($mobile, '0')) {
+        $mobile = '880' . substr($mobile, 1);
+    }
+
+    $url = 'https://smsapi.fastsmsbd.com/smsapiv3?' . http_build_query([
+        'apikey'  => $api_key,
+        'sender'  => $sender_id,
+        'msisdn'  => $mobile,
+        'smstext' => $message,
+    ]);
+
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+    $response = curl_exec($ch);
+    $errno    = curl_errno($ch);
+    curl_close($ch);
+
+    return ($errno === 0 && $response !== false);
+}
+
+/**
+ * Send a fee payment invoice email using the 'fee_payment_invoice' email template.
+ *
+ * @param array $student     Row from students table (full_name, email, student_id, dept_name etc.)
+ * @param array $payment_info Associative array with payment details for the template vars
+ */
+function acc_send_fee_invoice_email(array $student, array $payment_info): bool
+{
+    if (acc_setting('email_invoice', '1') !== '1') {
+        return false;
+    }
+    if (empty($student['email'])) {
+        return false;
+    }
+
+    require_once __DIR__ . '/../includes/mailer.php';
+
+    $currency = acc_currency();
+
+    $narration_row = '';
+    if (!empty($payment_info['narration'])) {
+        $narration_row = '<p style="margin:4px 0 0;font-size:13px;color:#6b7280;">Note: ' . htmlspecialchars($payment_info['narration'], ENT_QUOTES, 'UTF-8') . '</p>';
+    }
+
+    $vars = [
+        'student_name'     => $student['full_name'],
+        'student_sid'      => $student['student_id'],
+        'department'       => $student['dept_name'] ?? '',
+        'voucher_number'   => $payment_info['voucher_number'],
+        'payment_date'     => date('d M Y', strtotime($payment_info['payment_date'])),
+        'fee_type_label'   => $payment_info['fee_type_label'],
+        'semester_label'   => !empty($payment_info['semester_label']) ? ' – ' . $payment_info['semester_label'] : '',
+        'currency'         => $currency,
+        'amount'           => number_format((float)$payment_info['amount'], 2),
+        'outstanding_total'=> number_format((float)$payment_info['outstanding_total'], 2),
+        'reference'        => $payment_info['reference'] ?: '—',
+        'narration_row'    => $narration_row,
+    ];
+
+    return send_template_email(
+        'fee_payment_invoice',
+        $student['email'],
+        $student['full_name'],
+        $vars
+    );
+}
+
+/**
+ * Human-readable label for each sfp_payments fee_type.
+ */
+function acc_fee_type_label(string $fee_type): string
+{
+    return match ($fee_type) {
+        'admission'        => 'Admission Fee',
+        'registration'     => 'Registration Fee',
+        'semester_tuition' => 'Semester Tuition Fee',
+        'fixed_fee'        => 'Fixed Institutional Fee',
+        'english_fee'      => 'English Course Fee',
+        'other'            => 'Other Fee',
+        default            => ucfirst(str_replace('_', ' ', $fee_type)),
+    };
+}
+
+/**
+ * Compute total outstanding balance across ALL fee types for a student's package.
+ * Used by the invoice email so the student can see remaining balance.
+ */
+function acc_total_outstanding(int $package_id): float
+{
+    $db = db();
+
+    $pkg_stmt = $db->prepare('SELECT * FROM sfp_packages WHERE id = ?');
+    $pkg_stmt->execute([$package_id]);
+    $pkg = $pkg_stmt->fetch();
+    if (!$pkg) return 0.0;
+
+    $cf      = $db->query('SELECT reg_fee_per_semester FROM cf_settings WHERE id = 1')->fetch();
+    $reg_fee = $cf ? (float)$cf['reg_fee_per_semester'] : 0.0;
+
+    $sem_stmt = $db->prepare('SELECT COUNT(*), COALESCE(SUM(tuition_payable),0) FROM sfp_semester_fees WHERE package_id = ?');
+    $sem_stmt->execute([$package_id]);
+    $sem_row = $sem_stmt->fetch(PDO::FETCH_NUM);
+    $num_sems      = (int)($sem_row[0] ?? 0);
+    $tuition_total = (float)($sem_row[1] ?? 0);
+
+    $total_due = (float)$pkg['admission_fees']
+               + ($reg_fee * $num_sems)
+               + (float)$pkg['fixed_institutional_fees']
+               + (float)$pkg['english_course_fee']
+               + $tuition_total;
+
+    $paid_stmt = $db->prepare('SELECT COALESCE(SUM(amount),0) FROM sfp_payments WHERE package_id = ?');
+    $paid_stmt->execute([$package_id]);
+    $total_paid = (float)$paid_stmt->fetchColumn();
+
+    return max(0.0, $total_due - $total_paid);
+}
