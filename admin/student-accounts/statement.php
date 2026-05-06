@@ -59,7 +59,7 @@ if ($sf1) {
 // ── Fee calculations ──────────────────────────────────────────────────────────
 
 // Fees breakdown (totals for the whole programme)
-$admission_fee     = (float)$pkg['admission_fees'];        // one-time, paid at admission
+$admission_fee     = (float)($pkg['admission_fees'] ?? 0);        // one-time, paid at admission
 $reg_fee_total     = ($cf ? (float)$cf['reg_fee_per_semester'] : 0) * (float)$pkg['total_semesters'];
 $reg_fee_1st_sem   = $cf ? (float)$cf['reg_fee_per_semester'] : 0;
 $form_id_fee       = $cf ? (float)$cf['form_id_fee'] : 0;

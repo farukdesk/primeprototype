@@ -20,7 +20,7 @@ foreach ($cf_programs as $prog) {
         'months_per_semester'      => $months > 0 ? round($months / (float)max($prog['total_semesters'], 1), 2) : 0,
         'standard_tuition_full'    => (int)$prog['standard_tuition_full'],
         'tuition_per_semester'     => (float)$prog['tuition_per_semester'],
-        'admission_fees'           => (int)$prog['admission_fees'],
+        'admission_fees'           => (int)($prog['admission_fees'] ?? 0),
         'admission_fee_m'          => (int)($prog['admission_fee_m'] ?? 0),
         'fixed_institutional_fees' => (int)$prog['fixed_institutional_fees'],
         'english_course_fee'       => (int)$prog['english_course_fee'],

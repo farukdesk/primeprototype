@@ -33,7 +33,7 @@ $form_id_fee         = $cf_settings ? (float)$cf_settings['form_id_fee']        
 $total_reg_fees      = $reg_fee_per_sem * count($semester_fees);
 
 // Admission Day Payment = base admission fee only (reg fee and form/ID card fee are counted separately)
-$admission_fee       = (float)$pkg['admission_fees'];
+$admission_fee       = (float)($pkg['admission_fees'] ?? 0);
 
 // Totals
 $total_tuition_payable   = 0.0;
@@ -150,7 +150,7 @@ require_once __DIR__ . '/../includes/header.php';
                     'Months / Semester'          => number_format((float)$pkg['months_per_semester'], 2),
                     'Standard Tuition (Full)'    => sfp_money((float)$pkg['standard_tuition_full']),
                     'Base Tuition / Semester'    => sfp_money((float)$pkg['tuition_per_semester']),
-                    'Admission Fee (one-time)'        => sfp_money((float)$pkg['admission_fees']),
+                    'Admission Fee (one-time)'        => sfp_money((float)($pkg['admission_fees'] ?? 0)),
                     'Fixed Institutional Fees'   => sfp_money((float)$pkg['fixed_institutional_fees']),
                     'English Course Fee'         => sfp_money((float)$pkg['english_course_fee']),
                 ];
