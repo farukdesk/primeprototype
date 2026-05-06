@@ -33,7 +33,7 @@ $form_id_fee         = $cf_settings ? (float)$cf_settings['form_id_fee']        
 $total_reg_fees      = $reg_fee_per_sem * count($semester_fees);
 
 // Admission Day Payment = base admission fee only (reg fee and form/ID card fee are counted separately)
-$admission_fee       = (float)$pkg['admission_fees'];
+$admission_fee       = (float)($pkg['admission_fees'] ?? 0);
 
 // Totals
 $total_tuition_payable   = 0.0;
