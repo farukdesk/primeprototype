@@ -150,7 +150,7 @@ require_once __DIR__ . '/../includes/header.php';
                     'Months / Semester'          => number_format((float)$pkg['months_per_semester'], 2),
                     'Standard Tuition (Full)'    => sfp_money((float)$pkg['standard_tuition_full']),
                     'Base Tuition / Semester'    => sfp_money((float)$pkg['tuition_per_semester']),
-                    'Admission Fee (one-time)'        => sfp_money((float)$pkg['admission_fees']),
+                    'Admission Fee (one-time)'        => sfp_money((float)($pkg['admission_fees'] ?? 0)),
                     'Fixed Institutional Fees'   => sfp_money((float)$pkg['fixed_institutional_fees']),
                     'English Course Fee'         => sfp_money((float)$pkg['english_course_fee']),
                 ];
