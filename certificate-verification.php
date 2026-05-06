@@ -6,6 +6,7 @@
 
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/seo.php';
+require_once __DIR__ . '/includes/captcha-helpers.php';
 
 $page_title = 'Certificate Verification – Prime University';
 
@@ -54,6 +55,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $fd['co_email']        = trim($_POST['co_email']        ?? '');
         $fd['co_phone']        = trim($_POST['co_phone']        ?? '');
         $fd['student_id']      = trim($_POST['student_id']      ?? '');
+
+        // CAPTCHA verification
+        if (!captcha_verify_request()) {
+            $form_errors[] = 'CAPTCHA verification failed. Please verify that you are not a robot.';
+        }
 
         // Validate verifier type
         if (!in_array($fd['verifier_type'], ['student', 'company'], true)) {
@@ -681,6 +687,7 @@ function cert_photo_url(?string $photo): string
    }
    </style>
 <?php include __DIR__ . '/includes/meta-pixel.php'; ?>
+<?php captcha_render_script(); ?>
 </head>
 <body id="body" class="it-magic-cursor">
 
@@ -860,6 +867,9 @@ function cert_photo_url(?string $photo): string
                               <i class="fas fa-search"></i>
                               <span>Verify</span>
                            </button>
+                        </div>
+                        <div style="margin-top: 15px;">
+                           <?php captcha_render_widget(); ?>
                         </div>
                      </div>
 
