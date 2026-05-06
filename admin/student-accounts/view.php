@@ -437,9 +437,8 @@ $first_sem_label   = ($first_sem && $first_sem['semester_label']) ? $first_sem['
                     </tr>
                 </thead>
                 <tbody>
-                <?php for ($m = 1; $m <= $num_months; $m++): 
-                    $month_name = sfp_get_month_name($m, $start_month);
-                ?>
+                <?php for ($m = 1; $m <= $num_months; $m++): ?>
+                <?php $month_name = sfp_get_month_name($m, $start_month); ?>
                 <tr>
                     <td class="fw-semibold text-muted"><?= $m ?></td>
                     <td>Month <?= $m ?><?= $month_name ? ' (' . h($month_name) . ')' : '' ?></td>

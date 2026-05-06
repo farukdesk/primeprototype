@@ -9,13 +9,15 @@ This feature automates the generation of semester names and month names in the s
 When setting the label for the first semester in a student's account, the system can automatically generate semester names for all remaining semesters based on the student's semester type.
 
 **Semester Types:**
-- **Bi-semester**: 8 semesters total (Spring, Fall only)
+- **Bi-semester**: Spring and Fall only (typically 8 semesters for a 4-year program)
   - Sequence: Spring → Fall → Spring → Fall...
   - Example: Spring 2026, Fall 2026, Spring 2027, Fall 2027...
+  - Note: Total number of semesters depends on the program configuration
 
-- **Tri-semester**: 12 semesters total (Spring, Summer, Fall)
+- **Tri-semester**: Spring, Summer, Fall (typically 12 semesters for a 4-year program)
   - Sequence: Spring → Summer → Fall → Spring...
   - Example: Spring 2026, Summer 2026, Fall 2026, Spring 2027...
+  - Note: Total number of semesters depends on the program configuration
 
 **How to Use:**
 1. Navigate to a student account at `/admin/student-accounts/view.php`
