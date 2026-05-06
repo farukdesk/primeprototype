@@ -25,10 +25,24 @@ $sem_fixed_portion   = sfp_semester_fixed_portion($pkg);
 $sem_english_portion = sfp_semester_english_portion($pkg);
 
 // Registration fee per semester and form/ID-card fee (from cf_settings)
-$cf_settings         = db()->query('SELECT reg_fee_per_semester, form_id_fee, start_month FROM cf_settings WHERE id = 1')->fetch();
+$cf_settings         = db()->query('SELECT reg_fee_per_semester, form_id_fee, bi_semester_start_month, tri_semester_start_month, start_month FROM cf_settings WHERE id = 1')->fetch();
 $reg_fee_per_sem     = $cf_settings ? (float)$cf_settings['reg_fee_per_semester'] : 0.0;
 $form_id_fee         = $cf_settings ? (float)$cf_settings['form_id_fee']           : 0.0;
-$start_month         = $cf_settings ? (int)$cf_settings['start_month']             : 1;
+
+// Determine which start month to use based on total_semesters (bi-semester <= 8, tri-semester > 8)
+$is_bi_semester = (int)($pkg['total_semesters'] ?? 0) <= 8;
+if ($cf_settings) {
+    // Use new fields if available, otherwise fall back to legacy start_month
+    if (isset($cf_settings['bi_semester_start_month']) && isset($cf_settings['tri_semester_start_month'])) {
+        $start_month = $is_bi_semester 
+            ? (int)$cf_settings['bi_semester_start_month'] 
+            : (int)$cf_settings['tri_semester_start_month'];
+    } else {
+        $start_month = (int)($cf_settings['start_month'] ?? 1);
+    }
+} else {
+    $start_month = 1;
+}
 
 // Semester 1 reg fee is now shown in the registration column together with all other semesters.
 $total_reg_fees      = $reg_fee_per_sem * count($semester_fees);
