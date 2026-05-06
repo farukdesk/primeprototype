@@ -249,6 +249,11 @@ $active_tab = 'student';
 if (($_POST['mode'] ?? '') === 'general')    $active_tab = 'general';
 if (($_POST['mode'] ?? '') === 'admission')  $active_tab = 'admission';
 
+$sms_enabled = acc_setting('sms_enabled', '0') === '1';
+$adm_notification_note = $sms_enabled
+    ? 'SMS and email invoice sent to the applicant with their Student ID.'
+    : 'Email invoice sent to the applicant with their Student ID (SMS currently disabled).';
+
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
@@ -444,7 +449,7 @@ require_once __DIR__ . '/../includes/header.php';
                             <strong>Accounting entry:</strong>
                             <span class="text-success">Debit</span> the received-into account &amp;
                             <span class="text-danger">Credit</span> <span id="incomeAccountLabel">the income account</span> automatically.
-                            An email invoice<?= acc_setting('sms_enabled','0')==='1' ? ' and SMS' : '' ?> will be sent to the student.
+                            An email invoice<?= $sms_enabled ? ' and SMS' : '' ?> will be sent to the student.
                         </div>
 
                         <div class="d-flex gap-2 mt-3">
@@ -686,7 +691,7 @@ require_once __DIR__ . '/../includes/header.php';
                             <li><span class="text-success">Debit</span> the received-into account &amp; <span class="text-danger">Credit</span> <span id="admIncomeLabel">the Admission Fees income account</span>.</li>
                             <li>Application status set to <strong>Admission Complete</strong>.</li>
                             <li>Student ID generated &amp; student record created in the Student module.</li>
-                            <li>SMS<?= acc_setting('sms_enabled','0')==='1' ? ' and email' : ' (if enabled) and email' ?> invoice sent to the applicant with their Student ID.</li>
+                            <li><?= h($adm_notification_note) ?></li>
                         </ul>
                     </div>
 

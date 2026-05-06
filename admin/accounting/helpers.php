@@ -1176,9 +1176,9 @@ function acc_create_student_from_applicant(array $applicant, string $student_id)
 
     $db->prepare(
         'INSERT INTO students
-            (student_id, dept_id, program_id, admitted_semester,
-             full_name, email, phone, sex, dob,
-             status, created_by)
+             (student_id, dept_id, program_id, admitted_semester,
+              full_name, email, phone, sex, dob,
+              status, created_by)
          VALUES (?,?,?,?,?,?,?,?,?,?,?)'
     )->execute([
         $student_id,
