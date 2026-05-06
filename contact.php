@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/seo.php';
+require_once __DIR__ . '/includes/captcha-helpers.php';
 
 $page_title = 'Contact Us – Prime University';
 
@@ -21,6 +22,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $form_data['phone']   = trim($_POST['phone']   ?? '');
         $form_data['subject'] = trim($_POST['subject'] ?? '');
         $form_data['message'] = trim($_POST['message'] ?? '');
+
+        // CAPTCHA verification
+        if (!captcha_verify_request()) {
+            $form_errors[] = 'CAPTCHA verification failed. Please verify that you are not a robot.';
+        }
 
         if (!filter_var($form_data['email'], FILTER_VALIDATE_EMAIL)) $form_errors[] = 'A valid email address is required.';
         if ($form_data['subject'] === '')                           $form_errors[] = 'Subject is required.';
@@ -323,6 +329,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
    .wow-stagger > * { opacity: 0; }
    </style>
 <?php include __DIR__ . '/includes/meta-pixel.php'; ?>
+<?php captcha_render_script(); ?>
 </head>
 <body id="body" class="it-magic-cursor">
 
@@ -514,6 +521,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                      rows="5" placeholder="Write your message here…" required><?= fh($form_data['message']) ?></textarea>
                         </div>
                         <div class="col-12 mt-2">
+                           <?php captcha_render_widget(); ?>
                            <button type="submit" class="pu-submit-btn">
                               <i class="fas fa-paper-plane"></i> Send Message
                            </button>
