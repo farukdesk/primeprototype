@@ -32,12 +32,11 @@ $form_id_fee         = $cf_settings ? (float)$cf_settings['form_id_fee']        
 // Determine which start month to use based on total_semesters
 $is_bi_semester_program = ($pkg['total_semesters'] ?? 0) <= SFP_MAX_BI_SEMESTER_COUNT;
 if ($cf_settings) {
-    // Use new fields if available and valid, otherwise fall back to legacy start_month
-    $bi_month = $cf_settings['bi_semester_start_month'] ?? null;
-    $tri_month = $cf_settings['tri_semester_start_month'] ?? null;
-    
-    if ($bi_month !== null && $tri_month !== null) {
-        $start_month = $is_bi_semester_program ? (int)$bi_month : (int)$tri_month;
+    // Use the appropriate field based on program type, or fall back to legacy start_month
+    if ($is_bi_semester_program && $cf_settings['bi_semester_start_month'] !== null) {
+        $start_month = (int)$cf_settings['bi_semester_start_month'];
+    } elseif (!$is_bi_semester_program && $cf_settings['tri_semester_start_month'] !== null) {
+        $start_month = (int)$cf_settings['tri_semester_start_month'];
     } else {
         $start_month = (int)($cf_settings['start_month'] ?? CF_DEFAULT_START_MONTH);
     }
