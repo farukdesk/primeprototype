@@ -793,7 +793,7 @@ function acc_student_fee_summary(int $student_id): ?array
 
     // Paid amounts per fee_type and per semester_fee_id
     $paid_stmt = $db->prepare(
-        'SELECT fee_type, semester_fee_id, COALESCE(SUM(amount),0) AS paid
+        'SELECT fee_type, COALESCE(semester_fee_id, 0) AS sfid, COALESCE(SUM(amount),0) AS paid
          FROM sfp_payments
          WHERE package_id = ?
          GROUP BY fee_type, semester_fee_id'
@@ -801,11 +801,10 @@ function acc_student_fee_summary(int $student_id): ?array
     $paid_stmt->execute([$package_id]);
     $paid_rows = $paid_stmt->fetchAll();
 
-    // Build lookup: [fee_type][semester_fee_id|'total'] => paid_amount
+    // Build lookup: [fee_type][sfid] => paid_amount  (sfid=0 for NULL / package-level payments)
     $paid_map = [];
     foreach ($paid_rows as $row) {
-        $key = $row['semester_fee_id'] ?? 'total';
-        $paid_map[$row['fee_type']][$key] = (float)$row['paid'];
+        $paid_map[$row['fee_type']][(int)$row['sfid']] = (float)$row['paid'];
     }
 
     // Helper: total paid for a fee_type (all semester_fee_ids combined)
@@ -820,27 +819,32 @@ function acc_student_fee_summary(int $student_id): ?array
     $admission_due  = (float)$pkg['admission_fees'];
     $admission_paid = $total_paid_for('admission');
 
-    // Registration (per semester)
+    // Registration totals (per-semester distribution handled in the loop below)
     $reg_due  = $reg_fee * $num_semesters;
     $reg_paid = $total_paid_for('registration');
 
-    // Fixed institutional fee total (minus any discounts already baked into semester rows)
-    $fixed_due  = (float)$pkg['fixed_institutional_fees'];
-    $fixed_paid = $total_paid_for('fixed_fee');
+    // Per-semester tuition + monthly breakdown
+    $months     = (float)($pkg['total_months'] ?? 0);
+    $mps        = (float)($pkg['months_per_semester'] ?? 0);
+    $months_int = max(1, (int)round($mps)); // months per semester as integer
 
-    // English course fee total
-    $english_due  = (float)$pkg['english_course_fee'];
-    $english_paid = $total_paid_for('english_fee');
+    // Distribute total registration paid sequentially across semesters
+    $reg_credit_remaining = $reg_paid;
 
-    // Per-semester tuition
-    $months = (float)($pkg['total_months'] ?? 0);
-    $mps    = (float)($pkg['months_per_semester'] ?? 0);
+    // Legacy fixed/english payments (sfid=0, no semester link) → distribute evenly
+    $legacy_fixed_english = (float)($paid_map['fixed_fee'][0]   ?? 0)
+                          + (float)($paid_map['english_fee'][0] ?? 0);
+    $legacy_credit_per_sem = $num_semesters > 0
+        ? round($legacy_fixed_english / $num_semesters, 2) : 0.0;
 
     $semesters_enriched = [];
     foreach ($semester_fees as $sf) {
         $sf_id = (int)$sf['id'];
-        $tuition_due  = (float)$sf['tuition_payable'];
-        $tuition_paid = (float)($paid_map['semester_tuition'][$sf_id] ?? 0);
+
+        // Per-semester registration (sequential distribution)
+        $reg_paid_sem = min($reg_fee, max(0.0, $reg_credit_remaining));
+        $reg_credit_remaining -= $reg_paid_sem;
+        $reg_out_sem  = max(0.0, $reg_fee - $reg_paid_sem);
 
         // Per-semester portions of fixed and English fees
         $fixed_per_sem   = ($months > 0 && $mps > 0)
@@ -852,29 +856,69 @@ function acc_student_fee_summary(int $student_id): ?array
         $fixed_per_sem   = max(0.0, $fixed_per_sem   - (float)($sf['fixed_discount_amount']   ?? 0));
         $english_per_sem = max(0.0, $english_per_sem - (float)($sf['english_discount_amount'] ?? 0));
 
+        // Total semester "overall" amount = tuition + fixed portion + English portion
+        $tuition_payable_sem = (float)$sf['tuition_payable'];
+        $sem_total_due       = $tuition_payable_sem + $fixed_per_sem + $english_per_sem;
+
+        // Monthly fee (distribute evenly; last month absorbs any rounding remainder)
+        $monthly_fee = $months_int > 1
+            ? round($sem_total_due / $months_int, 2)
+            : $sem_total_due;
+
+        // Total paid for this semester: semester_tuition + any per-sem fixed/english + legacy share
+        $tuition_paid_sem = (float)($paid_map['semester_tuition'][$sf_id] ?? 0)
+                          + (float)($paid_map['fixed_fee'][$sf_id]        ?? 0)
+                          + (float)($paid_map['english_fee'][$sf_id]      ?? 0)
+                          + $legacy_credit_per_sem;
+
+        // Build per-month rows by sequential credit distribution
+        $monthly_rows = [];
+        $month_credit = $tuition_paid_sem;
+        for ($m = 1; $m <= $months_int; $m++) {
+            // Last month absorbs any rounding remainder so totals balance exactly
+            $m_due  = ($m < $months_int)
+                ? $monthly_fee
+                : max(0.0, $sem_total_due - $monthly_fee * ($months_int - 1));
+            $m_paid = min($m_due, max(0.0, $month_credit));
+            $month_credit -= $m_paid;
+            $monthly_rows[] = [
+                'month_number' => $m,
+                'due'          => round($m_due, 2),
+                'paid'         => round($m_paid, 2),
+                'out'          => round(max(0.0, $m_due - $m_paid), 2),
+            ];
+        }
+
         $semesters_enriched[] = array_merge($sf, [
-            'tuition_due'     => $tuition_due,
-            'tuition_paid'    => $tuition_paid,
-            'tuition_out'     => max(0.0, $tuition_due - $tuition_paid),
+            'tuition_due'     => round($sem_total_due, 2),
+            'tuition_paid'    => round($tuition_paid_sem, 2),
+            'tuition_out'     => round(max(0.0, $sem_total_due - $tuition_paid_sem), 2),
             'fixed_per_sem'   => $fixed_per_sem,
             'english_per_sem' => $english_per_sem,
             'reg_fee'         => $reg_fee,
+            'reg_paid'        => round($reg_paid_sem, 2),
+            'reg_out'         => round($reg_out_sem, 2),
+            'monthly_fee'     => $monthly_fee,
+            'monthly_rows'    => $monthly_rows,
+            'months_per_sem'  => $months_int,
         ]);
     }
 
     $total_tuition_due  = array_sum(array_column($semesters_enriched, 'tuition_due'));
-    $total_tuition_paid = $total_paid_for('semester_tuition');
+    $total_tuition_paid = $total_paid_for('semester_tuition')
+                        + $total_paid_for('fixed_fee')
+                        + $total_paid_for('english_fee');
 
     return [
-        'package'    => $pkg,
+        'package'     => $pkg,
         'cf_settings' => ['reg_fee_per_semester' => $reg_fee, 'form_id_fee' => $form_id_fee],
-        'semesters'  => $semesters_enriched,
-        'totals'     => [
-            'admission'  => ['due' => $admission_due,       'paid' => $admission_paid,       'out' => max(0.0, $admission_due - $admission_paid)],
-            'registration'=> ['due' => $reg_due,            'paid' => $reg_paid,             'out' => max(0.0, $reg_due - $reg_paid)],
-            'tuition'    => ['due' => $total_tuition_due,   'paid' => $total_tuition_paid,   'out' => max(0.0, $total_tuition_due - $total_tuition_paid)],
-            'fixed'      => ['due' => $fixed_due,           'paid' => $fixed_paid,           'out' => max(0.0, $fixed_due - $fixed_paid)],
-            'english'    => ['due' => $english_due,         'paid' => $english_paid,         'out' => max(0.0, $english_due - $english_paid)],
+        'semesters'   => $semesters_enriched,
+        'totals'      => [
+            'admission'    => ['due' => $admission_due,     'paid' => $admission_paid,     'out' => max(0.0, $admission_due - $admission_paid)],
+            'registration' => ['due' => $reg_due,           'paid' => $reg_paid,           'out' => max(0.0, $reg_due - $reg_paid)],
+            'tuition'      => ['due' => $total_tuition_due, 'paid' => $total_tuition_paid, 'out' => max(0.0, $total_tuition_due - $total_tuition_paid)],
+            'fixed'        => ['due' => 0, 'paid' => 0, 'out' => 0], // included in monthly fee
+            'english'      => ['due' => 0, 'paid' => 0, 'out' => 0], // included in monthly fee
         ],
     ];
 }
@@ -906,6 +950,7 @@ function acc_collect_student_fee(
     string $fee_type,
     ?int   $semester_fee_id,
     ?int   $semester_number,
+    ?int   $month_number,
     float  $amount,
     int    $cash_account_id,
     int    $income_account_id,
@@ -929,14 +974,15 @@ function acc_collect_student_fee(
     $user = auth_user();
     $db->prepare(
         'INSERT INTO sfp_payments
-            (student_id, package_id, semester_fee_id, fee_type, semester_number, amount, voucher_id, note, collected_by)
-         VALUES (?,?,?,?,?,?,?,?,?)'
+            (student_id, package_id, semester_fee_id, fee_type, semester_number, month_number, amount, voucher_id, note, collected_by)
+         VALUES (?,?,?,?,?,?,?,?,?,?)'
     )->execute([
         $student_id,
         $package_id,
         $semester_fee_id,
         $fee_type,
         $semester_number,
+        $month_number,
         round($amount, 2),
         $voucher_id,
         $narration ?: null,
