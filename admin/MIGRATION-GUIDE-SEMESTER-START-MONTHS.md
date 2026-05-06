@@ -29,9 +29,10 @@ admin/course-fees-start-month-v2.sql
 ```
 
 This migration will:
-- Rename `start_month` to `bi_semester_start_month`
+- Add a new `bi_semester_start_month` field
 - Add a new `tri_semester_start_month` field
-- Set default values to January (month 1) for both fields
+- Copy the existing `start_month` value to both new fields
+- Preserve the original `start_month` field for backward compatibility
 
 ### 2. Configure Start Months
 
@@ -57,9 +58,10 @@ This logic is implemented in:
 
 The migration maintains backward compatibility:
 
-1. The original `start_month` field is renamed to `bi_semester_start_month`
-2. If the new fields are not found (e.g., migration not run), the code falls back to the legacy `start_month` field
-3. Existing data is preserved during the migration
+1. The original `start_month` field is **preserved** (not removed)
+2. The new `bi_semester_start_month` and `tri_semester_start_month` fields are added alongside it
+3. If the new fields are not found (e.g., migration not run), the code falls back to the legacy `start_month` field
+4. Existing `start_month` values are automatically copied to both new fields during migration
 
 ## Files Modified
 
