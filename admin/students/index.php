@@ -85,16 +85,11 @@ $stmt->execute($params);
 $students = $stmt->fetchAll();
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
-if ($dept_scope !== null && !empty($dept_scope)) {
-    $phs_s       = implode(',', array_fill(0, count($dept_scope), '?'));
-    $stats_stmt  = db()->prepare("SELECT status, COUNT(*) AS cnt FROM students WHERE dept_id IN ($phs_s) GROUP BY status");
-    $stats_stmt->execute($dept_scope);
-    $stats_rows = $stats_stmt->fetchAll();
-} elseif ($dept_scope !== null && empty($dept_scope)) {
-    $stats_rows = [];
-} else {
-    $stats_rows = db()->query('SELECT status, COUNT(*) AS cnt FROM students GROUP BY status')->fetchAll();
-}
+// Use the same WHERE clause as the main query to make stats reflect current filters
+$stats_sql = 'SELECT status, COUNT(*) AS cnt FROM students s' . $where_sql . ' GROUP BY status';
+$stats_stmt = db()->prepare($stats_sql);
+$stats_stmt->execute($params);
+$stats_rows = $stats_stmt->fetchAll();
 $stats = array_column($stats_rows, 'cnt', 'status');
 $total_students = array_sum($stats);
 
