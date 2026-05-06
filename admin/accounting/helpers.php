@@ -1146,6 +1146,153 @@ function acc_collect_applicant_admission_fee(
     return $voucher_id;
 }
 
+// ── Admission complete helpers ────────────────────────────────────────────────
+
+/**
+ * Create a student record in the students table from an admissions_applications row.
+ * Skips creation if a student with the given student_id already exists.
+ * Returns the new (or existing) students.id PK.
+ */
+function acc_create_student_from_applicant(array $applicant, string $student_id): int
+{
+    $db = db();
+
+    // Check for existing student with this student_id
+    $existing = $db->prepare('SELECT id FROM students WHERE student_id = ? LIMIT 1');
+    $existing->execute([$student_id]);
+    $existing_id = (int)($existing->fetchColumn() ?: 0);
+    if ($existing_id) {
+        return $existing_id;
+    }
+
+    $user = auth_user();
+
+    // Map applicant semester to admitted_semester (take the first value if CSV)
+    $admitted_semester = '';
+    if (!empty($applicant['semester'])) {
+        $parts = explode(',', $applicant['semester']);
+        $admitted_semester = trim($parts[0]);
+    }
+
+    $db->prepare(
+        'INSERT INTO students
+            (student_id, dept_id, program_id, admitted_semester,
+             full_name, email, phone, sex, dob,
+             status, created_by)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?)'
+    )->execute([
+        $student_id,
+        $applicant['dept_id'] ?: null,
+        $applicant['program_id'] ?: null,
+        $admitted_semester ?: null,
+        $applicant['student_name'],
+        $applicant['present_email'] ?: null,
+        $applicant['present_contact'] ?: null,
+        $applicant['sex'] ?? null,
+        !empty($applicant['date_of_birth']) ? $applicant['date_of_birth'] : null,
+        'Active',
+        $user['id'] ?? null,
+    ]);
+
+    return (int)$db->lastInsertId();
+}
+
+/**
+ * Send an admission-complete SMS notification to the applicant.
+ * Uses the accounting SMS settings (same gateway as fee SMS).
+ */
+function acc_send_admission_complete_sms(array $applicant, string $student_id, string $voucher_number): bool
+{
+    if (acc_setting('sms_enabled', '0') !== '1') {
+        return false;
+    }
+
+    $mobile = $applicant['present_contact'] ?? '';
+    if ($mobile === '') {
+        return false;
+    }
+
+    $api_key   = acc_setting('sms_api_key', '');
+    $sender_id = acc_setting('sms_sender_id', '');
+    if ($api_key === '' || $sender_id === '') {
+        return false;
+    }
+
+    $currency = acc_currency();
+    $cf = db()->query('SELECT admission_fee_base, form_id_fee FROM cf_settings WHERE id = 1')->fetch();
+    $total = $cf ? ((float)$cf['admission_fee_base'] + (float)$cf['form_id_fee']) : 0.0;
+
+    $template = acc_setting(
+        'sms_admission_template',
+        'Dear {{student_name}}, your admission is complete. Student ID: {{student_id}}. Voucher: {{voucher_number}}. Amount paid: {{currency}}{{amount}}. Welcome to {{app_name}}!'
+    );
+
+    $vars = [
+        'student_name'   => $applicant['student_name'],
+        'student_id'     => $student_id,
+        'voucher_number' => $voucher_number,
+        'currency'       => $currency,
+        'amount'         => number_format($total, 2),
+        'app_name'       => APP_NAME,
+    ];
+
+    $search  = [];
+    $replace = [];
+    foreach ($vars as $key => $val) {
+        $search[]  = '{{' . $key . '}}';
+        $replace[] = (string)$val;
+    }
+    $message = str_replace($search, $replace, $template);
+
+    $mobile = preg_replace('/\D/', '', $mobile);
+    if (str_starts_with($mobile, '0')) {
+        $mobile = '880' . substr($mobile, 1);
+    }
+
+    $url = 'https://smsapi.fastsmsbd.com/smsapiv3?' . http_build_query([
+        'apikey'  => $api_key,
+        'sender'  => $sender_id,
+        'msisdn'  => $mobile,
+        'smstext' => $message,
+    ]);
+
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+    $response = curl_exec($ch);
+    $errno    = curl_errno($ch);
+    curl_close($ch);
+
+    return ($errno === 0 && $response !== false);
+}
+
+/**
+ * Send an admission-complete invoice email to the applicant.
+ * Reuses the fee_payment_invoice email template, building a pseudo-student array.
+ */
+function acc_send_admission_complete_email(array $applicant, string $student_id, array $payment_info): bool
+{
+    if (acc_setting('email_invoice', '1') !== '1') {
+        return false;
+    }
+
+    $email = $applicant['present_email'] ?? '';
+    if ($email === '') {
+        return false;
+    }
+
+    // Build a student-like array so we can reuse acc_send_fee_invoice_email()
+    $pseudo_student = [
+        'full_name'  => $applicant['student_name'],
+        'email'      => $email,
+        'student_id' => $student_id,
+        'dept_name'  => $applicant['dept_name'] ?? '',
+    ];
+
+    return acc_send_fee_invoice_email($pseudo_student, $payment_info);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**

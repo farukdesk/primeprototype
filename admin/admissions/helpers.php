@@ -287,6 +287,7 @@ function adm_status_badge(string $status): string
         'draft'               => ['bg-secondary', 'Draft'],
         'ready_for_admission' => ['bg-success',   'Ready for Admission'],
         'cancelled'           => ['bg-danger',     'Cancelled'],
+        'admission_complete'  => ['bg-primary',    'Admission Complete'],
     ];
     [$cls, $label] = $map[$status] ?? ['bg-secondary', ucfirst(str_replace('_', ' ', $status))];
     return '<span class="badge ' . $cls . '">' . h($label) . '</span>';

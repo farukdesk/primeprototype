@@ -35,7 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $student_name           = trim($_POST['student_name']           ?? '');
     $father_name            = trim($_POST['father_name']            ?? '');
     $mother_name            = trim($_POST['mother_name']            ?? '');
-    $status                 = in_array($_POST['status'] ?? '', ['ready_for_admission','draft','cancelled'], true)
+    $status                 = in_array($_POST['status'] ?? '', ['ready_for_admission','draft','cancelled','admission_complete'], true)
                               ? $_POST['status'] : 'draft';
     $dept_id                = (int)($_POST['dept_id']    ?? 0) ?: null;
     $program_id             = (int)($_POST['program_id'] ?? 0) ?: null;
@@ -238,6 +238,7 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                                     'ready_for_admission' => 'Ready for Admission',
                                     'draft'               => 'Draft',
                                     'cancelled'           => 'Cancelled',
+                                    'admission_complete'  => 'Admission Complete',
                                 ] as $sv => $sl): ?>
                                 <option value="<?= $sv ?>" <?= ($app['status'] === $sv) ? 'selected' : '' ?>><?= h($sl) ?></option>
                                 <?php endforeach; ?>

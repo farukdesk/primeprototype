@@ -122,7 +122,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'admissi
     $date              = trim($_POST['voucher_date']        ?? date('Y-m-d'));
     $reference         = trim($_POST['reference']          ?? '');
     $narration         = trim($_POST['narration']          ?? '');
-    $assign_sid        = ($_POST['assign_student_id'] ?? '0') === '1';
 
     if (!$app_id)            $errors[] = 'Invalid application.';
     if ($amount <= 0)        $errors[] = 'Amount must be greater than zero.';
@@ -156,24 +155,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'admissi
             $voucher_number = $voucher['voucher_number'] ?? '—';
             $currency       = acc_currency();
 
-            // Assign student ID if requested and not yet assigned
-            $assigned_sid = '';
-            if ($assign_sid && !empty($applicant['program_id']) && empty($applicant['office_student_id'])) {
-                $assigned_sid = adm_sid_generate((int)$applicant['program_id']);
-                if ($assigned_sid !== '') {
+            // Generate & assign student ID if not yet assigned and settings exist
+            $assigned_sid = $applicant['office_student_id'] ?? '';
+            if ($assigned_sid === '' && !empty($applicant['program_id'])) {
+                $new_sid = adm_sid_generate((int)$applicant['program_id']);
+                if ($new_sid !== '') {
                     db()->prepare(
                         'UPDATE admissions_applications SET office_student_id = ? WHERE id = ?'
-                    )->execute([$assigned_sid, $app_id]);
+                    )->execute([$new_sid, $app_id]);
+                    $assigned_sid = $new_sid;
                 }
             }
 
-            $success_msg = 'Admission fee of ' . $currency . ' ' . number_format($amount, 2) .
+            // Mark application as admission complete
+            db()->prepare(
+                "UPDATE admissions_applications SET status = 'admission_complete' WHERE id = ?"
+            )->execute([$app_id]);
+
+            // Create student record in students module (if not already exists)
+            if ($assigned_sid !== '') {
+                acc_create_student_from_applicant($applicant, $assigned_sid);
+            }
+
+            // Retrieve cf_settings for fee breakdown in notifications
+            $cf_row      = db()->query('SELECT admission_fee_base, form_id_fee FROM cf_settings WHERE id = 1')->fetch();
+            $adm_fee_lbl = ($cf_row
+                ? 'Admission Fee + ID Card & Form Fee (' . $currency . ' ' . number_format((float)$cf_row['admission_fee_base'], 2) .
+                  ' + ' . $currency . ' ' . number_format((float)$cf_row['form_id_fee'], 2) . ')'
+                : 'Admission Fee');
+
+            // Send email invoice
+            acc_send_admission_complete_email($applicant, $assigned_sid, [
+                'voucher_number'    => $voucher_number,
+                'payment_date'      => $date,
+                'fee_type_label'    => $adm_fee_lbl,
+                'semester_label'    => '',
+                'amount'            => $amount,
+                'outstanding_total' => 0,
+                'reference'         => $reference,
+                'narration'         => $narration,
+            ]);
+
+            // Send SMS
+            acc_send_admission_complete_sms($applicant, $assigned_sid, $voucher_number);
+
+            $success_msg = 'Admission &amp; ID/Form fee of ' . $currency . ' ' . number_format($amount, 2) .
                 ' collected for <strong>' . h($applicant['student_name']) . '</strong>. ' .
                 '<a href="' . APP_URL . '/accounting/voucher-view.php?id=' . $vid .
-                '" class="alert-link">View Voucher #' . h($voucher_number) . '</a>';
+                '" class="alert-link">View Voucher #' . h($voucher_number) . '</a>' .
+                ' — Status set to <strong>Admission Complete</strong>.';
 
             if ($assigned_sid !== '') {
-                $success_msg .= ' — Student ID assigned: <strong>' . h($assigned_sid) . '</strong>';
+                $success_msg .= ' Student ID: <strong>' . h($assigned_sid) . '</strong>.';
             }
 
             flash_set('success', $success_msg);
@@ -536,8 +569,10 @@ require_once __DIR__ . '/../includes/header.php';
         <div class="card-body p-4">
             <p class="text-muted small mb-3">
                 <i class="fas fa-info-circle me-1 text-primary"></i>
-                Use this tab to collect the <strong>admission fee</strong> for applicants who have
-                submitted an application form but have not yet been assigned a Student&nbsp;ID.
+                Use this tab to collect the <strong>admission fee, ID card &amp; form fees</strong> for applicants who have
+                submitted an application form. Upon payment the applicant's status will be set to
+                <strong>Admission Complete</strong>, a Student&nbsp;ID will be generated, and the student will be
+                created in the Student module.
             </p>
             <div class="row g-3 align-items-end">
                 <div class="col-md-5">
@@ -575,11 +610,20 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
         </div>
 
+        <!-- Fee breakdown info -->
+        <div class="alert alert-info border mb-3 small" id="admFeeBreakdown" style="display:none;">
+            <i class="fas fa-receipt me-1"></i>
+            <strong>Fee Breakdown:</strong>
+            Admission Fee: <strong id="admFeeAdmission">—</strong> +
+            ID Card &amp; Form Fee: <strong id="admFeeFormId">—</strong> =
+            Total: <strong id="admFeeTotal">—</strong>
+        </div>
+
         <!-- Payment collection form -->
         <div class="card border-0 shadow-sm border-start border-primary border-3">
             <div class="card-header py-3 px-4 bg-primary bg-opacity-10">
                 <span class="fw-semibold text-primary">
-                    <i class="fas fa-hand-holding-usd me-2"></i>Collect Admission Fee
+                    <i class="fas fa-hand-holding-usd me-2"></i>Collect Admission, ID Card &amp; Form Fees
                 </span>
             </div>
             <div class="card-body p-4">
@@ -597,12 +641,12 @@ require_once __DIR__ . '/../includes/header.php';
                         </div>
                         <div class="col-md-4">
                             <label class="form-label fw-semibold">
-                                Amount (<?= acc_currency() ?>) <span class="text-danger">*</span>
+                                Total Amount (<?= acc_currency() ?>) <span class="text-danger">*</span>
                             </label>
                             <input type="number" name="amount" id="admAmount" class="form-control"
                                    step="0.01" min="0.01" required>
                             <div class="form-text">
-                                Suggested: <strong id="admSuggestedFee">—</strong>
+                                Total (Admission + ID/Form): <strong id="admSuggestedFee">—</strong>
                                 &nbsp;|&nbsp; Already paid: <strong id="admAlreadyPaid">—</strong>
                             </div>
                         </div>
@@ -633,34 +677,22 @@ require_once __DIR__ . '/../includes/header.php';
                             <input type="text" name="narration" id="admNarration" class="form-control"
                                    placeholder="Additional note">
                         </div>
-
-                        <!-- Assign Student ID option (shown only when possible) -->
-                        <div class="col-12" id="admSidOption" style="display:none;">
-                            <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" role="switch"
-                                       name="assign_student_id" id="chkAssignSid" value="1" checked>
-                                <label class="form-check-label fw-semibold" for="chkAssignSid">
-                                    <i class="fas fa-id-card me-1 text-success"></i>
-                                    Generate &amp; assign a Student ID to this applicant after fee collection
-                                </label>
-                            </div>
-                            <div class="form-text text-muted ms-4 ps-2">
-                                A unique Student ID will be auto-generated from the program's ID settings
-                                and saved to the admission application record.
-                            </div>
-                        </div>
                     </div>
 
                     <div class="alert alert-light border mt-3 small">
                         <i class="fas fa-info-circle text-primary me-1"></i>
-                        <strong>Accounting entry:</strong>
-                        <span class="text-success">Debit</span> the received-into account &amp;
-                        <span class="text-danger">Credit</span> <span id="admIncomeLabel">the Admission Fees income account</span> automatically.
+                        <strong>What happens on submit:</strong>
+                        <ul class="mb-0 mt-1">
+                            <li><span class="text-success">Debit</span> the received-into account &amp; <span class="text-danger">Credit</span> <span id="admIncomeLabel">the Admission Fees income account</span>.</li>
+                            <li>Application status set to <strong>Admission Complete</strong>.</li>
+                            <li>Student ID generated &amp; student record created in the Student module.</li>
+                            <li>SMS<?= acc_setting('sms_enabled','0')==='1' ? ' and email' : ' (if enabled) and email' ?> invoice sent to the applicant with their Student ID.</li>
+                        </ul>
                     </div>
 
                     <div class="d-flex gap-2 mt-3">
                         <button type="submit" class="btn btn-success px-4">
-                            <i class="fas fa-check me-1"></i> Post &amp; Collect
+                            <i class="fas fa-check me-1"></i> Post &amp; Complete Admission
                         </button>
                         <button type="button" class="btn btn-outline-secondary" id="btnAdmCancel">Cancel</button>
                     </div>
@@ -974,7 +1006,8 @@ require_once __DIR__ . '/../includes/header.php';
                     'Form #: ' + ap.app_number +
                     (ap.program_name ? '   |   ' + ap.program_name : '') +
                     (ap.dept_name    ? '   |   ' + ap.dept_name    : '') +
-                    (ap.present_contact ? '   |   ' + ap.present_contact : '');
+                    (ap.present_contact ? '   |   ' + ap.present_contact : '') +
+                    (ap.present_email   ? '   |   ' + ap.present_email   : '');
 
                 // Status badge
                 document.getElementById('admStatusBadge').textContent =
@@ -987,17 +1020,28 @@ require_once __DIR__ . '/../includes/header.php';
                     sidBadge.textContent = 'Student ID: ' + ap.office_student_id;
                 } else {
                     sidBadge.className = 'badge bg-secondary-subtle text-secondary border border-secondary-subtle px-3 py-2';
-                    sidBadge.textContent = 'No Student ID yet';
+                    sidBadge.textContent = 'Student ID will be generated';
                 }
 
                 // Hidden fields
                 document.getElementById('hAdmAppId').value  = ap.id;
                 document.getElementById('hAdmIncomeId').value = data.income_account_id;
 
+                // Fee breakdown display
+                const admFeeBreakdown = document.getElementById('admFeeBreakdown');
+                if (data.form_id_fee > 0) {
+                    document.getElementById('admFeeAdmission').textContent = fmtAdm(data.admission_fee_base);
+                    document.getElementById('admFeeFormId').textContent    = fmtAdm(data.form_id_fee);
+                    document.getElementById('admFeeTotal').textContent     = fmtAdm(data.suggested_fee);
+                    admFeeBreakdown.style.display = '';
+                } else {
+                    admFeeBreakdown.style.display = 'none';
+                }
+
                 // Fee amounts
                 document.getElementById('admSuggestedFee').textContent  = fmtAdm(data.suggested_fee);
                 document.getElementById('admAlreadyPaid').textContent   = fmtAdm(data.already_paid);
-                document.getElementById('admAmount').value = (data.suggested_fee - data.already_paid).toFixed(2);
+                document.getElementById('admAmount').value = Math.max(0, data.suggested_fee - data.already_paid).toFixed(2);
 
                 // Income account label
                 const incLbl = incomeAccLabel[data.income_account_id] || 'Admission Fees income account';
@@ -1005,11 +1049,7 @@ require_once __DIR__ . '/../includes/header.php';
 
                 // Auto-fill narration
                 document.getElementById('admNarration').value =
-                    'Admission Fee – ' + ap.student_name + ' (Form #' + ap.app_number + ')';
-
-                // Show/hide "Assign Student ID" option
-                const sidOption = document.getElementById('admSidOption');
-                sidOption.style.display = data.can_assign_sid ? '' : 'none';
+                    'Admission, ID Card & Form Fee – ' + ap.student_name + ' (Form #' + ap.app_number + ')';
 
                 admDetailWrap.style.display = '';
                 admDetailWrap.scrollIntoView({behavior: 'smooth', block: 'start'});
