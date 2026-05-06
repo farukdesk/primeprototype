@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/mailer.php';
+require_once __DIR__ . '/../includes/captcha-helpers.php';
 
 // Already logged in?
 if (!empty($_SESSION['user_id'])) {
@@ -17,7 +18,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $email = trim($_POST['email'] ?? '');
 
-    if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    // CAPTCHA verification
+    if (!captcha_verify_request()) {
+        $error = 'CAPTCHA verification failed. Please verify that you are not a robot.';
+    } elseif ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $error = 'Please enter a valid email address.';
     } else {
         // Look up the user (always show generic success to prevent enumeration)
@@ -126,6 +130,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         .back-link a { color: #4f8ef7; text-decoration: none; }
         .back-link a:hover { text-decoration: underline; }
     </style>
+<?php captcha_render_script(); ?>
 </head>
 <body>
 <div class="login-card">
@@ -169,6 +174,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                        placeholder="Enter your email address"
                        value="<?= h($_POST['email'] ?? '') ?>" required autocomplete="email">
             </div>
+        </div>
+
+        <div class="mb-3">
+            <?php captcha_render_widget(); ?>
         </div>
 
         <button type="submit" class="btn btn-submit">
