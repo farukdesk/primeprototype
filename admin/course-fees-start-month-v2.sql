@@ -24,4 +24,3 @@ UPDATE `cf_settings`
 SET `bi_semester_start_month` = COALESCE(`bi_semester_start_month`, `start_month`, 1),
     `tri_semester_start_month` = COALESCE(`tri_semester_start_month`, `start_month`, 1)
 WHERE `id` = 1;
-
