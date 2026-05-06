@@ -372,7 +372,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                         
                         // Validate database connection
                         if (!$pdo) {
-                            $parse_error = 'Database connection failed. Please try again.';
+                            $parse_error = 'Database connection failed. Please check your database configuration or contact support.';
                         } else {
                             // First pass: collect all student IDs from CSV for batch duplicate checking
                             $csv_student_ids = [];
@@ -432,7 +432,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                                 if ($sid !== '') {
                                     // Check against database
                                     if (isset($existing_ids[$sid])) {
-                                        $validated['errors'][] = 'Student ID "' . htmlspecialchars($sid, ENT_QUOTES, 'UTF-8') . '" already exists in database (duplicate).';
+                                        $validated['errors'][] = 'Student ID "' . htmlspecialchars($sid, ENT_QUOTES, 'UTF-8') . '" already exists in database.';
                                     }
                                     // Check within CSV file
                                     if (isset($seen_student_ids[$sid])) {
