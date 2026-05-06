@@ -999,7 +999,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <td class="small">${semText}</td>
                     <td class="small">${monText}</td>
                     <td class="text-end small fw-semibold text-success">${fmt(p.amount)}</td>
-                    <td class="small"><a href="${APP_URL}/accounting/voucher-view.php?id=${p.voucher_id}" target="_blank" class="text-decoration-none">${p.voucher_number ?? '—'}</a></td>
+                    <td class="small"><a href="${APP_URL}/accounting/voucher-view.php?id=${p.voucher_id}" target="_blank" rel="noopener noreferrer" class="text-decoration-none">${p.voucher_number ?? '—'}</a></td>
                     <td class="small">${p.collected_by_name}</td>
                     <td>${statusBadge}</td>`;
                 tbody.appendChild(tr);

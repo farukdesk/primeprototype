@@ -801,7 +801,8 @@ function acc_student_fee_summary(int $student_id): ?array
     $paid_stmt->execute([$package_id]);
     $paid_rows = $paid_stmt->fetchAll();
 
-    // Build lookup: [fee_type][sfid] => paid_amount  (sfid=0 for NULL / package-level payments)
+    // Build lookup: [fee_type][coalesced_semester_fee_id] => paid_amount
+    // Key 0 represents payments with NULL semester_fee_id (package-level / legacy payments)
     $paid_map = [];
     foreach ($paid_rows as $row) {
         $paid_map[$row['fee_type']][(int)$row['sfid']] = (float)$row['paid'];
