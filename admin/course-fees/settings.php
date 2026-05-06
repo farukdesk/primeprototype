@@ -26,8 +26,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $form_id_fee     = max(0, (int)($_POST['form_id_fee']          ?? 1000));
         $id_card_fee     = max(0, (int)($_POST['id_card_fee']          ?? 500));
         $admission_form_fee = max(0, (int)($_POST['admission_form_fee'] ?? 500));
-        $bi_semester_start_month  = max(1, min(12, (int)($_POST['bi_semester_start_month']  ?? 1)));
-        $tri_semester_start_month = max(1, min(12, (int)($_POST['tri_semester_start_month'] ?? 1)));
+        $bi_semester_start_month  = cf_validate_month((int)($_POST['bi_semester_start_month']  ?? 1));
+        $tri_semester_start_month = cf_validate_month((int)($_POST['tri_semester_start_month'] ?? 1));
 
         if ($page_title_val === '') $errors[] = 'Page title is required.';
         if ($session_label  === '') $errors[] = 'Session label is required.';

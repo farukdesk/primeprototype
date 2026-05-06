@@ -78,3 +78,8 @@ function cf_get_months(): array {
         9 => 'September', 10 => 'October', 11 => 'November', 12 => 'December'
     ];
 }
+
+// ── Month validation ──────────────────────────────────────────────────────────
+function cf_validate_month(int $month): int {
+    return max(1, min(12, $month));
+}

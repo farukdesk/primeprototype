@@ -30,7 +30,7 @@ $reg_fee_per_sem     = $cf_settings ? (float)$cf_settings['reg_fee_per_semester'
 $form_id_fee         = $cf_settings ? (float)$cf_settings['form_id_fee']           : 0.0;
 
 // Determine which start month to use based on total_semesters
-$is_bi_semester_program = (int)($pkg['total_semesters'] ?? 0) <= SFP_MAX_BI_SEMESTER_COUNT;
+$is_bi_semester_program = ($pkg['total_semesters'] ?? 0) <= SFP_MAX_BI_SEMESTER_COUNT;
 if ($cf_settings) {
     // Use new fields if available and valid, otherwise fall back to legacy start_month
     if ($cf_settings['bi_semester_start_month'] !== null && $cf_settings['tri_semester_start_month'] !== null) {
