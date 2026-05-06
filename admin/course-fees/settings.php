@@ -123,18 +123,11 @@ require_once __DIR__ . '/../includes/header.php';
                         <textarea name="disclaimer" class="form-control" rows="4"><?= h($settings['disclaimer'] ?? '') ?></textarea>
                         <div class="form-text">Shown at the bottom of the public calculator page.</div>
                     </div>
-                    <?php
-                    // Month options for dropdowns
-                    $months = [
-                        1 => 'January', 2 => 'February', 3 => 'March', 4 => 'April',
-                        5 => 'May', 6 => 'June', 7 => 'July', 8 => 'August',
-                        9 => 'September', 10 => 'October', 11 => 'November', 12 => 'December'
-                    ];
-                    ?>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Bi-Semester Start Month</label>
                         <select name="bi_semester_start_month" class="form-select">
                             <?php
+                            $months = cf_get_months();
                             $bi_start_month = (int)($settings['bi_semester_start_month'] ?? $settings['start_month'] ?? 1);
                             foreach ($months as $num => $name):
                             ?>
