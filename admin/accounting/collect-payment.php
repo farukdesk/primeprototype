@@ -102,7 +102,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
 
             flash_set('success',
                 'Payment of ' . $currency . ' ' . number_format($amount, 2) . ' collected successfully. ' .
-                '<a href="' . APP_URL . '/accounting/voucher-view.php?id=' . $vid . '" class="alert-link">View Voucher #' . h($voucher_number) . '</a>'
+                '<a href="' . APP_URL . '/accounting/voucher-view.php?id=' . $vid . '" class="alert-link">View Voucher #' . h($voucher_number) . '</a>' .
+                ' &nbsp;|&nbsp; ' .
+                '<a href="' . APP_URL . '/accounting/fee-invoice.php?voucher_id=' . $vid . '" target="_blank" class="alert-link fw-semibold"><i class="fas fa-print me-1"></i>Print Invoice</a>'
             );
             redirect(APP_URL . '/accounting/collect-payment.php');
         } catch (RuntimeException $e) {
@@ -209,6 +211,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'admissi
             if ($assigned_sid !== '') {
                 $success_msg .= ' Student ID: <strong>' . h($assigned_sid) . '</strong>.';
             }
+
+            $success_msg .= ' &nbsp;|&nbsp; <a href="' . APP_URL . '/accounting/fee-invoice.php?voucher_id=' . $vid .
+                '" target="_blank" class="alert-link fw-semibold"><i class="fas fa-print me-1"></i>Print Invoice</a>';
 
             flash_set('success', $success_msg);
             redirect(APP_URL . '/accounting/collect-payment.php');
