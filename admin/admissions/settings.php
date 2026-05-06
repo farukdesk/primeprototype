@@ -20,21 +20,38 @@ if ($action === 'save_settings' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $next_fs    = trim($_POST['next_fs_number']   ?? '');
     $form_price = trim($_POST['form_price']        ?? '');
 
+    // Read current values before saving (for diff-logging)
+    $old_next_num   = adm_get_setting('next_form_number', '1');
+    $old_next_fs    = adm_get_setting('next_fs_number',   '1');
+    $old_form_price = adm_get_setting('form_price',        '500');
+
     $ok = true;
     if ($next_num !== '' && ctype_digit($next_num) && (int)$next_num >= 1) {
-        adm_save_setting('next_form_number', (string)(int)$next_num);
+        $new_val = (string)(int)$next_num;
+        adm_save_setting('next_form_number', $new_val);
+        if ($new_val !== $old_next_num) {
+            log_change('admissions-settings', 'UPDATE', null, 'General Settings', 'next_form_number', $old_next_num, $new_val, 'Next application form number changed');
+        }
     } elseif ($next_num !== '') {
         flash_set('error', 'Application form number must be a positive integer.');
         $ok = false;
     }
     if ($ok && $next_fs !== '' && ctype_digit($next_fs) && (int)$next_fs >= 1) {
-        adm_save_setting('next_fs_number', (string)(int)$next_fs);
+        $new_val = (string)(int)$next_fs;
+        adm_save_setting('next_fs_number', $new_val);
+        if ($new_val !== $old_next_fs) {
+            log_change('admissions-settings', 'UPDATE', null, 'General Settings', 'next_fs_number', $old_next_fs, $new_val, 'Next form sale number changed');
+        }
     } elseif ($ok && $next_fs !== '') {
         flash_set('error', 'Form sale number must be a positive integer.');
         $ok = false;
     }
     if ($ok && $form_price !== '' && is_numeric($form_price) && (float)$form_price >= 0) {
-        adm_save_setting('form_price', (string)(float)$form_price);
+        $new_val = (string)(float)$form_price;
+        adm_save_setting('form_price', $new_val);
+        if ($new_val !== $old_form_price) {
+            log_change('admissions-settings', 'UPDATE', null, 'General Settings', 'form_price', $old_form_price, $new_val, 'Form sale price changed');
+        }
     } elseif ($ok && $form_price !== '') {
         flash_set('error', 'Form price must be a valid non-negative number.');
         $ok = false;
@@ -106,11 +123,23 @@ if ($action === 'save_fs_mapping' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    $inv_fields = adm_fs_invoice_fields();
+    $field_label = $inv_fields[$field_key] ?? $field_key;
+
     db()->prepare(
         'INSERT INTO adm_fs_field_mappings (field_key, x_percent, y_percent, font_size)
          VALUES (?, ?, ?, ?)
          ON DUPLICATE KEY UPDATE x_percent=VALUES(x_percent), y_percent=VALUES(y_percent), font_size=VALUES(font_size)'
     )->execute([$field_key, $x_percent, $y_percent, $font_size]);
+
+    log_change(
+        'admissions-settings', 'UPDATE', null,
+        'Invoice Field Mapping',
+        $field_key,
+        null,
+        'x=' . $x_percent . '% y=' . $y_percent . '% font=' . $font_size . 'pt',
+        'Invoice field mapping set for "' . $field_label . '"'
+    );
 
     echo json_encode(['ok' => true]);
     exit;
@@ -123,8 +152,18 @@ if ($action === 'remove_fs_mapping' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         echo json_encode(['ok' => false, 'error' => 'CSRF mismatch']);
         exit;
     }
-    $field_key = trim($_POST['field_key'] ?? '');
+    $field_key  = trim($_POST['field_key'] ?? '');
+    $inv_fields = adm_fs_invoice_fields();
+    $field_label = $inv_fields[$field_key] ?? $field_key;
     db()->prepare('DELETE FROM adm_fs_field_mappings WHERE field_key = ?')->execute([$field_key]);
+    log_change(
+        'admissions-settings', 'UPDATE', null,
+        'Invoice Field Mapping',
+        $field_key,
+        'mapped',
+        null,
+        'Invoice field mapping removed for "' . $field_label . '"'
+    );
     echo json_encode(['ok' => true]);
     exit;
 }
@@ -152,6 +191,15 @@ if ($action === 'save_mapping' && $_SERVER['REQUEST_METHOD'] === 'POST') {
          ON DUPLICATE KEY UPDATE x_percent=VALUES(x_percent), y_percent=VALUES(y_percent), font_size=VALUES(font_size)'
     )->execute([$field_key, $page_number, $x_percent, $y_percent, $font_size]);
 
+    log_change(
+        'admissions-settings', 'UPDATE', null,
+        'Form Template Mapping (Page ' . $page_number . ')',
+        $field_key,
+        null,
+        'x=' . $x_percent . '% y=' . $y_percent . '% font=' . $font_size . 'pt',
+        'Field mapping set for "' . $field_key . '" on page ' . $page_number
+    );
+
     echo json_encode(['ok' => true]);
     exit;
 }
@@ -167,6 +215,14 @@ if ($action === 'remove_mapping' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     db()->prepare(
         'DELETE FROM admissions_field_mappings WHERE field_key = ? AND page_number = ?'
     )->execute([$field_key, $page_number]);
+    log_change(
+        'admissions-settings', 'UPDATE', null,
+        'Form Template Mapping (Page ' . $page_number . ')',
+        $field_key,
+        'mapped',
+        null,
+        'Field mapping removed for "' . $field_key . '" on page ' . $page_number
+    );
     echo json_encode(['ok' => true]);
     exit;
 }
@@ -250,19 +306,42 @@ if ($action === 'save_student_id_settings' && $_SERVER['REQUEST_METHOD'] === 'PO
         $pid    = (int)$pid;
         $serial = max(1, (int)($next_serials[$i] ?? 1));
         if ($pid < 1) continue;
-        $stmt->execute([
-            $pid,
-            substr(trim($univ_codes[$i] ?? '028'), 0, 10),
-            substr(trim($year_codes[$i]  ?? '26'),  0, 4),
-            substr(trim($sem_codes[$i]   ?? '2'),   0, 4),
-            substr(trim($fac_codes[$i]   ?? ''),    0, 4),
-            substr(trim($subj_codes[$i]  ?? ''),    0, 4),
-            substr(trim($type_progs[$i]  ?? '1'),   0, 4),
-            $serial,
-        ]);
+
+        $new_univ = substr(trim($univ_codes[$i] ?? '028'), 0, 10);
+        $new_year = substr(trim($year_codes[$i]  ?? '26'),  0, 4);
+        $new_sem  = substr(trim($sem_codes[$i]   ?? '2'),   0, 4);
+        $new_fac  = substr(trim($fac_codes[$i]   ?? ''),    0, 4);
+        $new_subj = substr(trim($subj_codes[$i]  ?? ''),    0, 4);
+        $new_type = substr(trim($type_progs[$i]  ?? '1'),   0, 4);
+
+        $old = adm_sid_get($pid);
+
+        $stmt->execute([$pid, $new_univ, $new_year, $new_sem, $new_fac, $new_subj, $new_type, $serial]);
+
+        // Log any field that actually changed for this program
+        $field_map = [
+            'university_code'  => [$old['university_code']  ?? null, $new_univ],
+            'year_code'        => [$old['year_code']        ?? null, $new_year],
+            'semester_code'    => [$old['semester_code']    ?? null, $new_sem],
+            'faculty_code'     => [$old['faculty_code']     ?? null, $new_fac],
+            'subject_code'     => [$old['subject_code']     ?? null, $new_subj],
+            'type_of_program'  => [$old['type_of_program']  ?? null, $new_type],
+            'next_serial'      => [(string)($old['next_serial'] ?? null), (string)$serial],
+        ];
+        foreach ($field_map as $fname => [$old_v, $new_v]) {
+            if ((string)$old_v !== (string)$new_v) {
+                log_change(
+                    'admissions-settings', 'UPDATE', $pid,
+                    'Student ID Settings (Program #' . $pid . ')',
+                    $fname,
+                    $old_v,
+                    $new_v,
+                    'Student ID setting "' . $fname . '" updated for program #' . $pid
+                );
+            }
+        }
     }
 
-    log_change('admissions', 'UPDATE', null, 'Student ID Settings');
     flash_set('success', 'Student ID settings saved.');
     redirect(APP_URL . '/admissions/settings.php?tab=student_id');
 }
@@ -271,22 +350,71 @@ if ($action === 'save_student_id_settings' && $_SERVER['REQUEST_METHOD'] === 'PO
 if ($action === 'save_notification_settings' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
-    adm_save_setting('sms_enabled',            isset($_POST['sms_enabled']) ? '1' : '0');
-    adm_save_setting('sms_api_key',            trim($_POST['sms_api_key']   ?? ''));
-    adm_save_setting('sms_sender_id',          trim($_POST['sms_sender_id'] ?? ''));
-    adm_save_setting('sms_template_form_sale', trim($_POST['sms_template_form_sale'] ?? ''));
-    adm_save_setting('email_enabled',          isset($_POST['email_enabled']) ? '1' : '0');
+    // Read current values before saving
+    $notif_fields = [
+        'sms_enabled'            => adm_get_setting('sms_enabled',            '0'),
+        'sms_api_key'            => adm_get_setting('sms_api_key',            ''),
+        'sms_sender_id'          => adm_get_setting('sms_sender_id',          ''),
+        'sms_template_form_sale' => adm_get_setting('sms_template_form_sale', ''),
+        'email_enabled'          => adm_get_setting('email_enabled',           '0'),
+    ];
+
+    $new_sms_enabled            = isset($_POST['sms_enabled']) ? '1' : '0';
+    $new_sms_api_key            = trim($_POST['sms_api_key']   ?? '');
+    $new_sms_sender_id          = trim($_POST['sms_sender_id'] ?? '');
+    $new_sms_template_form_sale = trim($_POST['sms_template_form_sale'] ?? '');
+    $new_email_enabled          = isset($_POST['email_enabled']) ? '1' : '0';
+
+    adm_save_setting('sms_enabled',            $new_sms_enabled);
+    adm_save_setting('sms_api_key',            $new_sms_api_key);
+    adm_save_setting('sms_sender_id',          $new_sms_sender_id);
+    adm_save_setting('sms_template_form_sale', $new_sms_template_form_sale);
+    adm_save_setting('email_enabled',          $new_email_enabled);
+
+    $new_notif_values = [
+        'sms_enabled'            => $new_sms_enabled,
+        'sms_api_key'            => $new_sms_api_key,
+        'sms_sender_id'          => $new_sms_sender_id,
+        'sms_template_form_sale' => $new_sms_template_form_sale,
+        'email_enabled'          => $new_email_enabled,
+    ];
+
+    foreach ($new_notif_values as $key => $new_val) {
+        if ($new_val !== $notif_fields[$key]) {
+            // Mask API keys in log output
+            $log_old = ($key === 'sms_api_key' && $notif_fields[$key] !== '') ? '(hidden)' : $notif_fields[$key];
+            $log_new = ($key === 'sms_api_key' && $new_val !== '')            ? '(hidden)' : $new_val;
+            log_change(
+                'admissions-settings', 'UPDATE', null,
+                'Notification Settings',
+                $key,
+                $log_old,
+                $log_new,
+                'Notification setting "' . $key . '" changed'
+            );
+        }
+    }
 
     // Persist email template body & subject
     $email_subject = trim($_POST['email_subject'] ?? '');
     $email_body    = trim($_POST['email_body']    ?? '');
     if ($email_subject !== '' && $email_body !== '') {
+        $old_tpl_stmt = db()->prepare('SELECT subject, body_html FROM email_templates WHERE action = ?');
+        $old_tpl_stmt->execute(['form_sale_notification']);
+        $old_tpl = $old_tpl_stmt->fetch();
+
         db()->prepare(
             'UPDATE email_templates SET subject = ?, body_html = ? WHERE action = ?'
         )->execute([$email_subject, $email_body, 'form_sale_notification']);
+
+        if ($old_tpl && $email_subject !== $old_tpl['subject']) {
+            log_change('admissions-settings', 'UPDATE', null, 'Notification Settings', 'email_subject', $old_tpl['subject'], $email_subject, 'Form sale email subject changed');
+        }
+        if ($old_tpl && $email_body !== $old_tpl['body_html']) {
+            log_change('admissions-settings', 'UPDATE', null, 'Notification Settings', 'email_body', null, null, 'Form sale email body template updated');
+        }
     }
 
-    log_change('admissions', 'UPDATE', null, 'Notification Settings');
     flash_set('success', 'Notification settings saved.');
     redirect(APP_URL . '/admissions/settings.php?tab=notifications');
 }

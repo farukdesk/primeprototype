@@ -17,15 +17,25 @@ $package_id     = (int)($_POST['package_id']    ?? 0);
 $semester_label = trim($_POST['semester_label'] ?? '');
 
 if ($sf_id > 0 && $package_id > 0) {
-    $sf_stmt = db()->prepare('SELECT id, semester_number FROM sfp_semester_fees WHERE id = ? AND package_id = ?');
+    $sf_stmt = db()->prepare('SELECT id, semester_number, semester_label FROM sfp_semester_fees WHERE id = ? AND package_id = ?');
     $sf_stmt->execute([$sf_id, $package_id]);
     $sf = $sf_stmt->fetch();
 
     if ($sf) {
         $user = auth_user();
+        $old_label = $sf['semester_label'] ?? null;
         db()->prepare(
             'UPDATE sfp_semester_fees SET semester_label = ?, updated_by = ?, updated_at = NOW() WHERE id = ?'
         )->execute([$semester_label ?: null, $user['id'], $sf_id]);
+
+        log_change(
+            'student-accounts', 'UPDATE', $package_id,
+            'Semester #' . $sf['semester_number'],
+            'semester_label',
+            $old_label,
+            $semester_label ?: null,
+            'Semester #' . $sf['semester_number'] . ' label ' . ($semester_label ? 'set to "' . $semester_label . '"' : 'cleared')
+        );
 
         flash_set('success', 'Label updated for Semester #' . $sf['semester_number'] . '.');
     } else {
