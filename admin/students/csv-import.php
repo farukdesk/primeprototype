@@ -370,6 +370,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                         $preview_rows = [];
                         $row_num = 1;
                         $pdo = db(); // Get database connection for duplicate checking
+                        $seen_student_ids = []; // Track student IDs within this CSV file
                         foreach ($all_rows as $raw) {
                             $row_num++;
                             // Skip completely blank rows
@@ -388,6 +389,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                                 $district_by_name, $thana_by_did_name,
                                 $pdo
                             );
+                            
+                            // Check for duplicates within the CSV file itself
+                            $sid = trim($assoc['id_no'] ?? '');
+                            if ($sid !== '' && isset($seen_student_ids[$sid])) {
+                                $validated['errors'][] = 'Student ID "' . htmlspecialchars($sid, ENT_QUOTES, 'UTF-8') . '" appears multiple times in this CSV file (duplicate in row ' . $seen_student_ids[$sid] . ').';
+                            } elseif ($sid !== '') {
+                                $seen_student_ids[$sid] = $row_num;
+                            }
+                            
                             $validated['row_num'] = $row_num;
                             $preview_rows[] = $validated;
                         }
