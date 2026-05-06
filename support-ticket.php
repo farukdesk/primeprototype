@@ -59,6 +59,53 @@ function pub_notify_emails(): array
     }
 }
 
+function pub_get_setting(string $key, string $default = ''): string
+{
+    $db = pub_db();
+    if (!$db) return $default;
+    try {
+        $stmt = $db->prepare("SELECT `value` FROM support_settings WHERE `key` = ? LIMIT 1");
+        $stmt->execute([$key]);
+        $row = $stmt->fetchColumn();
+        return $row !== false ? (string)$row : $default;
+    } catch (Throwable $e) {
+        return $default;
+    }
+}
+
+function pub_verify_recaptcha(string $response, string $secret_key): bool
+{
+    if (empty($response) || empty($secret_key)) {
+        return false;
+    }
+
+    $verify_url = 'https://www.google.com/recaptcha/api/siteverify';
+    $data = [
+        'secret'   => $secret_key,
+        'response' => $response,
+        'remoteip' => $_SERVER['REMOTE_ADDR'] ?? '',
+    ];
+
+    $options = [
+        'http' => [
+            'header'  => "Content-Type: application/x-www-form-urlencoded\r\n",
+            'method'  => 'POST',
+            'content' => http_build_query($data),
+            'timeout' => 10,
+        ],
+    ];
+
+    $context = stream_context_create($options);
+    $result = @file_get_contents($verify_url, false, $context);
+
+    if ($result === false) {
+        return false;
+    }
+
+    $json = json_decode($result, true);
+    return isset($json['success']) && $json['success'] === true;
+}
+
 function pub_send_mail(string $to, string $to_name, string $subject, string $body): void
 {
     $from  = 'noreply@primeuniversity.ac.bd';
@@ -202,6 +249,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action']) && $_POST[
         $valid_prios  = ['Low','Medium','High','Critical'];
         $valid_utypes = ['','Student','Faculty','Administrative Employee'];
 
+        // CAPTCHA verification (if enabled)
+        $captcha_enabled = pub_get_setting('captcha_enabled', '0');
+        if ($captcha_enabled === '1') {
+            $captcha_response = $_POST['g-recaptcha-response'] ?? '';
+            $captcha_secret   = pub_get_setting('captcha_secret_key', '');
+            
+            if (!pub_verify_recaptcha($captcha_response, $captcha_secret)) {
+                $form_errors[] = 'CAPTCHA verification failed. Please verify that you are not a robot.';
+            }
+        }
+
         if ($full_name === '')                    $form_errors[] = 'Your name is required.';
         if ($email === '')                         $form_errors[] = 'Email address is required.';
         elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) $form_errors[] = 'Please enter a valid email address.';
@@ -290,6 +348,13 @@ function pub_status_color(string $status): string
    <link rel="stylesheet" href="/assets/css/font-awesome-pro.css">
    <link rel="stylesheet" href="/assets/css/spacing.css">
    <link rel="stylesheet" href="/assets/css/main.css">
+   <?php
+   // Load reCAPTCHA if enabled
+   $captcha_enabled_check = pub_get_setting('captcha_enabled', '0');
+   if ($captcha_enabled_check === '1'):
+   ?>
+   <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+   <?php endif; ?>
    <style>
       /* ── Support Portal Custom Styles ──────────────────────────────── */
       .pu-support-hero {
@@ -641,6 +706,17 @@ function pub_status_color(string $status): string
                               <div id="pub_sla_hint" class="form-text text-muted mt-1"></div>
                            </div>
                         </div>
+
+                        <?php
+                        // Display reCAPTCHA if enabled
+                        $pub_captcha_enabled = pub_get_setting('captcha_enabled', '0');
+                        $pub_captcha_site_key = pub_get_setting('captcha_site_key', '');
+                        if ($pub_captcha_enabled === '1' && !empty($pub_captcha_site_key)):
+                        ?>
+                        <div class="mb-4">
+                           <div class="g-recaptcha" data-sitekey="<?= pub_h($pub_captcha_site_key) ?>"></div>
+                        </div>
+                        <?php endif; ?>
 
                         <button type="submit" class="btn btn-primary btn-lg w-100" style="border-radius:10px;">
                            <i class="fas fa-paper-plane me-2"></i>Submit Support Ticket
