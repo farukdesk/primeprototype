@@ -1077,6 +1077,77 @@ function acc_send_fee_invoice_email(array $student, array $payment_info): bool
     );
 }
 
+// ── Admission Applicant Helpers ───────────────────────────────────────────────
+
+/**
+ * Find an admission applicant by their application / form number.
+ * Returns a row from admissions_applications (joined with dept + program),
+ * or null if not found.
+ */
+function acc_get_applicant_by_appnumber(string $app_number): ?array
+{
+    $stmt = db()->prepare(
+        'SELECT a.id, a.app_number, a.student_name, a.present_contact, a.present_email,
+                a.dept_id, a.program_id, a.status, a.office_student_id,
+                d.name AS dept_name, p.program_name
+         FROM admissions_applications a
+         LEFT JOIN dept_departments d        ON d.id = a.dept_id
+         LEFT JOIN dept_academic_programs p  ON p.id = a.program_id
+         WHERE a.app_number = ?
+         LIMIT 1'
+    );
+    $stmt->execute([trim($app_number)]);
+    return $stmt->fetch() ?: null;
+}
+
+/**
+ * Total admission fee already collected for a given application.
+ */
+function acc_get_applicant_admission_paid(int $app_id): float
+{
+    $stmt = db()->prepare(
+        'SELECT COALESCE(SUM(amount), 0) FROM adm_admission_fee_payments WHERE application_id = ?'
+    );
+    $stmt->execute([$app_id]);
+    return (float)$stmt->fetchColumn();
+}
+
+/**
+ * Collect an admission fee for a pre-enrollment applicant.
+ *
+ * Posts a receipt voucher (debit cash/bank, credit income account) and
+ * records a row in adm_admission_fee_payments.
+ *
+ * @return int  New acc_vouchers.id
+ * @throws RuntimeException on accounting failure
+ */
+function acc_collect_applicant_admission_fee(
+    int    $app_id,
+    float  $amount,
+    int    $cash_account_id,
+    int    $income_account_id,
+    string $date,
+    string $reference = '',
+    string $narration  = ''
+): int {
+    $amount = round($amount, 2);
+
+    $voucher_id = acc_post_voucher('receipt', $date, [
+        ['account_id' => $cash_account_id,   'debit' => $amount, 'credit' => 0,       'description' => $narration],
+        ['account_id' => $income_account_id, 'debit' => 0,       'credit' => $amount, 'description' => $narration],
+    ], $narration, $reference);
+
+    $user = auth_user();
+    db()->prepare(
+        'INSERT INTO adm_admission_fee_payments (application_id, voucher_id, amount, collected_by)
+         VALUES (?, ?, ?, ?)'
+    )->execute([$app_id, $voucher_id, $amount, $user['id'] ?? null]);
+
+    return $voucher_id;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
  * Human-readable label for each sfp_payments fee_type.
  */
