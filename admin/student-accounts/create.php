@@ -58,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $attendance_requirement   = (int)($_POST['attendance_requirement']  ?? 70);
     $safety_net_gpa_threshold = (float)($_POST['safety_net_gpa_threshold'] ?? 3.00);
     
-    // Snapshot registration and form fees from program or fallback to cf_settings
+    // Snapshot registration and form fees from POST (populated from program data via JS)
     $reg_fee_per_semester  = (float)($_POST['reg_fee_per_semester'] ?? 0);
     $form_id_fee           = (float)($_POST['form_id_fee']          ?? 0);
 
