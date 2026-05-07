@@ -139,10 +139,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
                 if ($collection_mode === 'multi' && !empty($item['label'])) {
                     $item_narration = $item['label'] . ($narration !== '' ? ' | ' . $narration : '');
                 }
+                $provider = $mobile_banking_provider !== '' ? $mobile_banking_provider : null;
+                $txn_no = $transaction_number !== '' ? $transaction_number : null;
                 $vid = acc_collect_student_fee(
                     $student_id, $package_id, $item['fee_type'],
                     $item['semester_fee_id'], $item['semester_number'], $item['month_number'],
-                    $payment_method, $mobile_banking_provider !== '' ? $mobile_banking_provider : null, $transaction_number !== '' ? $transaction_number : null,
+                    $payment_method, $provider, $txn_no,
                     $item['amount'], $cash_account_id, $item['income_account_id'],
                     $date, $reference, $item_narration
                 );
@@ -277,9 +279,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'admissi
 
     if (empty($errors)) {
         try {
+            $adm_provider = $mobile_banking_provider !== '' ? $mobile_banking_provider : null;
+            $adm_txn_no = $transaction_number !== '' ? $transaction_number : null;
             $vid = acc_collect_applicant_admission_fee(
                 $app_id, $amount, $cash_account_id, $income_account_id,
-                $payment_method, $mobile_banking_provider !== '' ? $mobile_banking_provider : null, $transaction_number !== '' ? $transaction_number : null,
+                $payment_method, $adm_provider, $adm_txn_no,
                 $date, $reference, $narration
             );
 
@@ -494,7 +498,7 @@ require_once __DIR__ . '/../includes/header.php';
 
         <!-- Outstanding fee table -->
         <div class="card border-0 shadow-sm mb-4">
-            <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between">
+                    <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between">
                 <span class="fw-semibold"><i class="fas fa-file-invoice-dollar me-2 text-success"></i>Fee Obligations & Outstanding Balance</span>
                 <div class="d-flex align-items-center gap-2">
                     <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 fs-6" id="totalOutstandingBadge"></span>
@@ -503,6 +507,7 @@ require_once __DIR__ . '/../includes/header.php';
                     </button>
                 </div>
             </div>
+            <!-- Starts collapsed; JS opens automatically when outstanding fees exist -->
             <div class="card-body p-0 collapse" id="feeObligationsCollapse" data-bs-parent="#studentFeeAccordion">
                 <div class="px-4 py-2 border-bottom bg-light-subtle" id="multiCollectBar" style="display:none;">
                     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">

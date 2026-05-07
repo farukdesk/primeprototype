@@ -886,7 +886,8 @@ function acc_student_fee_summary(int $student_id): ?array
                 : max(0.0, $sem_total_due - $monthly_fee * ($months_int - 1));
             $m_paid = min($m_due, max(0.0, $month_credit));
             $month_credit -= $m_paid;
-            $month_meta = acc_month_year_for_slot($start_month, $start_year, ((int)$sf['semester_number'] - 1) * $months_int + ($m - 1));
+            $month_offset = ((int)$sf['semester_number'] - 1) * $months_int + ($m - 1);
+            $month_meta = acc_month_year_for_slot($start_month, $start_year, $month_offset);
             $monthly_rows[] = [
                 'month_number' => $m,
                 'month_label'  => $month_meta['label'],

@@ -144,6 +144,7 @@ $collected_by    = $voucher['created_by_name'] ?? '—';
 $created_at      = date('d M Y, h:i A', strtotime($voucher['created_at']));
 
 $invoice_signature_name = auth_user()['full_name'] ?? $collected_by;
+$invoice_copy_label = 'Invoice Copy';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -424,7 +425,8 @@ function render_copy(
     string $month_lbl,
     string $payment_method_lbl,
     string $transaction_number,
-    string $invoice_signature_name
+    string $invoice_signature_name,
+    string $invoice_copy_label
 ): void {
 ?>
 <div class="invoice-copy">
@@ -435,7 +437,7 @@ function render_copy(
                 <div class="uni-name">Prime University</div>
                 <div class="uni-sub">Mirpur-1, Dhaka, Bangladesh &nbsp;|&nbsp; primeuniversity.ac.bd</div>
             </div>
-        <div class="copy-label">Invoice Copy</div>
+        <div class="copy-label"><?= h($invoice_copy_label) ?></div>
     </div>
 
     <!-- Title ribbon -->
@@ -549,7 +551,7 @@ function render_copy(
     $currency, $voucher_number, $voucher_date, $voucher_amount,
     $reference, $narration, $collected_by, $created_at,
     $payer_name, $payer_sid, $payer_dept, $payer_prog, $payer_phone, $payer_email,
-    $fee_type_lbl, $semester_lbl, $month_lbl, $payment_method_lbl, $transaction_number, $invoice_signature_name
+    $fee_type_lbl, $semester_lbl, $month_lbl, $payment_method_lbl, $transaction_number, $invoice_signature_name, $invoice_copy_label
 ); ?>
 
 </div><!-- /print-wrapper -->
