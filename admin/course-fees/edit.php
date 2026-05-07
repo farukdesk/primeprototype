@@ -71,7 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $form_id = null;
     } else {
         $form_id_total = (int)($id_card ?? 0) + (int)($adm_form ?? 0);
-        $form_id = $form_id_total > 0 ? $form_id_total : null;
+        $form_id = $form_id_total;
     }
     $bi_start_month     = $_POST['bi_semester_start_month']  !== '' ? (int)$_POST['bi_semester_start_month']  : null;
     $tri_start_month    = $_POST['tri_semester_start_month'] !== '' ? (int)$_POST['tri_semester_start_month'] : null;

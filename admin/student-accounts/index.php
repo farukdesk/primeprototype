@@ -134,10 +134,10 @@ require_once __DIR__ . '/../includes/header.php';
                     $has_semester_months = ($months > 0 && $months_per_semester > 0);
 
                     $fixed_per_sem = $has_semester_months
-                        ? round((float)$pkg['fixed_institutional_fees'] / $months * $months_per_semester, 2)
+                        ? round((float)$pkg['fixed_institutional_fees'] * $months_per_semester / $months, 2)
                         : 0.0;
                     $english_per_sem = $has_semester_months
-                        ? round((float)$pkg['english_course_fee'] / $months * $months_per_semester, 2)
+                        ? round((float)$pkg['english_course_fee'] * $months_per_semester / $months, 2)
                         : 0.0;
 
                     $fixed_after_discount = max(0.0, $fixed_per_sem - (float)($pkg['current_fixed_discount'] ?? 0));
