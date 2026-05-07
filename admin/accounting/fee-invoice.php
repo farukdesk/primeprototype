@@ -21,6 +21,17 @@ if (!$voucher) {
     die('Voucher not found.');
 }
 
+$done_url = APP_URL . '/accounting/collect-payment.php?tab=student';
+$from = trim($_GET['from'] ?? '');
+$return_student_sid = trim($_GET['student_sid'] ?? '');
+$is_valid_student_sid = preg_match('/^[A-Za-z0-9._-]+$/', $return_student_sid) === 1;
+if ($from !== 'collect-payment') {
+    $done_url = APP_URL . '/accounting/vouchers.php';
+}
+if ($from === 'collect-payment' && $is_valid_student_sid) {
+    $done_url .= '&student_sid=' . urlencode($return_student_sid);
+}
+
 $currency = acc_currency();
 
 // ── Try to load student fee payment record ────────────────────────────────────
@@ -145,6 +156,7 @@ if ($sfp) {
             display: inline-flex; align-items: center; gap: 5px;
         }
         .screen-controls a.btn-close-inv { background: #6c757d; }
+        .screen-controls button.btn-done-inv { background: #0d6efd; }
         .screen-controls .inv-meta { font-size: 12px; opacity: .9; margin-left: auto; }
 
         /* ── Page wrapper ─────────────────────────────────────── */
@@ -360,6 +372,7 @@ if ($sfp) {
 <!-- Screen control bar (hidden on print) -->
 <div class="screen-controls">
     <button onclick="window.print()">&#128438; Print Invoice</button>
+    <button type="button" class="btn-done-inv" onclick="doneInvoice()">&#10003; Done</button>
     <a href="javascript:window.close()" class="btn-close-inv">✕ Close</a>
     <span class="inv-meta">
         Voucher: <strong><?= h($voucher_number) ?></strong> &nbsp;|&nbsp;
@@ -540,6 +553,18 @@ function render_copy(
 </div><!-- /print-wrapper -->
 
 <script>
+const DONE_URL = <?= json_encode($done_url) ?>;
+
+function doneInvoice() {
+    if (window.opener && !window.opener.closed) {
+        window.opener.location.href = DONE_URL;
+        window.opener.focus();
+        window.close();
+        return;
+    }
+    window.location.href = DONE_URL;
+}
+
 // Auto-open print dialog when the page loads
 window.addEventListener('load', function() {
     // Small delay ensures styles are rendered before print dialog opens

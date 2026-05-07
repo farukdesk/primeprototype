@@ -106,7 +106,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
                 ' &nbsp;|&nbsp; ' .
                 '<a href="' . APP_URL . '/accounting/fee-invoice.php?voucher_id=' . $vid . '" target="_blank" class="alert-link fw-semibold"><i class="fas fa-print me-1"></i>Print Invoice</a>'
             );
-            redirect(APP_URL . '/accounting/collect-payment.php');
+            $sid_for_next = $stu['student_id'] ?? '';
+            redirect(APP_URL . '/accounting/collect-payment.php?tab=student&invoice_voucher_id=' . (int)$vid . '&student_sid=' . urlencode($sid_for_next));
         } catch (RuntimeException $e) {
             $errors[] = $e->getMessage();
         }
@@ -216,7 +217,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'admissi
                 '" target="_blank" class="alert-link fw-semibold"><i class="fas fa-print me-1"></i>Print Invoice</a>';
 
             flash_set('success', $success_msg);
-            redirect(APP_URL . '/accounting/collect-payment.php');
+            redirect(APP_URL . '/accounting/collect-payment.php?tab=admission&invoice_voucher_id=' . (int)$vid);
         } catch (RuntimeException $e) {
             $errors[] = $e->getMessage();
         }
@@ -254,11 +255,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'general
 $active_tab = 'student';
 if (($_POST['mode'] ?? '') === 'general')    $active_tab = 'general';
 if (($_POST['mode'] ?? '') === 'admission')  $active_tab = 'admission';
+if (in_array($_GET['tab'] ?? '', ['student', 'general', 'admission'], true)) {
+    $active_tab = $_GET['tab'];
+}
 
 $sms_enabled = acc_setting('sms_enabled', '0') === '1';
 $adm_notification_note = $sms_enabled
     ? 'SMS and email invoice sent to the applicant with their Student ID.'
     : 'Email invoice sent to the applicant with their Student ID (SMS currently disabled).';
+$invoice_popup_voucher_id = (int)($_GET['invoice_voucher_id'] ?? 0);
+$auto_student_sid = trim($_GET['student_sid'] ?? '');
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -340,6 +346,7 @@ require_once __DIR__ . '/../includes/header.php';
 
     <!-- Fee summary panel ──────────────────────────────────────────────── -->
     <div id="feeSummaryWrap" style="display:none;">
+        <div id="studentFeeAccordion">
 
         <!-- Student info strip -->
         <div class="card border-0 shadow-sm mb-3" id="studentInfoCard">
@@ -361,9 +368,14 @@ require_once __DIR__ . '/../includes/header.php';
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between">
                 <span class="fw-semibold"><i class="fas fa-file-invoice-dollar me-2 text-success"></i>Fee Obligations & Outstanding Balance</span>
-                <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 fs-6" id="totalOutstandingBadge"></span>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 fs-6" id="totalOutstandingBadge"></span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#feeObligationsCollapse" aria-expanded="true" aria-controls="feeObligationsCollapse">
+                        <i class="fas fa-chevron-down me-1"></i>Open
+                    </button>
+                </div>
             </div>
-            <div class="card-body p-0">
+            <div class="card-body p-0 collapse show" id="feeObligationsCollapse" data-bs-parent="#studentFeeAccordion">
                 <div class="table-responsive">
                     <table class="table table-hover table-sm align-middle mb-0" id="feeTable">
                         <thead class="table-light">
@@ -394,9 +406,14 @@ require_once __DIR__ . '/../includes/header.php';
         <div class="card border-0 shadow-sm mb-4" id="transactionHistoryCard" style="display:none;">
             <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between">
                 <span class="fw-semibold"><i class="fas fa-history me-2 text-info"></i>Payment Transaction History</span>
-                <span class="badge bg-info-subtle text-info border border-info-subtle px-3 py-2" id="transactionCount"></span>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-info-subtle text-info border border-info-subtle px-3 py-2" id="transactionCount"></span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#transactionHistoryCollapse" aria-expanded="false" aria-controls="transactionHistoryCollapse">
+                        <i class="fas fa-chevron-down me-1"></i>Open
+                    </button>
+                </div>
             </div>
-            <div class="card-body p-0">
+            <div class="card-body p-0 collapse" id="transactionHistoryCollapse" data-bs-parent="#studentFeeAccordion">
                 <div class="table-responsive">
                     <table class="table table-sm table-hover align-middle mb-0">
                         <thead class="table-light">
@@ -407,6 +424,7 @@ require_once __DIR__ . '/../includes/header.php';
                                 <th>Month</th>
                                 <th class="text-end">Amount</th>
                                 <th>Voucher #</th>
+                                <th>Invoice</th>
                                 <th>Collected By</th>
                                 <th>Status</th>
                             </tr>
@@ -420,12 +438,15 @@ require_once __DIR__ . '/../includes/header.php';
         <!-- Payment form (shown when user clicks Collect) -->
         <div id="paymentFormCard" style="display:none;">
             <div class="card border-0 shadow-sm border-start border-success border-3">
-                <div class="card-header py-3 px-4 bg-success bg-opacity-10">
+                <div class="card-header py-3 px-4 bg-success bg-opacity-10 d-flex align-items-center justify-content-between">
                     <span class="fw-semibold text-success"><i class="fas fa-check-circle me-2"></i>
                         Confirm & Post Payment — <span id="payFormFeeLabel"></span>
                     </span>
+                    <button type="button" class="btn btn-sm btn-outline-success" data-bs-toggle="collapse" data-bs-target="#paymentFormCollapse" aria-expanded="true" aria-controls="paymentFormCollapse">
+                        <i class="fas fa-chevron-down me-1"></i>Open
+                    </button>
                 </div>
-                <div class="card-body p-4">
+                <div class="card-body p-4 collapse show" id="paymentFormCollapse" data-bs-parent="#studentFeeAccordion">
                     <form method="post" id="studentPayForm">
                         <?= csrf_field() ?>
                         <input type="hidden" name="mode" value="student">
@@ -496,6 +517,7 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
             </div>
         </div>
+        </div><!-- /studentFeeAccordion -->
     </div><!-- /feeSummaryWrap -->
 
 </div><!-- /tab-pane student -->
@@ -764,6 +786,12 @@ require_once __DIR__ . '/../includes/header.php';
     // ── Data from PHP ────────────────────────────────────────────────────────
     const CURRENCY = <?= json_encode(acc_currency()) ?>;
     const APP_URL  = <?= json_encode(APP_URL) ?>;
+    const INVOICE_POPUP_URL = <?= json_encode(
+        $invoice_popup_voucher_id > 0
+            ? APP_URL . '/accounting/fee-invoice.php?voucher_id=' . $invoice_popup_voucher_id . '&from=collect-payment&student_sid=' . urlencode($auto_student_sid)
+            : ''
+    ) ?>;
+    const AUTO_STUDENT_SID = <?= json_encode($auto_student_sid) ?>;
 
     // Income account map injected by AJAX response
     let incomeAccountsMap = {};
@@ -787,6 +815,16 @@ require_once __DIR__ . '/../includes/header.php';
             other:            'Other',
         };
         return map[type] || type;
+    }
+
+    function openAccordionSection(collapseId) {
+        const target = document.getElementById(collapseId);
+        if (!target) return;
+        if (window.bootstrap && window.bootstrap.Collapse) {
+            window.bootstrap.Collapse.getOrCreateInstance(target).show();
+        } else {
+            target.classList.add('show');
+        }
     }
 
     // ── Student search autocomplete ──────────────────────────────────────────
@@ -854,6 +892,7 @@ require_once __DIR__ . '/../includes/header.php';
                 renderFeeSummary(data);
                 document.getElementById('feeSummaryWrap').style.display = '';
                 document.getElementById('paymentFormCard').style.display = 'none';
+                openAccordionSection('feeObligationsCollapse');
             })
             .catch(() => {
                 btnLoad.disabled = false;
@@ -984,7 +1023,7 @@ require_once __DIR__ . '/../includes/header.php';
         countBadge.textContent = payments.length + ' transaction' + (payments.length !== 1 ? 's' : '');
 
         if (payments.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3 small"><i class="fas fa-info-circle me-1"></i>No transactions recorded yet.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-3 small"><i class="fas fa-info-circle me-1"></i>No transactions recorded yet.</td></tr>';
         } else {
             payments.forEach(p => {
                 const feeLabel  = feeTypeLabel(p.fee_type);
@@ -1005,6 +1044,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <td class="small">${monText}</td>
                     <td class="text-end small fw-semibold text-success">${fmt(p.amount)}</td>
                     <td class="small"><a href="${APP_URL}/accounting/voucher-view.php?id=${p.voucher_id}" target="_blank" rel="noopener noreferrer" class="text-decoration-none">${p.voucher_number ?? '—'}</a></td>
+                    <td class="small"><a href="${APP_URL}/accounting/fee-invoice.php?voucher_id=${p.voucher_id}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-primary py-0 px-2"><i class="fas fa-print me-1"></i>Invoice</a></td>
                     <td class="small">${p.collected_by_name}</td>
                     <td>${statusBadge}</td>`;
                 tbody.appendChild(tr);
@@ -1050,6 +1090,7 @@ require_once __DIR__ . '/../includes/header.php';
 
         const card = document.getElementById('paymentFormCard');
         card.style.display = '';
+        openAccordionSection('paymentFormCollapse');
         card.scrollIntoView({behavior: 'smooth', block: 'start'});
     }
 
@@ -1176,6 +1217,23 @@ require_once __DIR__ . '/../includes/header.php';
         admAppNumberInput.value = '';
         admAppNumberInput.focus();
     });
+
+    // Auto-popup invoice after a successful payment, then prepare next student flow
+    if (INVOICE_POPUP_URL) {
+        const popup = window.open(INVOICE_POPUP_URL, 'fee_invoice_print', 'width=980,height=920');
+        if (!popup) {
+            alert('Invoice popup was blocked. Please allow popups and use the Print Invoice link from the success message.');
+        }
+    }
+
+    if (AUTO_STUDENT_SID) {
+        searchInput.value = AUTO_STUDENT_SID;
+        selectedSid = AUTO_STUDENT_SID;
+        btnLoad.disabled = false;
+        btnLoad.click();
+    } else {
+        searchInput.focus();
+    }
 
 })();
 </script>
