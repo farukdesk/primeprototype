@@ -7,6 +7,11 @@ $page_title      = 'Collect Payment';
 $cash_accounts   = acc_cash_accounts();
 $income_accounts = acc_income_accounts();
 $default_cash    = acc_setting('default_cash_account', '1100');
+$received_into_map = acc_received_into_account_map_for_payment_methods();
+$cash_account_labels_by_id = [];
+foreach ($cash_accounts as $a) {
+    $cash_account_labels_by_id[(int)$a['id']] = $a['code'] . ' – ' . $a['name'];
+}
 $errors          = [];
 
 // ── POST: process a student-fee payment ──────────────────────────────────────
@@ -35,7 +40,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
 
     if (!$student_id)                          $errors[] = 'Invalid student.';
     if (!$package_id)                          $errors[] = 'Student has no fee package.';
-    if (!$cash_account_id)                     $errors[] = 'Please select the received-into account.';
     if (!$date)                                $errors[] = 'Date is required.';
     if (!in_array($payment_method, ['cash', 'bank', 'mobile_banking'], true)) {
         $errors[] = 'Invalid payment method selected.';
@@ -45,6 +49,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
     }
     if ($payment_method !== 'cash' && $transaction_number === '') {
         $errors[] = 'Transaction number is required for non-cash payments.';
+    }
+    if (empty($errors)) {
+        $cash_account_id = acc_received_into_account_id_for_payment_method($payment_method);
+        if ($cash_account_id <= 0) {
+            $errors[] = 'Received-into mapping is missing for this payment method. Please configure it in Accounting Settings.';
+        }
     }
 
     if (empty($errors)) {
@@ -279,7 +289,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'admissi
 
     if (!$app_id)            $errors[] = 'Invalid application.';
     if ($amount <= 0)        $errors[] = 'Amount must be greater than zero.';
-    if (!$cash_account_id)   $errors[] = 'Please select the received-into account.';
     if (!$income_account_id) $errors[] = 'Please select the income account.';
     if (!$date)              $errors[] = 'Date is required.';
     if (!in_array($payment_method, ['cash', 'bank', 'mobile_banking'], true)) {
@@ -290,6 +299,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'admissi
     }
     if ($payment_method !== 'cash' && $transaction_number === '') {
         $errors[] = 'Transaction number is required for non-cash payments.';
+    }
+    if (empty($errors)) {
+        $cash_account_id = acc_received_into_account_id_for_payment_method($payment_method);
+        if ($cash_account_id <= 0) {
+            $errors[] = 'Received-into mapping is missing for this payment method. Please configure it in Accounting Settings.';
+        }
     }
 
     // Load applicant to validate and get details
@@ -658,15 +673,13 @@ require_once __DIR__ . '/../includes/header.php';
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label fw-semibold">Received Into <span class="text-danger">*</span></label>
-                                <select name="cash_account_id" class="form-select" required>
-                                    <option value="">— Select Account —</option>
-                                    <?php foreach ($cash_accounts as $a): ?>
-                                    <option value="<?= $a['id'] ?>"
-                                        <?= ($a['code'] == $default_cash) ? 'selected' : '' ?>>
-                                        <?= h($a['code'] . ' – ' . $a['name']) ?>
-                                    </option>
-                                    <?php endforeach; ?>
-                                </select>
+                                <?php
+                                $student_default_received_id = (int)($received_into_map['cash'] ?? 0);
+                                $student_default_received_label = $cash_account_labels_by_id[$student_default_received_id] ?? 'Not configured';
+                                ?>
+                                <input type="hidden" name="cash_account_id" id="hStudentCashAccountId" value="<?= (int)$student_default_received_id ?>">
+                                <input type="text" class="form-control" id="studentReceivedIntoLabel" value="<?= h($student_default_received_label) ?>" readonly>
+                                <div class="form-text">Auto-mapped from Accounting Settings based on payment method.</div>
                             </div>
 
                             <div class="col-md-6">
@@ -930,15 +943,13 @@ require_once __DIR__ . '/../includes/header.php';
                         </div>
                         <div class="col-md-4">
                             <label class="form-label fw-semibold">Received Into <span class="text-danger">*</span></label>
-                            <select name="cash_account_id" class="form-select" required>
-                                <option value="">— Select Account —</option>
-                                <?php foreach ($cash_accounts as $a): ?>
-                                <option value="<?= $a['id'] ?>"
-                                    <?= ($a['code'] == $default_cash) ? 'selected' : '' ?>>
-                                    <?= h($a['code'] . ' – ' . $a['name']) ?>
-                                </option>
-                                <?php endforeach; ?>
-                            </select>
+                            <?php
+                            $admission_default_received_id = (int)($received_into_map['cash'] ?? 0);
+                            $admission_default_received_label = $cash_account_labels_by_id[$admission_default_received_id] ?? 'Not configured';
+                            ?>
+                            <input type="hidden" name="cash_account_id" id="hAdmCashAccountId" value="<?= (int)$admission_default_received_id ?>">
+                            <input type="text" class="form-control" id="admReceivedIntoLabel" value="<?= h($admission_default_received_label) ?>" readonly>
+                            <div class="form-text">Auto-mapped from Accounting Settings based on payment method.</div>
                         </div>
 
                         <div class="col-md-6">
@@ -1021,6 +1032,8 @@ require_once __DIR__ . '/../includes/header.php';
             : ''
     ) ?>;
     const AUTO_STUDENT_SID = <?= json_encode($auto_student_sid) ?>;
+    const RECEIVED_INTO_MAP = <?= json_encode($received_into_map) ?>;
+    const CASH_ACCOUNT_LABELS = <?= json_encode($cash_account_labels_by_id) ?>;
 
     // Income account map injected by AJAX response
     let incomeAccountsMap = {};
@@ -1067,6 +1080,20 @@ require_once __DIR__ . '/../includes/header.php';
         bar.style.display = selectedFeeItems.size > 0 ? '' : 'none';
     }
 
+    function syncStudentReceivedIntoAccount() {
+        const method = document.getElementById('payMethod').value;
+        const accountId = Number(RECEIVED_INTO_MAP[method] || 0);
+        document.getElementById('hStudentCashAccountId').value = accountId > 0 ? String(accountId) : '';
+        document.getElementById('studentReceivedIntoLabel').value = CASH_ACCOUNT_LABELS[accountId] || 'Not configured';
+    }
+
+    function syncAdmissionReceivedIntoAccount() {
+        const method = document.getElementById('admPayMethod').value;
+        const accountId = Number(RECEIVED_INTO_MAP[method] || 0);
+        document.getElementById('hAdmCashAccountId').value = accountId > 0 ? String(accountId) : '';
+        document.getElementById('admReceivedIntoLabel').value = CASH_ACCOUNT_LABELS[accountId] || 'Not configured';
+    }
+
     function updateStudentPaymentMethodUI() {
         const method = document.getElementById('payMethod').value;
         const providerWrap = document.getElementById('payMobileProviderWrap');
@@ -1082,6 +1109,7 @@ require_once __DIR__ . '/../includes/header.php';
         txnInput.required = needsTxn;
         if (!isMobile) provider.value = '';
         if (!needsTxn) txnInput.value = '';
+        syncStudentReceivedIntoAccount();
     }
 
     function updateAdmissionPaymentMethodUI() {
@@ -1099,6 +1127,7 @@ require_once __DIR__ . '/../includes/header.php';
         txnInput.required = needsTxn;
         if (!isMobile) provider.value = '';
         if (!needsTxn) txnInput.value = '';
+        syncAdmissionReceivedIntoAccount();
     }
 
     // ── Student search autocomplete ──────────────────────────────────────────
