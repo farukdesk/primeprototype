@@ -123,7 +123,13 @@ INSERT INTO `acc_settings` (`setting_key`, `setting_value`) VALUES
 ('default_cash_account', '1100'),
 ('default_bank_account', '1200'),
 ('currency_symbol',      '৳'),
-('currency_code',        'BDT');
+('currency_code',        'BDT'),
+('income_account_admission',        '4200'),
+('income_account_registration',     '4100'),
+('income_account_semester_tuition', '4100'),
+('income_account_fixed_fee',        '4100'),
+('income_account_english_fee',      '4100'),
+('income_account_other',            '4700');
 
 -- ── Register modules ────────────────────────────────────────
 INSERT IGNORE INTO `modules` (`name`, `slug`, `description`, `icon`, `sort_order`, `is_active`) VALUES
