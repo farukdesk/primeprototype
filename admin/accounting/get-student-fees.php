@@ -39,15 +39,8 @@ foreach ($summary['semesters'] as $sem) {
     }
 }
 
-// Retrieve income account IDs for each fee type (used by JS to auto-select)
-$income_accounts = [
-    'admission'        => acc_income_account_id_by_code('4200'), // Admission Fees
-    'registration'     => acc_income_account_id_by_code('4100'), // Tuition Fees (reg)
-    'semester_tuition' => acc_income_account_id_by_code('4100'), // Tuition Fees
-    'fixed_fee'        => acc_income_account_id_by_code('4100'), // Tuition Fees
-    'english_fee'      => acc_income_account_id_by_code('4100'), // Tuition Fees
-    'other'            => acc_income_account_id_by_code('4700'), // Miscellaneous Income
-];
+// Retrieve configured income-account mappings for each fee type
+$income_accounts = acc_income_account_map_for_fee_types();
 
 // Payment transaction history for this student
 $raw_payments = acc_get_student_payments((int)$student['package_id']);

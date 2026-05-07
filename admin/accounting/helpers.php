@@ -1075,6 +1075,88 @@ function acc_income_account_id_by_code(string $code): int
     return (int)($stmt->fetchColumn() ?: 0);
 }
 
+/**
+ * Valid student fee types handled by accounting.
+ *
+ * @return string[]
+ */
+function acc_student_fee_types(): array
+{
+    return ['admission', 'registration', 'semester_tuition', 'fixed_fee', 'english_fee', 'other'];
+}
+
+/**
+ * Default COA income code for each fee type.
+ *
+ * @return string COA account code (e.g. 4100)
+ */
+function acc_default_income_code_for_fee_type(string $fee_type): string
+{
+    return match ($fee_type) {
+        'admission'        => '4200', // Admission Fees
+        'registration'     => '4100', // Tuition Fees (reg)
+        'semester_tuition' => '4100', // Tuition Fees
+        'fixed_fee'        => '4100', // Tuition Fees
+        'english_fee'      => '4100', // Tuition Fees
+        'other'            => '4700', // Miscellaneous Income
+        default            => '4700',
+    };
+}
+
+/**
+ * Read mapped income-account code for a fee type from settings.
+ * Falls back to the default mapped code if setting is missing.
+ */
+function acc_income_account_code_for_fee_type(string $fee_type): string
+{
+    $default_code = acc_default_income_code_for_fee_type($fee_type);
+    $setting_key  = 'income_account_' . $fee_type;
+    $code         = trim(acc_setting($setting_key, $default_code));
+    return $code !== '' ? $code : $default_code;
+}
+
+/**
+ * Read mapped income-account ID for a fee type from settings.
+ * Falls back to the default mapped account when needed.
+ */
+function acc_income_account_id_for_fee_type(string $fee_type): int
+{
+    static $cache = [];
+    if (isset($cache[$fee_type])) {
+        return $cache[$fee_type];
+    }
+
+    $code = acc_income_account_code_for_fee_type($fee_type);
+    $id = acc_income_account_id_by_code($code);
+    if ($id > 0) {
+        return $cache[$fee_type] = $id;
+    }
+
+    $fallback_id = acc_income_account_id_by_code(acc_default_income_code_for_fee_type($fee_type));
+    if ($fallback_id > 0) {
+        return $cache[$fee_type] = $fallback_id;
+    }
+
+    $any_income = db()->query("SELECT id FROM acc_accounts WHERE type = 'income' AND is_active = 1 ORDER BY code ASC LIMIT 1")->fetchColumn();
+    return $cache[$fee_type] = (int)($any_income ?: 0);
+}
+
+/**
+ * Build fee-type => income account id map.
+ *
+ * @param string[]|null $fee_types
+ * @return array<string,int>
+ */
+function acc_income_account_map_for_fee_types(?array $fee_types = null): array
+{
+    $map = [];
+    $fee_types = $fee_types ?: acc_student_fee_types();
+    foreach ($fee_types as $type) {
+        $map[$type] = acc_income_account_id_for_fee_type($type);
+    }
+    return $map;
+}
+
 // ── SMS & Email notification helpers ─────────────────────────────────────────
 
 /**

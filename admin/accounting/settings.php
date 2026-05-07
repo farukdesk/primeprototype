@@ -8,6 +8,9 @@ $errors = [];
 
 // Get all cash/bank accounts for default selection
 $asset_accounts = acc_accounts_by_type('asset');
+$income_accounts = acc_income_accounts();
+$income_codes = array_column($income_accounts, 'code');
+$fee_types = acc_student_fee_types();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
@@ -28,6 +31,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $new_api_key = trim($_POST['sms_api_key'] ?? '');
     if ($new_api_key !== '') {
         $settings_to_save['sms_api_key'] = $new_api_key;
+    }
+
+    foreach ($fee_types as $fee_type) {
+        $key = 'income_account_' . $fee_type;
+        $selected_code = trim((string)($_POST[$key] ?? ''));
+        if (!in_array($selected_code, $income_codes, true)) {
+            $selected_code = acc_default_income_code_for_fee_type($fee_type);
+        }
+        $settings_to_save[$key] = $selected_code;
     }
 
     foreach ($settings_to_save as $key => $value) {
@@ -123,6 +135,26 @@ require_once __DIR__ . '/../includes/header.php';
                             </select>
                             <div class="form-text">Pre-selected in Transfer Money form</div>
                         </div>
+                    </div>
+
+                    <h6 class="fw-bold mb-3 text-muted text-uppercase" style="font-size:.75rem;letter-spacing:.06em">Student Fee Income Mapping</h6>
+                    <div class="row g-3 mb-4">
+                        <?php foreach ($fee_types as $fee_type): ?>
+                            <?php
+                            $setting_key = 'income_account_' . $fee_type;
+                            $selected_code = acc_income_account_code_for_fee_type($fee_type);
+                            ?>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold"><?= h(acc_fee_type_label($fee_type)) ?></label>
+                                <select name="<?= h($setting_key) ?>" class="form-select" required>
+                                    <?php foreach ($income_accounts as $a): ?>
+                                        <option value="<?= h($a['code']) ?>" <?= $selected_code === $a['code'] ? 'selected' : '' ?>>
+                                            <?= h($a['code'] . ' – ' . $a['name']) ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                        <?php endforeach; ?>
                     </div>
 
                     <h6 class="fw-bold mb-3 text-muted text-uppercase" style="font-size:.75rem;letter-spacing:.06em">Voucher Numbering</h6>

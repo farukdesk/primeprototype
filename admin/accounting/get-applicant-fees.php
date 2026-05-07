@@ -31,8 +31,8 @@ $suggested_fee      = $admission_fee_base + $form_id_fee;
 // Amount already collected for this application
 $already_paid = acc_get_applicant_admission_paid((int)$applicant['id']);
 
-// Income account for admission fees (code 4200)
-$income_account_id = acc_income_account_id_by_code('4200');
+// Configured income account for admission fee
+$income_account_id = acc_income_account_id_for_fee_type('admission');
 
 // Check whether student-ID settings exist for this program
 $has_sid_settings = false;
