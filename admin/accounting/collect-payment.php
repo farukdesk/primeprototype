@@ -469,7 +469,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <label class="form-label fw-semibold">Student ID or Name</label>
                     <input type="text" id="studentSearch" class="form-control"
                            placeholder="Type student ID or name…" autocomplete="off">
-                    <div class="form-text">Select from suggestions, then load summary. Tip: press Enter to load quickly.</div>
+                    <div class="form-text">Select from suggestions or enter a valid Student ID, then press Enter to load quickly.</div>
                     <div id="studentSuggestions" class="list-group position-absolute z-3 w-100" style="max-width:420px;display:none;"></div>
                 </div>
                 <div class="col-md-3">

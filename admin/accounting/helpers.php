@@ -60,7 +60,7 @@ function acc_currency(): string
 
 function acc_university_logo_url(): string
 {
-    return APP_URL . '/assets/img/logo/favicon.png';
+    return APP_URL . '/assets/img/logo/logo-black-sm.png';
 }
 
 function acc_university_address(): string
