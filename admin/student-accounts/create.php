@@ -216,7 +216,7 @@ require_once __DIR__ . '/../includes/header.php';
         <div class="card-header bg-success text-white fw-semibold py-3">
             <i class="fas fa-calculator me-2"></i>Programme &amp; Fee Constants
             <span class="fw-normal ms-2 opacity-75" style="font-size:.8rem;">
-                Select a programme to auto-fill fee constants; you may adjust the values before saving.
+                Select a programme to auto-fill fee constants before saving.
             </span>
         </div>
         <div class="card-body">
@@ -288,13 +288,24 @@ require_once __DIR__ . '/../includes/header.php';
                     </div>
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label fw-semibold">Admission Fees (info only – already paid)</label>
+                    <label class="form-label fw-semibold">Admission Fees</label>
                     <div class="input-group">
-                        <input type="number" name="admission_fees" id="f-admission" class="form-control" min="0"
+                        <input type="number" name="admission_fees" id="f-admission" class="form-control bg-light" min="0" readonly
                                value="<?= h(old('admission_fees', '')) ?>">
                         <span class="input-group-text">BDT</span>
                     </div>
+                    <div class="form-text">Auto-filled from course fee structure</div>
                 </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Registration Fee / Semester</label>
+                    <div class="input-group">
+                        <input type="number" name="reg_fee_per_semester" id="f-reg-fee" class="form-control bg-light" min="0" readonly
+                               value="<?= h(old('reg_fee_per_semester', '0')) ?>">
+                        <span class="input-group-text">BDT</span>
+                    </div>
+                    <div class="form-text">Auto-filled from course fee structure</div>
+                </div>
+                <input type="hidden" name="form_id_fee" id="f-form-id-fee" value="<?= h(old('form_id_fee', '0')) ?>">
             </div>
 
             <hr class="my-3">
@@ -466,7 +477,9 @@ document.getElementById('cf-program-select').addEventListener('change', function
     document.getElementById('f-total-months').value               = p.total_months;
     document.getElementById('f-std-tuition').value                = p.standard_tuition_full;
     document.getElementById('f-tuition-sem').value                = p.tuition_per_semester;
-    document.getElementById('f-admission').value                  = p.admission_fee_m;
+    document.getElementById('f-admission').value                  = p.admission_fees || p.admission_fee_m || 0;
+    document.getElementById('f-reg-fee').value                    = p.reg_fee_per_semester || 0;
+    document.getElementById('f-form-id-fee').value                = p.form_id_fee || 0;
     document.getElementById('f-fixed-inst').value                 = p.fixed_institutional_fees;
     document.getElementById('f-english').value                    = p.english_course_fee;
     document.getElementById('f-snc').value                        = p.safety_net_cap;
