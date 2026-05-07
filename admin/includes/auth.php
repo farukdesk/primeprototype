@@ -320,8 +320,8 @@ function flash_show(): void {
 }
 
 // ── Misc helpers ─────────────────────────────────────────────────────────────
-function redirect(string $url): never {
-    header('Location: ' . $url);
+function redirect(string $url, int $code = 302): never {
+    header('Location: ' . $url, true, $code);
     exit;
 }
 
