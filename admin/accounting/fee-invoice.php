@@ -24,10 +24,11 @@ if (!$voucher) {
 $done_url = APP_URL . '/accounting/collect-payment.php?tab=student';
 $from = trim($_GET['from'] ?? '');
 $return_student_sid = trim($_GET['student_sid'] ?? '');
+$is_valid_student_sid = preg_match('/^[A-Za-z0-9._-]+$/', $return_student_sid) === 1;
 if ($from !== 'collect-payment') {
     $done_url = APP_URL . '/accounting/vouchers.php';
 }
-if ($from === 'collect-payment' && $return_student_sid !== '') {
+if ($from === 'collect-payment' && $is_valid_student_sid) {
     $done_url .= '&student_sid=' . urlencode($return_student_sid);
 }
 

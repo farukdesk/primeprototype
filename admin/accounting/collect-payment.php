@@ -1222,7 +1222,7 @@ require_once __DIR__ . '/../includes/header.php';
     if (INVOICE_POPUP_URL) {
         const popup = window.open(INVOICE_POPUP_URL, 'fee_invoice_print', 'width=980,height=920');
         if (!popup) {
-            window.location.href = INVOICE_POPUP_URL;
+            alert('Invoice popup was blocked. Please allow popups and use the Print Invoice link from the success message.');
         }
     }
 
