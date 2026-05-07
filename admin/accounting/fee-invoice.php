@@ -195,7 +195,7 @@ $voucher_date   = date('d F Y', strtotime($primary_voucher['voucher_date']));
 $total_amount   = array_sum(array_column($fee_rows, 'amount'));
 $voucher_amount = number_format($total_amount, 2);
 $reference      = $primary_voucher['reference']      ?? '';
-$narration      = $primary_voucher['narration']       ?? '';
+$narration      = $primary_voucher['narration']      ?? '';
 $collected_by   = $primary_voucher['created_by_name'] ?? '—';
 $created_at     = date('d M Y, h:i A', strtotime($primary_voucher['created_at']));
 

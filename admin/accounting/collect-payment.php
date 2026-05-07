@@ -171,7 +171,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
                     $sf_row = db()->prepare('SELECT semester_label, semester_number FROM sfp_semester_fees WHERE id = ?');
                     $sf_row->execute([$item['semester_fee_id']]);
                     $sf_row = $sf_row->fetch();
-                    $sem_label = $sf_row['semester_label'] ?: ('Semester ' . ($sf_row['semester_number'] ?? ''));
+                    $sem_label = ($sf_row && $sf_row['semester_label'] !== '' && $sf_row['semester_label'] !== null)
+                        ? (string)$sf_row['semester_label']
+                        : ($sf_row && $sf_row['semester_number'] ? 'Semester ' . $sf_row['semester_number'] : '');
                 }
 
                 $fee_label = acc_fee_type_label($item['fee_type']);

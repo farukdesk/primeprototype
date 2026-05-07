@@ -1340,7 +1340,9 @@ function acc_send_fee_invoice_email(array $student, array $payment_info, array $
         if (is_file($vendor_autoload)) {
             require_once $vendor_autoload;
             // Build voucher stub for the PDF renderer
-            $vd_stmt = db()->prepare('SELECT * FROM acc_vouchers WHERE id = ? LIMIT 1');
+            $vd_stmt = db()->prepare(
+                'SELECT voucher_number, voucher_date, narration, created_by_name FROM acc_vouchers WHERE id = ? LIMIT 1'
+            );
             $vd_stmt->execute([(int)($payment_info['voucher_id'] ?? 0)]);
             $vd_row = $vd_stmt->fetch() ?: [];
             if (!$vd_row && !empty($payment_info['voucher_number'])) {
@@ -1360,6 +1362,7 @@ function acc_send_fee_invoice_email(array $student, array $payment_info, array $
         }
     } catch (\Throwable $e) {
         // PDF generation failed; send email without attachment
+        error_log('acc_send_fee_invoice_email: PDF generation failed – ' . $e->getMessage());
         $pdf_data = '';
     }
 
@@ -1368,11 +1371,11 @@ function acc_send_fee_invoice_email(array $student, array $payment_info, array $
     $from_email = defined('MAIL_FROM') ? MAIL_FROM : 'noreply@' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
     $encoded_from = '=?UTF-8?B?' . base64_encode($from_name) . '?=';
     $subject = 'Fee Payment Confirmation – Receipt ' . $voucher_no . ' – ' . $student_name;
-    $sid_slug = preg_replace('/[^A-Za-z0-9\-]/', '', $student['student_id'] ?? 'student');
+    $sid_slug = preg_replace('/[^A-Za-z0-9_\-]/', '', $student['student_id'] ?? 'student');
 
     if ($pdf_data !== '') {
         $boundary = '----=_Part_' . md5(uniqid('', true));
-        $attach_name = 'fee-receipt-' . $sid_slug . '-' . preg_replace('/[^A-Za-z0-9\-]/', '', $voucher_no) . '.pdf';
+        $attach_name = 'fee-receipt-' . $sid_slug . '-' . preg_replace('/[^A-Za-z0-9_\-]/', '', $voucher_no) . '.pdf';
 
         $headers  = 'MIME-Version: 1.0' . "\r\n";
         $headers .= 'Content-Type: multipart/mixed; boundary="' . $boundary . '"' . "\r\n";
