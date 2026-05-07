@@ -129,15 +129,15 @@ require_once __DIR__ . '/../includes/header.php';
                     </td>
                     <?php
                     $months = (float)($pkg['total_months'] ?? 0);
-                    $mps    = (float)($pkg['months_per_semester'] ?? 0);
+                    $months_per_semester = (float)($pkg['months_per_semester'] ?? 0);
                     $reg    = (float)($pkg['reg_fee_per_semester'] ?? 0);
-                    $has_semester_months = ($months > 0 && $mps > 0);
+                    $has_semester_months = ($months > 0 && $months_per_semester > 0);
 
                     $fixed_per_sem = $has_semester_months
-                        ? round((float)$pkg['fixed_institutional_fees'] / $months * $mps, 2)
+                        ? round((float)$pkg['fixed_institutional_fees'] / $months * $months_per_semester, 2)
                         : 0.0;
                     $english_per_sem = $has_semester_months
-                        ? round((float)$pkg['english_course_fee'] / $months * $mps, 2)
+                        ? round((float)$pkg['english_course_fee'] / $months * $months_per_semester, 2)
                         : 0.0;
 
                     $fixed_after_discount = max(0.0, $fixed_per_sem - (float)($pkg['current_fixed_discount'] ?? 0));
@@ -145,7 +145,7 @@ require_once __DIR__ . '/../includes/header.php';
                     $tuition_current = (float)($pkg['current_tuition_payable'] ?? $pkg['tuition_per_semester'] ?? 0);
 
                     $current_sem_total = $tuition_current + $fixed_after_discount + $english_after_discount + $reg;
-                    $current_monthly_total = ($mps > 0) ? ($current_sem_total / $mps) : 0.0;
+                    $current_monthly_total = ($months_per_semester > 0) ? ($current_sem_total / $months_per_semester) : 0.0;
                     ?>
                     <td class="text-center"><?= (int)$pkg['total_semesters'] ?></td>
                     <td><?= sfp_money($current_sem_total) ?></td>
