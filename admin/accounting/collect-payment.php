@@ -13,6 +13,31 @@ foreach ($cash_accounts as $a) {
     $cash_account_labels_by_id[(int)$a['id']] = $a['code'] . ' – ' . $a['name'];
 }
 $errors          = [];
+
+// ── One-time payment nonce helpers (prevent duplicate payment on browser refresh / POST replay) ──
+function payment_nonce_generate(): void {
+    $_SESSION['collect_payment_nonce'] = bin2hex(random_bytes(16));
+}
+
+/**
+ * Validate the submitted nonce against the session nonce, consume it, and
+ * redirect with a warning on mismatch (duplicate-submission detected).
+ */
+function payment_nonce_check_and_consume(string $fallback_redirect_url): void {
+    $submitted = $_POST['payment_nonce'] ?? '';
+    $stored    = $_SESSION['collect_payment_nonce'] ?? '';
+    if (!$submitted || !$stored || !hash_equals($stored, $submitted)) {
+        flash_set('warning', 'This payment form was already submitted. Please check the transaction history below to avoid collecting twice.');
+        redirect($fallback_redirect_url, 303);
+    }
+    unset($_SESSION['collect_payment_nonce']);
+}
+
+// Fresh nonce on every GET so the form starts with a valid token
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    payment_nonce_generate();
+}
+
 $received_into_mapping_error = static function (string $payment_method): string {
     return 'Received-into mapping is missing for payment method "' . acc_payment_method_label($payment_method) . '". Please configure it in Accounting Settings.';
 };
@@ -20,6 +45,9 @@ $received_into_mapping_error = static function (string $payment_method): string 
 // ── POST: process a student-fee payment ──────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student') {
     csrf_check();
+
+    // Duplicate-submission guard: validate and consume the one-time nonce
+    payment_nonce_check_and_consume(APP_URL . '/accounting/collect-payment.php?tab=student');
 
     $student_id      = (int)($_POST['student_id']       ?? 0);
     $package_id      = (int)($_POST['package_id']       ?? 0);
@@ -264,10 +292,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
             if ($collection_mode !== 'multi' && $last_voucher_id > 0) {
                 $next_url .= '&invoice_voucher_id=' . (int)$last_voucher_id;
             }
-            redirect($next_url);
+            redirect($next_url, 303);
         } catch (RuntimeException $e) {
             $errors[] = $e->getMessage();
         }
+    }
+    // Regenerate nonce if errors occurred so the user can retry
+    if (!empty($errors)) {
+        payment_nonce_generate();
     }
 }
 
@@ -275,6 +307,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'admission') {
     csrf_check();
     require_once __DIR__ . '/../admissions/helpers.php';
+
+    // Duplicate-submission guard: validate and consume the one-time nonce
+    payment_nonce_check_and_consume(APP_URL . '/accounting/collect-payment.php?tab=admission');
 
     $app_id            = (int)($_POST['application_id']    ?? 0);
     $amount            = (float)($_POST['amount']          ?? 0);
@@ -393,16 +428,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'admissi
                 '" target="_blank" class="alert-link fw-semibold"><i class="fas fa-print me-1"></i>Print Invoice</a>';
 
             flash_set('success', $success_msg);
-            redirect(APP_URL . '/accounting/collect-payment.php?tab=admission&invoice_voucher_id=' . (int)$vid);
+            redirect(APP_URL . '/accounting/collect-payment.php?tab=admission&invoice_voucher_id=' . (int)$vid, 303);
         } catch (RuntimeException $e) {
             $errors[] = $e->getMessage();
         }
+    }
+    // Regenerate nonce if errors occurred so the user can retry
+    if (!empty($errors)) {
+        payment_nonce_generate();
     }
 }
 
 // ── POST: process a general payment ──────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'general') {
     csrf_check();
+
+    // Duplicate-submission guard: validate and consume the one-time nonce
+    payment_nonce_check_and_consume(APP_URL . '/accounting/collect-payment.php');
 
     $amount            = (float)($_POST['amount']            ?? 0);
     $received_into_account_id = (int)($_POST['received_into_account_id'] ?? $_POST['cash_account_id'] ?? 0);
@@ -421,12 +463,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'general
         try {
             $vid = acc_collect_payment($amount, $received_into_account_id, $income_account_id, $date, $reference, $narration);
             flash_set('success', 'Payment collected successfully. <a href="' . APP_URL . '/accounting/voucher-view.php?id=' . $vid . '" class="alert-link">View Voucher</a>');
-            redirect(APP_URL . '/accounting/collect-payment.php');
+            redirect(APP_URL . '/accounting/collect-payment.php', 303);
         } catch (RuntimeException $e) {
             $errors[] = $e->getMessage();
         }
     }
+    // Regenerate nonce if errors occurred so the user can retry
+    if (!empty($errors)) {
+        payment_nonce_generate();
+    }
 }
+
+$form_nonce = $_SESSION['collect_payment_nonce'] ?? '';
 
 $active_tab = 'student';
 if (($_POST['mode'] ?? '') === 'general')    $active_tab = 'general';
@@ -734,6 +782,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="card-body p-4 collapse show" id="paymentFormCollapse" data-bs-parent="#studentFeeAccordion">
                     <form method="post" id="studentPayForm">
                         <?= csrf_field() ?>
+                        <input type="hidden" name="payment_nonce" value="<?= h($form_nonce) ?>">
                         <input type="hidden" name="mode" value="student">
                         <input type="hidden" name="collection_mode" id="hCollectionMode" value="single">
                         <input type="hidden" name="fee_items" id="hFeeItems" value="">
@@ -849,8 +898,9 @@ require_once __DIR__ . '/../includes/header.php';
                     </div>
                 </div>
                 <div class="card-body p-4">
-                    <form method="post">
+                    <form method="post" id="generalPayForm">
                         <?= csrf_field() ?>
+                        <input type="hidden" name="payment_nonce" value="<?= h($form_nonce) ?>">
                         <input type="hidden" name="mode" value="general">
 
                         <div class="row g-3">
@@ -1009,6 +1059,7 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="card-body p-4">
                 <form method="post" id="admPayForm">
                     <?= csrf_field() ?>
+                    <input type="hidden" name="payment_nonce" value="<?= h($form_nonce) ?>">
                     <input type="hidden" name="mode"           value="admission">
                     <input type="hidden" name="application_id" id="hAdmAppId">
                     <input type="hidden" name="income_account_id" id="hAdmIncomeId">
@@ -2048,6 +2099,23 @@ require_once __DIR__ . '/../includes/header.php';
         admAppNumberInput.value = '';
         admAppNumberInput.focus();
     });
+
+    // ── Disable submit buttons on form submit (prevent double-click / double-payment) ──
+    function disableSubmitOnClick(formId) {
+        const form = document.getElementById(formId);
+        if (!form) return;
+        form.addEventListener('submit', function () {
+            const btn = this.querySelector('button[type="submit"]');
+            if (btn) {
+                btn.disabled = true;
+                btn.setAttribute('aria-busy', 'true');
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span><span>Processing…</span>';
+            }
+        });
+    }
+    disableSubmitOnClick('studentPayForm');
+    disableSubmitOnClick('generalPayForm');
+    disableSubmitOnClick('admPayForm');
 
     // Auto-popup invoice after a successful payment, then prepare next student flow
     if (INVOICE_POPUP_URL) {
