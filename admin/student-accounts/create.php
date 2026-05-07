@@ -54,6 +54,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $safety_net_per_semester  = (float)($_POST['safety_net_per_semester'] ?? 0);
     $attendance_requirement   = (int)($_POST['attendance_requirement']  ?? 70);
     $safety_net_gpa_threshold = (float)($_POST['safety_net_gpa_threshold'] ?? 3.00);
+    
+    // Snapshot registration and form fees from cf_settings at package creation time
+    $cf_settings           = $db->query('SELECT reg_fee_per_semester, form_id_fee FROM cf_settings WHERE id = 1')->fetch();
+    $reg_fee_per_semester  = $cf_settings ? (float)$cf_settings['reg_fee_per_semester'] : 0.0;
+    $form_id_fee           = $cf_settings ? (float)$cf_settings['form_id_fee']          : 0.0;
 
     // Validate
     if ($student_id <= 0)      $errors[] = 'Please select a valid student.';
@@ -95,11 +100,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 total_semesters, total_months, months_per_semester,
                 standard_tuition_full, tuition_per_semester, admission_fees,
                 fixed_institutional_fees, english_course_fee,
+                reg_fee_per_semester, form_id_fee,
                 safety_net_cap, safety_net_per_semester,
                 attendance_requirement, safety_net_gpa_threshold,
                 monthly_fixed_fee, monthly_english_fee,
                 note, assigned_by)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
         )->execute([
             $student_id,
             $cf_program_id > 0 ? $cf_program_id : null,
@@ -112,6 +118,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $admission_fees,
             $fixed_institutional_fees,
             $english_course_fee,
+            $reg_fee_per_semester,
+            $form_id_fee,
             $safety_net_cap > 0  ? $safety_net_cap            : null,
             $safety_net_per_semester > 0 ? $safety_net_per_semester : null,
             $attendance_requirement,
