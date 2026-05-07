@@ -145,7 +145,7 @@ require_once __DIR__ . '/../includes/header.php';
                     $tuition_current = (float)($pkg['current_tuition_payable'] ?? $pkg['tuition_per_semester'] ?? 0);
 
                     $current_sem_total = $tuition_current + $fixed_after_discount + $english_after_discount + $reg;
-                    $current_monthly_total = ($mps > 0) ? ($current_sem_total / $mps) : $current_sem_total;
+                    $current_monthly_total = ($mps > 0) ? ($current_sem_total / $mps) : 0.0;
                     ?>
                     <td class="text-center"><?= (int)$pkg['total_semesters'] ?></td>
                     <td><?= sfp_money($current_sem_total) ?></td>

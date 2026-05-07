@@ -290,7 +290,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="col-md-4">
                     <label class="form-label fw-semibold">Admission Fees</label>
                     <div class="input-group">
-                        <input type="number" name="admission_fees" id="f-admission" class="form-control bg-light" min="0" readonly aria-readonly="true"
+                        <input type="number" name="admission_fees" id="f-admission" class="form-control bg-light" min="0" readonly
                                value="<?= h(old('admission_fees', '')) ?>">
                         <span class="input-group-text">BDT</span>
                     </div>
@@ -299,7 +299,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="col-md-4">
                     <label class="form-label fw-semibold">Registration Fee / Semester</label>
                     <div class="input-group">
-                        <input type="number" name="reg_fee_per_semester" id="f-reg-fee" class="form-control bg-light" min="0" readonly aria-readonly="true"
+                        <input type="number" name="reg_fee_per_semester" id="f-reg-fee" class="form-control bg-light" min="0" readonly
                                value="<?= h(old('reg_fee_per_semester', '0')) ?>">
                         <span class="input-group-text">BDT</span>
                     </div>
