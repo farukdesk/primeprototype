@@ -77,11 +77,17 @@ function acc_logo_data_uri(): string
 {
     $custom_logo = dirname(__DIR__) . '/uploads/logos/' . ACC_INVOICE_CUSTOM_LOGO_FILE;
     if (is_file($custom_logo) && is_readable($custom_logo)) {
-        return 'data:image/png;base64,' . base64_encode(file_get_contents($custom_logo));
+        $logo_bytes = file_get_contents($custom_logo);
+        if ($logo_bytes !== false) {
+            return 'data:image/png;base64,' . base64_encode($logo_bytes);
+        }
     }
     $default_logo = dirname(dirname(__DIR__)) . '/assets/img/logo/logo-black-sm.png';
     if (is_file($default_logo) && is_readable($default_logo)) {
-        return 'data:image/png;base64,' . base64_encode(file_get_contents($default_logo));
+        $logo_bytes = file_get_contents($default_logo);
+        if ($logo_bytes !== false) {
+            return 'data:image/png;base64,' . base64_encode($logo_bytes);
+        }
     }
     return '';
 }
