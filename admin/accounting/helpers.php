@@ -1136,6 +1136,12 @@ function acc_send_fee_invoice_email(array $student, array $payment_info): bool
         'outstanding_total'=> number_format((float)$payment_info['outstanding_total'], 2),
         'reference'        => $payment_info['reference'] ?: '—',
         'narration_row'    => $narration_row,
+        'invoice_copy_label' => 'Student Copy',
+        'invoice_url'      => !empty($payment_info['voucher_id'])
+            ? APP_URL . '/accounting/fee-invoice.php?voucher_id=' . (int)$payment_info['voucher_id']
+            : '',
+        'university_address' => '114/116 Mazar Road, Mirpur-1, Dhaka 1216, Bangladesh',
+        'university_website' => 'https://www.primeuniversity.ac.bd/',
     ];
 
     return send_template_email(

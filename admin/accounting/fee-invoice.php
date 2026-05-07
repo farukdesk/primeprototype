@@ -1,7 +1,7 @@
 <?php
 /**
  * Fee Collection Invoice – Standalone print page (no admin layout).
- * Displays a single printable invoice copy.
+ * Displays always two printable invoice copies (Office + Student).
  *
  * Usage: fee-invoice.php?voucher_id=123
  */
@@ -144,7 +144,13 @@ $collected_by    = $voucher['created_by_name'] ?? '—';
 $created_at      = date('d M Y, h:i A', strtotime($voucher['created_at']));
 
 $invoice_signature_name = auth_user()['full_name'] ?? $collected_by;
-$invoice_copy_label = 'Invoice Copy';
+$student_outstanding_total = 0.0;
+if ($sfp && !empty($sfp['package_id'])) {
+    $student_outstanding_total = (float)acc_total_outstanding((int)$sfp['package_id']);
+}
+$university_logo_url = APP_URL . '/assets/img/logo/favicon.png';
+$university_address = '114/116 Mazar Road, Mirpur-1, Dhaka 1216, Bangladesh';
+$university_website = 'https://www.primeuniversity.ac.bd/';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -208,6 +214,20 @@ $invoice_copy_label = 'Invoice Copy';
             align-items: center;
             justify-content: space-between;
         }
+        .inv-header .brand-wrap {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .inv-header .brand-logo {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            object-fit: contain;
+            background: #fff;
+            padding: 3px;
+            box-shadow: 0 0 0 1px rgba(255,255,255,.35) inset;
+        }
         .inv-header .uni-name {
             font-size: 17px;
             font-weight: 700;
@@ -217,6 +237,7 @@ $invoice_copy_label = 'Invoice Copy';
             font-size: 10px;
             opacity: .8;
             margin-top: 2px;
+            line-height: 1.35;
         }
         .inv-header .copy-label {
             background: rgba(255,255,255,.15);
@@ -426,16 +447,24 @@ function render_copy(
     string $payment_method_lbl,
     string $transaction_number,
     string $invoice_signature_name,
-    string $invoice_copy_label
+    string $invoice_copy_label,
+    string $university_logo_url,
+    string $university_address,
+    string $university_website,
+    float $student_outstanding_total,
+    bool $is_student_copy
 ): void {
 ?>
 <div class="invoice-copy">
 
     <!-- Header -->
     <div class="inv-header">
-        <div>
-            <div class="uni-name">Prime University</div>
-            <div class="uni-sub">Mirpur-1, Dhaka, Bangladesh &nbsp;|&nbsp; primeuniversity.ac.bd</div>
+        <div class="brand-wrap">
+            <img src="<?= h($university_logo_url) ?>" alt="Prime University Logo" class="brand-logo">
+            <div>
+                <div class="uni-name">Prime University</div>
+                <div class="uni-sub"><?= h($university_address) ?><br><?= h($university_website) ?></div>
+            </div>
         </div>
         <div class="copy-label"><?= h($invoice_copy_label) ?></div>
     </div>
@@ -534,6 +563,12 @@ function render_copy(
             </tfoot>
         </table>
 
+        <?php if ($is_student_copy && $student_outstanding_total > 0): ?>
+        <div class="outstanding-note">
+            Outstanding balance after this payment: <strong><?= h($currency) ?> <?= h(number_format($student_outstanding_total, 2)) ?></strong>
+        </div>
+        <?php endif; ?>
+
         <div class="sig-row">
             <div class="sig-box"><?= h($invoice_signature_name) ?><br><span style="font-size:9px;">Collected By</span></div>
         </div>
@@ -541,7 +576,7 @@ function render_copy(
     </div><!-- /inv-body -->
 
     <div class="inv-footer">
-        This is a computer-generated receipt. Please retain it for your records. &nbsp;|&nbsp; Prime University, Mirpur-1, Dhaka
+        This is a computer-generated receipt. Please retain it for your records. &nbsp;|&nbsp; Prime University, <?= h($university_address) ?>
     </div>
 
 </div><!-- /invoice-copy -->
@@ -551,7 +586,20 @@ function render_copy(
     $currency, $voucher_number, $voucher_date, $voucher_amount,
     $reference, $narration, $collected_by, $created_at,
     $payer_name, $payer_sid, $payer_dept, $payer_prog, $payer_phone, $payer_email,
-    $fee_type_lbl, $semester_lbl, $month_lbl, $payment_method_lbl, $transaction_number, $invoice_signature_name, $invoice_copy_label
+    $fee_type_lbl, $semester_lbl, $month_lbl, $payment_method_lbl, $transaction_number,
+    $invoice_signature_name, 'Office Copy', $university_logo_url, $university_address, $university_website,
+    $student_outstanding_total, false
+); ?>
+
+<div class="cut-line">— Cut Here —</div>
+
+<?php render_copy(
+    $currency, $voucher_number, $voucher_date, $voucher_amount,
+    $reference, $narration, $collected_by, $created_at,
+    $payer_name, $payer_sid, $payer_dept, $payer_prog, $payer_phone, $payer_email,
+    $fee_type_lbl, $semester_lbl, $month_lbl, $payment_method_lbl, $transaction_number,
+    $invoice_signature_name, 'Student Copy', $university_logo_url, $university_address, $university_website,
+    $student_outstanding_total, true
 ); ?>
 
 </div><!-- /print-wrapper -->
