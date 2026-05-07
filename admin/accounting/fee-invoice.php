@@ -432,11 +432,11 @@ function render_copy(
 <div class="invoice-copy">
 
     <!-- Header -->
-        <div class="inv-header">
-            <div>
-                <div class="uni-name">Prime University</div>
-                <div class="uni-sub">Mirpur-1, Dhaka, Bangladesh &nbsp;|&nbsp; primeuniversity.ac.bd</div>
-            </div>
+    <div class="inv-header">
+        <div>
+            <div class="uni-name">Prime University</div>
+            <div class="uni-sub">Mirpur-1, Dhaka, Bangladesh &nbsp;|&nbsp; primeuniversity.ac.bd</div>
+        </div>
         <div class="copy-label"><?= h($invoice_copy_label) ?></div>
     </div>
 

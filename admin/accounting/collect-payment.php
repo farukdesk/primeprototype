@@ -498,7 +498,7 @@ require_once __DIR__ . '/../includes/header.php';
 
         <!-- Outstanding fee table -->
         <div class="card border-0 shadow-sm mb-4">
-                    <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between">
+            <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between">
                 <span class="fw-semibold"><i class="fas fa-file-invoice-dollar me-2 text-success"></i>Fee Obligations & Outstanding Balance</span>
                 <div class="d-flex align-items-center gap-2">
                     <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 fs-6" id="totalOutstandingBadge"></span>

@@ -1465,7 +1465,7 @@ function acc_package_start_year(array $pkg, array $semester_fees): int
         }
     }
     foreach ($candidates as $txt) {
-        if (preg_match('/\b(20\d{2}|19\d{2})\b/', $txt, $m)) {
+        if (preg_match('/\b(20\d{2})\b/', $txt, $m)) {
             return (int)$m[1];
         }
     }
