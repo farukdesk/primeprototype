@@ -172,6 +172,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
                 // ── Email invoice ─────────────────────────────────────────────
                 if ($stu) {
                     acc_send_fee_invoice_email($stu, [
+                        'voucher_id'       => $vid,
                         'voucher_number'   => $voucher_number,
                         'payment_date'     => $date,
                         'fee_type_label'   => $fee_label,
@@ -323,6 +324,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'admissi
 
             // Send email invoice
             acc_send_admission_complete_email($applicant, $assigned_sid, [
+                'voucher_id'        => $vid,
                 'voucher_number'    => $voucher_number,
                 'payment_date'      => $date,
                 'fee_type_label'    => $adm_fee_lbl,
@@ -346,6 +348,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'admissi
                 $success_msg .= ' Student ID: <strong>' . h($assigned_sid) . '</strong>.';
             }
 
+            $success_msg .= ' Student Copy invoice has been sent by email' . ($sms_enabled ? ' and payment SMS has been sent.' : ' (SMS currently disabled in Accounting Settings).');
             $success_msg .= ' &nbsp;|&nbsp; <a href="' . APP_URL . '/accounting/fee-invoice.php?voucher_id=' . $vid .
                 '" target="_blank" class="alert-link fw-semibold"><i class="fas fa-print me-1"></i>Print Invoice</a>';
 
@@ -394,8 +397,8 @@ if (in_array($_GET['tab'] ?? '', ['student', 'general', 'admission'], true)) {
 
 $sms_enabled = acc_setting('sms_enabled', '0') === '1';
 $adm_notification_note = $sms_enabled
-    ? 'SMS and email invoice sent to the applicant with their Student ID.'
-    : 'Email invoice sent to the applicant with their Student ID (SMS currently disabled).';
+    ? 'Student Copy invoice email and payment SMS are sent to the applicant with their Student ID.'
+    : 'Student Copy invoice email is sent to the applicant with their Student ID (SMS currently disabled).';
 $invoice_popup_voucher_id = (int)($_GET['invoice_voucher_id'] ?? 0);
 $auto_student_sid = trim($_GET['student_sid'] ?? '');
 
@@ -466,6 +469,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <label class="form-label fw-semibold">Student ID or Name</label>
                     <input type="text" id="studentSearch" class="form-control"
                            placeholder="Type student ID or name…" autocomplete="off">
+                    <div class="form-text">Select from suggestions or enter a valid Student ID, then press Enter to load quickly.</div>
                     <div id="studentSuggestions" class="list-group position-absolute z-3 w-100" style="max-width:420px;display:none;"></div>
                 </div>
                 <div class="col-md-3">
@@ -678,7 +682,7 @@ require_once __DIR__ . '/../includes/header.php';
                             <strong>Accounting entry:</strong>
                             <span class="text-success">Debit</span> the received-into account &amp;
                             <span class="text-danger">Credit</span> <span id="incomeAccountLabel">the income account</span> automatically.
-                            An email invoice<?= $sms_enabled ? ' and SMS' : '' ?> will be sent to the student.
+                            Student Copy invoice email<?= $sms_enabled ? ' and payment SMS' : '' ?> will be sent to the student.
                         </div>
 
                         <div class="d-flex gap-2 mt-3">
@@ -1074,9 +1078,16 @@ require_once __DIR__ . '/../includes/header.php';
     const suggestions    = document.getElementById('studentSuggestions');
     const btnLoad        = document.getElementById('btnLoadFees');
     let   selectedSid    = null;
+    function resolveStudentSidFromInput(rawValue) {
+        const raw = (rawValue || '').trim();
+        if (!raw) return '';
+        return raw.includes(' – ') ? raw.split(' – ')[0].trim() : raw;
+    }
 
     let searchTimer;
     searchInput.addEventListener('input', function () {
+        selectedSid = null;
+        btnLoad.disabled = true;
         clearTimeout(searchTimer);
         const q = this.value.trim();
         if (q.length < 2) { suggestions.style.display = 'none'; return; }
@@ -1104,6 +1115,17 @@ require_once __DIR__ . '/../includes/header.php';
                 });
         }, 250);
     });
+    searchInput.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        if (!selectedSid) {
+            selectedSid = resolveStudentSidFromInput(this.value);
+        }
+        if (selectedSid) {
+            btnLoad.disabled = false;
+            btnLoad.click();
+        }
+    });
 
     document.addEventListener('click', e => {
         if (!searchInput.contains(e.target)) suggestions.style.display = 'none';
@@ -1111,7 +1133,10 @@ require_once __DIR__ . '/../includes/header.php';
 
     // ── Load fee summary ─────────────────────────────────────────────────────
     btnLoad.addEventListener('click', function () {
-        if (!selectedSid) return;
+        if (!selectedSid) {
+            selectedSid = resolveStudentSidFromInput(searchInput.value);
+            if (!selectedSid) return;
+        }
 
         btnLoad.disabled = true;
         btnLoad.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Loading…';
