@@ -778,10 +778,10 @@ function acc_student_fee_summary(int $student_id): ?array
 
     $package_id = (int)$pkg['id'];
 
-    // Course-fee global settings
-    $cf = $db->query('SELECT reg_fee_per_semester, form_id_fee FROM cf_settings WHERE id = 1')->fetch();
-    $reg_fee     = $cf ? (float)$cf['reg_fee_per_semester'] : 0.0;
-    $form_id_fee = $cf ? (float)$cf['form_id_fee'] : 0.0;
+    // Use snapshotted registration and form fees from the package (not global cf_settings)
+    // This ensures each student retains their originally assigned fees
+    $reg_fee     = (float)($pkg['reg_fee_per_semester'] ?? 0.0);
+    $form_id_fee = (float)($pkg['form_id_fee'] ?? 0.0);
 
     // Semester fee rows
     $sf_stmt = $db->prepare(
@@ -1371,8 +1371,8 @@ function acc_total_outstanding(int $package_id): float
     $pkg = $pkg_stmt->fetch();
     if (!$pkg) return 0.0;
 
-    $cf      = $db->query('SELECT reg_fee_per_semester FROM cf_settings WHERE id = 1')->fetch();
-    $reg_fee = $cf ? (float)$cf['reg_fee_per_semester'] : 0.0;
+    // Use snapshotted registration fee from the package (not global cf_settings)
+    $reg_fee = (float)($pkg['reg_fee_per_semester'] ?? 0.0);
 
     $sem_stmt = $db->prepare('SELECT COUNT(*), COALESCE(SUM(tuition_payable),0) FROM sfp_semester_fees WHERE package_id = ?');
     $sem_stmt->execute([$package_id]);

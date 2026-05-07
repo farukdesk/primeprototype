@@ -24,21 +24,24 @@ $all_scholarships = sfp_get_all_semester_scholarships($id);
 $sem_fixed_portion   = sfp_semester_fixed_portion($pkg);
 $sem_english_portion = sfp_semester_english_portion($pkg);
 
-// Registration fee per semester and form/ID-card fee (from cf_settings)
-$cf_settings         = db()->query('SELECT reg_fee_per_semester, form_id_fee, bi_semester_start_month, tri_semester_start_month, start_month FROM cf_settings WHERE id = 1')->fetch();
-$reg_fee_per_sem     = $cf_settings ? (float)$cf_settings['reg_fee_per_semester'] : 0.0;
-$form_id_fee         = $cf_settings ? (float)$cf_settings['form_id_fee']           : 0.0;
+// Use snapshotted registration and form fees from the package (not global cf_settings)
+// This ensures displayed fees match the student's actual obligations
+$reg_fee_per_sem     = (float)($pkg['reg_fee_per_semester'] ?? 0.0);
+$form_id_fee         = (float)($pkg['form_id_fee'] ?? 0.0);
+
+// Also fetch current global values for comparison (optional display)
+$cf_settings_global  = db()->query('SELECT reg_fee_per_semester, form_id_fee, bi_semester_start_month, tri_semester_start_month, start_month FROM cf_settings WHERE id = 1')->fetch();
 
 // Determine which start month to use based on total_semesters
 $is_bi_semester_program = ($pkg['total_semesters'] ?? 0) <= SFP_MAX_BI_SEMESTER_COUNT;
-if ($cf_settings) {
+if ($cf_settings_global) {
     // Use the appropriate field based on program type, or fall back to legacy start_month
-    if ($is_bi_semester_program && $cf_settings['bi_semester_start_month'] !== null) {
-        $start_month = (int)$cf_settings['bi_semester_start_month'];
-    } elseif (!$is_bi_semester_program && $cf_settings['tri_semester_start_month'] !== null) {
-        $start_month = (int)$cf_settings['tri_semester_start_month'];
+    if ($is_bi_semester_program && $cf_settings_global['bi_semester_start_month'] !== null) {
+        $start_month = (int)$cf_settings_global['bi_semester_start_month'];
+    } elseif (!$is_bi_semester_program && $cf_settings_global['tri_semester_start_month'] !== null) {
+        $start_month = (int)$cf_settings_global['tri_semester_start_month'];
     } else {
-        $start_month = (int)($cf_settings['start_month'] ?? CF_DEFAULT_START_MONTH);
+        $start_month = (int)($cf_settings_global['start_month'] ?? CF_DEFAULT_START_MONTH);
     }
 } else {
     $start_month = CF_DEFAULT_START_MONTH;
@@ -165,7 +168,9 @@ require_once __DIR__ . '/../includes/header.php';
                     'Months / Semester'          => number_format((float)$pkg['months_per_semester'], 2),
                     'Standard Tuition (Full)'    => sfp_money((float)$pkg['standard_tuition_full']),
                     'Base Tuition / Semester'    => sfp_money((float)$pkg['tuition_per_semester']),
+                    'Registration Fee / Semester' => sfp_money($reg_fee_per_sem),
                     'Admission Fee (one-time)'        => sfp_money((float)($pkg['admission_fees'] ?? 0)),
+                    'Form & ID Fee (one-time)'   => sfp_money($form_id_fee),
                     'Fixed Institutional Fees'   => sfp_money((float)$pkg['fixed_institutional_fees']),
                     'English Course Fee'         => sfp_money((float)$pkg['english_course_fee']),
                 ];

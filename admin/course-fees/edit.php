@@ -14,6 +14,11 @@ $db         = db();
 
 $degree_types = cf_get_degree_types();
 
+// Count how many students are currently using this program
+$student_count_stmt = $db->prepare('SELECT COUNT(*) FROM sfp_packages WHERE cf_program_id = ?');
+$student_count_stmt->execute([$id]);
+$students_using_program = (int)$student_count_stmt->fetchColumn();
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
@@ -135,6 +140,44 @@ require_once __DIR__ . '/../includes/header.php';
 <?php if ($errors): ?>
 <div class="alert alert-danger"><ul class="mb-0"><?php foreach ($errors as $e): ?><li><?= h($e) ?></li><?php endforeach; ?></ul></div>
 <?php endif; ?>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     IMPORTANT WARNING: Fee Changes Impact
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="alert alert-warning border-start border-warning border-4 shadow-sm mb-4" role="alert">
+    <div class="d-flex align-items-start gap-3">
+        <div class="flex-shrink-0" style="font-size: 2rem;">
+            <i class="fas fa-exclamation-triangle text-warning"></i>
+        </div>
+        <div class="flex-grow-1">
+            <h5 class="alert-heading mb-2">
+                <i class="fas fa-info-circle me-2"></i>Important: Fee Changes Only Affect New Students
+            </h5>
+            <p class="mb-2">
+                Changes to this program's fee structure will <strong>only apply to newly enrolled students</strong>. 
+                Existing students retain their original fee package and will <strong>not be affected</strong> by these changes.
+            </p>
+            <?php if ($students_using_program > 0): ?>
+            <div class="alert alert-info mb-0 mt-3 py-2">
+                <i class="fas fa-users me-2"></i>
+                <strong><?= number_format($students_using_program) ?></strong> student<?= $students_using_program !== 1 ? 's are' : ' is' ?> 
+                currently using this program. Their fees are protected and will not change.
+            </div>
+            <?php else: ?>
+            <div class="alert alert-success mb-0 mt-3 py-2">
+                <i class="fas fa-check-circle me-2"></i>
+                No students currently enrolled in this program. Changes can be made freely.
+            </div>
+            <?php endif; ?>
+            <hr class="my-3">
+            <p class="mb-0 small text-muted">
+                <i class="fas fa-lightbulb me-1"></i>
+                <strong>Why?</strong> Student fee packages are <em>snapshotted</em> at enrollment time. 
+                This protects students from retroactive fee increases and maintains financial data integrity.
+            </p>
+        </div>
+    </div>
+</div>
 
 <form method="post" novalidate id="cf-form">
     <?= csrf_field() ?>
