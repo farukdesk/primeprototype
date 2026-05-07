@@ -1484,8 +1484,9 @@ function acc_month_year_for_slot(int $start_month, int $start_year, int $offset)
         7 => 'Jul', 8 => 'Aug', 9 => 'Sep', 10 => 'Oct', 11 => 'Nov', 12 => 'Dec',
     ];
     $serial = ($start_month - 1) + $offset;
-    $month = ($serial % 12) + 1;
-    $year = $start_year + (int)floor($serial / 12);
+    $month_index = (($serial % 12) + 12) % 12;
+    $month = $month_index + 1;
+    $year = $start_year + (int)floor(($serial - $month_index) / 12);
     return [
         'month' => $month,
         'year'  => $year,

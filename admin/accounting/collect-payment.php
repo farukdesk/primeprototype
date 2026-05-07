@@ -1407,7 +1407,7 @@ require_once __DIR__ . '/../includes/header.php';
         document.getElementById('payOutstanding').textContent = fmt(total);
         document.getElementById('payFormFeeLabel').textContent = 'Multiple Fee Items';
         document.getElementById('payNarration').value = 'Multiple fee collection – ' + currentSummary.package.student_name + ' (' + currentStudent.student_id + ')';
-        document.getElementById('incomeAccountLabel').textContent = 'mapped income accounts';
+        document.getElementById('incomeAccountLabel').textContent = 'Mapped Income Accounts';
         document.getElementById('paymentFormCard').style.display = '';
         openAccordionSection('paymentFormCollapse');
         document.getElementById('paymentFormCard').scrollIntoView({behavior: 'smooth', block: 'start'});
