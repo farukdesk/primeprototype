@@ -58,6 +58,21 @@ function acc_currency(): string
     return acc_setting('currency_symbol', '৳');
 }
 
+function acc_university_logo_url(): string
+{
+    return APP_URL . '/assets/img/logo/favicon.png';
+}
+
+function acc_university_address(): string
+{
+    return '114/116 Mazar Road, Mirpur-1, Dhaka 1216, Bangladesh';
+}
+
+function acc_university_website(): string
+{
+    return 'https://www.primeuniversity.ac.bd/';
+}
+
 function acc_fmt(float $amount): string
 {
     return acc_currency() . ' ' . number_format($amount, 2);
@@ -1140,8 +1155,9 @@ function acc_send_fee_invoice_email(array $student, array $payment_info): bool
         'invoice_url'      => !empty($payment_info['voucher_id'])
             ? APP_URL . '/accounting/fee-invoice.php?voucher_id=' . (int)$payment_info['voucher_id']
             : '',
-        'university_address' => '114/116 Mazar Road, Mirpur-1, Dhaka 1216, Bangladesh',
-        'university_website' => 'https://www.primeuniversity.ac.bd/',
+        'university_address' => acc_university_address(),
+        'university_website' => acc_university_website(),
+        'logo_url'         => acc_university_logo_url(),
     ];
 
     return send_template_email(

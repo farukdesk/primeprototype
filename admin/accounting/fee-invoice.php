@@ -148,9 +148,9 @@ $student_outstanding_total = 0.0;
 if ($sfp && !empty($sfp['package_id'])) {
     $student_outstanding_total = (float)acc_total_outstanding((int)$sfp['package_id']);
 }
-$university_logo_url = APP_URL . '/assets/img/logo/favicon.png';
-$university_address = '114/116 Mazar Road, Mirpur-1, Dhaka 1216, Bangladesh';
-$university_website = 'https://www.primeuniversity.ac.bd/';
+$university_logo_url = acc_university_logo_url();
+$university_address = acc_university_address();
+$university_website = acc_university_website();
 ?>
 <!DOCTYPE html>
 <html lang="en">

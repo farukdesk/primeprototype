@@ -348,7 +348,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'admissi
                 $success_msg .= ' Student ID: <strong>' . h($assigned_sid) . '</strong>.';
             }
 
-            $success_msg .= ' Student copy invoice has been sent by email' . ($sms_enabled ? ' and payment SMS has been sent.' : ' (SMS currently disabled in Accounting Settings).');
+            $success_msg .= ' Student Copy invoice has been sent by email' . ($sms_enabled ? ' and payment SMS has been sent.' : ' (SMS currently disabled in Accounting Settings).');
             $success_msg .= ' &nbsp;|&nbsp; <a href="' . APP_URL . '/accounting/fee-invoice.php?voucher_id=' . $vid .
                 '" target="_blank" class="alert-link fw-semibold"><i class="fas fa-print me-1"></i>Print Invoice</a>';
 
@@ -1078,6 +1078,11 @@ require_once __DIR__ . '/../includes/header.php';
     const suggestions    = document.getElementById('studentSuggestions');
     const btnLoad        = document.getElementById('btnLoadFees');
     let   selectedSid    = null;
+    function resolveStudentSidFromInput(rawValue) {
+        const raw = (rawValue || '').trim();
+        if (!raw) return '';
+        return raw.includes(' – ') ? raw.split(' – ')[0].trim() : raw;
+    }
 
     let searchTimer;
     searchInput.addEventListener('input', function () {
@@ -1114,10 +1119,7 @@ require_once __DIR__ . '/../includes/header.php';
         if (e.key !== 'Enter') return;
         e.preventDefault();
         if (!selectedSid) {
-            const raw = this.value.trim();
-            if (raw) {
-                selectedSid = raw.includes(' – ') ? raw.split(' – ')[0].trim() : raw;
-            }
+            selectedSid = resolveStudentSidFromInput(this.value);
         }
         if (selectedSid) {
             btnLoad.disabled = false;
@@ -1132,9 +1134,8 @@ require_once __DIR__ . '/../includes/header.php';
     // ── Load fee summary ─────────────────────────────────────────────────────
     btnLoad.addEventListener('click', function () {
         if (!selectedSid) {
-            const raw = searchInput.value.trim();
-            if (!raw) return;
-            selectedSid = raw.includes(' – ') ? raw.split(' – ')[0].trim() : raw;
+            selectedSid = resolveStudentSidFromInput(searchInput.value);
+            if (!selectedSid) return;
         }
 
         btnLoad.disabled = true;
