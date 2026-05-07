@@ -156,13 +156,22 @@ function acc_cash_accounts(): array
  */
 function acc_asset_account_id_by_code(string $code): int
 {
+    static $cache = [];
+    $code = trim($code);
+    if ($code === '') {
+        return 0;
+    }
+    if (isset($cache[$code])) {
+        return $cache[$code];
+    }
+
     $stmt = db()->prepare(
         "SELECT id FROM acc_accounts
          WHERE code = ? AND type = 'asset' AND sub_type = 'current_asset' AND is_active = 1
          LIMIT 1"
     );
     $stmt->execute([$code]);
-    return (int)($stmt->fetchColumn() ?: 0);
+    return $cache[$code] = (int)($stmt->fetchColumn() ?: 0);
 }
 
 /**
@@ -171,14 +180,17 @@ function acc_asset_account_id_by_code(string $code): int
 function acc_received_into_account_code_for_payment_method(string $method): string
 {
     $method = strtolower(trim($method));
+    if (!in_array($method, ['cash', 'bank', 'mobile_banking'], true)) {
+        return '';
+    }
     $fallback = ($method === 'bank' || $method === 'mobile_banking')
         ? acc_setting('default_bank_account', '1200')
         : acc_setting('default_cash_account', '1100');
 
     $setting_key = match ($method) {
+        'cash' => 'received_into_cash_account',
         'bank' => 'received_into_bank_account',
         'mobile_banking' => 'received_into_mobile_banking_account',
-        default => 'received_into_cash_account',
     };
 
     $code = trim(acc_setting($setting_key, $fallback));
@@ -196,6 +208,10 @@ function acc_received_into_account_id_for_payment_method(string $method): int
         return $cache[$method];
     }
 
+    if (!in_array($method, ['cash', 'bank', 'mobile_banking'], true)) {
+        return $cache[$method] = 0;
+    }
+
     $id = acc_asset_account_id_by_code(acc_received_into_account_code_for_payment_method($method));
     if ($id > 0) {
         return $cache[$method] = $id;
@@ -209,11 +225,13 @@ function acc_received_into_account_id_for_payment_method(string $method): int
         return $cache[$method] = $fallback_id;
     }
 
-    $any = db()->query(
+    $stmt = db()->prepare(
         "SELECT id FROM acc_accounts
          WHERE type = 'asset' AND sub_type = 'current_asset' AND code LIKE '1%' AND is_active = 1
          ORDER BY code ASC LIMIT 1"
-    )->fetchColumn();
+    );
+    $stmt->execute();
+    $any = $stmt->fetchColumn();
     return $cache[$method] = (int)($any ?: 0);
 }
 

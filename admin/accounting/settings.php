@@ -15,14 +15,16 @@ $fee_types = acc_student_fee_types();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
+    $fallback_cash_code = acc_setting('default_cash_account', '1100');
+    $fallback_bank_code = acc_setting('default_bank_account', '1200');
 
     $settings_to_save = [
         'fiscal_year_start'    => trim($_POST['fiscal_year_start']    ?? '07-01'),
         'default_cash_account' => trim($_POST['default_cash_account'] ?? '1100'),
         'default_bank_account' => trim($_POST['default_bank_account'] ?? '1200'),
-        'received_into_cash_account' => trim($_POST['received_into_cash_account'] ?? acc_setting('default_cash_account', '1100')),
-        'received_into_bank_account' => trim($_POST['received_into_bank_account'] ?? acc_setting('default_bank_account', '1200')),
-        'received_into_mobile_banking_account' => trim($_POST['received_into_mobile_banking_account'] ?? acc_setting('default_bank_account', '1200')),
+        'received_into_cash_account' => trim($_POST['received_into_cash_account'] ?? $fallback_cash_code),
+        'received_into_bank_account' => trim($_POST['received_into_bank_account'] ?? $fallback_bank_code),
+        'received_into_mobile_banking_account' => trim($_POST['received_into_mobile_banking_account'] ?? $fallback_bank_code),
         'currency_symbol'      => trim($_POST['currency_symbol']      ?? '৳'),
         'currency_code'        => strtoupper(trim($_POST['currency_code'] ?? 'BDT')),
         'email_invoice'        => isset($_POST['email_invoice'])  ? '1' : '0',
@@ -37,6 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $settings_to_save['sms_api_key'] = $new_api_key;
     }
 
+    $bank_account_keys = ['default_bank_account', 'received_into_bank_account', 'received_into_mobile_banking_account'];
     foreach ([
         'default_cash_account',
         'default_bank_account',
@@ -45,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'received_into_mobile_banking_account',
     ] as $asset_key) {
         if (!in_array($settings_to_save[$asset_key], $asset_codes, true)) {
-            $settings_to_save[$asset_key] = ($asset_key === 'default_bank_account' || $asset_key === 'received_into_bank_account' || $asset_key === 'received_into_mobile_banking_account')
+            $settings_to_save[$asset_key] = in_array($asset_key, $bank_account_keys, true)
                 ? '1200'
                 : '1100';
         }
