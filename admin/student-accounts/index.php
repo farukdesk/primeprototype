@@ -41,12 +41,18 @@ $stmt = $db->prepare(
             s.full_name    AS student_name,
             s.student_id   AS student_sid,
             s.admitted_semester,
-            s.status       AS student_status
+            s.status       AS student_status,
+            sf1.tuition_payable        AS current_tuition_payable,
+            sf1.fixed_discount_amount  AS current_fixed_discount,
+            sf1.english_discount_amount AS current_english_discount
      FROM sfp_packages p
-     JOIN students s ON s.id = p.student_id
-     WHERE $where_sql
-     ORDER BY p.created_at DESC
-     LIMIT $per_page OFFSET $off"
+      JOIN students s ON s.id = p.student_id
+      LEFT JOIN sfp_semester_fees sf1
+             ON sf1.package_id = p.id
+            AND sf1.semester_number = 1
+      WHERE $where_sql
+      ORDER BY p.created_at DESC
+      LIMIT $per_page OFFSET $off"
 );
 $stmt->execute($params);
 $packages = $stmt->fetchAll();
@@ -121,9 +127,28 @@ require_once __DIR__ . '/../includes/header.php';
                     <td>
                         <?= h($pkg['program_name']) ?>
                     </td>
+                    <?php
+                    $months = (float)($pkg['total_months'] ?? 0);
+                    $mps    = (float)($pkg['months_per_semester'] ?? 0);
+                    $reg    = (float)($pkg['reg_fee_per_semester'] ?? 0);
+
+                    $fixed_per_sem = ($months > 0 && $mps > 0)
+                        ? round((float)$pkg['fixed_institutional_fees'] / $months * $mps, 2)
+                        : 0.0;
+                    $english_per_sem = ($months > 0 && $mps > 0)
+                        ? round((float)$pkg['english_course_fee'] / $months * $mps, 2)
+                        : 0.0;
+
+                    $fixed_after_discount = max(0.0, $fixed_per_sem - (float)($pkg['current_fixed_discount'] ?? 0));
+                    $english_after_discount = max(0.0, $english_per_sem - (float)($pkg['current_english_discount'] ?? 0));
+                    $tuition_current = (float)($pkg['current_tuition_payable'] ?? $pkg['tuition_per_semester'] ?? 0);
+
+                    $current_sem_total = $tuition_current + $fixed_after_discount + $english_after_discount + $reg;
+                    $current_monthly_total = ($mps > 0) ? ($current_sem_total / $mps) : $current_sem_total;
+                    ?>
                     <td class="text-center"><?= (int)$pkg['total_semesters'] ?></td>
-                    <td><?= sfp_money((float)$pkg['tuition_per_semester']) ?></td>
-                    <td><?= sfp_money((float)$pkg['monthly_fixed_fee']) ?></td>
+                    <td><?= sfp_money($current_sem_total) ?></td>
+                    <td><?= sfp_money($current_monthly_total) ?></td>
                     <td>
                         <small class="text-muted"><?= date('d M Y', strtotime($pkg['created_at'])) ?></small>
                     </td>

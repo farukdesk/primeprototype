@@ -56,12 +56,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $int_monthly     = $_POST['internal_monthly']     !== '' ? (float)$_POST['internal_monthly']    : null;
 
     // Per-program fee constants (moved from global settings)
-    $adm_fee_base       = $_POST['admission_fee_base']       !== '' ? (int)$_POST['admission_fee_base']       : null;
-    $reg_fee_sem        = $_POST['reg_fee_per_semester']     !== '' ? (int)$_POST['reg_fee_per_semester']     : null;
-    $reg_fee_tot        = $_POST['reg_fee_total']            !== '' ? (int)$_POST['reg_fee_total']            : null;
-    $form_id            = $_POST['form_id_fee']              !== '' ? (int)$_POST['form_id_fee']              : null;
-    $id_card            = $_POST['id_card_fee']              !== '' ? (int)$_POST['id_card_fee']              : null;
-    $adm_form           = $_POST['admission_form_fee']       !== '' ? (int)$_POST['admission_form_fee']       : null;
+    $adm_fee_base       = ($_POST['admission_fee_base'] ?? '')       !== '' ? (int)$_POST['admission_fee_base']       : null;
+    $reg_fee_sem        = ($_POST['reg_fee_per_semester'] ?? '')     !== '' ? (int)$_POST['reg_fee_per_semester']     : null;
+    $reg_fee_tot        = ($_POST['reg_fee_total'] ?? '')            !== '' ? (int)$_POST['reg_fee_total']            : null;
+    $id_card            = ($_POST['id_card_fee'] ?? '')              !== '' ? (int)$_POST['id_card_fee']              : null;
+    $adm_form           = ($_POST['admission_form_fee'] ?? '')       !== '' ? (int)$_POST['admission_form_fee']       : null;
+    $form_id            = ($id_card === null && $adm_form === null) ? null : ((int)($id_card ?? 0) + (int)($adm_form ?? 0));
     $bi_start_month     = $_POST['bi_semester_start_month']  !== '' ? (int)$_POST['bi_semester_start_month']  : null;
     $tri_start_month    = $_POST['tri_semester_start_month'] !== '' ? (int)$_POST['tri_semester_start_month'] : null;
 
@@ -259,12 +259,6 @@ require_once __DIR__ . '/../includes/header.php';
                             <input type="number" name="reg_fee_total" value="<?= h($old('reg_fee_total')) ?>"
                                    class="form-control" min="0" placeholder="e.g. 12000">
                             <div class="form-text">Total across all semesters (BDT)</div>
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label fw-semibold">Form + ID Fee (Legacy)</label>
-                            <input type="number" name="form_id_fee" value="<?= h($old('form_id_fee')) ?>"
-                                   class="form-control" min="0" placeholder="e.g. 1000">
-                            <div class="form-text">Admission form + ID card combined (BDT)</div>
                         </div>
                         <div class="col-md-4">
                             <label class="form-label fw-semibold">ID Card Fee</label>
