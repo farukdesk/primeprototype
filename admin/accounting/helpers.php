@@ -10,6 +10,8 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../change-log/helpers.php';
 
+const ACC_INVOICE_CUSTOM_LOGO_FILE = 'Prime_University_Invoice logo.png';
+
 // ── Permission helpers ────────────────────────────────────────────────────────
 
 function acc_can_view(): bool
@@ -61,9 +63,9 @@ function acc_currency(): string
 function acc_university_logo_url(): string
 {
     $base = defined('SITE_URL') ? SITE_URL : APP_URL;
-    $custom_logo_abs = dirname(__DIR__) . '/uploads/logos/Prime_University_Invoice logo.png';
+    $custom_logo_abs = dirname(__DIR__) . '/uploads/logos/' . ACC_INVOICE_CUSTOM_LOGO_FILE;
     if (is_file($custom_logo_abs) && is_readable($custom_logo_abs)) {
-        return rtrim($base, '/') . '/admin/uploads/logos/' . rawurlencode('Prime_University_Invoice logo.png');
+        return rtrim($base, '/') . '/admin/uploads/logos/' . rawurlencode(ACC_INVOICE_CUSTOM_LOGO_FILE);
     }
     return rtrim($base, '/') . '/assets/img/logo/logo-black-sm.png';
 }
@@ -73,7 +75,7 @@ function acc_university_logo_url(): string
  */
 function acc_logo_data_uri(): string
 {
-    $custom_logo = dirname(__DIR__) . '/uploads/logos/Prime_University_Invoice logo.png';
+    $custom_logo = dirname(__DIR__) . '/uploads/logos/' . ACC_INVOICE_CUSTOM_LOGO_FILE;
     if (is_file($custom_logo) && is_readable($custom_logo)) {
         return 'data:image/png;base64,' . base64_encode(file_get_contents($custom_logo));
     }
