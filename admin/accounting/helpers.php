@@ -61,6 +61,10 @@ function acc_currency(): string
 function acc_university_logo_url(): string
 {
     $base = defined('SITE_URL') ? SITE_URL : APP_URL;
+    $custom_logo_abs = dirname(__DIR__) . '/uploads/logos/Prime_University_Invoice logo.png';
+    if (is_file($custom_logo_abs) && is_readable($custom_logo_abs)) {
+        return rtrim($base, '/') . '/admin/uploads/logos/' . rawurlencode('Prime_University_Invoice logo.png');
+    }
     return rtrim($base, '/') . '/assets/img/logo/logo-black-sm.png';
 }
 
@@ -69,9 +73,13 @@ function acc_university_logo_url(): string
  */
 function acc_logo_data_uri(): string
 {
-    $path = dirname(dirname(__DIR__)) . '/assets/img/logo/logo-black-sm.png';
-    if (is_file($path) && is_readable($path)) {
-        return 'data:image/png;base64,' . base64_encode(file_get_contents($path));
+    $custom_logo = dirname(__DIR__) . '/uploads/logos/Prime_University_Invoice logo.png';
+    if (is_file($custom_logo) && is_readable($custom_logo)) {
+        return 'data:image/png;base64,' . base64_encode(file_get_contents($custom_logo));
+    }
+    $default_logo = dirname(dirname(__DIR__)) . '/assets/img/logo/logo-black-sm.png';
+    if (is_file($default_logo) && is_readable($default_logo)) {
+        return 'data:image/png;base64,' . base64_encode(file_get_contents($default_logo));
     }
     return '';
 }
