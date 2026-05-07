@@ -1132,7 +1132,13 @@ function acc_income_account_id_for_fee_type(string $fee_type): int
         return $cache[$fee_type] = $id;
     }
 
-    return $cache[$fee_type] = acc_income_account_id_by_code(acc_default_income_code_for_fee_type($fee_type));
+    $fallback_id = acc_income_account_id_by_code(acc_default_income_code_for_fee_type($fee_type));
+    if ($fallback_id > 0) {
+        return $cache[$fee_type] = $fallback_id;
+    }
+
+    $any_income = db()->query("SELECT id FROM acc_accounts WHERE type = 'income' AND is_active = 1 ORDER BY code ASC LIMIT 1")->fetchColumn();
+    return $cache[$fee_type] = (int)($any_income ?: 0);
 }
 
 /**
@@ -1146,7 +1152,7 @@ function acc_income_account_map_for_fee_types(?array $fee_types = null): array
     $map = [];
     $fee_types = $fee_types ?: acc_student_fee_types();
     foreach ($fee_types as $type) {
-        $map[$type] = acc_income_account_id_for_fee_type((string)$type);
+        $map[$type] = acc_income_account_id_for_fee_type($type);
     }
     return $map;
 }
