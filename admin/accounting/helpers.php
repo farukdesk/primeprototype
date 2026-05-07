@@ -60,7 +60,20 @@ function acc_currency(): string
 
 function acc_university_logo_url(): string
 {
-    return APP_URL . '/assets/img/logo/logo-black-sm.png';
+    $base = defined('SITE_URL') ? SITE_URL : APP_URL;
+    return rtrim($base, '/') . '/assets/img/logo/logo-black-sm.png';
+}
+
+/**
+ * Return logo as a base64 data URI for embedding in PDF (dompdf cannot fetch remote URLs).
+ */
+function acc_logo_data_uri(): string
+{
+    $path = dirname(dirname(__DIR__)) . '/assets/img/logo/logo-black-sm.png';
+    if (is_file($path) && is_readable($path)) {
+        return 'data:image/png;base64,' . base64_encode(file_get_contents($path));
+    }
+    return '';
 }
 
 function acc_university_address(): string
@@ -1115,12 +1128,121 @@ function acc_send_fee_sms(string $mobile, array $vars): bool
 }
 
 /**
- * Send a fee payment invoice email using the 'fee_payment_invoice' email template.
+ * Generate student-copy invoice HTML (suitable for Dompdf).
  *
- * @param array $student     Row from students table (full_name, email, student_id, dept_name etc.)
- * @param array $payment_info Associative array with payment details for the template vars
+ * @param array $student       Row from students (full_name, student_id, dept_name, program_name, phone, email)
+ * @param array $voucher       Row from acc_vouchers (voucher_number, voucher_date, total_amount, narration, created_by_name)
+ * @param array $invoice_items Array of fee rows. Each: ['fee_type_label','semester_label','month_label','amount','narration']
+ * @return string              HTML string
  */
-function acc_send_fee_invoice_email(array $student, array $payment_info): bool
+function acc_render_invoice_html(array $student, array $voucher, array $invoice_items): string
+{
+    $currency    = acc_currency();
+    $logo_uri    = acc_logo_data_uri();
+    $logo_html   = $logo_uri
+        ? '<img src="' . $logo_uri . '" style="height:44px;width:44px;border-radius:50%;object-fit:contain;background:#fff;padding:3px;">'
+        : '';
+    $address     = htmlspecialchars(acc_university_address(), ENT_QUOTES, 'UTF-8');
+    $website     = htmlspecialchars(acc_university_website(), ENT_QUOTES, 'UTF-8');
+    $voucher_no  = htmlspecialchars($voucher['voucher_number'] ?? '—', ENT_QUOTES, 'UTF-8');
+    $voucher_dt  = htmlspecialchars(date('d F Y', strtotime($voucher['voucher_date'] ?? 'now')), ENT_QUOTES, 'UTF-8');
+    $collected   = htmlspecialchars($voucher['created_by_name'] ?? '—', ENT_QUOTES, 'UTF-8');
+    $narration   = htmlspecialchars($voucher['narration'] ?? '', ENT_QUOTES, 'UTF-8');
+    $s_name      = htmlspecialchars($student['full_name']   ?? '—', ENT_QUOTES, 'UTF-8');
+    $s_id        = htmlspecialchars($student['student_id']  ?? '', ENT_QUOTES, 'UTF-8');
+    $s_dept      = htmlspecialchars($student['dept_name']   ?? '', ENT_QUOTES, 'UTF-8');
+    $s_prog      = htmlspecialchars($student['program_name'] ?? '', ENT_QUOTES, 'UTF-8');
+    $s_phone     = htmlspecialchars($student['phone']  ?? '', ENT_QUOTES, 'UTF-8');
+    $s_email     = htmlspecialchars($student['email']  ?? '', ENT_QUOTES, 'UTF-8');
+
+    $rows_html = '';
+    $grand_total = 0.0;
+    $i = 1;
+    foreach ($invoice_items as $it) {
+        $desc   = htmlspecialchars($it['fee_type_label'] ?? '', ENT_QUOTES, 'UTF-8');
+        $sem    = htmlspecialchars($it['semester_label'] ?? '', ENT_QUOTES, 'UTF-8');
+        $mon    = htmlspecialchars($it['month_label']    ?? '', ENT_QUOTES, 'UTF-8');
+        $amt    = (float)($it['amount'] ?? 0);
+        $note   = htmlspecialchars($it['narration'] ?? '', ENT_QUOTES, 'UTF-8');
+        $desc_cell = $desc;
+        if ($sem)  { $desc_cell .= ' <span style="font-size:8pt;color:#555;">(' . $sem . ($mon ? ', ' . $mon : '') . ')</span>'; }
+        elseif ($mon) { $desc_cell .= ' <span style="font-size:8pt;color:#555;">(' . $mon . ')</span>'; }
+        if ($note) { $desc_cell .= '<br><span style="font-size:7.5pt;color:#888;">' . $note . '</span>'; }
+        $grand_total += $amt;
+        $rows_html .= '<tr style="border-bottom:1px solid #e9ecef;">'
+            . '<td style="padding:5px 8px;font-size:9pt;">' . $i . '</td>'
+            . '<td style="padding:5px 8px;font-size:9pt;">' . $desc_cell . '</td>'
+            . '<td style="padding:5px 8px;font-size:9pt;text-align:right;">' . htmlspecialchars($currency . ' ' . number_format($amt, 2), ENT_QUOTES, 'UTF-8') . '</td>'
+            . '</tr>';
+        $i++;
+    }
+
+    $total_html = htmlspecialchars($currency . ' ' . number_format($grand_total, 2), ENT_QUOTES, 'UTF-8');
+
+    return '<!DOCTYPE html><html><head><meta charset="UTF-8">'
+        . '<title>Fee Receipt - Student Copy</title></head>'
+        . '<body style="font-family:Arial,Helvetica,sans-serif;font-size:10pt;color:#222;margin:0;padding:0;">'
+        . '<div style="max-width:700px;margin:0 auto;">'
+        // Header
+        . '<table style="width:100%;border-collapse:collapse;background:#1a3c5e;color:#fff;padding:12px 20px;" cellpadding="0" cellspacing="0"><tr>'
+        . '<td style="padding:12px 16px;vertical-align:middle;width:56px;">' . $logo_html . '</td>'
+        . '<td style="padding:12px 8px;vertical-align:middle;">'
+        . '<div style="font-size:14pt;font-weight:700;color:#fff;">Prime University</div>'
+        . '<div style="font-size:8pt;color:rgba(255,255,255,.8);margin-top:2px;">' . $address . '<br>' . $website . '</div>'
+        . '</td>'
+        . '<td style="padding:12px 16px;text-align:right;vertical-align:middle;white-space:nowrap;">'
+        . '<span style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:20px;padding:3px 12px;font-size:8.5pt;font-weight:700;letter-spacing:.5px;text-transform:uppercase;">Student Copy</span>'
+        . '</td></tr></table>'
+        // Title ribbon
+        . '<div style="text-align:center;background:#f0f4f8;border-bottom:2px solid #1a3c5e;padding:6px;font-size:11pt;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#1a3c5e;">Fee Collection Receipt</div>'
+        // Meta row
+        . '<table style="width:100%;border-collapse:collapse;margin-top:10px;" cellpadding="0" cellspacing="0"><tr>'
+        . '<td style="width:50%;padding:0 8px 0 0;vertical-align:top;">'
+        . '<table style="width:100%;border:1px solid #dee2e6;border-radius:4px;border-collapse:collapse;background:#f8fafc;" cellpadding="6"><tr><td style="font-size:8.5pt;color:#6b7280;width:110px;">Receipt No.</td><td style="font-size:9pt;font-weight:600;">' . $voucher_no . '</td></tr>'
+        . '<tr><td style="font-size:8.5pt;color:#6b7280;">Date</td><td style="font-size:9pt;font-weight:600;">' . $voucher_dt . '</td></tr></table>'
+        . '</td>'
+        . '<td style="width:50%;padding:0 0 0 8px;vertical-align:top;">'
+        . '<table style="width:100%;border:1px solid #dee2e6;border-radius:4px;border-collapse:collapse;background:#f8fafc;" cellpadding="6"><tr><td style="font-size:8.5pt;color:#6b7280;width:110px;">Collected By</td><td style="font-size:9pt;font-weight:600;">' . $collected . '</td></tr></table>'
+        . '</td></tr></table>'
+        // Payer box
+        . '<div style="border:1px solid #1a3c5e;border-radius:4px;padding:8px 12px;margin:8px 0;background:#f0f6ff;">'
+        . '<div style="font-size:12pt;font-weight:700;color:#1a3c5e;">' . $s_name . '</div>'
+        . '<div style="font-size:9pt;color:#555;margin-top:2px;">'
+        . ($s_id    ? 'Student ID: <strong>' . $s_id . '</strong>' : '')
+        . ($s_dept  ? ' &nbsp;|&nbsp; Dept: <strong>' . $s_dept . '</strong>' : '')
+        . ($s_prog  ? '<br>Program: <strong>' . $s_prog . '</strong>' : '')
+        . ($s_phone ? ' &nbsp;|&nbsp; Mobile: ' . $s_phone : '')
+        . '</div>'
+        . '</div>'
+        // Fee table
+        . '<table style="width:100%;border-collapse:collapse;font-size:10pt;" cellpadding="0" cellspacing="0">'
+        . '<thead><tr style="background:#1a3c5e;color:#fff;">'
+        . '<th style="padding:5px 8px;font-size:9pt;text-align:left;width:30px;">#</th>'
+        . '<th style="padding:5px 8px;font-size:9pt;text-align:left;">Fee Description</th>'
+        . '<th style="padding:5px 8px;font-size:9pt;text-align:right;">Amount (' . htmlspecialchars($currency, ENT_QUOTES, 'UTF-8') . ')</th>'
+        . '</tr></thead><tbody>'
+        . $rows_html
+        . '</tbody><tfoot><tr style="background:#f8fafc;border-top:2px solid #1a3c5e;">'
+        . '<td colspan="2" style="padding:6px 8px;font-size:10pt;font-weight:700;">Total Amount Received</td>'
+        . '<td style="padding:6px 8px;font-size:12pt;font-weight:700;color:#1a6e3c;text-align:right;">' . $total_html . '</td>'
+        . '</tr></tfoot></table>'
+        . ($narration ? '<div style="font-size:8.5pt;color:#555;margin-top:6px;padding:4px 8px;border-left:3px solid #1a3c5e;">Note: ' . $narration . '</div>' : '')
+        // Footer
+        . '<div style="text-align:center;font-size:8pt;color:#888;margin-top:14px;padding-top:8px;border-top:1px solid #e9ecef;">'
+        . 'This is a computer-generated receipt. Please retain it for your records. &nbsp;|&nbsp; Prime University, ' . $address
+        . '</div>'
+        . '</div></body></html>';
+}
+
+/**
+ * Send a fee payment invoice email with a formal email body and PDF student-copy attachment.
+ *
+ * @param array $student       Row from students table (full_name, email, student_id, dept_name etc.)
+ * @param array $payment_info  Primary payment details (voucher_id, voucher_number, payment_date, fee_type_label, semester_label, amount, reference, narration)
+ * @param array $all_items     All fee line items (for multi-payment). Defaults to wrapping $payment_info as single item.
+ *                             Each item: ['fee_type_label','semester_label','month_label','amount','narration']
+ */
+function acc_send_fee_invoice_email(array $student, array $payment_info, array $all_items = []): bool
 {
     if (acc_setting('email_invoice', '1') !== '1') {
         return false;
@@ -1129,44 +1251,160 @@ function acc_send_fee_invoice_email(array $student, array $payment_info): bool
         return false;
     }
 
-    require_once __DIR__ . '/../includes/mailer.php';
-
-    $currency = acc_currency();
-
-    $narration_row = '';
-    if (!empty($payment_info['narration'])) {
-        $narration_row = '<p style="margin:4px 0 0;font-size:13px;color:#6b7280;">Note: ' . htmlspecialchars($payment_info['narration'], ENT_QUOTES, 'UTF-8') . '</p>';
+    if (empty($all_items)) {
+        $all_items = [[
+            'fee_type_label' => $payment_info['fee_type_label'] ?? '',
+            'semester_label' => $payment_info['semester_label'] ?? '',
+            'month_label'    => '',
+            'amount'         => $payment_info['amount'] ?? 0,
+            'narration'      => $payment_info['narration'] ?? '',
+        ]];
     }
 
-    $vars = [
-        'student_name'     => $student['full_name'],
-        'student_sid'      => $student['student_id'],
-        'department'       => $student['dept_name'] ?? '',
-        'voucher_number'   => $payment_info['voucher_number'],
-        'payment_date'     => date('d M Y', strtotime($payment_info['payment_date'])),
-        'fee_type_label'   => $payment_info['fee_type_label'],
-        'semester_label'   => !empty($payment_info['semester_label']) ? ' – ' . $payment_info['semester_label'] : '',
-        'currency'         => $currency,
-        'amount'           => number_format((float)$payment_info['amount'], 2),
-        'outstanding_total'=> number_format((float)$payment_info['outstanding_total'], 2),
-        'reference'        => $payment_info['reference'] ?: '—',
-        'narration_row'    => $narration_row,
-        'invoice_copy_label' => 'Student Copy',
-        'invoice_url'      => !empty($payment_info['voucher_id'])
-            ? APP_URL . '/accounting/fee-invoice.php?voucher_id=' . (int)$payment_info['voucher_id']
-            : '',
-        'university_address' => acc_university_address(),
-        'university_website' => acc_university_website(),
-        'logo_url'         => acc_university_logo_url(),
-    ];
+    $currency    = acc_currency();
+    $student_name = $student['full_name'] ?? '';
+    $voucher_no  = $payment_info['voucher_number'] ?? '—';
+    $pay_date    = date('d M Y', strtotime($payment_info['payment_date'] ?? 'now'));
+    $total_amt   = 0.0;
+    foreach ($all_items as $it) {
+        $total_amt += (float)($it['amount'] ?? 0);
+    }
+    $formatted_total = $currency . ' ' . number_format($total_amt, 2);
+    $fee_lbl = count($all_items) > 1 ? 'Multiple Fee Payment' : ($payment_info['fee_type_label'] ?? 'Fee Payment');
 
-    return send_template_email(
-        'fee_payment_invoice',
-        $student['email'],
-        $student['full_name'],
-        $vars
-    );
+    // ── Formal email body ─────────────────────────────────────────────────────
+    $items_table_rows = '';
+    foreach ($all_items as $it) {
+        $desc = htmlspecialchars($it['fee_type_label'] ?? '', ENT_QUOTES, 'UTF-8');
+        if (!empty($it['semester_label'])) {
+            $desc .= ' (' . htmlspecialchars($it['semester_label'], ENT_QUOTES, 'UTF-8');
+            if (!empty($it['month_label'])) {
+                $desc .= ', ' . htmlspecialchars($it['month_label'], ENT_QUOTES, 'UTF-8');
+            }
+            $desc .= ')';
+        } elseif (!empty($it['month_label'])) {
+            $desc .= ' (' . htmlspecialchars($it['month_label'], ENT_QUOTES, 'UTF-8') . ')';
+        }
+        $items_table_rows .= '<tr>'
+            . '<td style="padding:6px 12px;border-bottom:1px solid #e9ecef;">' . $desc . '</td>'
+            . '<td style="padding:6px 12px;border-bottom:1px solid #e9ecef;text-align:right;white-space:nowrap;">'
+            . htmlspecialchars($currency . ' ' . number_format((float)($it['amount'] ?? 0), 2), ENT_QUOTES, 'UTF-8')
+            . '</td>'
+            . '</tr>';
+    }
+
+    $address = htmlspecialchars(acc_university_address(), ENT_QUOTES, 'UTF-8');
+    $website = htmlspecialchars(acc_university_website(), ENT_QUOTES, 'UTF-8');
+    $logo_url = acc_university_logo_url();
+
+    $body_html = '<!DOCTYPE html><html><head><meta charset="UTF-8"></head>'
+        . '<body style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#333;background:#f4f4f4;margin:0;padding:20px;">'
+        . '<div style="max-width:600px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);">'
+        // Email header
+        . '<div style="background:#1a3c5e;padding:20px 28px;display:flex;align-items:center;">'
+        . '<img src="' . htmlspecialchars($logo_url, ENT_QUOTES, 'UTF-8') . '" alt="Prime University" style="height:40px;width:40px;border-radius:50%;object-fit:contain;background:#fff;padding:2px;margin-right:12px;">'
+        . '<div style="color:#fff;">'
+        . '<div style="font-size:17px;font-weight:700;">Prime University</div>'
+        . '<div style="font-size:11px;opacity:.8;margin-top:2px;">Accounts Section &nbsp;|&nbsp; Fee Payment Confirmation</div>'
+        . '</div></div>'
+        // Body
+        . '<div style="padding:28px 32px;">'
+        . '<p style="margin:0 0 16px;">Dear <strong>' . htmlspecialchars($student_name, ENT_QUOTES, 'UTF-8') . '</strong>,</p>'
+        . '<p style="margin:0 0 16px;">We are pleased to confirm that your fee payment has been received and processed successfully. Please find the details below:</p>'
+        . '<table style="width:100%;border-collapse:collapse;margin-bottom:20px;font-size:13px;border:1px solid #e2e8f0;border-radius:6px;">'
+        . '<tr style="background:#f0f4f8;"><td style="padding:8px 12px;font-weight:600;width:45%;">Receipt No.</td><td style="padding:8px 12px;">' . htmlspecialchars($voucher_no, ENT_QUOTES, 'UTF-8') . '</td></tr>'
+        . '<tr><td style="padding:8px 12px;font-weight:600;border-top:1px solid #e9ecef;">Payment Date</td><td style="padding:8px 12px;border-top:1px solid #e9ecef;">' . $pay_date . '</td></tr>'
+        . '<tr style="background:#f0f4f8;"><td style="padding:8px 12px;font-weight:600;border-top:1px solid #e9ecef;">Student ID</td><td style="padding:8px 12px;border-top:1px solid #e9ecef;">' . htmlspecialchars($student['student_id'] ?? '', ENT_QUOTES, 'UTF-8') . '</td></tr>'
+        . '<tr><td style="padding:8px 12px;font-weight:600;border-top:1px solid #e9ecef;">Fee Type</td><td style="padding:8px 12px;border-top:1px solid #e9ecef;">' . htmlspecialchars($fee_lbl, ENT_QUOTES, 'UTF-8') . '</td></tr>'
+        . '</table>'
+        . '<table style="width:100%;border-collapse:collapse;margin-bottom:20px;font-size:13px;border:1px solid #e2e8f0;">'
+        . '<thead><tr style="background:#1a3c5e;color:#fff;"><th style="padding:7px 12px;text-align:left;font-weight:600;">Fee Description</th><th style="padding:7px 12px;text-align:right;font-weight:600;">Amount</th></tr></thead>'
+        . '<tbody>' . $items_table_rows . '</tbody>'
+        . '<tfoot><tr style="background:#f0f4f8;font-weight:700;"><td style="padding:8px 12px;border-top:2px solid #1a3c5e;">Total Amount Received</td><td style="padding:8px 12px;border-top:2px solid #1a3c5e;text-align:right;color:#1a6e3c;">' . htmlspecialchars($formatted_total, ENT_QUOTES, 'UTF-8') . '</td></tr></tfoot>'
+        . '</table>'
+        . '<p style="margin:0 0 16px;">Your official fee receipt (Student Copy) is attached to this email as a PDF. Please retain it for your records.</p>'
+        . '<p style="margin:0 0 16px;">If you have any queries regarding this payment, please contact the Accounts Section at the university.</p>'
+        . '<p style="margin:0;">Yours sincerely,<br><strong>Accounts Section</strong><br>Prime University<br>'
+        . $address . '<br><a href="' . $website . '" style="color:#1a3c5e;">' . $website . '</a></p>'
+        . '</div>'
+        // Footer
+        . '<div style="background:#f8fafc;border-top:1px solid #e9ecef;padding:12px 28px;font-size:11px;color:#888;text-align:center;">'
+        . 'This is an automated email from the Prime University fee management system. Please do not reply to this email.'
+        . '</div>'
+        . '</div></body></html>';
+
+    // ── Generate PDF student copy ─────────────────────────────────────────────
+    $pdf_data = '';
+    try {
+        $vendor_autoload = dirname(dirname(__DIR__)) . '/vendor/autoload.php';
+        if (is_file($vendor_autoload)) {
+            require_once $vendor_autoload;
+            // Build voucher stub for the PDF renderer
+            $vd_stmt = db()->prepare('SELECT * FROM acc_vouchers WHERE id = ? LIMIT 1');
+            $vd_stmt->execute([(int)($payment_info['voucher_id'] ?? 0)]);
+            $vd_row = $vd_stmt->fetch() ?: [];
+            if (!$vd_row && !empty($payment_info['voucher_number'])) {
+                $vd_row = [
+                    'voucher_number'   => $payment_info['voucher_number'],
+                    'voucher_date'     => $payment_info['payment_date'] ?? date('Y-m-d'),
+                    'narration'        => $payment_info['narration'] ?? '',
+                    'created_by_name'  => '',
+                ];
+            }
+            $invoice_html = acc_render_invoice_html($student, $vd_row, $all_items);
+            $dompdf = new \Dompdf\Dompdf(['isRemoteEnabled' => false]);
+            $dompdf->loadHtml($invoice_html, 'UTF-8');
+            $dompdf->setPaper('A4', 'portrait');
+            $dompdf->render();
+            $pdf_data = $dompdf->output();
+        }
+    } catch (\Throwable $e) {
+        // PDF generation failed; send email without attachment
+        $pdf_data = '';
+    }
+
+    // ── Build and send the email ──────────────────────────────────────────────
+    $from_name  = APP_NAME;
+    $from_email = defined('MAIL_FROM') ? MAIL_FROM : 'noreply@' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+    $encoded_from = '=?UTF-8?B?' . base64_encode($from_name) . '?=';
+    $subject = 'Fee Payment Confirmation – Receipt ' . $voucher_no . ' – ' . $student_name;
+    $sid_slug = preg_replace('/[^A-Za-z0-9\-]/', '', $student['student_id'] ?? 'student');
+
+    if ($pdf_data !== '') {
+        $boundary = '----=_Part_' . md5(uniqid('', true));
+        $attach_name = 'fee-receipt-' . $sid_slug . '-' . preg_replace('/[^A-Za-z0-9\-]/', '', $voucher_no) . '.pdf';
+
+        $headers  = 'MIME-Version: 1.0' . "\r\n";
+        $headers .= 'Content-Type: multipart/mixed; boundary="' . $boundary . '"' . "\r\n";
+        $headers .= 'From: ' . $encoded_from . ' <' . $from_email . '>' . "\r\n";
+        $headers .= 'Reply-To: ' . $from_email . "\r\n";
+        $headers .= 'X-Mailer: PHP/' . PHP_VERSION;
+
+        $message  = '--' . $boundary . "\r\n";
+        $message .= 'Content-Type: text/html; charset=UTF-8' . "\r\n";
+        $message .= 'Content-Transfer-Encoding: quoted-printable' . "\r\n\r\n";
+        $message .= quoted_printable_encode($body_html) . "\r\n";
+
+        $message .= '--' . $boundary . "\r\n";
+        $message .= 'Content-Type: application/pdf; name="' . $attach_name . '"' . "\r\n";
+        $message .= 'Content-Transfer-Encoding: base64' . "\r\n";
+        $message .= 'Content-Disposition: attachment; filename="' . $attach_name . '"' . "\r\n\r\n";
+        $message .= chunk_split(base64_encode($pdf_data)) . "\r\n";
+        $message .= '--' . $boundary . '--';
+
+        return mail($student['email'], $subject, $message, $headers, '-f' . $from_email);
+    }
+
+    // Fallback: send without attachment (plain HTML email)
+    $headers  = 'MIME-Version: 1.0' . "\r\n";
+    $headers .= 'Content-Type: text/html; charset=UTF-8' . "\r\n";
+    $headers .= 'From: ' . $encoded_from . ' <' . $from_email . '>' . "\r\n";
+    $headers .= 'Reply-To: ' . $from_email . "\r\n";
+    $headers .= 'X-Mailer: PHP/' . PHP_VERSION;
+
+    return mail($student['email'], $subject, $body_html, $headers, '-f' . $from_email);
 }
+
 
 // ── Admission Applicant Helpers ───────────────────────────────────────────────
 

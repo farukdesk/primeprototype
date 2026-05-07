@@ -3,7 +3,9 @@
  * Fee Collection Invoice – Standalone print page (no admin layout).
  * Displays always two printable invoice copies (Office + Student).
  *
- * Usage: fee-invoice.php?voucher_id=123
+ * Usage:
+ *   fee-invoice.php?voucher_id=123          – single payment invoice
+ *   fee-invoice.php?voucher_ids=1,2,3       – combined invoice for multiple payments
  */
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/helpers.php';
@@ -11,15 +13,38 @@ require_once __DIR__ . '/helpers.php';
 auth_check();
 require_access('accounting');
 
-$voucher_id = (int)($_GET['voucher_id'] ?? 0);
-if (!$voucher_id) {
+// ── Resolve voucher IDs ───────────────────────────────────────────────────────
+$multi_ids_raw = trim($_GET['voucher_ids'] ?? '');
+$single_id     = (int)($_GET['voucher_id'] ?? 0);
+
+if ($multi_ids_raw !== '') {
+    $voucher_ids = array_filter(array_map('intval', explode(',', $multi_ids_raw)));
+} elseif ($single_id) {
+    $voucher_ids = [$single_id];
+} else {
     die('Invalid invoice.');
 }
+$voucher_ids = array_values(array_unique($voucher_ids));
+if (!$voucher_ids) {
+    die('Invalid invoice.');
+}
+$is_multi = count($voucher_ids) > 1;
 
-$voucher = acc_get_voucher($voucher_id);
-if (!$voucher) {
+// Load all vouchers
+$vouchers = [];
+foreach ($voucher_ids as $vid) {
+    $v = acc_get_voucher($vid);
+    if ($v) {
+        $vouchers[$vid] = $v;
+    }
+}
+if (!$vouchers) {
     die('Voucher not found.');
 }
+
+// Use first voucher as the "primary" for header display
+$primary_voucher = reset($vouchers);
+$voucher_id      = (int)key($vouchers); // primary voucher id
 
 $done_url = APP_URL . '/accounting/collect-payment.php?tab=student';
 $from = trim($_GET['from'] ?? '');
@@ -34,24 +59,26 @@ if ($from === 'collect-payment' && $is_valid_student_sid) {
 
 $currency = acc_currency();
 
-// ── Try to load student fee payment record ────────────────────────────────────
-$sfp_stmt = db()->prepare(
-    'SELECT sp.*,
-            s.full_name, s.student_id AS student_sid, s.email, s.phone,
-            d.name AS dept_name, p.program_name
-     FROM sfp_payments sp
-     JOIN students s ON s.id = sp.student_id
-     LEFT JOIN dept_departments d       ON d.id = s.dept_id
-     LEFT JOIN dept_academic_programs p ON p.id = s.program_id
-     WHERE sp.voucher_id = ?
-     LIMIT 1'
-);
-$sfp_stmt->execute([$voucher_id]);
-$sfp = $sfp_stmt->fetch();
+// ── Helper: resolve fee row data for a single sfp_payments voucher_id ────────
+function inv_resolve_sfp(int $vid): ?array
+{
+    $sfp_stmt = db()->prepare(
+        'SELECT sp.*,
+                s.full_name, s.student_id AS student_sid, s.email, s.phone,
+                d.name AS dept_name, p.program_name
+         FROM sfp_payments sp
+         JOIN students s ON s.id = sp.student_id
+         LEFT JOIN dept_departments d       ON d.id = s.dept_id
+         LEFT JOIN dept_academic_programs p ON p.id = s.program_id
+         WHERE sp.voucher_id = ?
+         LIMIT 1'
+    );
+    $sfp_stmt->execute([$vid]);
+    return $sfp_stmt->fetch() ?: null;
+}
 
-// ── Try to load admission fee payment record ──────────────────────────────────
-$adm_payment = null;
-if (!$sfp) {
+function inv_resolve_adm(int $vid): ?array
+{
     $adm_stmt = db()->prepare(
         'SELECT afp.*,
                 a.student_name, a.app_number, a.present_contact AS phone,
@@ -64,90 +91,126 @@ if (!$sfp) {
          WHERE afp.voucher_id = ?
          LIMIT 1'
     );
-    $adm_stmt->execute([$voucher_id]);
-    $adm_payment = $adm_stmt->fetch();
+    $adm_stmt->execute([$vid]);
+    return $adm_stmt->fetch() ?: null;
 }
 
-// ── Compose display fields ────────────────────────────────────────────────────
-
+// ── Build fee line items for the table ───────────────────────────────────────
+$fee_rows = [];  // Each: ['voucher_number','fee_type_lbl','semester_lbl','month_lbl','amount','narration']
 $payer_name   = '';
 $payer_sid    = '';
 $payer_dept   = '';
 $payer_prog   = '';
 $payer_phone  = '';
 $payer_email  = '';
-$fee_type_lbl = 'Fee Payment';
-$semester_lbl = '';
-$month_lbl    = '';
 $payment_method_lbl = 'Cash';
 $transaction_number = '';
 
-if ($sfp) {
-    $payer_name   = $sfp['full_name']      ?? '';
-    $payer_sid    = $sfp['student_sid']    ?? '';
-    $payer_dept   = $sfp['dept_name']      ?? '';
-    $payer_prog   = $sfp['program_name']   ?? '';
-    $payer_phone  = $sfp['phone']          ?? '';
-    $payer_email  = $sfp['email']          ?? '';
-    $fee_type_lbl = acc_fee_type_label($sfp['fee_type']);
+foreach ($voucher_ids as $vid) {
+    $v   = $vouchers[$vid] ?? null;
+    if (!$v) continue;
+    $sfp = inv_resolve_sfp($vid);
+    $adm = !$sfp ? inv_resolve_adm($vid) : null;
 
-    if ($sfp['semester_number']) {
-        // Try to get semester label from sfp_semester_fees
-        $sf_row = db()->prepare('SELECT semester_label FROM sfp_semester_fees WHERE id = ?');
-        $sf_row->execute([$sfp['semester_fee_id']]);
-        $sf_row = $sf_row->fetch();
-        $semester_lbl = ($sf_row && $sf_row['semester_label'])
-            ? $sf_row['semester_label']
-            : 'Semester ' . $sfp['semester_number'];
-    }
-    if ($sfp['month_number']) {
-        $month_lbl = 'Month ' . $sfp['month_number'];
-        $summary = acc_student_fee_summary((int)$sfp['student_id']);
-        if ($summary) {
-            foreach ($summary['semesters'] as $sem) {
-                if ((int)$sem['semester_number'] !== (int)$sfp['semester_number']) continue;
-                foreach (($sem['monthly_rows'] ?? []) as $mr) {
-                    if ((int)$mr['month_number'] === (int)$sfp['month_number']) {
-                        $month_lbl .= ' (' . ($mr['month_label'] ?? '') . ')';
-                        break 2;
+    $row_fee_lbl  = 'Fee Payment';
+    $row_sem_lbl  = '';
+    $row_mon_lbl  = '';
+    $row_amount   = (float)($v['total_amount'] ?? 0);
+    $row_narration = $v['narration'] ?? '';
+
+    if ($sfp) {
+        // Populate payer info from first resolved record
+        if ($payer_name === '') {
+            $payer_name  = $sfp['full_name']    ?? '';
+            $payer_sid   = $sfp['student_sid']  ?? '';
+            $payer_dept  = $sfp['dept_name']    ?? '';
+            $payer_prog  = $sfp['program_name'] ?? '';
+            $payer_phone = $sfp['phone']        ?? '';
+            $payer_email = $sfp['email']        ?? '';
+        }
+        $row_fee_lbl = acc_fee_type_label($sfp['fee_type']);
+
+        if ($sfp['semester_number']) {
+            $sf_row = db()->prepare('SELECT semester_label FROM sfp_semester_fees WHERE id = ?');
+            $sf_row->execute([$sfp['semester_fee_id']]);
+            $sf_row = $sf_row->fetch();
+            $row_sem_lbl = ($sf_row && $sf_row['semester_label'])
+                ? $sf_row['semester_label']
+                : 'Semester ' . $sfp['semester_number'];
+        }
+        if ($sfp['month_number']) {
+            $row_mon_lbl = 'Month ' . $sfp['month_number'];
+            $summary = acc_student_fee_summary((int)$sfp['student_id']);
+            if ($summary) {
+                foreach ($summary['semesters'] as $sem) {
+                    if ((int)$sem['semester_number'] !== (int)$sfp['semester_number']) continue;
+                    foreach (($sem['monthly_rows'] ?? []) as $mr) {
+                        if ((int)$mr['month_number'] === (int)$sfp['month_number']) {
+                            $row_mon_lbl .= ' (' . ($mr['month_label'] ?? '') . ')';
+                            break 2;
+                        }
                     }
                 }
             }
         }
+        if (!$is_multi) {
+            $payment_method_lbl = acc_payment_method_label(
+                (string)($sfp['payment_method'] ?? 'cash'),
+                $sfp['mobile_banking_provider'] ?? null
+            );
+            $transaction_number = (string)($sfp['transaction_number'] ?? '');
+        }
+    } elseif ($adm) {
+        if ($payer_name === '') {
+            $payer_name  = $adm['student_name'] ?? '';
+            $payer_sid   = $adm['student_sid']  ?? '';
+            $payer_dept  = $adm['dept_name']    ?? '';
+            $payer_prog  = $adm['program_name'] ?? '';
+            $payer_phone = $adm['phone']        ?? '';
+            $payer_email = $adm['email']        ?? '';
+        }
+        $row_fee_lbl = 'Admission Fee';
+        if (!$is_multi) {
+            $payment_method_lbl = acc_payment_method_label(
+                (string)($adm['payment_method'] ?? 'cash'),
+                $adm['mobile_banking_provider'] ?? null
+            );
+            $transaction_number = (string)($adm['transaction_number'] ?? '');
+        }
     }
-    $payment_method_lbl = acc_payment_method_label(
-        (string)($sfp['payment_method'] ?? 'cash'),
-        $sfp['mobile_banking_provider'] ?? null
-    );
-    $transaction_number = (string)($sfp['transaction_number'] ?? '');
-} elseif ($adm_payment) {
-    $payer_name   = $adm_payment['student_name'] ?? '';
-    $payer_sid    = $adm_payment['student_sid']  ?? '';
-    $payer_dept   = $adm_payment['dept_name']    ?? '';
-    $payer_prog   = $adm_payment['program_name'] ?? '';
-    $payer_phone  = $adm_payment['phone']        ?? '';
-    $payer_email  = $adm_payment['email']        ?? '';
-    $fee_type_lbl = 'Admission Fee';
-    $payment_method_lbl = acc_payment_method_label(
-        (string)($adm_payment['payment_method'] ?? 'cash'),
-        $adm_payment['mobile_banking_provider'] ?? null
-    );
-    $transaction_number = (string)($adm_payment['transaction_number'] ?? '');
+
+    $fee_rows[] = [
+        'voucher_number' => $v['voucher_number'] ?? '—',
+        'fee_type_lbl'   => $row_fee_lbl,
+        'semester_lbl'   => $row_sem_lbl,
+        'month_lbl'      => $row_mon_lbl,
+        'amount'         => $row_amount,
+        'narration'      => $row_narration,
+    ];
 }
 
-$voucher_number  = $voucher['voucher_number'] ?? '—';
-$voucher_date    = date('d F Y', strtotime($voucher['voucher_date']));
-$voucher_amount  = number_format((float)$voucher['total_amount'], 2);
-$reference       = $voucher['reference']      ?? '';
-$narration       = $voucher['narration']      ?? '';
-$collected_by    = $voucher['created_by_name'] ?? '—';
-$created_at      = date('d M Y, h:i A', strtotime($voucher['created_at']));
+// ── Primary voucher display fields ────────────────────────────────────────────
+$voucher_number = $primary_voucher['voucher_number'] ?? '—';
+$voucher_date   = date('d F Y', strtotime($primary_voucher['voucher_date']));
+$total_amount   = array_sum(array_column($fee_rows, 'amount'));
+$voucher_amount = number_format($total_amount, 2);
+$reference      = $primary_voucher['reference']      ?? '';
+$narration      = $primary_voucher['narration']       ?? '';
+$collected_by   = $primary_voucher['created_by_name'] ?? '—';
+$created_at     = date('d M Y, h:i A', strtotime($primary_voucher['created_at']));
+
+// For single invoice, use the single row's amounts directly
+if (!$is_multi && count($fee_rows) === 1) {
+    $fee_type_lbl       = $fee_rows[0]['fee_type_lbl'];
+    $semester_lbl       = $fee_rows[0]['semester_lbl'];
+    $month_lbl          = $fee_rows[0]['month_lbl'];
+} else {
+    $fee_type_lbl = 'Multiple Fee Payment';
+    $semester_lbl = '';
+    $month_lbl    = '';
+}
 
 $invoice_signature_name = auth_user()['full_name'] ?? $collected_by;
-$student_outstanding_total = 0.0;
-if ($sfp && !empty($sfp['package_id'])) {
-    $student_outstanding_total = (float)acc_total_outstanding((int)$sfp['package_id']);
-}
 $university_logo_url = acc_university_logo_url();
 $university_address = acc_university_address();
 $university_website = acc_university_website();
@@ -425,7 +488,7 @@ $university_website = acc_university_website();
 <div class="print-wrapper">
 
 <?php
-// Render invoice copy
+// Render invoice copy (uses $fee_rows for multi-payment support)
 function render_copy(
     string $currency,
     string $voucher_number,
@@ -441,9 +504,6 @@ function render_copy(
     string $payer_prog,
     string $payer_phone,
     string $payer_email,
-    string $fee_type_lbl,
-    string $semester_lbl,
-    string $month_lbl,
     string $payment_method_lbl,
     string $transaction_number,
     string $invoice_signature_name,
@@ -451,9 +511,9 @@ function render_copy(
     string $university_logo_url,
     string $university_address,
     string $university_website,
-    float $student_outstanding_total,
-    bool $is_student_copy
+    array  $fee_rows
 ): void {
+    $is_multi = count($fee_rows) > 1;
 ?>
 <div class="invoice-copy">
 
@@ -491,6 +551,7 @@ function render_copy(
                     <span class="meta-value"><?= h($reference) ?></span>
                 </div>
                 <?php endif; ?>
+                <?php if (!$is_multi): ?>
                 <div class="meta-line">
                     <span class="meta-label">Payment Method</span>
                     <span class="meta-value"><?= h($payment_method_lbl) ?></span>
@@ -500,6 +561,7 @@ function render_copy(
                     <span class="meta-label">Transaction #</span>
                     <span class="meta-value"><?= h($transaction_number) ?></span>
                 </div>
+                <?php endif; ?>
                 <?php endif; ?>
             </div>
             <div class="inv-meta-col">
@@ -532,28 +594,38 @@ function render_copy(
                 <tr>
                     <th>#</th>
                     <th>Fee Description</th>
-                    <?php if ($semester_lbl): ?><th>Semester</th><?php endif; ?>
-                    <?php if ($month_lbl):    ?><th>Month</th><?php endif; ?>
                     <th class="text-right">Amount (<?= h($currency) ?>)</th>
                 </tr>
             </thead>
             <tbody>
+                <?php foreach ($fee_rows as $i => $row): ?>
                 <tr>
-                    <td>1</td>
+                    <td><?= $i + 1 ?></td>
                     <td>
-                        <?= h($fee_type_lbl) ?>
-                        <?php if ($narration): ?>
-                            <br><span style="font-size:10px;color:#6b7280;"><?= h($narration) ?></span>
+                        <?= h($row['fee_type_lbl']) ?>
+                        <?php if ($row['semester_lbl']): ?>
+                            <span style="font-size:10px;color:#555;"> – <?= h($row['semester_lbl']) ?></span>
+                        <?php endif; ?>
+                        <?php if ($row['month_lbl']): ?>
+                            <span style="font-size:10px;color:#555;"> / <?= h($row['month_lbl']) ?></span>
+                        <?php endif; ?>
+                        <?php $row_note = $is_multi ? $row['narration'] : ''; ?>
+                        <?php if ($row_note): ?>
+                            <br><span style="font-size:10px;color:#6b7280;"><?= h($row_note) ?></span>
                         <?php endif; ?>
                     </td>
-                    <?php if ($semester_lbl): ?><td><?= h($semester_lbl) ?></td><?php endif; ?>
-                    <?php if ($month_lbl):    ?><td><?= h($month_lbl) ?></td><?php endif; ?>
-                    <td class="text-right"><?= h($voucher_amount) ?></td>
+                    <td class="text-right"><?= h(number_format((float)$row['amount'], 2)) ?></td>
                 </tr>
+                <?php endforeach; ?>
+                <?php if (!$is_multi && $narration): ?>
+                <tr>
+                    <td colspan="3" style="font-size:10px;color:#6b7280;padding:4px 10px 6px;"><?= h($narration) ?></td>
+                </tr>
+                <?php endif; ?>
             </tbody>
             <tfoot>
                 <tr>
-                    <td colspan="<?= 2 + ($semester_lbl ? 1 : 0) + ($month_lbl ? 1 : 0) ?>">
+                    <td colspan="2">
                         <strong>Total Amount Received</strong>
                     </td>
                     <td class="text-right">
@@ -562,12 +634,6 @@ function render_copy(
                 </tr>
             </tfoot>
         </table>
-
-        <?php if ($is_student_copy && $student_outstanding_total > 0): ?>
-        <div class="outstanding-note">
-            Outstanding balance after this payment: <strong><?= h($currency) ?> <?= h(number_format($student_outstanding_total, 2)) ?></strong>
-        </div>
-        <?php endif; ?>
 
         <div class="sig-row">
             <div class="sig-box"><?= h($invoice_signature_name) ?><br><span style="font-size:9px;">Collected By</span></div>
@@ -586,9 +652,9 @@ function render_copy(
     $currency, $voucher_number, $voucher_date, $voucher_amount,
     $reference, $narration, $collected_by, $created_at,
     $payer_name, $payer_sid, $payer_dept, $payer_prog, $payer_phone, $payer_email,
-    $fee_type_lbl, $semester_lbl, $month_lbl, $payment_method_lbl, $transaction_number,
+    $payment_method_lbl, $transaction_number,
     $invoice_signature_name, 'Office Copy', $university_logo_url, $university_address, $university_website,
-    $student_outstanding_total, false
+    $fee_rows
 ); ?>
 
 <div class="cut-line">— Cut Here —</div>
@@ -597,9 +663,9 @@ function render_copy(
     $currency, $voucher_number, $voucher_date, $voucher_amount,
     $reference, $narration, $collected_by, $created_at,
     $payer_name, $payer_sid, $payer_dept, $payer_prog, $payer_phone, $payer_email,
-    $fee_type_lbl, $semester_lbl, $month_lbl, $payment_method_lbl, $transaction_number,
+    $payment_method_lbl, $transaction_number,
     $invoice_signature_name, 'Student Copy', $university_logo_url, $university_address, $university_website,
-    $student_outstanding_total, true
+    $fee_rows
 ); ?>
 
 </div><!-- /print-wrapper -->
