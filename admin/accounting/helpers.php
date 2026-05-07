@@ -128,12 +128,39 @@ function acc_next_voucher_number(string $type): string
     $prefix = $prefix_map[$type] ?? 'JV';
     $year   = date('Y');
 
-    $current = (int)acc_setting($key, '1');
-    $number  = $prefix . '-' . $year . '-' . str_pad((string)$current, 5, '0', STR_PAD_LEFT);
+    $db = db();
 
-    acc_save_setting($key, (string)($current + 1));
+    // Ensure the counter row exists so FOR UPDATE can lock it.
+    $db->prepare(
+        'INSERT IGNORE INTO acc_settings (setting_key, setting_value) VALUES (?, \'1\')'
+    )->execute([$key]);
 
-    return $number;
+    // Atomically reserve the next number with a row-level lock so concurrent
+    // requests queue up and each receives a distinct counter value.
+    $db->beginTransaction();
+    try {
+        $stmt = $db->prepare('SELECT setting_value FROM acc_settings WHERE setting_key = ? FOR UPDATE');
+        $stmt->execute([$key]);
+        $raw = $stmt->fetchColumn();
+
+        if ($raw === false) {
+            throw new \RuntimeException("Voucher counter row missing for key: {$key}");
+        }
+
+        $current = (int)$raw;
+
+        $db->prepare('UPDATE acc_settings SET setting_value = ? WHERE setting_key = ?')
+           ->execute([(string)($current + 1), $key]);
+
+        $db->commit();
+    } catch (\Throwable $e) {
+        if ($db->inTransaction()) {
+            $db->rollBack();
+        }
+        throw $e;
+    }
+
+    return $prefix . '-' . $year . '-' . str_pad((string)$current, 5, '0', STR_PAD_LEFT);
 }
 
 // ── Account fetch helpers ─────────────────────────────────────────────────────
