@@ -8,17 +8,23 @@ $errors = [];
 
 // Get all cash/bank accounts for default selection
 $asset_accounts = acc_accounts_by_type('asset');
+$asset_codes = array_column($asset_accounts, 'code');
 $income_accounts = acc_income_accounts();
 $income_codes = array_column($income_accounts, 'code');
 $fee_types = acc_student_fee_types();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
+    $fallback_cash_code = acc_setting('default_cash_account', '1100');
+    $fallback_bank_code = acc_setting('default_bank_account', '1200');
 
     $settings_to_save = [
         'fiscal_year_start'    => trim($_POST['fiscal_year_start']    ?? '07-01'),
         'default_cash_account' => trim($_POST['default_cash_account'] ?? '1100'),
         'default_bank_account' => trim($_POST['default_bank_account'] ?? '1200'),
+        'received_into_cash_account' => trim($_POST['received_into_cash_account'] ?? $fallback_cash_code),
+        'received_into_bank_account' => trim($_POST['received_into_bank_account'] ?? $fallback_bank_code),
+        'received_into_mobile_banking_account' => trim($_POST['received_into_mobile_banking_account'] ?? $fallback_bank_code),
         'currency_symbol'      => trim($_POST['currency_symbol']      ?? '৳'),
         'currency_code'        => strtoupper(trim($_POST['currency_code'] ?? 'BDT')),
         'email_invoice'        => isset($_POST['email_invoice'])  ? '1' : '0',
@@ -31,6 +37,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $new_api_key = trim($_POST['sms_api_key'] ?? '');
     if ($new_api_key !== '') {
         $settings_to_save['sms_api_key'] = $new_api_key;
+    }
+
+    $bank_account_keys = ['default_bank_account', 'received_into_bank_account', 'received_into_mobile_banking_account'];
+    foreach ([
+        'default_cash_account',
+        'default_bank_account',
+        'received_into_cash_account',
+        'received_into_bank_account',
+        'received_into_mobile_banking_account',
+    ] as $asset_key) {
+        if (!in_array($settings_to_save[$asset_key], $asset_codes, true)) {
+            $settings_to_save[$asset_key] = in_array($asset_key, $bank_account_keys, true)
+                ? '1200'
+                : '1100';
+        }
     }
 
     foreach ($fee_types as $fee_type) {
@@ -134,6 +155,43 @@ require_once __DIR__ . '/../includes/header.php';
                                 <?php endforeach; ?>
                             </select>
                             <div class="form-text">Pre-selected in Transfer Money form</div>
+                        </div>
+                    </div>
+
+                    <h6 class="fw-bold mb-3 text-muted text-uppercase" style="font-size:.75rem;letter-spacing:.06em">Collect Payment → Received Into Mapping</h6>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Cash Payment</label>
+                            <select name="received_into_cash_account" class="form-select" required>
+                                <?php $selected_cash_recv = acc_setting('received_into_cash_account', acc_setting('default_cash_account', '1100')); ?>
+                                <?php foreach ($asset_accounts as $a): ?>
+                                <option value="<?= h($a['code']) ?>" <?= $selected_cash_recv === $a['code'] ? 'selected' : '' ?>>
+                                    <?= h($a['code'] . ' – ' . $a['name']) ?>
+                                </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Bank Payment</label>
+                            <select name="received_into_bank_account" class="form-select" required>
+                                <?php $selected_bank_recv = acc_setting('received_into_bank_account', acc_setting('default_bank_account', '1200')); ?>
+                                <?php foreach ($asset_accounts as $a): ?>
+                                <option value="<?= h($a['code']) ?>" <?= $selected_bank_recv === $a['code'] ? 'selected' : '' ?>>
+                                    <?= h($a['code'] . ' – ' . $a['name']) ?>
+                                </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Mobile Banking Payment</label>
+                            <select name="received_into_mobile_banking_account" class="form-select" required>
+                                <?php $selected_mobile_recv = acc_setting('received_into_mobile_banking_account', acc_setting('default_bank_account', '1200')); ?>
+                                <?php foreach ($asset_accounts as $a): ?>
+                                <option value="<?= h($a['code']) ?>" <?= $selected_mobile_recv === $a['code'] ? 'selected' : '' ?>>
+                                    <?= h($a['code'] . ' – ' . $a['name']) ?>
+                                </option>
+                                <?php endforeach; ?>
+                            </select>
                         </div>
                     </div>
 

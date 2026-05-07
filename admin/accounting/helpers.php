@@ -166,6 +166,107 @@ function acc_cash_accounts(): array
     )->fetchAll();
 }
 
+/**
+ * Look up an active current-asset account by its COA code.
+ * Returns account id or 0 if not found.
+ */
+function acc_asset_account_id_by_code(string $code): int
+{
+    static $cache = [];
+    $code = trim($code);
+    if ($code === '') {
+        return 0;
+    }
+    if (isset($cache[$code])) {
+        return $cache[$code];
+    }
+
+    $stmt = db()->prepare(
+        "SELECT id FROM acc_accounts
+         WHERE code = ? AND type = 'asset' AND sub_type = 'current_asset' AND is_active = 1
+         LIMIT 1"
+    );
+    $stmt->execute([$code]);
+    return $cache[$code] = (int)($stmt->fetchColumn() ?: 0);
+}
+
+/**
+ * Read configured received-into account code for payment method.
+ */
+function acc_received_into_account_code_for_payment_method(string $method): string
+{
+    $method = strtolower(trim($method));
+    if (!in_array($method, ['cash', 'bank', 'mobile_banking'], true)) {
+        return '';
+    }
+    $fallback = ($method === 'bank' || $method === 'mobile_banking')
+        ? acc_setting('default_bank_account', '1200')
+        : acc_setting('default_cash_account', '1100');
+
+    $setting_key = match ($method) {
+        'cash' => 'received_into_cash_account',
+        'bank' => 'received_into_bank_account',
+        'mobile_banking' => 'received_into_mobile_banking_account',
+    };
+
+    $code = trim(acc_setting($setting_key, $fallback));
+    return $code !== '' ? $code : $fallback;
+}
+
+/**
+ * Resolve mapped received-into account id for payment method.
+ */
+function acc_received_into_account_id_for_payment_method(string $method): int
+{
+    static $cache = [];
+    $method = strtolower(trim($method));
+    if (isset($cache[$method])) {
+        return $cache[$method];
+    }
+
+    if (!in_array($method, ['cash', 'bank', 'mobile_banking'], true)) {
+        return $cache[$method] = 0;
+    }
+
+    $id = acc_asset_account_id_by_code(acc_received_into_account_code_for_payment_method($method));
+    if ($id > 0) {
+        return $cache[$method] = $id;
+    }
+
+    $fallback_code = ($method === 'bank' || $method === 'mobile_banking')
+        ? acc_setting('default_bank_account', '1200')
+        : acc_setting('default_cash_account', '1100');
+    $fallback_id = acc_asset_account_id_by_code($fallback_code);
+    if ($fallback_id > 0) {
+        return $cache[$method] = $fallback_id;
+    }
+
+    $stmt = db()->prepare(
+        "SELECT id FROM acc_accounts
+         WHERE type = 'asset' AND sub_type = 'current_asset' AND code LIKE '1%' AND is_active = 1
+         ORDER BY code ASC LIMIT 1"
+    );
+    $stmt->execute();
+    $any = $stmt->fetchColumn();
+    return $cache[$method] = (int)($any ?: 0);
+}
+
+/**
+ * Build payment-method => received-into account id map.
+ *
+ * @param string[]|null $methods
+ * @return array<string,int>
+ */
+function acc_received_into_account_map_for_payment_methods(?array $methods = null): array
+{
+    $methods = $methods ?: ['cash', 'bank', 'mobile_banking'];
+    $map = [];
+    foreach ($methods as $method) {
+        $map[$method] = acc_received_into_account_id_for_payment_method($method);
+    }
+    return $map;
+}
+
 function acc_income_accounts(): array
 {
     return acc_accounts_by_type('income');

@@ -7,7 +7,15 @@ $page_title      = 'Collect Payment';
 $cash_accounts   = acc_cash_accounts();
 $income_accounts = acc_income_accounts();
 $default_cash    = acc_setting('default_cash_account', '1100');
+$received_into_map = acc_received_into_account_map_for_payment_methods();
+$cash_account_labels_by_id = [];
+foreach ($cash_accounts as $a) {
+    $cash_account_labels_by_id[(int)$a['id']] = $a['code'] . ' – ' . $a['name'];
+}
 $errors          = [];
+$received_into_mapping_error = static function (string $payment_method): string {
+    return 'Received-into mapping is missing for payment method "' . acc_payment_method_label($payment_method) . '". Please configure it in Accounting Settings.';
+};
 
 // ── POST: process a student-fee payment ──────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student') {
@@ -25,7 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
     $payment_method  = trim((string)($_POST['payment_method'] ?? 'cash'));
     $mobile_banking_provider = trim((string)($_POST['mobile_banking_provider'] ?? ''));
     $transaction_number = trim((string)($_POST['transaction_number'] ?? ''));
-    $cash_account_id   = (int)($_POST['cash_account_id']   ?? 0);
+    $received_into_account_id = acc_received_into_account_id_for_payment_method($payment_method);
     $income_account_id = (int)($_POST['income_account_id'] ?? 0);
     $date            = trim($_POST['voucher_date']       ?? date('Y-m-d'));
     $reference       = trim($_POST['reference']          ?? '');
@@ -35,7 +43,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
 
     if (!$student_id)                          $errors[] = 'Invalid student.';
     if (!$package_id)                          $errors[] = 'Student has no fee package.';
-    if (!$cash_account_id)                     $errors[] = 'Please select the received-into account.';
     if (!$date)                                $errors[] = 'Date is required.';
     if (!in_array($payment_method, ['cash', 'bank', 'mobile_banking'], true)) {
         $errors[] = 'Invalid payment method selected.';
@@ -45,6 +52,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
     }
     if ($payment_method !== 'cash' && $transaction_number === '') {
         $errors[] = 'Transaction number is required for non-cash payments.';
+    }
+    if ($received_into_account_id <= 0) {
+        $errors[] = $received_into_mapping_error($payment_method);
     }
 
     if (empty($errors)) {
@@ -151,7 +161,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
                     $student_id, $package_id, $item['fee_type'],
                     $item['semester_fee_id'], $item['semester_number'], $item['month_number'],
                     $payment_method, $provider, $txn_no,
-                    $item['amount'], $cash_account_id, $item['income_account_id'],
+                    $item['amount'], $received_into_account_id, $item['income_account_id'],
                     $date, $reference, $item_narration
                 );
                 $last_voucher_id = (int)$vid;
@@ -271,7 +281,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'admissi
     $payment_method    = trim((string)($_POST['payment_method'] ?? 'cash'));
     $mobile_banking_provider = trim((string)($_POST['mobile_banking_provider'] ?? ''));
     $transaction_number = trim((string)($_POST['transaction_number'] ?? ''));
-    $cash_account_id   = (int)($_POST['cash_account_id']   ?? 0);
+    $received_into_account_id = acc_received_into_account_id_for_payment_method($payment_method);
     $income_account_id = (int)($_POST['income_account_id'] ?? 0);
     $date              = trim($_POST['voucher_date']        ?? date('Y-m-d'));
     $reference         = trim($_POST['reference']          ?? '');
@@ -279,7 +289,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'admissi
 
     if (!$app_id)            $errors[] = 'Invalid application.';
     if ($amount <= 0)        $errors[] = 'Amount must be greater than zero.';
-    if (!$cash_account_id)   $errors[] = 'Please select the received-into account.';
     if (!$income_account_id) $errors[] = 'Please select the income account.';
     if (!$date)              $errors[] = 'Date is required.';
     if (!in_array($payment_method, ['cash', 'bank', 'mobile_banking'], true)) {
@@ -290,6 +299,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'admissi
     }
     if ($payment_method !== 'cash' && $transaction_number === '') {
         $errors[] = 'Transaction number is required for non-cash payments.';
+    }
+    if ($received_into_account_id <= 0) {
+        $errors[] = $received_into_mapping_error($payment_method);
     }
 
     // Load applicant to validate and get details
@@ -312,7 +324,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'admissi
             $adm_provider = $mobile_banking_provider !== '' ? $mobile_banking_provider : null;
             $adm_txn_no = $transaction_number !== '' ? $transaction_number : null;
             $vid = acc_collect_applicant_admission_fee(
-                $app_id, $amount, $cash_account_id, $income_account_id,
+                $app_id, $amount, $received_into_account_id, $income_account_id,
                 $payment_method, $adm_provider, $adm_txn_no,
                 $date, $reference, $narration
             );
@@ -393,21 +405,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'general
     csrf_check();
 
     $amount            = (float)($_POST['amount']            ?? 0);
-    $cash_account_id   = (int)($_POST['cash_account_id']     ?? 0);
+    $received_into_account_id = (int)($_POST['received_into_account_id'] ?? $_POST['cash_account_id'] ?? 0);
     $income_account_id = (int)($_POST['income_account_id']   ?? 0);
     $date              = trim($_POST['voucher_date']          ?? date('Y-m-d'));
     $reference         = trim($_POST['reference']            ?? '');
     $narration         = trim($_POST['narration']            ?? '');
 
     if ($amount <= 0)            $errors[] = 'Amount must be greater than zero.';
-    if (!$cash_account_id)       $errors[] = 'Please select the received-into account.';
+    if (!$received_into_account_id) $errors[] = 'Please select the received-into account.';
     if (!$income_account_id)     $errors[] = 'Please select the income type.';
     if (!$date)                  $errors[] = 'Date is required.';
-    if ($cash_account_id === $income_account_id) $errors[] = 'Source and destination accounts cannot be the same.';
+    if ($received_into_account_id === $income_account_id) $errors[] = 'Source and destination accounts cannot be the same.';
 
     if (empty($errors)) {
         try {
-            $vid = acc_collect_payment($amount, $cash_account_id, $income_account_id, $date, $reference, $narration);
+            $vid = acc_collect_payment($amount, $received_into_account_id, $income_account_id, $date, $reference, $narration);
             flash_set('success', 'Payment collected successfully. <a href="' . APP_URL . '/accounting/voucher-view.php?id=' . $vid . '" class="alert-link">View Voucher</a>');
             redirect(APP_URL . '/accounting/collect-payment.php');
         } catch (RuntimeException $e) {
@@ -658,15 +670,13 @@ require_once __DIR__ . '/../includes/header.php';
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label fw-semibold">Received Into <span class="text-danger">*</span></label>
-                                <select name="cash_account_id" class="form-select" required>
-                                    <option value="">— Select Account —</option>
-                                    <?php foreach ($cash_accounts as $a): ?>
-                                    <option value="<?= $a['id'] ?>"
-                                        <?= ($a['code'] == $default_cash) ? 'selected' : '' ?>>
-                                        <?= h($a['code'] . ' – ' . $a['name']) ?>
-                                    </option>
-                                    <?php endforeach; ?>
-                                </select>
+                                <?php
+                                $student_default_received_id = (int)($received_into_map['cash'] ?? 0);
+                                $student_default_received_label = $cash_account_labels_by_id[$student_default_received_id] ?? 'Not configured';
+                                ?>
+                                <input type="hidden" name="received_into_account_id" id="hStudentReceivedIntoAccountId" value="<?= (int)$student_default_received_id ?>">
+                                <input type="text" class="form-control" id="studentReceivedIntoLabel" value="<?= h($student_default_received_label) ?>" readonly>
+                                <div class="form-text">Auto-mapped from Accounting Settings based on payment method.</div>
                             </div>
 
                             <div class="col-md-6">
@@ -930,15 +940,13 @@ require_once __DIR__ . '/../includes/header.php';
                         </div>
                         <div class="col-md-4">
                             <label class="form-label fw-semibold">Received Into <span class="text-danger">*</span></label>
-                            <select name="cash_account_id" class="form-select" required>
-                                <option value="">— Select Account —</option>
-                                <?php foreach ($cash_accounts as $a): ?>
-                                <option value="<?= $a['id'] ?>"
-                                    <?= ($a['code'] == $default_cash) ? 'selected' : '' ?>>
-                                    <?= h($a['code'] . ' – ' . $a['name']) ?>
-                                </option>
-                                <?php endforeach; ?>
-                            </select>
+                            <?php
+                            $admission_default_received_id = (int)($received_into_map['cash'] ?? 0);
+                            $admission_default_received_label = $cash_account_labels_by_id[$admission_default_received_id] ?? 'Not configured';
+                            ?>
+                            <input type="hidden" name="received_into_account_id" id="hAdmReceivedIntoAccountId" value="<?= (int)$admission_default_received_id ?>">
+                            <input type="text" class="form-control" id="admReceivedIntoLabel" value="<?= h($admission_default_received_label) ?>" readonly>
+                            <div class="form-text">Auto-mapped from Accounting Settings based on payment method.</div>
                         </div>
 
                         <div class="col-md-6">
@@ -1021,6 +1029,8 @@ require_once __DIR__ . '/../includes/header.php';
             : ''
     ) ?>;
     const AUTO_STUDENT_SID = <?= json_encode($auto_student_sid) ?>;
+    const RECEIVED_INTO_MAP = <?= json_encode($received_into_map) ?>;
+    const CASH_ACCOUNT_LABELS = <?= json_encode($cash_account_labels_by_id) ?>;
 
     // Income account map injected by AJAX response
     let incomeAccountsMap = {};
@@ -1067,6 +1077,22 @@ require_once __DIR__ . '/../includes/header.php';
         bar.style.display = selectedFeeItems.size > 0 ? '' : 'none';
     }
 
+    function syncStudentReceivedIntoAccount() {
+        const method = document.getElementById('payMethod').value;
+        const accountId = Number(RECEIVED_INTO_MAP[method] || 0);
+        document.getElementById('hStudentReceivedIntoAccountId').value = String(accountId);
+        const label = CASH_ACCOUNT_LABELS[accountId];
+        document.getElementById('studentReceivedIntoLabel').value = label || (accountId > 0 ? ('Account #' + accountId) : 'Not configured');
+    }
+
+    function syncAdmissionReceivedIntoAccount() {
+        const method = document.getElementById('admPayMethod').value;
+        const accountId = Number(RECEIVED_INTO_MAP[method] || 0);
+        document.getElementById('hAdmReceivedIntoAccountId').value = String(accountId);
+        const label = CASH_ACCOUNT_LABELS[accountId];
+        document.getElementById('admReceivedIntoLabel').value = label || (accountId > 0 ? ('Account #' + accountId) : 'Not configured');
+    }
+
     function updateStudentPaymentMethodUI() {
         const method = document.getElementById('payMethod').value;
         const providerWrap = document.getElementById('payMobileProviderWrap');
@@ -1082,6 +1108,7 @@ require_once __DIR__ . '/../includes/header.php';
         txnInput.required = needsTxn;
         if (!isMobile) provider.value = '';
         if (!needsTxn) txnInput.value = '';
+        syncStudentReceivedIntoAccount();
     }
 
     function updateAdmissionPaymentMethodUI() {
@@ -1099,6 +1126,7 @@ require_once __DIR__ . '/../includes/header.php';
         txnInput.required = needsTxn;
         if (!isMobile) provider.value = '';
         if (!needsTxn) txnInput.value = '';
+        syncAdmissionReceivedIntoAccount();
     }
 
     // ── Student search autocomplete ──────────────────────────────────────────
