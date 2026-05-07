@@ -1087,6 +1087,8 @@ function acc_student_fee_types(): array
 
 /**
  * Default COA income code for each fee type.
+ *
+ * @return string COA account code (e.g. 4100)
  */
 function acc_default_income_code_for_fee_type(string $fee_type): string
 {
@@ -1103,17 +1105,14 @@ function acc_default_income_code_for_fee_type(string $fee_type): string
 
 /**
  * Read mapped income-account code for a fee type from settings.
- * Falls back to the default mapped code if setting is missing/invalid.
+ * Falls back to the default mapped code if setting is missing.
  */
 function acc_income_account_code_for_fee_type(string $fee_type): string
 {
     $default_code = acc_default_income_code_for_fee_type($fee_type);
     $setting_key  = 'income_account_' . $fee_type;
     $code         = trim(acc_setting($setting_key, $default_code));
-    if ($code === '') {
-        $code = $default_code;
-    }
-    return acc_income_account_id_by_code($code) > 0 ? $code : $default_code;
+    return $code !== '' ? $code : $default_code;
 }
 
 /**
@@ -1122,7 +1121,18 @@ function acc_income_account_code_for_fee_type(string $fee_type): string
  */
 function acc_income_account_id_for_fee_type(string $fee_type): int
 {
-    return acc_income_account_id_by_code(acc_income_account_code_for_fee_type($fee_type));
+    static $cache = [];
+    if (isset($cache[$fee_type])) {
+        return $cache[$fee_type];
+    }
+
+    $code = acc_income_account_code_for_fee_type($fee_type);
+    $id = acc_income_account_id_by_code($code);
+    if ($id > 0) {
+        return $cache[$fee_type] = $id;
+    }
+
+    return $cache[$fee_type] = acc_income_account_id_by_code(acc_default_income_code_for_fee_type($fee_type));
 }
 
 /**
