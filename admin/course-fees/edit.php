@@ -67,7 +67,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $reg_fee_tot        = ($_POST['reg_fee_total'] ?? '')            !== '' ? (int)$_POST['reg_fee_total']            : null;
     $id_card            = ($_POST['id_card_fee'] ?? '')              !== '' ? (int)$_POST['id_card_fee']              : null;
     $adm_form           = ($_POST['admission_form_fee'] ?? '')       !== '' ? (int)$_POST['admission_form_fee']       : null;
-    $form_id            = ($id_card === null && $adm_form === null) ? null : ((int)($id_card ?? 0) + (int)($adm_form ?? 0));
+    if ($id_card === null && $adm_form === null) {
+        $form_id = null;
+    } else {
+        $form_id = (int)($id_card ?? 0) + (int)($adm_form ?? 0);
+    }
     $bi_start_month     = $_POST['bi_semester_start_month']  !== '' ? (int)$_POST['bi_semester_start_month']  : null;
     $tri_start_month    = $_POST['tri_semester_start_month'] !== '' ? (int)$_POST['tri_semester_start_month'] : null;
 

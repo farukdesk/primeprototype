@@ -131,11 +131,12 @@ require_once __DIR__ . '/../includes/header.php';
                     $months = (float)($pkg['total_months'] ?? 0);
                     $mps    = (float)($pkg['months_per_semester'] ?? 0);
                     $reg    = (float)($pkg['reg_fee_per_semester'] ?? 0);
+                    $has_semester_months = ($months > 0 && $mps > 0);
 
-                    $fixed_per_sem = ($months > 0 && $mps > 0)
+                    $fixed_per_sem = $has_semester_months
                         ? round((float)$pkg['fixed_institutional_fees'] / $months * $mps, 2)
                         : 0.0;
-                    $english_per_sem = ($months > 0 && $mps > 0)
+                    $english_per_sem = $has_semester_months
                         ? round((float)$pkg['english_course_fee'] / $months * $mps, 2)
                         : 0.0;
 
