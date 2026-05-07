@@ -44,6 +44,14 @@ CREATE TABLE IF NOT EXISTS `sfp_payments` (
                       ) NOT NULL,
     `semester_number` TINYINT UNSIGNED  DEFAULT NULL
                       COMMENT 'Semester number (1-based) – mirrors semester_fee_id.semester_number for easy filtering',
+    `month_number`    TINYINT UNSIGNED  DEFAULT NULL
+                      COMMENT 'Month within semester for monthly fee tracking',
+    `payment_method`  ENUM('cash','bank','mobile_banking') NOT NULL DEFAULT 'cash'
+                      COMMENT 'How payment was received',
+    `mobile_banking_provider` ENUM('bkash','nagad','rocket') DEFAULT NULL
+                      COMMENT 'Provider when payment_method=mobile_banking',
+    `transaction_number` VARCHAR(100) DEFAULT NULL
+                      COMMENT 'External transaction/challan/reference number for non-cash payments',
     `amount`          DECIMAL(10,2)     NOT NULL
                       COMMENT 'Amount actually received in this payment',
     `voucher_id`      INT UNSIGNED      NOT NULL

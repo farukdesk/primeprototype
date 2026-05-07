@@ -767,16 +767,19 @@ function acc_student_fee_summary(int $student_id): ?array
 
     // Load package
     $pkg_stmt = $db->prepare(
-        'SELECT p.*, s.full_name AS student_name, s.student_id AS student_sid
+        'SELECT p.*, s.full_name AS student_name, s.student_id AS student_sid, s.admitted_semester,
+                cp.bi_semester_start_month, cp.tri_semester_start_month
          FROM sfp_packages p
          JOIN students s ON s.id = p.student_id
+         LEFT JOIN cf_programs cp ON cp.id = p.cf_program_id
          WHERE p.student_id = ?'
     );
     $pkg_stmt->execute([$student_id]);
     $pkg = $pkg_stmt->fetch();
     if (!$pkg) return null;
 
-    $package_id = (int)$pkg['id'];
+    $package_id  = (int)$pkg['id'];
+    $start_month = acc_package_start_month($pkg);
 
     // Use snapshotted registration and form fees from the package (not global cf_settings)
     // This ensures each student retains their originally assigned fees
@@ -790,6 +793,7 @@ function acc_student_fee_summary(int $student_id): ?array
     $sf_stmt->execute([$package_id]);
     $semester_fees = $sf_stmt->fetchAll();
     $num_semesters = count($semester_fees);
+    $start_year = acc_package_start_year($pkg, $semester_fees);
 
     // Paid amounts per fee_type and per semester_fee_id
     $paid_stmt = $db->prepare(
@@ -882,8 +886,11 @@ function acc_student_fee_summary(int $student_id): ?array
                 : max(0.0, $sem_total_due - $monthly_fee * ($months_int - 1));
             $m_paid = min($m_due, max(0.0, $month_credit));
             $month_credit -= $m_paid;
+            $month_offset = ((int)$sf['semester_number'] - 1) * $months_int + ($m - 1);
+            $month_info = acc_month_year_for_slot($start_month, $start_year, $month_offset);
             $monthly_rows[] = [
                 'month_number' => $m,
+                'month_label'  => $month_info['label'],
                 'due'          => round($m_due, 2),
                 'paid'         => round($m_paid, 2),
                 'out'          => round(max(0.0, $m_due - $m_paid), 2),
@@ -935,6 +942,10 @@ function acc_student_fee_summary(int $student_id): ?array
  * @param  string $fee_type          One of the sfp_payments.fee_type ENUM values
  * @param  int|null $semester_fee_id sfp_semester_fees.id (for semester_tuition / fixed_fee / english_fee)
  * @param  int|null $semester_number Semester number (mirrors semester_fee_id's semester_number)
+ * @param  int|null $month_number    Month number (for monthly installment tracking)
+ * @param  string   $payment_method  cash|bank|mobile_banking
+ * @param  string|null $mobile_banking_provider bkash|nagad|rocket when payment_method=mobile_banking
+ * @param  string|null $transaction_number Required for non-cash methods
  * @param  float  $amount            Amount received
  * @param  int    $cash_account_id   acc_accounts.id  (debit – cash or bank)
  * @param  int    $income_account_id acc_accounts.id  (credit – income type)
@@ -952,6 +963,9 @@ function acc_collect_student_fee(
     ?int   $semester_fee_id,
     ?int   $semester_number,
     ?int   $month_number,
+    string $payment_method,
+    ?string $mobile_banking_provider,
+    ?string $transaction_number,
     float  $amount,
     int    $cash_account_id,
     int    $income_account_id,
@@ -964,6 +978,11 @@ function acc_collect_student_fee(
     }
 
     $db = db();
+    [$payment_method, $mobile_banking_provider, $transaction_number] = acc_normalize_payment_method_fields(
+        $payment_method,
+        $mobile_banking_provider,
+        $transaction_number
+    );
 
     // Post the receipt voucher
     $voucher_id = acc_post_voucher('receipt', $date, [
@@ -975,8 +994,8 @@ function acc_collect_student_fee(
     $user = auth_user();
     $db->prepare(
         'INSERT INTO sfp_payments
-            (student_id, package_id, semester_fee_id, fee_type, semester_number, month_number, amount, voucher_id, note, collected_by)
-         VALUES (?,?,?,?,?,?,?,?,?,?)'
+            (student_id, package_id, semester_fee_id, fee_type, semester_number, month_number, payment_method, mobile_banking_provider, transaction_number, amount, voucher_id, note, collected_by)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)'
     )->execute([
         $student_id,
         $package_id,
@@ -984,6 +1003,9 @@ function acc_collect_student_fee(
         $fee_type,
         $semester_number,
         $month_number,
+        $payment_method,
+        $mobile_banking_provider,
+        $transaction_number,
         round($amount, 2),
         $voucher_id,
         $narration ?: null,
@@ -1164,6 +1186,7 @@ function acc_get_applicant_admission_paid(int $app_id): float
  *
  * Posts a receipt voucher (debit cash/bank, credit income account) and
  * records a row in adm_admission_fee_payments.
+ * Supports payment method and transaction reference tracking.
  *
  * @return int  New acc_vouchers.id
  * @throws RuntimeException on accounting failure
@@ -1173,11 +1196,19 @@ function acc_collect_applicant_admission_fee(
     float  $amount,
     int    $cash_account_id,
     int    $income_account_id,
+    string $payment_method,
+    ?string $mobile_banking_provider,
+    ?string $transaction_number,
     string $date,
     string $reference = '',
     string $narration  = ''
 ): int {
     $amount = round($amount, 2);
+    [$payment_method, $mobile_banking_provider, $transaction_number] = acc_normalize_payment_method_fields(
+        $payment_method,
+        $mobile_banking_provider,
+        $transaction_number
+    );
 
     $voucher_id = acc_post_voucher('receipt', $date, [
         ['account_id' => $cash_account_id,   'debit' => $amount, 'credit' => 0,       'description' => $narration],
@@ -1186,9 +1217,10 @@ function acc_collect_applicant_admission_fee(
 
     $user = auth_user();
     db()->prepare(
-        'INSERT INTO adm_admission_fee_payments (application_id, voucher_id, amount, collected_by)
-         VALUES (?, ?, ?, ?)'
-    )->execute([$app_id, $voucher_id, $amount, $user['id'] ?? null]);
+        'INSERT INTO adm_admission_fee_payments
+            (application_id, voucher_id, amount, payment_method, mobile_banking_provider, transaction_number, collected_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?)'
+    )->execute([$app_id, $voucher_id, $amount, $payment_method, $mobile_banking_provider, $transaction_number, $user['id'] ?? null]);
 
     return $voucher_id;
 }
@@ -1356,6 +1388,110 @@ function acc_fee_type_label(string $fee_type): string
         'other'            => 'Other Fee',
         default            => ucfirst(str_replace('_', ' ', $fee_type)),
     };
+}
+
+/**
+ * Human-readable label for payment method display.
+ */
+function acc_payment_method_label(string $method, ?string $provider = null): string
+{
+    $method = strtolower(trim($method));
+    return match ($method) {
+        'bank' => 'Bank',
+        'mobile_banking' => 'Mobile Banking' . ($provider ? ' (' . ucfirst(strtolower($provider)) . ')' : ''),
+        default => 'Cash',
+    };
+}
+
+/**
+ * Normalize and validate payment method fields.
+ *
+ * @return array{0:string,1:?string,2:?string}
+ */
+function acc_normalize_payment_method_fields(string $method, ?string $provider, ?string $txn): array
+{
+    $method = strtolower(trim($method));
+    if (!in_array($method, ['cash', 'bank', 'mobile_banking'], true)) {
+        throw new RuntimeException('Invalid payment method selected.');
+    }
+
+    $provider = $provider !== null ? strtolower(trim($provider)) : null;
+    $txn = $txn !== null ? trim($txn) : null;
+
+    if ($method === 'mobile_banking') {
+        if (!in_array($provider, ['bkash', 'nagad', 'rocket'], true)) {
+            throw new RuntimeException('Please select a mobile banking provider.');
+        }
+    } else {
+        $provider = null;
+    }
+
+    if ($method === 'cash') {
+        $txn = null;
+    } else {
+        if ($txn === null || $txn === '') {
+            throw new RuntimeException('Transaction number is required for non-cash payments.');
+        }
+    }
+
+    return [$method, $provider, $txn];
+}
+
+/**
+ * Determine package start month from snapshotted/linked program settings.
+ */
+function acc_package_start_month(array $pkg): int
+{
+    $total_semesters = (int)($pkg['total_semesters'] ?? 0);
+    $is_bi = $total_semesters > 0 && $total_semesters <= 8;
+    $start = $is_bi
+        ? (int)($pkg['bi_semester_start_month'] ?? 0)
+        : (int)($pkg['tri_semester_start_month'] ?? 0);
+    return ($start >= 1 && $start <= 12) ? $start : 1;
+}
+
+/**
+ * Determine package start year from semester labels/admitted semester.
+ */
+function acc_package_start_year(array $pkg, array $semester_fees): int
+{
+    $candidates = [];
+    if (!empty($pkg['admitted_semester'])) {
+        $candidates[] = (string)$pkg['admitted_semester'];
+    }
+    foreach ($semester_fees as $sf) {
+        if (!empty($sf['semester_label'])) {
+            $candidates[] = (string)$sf['semester_label'];
+        }
+    }
+    foreach ($candidates as $txt) {
+        if (preg_match('/\b(2\d{3})\b/', $txt, $m)) {
+            return (int)$m[1];
+        }
+    }
+    return (int)date('Y');
+}
+
+/**
+ * Get month/year metadata for a month slot offset from the package start.
+ *
+ * @return array{month:int,year:int,label:string}
+ */
+function acc_month_year_for_slot(int $start_month, int $start_year, int $offset): array
+{
+    static $month_short_names = [
+        1 => 'Jan', 2 => 'Feb', 3 => 'Mar', 4 => 'Apr', 5 => 'May', 6 => 'Jun',
+        7 => 'Jul', 8 => 'Aug', 9 => 'Sep', 10 => 'Oct', 11 => 'Nov', 12 => 'Dec',
+    ];
+    $serial = ($start_month - 1) + $offset;
+    $month_index = (($serial % 12) + 12) % 12;
+    $month = $month_index + 1;
+    $year = $start_year + (int)floor(($serial - $month_index) / 12);
+    return [
+        'month' => $month,
+        'year'  => $year,
+        'label' => ($month_short_names[$month] ?? '') . ' ' . $year,
+    ];
 }
 
 /**

@@ -32,6 +32,13 @@ if (!$summary) {
     exit;
 }
 
+$month_labels_map = [];
+foreach ($summary['semesters'] as $sem) {
+    foreach (($sem['monthly_rows'] ?? []) as $mr) {
+        $month_labels_map[(int)$sem['semester_number'] . ':' . (int)$mr['month_number']] = $mr['month_label'] ?? '';
+    }
+}
+
 // Retrieve income account IDs for each fee type (used by JS to auto-select)
 $income_accounts = [
     'admission'        => acc_income_account_id_by_code('4200'), // Admission Fees
@@ -55,6 +62,16 @@ $payments = array_map(function ($p) {
         'fee_type'          => $p['fee_type'],
         'semester_number'   => $p['semester_number'] ?? null,
         'month_number'      => $p['month_number']    ?? null,
+        'month_label'       => (!empty($p['semester_number']) && !empty($p['month_number']))
+            ? ($month_labels_map[(int)$p['semester_number'] . ':' . (int)$p['month_number']] ?? '')
+            : '',
+        'payment_method'    => $p['payment_method'] ?? 'cash',
+        'mobile_banking_provider' => $p['mobile_banking_provider'] ?? null,
+        'transaction_number' => $p['transaction_number'] ?? null,
+        'payment_method_label' => acc_payment_method_label(
+            (string)($p['payment_method'] ?? 'cash'),
+            $p['mobile_banking_provider'] ?? null
+        ),
         'amount'            => (float)$p['amount'],
         'note'              => $p['note'] ?? '',
         'collected_by_name' => $p['collected_by_name'] ?? '—',
