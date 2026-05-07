@@ -887,10 +887,10 @@ function acc_student_fee_summary(int $student_id): ?array
             $m_paid = min($m_due, max(0.0, $month_credit));
             $month_credit -= $m_paid;
             $month_offset = ((int)$sf['semester_number'] - 1) * $months_int + ($m - 1);
-            $month_meta = acc_month_year_for_slot($start_month, $start_year, $month_offset);
+            $month_info = acc_month_year_for_slot($start_month, $start_year, $month_offset);
             $monthly_rows[] = [
                 'month_number' => $m,
-                'month_label'  => $month_meta['label'],
+                'month_label'  => $month_info['label'],
                 'due'          => round($m_due, 2),
                 'paid'         => round($m_paid, 2),
                 'out'          => round(max(0.0, $m_due - $m_paid), 2),
@@ -1479,13 +1479,17 @@ function acc_package_start_year(array $pkg, array $semester_fees): int
  */
 function acc_month_year_for_slot(int $start_month, int $start_year, int $offset): array
 {
+    static $month_short_names = [
+        1 => 'Jan', 2 => 'Feb', 3 => 'Mar', 4 => 'Apr', 5 => 'May', 6 => 'Jun',
+        7 => 'Jul', 8 => 'Aug', 9 => 'Sep', 10 => 'Oct', 11 => 'Nov', 12 => 'Dec',
+    ];
     $serial = ($start_month - 1) + $offset;
     $month = ($serial % 12) + 1;
     $year = $start_year + (int)floor($serial / 12);
     return [
         'month' => $month,
         'year'  => $year,
-        'label' => date('M Y', strtotime(sprintf('%04d-%02d-01', $year, $month))),
+        'label' => ($month_short_names[$month] ?? '') . ' ' . $year,
     ];
 }
 

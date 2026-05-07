@@ -82,6 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
                         . ((int)($item['semester_number'] ?? 0) ?: '') . '|'
                         . ((int)($item['month_number'] ?? 0) ?: '');
                     $outstanding_now = (float)($outstanding_lookup[$key] ?? 0);
+                    // Skip already-fully-paid items in case the UI selection becomes stale.
                     if ($outstanding_now <= 0) {
                         continue;
                     }
@@ -507,7 +508,7 @@ require_once __DIR__ . '/../includes/header.php';
                     </button>
                 </div>
             </div>
-            <!-- Starts collapsed; JS opens automatically when outstanding fees exist -->
+            <!-- Starts collapsed; JS auto-opens in renderFeeSummary() when outstanding fees exist -->
             <div class="card-body p-0 collapse" id="feeObligationsCollapse" data-bs-parent="#studentFeeAccordion">
                 <div class="px-4 py-2 border-bottom bg-light-subtle" id="multiCollectBar" style="display:none;">
                     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -1264,7 +1265,7 @@ require_once __DIR__ . '/../includes/header.php';
             // Monthly overall fees (tuition + fixed + English portion / months)
             sf.monthly_rows.forEach(mr => {
                 addRow(
-                    semLabel + ' – Month ' + mr.month_number + ' (' + (mr.month_label || ('Month ' + mr.month_number)) + ')',
+                    semLabel + ' – Month ' + mr.month_number + (mr.month_label ? ' (' + mr.month_label + ')' : ''),
                     mr.due, mr.paid, mr.out,
                     'semester_tuition', sf.id, sf.semester_number, semLabel, mr.month_number, mr.month_label || ''
                 );
