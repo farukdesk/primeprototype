@@ -121,17 +121,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
             }
 
             $stu_stmt = db()->prepare(
-                'SELECT s.*, d.name AS dept_name
+                'SELECT s.*, d.name AS dept_name, p.program_name
                  FROM students s
-                 LEFT JOIN dept_departments d ON d.id = s.dept_id
+                 LEFT JOIN dept_departments d       ON d.id = s.dept_id
+                 LEFT JOIN dept_academic_programs p ON p.id = s.program_id
                  WHERE s.id = ?'
             );
             $stu_stmt->execute([$student_id]);
             $stu = $stu_stmt->fetch();
 
-            $voucher_links = [];
+            $voucher_links   = [];
+            $voucher_ids_arr = [];
+            $all_invoice_items = [];
             $last_voucher_id = 0;
-            $total_amount = 0.0;
+            $total_amount    = 0.0;
+            $first_voucher_number = '';
+
             foreach ($fee_items as $item) {
                 if (!$item['income_account_id']) {
                     throw new RuntimeException('Income account mapping is missing for one of the selected fee items.');
@@ -151,10 +156,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
                 );
                 $last_voucher_id = (int)$vid;
                 $total_amount += (float)$item['amount'];
+                $voucher_ids_arr[] = (int)$vid;
 
-                // Fetch voucher number for notifications
-                $voucher = acc_get_voucher($vid);
+                // Fetch voucher number for success message
+                $voucher        = acc_get_voucher($vid);
                 $voucher_number = $voucher['voucher_number'] ?? '—';
+                if ($first_voucher_number === '') {
+                    $first_voucher_number = $voucher_number;
+                }
 
                 // Semester label (if semester payment)
                 $sem_label = '';
@@ -162,53 +171,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
                     $sf_row = db()->prepare('SELECT semester_label, semester_number FROM sfp_semester_fees WHERE id = ?');
                     $sf_row->execute([$item['semester_fee_id']]);
                     $sf_row = $sf_row->fetch();
-                    $sem_label = $sf_row['semester_label'] ?: ('Semester ' . $sf_row['semester_number']);
+                    $sem_label = ($sf_row && $sf_row['semester_label'] !== '' && $sf_row['semester_label'] !== null)
+                        ? (string)$sf_row['semester_label']
+                        : ($sf_row && $sf_row['semester_number'] ? 'Semester ' . $sf_row['semester_number'] : '');
                 }
 
-                $currency   = acc_currency();
-                $fee_label  = acc_fee_type_label($item['fee_type']);
-                $outstanding = acc_total_outstanding($package_id);
+                $fee_label = acc_fee_type_label($item['fee_type']);
 
-                // ── Email invoice ─────────────────────────────────────────────
-                if ($stu) {
-                    acc_send_fee_invoice_email($stu, [
-                        'voucher_id'       => $vid,
-                        'voucher_number'   => $voucher_number,
-                        'payment_date'     => $date,
-                        'fee_type_label'   => $fee_label,
-                        'semester_label'   => $sem_label,
-                        'amount'           => $item['amount'],
-                        'outstanding_total'=> $outstanding,
-                        'reference'        => $reference,
-                        'narration'        => $item_narration,
-                    ]);
+                // Build invoice item for the combined email PDF
+                $all_invoice_items[] = [
+                    'voucher_id'     => $vid,
+                    'voucher_number' => $voucher_number,
+                    'fee_type_label' => $fee_label,
+                    'semester_label' => $sem_label,
+                    'month_label'    => $item['month_number'] ? 'Month ' . $item['month_number'] : '',
+                    'amount'         => $item['amount'],
+                    'narration'      => $item_narration,
+                ];
 
-                    // ── SMS ────────────────────────────────────────────────────
-                    $phone = $stu['phone'] ?? '';
-                    if ($phone) {
-                        acc_send_fee_sms($phone, [
-                            'student_name'   => $stu['full_name'],
-                            'student_sid'    => $stu['student_id'],
-                            'amount'         => number_format($item['amount'], 2),
-                            'currency'       => $currency,
-                            'fee_type'       => $fee_label . ($sem_label ? ' (' . $sem_label . ')' : ''),
-                            'voucher_number' => $voucher_number,
-                            'app_name'       => APP_NAME,
-                        ]);
-                    }
-                }
                 $voucher_links[] =
                     '<a href="' . APP_URL . '/accounting/fee-invoice.php?voucher_id=' . (int)$vid .
                     '" target="_blank" class="alert-link fw-semibold"><i class="fas fa-print me-1"></i>' .
                     h($voucher_number) . '</a>';
             }
 
+            // ── Send ONE email and ONE SMS after all fee items are collected ──────
+            if ($stu && $all_invoice_items) {
+                $currency      = acc_currency();
+                $first_item    = $all_invoice_items[0];
+                $multi         = count($all_invoice_items) > 1;
+                $summary_info  = [
+                    'voucher_id'     => $first_item['voucher_id'],
+                    'voucher_number' => $first_voucher_number,
+                    'payment_date'   => $date,
+                    'fee_type_label' => $multi ? 'Multiple Fee Payment' : $first_item['fee_type_label'],
+                    'semester_label' => $multi ? '' : $first_item['semester_label'],
+                    'amount'         => $total_amount,
+                    'reference'      => $reference,
+                    'narration'      => $multi ? 'Multiple fee payment' : $first_item['narration'],
+                ];
+                acc_send_fee_invoice_email($stu, $summary_info, $all_invoice_items);
+
+                $phone = $stu['phone'] ?? '';
+                if ($phone) {
+                    $fee_type_sms = $multi
+                        ? 'Multiple Fees'
+                        : ($first_item['fee_type_label'] . ($first_item['semester_label'] ? ' (' . $first_item['semester_label'] . ')' : ''));
+                    acc_send_fee_sms($phone, [
+                        'student_name'   => $stu['full_name'],
+                        'student_sid'    => $stu['student_id'],
+                        'amount'         => number_format($total_amount, 2),
+                        'currency'       => $currency,
+                        'fee_type'       => $fee_type_sms,
+                        'voucher_number' => $first_voucher_number,
+                        'app_name'       => APP_NAME,
+                    ]);
+                }
+            }
+
             $currency = acc_currency();
             if ($collection_mode === 'multi') {
+                $combined_invoice_url = APP_URL . '/accounting/fee-invoice.php?voucher_ids=' . implode(',', $voucher_ids_arr);
                 flash_set(
                     'success',
                     'Multiple fees collected successfully. Total received: ' . $currency . ' ' . number_format($total_amount, 2) .
-                    '. Invoices: ' . implode(' &nbsp;|&nbsp; ', $voucher_links)
+                    '. <a href="' . $combined_invoice_url . '" target="_blank" class="alert-link fw-semibold"><i class="fas fa-print me-1"></i>Print Combined Invoice</a>' .
+                    ' &nbsp;|&nbsp; Individual: ' . implode(' &nbsp;|&nbsp; ', $voucher_links)
                 );
             } else {
                 $voucher = acc_get_voucher($last_voucher_id);
