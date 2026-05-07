@@ -541,6 +541,98 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
         </div>
 
+        <!-- ── Smart Payment Card ─────────────────────────────────────────── -->
+        <div class="card border-0 shadow-sm mb-4 border-start border-4 border-primary" id="smartPayCard" style="display:none;">
+            <div class="card-header py-3 px-4 bg-primary bg-opacity-10 d-flex align-items-center justify-content-between flex-wrap gap-2">
+                <span class="fw-semibold text-primary fs-6">
+                    <i class="fas fa-bolt me-2"></i>Smart Payment — Auto-Distribute
+                </span>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="small text-muted">Total Outstanding:</span>
+                    <span class="badge bg-danger px-3 py-2 fs-6" id="spTotalOut">—</span>
+                </div>
+            </div>
+            <div class="card-body p-4">
+
+                <!-- Dues breakdown pills -->
+                <div class="d-flex flex-wrap gap-2 mb-4" id="spDuePills">
+                    <span class="badge rounded-pill bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 small" id="spPastDue" style="display:none;">
+                        <i class="fas fa-exclamation-triangle me-1"></i>Past Due: <strong id="spPastDueAmt">—</strong>
+                    </span>
+                    <span class="badge rounded-pill bg-warning-subtle text-warning-emphasis border border-warning-subtle px-3 py-2 small" id="spCurrentDue" style="display:none;">
+                        <i class="fas fa-calendar-day me-1"></i>Current Month: <strong id="spCurrentDueAmt">—</strong>
+                    </span>
+                    <span class="badge rounded-pill bg-info-subtle text-info border border-info-subtle px-3 py-2 small" id="spFutureDue" style="display:none;">
+                        <i class="fas fa-calendar-alt me-1"></i>Upcoming: <strong id="spFutureDueAmt">—</strong>
+                    </span>
+                </div>
+
+                <div class="row g-4">
+                    <!-- Left: Amount input + actions -->
+                    <div class="col-lg-5">
+                        <label class="form-label fw-semibold" for="spAmount">
+                            Amount Received (<?= acc_currency() ?>) <span class="text-danger">*</span>
+                        </label>
+                        <div class="input-group input-group-lg">
+                            <span class="input-group-text fw-bold text-primary"><?= acc_currency() ?></span>
+                            <input type="number" id="spAmount" class="form-control form-control-lg fw-bold text-end"
+                                   step="1" min="1" placeholder="0" autocomplete="off"
+                                   aria-label="Amount received in <?= acc_currency() ?>">
+                        </div>
+                        <div class="d-flex flex-wrap gap-2 mt-2">
+                            <button type="button" class="btn btn-sm btn-outline-danger" id="spBtnAllOut">
+                                <i class="fas fa-fire me-1"></i>All Outstanding
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-warning text-warning-emphasis" id="spBtnDueNow">
+                                <i class="fas fa-clock me-1"></i>Due Now
+                            </button>
+                        </div>
+                        <div class="mt-3" id="spNoteWrap" style="display:none;">
+                            <div class="alert border small py-2 mb-0" id="spNote" role="status" aria-live="polite"></div>
+                        </div>
+                        <div class="mt-3" id="spProceedWrap" style="display:none;">
+                            <button type="button" class="btn btn-primary px-4" id="spBtnProceed">
+                                <i class="fas fa-hand-holding-usd me-2"></i>Proceed to Payment Details
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Right: Distribution preview -->
+                    <div class="col-lg-7">
+                        <div id="spDistWrap" style="display:none;">
+                            <div class="border rounded overflow-hidden">
+                                <div class="bg-light-subtle px-3 py-2 border-bottom d-flex align-items-center justify-content-between">
+                                    <span class="small fw-semibold text-muted">
+                                        <i class="fas fa-layer-group me-1"></i>Auto-Distribution Preview
+                                    </span>
+                                    <span class="small text-muted" id="spDistMeta"></span>
+                                </div>
+                                <div class="table-responsive" style="max-height:260px;overflow-y:auto;">
+                                    <table class="table table-sm align-middle mb-0">
+                                        <thead class="table-light" style="position:sticky;top:0;z-index:1;">
+                                            <tr>
+                                                <th class="ps-3">Fee Item</th>
+                                                <th class="text-end">Due</th>
+                                                <th class="text-end">Applied</th>
+                                                <th class="text-center" style="width:100px;">Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="spDistBody"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="spDistEmpty" class="text-center text-muted py-5 small">
+                            <i class="fas fa-arrow-left me-1"></i>
+                            Enter an amount on the left to see how it will be distributed across outstanding fees.
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+        <!-- /Smart Payment Card ──────────────────────────────────────────── -->
+
         <!-- Outstanding fee table -->
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between">
@@ -1129,6 +1221,341 @@ require_once __DIR__ . '/../includes/header.php';
         syncAdmissionReceivedIntoAccount();
     }
 
+    // ════════════════════════════════════════════════════════════════════════
+    // Smart Payment – Auto-Distribution Logic
+    // ════════════════════════════════════════════════════════════════════════
+
+    const spCard         = document.getElementById('smartPayCard');
+    const spAmount       = document.getElementById('spAmount');
+    const spDistBody     = document.getElementById('spDistBody');
+    const spDistWrap     = document.getElementById('spDistWrap');
+    const spDistEmpty    = document.getElementById('spDistEmpty');
+    const spDistMeta     = document.getElementById('spDistMeta');
+    const spNote         = document.getElementById('spNote');
+    const spNoteWrap     = document.getElementById('spNoteWrap');
+    const spProceedWrap  = document.getElementById('spProceedWrap');
+    const spTotalOut     = document.getElementById('spTotalOut');
+
+    const SP_MIN_AMOUNT  = 0.01;   // minimum meaningful currency unit
+    const SP_FLOAT_EPS   = 0.005;  // floating-point comparison tolerance
+    const SP_DEBOUNCE_MS = 120;    // ms to wait before recomputing distribution
+
+    // Month name → number lookup (defined once at module scope)
+    const MONTH_MAP = {Jan:1,Feb:2,Mar:3,Apr:4,May:5,Jun:6,Jul:7,Aug:8,Sep:9,Oct:10,Nov:11,Dec:12};
+
+    let smartDistribution = []; // last computed allocation
+
+    /** Parse "May 2026" → {month:5, year:2026} or null */
+    function parseMonthLabel(label) {
+        if (!label) return null;
+        const parts = label.trim().split(' ');
+        const m = MONTH_MAP[parts[0]];
+        const y = parseInt(parts[1]);
+        return (m && y) ? {month: m, year: y} : null;
+    }
+
+    /** Return 'past' | 'current' | 'future' | 'other' for a fee item */
+    function itemPeriod(item) {
+        if (!item.cal_month) return 'other';
+        const now = new Date();
+        const ny = now.getFullYear(), nm = now.getMonth() + 1;
+        if (item.cal_year < ny || (item.cal_year === ny && item.cal_month < nm)) return 'past';
+        if (item.cal_year === ny && item.cal_month === nm) return 'current';
+        return 'future';
+    }
+
+    /**
+     * Build an ordered list of all outstanding fee items (chronological).
+     * Admission → per-semester [registration, monthly m1..mN] in semester order.
+     */
+    function buildOutstandingItems() {
+        if (!currentSummary) return [];
+        const items = [];
+        const t = currentSummary.totals;
+        const s = currentSummary;
+
+        // 1. Admission (one-time, highest priority)
+        if (t.admission.out > 0) {
+            items.push({
+                fee_type:          'admission',
+                semester_fee_id:   null,
+                semester_number:   null,
+                month_number:      null,
+                out:               t.admission.out,
+                label:             'Admission Fee',
+                income_account_id: incomeAccountsMap['admission'] ?? 0,
+                cal_month:         null, cal_year: null,
+            });
+        }
+
+        // 2. Per semester
+        for (const sf of s.semesters) {
+            const semLabel = sf.semester_label || ('Semester ' + sf.semester_number);
+            const semN     = sf.semester_number;
+
+            // Registration for this semester
+            if (sf.reg_out > 0) {
+                items.push({
+                    fee_type:          'registration',
+                    semester_fee_id:   sf.id,
+                    semester_number:   semN,
+                    month_number:      null,
+                    out:               sf.reg_out,
+                    label:             semLabel + ' — Registration Fee',
+                    income_account_id: incomeAccountsMap['registration'] ?? 0,
+                    cal_month:         null, cal_year: null,
+                });
+            }
+
+            // Monthly overall fees
+            for (const mr of sf.monthly_rows) {
+                if (mr.out <= 0) continue;
+                const parsed = parseMonthLabel(mr.month_label);
+                items.push({
+                    fee_type:          'semester_tuition',
+                    semester_fee_id:   sf.id,
+                    semester_number:   semN,
+                    month_number:      mr.month_number,
+                    out:               mr.out,
+                    label:             semLabel + ' — Month ' + mr.month_number
+                                       + (mr.month_label ? ' (' + mr.month_label + ')' : ''),
+                    month_label:       mr.month_label || '',
+                    income_account_id: incomeAccountsMap['semester_tuition'] ?? 0,
+                    cal_month:         parsed ? parsed.month : null,
+                    cal_year:          parsed ? parsed.year  : null,
+                });
+            }
+        }
+        return items;
+    }
+
+    /**
+     * Distribute `amountToPay` greedily across outstanding items (oldest-first).
+     * Returns array of {…item, applied, full}.
+     */
+    function computeDistribution(amountToPay) {
+        const items = buildOutstandingItems();
+        let remaining = Math.round(amountToPay * 100) / 100;
+        const result  = [];
+
+        for (const item of items) {
+            if (remaining < SP_MIN_AMOUNT) break;
+            const apply   = Math.round(Math.min(item.out, remaining) * 100) / 100;
+            if (apply <= 0) continue;
+            result.push({...item, applied: apply, full: apply >= item.out - SP_FLOAT_EPS});
+            remaining = Math.round((remaining - apply) * 100) / 100;
+        }
+        return result;
+    }
+
+    /** Compute totals for past-due / current-month / future pills */
+    function getSmartPayStats() {
+        const items = buildOutstandingItems();
+        let past = 0, current = 0, future = 0, total = 0;
+        for (const item of items) {
+            total += item.out;
+            const period = itemPeriod(item);
+            if (period === 'past')    past    += item.out;
+            else if (period === 'current') current += item.out;
+            else if (period === 'future')  future  += item.out;
+            // 'other' (admission, registration) counted in total but not in period pills
+        }
+        return {past, current, future, total};
+    }
+
+    /** Render the distribution preview table */
+    function renderSmartPreview(distribution) {
+        spDistBody.innerHTML = '';
+        let pastCount = 0, currentCount = 0, futureCount = 0, otherCount = 0;
+
+        if (distribution.length === 0) {
+            spDistWrap.style.display  = 'none';
+            spDistEmpty.style.display = '';
+            spNoteWrap.style.display  = 'none';
+            spProceedWrap.style.display = 'none';
+            return;
+        }
+
+        distribution.forEach(item => {
+            const period = itemPeriod(item);
+            if (period === 'past')    pastCount++;
+            else if (period === 'current') currentCount++;
+            else if (period === 'future')  futureCount++;
+            else otherCount++;
+
+            let periodBadge = '';
+            if (period === 'past')
+                periodBadge = '<span class="badge bg-danger-subtle text-danger border border-danger-subtle ms-1 small">Past Due</span>';
+            else if (period === 'current')
+                periodBadge = '<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle ms-1 small">Current</span>';
+            else if (period === 'future')
+                periodBadge = '<span class="badge bg-info-subtle text-info border border-info-subtle ms-1 small">Advance</span>';
+
+            const statusCell = item.full
+                ? '<span class="text-success small"><i class="fas fa-check-circle"></i> Cleared</span>'
+                : '<span class="text-warning-emphasis small"><i class="fas fa-adjust"></i> Partial</span>';
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="ps-3 small">${item.label}${periodBadge}</td>
+                <td class="text-end small text-muted">${fmt(item.out)}</td>
+                <td class="text-end small fw-semibold text-success">${fmt(item.applied)}</td>
+                <td class="text-center">${statusCell}</td>`;
+            spDistBody.appendChild(tr);
+        });
+
+        // Meta line (e.g. "3 items – 2 overdue & one-time fees, 1 advance")
+        const parts = [];
+        if (pastCount > 0)               parts.push(pastCount + ' overdue');
+        if (otherCount > 0)              parts.push(otherCount + ' one-time fee' + (otherCount > 1 ? 's' : ''));
+        if (currentCount > 0)            parts.push('current month');
+        if (futureCount > 0)             parts.push(futureCount + ' advance month' + (futureCount > 1 ? 's' : ''));
+        spDistMeta.textContent = distribution.length + ' item' + (distribution.length !== 1 ? 's' : '')
+            + (parts.length ? ' — ' + parts.join(', ') : '');
+
+        spDistWrap.style.display  = '';
+        spDistEmpty.style.display = 'none';
+
+        // Note about advance payment
+        if (futureCount > 0) {
+            spNote.className = 'alert alert-info border small py-2 mb-0';
+            spNote.innerHTML = '<i class="fas fa-info-circle me-1"></i>'
+                + '<strong>Advance payment:</strong> This amount clears all overdue fees and pre-pays '
+                + futureCount + ' upcoming month' + (futureCount > 1 ? 's' : '') + '.';
+            spNoteWrap.style.display = '';
+        } else if (pastCount > 0 && currentCount === 0 && futureCount === 0) {
+            spNote.className = 'alert alert-warning border small py-2 mb-0';
+            spNote.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i>'
+                + 'This amount partially covers overdue fees only.';
+            spNoteWrap.style.display = '';
+        } else {
+            spNoteWrap.style.display = 'none';
+        }
+
+        spProceedWrap.style.display = '';
+    }
+
+    /** Show/refresh the smart pay card after a student is loaded */
+    function showSmartPayCard() {
+        const stats = getSmartPayStats();
+
+        spTotalOut.textContent = fmt(stats.total);
+
+        // Past-due pill
+        if (stats.past > 0) {
+            document.getElementById('spPastDueAmt').textContent = fmt(stats.past);
+            document.getElementById('spPastDue').style.display  = '';
+        } else {
+            document.getElementById('spPastDue').style.display  = 'none';
+        }
+        // Current-month pill
+        if (stats.current > 0) {
+            document.getElementById('spCurrentDueAmt').textContent = fmt(stats.current);
+            document.getElementById('spCurrentDue').style.display   = '';
+        } else {
+            document.getElementById('spCurrentDue').style.display   = 'none';
+        }
+        // Future pill
+        if (stats.future > 0) {
+            document.getElementById('spFutureDueAmt').textContent = fmt(stats.future);
+            document.getElementById('spFutureDue').style.display   = '';
+        } else {
+            document.getElementById('spFutureDue').style.display   = 'none';
+        }
+
+        spAmount.value = '';
+        spDistBody.innerHTML = '';
+        spDistWrap.style.display   = 'none';
+        spDistEmpty.style.display  = '';
+        spNoteWrap.style.display   = 'none';
+        spProceedWrap.style.display = 'none';
+        smartDistribution = [];
+
+        if (stats.total > 0) {
+            spCard.style.display = '';
+        } else {
+            spCard.style.display = 'none';
+        }
+    }
+
+    /** Live update distribution when amount changes */
+    let spTimer = null;
+    spAmount.addEventListener('input', function () {
+        clearTimeout(spTimer);
+        spTimer = setTimeout(() => {
+            const amt = parseFloat(this.value);
+            if (!amt || amt <= 0) {
+                smartDistribution = [];
+                renderSmartPreview([]);
+                return;
+            }
+            smartDistribution = computeDistribution(amt);
+            renderSmartPreview(smartDistribution);
+        }, SP_DEBOUNCE_MS);
+    });
+
+    /** "All Outstanding" quick button */
+    document.getElementById('spBtnAllOut').addEventListener('click', () => {
+        const stats = getSmartPayStats();
+        if (stats.total <= 0) return;
+        spAmount.value = Math.ceil(stats.total);
+        spAmount.dispatchEvent(new Event('input'));
+    });
+
+    /** "Due Now" quick button (past + current only) */
+    document.getElementById('spBtnDueNow').addEventListener('click', () => {
+        const stats = getSmartPayStats();
+        const due = stats.past + stats.current;
+        if (due <= 0) return;
+        spAmount.value = Math.ceil(due);
+        spAmount.dispatchEvent(new Event('input'));
+    });
+
+    /** "Proceed to Payment Details" – populate existing multi-mode form */
+    document.getElementById('spBtnProceed').addEventListener('click', () => {
+        if (!smartDistribution || smartDistribution.length === 0) return;
+        if (!currentStudent) return;
+
+        const total    = smartDistribution.reduce((s, i) => s + i.applied, 0);
+        const items    = smartDistribution.map(i => ({
+            fee_type:          i.fee_type,
+            semester_fee_id:   i.semester_fee_id || null,
+            semester_number:   i.semester_number || null,
+            month_number:      i.month_number    || null,
+            amount:            i.applied.toFixed(2),
+            label:             i.label,
+            income_account_id: i.income_account_id || (incomeAccountsMap[i.fee_type] ?? 0),
+        }));
+
+        // Fill existing payment form in multi mode
+        document.getElementById('hCollectionMode').value  = 'multi';
+        document.getElementById('hFeeItems').value        = JSON.stringify(items);
+        document.getElementById('hStudentId').value       = currentStudent.id;
+        document.getElementById('hPackageId').value       = currentStudent.package_id;
+        document.getElementById('hFeeType').value         = 'other';
+        document.getElementById('hSemFeeId').value        = '';
+        document.getElementById('hSemNumber').value       = '';
+        document.getElementById('hMonthNumber').value     = '';
+        document.getElementById('hIncomeAccountId').value = '';
+        document.getElementById('payAmount').value        = total.toFixed(2);
+        document.getElementById('payOutstanding').textContent = fmt(total);
+        document.getElementById('payFormFeeLabel').textContent = 'Smart Payment (' + items.length + ' item' + (items.length !== 1 ? 's' : '') + ')';
+        document.getElementById('payNarration').value =
+            'Smart fee payment – ' + currentSummary.package.student_name + ' (' + currentStudent.student_id + ')';
+        document.getElementById('incomeAccountLabel').textContent = 'Mapped Income Accounts';
+
+        // Deselect any manual checkboxes
+        selectedFeeItems.clear();
+        document.querySelectorAll('.feeMultiChk').forEach(el => { el.checked = false; });
+        syncMultiCollectBar();
+
+        // Show and scroll to the payment confirmation form
+        const payCard = document.getElementById('paymentFormCard');
+        payCard.style.display = '';
+        openAccordionSection('paymentFormCollapse');
+        payCard.scrollIntoView({behavior: 'smooth', block: 'start'});
+    });
+
     // ── Student search autocomplete ──────────────────────────────────────────
     const searchInput    = document.getElementById('studentSearch');
     const suggestions    = document.getElementById('studentSuggestions');
@@ -1371,6 +1798,9 @@ require_once __DIR__ . '/../includes/header.php';
 
         // Render transaction history
         renderTransactionHistory(data.payments || []);
+
+        // Show the Smart Payment card
+        showSmartPayCard();
     }
 
     // ── Render transaction history ────────────────────────────────────────────
