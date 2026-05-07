@@ -30,6 +30,9 @@ foreach ($cf_programs as $prog) {
         'safety_net_gpa_threshold' => (float)$prog['safety_net_gpa_threshold'],
         'monthly_fixed_fee'        => $months > 0 ? round((float)$prog['fixed_institutional_fees'] / $months, 2) : 0,
         'monthly_english_fee'      => $months > 0 ? round((float)$prog['english_course_fee'] / $months, 2) : 0,
+        // Per-program fee constants (moved from global settings)
+        'reg_fee_per_semester'     => (int)($prog['reg_fee_per_semester'] ?? 0),
+        'form_id_fee'              => (int)($prog['form_id_fee'] ?? 0),
     ];
 }
 
@@ -55,10 +58,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $attendance_requirement   = (int)($_POST['attendance_requirement']  ?? 70);
     $safety_net_gpa_threshold = (float)($_POST['safety_net_gpa_threshold'] ?? 3.00);
     
-    // Snapshot registration and form fees from cf_settings at package creation time
-    $cf_settings           = $db->query('SELECT reg_fee_per_semester, form_id_fee FROM cf_settings WHERE id = 1')->fetch();
-    $reg_fee_per_semester  = $cf_settings ? (float)$cf_settings['reg_fee_per_semester'] : 0.0;
-    $form_id_fee           = $cf_settings ? (float)$cf_settings['form_id_fee']          : 0.0;
+    // Snapshot registration and form fees from POST (populated from program data via JS)
+    $reg_fee_per_semester  = (float)($_POST['reg_fee_per_semester'] ?? 0);
+    $form_id_fee           = (float)($_POST['form_id_fee']          ?? 0);
 
     // Validate
     if ($student_id <= 0)      $errors[] = 'Please select a valid student.';

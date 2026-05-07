@@ -55,6 +55,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $int_final       = $_POST['internal_final']       !== '' ? (int)$_POST['internal_final']        : null;
     $int_monthly     = $_POST['internal_monthly']     !== '' ? (float)$_POST['internal_monthly']    : null;
 
+    // Per-program fee constants (moved from global settings)
+    $adm_fee_base       = $_POST['admission_fee_base']       !== '' ? (int)$_POST['admission_fee_base']       : null;
+    $reg_fee_sem        = $_POST['reg_fee_per_semester']     !== '' ? (int)$_POST['reg_fee_per_semester']     : null;
+    $reg_fee_tot        = $_POST['reg_fee_total']            !== '' ? (int)$_POST['reg_fee_total']            : null;
+    $form_id            = $_POST['form_id_fee']              !== '' ? (int)$_POST['form_id_fee']              : null;
+    $id_card            = $_POST['id_card_fee']              !== '' ? (int)$_POST['id_card_fee']              : null;
+    $adm_form           = $_POST['admission_form_fee']       !== '' ? (int)$_POST['admission_form_fee']       : null;
+    $bi_start_month     = $_POST['bi_semester_start_month']  !== '' ? (int)$_POST['bi_semester_start_month']  : null;
+    $tri_start_month    = $_POST['tri_semester_start_month'] !== '' ? (int)$_POST['tri_semester_start_month'] : null;
+
     // Validate
     if ($degree_type_id <= 0) $errors[] = 'Degree type is required.';
     if ($program_slug === '')  $errors[] = 'Program slug is required.';
@@ -80,6 +90,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $db->prepare(
             'INSERT INTO cf_programs
              (degree_type_id, program_slug, program_name, sort_order, is_active,
+              admission_fee_base, reg_fee_per_semester, reg_fee_total, form_id_fee,
+              id_card_fee, admission_form_fee, bi_semester_start_month, tri_semester_start_month,
               total_credits, duration_years, total_semesters, total_months,
               standard_tuition_full, tuition_per_semester, admission_fees,
               fixed_institutional_fees, english_course_fee, safety_net_cap, safety_net_per_semester,
@@ -90,9 +102,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               external_waiver, external_final, external_monthly,
               internal_waiver, internal_final, internal_monthly)
              VALUES
-             (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+             (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
         )->execute([
             $degree_type_id, $program_slug, $program_name, $sort_order, $is_active,
+            $adm_fee_base, $reg_fee_sem, $reg_fee_tot, $form_id, $id_card, $adm_form, $bi_start_month, $tri_start_month,
             $total_credits, $duration_years, $total_semesters, $total_months,
             $std_tuition, $tps, $adm_fees, $fix_inst, $eng_fee, $sn_cap, $sn_per,
             $att_req, $sn_gpa, $sch_type,
@@ -216,6 +229,81 @@ require_once __DIR__ . '/../includes/header.php';
                             <label class="form-label fw-semibold">Total Months</label>
                             <input type="number" name="total_months" value="<?= h($old('total_months')) ?>"
                                    class="form-control" min="1">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Per-Program Fee Constants (Moved from Global Settings) -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header fw-semibold py-3 bg-success bg-opacity-10">
+                    <i class="fas fa-money-bill-wave me-2 text-success"></i>Fee Structure (Per-Program)
+                    <div class="form-text small fw-normal mt-1">These fees can be different for each program. Previously global settings.</div>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Admission Fee (One-time)</label>
+                            <input type="number" name="admission_fee_base" value="<?= h($old('admission_fee_base')) ?>"
+                                   class="form-control" min="0" placeholder="e.g. 10000">
+                            <div class="form-text">Base admission fee (BDT)</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Registration Fee / Semester</label>
+                            <input type="number" name="reg_fee_per_semester" value="<?= h($old('reg_fee_per_semester')) ?>"
+                                   class="form-control" min="0" placeholder="e.g. 1000">
+                            <div class="form-text">Per semester registration (BDT)</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Registration Fees Total</label>
+                            <input type="number" name="reg_fee_total" value="<?= h($old('reg_fee_total')) ?>"
+                                   class="form-control" min="0" placeholder="e.g. 12000">
+                            <div class="form-text">Total across all semesters (BDT)</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Form + ID Fee (Legacy)</label>
+                            <input type="number" name="form_id_fee" value="<?= h($old('form_id_fee')) ?>"
+                                   class="form-control" min="0" placeholder="e.g. 1000">
+                            <div class="form-text">Admission form + ID card combined (BDT)</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">ID Card Fee</label>
+                            <input type="number" name="id_card_fee" value="<?= h($old('id_card_fee')) ?>"
+                                   class="form-control" min="0" placeholder="e.g. 500">
+                            <div class="form-text">One-time ID card fee (BDT)</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Admission Form Fee</label>
+                            <input type="number" name="admission_form_fee" value="<?= h($old('admission_form_fee')) ?>"
+                                   class="form-control" min="0" placeholder="e.g. 500">
+                            <div class="form-text">One-time admission form fee (BDT)</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Bi-Semester Start Month</label>
+                            <select name="bi_semester_start_month" class="form-select">
+                                <option value="">Not specified</option>
+                                <?php
+                                $months = cf_get_months();
+                                foreach ($months as $num => $name):
+                                ?>
+                                <option value="<?= $num ?>" <?= (int)$old('bi_semester_start_month', 0) === $num ? 'selected' : '' ?>>
+                                    <?= h($name) ?>
+                                </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <div class="form-text">Starting month for bi-semester (2 semesters/year) programs</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Tri-Semester Start Month</label>
+                            <select name="tri_semester_start_month" class="form-select">
+                                <option value="">Not specified</option>
+                                <?php foreach ($months as $num => $name): ?>
+                                <option value="<?= $num ?>" <?= (int)$old('tri_semester_start_month', 0) === $num ? 'selected' : '' ?>>
+                                    <?= h($name) ?>
+                                </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <div class="form-text">Starting month for tri-semester (3 semesters/year) programs</div>
                         </div>
                     </div>
                 </div>

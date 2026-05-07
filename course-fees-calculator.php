@@ -99,6 +99,16 @@ foreach ($programs as $prog) {
         $c['SCHOLARSHIP_TYPE']        = $prog['scholarship_type'] ?? 'regular_bachelor';
         $c['INITIAL_WAIVER_TIERS']    = $prog['initial_waiver_tiers'] ? json_decode($prog['initial_waiver_tiers'], true) : [];
         $c['MERIT_WAIVER_TIERS']      = $prog['merit_waiver_tiers']   ? json_decode($prog['merit_waiver_tiers'],   true) : [];
+        
+        // Per-program fee constants (moved from global settings)
+        if ($prog['admission_fee_base']       !== null) $c['ADM_FEE_BASE']       = (int)$prog['admission_fee_base'];
+        if ($prog['reg_fee_per_semester']     !== null) $c['REG_FEE_SEM']        = (int)$prog['reg_fee_per_semester'];
+        if ($prog['reg_fee_total']            !== null) $c['REG_FEE_TOTAL']      = (int)$prog['reg_fee_total'];
+        if ($prog['form_id_fee']              !== null) $c['FORM_ID_FEE']        = (int)$prog['form_id_fee'];
+        if ($prog['id_card_fee']              !== null) $c['ID_CARD_FEE']        = (int)$prog['id_card_fee'];
+        if ($prog['admission_form_fee']       !== null) $c['ADMISSION_FORM_FEE'] = (int)$prog['admission_form_fee'];
+        if ($prog['bi_semester_start_month']  !== null) $c['BI_SEMESTER_START_MONTH']  = (int)$prog['bi_semester_start_month'];
+        if ($prog['tri_semester_start_month'] !== null) $c['TRI_SEMESTER_START_MONTH'] = (int)$prog['tri_semester_start_month'];
     }
 
     // Remove null values
@@ -554,7 +564,8 @@ foreach ($programs as $prog) {
 // ============================================================
 var SESSION_LABEL = <?= json_encode($session_label) ?>;
 
-// Global fee constants (configurable via admin Settings)
+// Global fallback fee constants (used only if program doesn't define them)
+// Programs now have their own fee constants
 var GLOBAL_FEES = {
     ADM_FEE_BASE       : <?= $adm_fee_base ?>,
     REG_FEE_SEM        : <?= $reg_fee_sem ?>,

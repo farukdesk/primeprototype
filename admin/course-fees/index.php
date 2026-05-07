@@ -131,11 +131,11 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
-<!-- Global Fee Settings Summary -->
+<!-- Global Settings Summary -->
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-header d-flex justify-content-between align-items-center py-3">
         <span class="fw-semibold">
-            <i class="fas fa-money-bill-wave me-2 text-success"></i>Global Fee Settings
+            <i class="fas fa-cog me-2 text-secondary"></i>Global Settings
         </span>
         <?php if (cf_can_edit()): ?>
         <a href="<?= APP_URL ?>/course-fees/settings.php" class="btn btn-sm btn-outline-secondary">
@@ -145,30 +145,24 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
     <div class="card-body py-3">
         <div class="row g-3">
-            <div class="col-6 col-md-2">
-                <div class="small text-muted mb-1">Admission Fee</div>
-                <div class="fw-semibold">৳ <?= number_format((int)($settings['admission_fee_base'] ?? 10000)) ?></div>
+            <div class="col-md-6">
+                <div class="small text-muted mb-1">Page Title</div>
+                <div class="fw-semibold"><?= h($settings['page_title'] ?? 'Course Fee Calculator') ?></div>
             </div>
-            <div class="col-6 col-md-2">
-                <div class="small text-muted mb-1">Registration / Semester</div>
-                <div class="fw-semibold">৳ <?= number_format((int)($settings['reg_fee_per_semester'] ?? 1000)) ?></div>
+            <div class="col-md-6">
+                <div class="small text-muted mb-1">Published Status</div>
+                <div class="fw-semibold">
+                    <?php if ($settings['is_published'] ?? 1): ?>
+                        <span class="badge bg-success">Published</span>
+                    <?php else: ?>
+                        <span class="badge bg-secondary">Not Published</span>
+                    <?php endif; ?>
+                </div>
             </div>
-            <div class="col-6 col-md-2">
-                <div class="small text-muted mb-1">Registration Fees Total</div>
-                <div class="fw-semibold">৳ <?= number_format((int)($settings['reg_fee_total'] ?? 12000)) ?></div>
-            </div>
-            <div class="col-6 col-md-2">
-                <div class="small text-muted mb-1">Admission Form Fees</div>
-                <div class="fw-semibold">৳ <?= number_format((int)($settings['admission_form_fee'] ?? 500)) ?></div>
-            </div>
-            <div class="col-6 col-md-2">
-                <div class="small text-muted mb-1">ID Card Fees</div>
-                <div class="fw-semibold">৳ <?= number_format((int)($settings['id_card_fee'] ?? 500)) ?></div>
-            </div>
-            <div class="col-6 col-md-2">
-                <div class="small text-muted mb-1">Form + ID (Legacy)</div>
-                <div class="fw-semibold">৳ <?= number_format((int)($settings['form_id_fee'] ?? 1000)) ?></div>
-            </div>
+        </div>
+        <div class="alert alert-info border-start border-info border-4 mt-3 mb-0">
+            <i class="fas fa-info-circle me-2"></i>
+            <strong>Note:</strong> Fee constants are now configured per-program. Each program can have different admission fees, registration fees, and other fee constants.
         </div>
     </div>
 </div>
