@@ -1,7 +1,7 @@
 <?php
 /**
  * Fee Collection Invoice – Standalone print page (no admin layout).
- * Displays two copies: Student Copy & Office Copy.
+ * Displays a single printable invoice copy.
  *
  * Usage: fee-invoice.php?voucher_id=123
  */
@@ -79,6 +79,8 @@ $payer_email  = '';
 $fee_type_lbl = 'Fee Payment';
 $semester_lbl = '';
 $month_lbl    = '';
+$payment_method_lbl = 'Cash';
+$transaction_number = '';
 
 if ($sfp) {
     $payer_name   = $sfp['full_name']      ?? '';
@@ -100,7 +102,24 @@ if ($sfp) {
     }
     if ($sfp['month_number']) {
         $month_lbl = 'Month ' . $sfp['month_number'];
+        $summary = acc_student_fee_summary((int)$sfp['student_id']);
+        if ($summary) {
+            foreach ($summary['semesters'] as $sem) {
+                if ((int)$sem['semester_number'] !== (int)$sfp['semester_number']) continue;
+                foreach (($sem['monthly_rows'] ?? []) as $mr) {
+                    if ((int)$mr['month_number'] === (int)$sfp['month_number']) {
+                        $month_lbl .= ' (' . ($mr['month_label'] ?? '') . ')';
+                        break 2;
+                    }
+                }
+            }
+        }
     }
+    $payment_method_lbl = acc_payment_method_label(
+        (string)($sfp['payment_method'] ?? 'cash'),
+        $sfp['mobile_banking_provider'] ?? null
+    );
+    $transaction_number = (string)($sfp['transaction_number'] ?? '');
 } elseif ($adm_payment) {
     $payer_name   = $adm_payment['student_name'] ?? '';
     $payer_sid    = $adm_payment['student_sid']  ?? '';
@@ -109,6 +128,11 @@ if ($sfp) {
     $payer_phone  = $adm_payment['phone']        ?? '';
     $payer_email  = $adm_payment['email']        ?? '';
     $fee_type_lbl = 'Admission Fee';
+    $payment_method_lbl = acc_payment_method_label(
+        (string)($adm_payment['payment_method'] ?? 'cash'),
+        $adm_payment['mobile_banking_provider'] ?? null
+    );
+    $transaction_number = (string)($adm_payment['transaction_number'] ?? '');
 }
 
 $voucher_number  = $voucher['voucher_number'] ?? '—';
@@ -119,12 +143,7 @@ $narration       = $voucher['narration']      ?? '';
 $collected_by    = $voucher['created_by_name'] ?? '—';
 $created_at      = date('d M Y, h:i A', strtotime($voucher['created_at']));
 
-// Outstanding balance (only for student fee payments)
-$outstanding_str = '';
-if ($sfp) {
-    $outstanding = acc_total_outstanding((int)$sfp['package_id']);
-    $outstanding_str = $currency . ' ' . number_format($outstanding, 2);
-}
+$invoice_signature_name = auth_user()['full_name'] ?? $collected_by;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -384,10 +403,8 @@ if ($sfp) {
 <div class="print-wrapper">
 
 <?php
-// Render one invoice copy: $copy_label = 'Student Copy' | 'Office Copy', $show_outstanding = true|false
+// Render invoice copy
 function render_copy(
-    string $copy_label,
-    bool   $show_outstanding,
     string $currency,
     string $voucher_number,
     string $voucher_date,
@@ -405,18 +422,20 @@ function render_copy(
     string $fee_type_lbl,
     string $semester_lbl,
     string $month_lbl,
-    string $outstanding_str
+    string $payment_method_lbl,
+    string $transaction_number,
+    string $invoice_signature_name
 ): void {
 ?>
 <div class="invoice-copy">
 
     <!-- Header -->
-    <div class="inv-header">
-        <div>
-            <div class="uni-name">Prime University</div>
-            <div class="uni-sub">Mirpur-1, Dhaka, Bangladesh &nbsp;|&nbsp; primeuniversity.ac.bd</div>
-        </div>
-        <div class="copy-label"><?= h($copy_label) ?></div>
+        <div class="inv-header">
+            <div>
+                <div class="uni-name">Prime University</div>
+                <div class="uni-sub">Mirpur-1, Dhaka, Bangladesh &nbsp;|&nbsp; primeuniversity.ac.bd</div>
+            </div>
+        <div class="copy-label">Invoice Copy</div>
     </div>
 
     <!-- Title ribbon -->
@@ -439,6 +458,16 @@ function render_copy(
                 <div class="meta-line">
                     <span class="meta-label">Reference</span>
                     <span class="meta-value"><?= h($reference) ?></span>
+                </div>
+                <?php endif; ?>
+                <div class="meta-line">
+                    <span class="meta-label">Payment Method</span>
+                    <span class="meta-value"><?= h($payment_method_lbl) ?></span>
+                </div>
+                <?php if ($transaction_number): ?>
+                <div class="meta-line">
+                    <span class="meta-label">Transaction #</span>
+                    <span class="meta-value"><?= h($transaction_number) ?></span>
                 </div>
                 <?php endif; ?>
             </div>
@@ -503,22 +532,8 @@ function render_copy(
             </tfoot>
         </table>
 
-        <?php if ($show_outstanding && $outstanding_str): ?>
-        <div class="outstanding-note">
-            ⚠ &nbsp;Outstanding balance after this payment:
-            <strong><?= h($outstanding_str) ?></strong>
-        </div>
-        <?php endif; ?>
-
-        <!-- Signature row -->
         <div class="sig-row">
-            <div class="sig-box">Receiver's Signature</div>
-            <div class="sig-box">Accounts Officer</div>
-            <?php if ($copy_label === 'Office Copy'): ?>
-            <div class="sig-box">Head of Accounts / Controller</div>
-            <?php else: ?>
-            <div class="sig-box">Student's Signature</div>
-            <?php endif; ?>
+            <div class="sig-box"><?= h($invoice_signature_name) ?><br><span style="font-size:9px;">Collected By</span></div>
         </div>
 
     </div><!-- /inv-body -->
@@ -531,23 +546,10 @@ function render_copy(
 <?php } ?>
 
 <?php render_copy(
-    'Student Copy',
-    true,  // show outstanding
     $currency, $voucher_number, $voucher_date, $voucher_amount,
     $reference, $narration, $collected_by, $created_at,
     $payer_name, $payer_sid, $payer_dept, $payer_prog, $payer_phone, $payer_email,
-    $fee_type_lbl, $semester_lbl, $month_lbl, $outstanding_str
-); ?>
-
-<div class="cut-line">✂ &nbsp; Cut here &nbsp; ✂</div>
-
-<?php render_copy(
-    'Office Copy',
-    false, // no outstanding on office copy
-    $currency, $voucher_number, $voucher_date, $voucher_amount,
-    $reference, $narration, $collected_by, $created_at,
-    $payer_name, $payer_sid, $payer_dept, $payer_prog, $payer_phone, $payer_email,
-    $fee_type_lbl, $semester_lbl, $month_lbl, $outstanding_str
+    $fee_type_lbl, $semester_lbl, $month_lbl, $payment_method_lbl, $transaction_number, $invoice_signature_name
 ); ?>
 
 </div><!-- /print-wrapper -->

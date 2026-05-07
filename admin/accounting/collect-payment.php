@@ -15,11 +15,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
 
     $student_id      = (int)($_POST['student_id']       ?? 0);
     $package_id      = (int)($_POST['package_id']       ?? 0);
+    $collection_mode = trim((string)($_POST['collection_mode'] ?? 'single'));
+    $fee_items_json  = trim((string)($_POST['fee_items'] ?? ''));
     $fee_type        = trim($_POST['fee_type']           ?? '');
     $semester_fee_id = (int)($_POST['semester_fee_id']  ?? 0) ?: null;
     $semester_number = (int)($_POST['semester_number']  ?? 0) ?: null;
     $month_number    = (int)($_POST['month_number']      ?? 0) ?: null;
     $amount          = (float)($_POST['amount']         ?? 0);
+    $payment_method  = trim((string)($_POST['payment_method'] ?? 'cash'));
+    $mobile_banking_provider = trim((string)($_POST['mobile_banking_provider'] ?? ''));
+    $transaction_number = trim((string)($_POST['transaction_number'] ?? ''));
     $cash_account_id   = (int)($_POST['cash_account_id']   ?? 0);
     $income_account_id = (int)($_POST['income_account_id'] ?? 0);
     $date            = trim($_POST['voucher_date']       ?? date('Y-m-d'));
@@ -30,26 +35,90 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
 
     if (!$student_id)                          $errors[] = 'Invalid student.';
     if (!$package_id)                          $errors[] = 'Student has no fee package.';
-    if (!in_array($fee_type, $valid_types))    $errors[] = 'Invalid fee type selected.';
-    if ($amount <= 0)                          $errors[] = 'Amount must be greater than zero.';
     if (!$cash_account_id)                     $errors[] = 'Please select the received-into account.';
-    if (!$income_account_id)                   $errors[] = 'Please select the income account.';
     if (!$date)                                $errors[] = 'Date is required.';
+    if (!in_array($payment_method, ['cash', 'bank', 'mobile_banking'], true)) {
+        $errors[] = 'Invalid payment method selected.';
+    }
+    if ($payment_method === 'mobile_banking' && !in_array($mobile_banking_provider, ['bkash', 'nagad', 'rocket'], true)) {
+        $errors[] = 'Please select a mobile banking provider.';
+    }
+    if ($payment_method !== 'cash' && $transaction_number === '') {
+        $errors[] = 'Transaction number is required for non-cash payments.';
+    }
 
     if (empty($errors)) {
         try {
-            $vid = acc_collect_student_fee(
-                $student_id, $package_id, $fee_type,
-                $semester_fee_id, $semester_number, $month_number,
-                $amount, $cash_account_id, $income_account_id,
-                $date, $reference, $narration
-            );
+            $fee_items = [];
+            if ($collection_mode === 'multi') {
+                $summary = acc_student_fee_summary($student_id);
+                if (!$summary) {
+                    throw new RuntimeException('Could not load current fee summary for this student.');
+                }
+                $outstanding_lookup = [];
+                $tot = $summary['totals'] ?? [];
+                $outstanding_lookup['admission|||'] = (float)($tot['admission']['out'] ?? 0);
+                foreach (($summary['semesters'] ?? []) as $sf) {
+                    $key_reg = 'registration|' . (int)$sf['id'] . '|' . (int)$sf['semester_number'] . '|';
+                    $outstanding_lookup[$key_reg] = (float)($sf['reg_out'] ?? 0);
+                    foreach (($sf['monthly_rows'] ?? []) as $mr) {
+                        $key_tuition = 'semester_tuition|' . (int)$sf['id'] . '|' . (int)$sf['semester_number'] . '|' . (int)$mr['month_number'];
+                        $outstanding_lookup[$key_tuition] = (float)($mr['out'] ?? 0);
+                    }
+                }
 
-            // Fetch voucher number for notifications
-            $voucher = acc_get_voucher($vid);
-            $voucher_number = $voucher['voucher_number'] ?? '—';
+                $decoded = json_decode($fee_items_json, true);
+                if (!is_array($decoded) || !$decoded) {
+                    throw new RuntimeException('Please select at least one outstanding fee item.');
+                }
+                foreach ($decoded as $item) {
+                    $row_fee_type = trim((string)($item['fee_type'] ?? ''));
+                    $row_amount   = (float)($item['amount'] ?? 0);
+                    if (!in_array($row_fee_type, $valid_types, true) || $row_amount <= 0) {
+                        continue;
+                    }
+                    $key = $row_fee_type . '|'
+                        . ((int)($item['semester_fee_id'] ?? 0) ?: '') . '|'
+                        . ((int)($item['semester_number'] ?? 0) ?: '') . '|'
+                        . ((int)($item['month_number'] ?? 0) ?: '');
+                    $outstanding_now = (float)($outstanding_lookup[$key] ?? 0);
+                    if ($outstanding_now <= 0) {
+                        continue;
+                    }
+                    $fee_items[] = [
+                        'fee_type'        => $row_fee_type,
+                        'semester_fee_id' => (int)($item['semester_fee_id'] ?? 0) ?: null,
+                        'semester_number' => (int)($item['semester_number'] ?? 0) ?: null,
+                        'month_number'    => (int)($item['month_number'] ?? 0) ?: null,
+                        'amount'          => round(min($row_amount, $outstanding_now), 2),
+                        'label'           => trim((string)($item['label'] ?? '')),
+                        'income_account_id' => (int)($item['income_account_id'] ?? 0),
+                    ];
+                }
+                if (!$fee_items) {
+                    throw new RuntimeException('No valid fee items were selected.');
+                }
+            } else {
+                if (!in_array($fee_type, $valid_types, true)) {
+                    throw new RuntimeException('Invalid fee type selected.');
+                }
+                if ($amount <= 0) {
+                    throw new RuntimeException('Amount must be greater than zero.');
+                }
+                if (!$income_account_id) {
+                    throw new RuntimeException('Please select the income account.');
+                }
+                $fee_items[] = [
+                    'fee_type'        => $fee_type,
+                    'semester_fee_id' => $semester_fee_id,
+                    'semester_number' => $semester_number,
+                    'month_number'    => $month_number,
+                    'amount'          => round($amount, 2),
+                    'label'           => '',
+                    'income_account_id' => $income_account_id,
+                ];
+            }
 
-            // Fetch student with dept name + phone/email for notifications
             $stu_stmt = db()->prepare(
                 'SELECT s.*, d.name AS dept_name
                  FROM students s
@@ -59,55 +128,101 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
             $stu_stmt->execute([$student_id]);
             $stu = $stu_stmt->fetch();
 
-            // Semester label (if semester payment)
-            $sem_label = '';
-            if ($semester_fee_id) {
-                $sf_row = db()->prepare('SELECT semester_label, semester_number FROM sfp_semester_fees WHERE id = ?');
-                $sf_row->execute([$semester_fee_id]);
-                $sf_row = $sf_row->fetch();
-                $sem_label = $sf_row['semester_label'] ?: ('Semester ' . $sf_row['semester_number']);
-            }
-
-            $currency   = acc_currency();
-            $fee_label  = acc_fee_type_label($fee_type);
-            $outstanding = acc_total_outstanding($package_id);
-
-            // ── Email invoice ─────────────────────────────────────────────
-            if ($stu) {
-                acc_send_fee_invoice_email($stu, [
-                    'voucher_number'   => $voucher_number,
-                    'payment_date'     => $date,
-                    'fee_type_label'   => $fee_label,
-                    'semester_label'   => $sem_label,
-                    'amount'           => $amount,
-                    'outstanding_total'=> $outstanding,
-                    'reference'        => $reference,
-                    'narration'        => $narration,
-                ]);
-
-                // ── SMS ────────────────────────────────────────────────────
-                $phone = $stu['phone'] ?? '';
-                if ($phone) {
-                    acc_send_fee_sms($phone, [
-                        'student_name'   => $stu['full_name'],
-                        'student_sid'    => $stu['student_id'],
-                        'amount'         => number_format($amount, 2),
-                        'currency'       => $currency,
-                        'fee_type'       => $fee_label . ($sem_label ? ' (' . $sem_label . ')' : ''),
-                        'voucher_number' => $voucher_number,
-                        'app_name'       => APP_NAME,
-                    ]);
+            $voucher_links = [];
+            $last_voucher_id = 0;
+            $total_amount = 0.0;
+            foreach ($fee_items as $item) {
+                if (!$item['income_account_id']) {
+                    throw new RuntimeException('Income account mapping is missing for one of the selected fee items.');
                 }
+                $item_narration = $narration;
+                if ($collection_mode === 'multi' && !empty($item['label'])) {
+                    $item_narration = $item['label'] . ($narration !== '' ? ' | ' . $narration : '');
+                }
+                $vid = acc_collect_student_fee(
+                    $student_id, $package_id, $item['fee_type'],
+                    $item['semester_fee_id'], $item['semester_number'], $item['month_number'],
+                    $payment_method, $mobile_banking_provider !== '' ? $mobile_banking_provider : null, $transaction_number !== '' ? $transaction_number : null,
+                    $item['amount'], $cash_account_id, $item['income_account_id'],
+                    $date, $reference, $item_narration
+                );
+                $last_voucher_id = (int)$vid;
+                $total_amount += (float)$item['amount'];
+
+                // Fetch voucher number for notifications
+                $voucher = acc_get_voucher($vid);
+                $voucher_number = $voucher['voucher_number'] ?? '—';
+
+                // Semester label (if semester payment)
+                $sem_label = '';
+                if ($item['semester_fee_id']) {
+                    $sf_row = db()->prepare('SELECT semester_label, semester_number FROM sfp_semester_fees WHERE id = ?');
+                    $sf_row->execute([$item['semester_fee_id']]);
+                    $sf_row = $sf_row->fetch();
+                    $sem_label = $sf_row['semester_label'] ?: ('Semester ' . $sf_row['semester_number']);
+                }
+
+                $currency   = acc_currency();
+                $fee_label  = acc_fee_type_label($item['fee_type']);
+                $outstanding = acc_total_outstanding($package_id);
+
+                // ── Email invoice ─────────────────────────────────────────────
+                if ($stu) {
+                    acc_send_fee_invoice_email($stu, [
+                        'voucher_number'   => $voucher_number,
+                        'payment_date'     => $date,
+                        'fee_type_label'   => $fee_label,
+                        'semester_label'   => $sem_label,
+                        'amount'           => $item['amount'],
+                        'outstanding_total'=> $outstanding,
+                        'reference'        => $reference,
+                        'narration'        => $item_narration,
+                    ]);
+
+                    // ── SMS ────────────────────────────────────────────────────
+                    $phone = $stu['phone'] ?? '';
+                    if ($phone) {
+                        acc_send_fee_sms($phone, [
+                            'student_name'   => $stu['full_name'],
+                            'student_sid'    => $stu['student_id'],
+                            'amount'         => number_format($item['amount'], 2),
+                            'currency'       => $currency,
+                            'fee_type'       => $fee_label . ($sem_label ? ' (' . $sem_label . ')' : ''),
+                            'voucher_number' => $voucher_number,
+                            'app_name'       => APP_NAME,
+                        ]);
+                    }
+                }
+                $voucher_links[] =
+                    '<a href="' . APP_URL . '/accounting/fee-invoice.php?voucher_id=' . (int)$vid .
+                    '" target="_blank" class="alert-link fw-semibold"><i class="fas fa-print me-1"></i>' .
+                    h($voucher_number) . '</a>';
             }
 
-            flash_set('success',
-                'Payment of ' . $currency . ' ' . number_format($amount, 2) . ' collected successfully. ' .
-                '<a href="' . APP_URL . '/accounting/voucher-view.php?id=' . $vid . '" class="alert-link">View Voucher #' . h($voucher_number) . '</a>' .
-                ' &nbsp;|&nbsp; ' .
-                '<a href="' . APP_URL . '/accounting/fee-invoice.php?voucher_id=' . $vid . '" target="_blank" class="alert-link fw-semibold"><i class="fas fa-print me-1"></i>Print Invoice</a>'
-            );
+            $currency = acc_currency();
+            if ($collection_mode === 'multi') {
+                flash_set(
+                    'success',
+                    'Multiple fees collected successfully. Total received: ' . $currency . ' ' . number_format($total_amount, 2) .
+                    '. Invoices: ' . implode(' &nbsp;|&nbsp; ', $voucher_links)
+                );
+            } else {
+                $voucher = acc_get_voucher($last_voucher_id);
+                $voucher_number = $voucher['voucher_number'] ?? '—';
+                flash_set(
+                    'success',
+                    'Payment of ' . $currency . ' ' . number_format($total_amount, 2) . ' collected successfully. ' .
+                    '<a href="' . APP_URL . '/accounting/voucher-view.php?id=' . $last_voucher_id . '" class="alert-link">View Voucher #' . h($voucher_number) . '</a>' .
+                    ' &nbsp;|&nbsp; ' .
+                    '<a href="' . APP_URL . '/accounting/fee-invoice.php?voucher_id=' . $last_voucher_id . '" target="_blank" class="alert-link fw-semibold"><i class="fas fa-print me-1"></i>Print Invoice</a>'
+                );
+            }
             $sid_for_next = $stu['student_id'] ?? '';
-            redirect(APP_URL . '/accounting/collect-payment.php?tab=student&invoice_voucher_id=' . (int)$vid . '&student_sid=' . urlencode($sid_for_next));
+            $next_url = APP_URL . '/accounting/collect-payment.php?tab=student&student_sid=' . urlencode($sid_for_next);
+            if ($collection_mode !== 'multi' && $last_voucher_id > 0) {
+                $next_url .= '&invoice_voucher_id=' . (int)$last_voucher_id;
+            }
+            redirect($next_url);
         } catch (RuntimeException $e) {
             $errors[] = $e->getMessage();
         }
@@ -121,6 +236,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'admissi
 
     $app_id            = (int)($_POST['application_id']    ?? 0);
     $amount            = (float)($_POST['amount']          ?? 0);
+    $payment_method    = trim((string)($_POST['payment_method'] ?? 'cash'));
+    $mobile_banking_provider = trim((string)($_POST['mobile_banking_provider'] ?? ''));
+    $transaction_number = trim((string)($_POST['transaction_number'] ?? ''));
     $cash_account_id   = (int)($_POST['cash_account_id']   ?? 0);
     $income_account_id = (int)($_POST['income_account_id'] ?? 0);
     $date              = trim($_POST['voucher_date']        ?? date('Y-m-d'));
@@ -132,6 +250,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'admissi
     if (!$cash_account_id)   $errors[] = 'Please select the received-into account.';
     if (!$income_account_id) $errors[] = 'Please select the income account.';
     if (!$date)              $errors[] = 'Date is required.';
+    if (!in_array($payment_method, ['cash', 'bank', 'mobile_banking'], true)) {
+        $errors[] = 'Invalid payment method selected.';
+    }
+    if ($payment_method === 'mobile_banking' && !in_array($mobile_banking_provider, ['bkash', 'nagad', 'rocket'], true)) {
+        $errors[] = 'Please select a mobile banking provider.';
+    }
+    if ($payment_method !== 'cash' && $transaction_number === '') {
+        $errors[] = 'Transaction number is required for non-cash payments.';
+    }
 
     // Load applicant to validate and get details
     $applicant = null;
@@ -152,6 +279,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'admissi
         try {
             $vid = acc_collect_applicant_admission_fee(
                 $app_id, $amount, $cash_account_id, $income_account_id,
+                $payment_method, $mobile_banking_provider !== '' ? $mobile_banking_provider : null, $transaction_number !== '' ? $transaction_number : null,
                 $date, $reference, $narration
             );
 
@@ -375,11 +503,23 @@ require_once __DIR__ . '/../includes/header.php';
                     </button>
                 </div>
             </div>
-            <div class="card-body p-0 collapse show" id="feeObligationsCollapse" data-bs-parent="#studentFeeAccordion">
+            <div class="card-body p-0 collapse" id="feeObligationsCollapse" data-bs-parent="#studentFeeAccordion">
+                <div class="px-4 py-2 border-bottom bg-light-subtle" id="multiCollectBar" style="display:none;">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div class="small text-muted">
+                            Selected <strong id="multiCollectCount">0</strong> item(s), total
+                            <strong id="multiCollectTotal"><?= h(acc_currency()) ?> 0.00</strong>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-success" id="btnCollectSelected">
+                            <i class="fas fa-layer-group me-1"></i>Collect Selected Fees
+                        </button>
+                    </div>
+                </div>
                 <div class="table-responsive">
                     <table class="table table-hover table-sm align-middle mb-0" id="feeTable">
                         <thead class="table-light">
                             <tr>
+                                <th class="text-center" style="width:42px;">#</th>
                                 <th class="ps-4">Fee Type</th>
                                 <th class="text-end">Total Due</th>
                                 <th class="text-end">Paid</th>
@@ -390,6 +530,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <tbody id="feeTableBody"></tbody>
                         <tfoot class="table-light fw-bold" id="feeTableFoot">
                             <tr>
+                                <td></td>
                                 <td class="ps-4">Total</td>
                                 <td class="text-end" id="footTotalDue"></td>
                                 <td class="text-end" id="footTotalPaid"></td>
@@ -422,6 +563,8 @@ require_once __DIR__ . '/../includes/header.php';
                                 <th>Fee Type</th>
                                 <th>Semester</th>
                                 <th>Month</th>
+                                <th>Payment Method</th>
+                                <th>Txn #</th>
                                 <th class="text-end">Amount</th>
                                 <th>Voucher #</th>
                                 <th>Invoice</th>
@@ -450,6 +593,8 @@ require_once __DIR__ . '/../includes/header.php';
                     <form method="post" id="studentPayForm">
                         <?= csrf_field() ?>
                         <input type="hidden" name="mode" value="student">
+                        <input type="hidden" name="collection_mode" id="hCollectionMode" value="single">
+                        <input type="hidden" name="fee_items" id="hFeeItems" value="">
                         <input type="hidden" name="student_id"      id="hStudentId">
                         <input type="hidden" name="package_id"      id="hPackageId">
                         <input type="hidden" name="fee_type"        id="hFeeType">
@@ -495,6 +640,29 @@ require_once __DIR__ . '/../includes/header.php';
                                 <label class="form-label fw-semibold">Note <small class="text-muted fw-normal">(optional)</small></label>
                                 <input type="text" name="narration" class="form-control"
                                        id="payNarration" placeholder="Additional note">
+                            </div>
+
+                            <div class="col-md-4">
+                                <label class="form-label fw-semibold">Payment Method <span class="text-danger">*</span></label>
+                                <select name="payment_method" id="payMethod" class="form-select" required>
+                                    <option value="cash">Cash</option>
+                                    <option value="bank">Bank</option>
+                                    <option value="mobile_banking">Mobile Banking</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4" id="payMobileProviderWrap" style="display:none;">
+                                <label class="form-label fw-semibold">Mobile Banking Provider <span class="text-danger">*</span></label>
+                                <select name="mobile_banking_provider" id="payMobileProvider" class="form-select">
+                                    <option value="">— Select Provider —</option>
+                                    <option value="bkash">Bkash</option>
+                                    <option value="nagad">Nagad</option>
+                                    <option value="rocket">Rocket</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4" id="payTxnWrap" style="display:none;">
+                                <label class="form-label fw-semibold">Transaction Number <span class="text-danger">*</span></label>
+                                <input type="text" name="transaction_number" id="payTxnNumber" class="form-control"
+                                       placeholder="Enter transaction number">
                             </div>
                         </div>
 
@@ -749,6 +917,29 @@ require_once __DIR__ . '/../includes/header.php';
                             <input type="text" name="narration" id="admNarration" class="form-control"
                                    placeholder="Additional note">
                         </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Payment Method <span class="text-danger">*</span></label>
+                            <select name="payment_method" id="admPayMethod" class="form-select" required>
+                                <option value="cash">Cash</option>
+                                <option value="bank">Bank</option>
+                                <option value="mobile_banking">Mobile Banking</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4" id="admProviderWrap" style="display:none;">
+                            <label class="form-label fw-semibold">Mobile Banking Provider <span class="text-danger">*</span></label>
+                            <select name="mobile_banking_provider" id="admMobileProvider" class="form-select">
+                                <option value="">— Select Provider —</option>
+                                <option value="bkash">Bkash</option>
+                                <option value="nagad">Nagad</option>
+                                <option value="rocket">Rocket</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4" id="admTxnWrap" style="display:none;">
+                            <label class="form-label fw-semibold">Transaction Number <span class="text-danger">*</span></label>
+                            <input type="text" name="transaction_number" id="admTxnNumber" class="form-control"
+                                   placeholder="Enter transaction number">
+                        </div>
                     </div>
 
                     <div class="alert alert-light border mt-3 small">
@@ -799,6 +990,7 @@ require_once __DIR__ . '/../includes/header.php';
     // Currently loaded student + summary
     let currentStudent = null;
     let currentSummary = null;
+    let selectedFeeItems = new Map();
 
     // ── Helpers ──────────────────────────────────────────────────────────────
     function fmt(n) {
@@ -825,6 +1017,50 @@ require_once __DIR__ . '/../includes/header.php';
         } else {
             target.classList.add('show');
         }
+    }
+
+    function syncMultiCollectBar() {
+        const bar = document.getElementById('multiCollectBar');
+        const countEl = document.getElementById('multiCollectCount');
+        const totalEl = document.getElementById('multiCollectTotal');
+        const total = Array.from(selectedFeeItems.values()).reduce((sum, item) => sum + Number(item.amount || 0), 0);
+        countEl.textContent = String(selectedFeeItems.size);
+        totalEl.textContent = fmt(total);
+        bar.style.display = selectedFeeItems.size > 0 ? '' : 'none';
+    }
+
+    function updateStudentPaymentMethodUI() {
+        const method = document.getElementById('payMethod').value;
+        const providerWrap = document.getElementById('payMobileProviderWrap');
+        const provider = document.getElementById('payMobileProvider');
+        const txnWrap = document.getElementById('payTxnWrap');
+        const txnInput = document.getElementById('payTxnNumber');
+        const isMobile = method === 'mobile_banking';
+        const needsTxn = method !== 'cash';
+
+        providerWrap.style.display = isMobile ? '' : 'none';
+        txnWrap.style.display = needsTxn ? '' : 'none';
+        provider.required = isMobile;
+        txnInput.required = needsTxn;
+        if (!isMobile) provider.value = '';
+        if (!needsTxn) txnInput.value = '';
+    }
+
+    function updateAdmissionPaymentMethodUI() {
+        const method = document.getElementById('admPayMethod').value;
+        const providerWrap = document.getElementById('admProviderWrap');
+        const provider = document.getElementById('admMobileProvider');
+        const txnWrap = document.getElementById('admTxnWrap');
+        const txnInput = document.getElementById('admTxnNumber');
+        const isMobile = method === 'mobile_banking';
+        const needsTxn = method !== 'cash';
+
+        providerWrap.style.display = isMobile ? '' : 'none';
+        txnWrap.style.display = needsTxn ? '' : 'none';
+        provider.required = isMobile;
+        txnInput.required = needsTxn;
+        if (!isMobile) provider.value = '';
+        if (!needsTxn) txnInput.value = '';
     }
 
     // ── Student search autocomplete ──────────────────────────────────────────
@@ -892,7 +1128,13 @@ require_once __DIR__ . '/../includes/header.php';
                 renderFeeSummary(data);
                 document.getElementById('feeSummaryWrap').style.display = '';
                 document.getElementById('paymentFormCard').style.display = 'none';
-                openAccordionSection('feeObligationsCollapse');
+                const totals = (data.summary && data.summary.totals) ? data.summary.totals : {};
+                const needsPayment = Number((totals.admission && totals.admission.out) || 0)
+                    + Number((totals.registration && totals.registration.out) || 0)
+                    + Number((totals.tuition && totals.tuition.out) || 0) > 0;
+                if (needsPayment) {
+                    openAccordionSection('feeObligationsCollapse');
+                }
             })
             .catch(() => {
                 btnLoad.disabled = false;
@@ -921,22 +1163,38 @@ require_once __DIR__ . '/../includes/header.php';
         function addSectionRow(label) {
             const tr = document.createElement('tr');
             tr.className = 'table-secondary';
-            tr.innerHTML = `<td colspan="5" class="ps-4 py-1 small fw-semibold text-muted">
+            tr.innerHTML = `<td colspan="6" class="ps-4 py-1 small fw-semibold text-muted">
                 <i class="fas fa-chevron-right me-1"></i>${label}
             </td>`;
             tbody.appendChild(tr);
         }
 
         // Add a fee data row (monthNumber optional – null for non-monthly fees)
-        function addRow(label, due, paid, out, feeType, semFeeId, semNumber, semLabel, monthNumber) {
+        function addRow(label, due, paid, out, feeType, semFeeId, semNumber, semLabel, monthNumber, monthLabel) {
             grandDue  += due;
             grandPaid += paid;
             grandOut  += out;
 
             const tr  = document.createElement('tr');
             const pct = (due > 0 && out > 0) ? Math.round((out / due) * 100) : 0;
+            const rowKey = [feeType, semFeeId ?? '', semNumber ?? '', monthNumber ?? ''].join('|');
+            const rowData = {
+                fee_type: feeType,
+                semester_fee_id: semFeeId || null,
+                semester_number: semNumber || null,
+                month_number: monthNumber || null,
+                amount: Number(out).toFixed(2),
+                label,
+                income_account_id: incomeAccountsMap[feeType] ?? 0,
+                month_label: monthLabel || ''
+            };
 
             tr.innerHTML = `
+                <td class="text-center">
+                    ${out > 0
+                        ? `<input type="checkbox" class="form-check-input feeMultiChk" data-row-key="${rowKey}">`
+                        : ''}
+                </td>
                 <td class="ps-4">
                     <div class="small">${label}</div>
                     ${due > 0 && out > 0
@@ -954,16 +1212,29 @@ require_once __DIR__ . '/../includes/header.php';
                         ? `<button type="button" class="btn btn-sm btn-outline-success py-0 px-2 collectBtn"
                                 data-fee-type="${feeType}"
                                 data-sem-fee-id="${semFeeId ?? ''}"
-                                data-sem-number="${semNumber ?? ''}"
-                                data-sem-label="${semLabel ?? ''}"
-                                data-month-number="${monthNumber ?? ''}"
-                                data-outstanding="${out}"
-                                data-label="${label}">
-                               <i class="fas fa-hand-holding-usd me-1"></i>Collect
-                           </button>`
+                                 data-sem-number="${semNumber ?? ''}"
+                                 data-sem-label="${semLabel ?? ''}"
+                                 data-month-number="${monthNumber ?? ''}"
+                                 data-month-label="${monthLabel ?? ''}"
+                                 data-outstanding="${out}"
+                                 data-income-account-id="${incomeAccountsMap[feeType] ?? ''}"
+                                 data-label="${label}">
+                                <i class="fas fa-hand-holding-usd me-1"></i>Collect
+                            </button>`
                         : (due > 0 ? '<span class="badge bg-success-subtle text-success border border-success-subtle"><i class="fas fa-check me-1"></i>Paid</span>' : '—')}
                 </td>`;
             tbody.appendChild(tr);
+            const chk = tr.querySelector('.feeMultiChk');
+            if (chk) {
+                chk.addEventListener('change', function () {
+                    if (this.checked) {
+                        selectedFeeItems.set(rowKey, rowData);
+                    } else {
+                        selectedFeeItems.delete(rowKey);
+                    }
+                    syncMultiCollectBar();
+                });
+            }
         }
 
         const t = s.totals;
@@ -971,7 +1242,7 @@ require_once __DIR__ . '/../includes/header.php';
         // ── Admission Fee ────────────────────────────────────────────────────
         addSectionRow('Admission');
         addRow('Admission Fee', t.admission.due, t.admission.paid, t.admission.out,
-               'admission', null, null, null, null);
+               'admission', null, null, null, null, null);
 
         // ── Per-semester: Registration + Monthly overall fees ────────────────
         s.semesters.forEach(sf => {
@@ -982,15 +1253,15 @@ require_once __DIR__ . '/../includes/header.php';
             addRow(
                 semLabel + ' – Registration Fee',
                 sf.reg_fee, sf.reg_paid, sf.reg_out,
-                'registration', sf.id, sf.semester_number, semLabel, null
+                'registration', sf.id, sf.semester_number, semLabel, null, null
             );
 
             // Monthly overall fees (tuition + fixed + English portion / months)
             sf.monthly_rows.forEach(mr => {
                 addRow(
-                    semLabel + ' – Month ' + mr.month_number + ' Overall Fee',
+                    semLabel + ' – Month ' + mr.month_number + ' (' + (mr.month_label || ('Month ' + mr.month_number)) + ')',
                     mr.due, mr.paid, mr.out,
-                    'semester_tuition', sf.id, sf.semester_number, semLabel, mr.month_number
+                    'semester_tuition', sf.id, sf.semester_number, semLabel, mr.month_number, mr.month_label || ''
                 );
             });
         });
@@ -1003,6 +1274,8 @@ require_once __DIR__ . '/../includes/header.php';
         // Outstanding badge
         document.getElementById('totalOutstandingBadge').textContent =
             'Outstanding: ' + fmt(grandOut);
+        selectedFeeItems.clear();
+        syncMultiCollectBar();
 
         // Attach collect button handlers
         tbody.querySelectorAll('.collectBtn').forEach(btn => {
@@ -1023,12 +1296,14 @@ require_once __DIR__ . '/../includes/header.php';
         countBadge.textContent = payments.length + ' transaction' + (payments.length !== 1 ? 's' : '');
 
         if (payments.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-3 small"><i class="fas fa-info-circle me-1"></i>No transactions recorded yet.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted py-3 small"><i class="fas fa-info-circle me-1"></i>No transactions recorded yet.</td></tr>';
         } else {
             payments.forEach(p => {
                 const feeLabel  = feeTypeLabel(p.fee_type);
                 const semText   = p.semester_number ? ('Semester ' + p.semester_number) : '—';
-                const monText   = p.month_number    ? ('Month ' + p.month_number) : (p.fee_type === 'semester_tuition' ? 'Lump sum' : '—');
+                const monText   = p.month_number
+                    ? ('Month ' + p.month_number + (p.month_label ? ' (' + p.month_label + ')' : ''))
+                    : (p.fee_type === 'semester_tuition' ? 'Lump sum' : '—');
                 const statusBadge = p.voucher_status === 'posted'
                     ? '<span class="badge bg-success-subtle text-success border border-success-subtle">Posted</span>'
                     : '<span class="badge bg-warning text-dark">' + p.voucher_status + '</span>';
@@ -1042,6 +1317,8 @@ require_once __DIR__ . '/../includes/header.php';
                     <td class="small">${feeLabel}</td>
                     <td class="small">${semText}</td>
                     <td class="small">${monText}</td>
+                    <td class="small">${p.payment_method_label || 'Cash'}</td>
+                    <td class="small">${p.transaction_number || '—'}</td>
                     <td class="text-end small fw-semibold text-success">${fmt(p.amount)}</td>
                     <td class="small"><a href="${APP_URL}/accounting/voucher-view.php?id=${p.voucher_id}" target="_blank" rel="noopener noreferrer" class="text-decoration-none">${p.voucher_number ?? '—'}</a></td>
                     <td class="small"><a href="${APP_URL}/accounting/fee-invoice.php?voucher_id=${p.voucher_id}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-primary py-0 px-2"><i class="fas fa-print me-1"></i>Invoice</a></td>
@@ -1058,22 +1335,27 @@ require_once __DIR__ . '/../includes/header.php';
         const feeType   = btn.dataset.feeType;
         const semFeeId  = btn.dataset.semFeeId   || '';
         const semNumber = btn.dataset.semNumber  || '';
-        const semLabel  = btn.dataset.semLabel   || '';
         const monthNum  = btn.dataset.monthNumber || '';
+        const incomeAcc = btn.dataset.incomeAccountId || '';
         const out       = parseFloat(btn.dataset.outstanding);
         const label     = btn.dataset.label;
 
+        document.getElementById('hCollectionMode').value = 'single';
+        document.getElementById('hFeeItems').value = '';
         document.getElementById('hStudentId').value    = currentStudent.id;
         document.getElementById('hPackageId').value    = currentStudent.package_id;
         document.getElementById('hFeeType').value      = feeType;
         document.getElementById('hSemFeeId').value     = semFeeId;
         document.getElementById('hSemNumber').value    = semNumber;
         document.getElementById('hMonthNumber').value  = monthNum;
-        document.getElementById('hIncomeAccountId').value = incomeAccountsMap[feeType] ?? '';
+        document.getElementById('hIncomeAccountId').value = incomeAcc || (incomeAccountsMap[feeType] ?? '');
 
         document.getElementById('payAmount').value     = out.toFixed(2);
         document.getElementById('payOutstanding').textContent = fmt(out);
         document.getElementById('payFormFeeLabel').textContent = label;
+        selectedFeeItems.clear();
+        document.querySelectorAll('.feeMultiChk').forEach(el => { el.checked = false; });
+        syncMultiCollectBar();
 
         // Auto-fill narration
         const pkg  = currentSummary.package;
@@ -1096,7 +1378,39 @@ require_once __DIR__ . '/../includes/header.php';
 
     document.getElementById('btnCancelPay').addEventListener('click', () => {
         document.getElementById('paymentFormCard').style.display = 'none';
+        selectedFeeItems.clear();
+        document.querySelectorAll('.feeMultiChk').forEach(el => { el.checked = false; });
+        syncMultiCollectBar();
     });
+
+    document.getElementById('btnCollectSelected').addEventListener('click', () => {
+        if (selectedFeeItems.size === 0) return;
+
+        const items = Array.from(selectedFeeItems.values());
+        const total = items.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+        document.getElementById('hCollectionMode').value = 'multi';
+        document.getElementById('hFeeItems').value = JSON.stringify(items);
+        document.getElementById('hStudentId').value = currentStudent.id;
+        document.getElementById('hPackageId').value = currentStudent.package_id;
+        document.getElementById('hFeeType').value = 'other';
+        document.getElementById('hSemFeeId').value = '';
+        document.getElementById('hSemNumber').value = '';
+        document.getElementById('hMonthNumber').value = '';
+        document.getElementById('hIncomeAccountId').value = '';
+        document.getElementById('payAmount').value = total.toFixed(2);
+        document.getElementById('payOutstanding').textContent = fmt(total);
+        document.getElementById('payFormFeeLabel').textContent = 'Multiple Fee Items';
+        document.getElementById('payNarration').value = 'Multiple fee collection – ' + currentSummary.package.student_name + ' (' + currentStudent.student_id + ')';
+        document.getElementById('incomeAccountLabel').textContent = 'mapped income accounts';
+        document.getElementById('paymentFormCard').style.display = '';
+        openAccordionSection('paymentFormCollapse');
+        document.getElementById('paymentFormCard').scrollIntoView({behavior: 'smooth', block: 'start'});
+    });
+
+    document.getElementById('payMethod').addEventListener('change', updateStudentPaymentMethodUI);
+    document.getElementById('admPayMethod').addEventListener('change', updateAdmissionPaymentMethodUI);
+    updateStudentPaymentMethodUI();
+    updateAdmissionPaymentMethodUI();
 
     // ════════════════════════════════════════════════════════════════════════
     // Tab 3 – Admission Applicant logic

@@ -13,6 +13,12 @@ CREATE TABLE IF NOT EXISTS `adm_admission_fee_payments` (
     `voucher_id`     INT UNSIGNED  NOT NULL
                      COMMENT 'acc_vouchers.id',
     `amount`         DECIMAL(12,2) NOT NULL,
+    `payment_method` ENUM('cash','bank','mobile_banking') NOT NULL DEFAULT 'cash'
+                     COMMENT 'How payment was received',
+    `mobile_banking_provider` ENUM('bkash','nagad','rocket') DEFAULT NULL
+                     COMMENT 'Provider when payment_method=mobile_banking',
+    `transaction_number` VARCHAR(100) DEFAULT NULL
+                     COMMENT 'External transaction/challan/reference number for non-cash payments',
     `collected_by`   INT UNSIGNED  NULL
                      COMMENT 'users.id of the staff member who collected',
     `collected_at`   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
