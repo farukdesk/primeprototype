@@ -567,19 +567,19 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
         <div class="card-body p-4">
             <div class="row g-3 align-items-end">
-                <div class="col-md-6">
+                <div class="col-md-8 col-lg-9 position-relative">
                     <label class="form-label fw-semibold">Student ID or Name</label>
                     <input type="text" id="studentSearch" class="form-control"
                            placeholder="Type student ID or name…" autocomplete="off">
-                    <div class="form-text">Select from suggestions or enter a valid Student ID, then press Enter to load quickly.</div>
-                    <div id="studentSuggestions" class="list-group position-absolute z-3 w-100" style="max-width:420px;display:none;"></div>
+                    <div id="studentSuggestions" class="list-group position-absolute z-3" style="left:0;right:0;max-width:480px;display:none;"></div>
                 </div>
-                <div class="col-md-3">
-                    <button type="button" id="btnLoadFees" class="btn btn-primary w-100" disabled>
-                        <i class="fas fa-calculator me-1"></i> Load Fee Summary
+                <div class="col-md-4 col-lg-3">
+                    <button type="button" id="btnLoadFees" class="btn btn-outline-secondary w-100" disabled>
+                        <i class="fas fa-sync-alt me-1"></i> Refresh Fees
                     </button>
                 </div>
             </div>
+            <p class="form-text mt-2 mb-0">Select a student from suggestions to load their current dues automatically. Press <kbd>Enter</kbd> to search by Student&nbsp;ID.</p>
         </div>
     </div>
 
@@ -1670,6 +1670,7 @@ require_once __DIR__ . '/../includes/header.php';
                             selectedSid       = s.student_id;
                             suggestions.style.display = 'none';
                             btnLoad.disabled  = false;
+                            loadFeeSummary(); // Auto-load fees immediately on student selection
                         });
                         suggestions.appendChild(a);
                     });
@@ -1685,7 +1686,7 @@ require_once __DIR__ . '/../includes/header.php';
         }
         if (selectedSid) {
             btnLoad.disabled = false;
-            btnLoad.click();
+            loadFeeSummary();
         }
     });
 
@@ -1694,7 +1695,7 @@ require_once __DIR__ . '/../includes/header.php';
     });
 
     // ── Load fee summary ─────────────────────────────────────────────────────
-    btnLoad.addEventListener('click', function () {
+    function loadFeeSummary() {
         if (!selectedSid) {
             selectedSid = resolveStudentSidFromInput(searchInput.value);
             if (!selectedSid) return;
@@ -1707,7 +1708,7 @@ require_once __DIR__ . '/../includes/header.php';
             .then(r => r.json())
             .then(data => {
                 btnLoad.disabled = false;
-                btnLoad.innerHTML = '<i class="fas fa-calculator me-1"></i> Load Fee Summary';
+                btnLoad.innerHTML = '<i class="fas fa-sync-alt me-1"></i> Refresh Fees';
 
                 if (data.error) {
                     alert(data.error);
@@ -1721,20 +1722,16 @@ require_once __DIR__ . '/../includes/header.php';
                 renderFeeSummary(data);
                 document.getElementById('feeSummaryWrap').style.display = '';
                 document.getElementById('paymentFormCard').style.display = 'none';
-                const totals = (data.summary && data.summary.totals) ? data.summary.totals : {};
-                const needsPayment = Number((totals.admission && totals.admission.out) || 0)
-                    + Number((totals.registration && totals.registration.out) || 0)
-                    + Number((totals.tuition && totals.tuition.out) || 0) > 0;
-                if (needsPayment) {
-                    openAccordionSection('feeObligationsCollapse');
-                }
+                // Fee obligations table stays collapsed; user can expand via the Details button
             })
             .catch(() => {
                 btnLoad.disabled = false;
-                btnLoad.innerHTML = '<i class="fas fa-calculator me-1"></i> Load Fee Summary';
+                btnLoad.innerHTML = '<i class="fas fa-sync-alt me-1"></i> Refresh Fees';
                 alert('Network error. Please try again.');
             });
-    });
+    }
+
+    btnLoad.addEventListener('click', loadFeeSummary);
 
     // ── Render fee table ─────────────────────────────────────────────────────
     function renderFeeSummary(data) {
@@ -2157,7 +2154,7 @@ require_once __DIR__ . '/../includes/header.php';
         searchInput.value = AUTO_STUDENT_SID;
         selectedSid = AUTO_STUDENT_SID;
         btnLoad.disabled = false;
-        btnLoad.click();
+        loadFeeSummary();
     } else {
         searchInput.focus();
     }
