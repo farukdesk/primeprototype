@@ -270,9 +270,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
             $currency = acc_currency();
             if ($collection_mode === 'multi') {
                 $combined_invoice_url = APP_URL . '/accounting/fee-invoice.php?voucher_ids=' . implode(',', $voucher_ids_arr);
+                $item_count = count($voucher_ids_arr);
+                $fees_label = $item_count === 1 ? '1 fee' : $item_count . ' fees';
                 flash_set(
                     'success',
-                    count($voucher_ids_arr) . ' fee item(s) collected successfully. Total: ' . $currency . ' ' . number_format($total_amount, 2) .
+                    $fees_label . ' collected successfully. Total: ' . $currency . ' ' . number_format($total_amount, 2) .
                     '. &nbsp;<a href="' . $combined_invoice_url . '" target="_blank" class="alert-link fw-semibold"><i class="fas fa-print me-1"></i>Print Invoice</a>'
                 );
             } else {
@@ -657,11 +659,11 @@ require_once __DIR__ . '/../includes/header.php';
                             <table class="table table-sm align-middle mb-0">
                                 <thead class="table-light">
                                     <tr>
-                                        <th class="ps-3" style="width:36px;">#</th>
-                                        <th>Fee Item</th>
-                                        <th class="text-end">Outstanding</th>
-                                        <th class="text-end fw-bold text-success">Applied</th>
-                                        <th class="text-center" style="width:90px;">Status</th>
+                                        <th class="ps-3" style="width:36px;" scope="col" aria-label="Row number">#</th>
+                                        <th scope="col">Fee Item</th>
+                                        <th class="text-end" scope="col">Outstanding</th>
+                                        <th class="text-end fw-bold text-success" scope="col">Applied</th>
+                                        <th class="text-center" style="width:90px;" scope="col">Status</th>
                                     </tr>
                                 </thead>
                                 <tbody id="spDistBody"></tbody>
