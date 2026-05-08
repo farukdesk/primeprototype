@@ -81,6 +81,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
     if ($payment_method !== 'cash' && $transaction_number === '') {
         $errors[] = 'Transaction number is required for non-cash payments.';
     }
+    if ($payment_method !== 'cash' && $transaction_number !== '' && acc_transaction_number_exists($transaction_number)) {
+        $errors[] = 'Transaction number "' . htmlspecialchars($transaction_number, ENT_QUOTES) . '" has already been used. Each payment must have a unique transaction number.';
+    }
     if ($received_into_account_id <= 0) {
         $errors[] = $received_into_mapping_error($payment_method);
     }
@@ -337,6 +340,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'admissi
     }
     if ($payment_method !== 'cash' && $transaction_number === '') {
         $errors[] = 'Transaction number is required for non-cash payments.';
+    }
+    if ($payment_method !== 'cash' && $transaction_number !== '' && acc_transaction_number_exists($transaction_number)) {
+        $errors[] = 'Transaction number "' . htmlspecialchars($transaction_number, ENT_QUOTES) . '" has already been used. Each payment must have a unique transaction number.';
     }
     if ($received_into_account_id <= 0) {
         $errors[] = $received_into_mapping_error($payment_method);

@@ -1156,6 +1156,12 @@ function acc_collect_student_fee(
         $transaction_number
     );
 
+    if ($transaction_number !== null && acc_transaction_number_exists($transaction_number)) {
+        throw new RuntimeException(
+            'Transaction number "' . $transaction_number . '" has already been used. Each payment must have a unique transaction number.'
+        );
+    }
+
     // Post the receipt voucher
     $voucher_id = acc_post_voucher('receipt', $date, [
         ['account_id' => $cash_account_id,   'debit' => $amount, 'credit' => 0,       'description' => $narration],
@@ -1699,6 +1705,12 @@ function acc_collect_applicant_admission_fee(
         $transaction_number
     );
 
+    if ($transaction_number !== null && acc_transaction_number_exists($transaction_number)) {
+        throw new RuntimeException(
+            'Transaction number "' . $transaction_number . '" has already been used. Each payment must have a unique transaction number.'
+        );
+    }
+
     $voucher_id = acc_post_voucher('receipt', $date, [
         ['account_id' => $cash_account_id,   'debit' => $amount, 'credit' => 0,       'description' => $narration],
         ['account_id' => $income_account_id, 'debit' => 0,       'credit' => $amount, 'description' => $narration],
@@ -1924,6 +1936,36 @@ function acc_normalize_payment_method_fields(string $method, ?string $provider, 
     }
 
     return [$method, $provider, $txn];
+}
+
+/**
+ * Return true if a transaction number is already recorded in any payment table.
+ * NULL / empty strings are never considered duplicates.
+ */
+function acc_transaction_number_exists(string $txn): bool
+{
+    if ($txn === '') {
+        return false;
+    }
+    $db = db();
+    $row = $db->prepare(
+        'SELECT 1
+         FROM sfp_payments
+         WHERE transaction_number = ?
+         LIMIT 1'
+    );
+    $row->execute([$txn]);
+    if ($row->fetchColumn() !== false) {
+        return true;
+    }
+    $row2 = $db->prepare(
+        'SELECT 1
+         FROM adm_admission_fee_payments
+         WHERE transaction_number = ?
+         LIMIT 1'
+    );
+    $row2->execute([$txn]);
+    return $row2->fetchColumn() !== false;
 }
 
 /**
