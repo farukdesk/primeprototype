@@ -18,18 +18,26 @@ csrf_check();
 $package_id      = (int)($_POST['package_id']      ?? 0);
 $sf_id           = (int)($_POST['sf_id']           ?? 0);
 $label           = trim($_POST['sc_label']         ?? '');
-$discount_pct    = (float)($_POST['discount_pct']  ?? 0);
+$discount_type   = in_array($_POST['discount_type'] ?? '', ['percentage', 'fixed'])
+                       ? $_POST['discount_type'] : 'percentage';
+$discount_pct    = ($discount_type === 'percentage') ? (float)($_POST['discount_pct'] ?? 0) : 0.0;
+$fixed_amount    = ($discount_type === 'fixed')      ? (float)($_POST['fixed_amount']  ?? 0) : null;
 $sc_note         = trim($_POST['sc_note']          ?? '');
 $apply_to_all    = !empty($_POST['apply_to_all']);
 $is_from_policy  = !empty($_POST['is_from_policy']) ? 1 : 0;
-$applies_to_fixed   = !empty($_POST['applies_to_fixed'])   ? 1 : 0;
-$applies_to_english = !empty($_POST['applies_to_english']) ? 1 : 0;
+// Fixed-amount scholarships only apply to tuition; ignore scope checkboxes for fixed type
+$applies_to_fixed   = ($discount_type === 'percentage' && !empty($_POST['applies_to_fixed']))   ? 1 : 0;
+$applies_to_english = ($discount_type === 'percentage' && !empty($_POST['applies_to_english'])) ? 1 : 0;
 
 $errors = [];
 
 if ($package_id <= 0) $errors[] = 'Invalid package.';
 if ($label === '') $errors[] = 'Scholarship label is required.';
-if ($discount_pct < 0.01 || $discount_pct > 100) $errors[] = 'Discount must be between 0.01 and 100.';
+if ($discount_type === 'percentage') {
+    if ($discount_pct < 0.01 || $discount_pct > 100) $errors[] = 'Discount percentage must be between 0.01 and 100.';
+} else {
+    if ($fixed_amount === null || $fixed_amount < 0.01) $errors[] = 'Fixed scholarship amount must be greater than 0.';
+}
 if (!$apply_to_all && $sf_id <= 0) $errors[] = 'Invalid semester row.';
 
 // Resolve student_id for file storage (needed if uploading a support doc)
@@ -91,18 +99,24 @@ if (empty($errors)) {
             foreach ($sf_rows as $sf) {
                 $row_id          = (int)$sf['id'];
                 $tuition_payable = (float)$sf['tuition_payable'];
-                $amount          = round($tuition_payable * $discount_pct / 100, 2);
+                if ($discount_type === 'fixed') {
+                    $amount = round(min((float)$fixed_amount, $tuition_payable), 2);
+                } else {
+                    $amount = round($tuition_payable * $discount_pct / 100, 2);
+                }
 
                 db()->prepare(
                     'INSERT INTO sfp_semester_scholarships
-                       (sf_id, label, discount_pct, amount, note,
+                       (sf_id, label, discount_pct, discount_type, fixed_amount, amount, note,
                         is_from_policy, applies_to_fixed, applies_to_english,
                         support_doc_id, created_by)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
                 )->execute([
                     $row_id,
                     $label,
                     round($discount_pct, 2),
+                    $discount_type,
+                    $fixed_amount,
                     $amount,
                     $sc_note ?: null,
                     $is_from_policy,
@@ -116,18 +130,22 @@ if (empty($errors)) {
                 $count++;
             }
 
+            $sc_display = ($discount_type === 'fixed')
+                ? 'BDT ' . number_format((float)$fixed_amount, 2)
+                : number_format($discount_pct, 2) . '%';
+
             log_change(
                 'student-accounts', 'UPDATE', $package_id,
                 'All Semesters',
                 'scholarship_added_all',
                 null,
-                $label . ' (' . number_format($discount_pct, 2) . '%) – all ' . $count . ' semesters',
-                'Scholarship "' . $label . '" (' . number_format($discount_pct, 2) . '%) applied to all ' . $count . ' semesters'
+                $label . ' (' . $sc_display . ') – all ' . $count . ' semesters',
+                'Scholarship "' . $label . '" (' . $sc_display . ') applied to all ' . $count . ' semesters'
             );
 
             flash_set('success',
                 'Scholarship <strong>' . h($label) . '</strong> ('
-                . number_format($discount_pct, 2) . '%) applied to all '
+                . $sc_display . ') applied to all '
                 . $count . ' semester' . ($count !== 1 ? 's' : '') . '.'
             );
         }
@@ -143,18 +161,24 @@ if (empty($errors)) {
             // Apply discount to the *remaining* payable balance, not the original tuition fee.
             // sfp_recalculate_semester() will also recompute cascaded amounts for all rows.
             $tuition_payable = (float)$sf['tuition_payable'];
-            $amount          = round($tuition_payable * $discount_pct / 100, 2);
+            if ($discount_type === 'fixed') {
+                $amount = round(min((float)$fixed_amount, $tuition_payable), 2);
+            } else {
+                $amount = round($tuition_payable * $discount_pct / 100, 2);
+            }
 
             db()->prepare(
                 'INSERT INTO sfp_semester_scholarships
-                   (sf_id, label, discount_pct, amount, note,
+                   (sf_id, label, discount_pct, discount_type, fixed_amount, amount, note,
                     is_from_policy, applies_to_fixed, applies_to_english,
                     support_doc_id, created_by)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
             )->execute([
                 $sf_id,
                 $label,
                 round($discount_pct, 2),
+                $discount_type,
+                $fixed_amount,
                 $amount,
                 $sc_note ?: null,
                 $is_from_policy,
@@ -167,18 +191,22 @@ if (empty($errors)) {
             // Recalculate totals in the semester row
             sfp_recalculate_semester($sf_id, $user['id']);
 
+            $sc_display = ($discount_type === 'fixed')
+                ? 'BDT ' . number_format((float)$fixed_amount, 2)
+                : number_format($discount_pct, 2) . '%';
+
             log_change(
                 'student-accounts', 'UPDATE', $package_id,
                 'Semester #' . $sf['semester_number'],
                 'scholarship_added',
                 null,
-                $label . ' (' . number_format($discount_pct, 2) . '%)',
-                'Scholarship "' . $label . '" (' . number_format($discount_pct, 2) . '%) added to semester #' . $sf['semester_number']
+                $label . ' (' . $sc_display . ')',
+                'Scholarship "' . $label . '" (' . $sc_display . ') added to semester #' . $sf['semester_number']
             );
 
             flash_set('success',
                 'Scholarship <strong>' . h($label) . '</strong> ('
-                . number_format($discount_pct, 2) . '%) added to Semester #'
+                . $sc_display . ') added to Semester #'
                 . $sf['semester_number'] . '.'
             );
         }
