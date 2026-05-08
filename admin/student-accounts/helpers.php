@@ -267,10 +267,11 @@ function sfp_recalculate_semester(int $sf_id, int $updated_by): void
 
         // Tuition discount
         if ($type === 'fixed') {
-            // Fixed-amount scholarship: use stored fixed_amount, capped at running balance
+            // Fixed-amount scholarship: use stored fixed_amount, capped at running balance.
+            // discount_pct is stored as 0 for fixed-type; it is not included in total_pct
+            // so percentage-based summaries remain accurate.
             $amount = min((float)($sc['fixed_amount'] ?? 0), $running_bal);
             $amount = round($amount, 2);
-            // discount_pct stays 0 for fixed-type; don't add to total_pct
         } else {
             $amount = round($running_bal * $pct / 100, 2);
             $amount = min($amount, $running_bal);

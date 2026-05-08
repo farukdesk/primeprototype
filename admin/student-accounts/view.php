@@ -310,7 +310,7 @@ require_once __DIR__ . '/../includes/header.php';
                                   style="font-size:.72rem;font-weight:500;">
                                 <?= h($sc['label']) ?>&nbsp;(<?php
                                     if (($sc['discount_type'] ?? 'percentage') === 'fixed'):
-                                        echo 'BDT ' . number_format((float)$sc['amount'], 2);
+                                        echo 'BDT ' . number_format((float)($sc['fixed_amount'] ?? $sc['amount']), 2);
                                     else:
                                         echo number_format((float)$sc['discount_pct'], 1) . '%';
                                     endif;
