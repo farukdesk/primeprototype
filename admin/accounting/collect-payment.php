@@ -270,11 +270,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
             $currency = acc_currency();
             if ($collection_mode === 'multi') {
                 $combined_invoice_url = APP_URL . '/accounting/fee-invoice.php?voucher_ids=' . implode(',', $voucher_ids_arr);
+                $item_count = count($voucher_ids_arr);
+                $fees_label = $item_count === 1 ? '1 fee' : $item_count . ' fees';
                 flash_set(
                     'success',
-                    'Multiple fees collected successfully. Total received: ' . $currency . ' ' . number_format($total_amount, 2) .
-                    '. <a href="' . $combined_invoice_url . '" target="_blank" class="alert-link fw-semibold"><i class="fas fa-print me-1"></i>Print Combined Invoice</a>' .
-                    ' &nbsp;|&nbsp; Individual: ' . implode(' &nbsp;|&nbsp; ', $voucher_links)
+                    $fees_label . ' collected successfully. Total: ' . $currency . ' ' . number_format($total_amount, 2) .
+                    '. &nbsp;<a href="' . $combined_invoice_url . '" target="_blank" class="alert-link fw-semibold"><i class="fas fa-print me-1"></i>Print Invoice</a>'
                 );
             } else {
                 $voucher = acc_get_voucher($last_voucher_id);
@@ -289,7 +290,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
             }
             $sid_for_next = $stu['student_id'] ?? '';
             $next_url = APP_URL . '/accounting/collect-payment.php?tab=student&student_sid=' . urlencode($sid_for_next);
-            if ($collection_mode !== 'multi' && $last_voucher_id > 0) {
+            if ($collection_mode === 'multi' && $voucher_ids_arr) {
+                $next_url .= '&invoice_voucher_ids=' . implode(',', $voucher_ids_arr);
+            } elseif ($last_voucher_id > 0) {
                 $next_url .= '&invoice_voucher_id=' . (int)$last_voucher_id;
             }
             redirect($next_url, 303);
@@ -488,6 +491,11 @@ $adm_notification_note = $sms_enabled
     ? 'Student Copy invoice email and payment SMS are sent to the applicant with their Student ID.'
     : 'Student Copy invoice email is sent to the applicant with their Student ID (SMS currently disabled).';
 $invoice_popup_voucher_id = (int)($_GET['invoice_voucher_id'] ?? 0);
+$invoice_popup_voucher_ids_raw = '';
+if (!empty($_GET['invoice_voucher_ids'])) {
+    $_ids = array_filter(array_map('intval', explode(',', (string)$_GET['invoice_voucher_ids'])));
+    if ($_ids) { $invoice_popup_voucher_ids_raw = implode(',', $_ids); }
+}
 $auto_student_sid = trim($_GET['student_sid'] ?? '');
 
 require_once __DIR__ . '/../includes/header.php';
@@ -590,36 +598,31 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
 
         <!-- ── Smart Payment Card ─────────────────────────────────────────── -->
-        <div class="card border-0 shadow-sm mb-4 border-start border-4 border-primary" id="smartPayCard" style="display:none;">
+        <div class="card border-0 shadow-sm mb-3" id="smartPayCard" style="display:none;">
             <div class="card-header py-3 px-4 bg-primary bg-opacity-10 d-flex align-items-center justify-content-between flex-wrap gap-2">
                 <span class="fw-semibold text-primary fs-6">
-                    <i class="fas fa-bolt me-2"></i>Smart Payment — Auto-Distribute
+                    <i class="fas fa-bolt me-2"></i>Smart Payment
                 </span>
-                <div class="d-flex align-items-center gap-2">
-                    <span class="small text-muted">Total Outstanding:</span>
-                    <span class="badge bg-danger px-3 py-2 fs-6" id="spTotalOut">—</span>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <span class="badge rounded-pill bg-danger px-3 py-2 small" id="spPastDue" style="display:none;">
+                        <i class="fas fa-exclamation-triangle me-1"></i>Past Due: <span id="spPastDueAmt">—</span>
+                    </span>
+                    <span class="badge rounded-pill bg-warning text-dark px-3 py-2 small" id="spCurrentDue" style="display:none;">
+                        <i class="fas fa-calendar-day me-1"></i>Current: <span id="spCurrentDueAmt">—</span>
+                    </span>
+                    <span class="badge rounded-pill bg-info px-3 py-2 small" id="spFutureDue" style="display:none;">
+                        <i class="fas fa-calendar-alt me-1"></i>Upcoming: <span id="spFutureDueAmt">—</span>
+                    </span>
+                    <span class="small text-primary fw-semibold">Total: <span class="badge bg-danger px-3 py-2 fs-6" id="spTotalOut">—</span></span>
                 </div>
             </div>
             <div class="card-body p-4">
 
-                <!-- Dues breakdown pills -->
-                <div class="d-flex flex-wrap gap-2 mb-4" id="spDuePills">
-                    <span class="badge rounded-pill bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 small" id="spPastDue" style="display:none;">
-                        <i class="fas fa-exclamation-triangle me-1"></i>Past Due: <strong id="spPastDueAmt">—</strong>
-                    </span>
-                    <span class="badge rounded-pill bg-warning-subtle text-warning-emphasis border border-warning-subtle px-3 py-2 small" id="spCurrentDue" style="display:none;">
-                        <i class="fas fa-calendar-day me-1"></i>Current Month: <strong id="spCurrentDueAmt">—</strong>
-                    </span>
-                    <span class="badge rounded-pill bg-info-subtle text-info border border-info-subtle px-3 py-2 small" id="spFutureDue" style="display:none;">
-                        <i class="fas fa-calendar-alt me-1"></i>Upcoming: <strong id="spFutureDueAmt">—</strong>
-                    </span>
-                </div>
-
-                <div class="row g-4">
-                    <!-- Left: Amount input + actions -->
-                    <div class="col-lg-5">
-                        <label class="form-label fw-semibold" for="spAmount">
-                            Amount Received (<?= acc_currency() ?>) <span class="text-danger">*</span>
+                <!-- Amount entry -->
+                <div class="row g-3 align-items-end mb-3">
+                    <div class="col-sm-5 col-md-4">
+                        <label class="form-label fw-semibold mb-1" for="spAmount">
+                            Amount to Collect (<?= acc_currency() ?>) <span class="text-danger">*</span>
                         </label>
                         <div class="input-group input-group-lg">
                             <span class="input-group-text fw-bold text-primary"><?= acc_currency() ?></span>
@@ -627,159 +630,74 @@ require_once __DIR__ . '/../includes/header.php';
                                    step="1" min="1" placeholder="0" autocomplete="off"
                                    aria-label="Amount received in <?= acc_currency() ?>">
                         </div>
-                        <div class="d-flex flex-wrap gap-2 mt-2">
-                            <button type="button" class="btn btn-sm btn-outline-danger" id="spBtnAllOut">
-                                <i class="fas fa-fire me-1"></i>All Outstanding
-                            </button>
-                            <button type="button" class="btn btn-sm btn-outline-warning text-warning-emphasis" id="spBtnDueNow">
-                                <i class="fas fa-clock me-1"></i>Due Now
-                            </button>
-                        </div>
-                        <div class="mt-3" id="spNoteWrap" style="display:none;">
-                            <div class="alert border small py-2 mb-0" id="spNote" role="status" aria-live="polite"></div>
-                        </div>
-                        <div class="mt-3" id="spProceedWrap" style="display:none;">
-                            <button type="button" class="btn btn-primary px-4" id="spBtnProceed">
-                                <i class="fas fa-hand-holding-usd me-2"></i>Proceed to Payment Details
-                            </button>
-                        </div>
                     </div>
+                    <div class="col-sm-7 col-md-8 d-flex align-items-end gap-2 flex-wrap pb-1">
+                        <button type="button" class="btn btn-sm btn-outline-danger" id="spBtnAllOut">
+                            <i class="fas fa-fire me-1"></i>All Outstanding
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-warning text-warning-emphasis" id="spBtnDueNow">
+                            <i class="fas fa-clock me-1"></i>Due Now
+                        </button>
+                    </div>
+                </div>
 
-                    <!-- Right: Distribution preview -->
-                    <div class="col-lg-7">
-                        <div id="spDistWrap" style="display:none;">
-                            <div class="border rounded overflow-hidden">
-                                <div class="bg-light-subtle px-3 py-2 border-bottom d-flex align-items-center justify-content-between">
-                                    <span class="small fw-semibold text-muted">
-                                        <i class="fas fa-layer-group me-1"></i>Auto-Distribution Preview
-                                    </span>
-                                    <span class="small text-muted" id="spDistMeta"></span>
-                                </div>
-                                <div class="table-responsive" style="max-height:260px;overflow-y:auto;">
-                                    <table class="table table-sm align-middle mb-0">
-                                        <thead class="table-light" style="position:sticky;top:0;z-index:1;">
-                                            <tr>
-                                                <th class="ps-3">Fee Item</th>
-                                                <th class="text-end">Due</th>
-                                                <th class="text-end">Applied</th>
-                                                <th class="text-center" style="width:100px;">Status</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="spDistBody"></tbody>
-                                    </table>
-                                </div>
-                            </div>
+                <!-- Note -->
+                <div id="spNoteWrap" style="display:none;">
+                    <div class="alert border small py-2 mb-3" id="spNote" role="status" aria-live="polite"></div>
+                </div>
+
+                <!-- Distribution preview (full width) -->
+                <div id="spDistWrap" style="display:none;">
+                    <div class="border rounded overflow-hidden mb-3">
+                        <div class="px-3 py-2 bg-light border-bottom d-flex align-items-center justify-content-between">
+                            <span class="small fw-semibold text-muted">
+                                <i class="fas fa-layer-group me-1"></i>Payment Distribution
+                            </span>
+                            <span class="small text-muted" id="spDistMeta"></span>
                         </div>
-                        <div id="spDistEmpty" class="text-center text-muted py-5 small">
-                            <i class="fas fa-arrow-left me-1"></i>
-                            Enter an amount on the left to see how it will be distributed across outstanding fees.
+                        <div class="table-responsive">
+                            <table class="table table-sm align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="ps-3" style="width:36px;" scope="col" aria-label="Row number">#</th>
+                                        <th scope="col">Fee Item</th>
+                                        <th class="text-end" scope="col">Outstanding</th>
+                                        <th class="text-end fw-bold text-success" scope="col">Applied</th>
+                                        <th class="text-center" style="width:90px;" scope="col">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="spDistBody"></tbody>
+                            </table>
                         </div>
                     </div>
+                    <div id="spProceedWrap" style="display:none;">
+                        <button type="button" class="btn btn-primary px-4" id="spBtnProceed">
+                            <i class="fas fa-arrow-right me-2"></i>Proceed to Payment Details
+                        </button>
+                    </div>
+                </div>
+
+                <div id="spDistEmpty" class="text-center text-muted py-4 small">
+                    <i class="fas fa-calculator fa-2x text-primary opacity-25 d-block mb-2"></i>
+                    Enter an amount above to see how it will be distributed across outstanding fees.
                 </div>
 
             </div>
         </div>
         <!-- /Smart Payment Card ──────────────────────────────────────────── -->
 
-        <!-- Outstanding fee table -->
-        <div class="card border-0 shadow-sm mb-4">
-            <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between">
-                <span class="fw-semibold"><i class="fas fa-file-invoice-dollar me-2 text-success"></i>Fee Obligations & Outstanding Balance</span>
-                <div class="d-flex align-items-center gap-2">
-                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 fs-6" id="totalOutstandingBadge"></span>
-                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#feeObligationsCollapse" aria-expanded="true" aria-controls="feeObligationsCollapse">
-                        <i class="fas fa-chevron-down me-1"></i>Open
-                    </button>
-                </div>
-            </div>
-            <!-- Starts collapsed; JS auto-opens in renderFeeSummary() when outstanding fees exist -->
-            <div class="card-body p-0 collapse" id="feeObligationsCollapse" data-bs-parent="#studentFeeAccordion">
-                <div class="px-4 py-2 border-bottom bg-light-subtle" id="multiCollectBar" style="display:none;">
-                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                        <div class="small text-muted">
-                            Selected <strong id="multiCollectCount">0</strong> item(s), total
-                            <strong id="multiCollectTotal"><?= h(acc_currency()) ?> 0.00</strong>
-                        </div>
-                        <button type="button" class="btn btn-sm btn-success" id="btnCollectSelected">
-                            <i class="fas fa-layer-group me-1"></i>Collect Selected Fees
-                        </button>
-                    </div>
-                </div>
-                <div class="table-responsive">
-                    <table class="table table-hover table-sm align-middle mb-0" id="feeTable">
-                        <thead class="table-light">
-                            <tr>
-                                <th class="text-center" style="width:42px;">#</th>
-                                <th class="ps-4">Fee Type</th>
-                                <th class="text-end">Total Due</th>
-                                <th class="text-end">Paid</th>
-                                <th class="text-end fw-bold">Outstanding</th>
-                                <th class="text-center">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody id="feeTableBody"></tbody>
-                        <tfoot class="table-light fw-bold" id="feeTableFoot">
-                            <tr>
-                                <td></td>
-                                <td class="ps-4">Total</td>
-                                <td class="text-end" id="footTotalDue"></td>
-                                <td class="text-end" id="footTotalPaid"></td>
-                                <td class="text-end text-danger" id="footTotalOut"></td>
-                                <td></td>
-                            </tr>
-                        </tfoot>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        <!-- Transaction History -->
-        <div class="card border-0 shadow-sm mb-4" id="transactionHistoryCard" style="display:none;">
-            <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between">
-                <span class="fw-semibold"><i class="fas fa-history me-2 text-info"></i>Payment Transaction History</span>
-                <div class="d-flex align-items-center gap-2">
-                    <span class="badge bg-info-subtle text-info border border-info-subtle px-3 py-2" id="transactionCount"></span>
-                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#transactionHistoryCollapse" aria-expanded="false" aria-controls="transactionHistoryCollapse">
-                        <i class="fas fa-chevron-down me-1"></i>Open
-                    </button>
-                </div>
-            </div>
-            <div class="card-body p-0 collapse" id="transactionHistoryCollapse" data-bs-parent="#studentFeeAccordion">
-                <div class="table-responsive">
-                    <table class="table table-sm table-hover align-middle mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th class="ps-4">Date</th>
-                                <th>Fee Type</th>
-                                <th>Semester</th>
-                                <th>Month</th>
-                                <th>Payment Method</th>
-                                <th>Txn #</th>
-                                <th class="text-end">Amount</th>
-                                <th>Voucher #</th>
-                                <th>Invoice</th>
-                                <th>Collected By</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody id="transactionTableBody"></tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        <!-- Payment form (shown when user clicks Collect) -->
+        <!-- Payment form (shown when user clicks Collect / Proceed) -->
         <div id="paymentFormCard" style="display:none;">
-            <div class="card border-0 shadow-sm border-start border-success border-3">
+            <div class="card border-0 shadow-sm border-start border-success border-3 mb-3">
                 <div class="card-header py-3 px-4 bg-success bg-opacity-10 d-flex align-items-center justify-content-between">
                     <span class="fw-semibold text-success"><i class="fas fa-check-circle me-2"></i>
-                        Confirm & Post Payment — <span id="payFormFeeLabel"></span>
+                        Confirm &amp; Post Payment — <span id="payFormFeeLabel"></span>
                     </span>
                     <button type="button" class="btn btn-sm btn-outline-success" data-bs-toggle="collapse" data-bs-target="#paymentFormCollapse" aria-expanded="true" aria-controls="paymentFormCollapse">
-                        <i class="fas fa-chevron-down me-1"></i>Open
+                        <i class="fas fa-chevron-down me-1"></i>Expand
                     </button>
                 </div>
-                <div class="card-body p-4 collapse show" id="paymentFormCollapse" data-bs-parent="#studentFeeAccordion">
+                <div class="card-body p-4 collapse show" id="paymentFormCollapse">
                     <form method="post" id="studentPayForm">
                         <?= csrf_field() ?>
                         <input type="hidden" name="payment_nonce" value="<?= h($form_nonce) ?>">
@@ -874,6 +792,94 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
             </div>
         </div>
+
+        <!-- Fee schedule table -->
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between">
+                <span class="fw-semibold"><i class="fas fa-file-invoice-dollar me-2 text-success"></i>Fee Schedule &amp; Outstanding Balance</span>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 fs-6" id="totalOutstandingBadge"></span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#feeObligationsCollapse" aria-expanded="true" aria-controls="feeObligationsCollapse">
+                        <i class="fas fa-list me-1"></i>Details
+                    </button>
+                </div>
+            </div>
+            <!-- Starts collapsed; JS auto-opens in renderFeeSummary() when outstanding fees exist -->
+            <div class="card-body p-0 collapse" id="feeObligationsCollapse" data-bs-parent="#studentFeeAccordion">
+                <div class="px-4 py-2 border-bottom bg-light-subtle" id="multiCollectBar" style="display:none;">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div class="small text-muted">
+                            Selected <strong id="multiCollectCount">0</strong> item(s), total
+                            <strong id="multiCollectTotal"><?= h(acc_currency()) ?> 0.00</strong>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-success" id="btnCollectSelected">
+                            <i class="fas fa-layer-group me-1"></i>Collect Selected Fees
+                        </button>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm align-middle mb-0" id="feeTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="text-center" style="width:42px;">#</th>
+                                <th class="ps-4">Fee Type</th>
+                                <th class="text-end">Total Due</th>
+                                <th class="text-end">Paid</th>
+                                <th class="text-end fw-bold">Outstanding</th>
+                                <th class="text-center">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="feeTableBody"></tbody>
+                        <tfoot class="table-light fw-bold" id="feeTableFoot">
+                            <tr>
+                                <td></td>
+                                <td class="ps-4">Total</td>
+                                <td class="text-end" id="footTotalDue"></td>
+                                <td class="text-end" id="footTotalPaid"></td>
+                                <td class="text-end text-danger" id="footTotalOut"></td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Transaction History -->
+        <div class="card border-0 shadow-sm mb-4" id="transactionHistoryCard" style="display:none;">
+            <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between">
+                <span class="fw-semibold"><i class="fas fa-history me-2 text-info"></i>Payment Transaction History</span>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-info-subtle text-info border border-info-subtle px-3 py-2" id="transactionCount"></span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#transactionHistoryCollapse" aria-expanded="false" aria-controls="transactionHistoryCollapse">
+                        <i class="fas fa-list me-1"></i>History
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0 collapse" id="transactionHistoryCollapse" data-bs-parent="#studentFeeAccordion">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-4">Date</th>
+                                <th>Fee Type</th>
+                                <th>Semester</th>
+                                <th>Month</th>
+                                <th>Payment Method</th>
+                                <th>Txn #</th>
+                                <th class="text-end">Amount</th>
+                                <th>Voucher #</th>
+                                <th>Invoice</th>
+                                <th>Collected By</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="transactionTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
         </div><!-- /studentFeeAccordion -->
     </div><!-- /feeSummaryWrap -->
 
@@ -1167,9 +1173,11 @@ require_once __DIR__ . '/../includes/header.php';
     const CURRENCY = <?= json_encode(acc_currency()) ?>;
     const APP_URL  = <?= json_encode(APP_URL) ?>;
     const INVOICE_POPUP_URL = <?= json_encode(
-        $invoice_popup_voucher_id > 0
-            ? APP_URL . '/accounting/fee-invoice.php?voucher_id=' . $invoice_popup_voucher_id . '&from=collect-payment&student_sid=' . urlencode($auto_student_sid)
-            : ''
+        $invoice_popup_voucher_ids_raw !== ''
+            ? APP_URL . '/accounting/fee-invoice.php?voucher_ids=' . $invoice_popup_voucher_ids_raw . '&from=collect-payment&student_sid=' . urlencode($auto_student_sid)
+            : ($invoice_popup_voucher_id > 0
+                ? APP_URL . '/accounting/fee-invoice.php?voucher_id=' . $invoice_popup_voucher_id . '&from=collect-payment&student_sid=' . urlencode($auto_student_sid)
+                : '')
     ) ?>;
     const AUTO_STUDENT_SID = <?= json_encode($auto_student_sid) ?>;
     const RECEIVED_INTO_MAP = <?= json_encode($received_into_map) ?>;
@@ -1427,12 +1435,16 @@ require_once __DIR__ . '/../includes/header.php';
             return;
         }
 
-        distribution.forEach(item => {
+        let totalApplied = 0;
+
+        distribution.forEach((item, index) => {
             const period = itemPeriod(item);
             if (period === 'past')    pastCount++;
             else if (period === 'current') currentCount++;
             else if (period === 'future')  futureCount++;
             else otherCount++;
+
+            totalApplied += item.applied;
 
             let periodBadge = '';
             if (period === 'past')
@@ -1448,12 +1460,22 @@ require_once __DIR__ . '/../includes/header.php';
 
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td class="ps-3 small">${item.label}${periodBadge}</td>
+                <td class="ps-3 small text-muted">${index + 1}</td>
+                <td class="small">${item.label}${periodBadge}</td>
                 <td class="text-end small text-muted">${fmt(item.out)}</td>
                 <td class="text-end small fw-semibold text-success">${fmt(item.applied)}</td>
                 <td class="text-center">${statusCell}</td>`;
             spDistBody.appendChild(tr);
         });
+
+        // Total row
+        const footTr = document.createElement('tr');
+        footTr.className = 'table-light fw-bold';
+        footTr.innerHTML = `
+            <td class="ps-3 small" colspan="3" style="text-align:right;">Total Applied:</td>
+            <td class="text-end small fw-bold text-success">${fmt(totalApplied)}</td>
+            <td></td>`;
+        spDistBody.appendChild(footTr);
 
         // Meta line (e.g. "3 items – 2 overdue & one-time fees, 1 advance")
         const parts = [];
