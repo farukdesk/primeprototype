@@ -1951,10 +1951,10 @@ function acc_transaction_number_exists(string $transaction_number): bool
     $stmt = $db->prepare(
         'SELECT 1
          FROM (
-             SELECT transaction_number FROM sfp_payments
+             SELECT transaction_number COLLATE utf8mb4_unicode_ci FROM sfp_payments
                  WHERE transaction_number = ?
              UNION ALL
-             SELECT transaction_number FROM adm_admission_fee_payments
+             SELECT transaction_number COLLATE utf8mb4_unicode_ci FROM adm_admission_fee_payments
                  WHERE transaction_number = ?
          ) AS combined
          LIMIT 1'
