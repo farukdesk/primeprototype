@@ -703,10 +703,12 @@ function applyPageBreakIfNeeded() {
     copies.forEach(function(el) { totalH += el.offsetHeight; });
     if (cutLine) totalH += cutLine.offsetHeight;
 
-    // A4 at 96 dpi = ~1123 px tall; minus 10 mm top + bottom margins (~76 px) ≈ 1047 px.
-    // Use a conservative threshold of 980 px to handle slight browser measurement variance.
+    // A4 at 96 dpi ≈ 1123 px tall; minus 10 mm top + bottom print margins (~76 px) ≈ 1047 px.
+    // A conservative threshold of 980 px (~67 px buffer) accounts for browser rounding,
+    // sub-pixel rendering differences, and slight variation across operating systems.
     if (totalH > 980) {
-        document.querySelector('.print-wrapper').classList.add('force-page-break');
+        var wrapper = document.querySelector('.print-wrapper');
+        if (wrapper) wrapper.classList.add('force-page-break');
     }
 }
 
