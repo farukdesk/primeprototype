@@ -465,9 +465,18 @@ $university_website = acc_university_website();
             body { background: #fff; }
             .screen-controls { display: none !important; }
             .print-wrapper { padding: 0; }
-            .invoice-copy { box-shadow: none; width: 100%; }
+            .invoice-copy { box-shadow: none; width: 100%; break-inside: avoid; }
             .cut-line { width: 100%; }
-            @page { margin: 10mm 10mm; }
+            @page { size: A4; margin: 10mm 10mm; }
+
+            /* When both copies don't fit on one page:
+               hide the cut-line and start the student copy on a new page */
+            .force-page-break .cut-line { display: none !important; }
+            .force-page-break .invoice-copy + .invoice-copy {
+                break-before: page !important;
+                page-break-before: always !important;
+                border-top: none !important;
+            }
         }
     </style>
 </head>
@@ -683,8 +692,29 @@ function doneInvoice() {
     window.location.href = DONE_URL;
 }
 
+// Detect whether both copies exceed one A4 page height.
+// If so, mark the wrapper so each copy prints on its own page.
+function applyPageBreakIfNeeded() {
+    var copies  = document.querySelectorAll('.invoice-copy');
+    var cutLine = document.querySelector('.cut-line');
+    if (copies.length !== 2) return;
+
+    var totalH = 0;
+    copies.forEach(function(el) { totalH += el.offsetHeight; });
+    if (cutLine) totalH += cutLine.offsetHeight;
+
+    // A4 at 96 dpi ≈ 1123 px tall; minus 10 mm top + bottom print margins (~76 px) ≈ 1047 px.
+    // A conservative threshold of 980 px (~67 px buffer) accounts for browser rounding,
+    // sub-pixel rendering differences, and slight variation across operating systems.
+    if (totalH > 980) {
+        var wrapper = document.querySelector('.print-wrapper');
+        if (wrapper) wrapper.classList.add('force-page-break');
+    }
+}
+
 // Auto-open print dialog when the page loads
 window.addEventListener('load', function() {
+    applyPageBreakIfNeeded();
     // Small delay ensures styles are rendered before print dialog opens
     setTimeout(function() { window.print(); }, 400);
 });
