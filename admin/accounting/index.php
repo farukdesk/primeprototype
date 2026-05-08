@@ -207,9 +207,11 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
                 <?php if (acc_can_reports()): ?>
                 <div class="mt-3 d-flex flex-wrap gap-2">
-                    <a href="<?= APP_URL ?>/accounting/reports/trial-balance.php"    class="btn btn-outline-secondary btn-sm"><i class="fas fa-balance-scale me-1"></i> Trial Balance</a>
-                    <a href="<?= APP_URL ?>/accounting/reports/income-statement.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-chart-bar me-1"></i> Income Statement</a>
-                    <a href="<?= APP_URL ?>/accounting/reports/balance-sheet.php"    class="btn btn-outline-secondary btn-sm"><i class="fas fa-building me-1"></i> Balance Sheet</a>
+                    <a href="<?= APP_URL ?>/accounting/reports/trial-balance.php"        class="btn btn-outline-secondary btn-sm"><i class="fas fa-balance-scale me-1"></i> Trial Balance</a>
+                    <a href="<?= APP_URL ?>/accounting/reports/income-statement.php"     class="btn btn-outline-secondary btn-sm"><i class="fas fa-chart-bar me-1"></i> Income Statement</a>
+                    <a href="<?= APP_URL ?>/accounting/reports/balance-sheet.php"        class="btn btn-outline-secondary btn-sm"><i class="fas fa-building me-1"></i> Balance Sheet</a>
+                    <a href="<?= APP_URL ?>/accounting/reports/student-collection.php"   class="btn btn-outline-primary btn-sm"><i class="fas fa-file-invoice-dollar me-1"></i> Student Collection</a>
+                    <a href="<?= APP_URL ?>/accounting/reports/staff-collection.php"     class="btn btn-outline-info btn-sm"><i class="fas fa-users me-1"></i> Staff Collection</a>
                 </div>
                 <?php endif; ?>
             </div>
