@@ -688,6 +688,11 @@ window.addEventListener('load', function() {
     // Small delay ensures styles are rendered before print dialog opens
     setTimeout(function() { window.print(); }, 400);
 });
+
+// Auto-close the invoice popup after the print dialog is dismissed
+window.addEventListener('afterprint', function() {
+    doneInvoice();
+});
 </script>
 </body>
 </html>
