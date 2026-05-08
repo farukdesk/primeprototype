@@ -240,7 +240,7 @@ function sfp_recalculate_semester(int $sf_id, int $updated_by): void
 
     // Fetch all scholarship rows ordered by creation date (oldest first)
     $rows_stmt = $db->prepare(
-        'SELECT id, discount_pct, applies_to_fixed, applies_to_english
+        'SELECT id, discount_pct, discount_type, fixed_amount, applies_to_fixed, applies_to_english
          FROM sfp_semester_scholarships
          WHERE sf_id = ?
          ORDER BY created_at ASC, id ASC'
@@ -262,30 +262,41 @@ function sfp_recalculate_semester(int $sf_id, int $updated_by): void
     $total_english_discount = 0.0;
 
     foreach ($scholarships as $sc) {
-        $pct    = (float)$sc['discount_pct'];
+        $pct  = (float)$sc['discount_pct'];
+        $type = $sc['discount_type'] ?? 'percentage';
 
         // Tuition discount
-        $amount = round($running_bal * $pct / 100, 2);
-        $amount = min($amount, $running_bal);
+        if ($type === 'fixed') {
+            // Fixed-amount scholarship: use stored fixed_amount, capped at running balance
+            $amount = min((float)($sc['fixed_amount'] ?? 0), $running_bal);
+            $amount = round($amount, 2);
+            // discount_pct stays 0 for fixed-type; don't add to total_pct
+        } else {
+            $amount = round($running_bal * $pct / 100, 2);
+            $amount = min($amount, $running_bal);
+            $total_pct += $pct;
+        }
+
         $update_stmt->execute([$amount, $sc['id']]);
         $running_bal  -= $amount;
         $total_amount += $amount;
-        $total_pct    += $pct;
 
-        // Fixed institutional fee discount
-        if ((int)$sc['applies_to_fixed'] && $running_fixed > 0) {
-            $fixed_amt = round($running_fixed * $pct / 100, 2);
-            $fixed_amt = min($fixed_amt, $running_fixed);
-            $running_fixed        -= $fixed_amt;
-            $total_fixed_discount += $fixed_amt;
-        }
+        // Fixed institutional fee and English course fee discounts only apply
+        // to percentage-type scholarships with the respective scope flags set.
+        if ($type === 'percentage') {
+            if ((int)$sc['applies_to_fixed'] && $running_fixed > 0) {
+                $fixed_amt = round($running_fixed * $pct / 100, 2);
+                $fixed_amt = min($fixed_amt, $running_fixed);
+                $running_fixed        -= $fixed_amt;
+                $total_fixed_discount += $fixed_amt;
+            }
 
-        // English course fee discount
-        if ((int)$sc['applies_to_english'] && $running_english > 0) {
-            $eng_amt = round($running_english * $pct / 100, 2);
-            $eng_amt = min($eng_amt, $running_english);
-            $running_english        -= $eng_amt;
-            $total_english_discount += $eng_amt;
+            if ((int)$sc['applies_to_english'] && $running_english > 0) {
+                $eng_amt = round($running_english * $pct / 100, 2);
+                $eng_amt = min($eng_amt, $running_english);
+                $running_english        -= $eng_amt;
+                $total_english_discount += $eng_amt;
+            }
         }
     }
 

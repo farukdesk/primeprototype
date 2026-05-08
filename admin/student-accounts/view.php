@@ -308,7 +308,13 @@ require_once __DIR__ . '/../includes/header.php';
                             <?php foreach ($sem_scholarships as $sc): ?>
                             <span class="badge rounded-pill bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25"
                                   style="font-size:.72rem;font-weight:500;">
-                                <?= h($sc['label']) ?>&nbsp;(<?= number_format((float)$sc['discount_pct'], 1) ?>%)
+                                <?= h($sc['label']) ?>&nbsp;(<?php
+                                    if (($sc['discount_type'] ?? 'percentage') === 'fixed'):
+                                        echo 'BDT ' . number_format((float)$sc['amount'], 2);
+                                    else:
+                                        echo number_format((float)$sc['discount_pct'], 1) . '%';
+                                    endif;
+                                ?>)
                                 <?php if ((int)$sc['applies_to_fixed']): ?>
                                 <span class="badge bg-warning text-dark ms-1" style="font-size:.6rem;vertical-align:middle;">+Fixed</span>
                                 <?php endif; ?>
@@ -554,11 +560,40 @@ $first_sem_label   = ($first_sem && $first_sem['semester_label']) ? $first_sem['
                     </div>
 
                     <div class="mb-3">
+                        <label class="form-label fw-semibold">Scholarship Type <span class="text-danger">*</span></label>
+                        <div class="d-flex gap-4">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="discount_type" value="percentage"
+                                       id="asc-type-pct" checked>
+                                <label class="form-check-label" for="asc-type-pct">
+                                    <i class="fas fa-percent me-1 text-secondary"></i>Percentage
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="discount_type" value="fixed"
+                                       id="asc-type-fixed">
+                                <label class="form-check-label" for="asc-type-fixed">
+                                    <i class="fas fa-money-bill-wave me-1 text-secondary"></i>Fixed Amount
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3" id="asc-pct-wrap">
                         <label class="form-label fw-semibold">Discount % <span class="text-danger">*</span></label>
                         <div class="input-group">
                             <input type="number" name="discount_pct" id="asc-pct"
-                                   class="form-control" step="0.0001" min="0.0001" max="100" required>
+                                   class="form-control" step="0.0001" min="0.0001" max="100">
                             <span class="input-group-text">%</span>
+                        </div>
+                    </div>
+
+                    <div class="mb-3 d-none" id="asc-fixed-wrap">
+                        <label class="form-label fw-semibold">Fixed Scholarship Amount <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text">BDT</span>
+                            <input type="number" name="fixed_amount" id="asc-fixed-amount"
+                                   class="form-control" step="0.01" min="0.01" placeholder="e.g. 5000">
                         </div>
                     </div>
 
@@ -576,8 +611,8 @@ $first_sem_label   = ($first_sem && $first_sem['semester_label']) ? $first_sem['
                                   placeholder="Optional note about this scholarship"></textarea>
                     </div>
 
-                    <!-- Fee scope: which fee types this discount covers -->
-                    <div class="mb-3">
+                    <!-- Fee scope: which fee types this discount covers (only for percentage type) -->
+                    <div class="mb-3" id="asc-scope-wrap">
                         <label class="form-label fw-semibold small">Also apply discount to:</label>
                         <div class="d-flex gap-3">
                             <div class="form-check">
@@ -706,18 +741,19 @@ document.querySelectorAll('.add-sc-btn').forEach(function(btn) {
         document.getElementById('asc-sem-info').textContent = 'Adding to: ' + semLbl;
         document.getElementById('asc-tuition-display').value =
             tuition.toLocaleString('en-BD', {minimumFractionDigits:2});
-        document.getElementById('asc-pct').value   = '';
-        document.getElementById('asc-label').value  = '';
-        document.getElementById('asc-note').value   = '';
-        document.getElementById('asc-amount').value = '0.00';
+        document.getElementById('asc-pct').value         = '';
+        document.getElementById('asc-label').value        = '';
+        document.getElementById('asc-note').value         = '';
+        document.getElementById('asc-amount').value       = '0.00';
+        var fixedAmtInput = document.getElementById('asc-fixed-amount');
+        if (fixedAmtInput) fixedAmtInput.value = '';
 
-        // Reset new fields
-        var fixedCb   = document.getElementById('asc-applies-fixed');
-        var engCb     = document.getElementById('asc-applies-english');
-        var docInput  = document.getElementById('asc-support-doc');
-        if (fixedCb)  fixedCb.checked  = false;
-        if (engCb)    engCb.checked    = false;
-        if (docInput) docInput.value   = '';
+        // Reset scholarship type to percentage
+        var typePct   = document.getElementById('asc-type-pct');
+        var typeFixed = document.getElementById('asc-type-fixed');
+        if (typePct)   typePct.checked   = true;
+        if (typeFixed) typeFixed.checked = false;
+        ascSwitchType('percentage');
 
         // Reset policy/tier selectors
         var polSel = document.getElementById('asc-policy-select');
@@ -732,6 +768,40 @@ document.querySelectorAll('.add-sc-btn').forEach(function(btn) {
         var modal = new bootstrap.Modal(document.getElementById('addScModal'));
         modal.show();
         setTimeout(function(){ document.getElementById('asc-label').focus(); }, 400);
+    });
+});
+
+// ── Scholarship type switch (Percentage / Fixed Amount) ────────────────────────
+function ascSwitchType(type) {
+    var pctWrap    = document.getElementById('asc-pct-wrap');
+    var fixedWrap  = document.getElementById('asc-fixed-wrap');
+    var scopeWrap  = document.getElementById('asc-scope-wrap');
+    var pctInput   = document.getElementById('asc-pct');
+    var fixedInput = document.getElementById('asc-fixed-amount');
+    var fixedCb    = document.getElementById('asc-applies-fixed');
+    var engCb      = document.getElementById('asc-applies-english');
+
+    if (type === 'fixed') {
+        if (pctWrap)   pctWrap.classList.add('d-none');
+        if (fixedWrap) fixedWrap.classList.remove('d-none');
+        if (scopeWrap) scopeWrap.classList.add('d-none');
+        if (pctInput)  { pctInput.removeAttribute('required'); pctInput.value = ''; }
+        if (fixedInput) fixedInput.setAttribute('required', 'required');
+        if (fixedCb)   fixedCb.checked = false;
+        if (engCb)     engCb.checked   = false;
+    } else {
+        if (pctWrap)   pctWrap.classList.remove('d-none');
+        if (fixedWrap) fixedWrap.classList.add('d-none');
+        if (scopeWrap) scopeWrap.classList.remove('d-none');
+        if (pctInput)  pctInput.setAttribute('required', 'required');
+        if (fixedInput) { fixedInput.removeAttribute('required'); fixedInput.value = ''; }
+    }
+    ascRecalcAmount();
+}
+
+document.querySelectorAll('input[name="discount_type"]').forEach(function(radio) {
+    radio.addEventListener('change', function() {
+        ascSwitchType(this.value);
     });
 });
 
@@ -769,9 +839,17 @@ function ascRecalcAmount() {
     var tuition = parseFloat(
         document.getElementById('asc-tuition-display').value.replace(/,/g, '')
     ) || 0;
-    var pct = parseFloat(document.getElementById('asc-pct').value) || 0;
-    document.getElementById('asc-amount').value =
-        (tuition * pct / 100).toLocaleString('en-BD', {minimumFractionDigits:2});
+
+    var typeFixed = document.getElementById('asc-type-fixed');
+    if (typeFixed && typeFixed.checked) {
+        var fixedVal = parseFloat(document.getElementById('asc-fixed-amount').value) || 0;
+        document.getElementById('asc-amount').value =
+            Math.min(fixedVal, tuition).toLocaleString('en-BD', {minimumFractionDigits:2});
+    } else {
+        var pct = parseFloat(document.getElementById('asc-pct').value) || 0;
+        document.getElementById('asc-amount').value =
+            (tuition * pct / 100).toLocaleString('en-BD', {minimumFractionDigits:2});
+    }
 }
 
 var ascPolicySel = document.getElementById('asc-policy-select');
@@ -835,6 +913,8 @@ if (ascTierSel) {
 }
 
 document.getElementById('asc-pct').addEventListener('input', ascRecalcAmount);
+var ascFixedInput = document.getElementById('asc-fixed-amount');
+if (ascFixedInput) ascFixedInput.addEventListener('input', ascRecalcAmount);
 
 // ── Edit Tuition modal ────────────────────────────────────────────────────────
 document.querySelectorAll('.edit-tuition-btn').forEach(function(btn) {
