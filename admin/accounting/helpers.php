@@ -1942,30 +1942,25 @@ function acc_normalize_payment_method_fields(string $method, ?string $provider, 
  * Return true if a transaction number is already recorded in any payment table.
  * NULL / empty strings are never considered duplicates.
  */
-function acc_transaction_number_exists(string $txn): bool
+function acc_transaction_number_exists(string $transaction_number): bool
 {
-    if ($txn === '') {
+    if ($transaction_number === '') {
         return false;
     }
     $db = db();
-    $row = $db->prepare(
+    $stmt = $db->prepare(
         'SELECT 1
-         FROM sfp_payments
-         WHERE transaction_number = ?
+         FROM (
+             SELECT transaction_number FROM sfp_payments
+                 WHERE transaction_number = ?
+             UNION ALL
+             SELECT transaction_number FROM adm_admission_fee_payments
+                 WHERE transaction_number = ?
+         ) AS combined
          LIMIT 1'
     );
-    $row->execute([$txn]);
-    if ($row->fetchColumn() !== false) {
-        return true;
-    }
-    $row2 = $db->prepare(
-        'SELECT 1
-         FROM adm_admission_fee_payments
-         WHERE transaction_number = ?
-         LIMIT 1'
-    );
-    $row2->execute([$txn]);
-    return $row2->fetchColumn() !== false;
+    $stmt->execute([$transaction_number, $transaction_number]);
+    return $stmt->fetchColumn() !== false;
 }
 
 /**
