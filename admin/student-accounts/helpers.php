@@ -84,21 +84,30 @@ function sfp_get_cf_programs(): array
                 COALESCE(
                     p.tuition_per_semester,
                     CASE
-                        WHEN p.total_semesters > 0 AND p.tuition_full IS NOT NULL
-                        THEN ROUND(p.tuition_full / p.total_semesters, 2)
+                        WHEN p.total_semesters > 0 AND COALESCE(p.standard_tuition_full, p.tuition_full) IS NOT NULL
+                        THEN ROUND(COALESCE(p.standard_tuition_full, p.tuition_full) / p.total_semesters, 2)
                         ELSE NULL
                     END,
                     0
                 ) AS tuition_per_semester,
-                COALESCE(p.admission_fees, p.admission_fee_m, 0) AS admission_fees,
+                COALESCE(p.admission_fees, p.admission_fee_base, p.admission_fee_m, 0) AS admission_fees,
                 p.admission_fee_m,
-                COALESCE(p.fixed_institutional_fees, p.institutional_fees, 0) AS fixed_institutional_fees,
+                COALESCE(
+                    p.fixed_institutional_fees,
+                    p.institutional_fees,
+                    CASE
+                        WHEN p.monthly_fixed IS NOT NULL AND p.total_months > 0
+                        THEN ROUND(p.monthly_fixed * p.total_months, 2)
+                        ELSE NULL
+                    END,
+                    0
+                ) AS fixed_institutional_fees,
                 COALESCE(p.english_course_fee, 0) AS english_course_fee,
                 COALESCE(
                     p.reg_fee_per_semester,
                     CASE
-                        WHEN p.total_semesters > 0 AND p.registration_fee IS NOT NULL
-                        THEN ROUND(p.registration_fee / p.total_semesters, 2)
+                        WHEN p.total_semesters > 0 AND COALESCE(p.reg_fee_total, p.registration_fee) IS NOT NULL
+                        THEN ROUND(COALESCE(p.reg_fee_total, p.registration_fee) / p.total_semesters, 2)
                         ELSE NULL
                     END,
                     0
