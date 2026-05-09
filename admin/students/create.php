@@ -462,7 +462,7 @@ require_once __DIR__ . '/../includes/header.php';
             <!-- Student ID -->
             <div class="col-12 col-md-6">
                 <label class="form-label">Student ID <span class="text-danger">*</span>
-                    <small class="text-muted fw-normal">(12 digits)</small>
+                    <small class="text-muted fw-normal">(up to 20 characters)</small>
                 </label>
                 <div class="d-flex gap-3 mb-2">
                     <div class="form-check">
@@ -479,11 +479,11 @@ require_once __DIR__ . '/../includes/header.php';
                 <div id="sid_manual_wrap">
                     <input type="text" class="form-control" name="student_id"
                            id="student_id_input"
-                           placeholder="e.g. 250102010001"
-                           maxlength="12"
-                           pattern="\d{12}"
+                           placeholder="e.g. PU-2026-0001"
+                           maxlength="20"
+                           pattern="[A-Za-z0-9\-]{1,20}"
                            value="<?= old('student_id') ?>">
-                    <div class="form-text">Format: YY + Semester(01/02/03) + DeptID(2) + ProgID(2) + Seq(4)</div>
+                    <div class="form-text">Use 1–20 letters, digits, or hyphens.</div>
                 </div>
                 <div id="sid_auto_note" class="alert alert-info py-2 mb-0 mt-2" style="font-size:.82rem;display:none;">
                     <i class="fas fa-magic me-1"></i>
