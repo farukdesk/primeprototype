@@ -80,9 +80,30 @@ function sfp_get_cf_programs(): array
     return db()->query(
         'SELECT p.id, p.program_name, p.program_slug,
                 p.total_semesters, p.total_months,
-                p.standard_tuition_full, p.tuition_per_semester,
-                p.admission_fees, p.admission_fee_m, p.fixed_institutional_fees, p.english_course_fee,
-                p.reg_fee_per_semester, p.form_id_fee,
+                COALESCE(p.standard_tuition_full, p.tuition_full, 0) AS standard_tuition_full,
+                COALESCE(
+                    p.tuition_per_semester,
+                    CASE
+                        WHEN p.total_semesters > 0 AND p.tuition_full IS NOT NULL
+                        THEN ROUND(p.tuition_full / p.total_semesters, 2)
+                        ELSE NULL
+                    END,
+                    0
+                ) AS tuition_per_semester,
+                COALESCE(p.admission_fees, p.admission_fee_m, 0) AS admission_fees,
+                p.admission_fee_m,
+                COALESCE(p.fixed_institutional_fees, p.institutional_fees, 0) AS fixed_institutional_fees,
+                COALESCE(p.english_course_fee, 0) AS english_course_fee,
+                COALESCE(
+                    p.reg_fee_per_semester,
+                    CASE
+                        WHEN p.total_semesters > 0 AND p.registration_fee IS NOT NULL
+                        THEN ROUND(p.registration_fee / p.total_semesters, 2)
+                        ELSE NULL
+                    END,
+                    0
+                ) AS reg_fee_per_semester,
+                p.form_id_fee,
                 p.safety_net_cap, p.safety_net_per_semester,
                 p.attendance_requirement, p.safety_net_gpa_threshold,
                 dt.name AS degree_type_name, dt.slug AS degree_type_slug
