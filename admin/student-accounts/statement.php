@@ -127,7 +127,7 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
     <title><?= h($page_title) ?></title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: Arial, sans-serif; font-size: 11px; line-height: 1.25; background: #f0f2f5; color: #222; }
+        body { font-family: Arial, sans-serif; font-size: 12px; line-height: 1.25; background: #f0f2f5; color: #222; }
 
         /* ── Screen toolbar ── */
         .screen-controls {
