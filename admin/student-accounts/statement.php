@@ -627,6 +627,10 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
     <!-- ── Signatures ── -->
     <div class="sig-section">
         <div class="sig-block">
+            <div class="sig-line">Signature of Student</div>
+            <div class="sig-subtitle"><?= h($pkg['student_name']) ?></div>
+        </div>
+        <div class="sig-block">
             <div class="sig-line">Admission Officer</div>
             <div class="sig-subtitle">Admission Office</div>
         </div>
@@ -637,10 +641,6 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
         <div class="sig-block">
             <div class="sig-line">Registrar</div>
             <div class="sig-subtitle">Office of the Registrar</div>
-        </div>
-        <div class="sig-block">
-            <div class="sig-line">Signature of Student</div>
-            <div class="sig-subtitle"><?= h($pkg['student_name']) ?></div>
         </div>
     </div>
 
