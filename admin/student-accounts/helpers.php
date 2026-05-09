@@ -89,7 +89,6 @@ function sfp_get_cf_programs(): array
          FROM cf_programs p
          JOIN cf_degree_types dt ON dt.id = p.degree_type_id
          WHERE p.is_active = 1
-           AND p.degree_type_id != (SELECT id FROM cf_degree_types WHERE slug = \'masters\' LIMIT 1)
          ORDER BY dt.sort_order, p.sort_order, p.program_name'
     )->fetchAll();
 }
