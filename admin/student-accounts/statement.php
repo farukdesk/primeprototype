@@ -244,7 +244,7 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
         @media print {
             @page { size: A4 portrait; margin: 0; }
             .screen-controls { display: none !important; }
-            body { background: #fff; }
+            body { background: #fff; line-height: 1.1; }
             .print-wrapper { padding: 0; }
             .statement-page {
                 box-shadow: none; margin: 0;
