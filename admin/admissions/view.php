@@ -25,6 +25,7 @@ require_once __DIR__ . '/../includes/header.php';
         <?php if (adm_can_edit()): ?>
         <a href="<?= APP_URL ?>/admissions/edit.php?id=<?= $id ?>" class="btn btn-primary btn-sm"><i class="fas fa-edit me-1"></i> Edit</a>
         <?php endif; ?>
+        <a href="<?= APP_URL ?>/admissions/statement.php?id=<?= $id ?>" target="_blank" class="btn btn-outline-success btn-sm"><i class="fas fa-file-invoice-dollar me-1"></i> Statement</a>
         <a href="<?= APP_URL ?>/admissions/print.php?id=<?= $id ?>" target="_blank" class="btn btn-outline-info btn-sm"><i class="fas fa-print me-1"></i> Print</a>
         <?php if (adm_can_delete()): ?>
         <button type="button" class="btn btn-outline-danger btn-sm" onclick="confirmDelete(<?= $id ?>, '<?= h(addslashes($app['app_number'])) ?>')">
@@ -54,6 +55,28 @@ require_once __DIR__ . '/../includes/header.php';
                     <div class="col-6 col-md-2"><div class="text-muted small">Year</div><div><?= h($app['year'] ?? '—') ?></div></div>
                     <div class="col-6 col-md-2"><div class="text-muted small">Semester</div><div><?= h($app['semester'] ?? '—') ?></div></div>
                 </div>
+            </div>
+        </div>
+
+        <!-- Financial Package -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white fw-semibold"><i class="fas fa-coins me-2 text-success"></i>Financial Package</div>
+            <div class="card-body">
+                <?php if (!empty($app['financial_package_name'])): ?>
+                <div class="row g-3">
+                    <div class="col-12 col-md-6"><div class="text-muted small">Package</div><div><?= h($app['financial_package_name']) ?></div></div>
+                    <div class="col-6 col-md-3"><div class="text-muted small">Semesters</div><div><?= h($app['financial_total_semesters'] ?? '—') ?></div></div>
+                    <div class="col-6 col-md-3"><div class="text-muted small">Months</div><div><?= h($app['financial_total_months'] ?? '—') ?></div></div>
+                    <div class="col-6 col-md-3"><div class="text-muted small">Tuition / Semester</div><div><?= number_format((float)($app['financial_tuition_per_semester'] ?? 0), 2) ?> BDT</div></div>
+                    <div class="col-6 col-md-3"><div class="text-muted small">Admission Fee</div><div><?= number_format((float)($app['financial_admission_fee'] ?? 0), 2) ?> BDT</div></div>
+                    <div class="col-6 col-md-3"><div class="text-muted small">Registration / Semester</div><div><?= number_format((float)($app['financial_registration_fee_per_semester'] ?? 0), 2) ?> BDT</div></div>
+                    <div class="col-6 col-md-3"><div class="text-muted small">Form & ID Fee</div><div><?= number_format((float)($app['financial_form_id_fee'] ?? 0), 2) ?> BDT</div></div>
+                    <div class="col-6 col-md-3"><div class="text-muted small">Institutional Fees</div><div><?= number_format((float)($app['financial_fixed_institutional_fees'] ?? 0), 2) ?> BDT</div></div>
+                    <div class="col-6 col-md-3"><div class="text-muted small">English Course Fee</div><div><?= number_format((float)($app['financial_english_course_fee'] ?? 0), 2) ?> BDT</div></div>
+                </div>
+                <?php else: ?>
+                <div class="text-muted">No financial package assigned yet.</div>
+                <?php endif; ?>
             </div>
         </div>
 

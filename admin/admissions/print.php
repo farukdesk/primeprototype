@@ -111,6 +111,7 @@ foreach ($all_fields as $f) {
 
 <div class="screen-controls">
     <button onclick="window.print()">🖨 Print</button>
+    <a href="<?= APP_URL ?>/admissions/statement.php?id=<?= (int)$app['id'] ?>" target="_blank" style="background:#16a34a;">Statement</a>
     <a href="javascript:window.close()" class="back-btn">✕ Close</a>
     <span><?= h($app['app_number']) ?> — <?= h($app['student_name']) ?></span>
 </div>

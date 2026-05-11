@@ -34,6 +34,24 @@ foreach (db()->query(
     $programs_by_dept[(int)$p['dept_id']][] = $p;
 }
 
+$financial_programs = adm_get_financial_programs();
+$financial_programs_by_id = [];
+$financial_programs_map = [];
+foreach ($financial_programs as $fp) {
+    $financial_programs_by_id[(int)$fp['id']] = $fp;
+    $financial_programs_map[(int)$fp['id']] = [
+        'program_name'             => $fp['program_name'],
+        'total_semesters'          => (int)$fp['total_semesters'],
+        'total_months'             => (int)$fp['total_months'],
+        'tuition_per_semester'     => (float)$fp['tuition_per_semester'],
+        'admission_fees'           => (float)$fp['admission_fees'],
+        'reg_fee_per_semester'     => (float)$fp['reg_fee_per_semester'],
+        'fixed_institutional_fees' => (float)$fp['fixed_institutional_fees'],
+        'english_course_fee'       => (float)$fp['english_course_fee'],
+        'form_id_fee'              => (float)$fp['form_id_fee'],
+    ];
+}
+
 // ── POST handler ──────────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
@@ -89,8 +107,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $office_batch_no        = trim($_POST['office_batch_no']        ?? '') ?: null;
     $office_decision        = trim($_POST['office_decision']        ?? '') ?: null;
     $office_checked_by      = trim($_POST['office_checked_by']      ?? '') ?: null;
+    $financial_package_id   = (int)($_POST['financial_package_id']  ?? 0) ?: null;
+
+    $financial_package_name = null;
+    $financial_total_semesters = null;
+    $financial_total_months = null;
+    $financial_tuition_per_semester = null;
+    $financial_admission_fee = null;
+    $financial_registration_fee_per_semester = null;
+    $financial_fixed_institutional_fees = null;
+    $financial_english_course_fee = null;
+    $financial_form_id_fee = null;
 
     if ($student_name === '') $errors[] = 'Student name is required.';
+    if (!$financial_package_id) {
+        $errors[] = 'Please assign a financial package.';
+    } elseif (!isset($financial_programs_by_id[$financial_package_id])) {
+        $errors[] = 'Selected financial package is invalid.';
+    } else {
+        $pkg = $financial_programs_by_id[$financial_package_id];
+        $financial_package_name = $pkg['program_name'];
+        $financial_total_semesters = (int)$pkg['total_semesters'];
+        $financial_total_months = (int)$pkg['total_months'];
+        $financial_tuition_per_semester = (float)$pkg['tuition_per_semester'];
+        $financial_admission_fee = (float)$pkg['admission_fees'];
+        $financial_registration_fee_per_semester = (float)$pkg['reg_fee_per_semester'];
+        $financial_fixed_institutional_fees = (float)$pkg['fixed_institutional_fees'];
+        $financial_english_course_fee = (float)$pkg['english_course_fee'];
+        $financial_form_id_fee = (float)$pkg['form_id_fee'];
+    }
 
     // Form sale link
     $form_sale_id     = (int)($_POST['form_sale_id'] ?? 0) ?: null;
@@ -156,10 +201,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 guardian_phone, guardian_email, guardian_relationship, guardian_monthly_income,
                 local_guardian_name, local_guardian_address_1, local_guardian_address_2, local_guardian_address_3, local_guardian_contact,
                 reference_name, reference_address_1, reference_address_2, reference_address_3, reference_contact,
-                expelled_answer, expelled_detail,
-                office_program, office_student_id, office_batch_no, office_decision, office_checked_by,
-                created_by)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+                 expelled_answer, expelled_detail,
+                 office_program, office_student_id, office_batch_no, office_decision, office_checked_by,
+                 financial_package_id, financial_package_name, financial_total_semesters, financial_total_months,
+                 financial_tuition_per_semester, financial_admission_fee, financial_registration_fee_per_semester,
+                 financial_fixed_institutional_fees, financial_english_course_fee, financial_form_id_fee,
+                 created_by)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
         )->execute([
             $app_number, $status, $dept_id, $program_id, $year, $semester,
             $student_name, $father_name, $mother_name,
@@ -173,6 +221,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $reference_name, $reference_address_1, $reference_address_2, $reference_address_3, $reference_contact,
             $expelled_answer, $expelled_detail,
             $office_program, $office_student_id, $office_batch_no, $office_decision, $office_checked_by,
+            $financial_package_id, $financial_package_name, $financial_total_semesters, $financial_total_months,
+            $financial_tuition_per_semester, $financial_admission_fee, $financial_registration_fee_per_semester,
+            $financial_fixed_institutional_fees, $financial_english_course_fee, $financial_form_id_fee,
             $user['id'],
         ]);
         $app_id = (int)db()->lastInsertId();
@@ -364,6 +415,60 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                                 </div>
                                 <?php endforeach; ?>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 1.5: Financial Package -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-white fw-semibold"><i class="fas fa-coins me-2 text-success"></i>Financial Package</div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-12 col-md-8">
+                            <label class="form-label">Assign Financial Package <span class="text-danger">*</span></label>
+                            <select name="financial_package_id" id="financial_package_id" class="form-select" required>
+                                <option value="">— Select Financial Package —</option>
+                                <?php
+                                $current_fp_dtype = '';
+                                foreach ($financial_programs as $fp):
+                                    if ($fp['degree_type_name'] !== $current_fp_dtype) {
+                                        if ($current_fp_dtype !== '') echo '</optgroup>';
+                                        echo '<optgroup label="' . h($fp['degree_type_name']) . '">';
+                                        $current_fp_dtype = $fp['degree_type_name'];
+                                    }
+                                ?>
+                                <option value="<?= (int)$fp['id'] ?>" <?= (int)($_POST['financial_package_id'] ?? 0) === (int)$fp['id'] ? 'selected' : '' ?>>
+                                    <?= h($fp['program_name']) ?>
+                                </option>
+                                <?php endforeach; if ($current_fp_dtype !== '') echo '</optgroup>'; ?>
+                            </select>
+                            <div class="form-text">Financial package is snapshotted on save and used in statement generation.</div>
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <label class="form-label">Package Name</label>
+                            <input type="text" id="financial_package_name_view" class="form-control bg-light" readonly
+                                   value="<?= h($_POST['financial_package_name'] ?? '') ?>">
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label class="form-label">Semesters</label>
+                            <input type="text" id="financial_total_semesters_view" class="form-control bg-light" readonly
+                                   value="<?= h($_POST['financial_total_semesters'] ?? '') ?>">
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label class="form-label">Months</label>
+                            <input type="text" id="financial_total_months_view" class="form-control bg-light" readonly
+                                   value="<?= h($_POST['financial_total_months'] ?? '') ?>">
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label class="form-label">Tuition / Semester</label>
+                            <input type="text" id="financial_tuition_per_semester_view" class="form-control bg-light" readonly
+                                   value="<?= h($_POST['financial_tuition_per_semester'] ?? '') ?>">
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label class="form-label">Admission Fee</label>
+                            <input type="text" id="financial_admission_fee_view" class="form-control bg-light" readonly
+                                   value="<?= h($_POST['financial_admission_fee'] ?? '') ?>">
                         </div>
                     </div>
                 </div>
@@ -742,6 +847,25 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
 </form>
 
 <script>
+var financialPrograms = <?= json_encode($financial_programs_map, JSON_HEX_TAG) ?>;
+
+function renderFinancialPackagePreview(packageId) {
+    var data = packageId && financialPrograms[packageId] ? financialPrograms[packageId] : null;
+    document.getElementById('financial_package_name_view').value = data ? data.program_name : '';
+    document.getElementById('financial_total_semesters_view').value = data ? data.total_semesters : '';
+    document.getElementById('financial_total_months_view').value = data ? data.total_months : '';
+    document.getElementById('financial_tuition_per_semester_view').value = data ? Number(data.tuition_per_semester).toFixed(2) : '';
+    document.getElementById('financial_admission_fee_view').value = data ? Number(data.admission_fees).toFixed(2) : '';
+}
+
+var financialPackageSel = document.getElementById('financial_package_id');
+if (financialPackageSel) {
+    financialPackageSel.addEventListener('change', function() {
+        renderFinancialPackagePreview(this.value);
+    });
+    renderFinancialPackagePreview(financialPackageSel.value);
+}
+
 // ── Department → Program dynamic filter ──────────────────────────────────────
 var deptPrograms = <?= json_encode($programs_by_dept, JSON_HEX_TAG) ?>;
 

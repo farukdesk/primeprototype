@@ -93,11 +93,24 @@ CREATE TABLE IF NOT EXISTS `admissions_applications` (
     `office_batch_no`        VARCHAR(100) NULL,
     `office_decision`        VARCHAR(255) NULL,
     `office_checked_by`      VARCHAR(255) NULL,
+    `financial_package_id`   INT UNSIGNED NULL,
+    `financial_package_name` VARCHAR(255) NULL,
+    `financial_total_semesters` SMALLINT UNSIGNED NULL,
+    `financial_total_months` SMALLINT UNSIGNED NULL,
+    `financial_tuition_per_semester` DECIMAL(12,2) NULL,
+    `financial_admission_fee` DECIMAL(12,2) NULL,
+    `financial_registration_fee_per_semester` DECIMAL(12,2) NULL,
+    `financial_fixed_institutional_fees` DECIMAL(12,2) NULL,
+    `financial_english_course_fee` DECIMAL(12,2) NULL,
+    `financial_form_id_fee` DECIMAL(12,2) NULL,
     `created_by`             INT UNSIGNED NOT NULL,
     `created_at`             DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at`             DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
-    UNIQUE KEY `uq_app_number` (`app_number`)
+    UNIQUE KEY `uq_app_number` (`app_number`),
+    KEY `idx_financial_package` (`financial_package_id`),
+    CONSTRAINT `fk_adm_financial_package`
+        FOREIGN KEY (`financial_package_id`) REFERENCES `cf_programs` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ── Repeating academic qualification rows ─────────────────
