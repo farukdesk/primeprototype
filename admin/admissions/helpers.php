@@ -295,6 +295,49 @@ function adm_status_badge(string $status): string
 
 // ── Fetch helpers ─────────────────────────────────────────────────────────────
 
+function adm_get_financial_programs(): array
+{
+    return db()->query(
+        'SELECT p.id, p.program_name, p.total_semesters, p.total_months,
+                COALESCE(
+                    p.tuition_per_semester,
+                    CASE
+                        WHEN p.total_semesters > 0 AND COALESCE(p.standard_tuition_full, p.tuition_full) IS NOT NULL
+                        THEN ROUND(COALESCE(p.standard_tuition_full, p.tuition_full) / p.total_semesters, 2)
+                        ELSE NULL
+                    END,
+                    0
+                ) AS tuition_per_semester,
+                COALESCE(p.admission_fees, p.admission_fee_base, p.admission_fee_m, 0) AS admission_fees,
+                COALESCE(
+                    p.reg_fee_per_semester,
+                    CASE
+                        WHEN p.total_semesters > 0 AND COALESCE(p.reg_fee_total, p.registration_fee) IS NOT NULL
+                        THEN ROUND(COALESCE(p.reg_fee_total, p.registration_fee) / p.total_semesters, 2)
+                        ELSE NULL
+                    END,
+                    0
+                ) AS reg_fee_per_semester,
+                COALESCE(
+                    p.fixed_institutional_fees,
+                    p.institutional_fees,
+                    CASE
+                        WHEN p.monthly_fixed IS NOT NULL AND p.total_months > 0
+                        THEN ROUND(p.monthly_fixed * p.total_months, 2)
+                        ELSE NULL
+                    END,
+                    0
+                ) AS fixed_institutional_fees,
+                COALESCE(p.english_course_fee, 0) AS english_course_fee,
+                COALESCE(p.form_id_fee, 0) AS form_id_fee,
+                dt.name AS degree_type_name
+         FROM cf_programs p
+         JOIN cf_degree_types dt ON dt.id = p.degree_type_id
+         WHERE p.is_active = 1
+         ORDER BY dt.sort_order, p.sort_order, p.program_name'
+    )->fetchAll();
+}
+
 function adm_get(int $id): array
 {
     $stmt = db()->prepare(

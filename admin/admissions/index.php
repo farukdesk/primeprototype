@@ -158,6 +158,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <td class="text-end pe-4">
                         <div class="d-flex justify-content-end gap-1">
                             <a href="<?= APP_URL ?>/admissions/view.php?id=<?= $app['id'] ?>" class="btn btn-sm btn-outline-secondary" title="View"><i class="fas fa-eye"></i></a>
+                            <a href="<?= APP_URL ?>/admissions/statement.php?id=<?= $app['id'] ?>" target="_blank" class="btn btn-sm btn-outline-success" title="Statement"><i class="fas fa-file-invoice-dollar"></i></a>
                             <?php if (adm_can_edit()): ?>
                             <a href="<?= APP_URL ?>/admissions/edit.php?id=<?= $app['id'] ?>" class="btn btn-sm btn-outline-primary" title="Edit"><i class="fas fa-edit"></i></a>
                             <?php endif; ?>
