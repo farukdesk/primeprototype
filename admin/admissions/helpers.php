@@ -295,6 +295,11 @@ function adm_status_badge(string $status): string
 
 // ── Fetch helpers ─────────────────────────────────────────────────────────────
 
+/**
+ * Fetch active financial packages from course-fee setup for admissions.
+ * Returns package rows with normalized fee values using legacy-to-current
+ * fallback precedence (e.g. tuition_full → tuition_per_semester).
+ */
 function adm_get_financial_programs(): array
 {
     return db()->query(
