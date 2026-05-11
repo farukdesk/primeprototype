@@ -203,7 +203,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect(APP_URL . '/departments/academic-programs/index.php?dept_id=' . $dept_id);
         } catch (Throwable $e) {
             $pdo->rollBack();
-            $errors[] = 'Database error: ' . h($e->getMessage());
+            error_log('Program merge failed: ' . $e->getMessage());
+            $errors[] = 'Unable to merge programs right now. Please try again.';
         }
     }
 }
@@ -335,10 +336,10 @@ require_once __DIR__ . '/../../includes/header.php';
     const btn = document.getElementById('mergeBtn');
 
     function update() {
-        const ok = src.value && tgt.value && src.value !== tgt.value;
-        box.classList.toggle('d-none', !ok);
-        if (!ok) chk.checked = false;
-        btn.disabled = !(ok && chk.checked);
+        const isValidSelection = src.value && tgt.value && src.value !== tgt.value;
+        box.classList.toggle('d-none', !isValidSelection);
+        if (!isValidSelection) chk.checked = false;
+        btn.disabled = !(isValidSelection && chk.checked);
     }
 
     src.addEventListener('change', update);
