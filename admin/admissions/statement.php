@@ -33,8 +33,8 @@ $regular_sem_pay  = $tuition_sem + $reg_fee_sem + $fixed_per_sem + $english_per_
 $admission_payable = $admission_fee + $reg_fee_sem + $form_id_fee;
 $monthly_after_admission = $total_months > 0 ? round(($tuition_total + $fixed_total + $english_total) / $total_months, 2) : 0.0;
 
-$admission_form_fee = (int)floor($form_id_fee / 2);
-$admission_id_fee   = $form_id_fee - $admission_form_fee;
+$admission_form_fee = round($form_id_fee / 2, 2);
+$admission_id_fee   = round($form_id_fee - $admission_form_fee, 2);
 $date_today         = date('d F Y');
 $page_title         = 'Statement of Payment – ' . ($app['student_name'] ?? 'Admission Applicant');
 ?>
@@ -302,7 +302,7 @@ $page_title         = 'Statement of Payment – ' . ($app['student_name'] ?? 'Ad
             <tr class="highlight">
                 <td colspan="2"><strong>First Semester Monthly Payment</strong>
                     <span style="font-size:9.5px; color:#92400e; font-weight:400;">
-                        (<?= number_format($tuition_total, 2) ?> Tuition + <?= number_format($fixed_total, 2) ?> Institutional &amp; Dev. Fee + <?= number_format($english_total, 2) ?> English Fee) ÷ <?= max(1, (int)$total_months) ?> months
+                        (<?= number_format($tuition_total, 2) ?> Tuition + <?= number_format($fixed_total, 2) ?> Institutional &amp; Dev. Fee + <?= number_format($english_total, 2) ?> English Fee) ÷ <?= ($total_months > 0) ? (int)$total_months : 0 ?> months
                     </span>
                 </td>
                 <td class="amt"><strong><?= number_format($monthly_after_admission, 2) ?></strong></td>
