@@ -25,7 +25,7 @@ $form_id_fee      = (float)($app['financial_form_id_fee'] ?? 0);
 
 $tuition_total    = $tuition_sem * $total_semesters;
 $reg_total        = $reg_fee_sem * $total_semesters;
-$grand_total      = $admission_fee + $reg_total + $tuition_total + $fixed_total + $english_total;
+$grand_total      = $admission_fee + $reg_total + $tuition_total + $fixed_total + $english_total + $form_id_fee;
 
 $fixed_per_sem    = $total_semesters > 0 ? round($fixed_total / $total_semesters, 2) : 0.0;
 $english_per_sem  = $total_semesters > 0 ? round($english_total / $total_semesters, 2) : 0.0;
@@ -302,7 +302,7 @@ $page_title         = 'Statement of Payment – ' . ($app['student_name'] ?? 'Ad
             <tr class="highlight">
                 <td colspan="2"><strong>First Semester Monthly Payment</strong>
                     <span style="font-size:9.5px; color:#92400e; font-weight:400;">
-                        (<?= number_format($tuition_sem, 2) ?> Tuition + <?= number_format($fixed_per_sem, 2) ?> Institutional &amp; Dev. Fee + <?= number_format($english_per_sem, 2) ?> English Fee) ÷ <?= max(1, (int)round($total_months / max(1, $total_semesters))) ?> months
+                        (<?= number_format($tuition_total, 2) ?> Tuition + <?= number_format($fixed_total, 2) ?> Institutional &amp; Dev. Fee + <?= number_format($english_total, 2) ?> English Fee) ÷ <?= max(1, (int)$total_months) ?> months
                     </span>
                 </td>
                 <td class="amt"><strong><?= number_format($monthly_after_admission, 2) ?></strong></td>
