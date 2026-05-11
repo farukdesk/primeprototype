@@ -146,14 +146,19 @@ function adm_sid_get(int $program_id): array|false
 /**
  * Generate a student ID for the given program and increment the serial counter.
  * Returns an empty string if no settings exist for the program.
+ *
+ * Programs that share the same ID prefix components (university_code, year_code,
+ * semester_code, faculty_code, subject_code, type_of_program) share a single
+ * serial sequence to prevent duplicate IDs across programs.
  */
 function adm_sid_generate(int $program_id): string
 {
     $db = db();
     $db->beginTransaction();
     try {
+        // First fetch this program's settings (without row lock) to get the prefix
         $stmt = $db->prepare(
-            'SELECT * FROM adm_student_id_settings WHERE program_id = ? FOR UPDATE'
+            'SELECT * FROM adm_student_id_settings WHERE program_id = ? LIMIT 1'
         );
         $stmt->execute([$program_id]);
         $settings = $stmt->fetch();
@@ -161,11 +166,53 @@ function adm_sid_generate(int $program_id): string
             $db->rollBack();
             return '';
         }
-        $serial = (int)$settings['next_serial'];
+
+        // Lock ALL programs sharing the same ID prefix so their counters stay in sync
+        $lock_stmt = $db->prepare(
+            'SELECT program_id, next_serial FROM adm_student_id_settings
+              WHERE university_code = ? AND year_code = ? AND semester_code = ?
+                AND faculty_code    = ? AND subject_code = ? AND type_of_program = ?
+              FOR UPDATE'
+        );
+        $lock_stmt->execute([
+            $settings['university_code'],
+            $settings['year_code'],
+            $settings['semester_code'],
+            $settings['faculty_code'],
+            $settings['subject_code'],
+            $settings['type_of_program'],
+        ]);
+        $sibling_rows = $lock_stmt->fetchAll();
+
+        // Use the highest next_serial across all sibling programs so no two programs
+        // ever issue the same serial number for an identical prefix
+        $serial = 1;
+        foreach ($sibling_rows as $row) {
+            $serial = max($serial, (int)$row['next_serial']);
+        }
+
         $digits = max(1, (int)$settings['serial_digits']);
+
+        // Advance every sibling program to serial + 1.
+        // The next_serial <= ? guard is a safety net: it prevents accidentally
+        // reducing a counter that somehow already moved ahead (e.g. a concurrent
+        // transaction that committed just before we locked).
         $db->prepare(
-            'UPDATE adm_student_id_settings SET next_serial = next_serial + 1 WHERE program_id = ?'
-        )->execute([$program_id]);
+            'UPDATE adm_student_id_settings SET next_serial = ?
+              WHERE university_code = ? AND year_code = ? AND semester_code = ?
+                AND faculty_code    = ? AND subject_code = ? AND type_of_program = ?
+                AND next_serial    <= ?'
+        )->execute([
+            $serial + 1,
+            $settings['university_code'],
+            $settings['year_code'],
+            $settings['semester_code'],
+            $settings['faculty_code'],
+            $settings['subject_code'],
+            $settings['type_of_program'],
+            $serial,
+        ]);
+
         $db->commit();
     } catch (\Throwable $e) {
         $db->rollBack();
