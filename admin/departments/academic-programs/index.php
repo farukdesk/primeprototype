@@ -101,12 +101,16 @@ require_once __DIR__ . '/../../includes/header.php';
                                    class="btn btn-sm btn-outline-success" style="border-radius:7px;" title="Eligibility Criteria">
                                     <i class="fas fa-check-circle"></i>
                                 </a>
-                                <a href="<?= APP_URL ?>/departments/academic-programs/edit.php?id=<?= $p['id'] ?>&dept_id=<?= $dept_id ?>"
-                                   class="btn btn-sm btn-outline-primary" style="border-radius:7px;" title="Edit">
-                                    <i class="fas fa-edit"></i>
-                                </a>
-                                <form method="POST" action="<?= APP_URL ?>/departments/academic-programs/delete.php"
-                                      onsubmit="return confirm('Delete program &quot;<?= h(addslashes($p['program_name'])) ?>&quot;?');">
+                                 <a href="<?= APP_URL ?>/departments/academic-programs/edit.php?id=<?= $p['id'] ?>&dept_id=<?= $dept_id ?>"
+                                    class="btn btn-sm btn-outline-primary" style="border-radius:7px;" title="Edit">
+                                     <i class="fas fa-edit"></i>
+                                 </a>
+                                 <a href="<?= APP_URL ?>/departments/academic-programs/merge.php?dept_id=<?= $dept_id ?>&id=<?= $p['id'] ?>"
+                                    class="btn btn-sm btn-outline-warning" style="border-radius:7px;" title="Merge into another program">
+                                     <i class="fas fa-code-merge"></i>
+                                 </a>
+                                 <form method="POST" action="<?= APP_URL ?>/departments/academic-programs/delete.php"
+                                       onsubmit="return confirm('Delete program &quot;<?= h(addslashes($p['program_name'])) ?>&quot;?');">
                                     <?= csrf_field() ?>
                                     <input type="hidden" name="id" value="<?= $p['id'] ?>">
                                     <input type="hidden" name="dept_id" value="<?= $dept_id ?>">
