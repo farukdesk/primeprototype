@@ -194,7 +194,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!empty($source['attachment'])) {
                 $file = UPLOAD_DIR . '/departments/' . $source['attachment'];
                 if (file_exists($file) && !unlink($file)) {
-                    error_log('Program merge attachment delete failed: ' . $file);
+                    error_log('Program merge attachment delete failed: ' . basename($file));
                 }
             }
 
@@ -207,7 +207,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } catch (Throwable $e) {
             $pdo->rollBack();
             error_log('Program merge failed: ' . $e->getMessage());
-            $errors[] = 'Unable to merge programs due to a data conflict. Please contact support if this continues.';
+            $errors[] = 'Unable to merge programs due to a data conflict (for example, conflicting unique records). Please contact support if this continues.';
         }
     }
 }
