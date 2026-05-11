@@ -302,7 +302,7 @@ $page_title         = 'Statement of Payment – ' . ($app['student_name'] ?? 'Ad
             <tr class="highlight">
                 <td colspan="2"><strong>First Semester Monthly Payment</strong>
                     <span style="font-size:9.5px; color:#92400e; font-weight:400;">
-                        (<?= number_format($tuition_total, 2) ?> Tuition + <?= number_format($fixed_total, 2) ?> Institutional &amp; Dev. Fee + <?= number_format($english_total, 2) ?> English Fee) ÷ <?= ($total_months > 0) ? (int)$total_months : 0 ?> months
+                        (<?= number_format($tuition_total, 2) ?> Tuition + <?= number_format($fixed_total, 2) ?> Institutional &amp; Dev. Fee + <?= number_format($english_total, 2) ?> English Fee) / <?= ($total_months > 0) ? (int)$total_months : 0 ?> months
                     </span>
                 </td>
                 <td class="amt"><strong><?= number_format($monthly_after_admission, 2) ?></strong></td>
