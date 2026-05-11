@@ -189,6 +189,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($errors)) {
         $app_number = $sale_form_number ?? adm_generate_number();
 
+        $application_values = [
+            $app_number, $status, $dept_id, $program_id, $year, $semester,
+            $student_name, $father_name, $mother_name,
+            $present_address_1, $present_address_2, $present_contact, $present_email,
+            $permanent_address_1, $permanent_address_2, $permanent_contact, $permanent_email,
+            $nationality, $date_of_birth, $place_of_birth, $religion, $nid_birth_cert,
+            $blood_group, $sex, $photo, $experience,
+            $guardian_name, $guardian_profession, $guardian_address_1, $guardian_address_2,
+            $guardian_phone, $guardian_email, $guardian_relationship, $guardian_monthly_income,
+            $local_guardian_name, $local_guardian_address_1, $local_guardian_address_2, $local_guardian_address_3, $local_guardian_contact,
+            $reference_name, $reference_address_1, $reference_address_2, $reference_address_3, $reference_contact,
+            $expelled_answer, $expelled_detail,
+            $office_program, $office_student_id, $office_batch_no, $office_decision, $office_checked_by,
+            $financial_package_id, $financial_package_name, $financial_total_semesters, $financial_total_months,
+            $financial_tuition_per_semester, $financial_admission_fee, $financial_registration_fee_per_semester,
+            $financial_fixed_institutional_fees, $financial_english_course_fee, $financial_form_id_fee,
+            $user['id'],
+        ];
+        $application_placeholders = implode(',', array_fill(0, count($application_values), '?'));
+
         db()->prepare(
             'INSERT INTO admissions_applications
                (app_number, status, dept_id, program_id, year, semester,
@@ -207,25 +227,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                  financial_tuition_per_semester, financial_admission_fee, financial_registration_fee_per_semester,
                  financial_fixed_institutional_fees, financial_english_course_fee, financial_form_id_fee,
                  created_by)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
-        )->execute([
-            $app_number, $status, $dept_id, $program_id, $year, $semester,
-            $student_name, $father_name, $mother_name,
-            $present_address_1, $present_address_2, $present_contact, $present_email,
-            $permanent_address_1, $permanent_address_2, $permanent_contact, $permanent_email,
-            $nationality, $date_of_birth, $place_of_birth, $religion, $nid_birth_cert,
-            $blood_group, $sex, $photo, $experience,
-            $guardian_name, $guardian_profession, $guardian_address_1, $guardian_address_2,
-            $guardian_phone, $guardian_email, $guardian_relationship, $guardian_monthly_income,
-            $local_guardian_name, $local_guardian_address_1, $local_guardian_address_2, $local_guardian_address_3, $local_guardian_contact,
-            $reference_name, $reference_address_1, $reference_address_2, $reference_address_3, $reference_contact,
-            $expelled_answer, $expelled_detail,
-            $office_program, $office_student_id, $office_batch_no, $office_decision, $office_checked_by,
-            $financial_package_id, $financial_package_name, $financial_total_semesters, $financial_total_months,
-            $financial_tuition_per_semester, $financial_admission_fee, $financial_registration_fee_per_semester,
-            $financial_fixed_institutional_fees, $financial_english_course_fee, $financial_form_id_fee,
-            $user['id'],
-        ]);
+             VALUES (' . $application_placeholders . ')'
+        )->execute($application_values);
         $app_id = (int)db()->lastInsertId();
 
         // Mark linked form sale as used
