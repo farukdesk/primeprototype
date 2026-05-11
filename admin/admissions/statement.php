@@ -21,7 +21,7 @@ $form_id_fee      = (float)($app['financial_form_id_fee'] ?? 0);
 
 $tuition_total    = $tuition_sem * max($total_semesters, 0);
 $reg_total        = $reg_fee_sem * max($total_semesters, 0);
-$grand_total      = $admission_fee + $reg_total + $tuition_total + $fixed_total + $english_total;
+$grand_total      = $admission_fee + $reg_total + $tuition_total + $fixed_total + $english_total + $form_id_fee;
 
 $fixed_per_sem    = $total_semesters > 0 ? round($fixed_total / $total_semesters, 2) : 0.0;
 $english_per_sem  = $total_semesters > 0 ? round($english_total / $total_semesters, 2) : 0.0;
@@ -92,6 +92,7 @@ $monthly_after_admission = $total_months > 0 ? round(($tuition_total + $fixed_to
                     <tr><td>Tuition Fee (<?= $total_semesters ?> semesters × <?= number_format($tuition_sem, 2) ?>)</td><td class="amt"><?= number_format($tuition_total, 2) ?></td></tr>
                     <tr><td>Institutional Fees (Total)</td><td class="amt"><?= number_format($fixed_total, 2) ?></td></tr>
                     <tr><td>English Course Fee (Total)</td><td class="amt"><?= number_format($english_total, 2) ?></td></tr>
+                    <tr><td>Form &amp; ID Fee</td><td class="amt"><?= number_format($form_id_fee, 2) ?></td></tr>
                     <tr class="total"><td>Grand Total</td><td class="amt"><?= number_format($grand_total, 2) ?></td></tr>
                 </tbody>
             </table>

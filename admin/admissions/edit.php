@@ -114,12 +114,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $financial_form_id_fee = null;
 
     if ($student_name === '') $errors[] = 'Student name is required.';
-    if (!$financial_package_id) {
-        $errors[] = 'Please assign a financial package.';
-    } elseif (!isset($financial_programs_by_id[$financial_package_id])) {
+    if ($financial_package_id && !isset($financial_programs_by_id[$financial_package_id])) {
         $errors[] = 'Selected financial package is invalid.';
         $financial_package_id = null;
-    } else {
+    } elseif ($financial_package_id) {
         $pkg = $financial_programs_by_id[$financial_package_id];
         $financial_package_name = $pkg['program_name'];
         $financial_total_semesters = (int)$pkg['total_semesters'];
@@ -337,8 +335,8 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                 <div class="card-body">
                     <div class="row g-3">
                         <div class="col-12 col-md-8">
-                            <label class="form-label">Assign Financial Package <span class="text-danger">*</span></label>
-                            <select name="financial_package_id" id="financial_package_id" class="form-select" required>
+                            <label class="form-label">Assign Financial Package</label>
+                            <select name="financial_package_id" id="financial_package_id" class="form-select">
                                 <option value="">— Select Financial Package —</option>
                                 <?php
                                 $current_fp_dtype = '';
