@@ -116,7 +116,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($student_name === '') $errors[] = 'Student name is required.';
     if ($financial_package_id && !isset($financial_programs_by_id[$financial_package_id])) {
         $errors[] = 'Selected financial package is invalid.';
-        $financial_package_id = null;
     } elseif ($financial_package_id) {
         $pkg = $financial_programs_by_id[$financial_package_id];
         $financial_package_name = $pkg['program_name'];

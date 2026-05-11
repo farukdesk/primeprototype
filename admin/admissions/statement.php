@@ -19,8 +19,8 @@ $fixed_total      = (float)($app['financial_fixed_institutional_fees'] ?? 0);
 $english_total    = (float)($app['financial_english_course_fee'] ?? 0);
 $form_id_fee      = (float)($app['financial_form_id_fee'] ?? 0);
 
-$tuition_total    = $tuition_sem * max($total_semesters, 0);
-$reg_total        = $reg_fee_sem * max($total_semesters, 0);
+$tuition_total    = $tuition_sem * $total_semesters;
+$reg_total        = $reg_fee_sem * $total_semesters;
 $grand_total      = $admission_fee + $reg_total + $tuition_total + $fixed_total + $english_total + $form_id_fee;
 
 $fixed_per_sem    = $total_semesters > 0 ? round($fixed_total / $total_semesters, 2) : 0.0;

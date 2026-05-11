@@ -124,7 +124,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'Please assign a financial package.';
     } elseif (!isset($financial_programs_by_id[$financial_package_id])) {
         $errors[] = 'Selected financial package is invalid.';
-        $financial_package_id = null;
     } else {
         $pkg = $financial_programs_by_id[$financial_package_id];
         $financial_package_name = $pkg['program_name'];
