@@ -193,11 +193,15 @@ function adm_sid_generate(int $program_id): string
 
         $digits = max(1, (int)$settings['serial_digits']);
 
-        // Advance every sibling program to serial + 1
+        // Advance every sibling program to serial + 1.
+        // The next_serial <= ? guard is a safety net: it prevents accidentally
+        // reducing a counter that somehow already moved ahead (e.g. a concurrent
+        // transaction that committed just before we locked).
         $db->prepare(
             'UPDATE adm_student_id_settings SET next_serial = ?
               WHERE university_code = ? AND year_code = ? AND semester_code = ?
-                AND faculty_code    = ? AND subject_code = ? AND type_of_program = ?'
+                AND faculty_code    = ? AND subject_code = ? AND type_of_program = ?
+                AND next_serial    <= ?'
         )->execute([
             $serial + 1,
             $settings['university_code'],
@@ -206,6 +210,7 @@ function adm_sid_generate(int $program_id): string
             $settings['faculty_code'],
             $settings['subject_code'],
             $settings['type_of_program'],
+            $serial,
         ]);
 
         $db->commit();
