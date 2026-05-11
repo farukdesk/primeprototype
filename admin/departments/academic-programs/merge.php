@@ -163,6 +163,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $tgtRow = $sidTgt->fetch();
 
                     if ($tgtRow) {
+                        // Keep the larger serial to avoid issuing duplicate/lower IDs after merge.
                         $nextSerial = max((int)$srcRow['next_serial'], (int)$tgtRow['next_serial']);
                         $pdo->prepare('UPDATE adm_student_id_settings SET next_serial = ? WHERE id = ?')
                             ->execute([$nextSerial, (int)$tgtRow['id']]);
@@ -192,7 +193,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if (!empty($source['attachment'])) {
                 $file = UPLOAD_DIR . '/departments/' . $source['attachment'];
-                if (file_exists($file)) @unlink($file);
+                if (file_exists($file) && !unlink($file)) {
+                    error_log('Program merge attachment delete failed: ' . $file);
+                }
             }
 
             flash_set(
@@ -204,7 +207,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } catch (Throwable $e) {
             $pdo->rollBack();
             error_log('Program merge failed: ' . $e->getMessage());
-            $errors[] = 'Unable to merge programs right now. Please try again.';
+            $errors[] = 'Unable to merge programs due to a data conflict. Please contact support if this continues.';
         }
     }
 }
@@ -237,7 +240,7 @@ require_once __DIR__ . '/../../includes/header.php';
     <div class="card-body p-4">
         <div class="alert alert-warning mb-4">
             <i class="fas fa-triangle-exclamation me-2"></i>
-            This will move all current <strong>program foreign-key references</strong> from the source program to the destination program,
+            This will move all current <strong>records linked to the source program</strong> to the destination program,
             then delete the source program permanently.
         </div>
 
