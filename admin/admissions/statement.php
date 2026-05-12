@@ -33,6 +33,10 @@ $regular_sem_pay  = $tuition_sem + $reg_fee_sem + $fixed_per_sem + $english_per_
 $admission_payable = $admission_fee + $reg_fee_sem + $form_id_fee;
 $monthly_after_admission = $total_months > 0 ? round(($tuition_total + $fixed_total + $english_total) / $total_months, 2) : 0.0;
 
+$scholarship_amount = (float)($app['scholarship_amount'] ?? 0);
+$scholarship_label  = (string)($app['scholarship_label']  ?? '');
+$first_sem_payable  = max(0.0, $regular_sem_pay - $scholarship_amount);
+
 $admission_form_fee = round($form_id_fee / 2, 2);
 $admission_id_fee   = round($form_id_fee - $admission_form_fee, 2);
 $date_today         = date('d F Y');
@@ -291,12 +295,16 @@ $page_title         = 'Statement of Payment – ' . ($app['student_name'] ?? 'Ad
             <tr class="visual-sep"><td colspan="3"></td></tr>
             <tr>
                 <td class="serial">5</td>
-                <td>Total Scholarship (First Semester)</td>
-                <td class="amt">—</td>
+                <td>Total Scholarship (First Semester)
+                    <?php if ($scholarship_amount > 0 && $scholarship_label !== ''): ?>
+                    <span style="font-size:9.5px;color:#6b7280;">– <?= h($scholarship_label) ?></span>
+                    <?php endif; ?>
+                </td>
+                <td class="amt"><?= $scholarship_amount > 0 ? '(' . number_format($scholarship_amount, 2) . ')' : '—' ?></td>
             </tr>
             <tr class="subtotal">
                 <td colspan="2"><strong>Total First Semester Payable Amount</strong></td>
-                <td class="amt"><strong><?= number_format($regular_sem_pay, 2) ?></strong></td>
+                <td class="amt"><strong><?= number_format($first_sem_payable, 2) ?></strong></td>
             </tr>
             <tr class="visual-sep"><td colspan="3"></td></tr>
             <tr class="highlight">
