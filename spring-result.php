@@ -115,6 +115,17 @@ function pub_gp_color(float $gp): string
     return '#dc2626';
 }
 
+function pub_has_fail_or_incom(array $entries): bool
+{
+    foreach ($entries as $e) {
+        $g = strtoupper(trim((string)$e['letter_grade']));
+        if ($g === 'F' || $g === 'INCOM') {
+            return true;
+        }
+    }
+    return false;
+}
+
 function pub_cgpa(array $entries): ?float
 {
     // Credit-weighted GPA: Σ(grade_point × credit) / Σ(credit)
@@ -755,12 +766,19 @@ function pub_cgpa(array $entries): ?float
                      </div>
 
                      <!-- Card footer: GPA + published indicator -->
-                     <?php $gpa = pub_cgpa($entries); ?>
+                     <?php
+                        $has_fail = pub_has_fail_or_incom($entries);
+                        $gpa      = $has_fail ? null : pub_cgpa($entries);
+                     ?>
                      <div class="rp-card-footer">
                         <div style="font-size:.8rem;color:#9ca3af;">
                            <i class="fas fa-check-circle me-1" style="color:#16a34a;"></i> Published
                         </div>
-                        <?php if ($gpa !== null): ?>
+                        <?php if ($has_fail): ?>
+                        <div class="rp-avg">
+                           GPA:&nbsp;<strong style="color:#6b7280;font-style:italic;">Incom</strong>
+                        </div>
+                        <?php elseif ($gpa !== null): ?>
                         <div class="rp-avg">
                            GPA:&nbsp;<strong style="color:<?= pub_gp_color($gpa); ?>;"><?= number_format($gpa, 2) ?></strong>
                         </div>
