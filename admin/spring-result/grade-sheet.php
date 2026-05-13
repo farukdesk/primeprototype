@@ -12,9 +12,8 @@ $result = sr_get_result($id);
 
 $entries = sr_get_entries($id);
 
-// ── Build per-student data and collect all course codes (ordered) ────────────
-$by_student   = []; // [student_id => ['name'=>..., 'courses'=>[course_code=>entry]]]
-$course_codes = []; // ordered list of all unique course codes
+// ── Build per-student data ────────────────────────────────────────────────────
+$by_student = []; // [student_id => ['name'=>..., 'courses'=>[course_code=>entry]]]
 
 foreach ($entries as $e) {
     $sid  = $e['student_id'];
@@ -26,18 +25,26 @@ foreach ($entries as $e) {
             'courses' => [],
         ];
     }
-    if ($code !== '') {
-        $by_student[$sid]['courses'][$code] = $e;
-        if (!in_array($code, $course_codes, true)) {
-            $course_codes[] = $code;
-        }
-    } else {
-        // Entry without a course code – still store under blank key
-        $by_student[$sid]['courses'][''] = $e;
-        if (!in_array('', $course_codes, true)) {
-            $course_codes[] = '';
-        }
+    $by_student[$sid]['courses'][$code] = $e;
+}
+
+// ── Group students by their exact set of course codes ────────────────────────
+// Students who share the same course set are printed together on one page,
+// so each page's table only has columns for that group's courses.
+$groups = []; // ['course_codes' => [...], 'students' => [...]]
+
+foreach ($by_student as $sid => $sdata) {
+    $codes = array_keys($sdata['courses']);
+    sort($codes);
+    $group_key = implode('|', $codes);
+
+    if (!isset($groups[$group_key])) {
+        $groups[$group_key] = [
+            'course_codes' => $codes,
+            'students'     => [],
+        ];
     }
+    $groups[$group_key]['students'][$sid] = $sdata;
 }
 
 // ── GPA calculator for a single student ──────────────────────────────────────
@@ -169,7 +176,7 @@ $page_title = 'Grade Sheet – ' . ($result['title'] ?? 'Result');
         .sig-subtitle { font-size: 9px; color: #6b7280; margin-top: 2px; }
 
         @media print {
-            @page { size: A3 landscape; margin: 8mm; }
+            @page { size: A4 landscape; margin: 8mm; }
             .screen-controls { display: none !important; }
             body { background: #fff; }
             .print-wrapper { padding: 0; }
@@ -178,6 +185,7 @@ $page_title = 'Grade Sheet – ' . ($result['title'] ?? 'Result');
                 width: 100%; max-width: none;
                 padding: 0;
             }
+            .sheet-page + .sheet-page { page-break-before: always; }
         }
     </style>
 </head>
@@ -191,6 +199,25 @@ $page_title = 'Grade Sheet – ' . ($result['title'] ?? 'Result');
 </div>
 
 <div class="print-wrapper">
+
+<?php if (empty($by_student)): ?>
+<div class="sheet-page">
+    <div class="univ-header">
+        <img src="<?= LOGO_URL ?>" alt="Prime University" class="logo" onerror="this.style.display='none'">
+        <div class="univ-name">Prime University</div>
+        <div class="univ-sub">114/116 Mazar Road, Mirpur-1, Dhaka 1216, Bangladesh &nbsp;|&nbsp; www.primeuniversity.ac.bd</div>
+    </div>
+    <div class="doc-title">Grade Sheet (Tabulation Sheet)</div>
+    <p style="text-align:center;color:#888;margin-top:40px;">No entries found for this result.</p>
+</div>
+<?php else: ?>
+
+<?php $group_index = 0; foreach ($groups as $group): ?>
+<?php
+    $group_course_codes = $group['course_codes'];
+    $group_students     = $group['students'];
+    $group_count        = count($group_students);
+?>
 <div class="sheet-page">
 
     <div class="univ-header">
@@ -207,13 +234,11 @@ $page_title = 'Grade Sheet – ' . ($result['title'] ?? 'Result');
         <?php if ($result['semester']): ?>
         <div><span>Semester: </span><strong><?= h($result['semester']) ?></strong></div>
         <?php endif; ?>
-        <div><span>Total Students: </span><strong><?= count($by_student) ?></strong></div>
-        <div><span>Total Entries: </span><strong><?= count($entries) ?></strong></div>
+        <div><span><?= count($groups) > 1 ? 'Students in this group: ' : 'Total Students: ' ?></span><strong><?= $group_count ?></strong></div>
+        <?php if (count($groups) > 1): ?>
+        <div><span>Page: </span><strong><?= $group_index + 1 ?> / <?= count($groups) ?></strong></div>
+        <?php endif; ?>
     </div>
-
-    <?php if (empty($by_student)): ?>
-    <p style="text-align:center;color:#888;margin-top:40px;">No entries found for this result.</p>
-    <?php else: ?>
 
     <table class="grade-table">
         <thead>
@@ -221,20 +246,20 @@ $page_title = 'Grade Sheet – ' . ($result['title'] ?? 'Result');
                 <th class="left" style="width:28px;">Sl</th>
                 <th class="left" style="min-width:100px;">Student ID</th>
                 <th class="left" style="min-width:140px;">Student Name</th>
-                <?php foreach ($course_codes as $code): ?>
+                <?php foreach ($group_course_codes as $code): ?>
                 <th><?= $code !== '' ? h($code) : '—' ?></th>
                 <?php endforeach; ?>
                 <th style="min-width:50px;">GPA</th>
             </tr>
         </thead>
         <tbody>
-        <?php $sl = 1; foreach ($by_student as $sid => $sdata): ?>
+        <?php $sl = 1; foreach ($group_students as $sid => $sdata): ?>
             <?php $gpa = sr_calc_gpa($sdata['courses']); ?>
             <tr>
                 <td class="center"><?= $sl++ ?></td>
                 <td><strong><?= h($sid) ?></strong></td>
                 <td><?= h($sdata['name']) ?></td>
-                <?php foreach ($course_codes as $code): ?>
+                <?php foreach ($group_course_codes as $code): ?>
                 <td class="center">
                     <?php if (isset($sdata['courses'][$code])): ?>
                         <?php $ce = $sdata['courses'][$code]; ?>
@@ -274,9 +299,11 @@ $page_title = 'Grade Sheet – ' . ($result['title'] ?? 'Result');
         </div>
     </div>
 
-    <?php endif; ?>
-
 </div>
+<?php $group_index++; endforeach; ?>
+
+<?php endif; ?>
+
 </div>
 
 </body>
