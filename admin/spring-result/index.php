@@ -36,6 +36,22 @@ require_once __DIR__ . '/../includes/header.php';
 
 <?php flash_show(); ?>
 
+<!-- Common public result link notice -->
+<div class="alert d-flex align-items-center gap-3 mb-4 py-3 px-4"
+     style="border-radius:12px;background:#f0f4ff;border:1.5px solid #c7d7f8;">
+    <i class="fas fa-link text-primary fs-5 flex-shrink-0"></i>
+    <div class="flex-grow-1 min-w-0">
+        <div class="fw-semibold text-primary mb-1" style="font-size:.9rem;">Common Result Link (share with all students)</div>
+        <code class="user-select-all" style="font-size:.82rem;word-break:break-all;">
+            <?= SITE_URL ?>/spring-result.php
+        </code>
+    </div>
+    <a href="<?= SITE_URL ?>/spring-result.php" target="_blank"
+       class="btn btn-sm btn-primary flex-shrink-0" style="border-radius:8px;">
+        <i class="fas fa-external-link-alt me-1"></i> Open
+    </a>
+</div>
+
 <div class="card" style="border-radius:12px;">
     <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center">
         <h6 class="mb-0 fw-semibold"><i class="fas fa-poll me-2 text-muted"></i>All Results</h6>
