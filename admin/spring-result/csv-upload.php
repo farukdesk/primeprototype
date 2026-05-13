@@ -136,6 +136,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                     $updated++;
                 } catch (Throwable $ex) {
                     $skipped++;
+                    $skip_msgs[] = 'Row ' . ($row_num + 2) . ': Could not update existing entry – ' . htmlspecialchars($ex->getMessage()) . '.';
                 }
                 continue;
             }
