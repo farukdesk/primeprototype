@@ -47,6 +47,18 @@ foreach ($by_student as $sid => $sdata) {
     $groups[$group_key]['students'][$sid] = $sdata;
 }
 
+// ── Fail/Incomplete detector ──────────────────────────────────────────────────
+function sr_has_fail_or_incom(array $courses): bool
+{
+    foreach ($courses as $e) {
+        $g = strtoupper(trim((string)($e['letter_grade'] ?? '')));
+        if ($g === 'F' || $g === 'INCOM') {
+            return true;
+        }
+    }
+    return false;
+}
+
 // ── GPA calculator for a single student ──────────────────────────────────────
 function sr_calc_gpa(array $courses): ?string
 {
@@ -254,7 +266,8 @@ $page_title = 'Grade Sheet – ' . ($result['title'] ?? 'Result');
         </thead>
         <tbody>
         <?php $sl = 1; foreach ($group_students as $sid => $sdata): ?>
-            <?php $gpa = sr_calc_gpa($sdata['courses']); ?>
+        <?php $has_fail = sr_has_fail_or_incom($sdata['courses']); ?>
+            <?php $gpa = $has_fail ? null : sr_calc_gpa($sdata['courses']); ?>
             <tr>
                 <td class="center"><?= $sl++ ?></td>
                 <td><strong><?= h($sid) ?></strong></td>
@@ -274,7 +287,7 @@ $page_title = 'Grade Sheet – ' . ($result['title'] ?? 'Result');
                     <?php endif; ?>
                 </td>
                 <?php endforeach; ?>
-                <td class="center gpa-cell"><?= $gpa !== null ? $gpa : '<span style="color:#888;font-style:italic;">N/A</span>' ?></td>
+                <td class="center gpa-cell"><?= $has_fail ? '<span style="color:#6b7280;font-style:italic;">Incom</span>' : ($gpa !== null ? $gpa : '<span style="color:#888;font-style:italic;">N/A</span>') ?></td>
             </tr>
         <?php endforeach; ?>
         </tbody>
