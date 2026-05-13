@@ -86,6 +86,10 @@ require_once __DIR__ . '/../includes/header.php';
                                    class="btn btn-sm btn-outline-primary" title="View / Manage" style="border-radius:7px;">
                                     <i class="fas fa-eye"></i>
                                 </a>
+                                <a href="<?= APP_URL ?>/spring-result/grade-sheet.php?result_id=<?= $r['id'] ?>"
+                                   class="btn btn-sm btn-outline-success" title="Grade Sheet PDF" target="_blank" style="border-radius:7px;">
+                                    <i class="fas fa-file-pdf"></i>
+                                </a>
                                 <?php if (sr_can_edit()): ?>
                                 <a href="<?= APP_URL ?>/spring-result/edit.php?id=<?= $r['id'] ?>"
                                    class="btn btn-sm btn-outline-secondary" title="Edit" style="border-radius:7px;">
