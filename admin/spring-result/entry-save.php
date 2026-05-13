@@ -27,6 +27,7 @@ if ($letter_grade === 'INCOM') {
     $letter_grade = 'Incom';
 }
 $grade_point  = trim($_POST['grade_point']  ?? '');
+$credit_raw   = trim($_POST['credit']       ?? '');
 
 $errors = [];
 
@@ -44,12 +45,13 @@ $gp_float = ($grade_point !== '') ? (float)$grade_point : null;
 if ($gp_float === null) {
     $gp_float = sr_grade_point_from_letter($letter_grade);
 }
+$credit_val = ($credit_raw !== '') ? (float)$credit_raw : null;
 
 if ($entry_id > 0) {
     // Update
     $stmt = db()->prepare(
         'UPDATE sr_result_entries
-         SET student_id=?, student_name=?, course_code=?, course_title=?, letter_grade=?, grade_point=?
+         SET student_id=?, student_name=?, course_code=?, course_title=?, letter_grade=?, grade_point=?, credit=?
          WHERE id=? AND result_id=?'
     );
     $stmt->execute([
@@ -59,6 +61,7 @@ if ($entry_id > 0) {
         $course_title,
         $letter_grade,
         $gp_float,
+        $credit_val,
         $entry_id,
         $result_id,
     ]);
@@ -66,8 +69,8 @@ if ($entry_id > 0) {
 } else {
     // Insert
     $stmt = db()->prepare(
-        'INSERT INTO sr_result_entries (result_id, student_id, student_name, course_code, course_title, letter_grade, grade_point)
-         VALUES (?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO sr_result_entries (result_id, student_id, student_name, course_code, course_title, letter_grade, grade_point, credit)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     );
     $stmt->execute([
         $result_id,
@@ -77,6 +80,7 @@ if ($entry_id > 0) {
         $course_title,
         $letter_grade,
         $gp_float,
+        $credit_val,
     ]);
     flash_set('success', 'Entry added successfully.');
 }
