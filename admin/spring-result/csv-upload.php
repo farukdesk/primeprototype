@@ -37,6 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
         'course_title' => (int)($_POST['col_course_title'] ?? -1),
         'letter_grade' => (int)($_POST['col_letter_grade'] ?? -1),
         'grade_point'  => (int)($_POST['col_grade_point']  ?? -1),
+        'credit'       => (int)($_POST['col_credit']       ?? -1),
     ];
 
     if ($map['student_id']   < 0) $errors[] = 'Please map the Student ID column.';
@@ -55,8 +56,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
         $skip_msgs = [];
         $stmt = db()->prepare(
             'INSERT INTO sr_result_entries
-               (result_id, student_id, student_name, course_code, course_title, letter_grade, grade_point)
-             VALUES (?, ?, ?, ?, ?, ?, ?)'
+               (result_id, student_id, student_name, course_code, course_title, letter_grade, grade_point, credit)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
         );
 
         foreach ($csv_rows as $row_num => $row) {
@@ -66,6 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
             $course_title = trim($row[$map['course_title']] ?? '');
             $letter_grade = strtoupper(trim($row[$map['letter_grade']] ?? ''));
             $grade_point  = trim($row[$map['grade_point']]  ?? '');
+            $credit_raw   = ($map['credit'] >= 0) ? trim($row[$map['credit']] ?? '') : '';
 
             // Strip parenthetical annotations added by manual exports, e.g. "A+(PLUS)" → "A+", "C(REGULAR)" → "C"
             $letter_grade = strtoupper(trim(preg_replace('/\s*\(.*?\)\s*/', '', $letter_grade)));
@@ -86,6 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
             }
 
             $gp = ($grade_point !== '' && strtoupper($letter_grade) !== 'INCOM') ? (float)$grade_point : sr_grade_point_from_letter($letter_grade);
+            $credit_val = ($credit_raw !== '') ? (float)$credit_raw : null;
 
             try {
                 $stmt->execute([
@@ -96,6 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                     $course_title,
                     $letter_grade,
                     $gp,
+                    $credit_val,
                 ]);
                 $inserted++;
             } catch (Throwable $ex) {
@@ -189,6 +193,7 @@ if ($step === 'map') {
         'course_title' => sr_guess_col($headers, ['course title', 'coursetitle', 'title', 'subject']),
         'letter_grade' => sr_guess_col($headers, ['letter grade', 'lettergrade', 'grade', 'letter']),
         'grade_point'  => sr_guess_col($headers, ['grade point', 'gradepoint', 'point', 'gp']),
+        'credit'       => sr_guess_col($headers, ['credit', 'credits', 'credit hours', 'ch']),
     ];
 }
 
@@ -272,6 +277,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <tr><td>Student Name</td><td>John Doe</td><td><span class="badge bg-secondary">No</span></td></tr>
                         <tr><td>Course Code</td><td>CSE-101</td><td><span class="badge bg-secondary">No</span></td></tr>
                         <tr><td>Course Title</td><td>Intro to Programming</td><td><span class="badge bg-danger">Yes</span></td></tr>
+                        <tr><td>Credit</td><td>3.00</td><td><span class="badge bg-secondary">No</span></td></tr>
                         <tr><td>Letter Grade</td><td>A+</td><td><span class="badge bg-danger">Yes</span></td></tr>
                         <tr><td>Grade Point</td><td>4.00</td><td><span class="badge bg-secondary">No</span></td></tr>
                     </tbody>
@@ -312,6 +318,7 @@ require_once __DIR__ . '/../includes/header.php';
                         'student_name' => ['Student Name', false],
                         'course_code'  => ['Course Code',  false],
                         'course_title' => ['Course Title', true],
+                        'credit'       => ['Credit',       false],
                         'letter_grade' => ['Letter Grade', true],
                         'grade_point'  => ['Grade Point',  false],
                     ];
@@ -392,6 +399,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <li>Rows with empty Student ID or Course Title are skipped.</li>
                     <li>Rows with invalid Letter Grade are skipped.</li>
                     <li>Grade Point is auto-computed if not mapped.</li>
+                    <li>Credit is optional; used for weighted GPA on the public result page.</li>
                     <li>Duplicate rows (same student + course) are inserted as separate entries.</li>
                     <li>Up to 10,000 rows per upload.</li>
                 </ul>

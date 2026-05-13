@@ -125,6 +125,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <th>Student Name</th>
                         <th>Course Code</th>
                         <th>Course Title</th>
+                        <th class="text-center">Credit</th>
                         <th class="text-center">Letter Grade</th>
                         <th class="text-center">Grade Point</th>
                         <?php if (sr_can_edit() || sr_can_delete()): ?>
@@ -134,7 +135,7 @@ require_once __DIR__ . '/../includes/header.php';
                 </thead>
                 <tbody id="entriesBody">
                 <?php if (empty($entries)): ?>
-                    <tr id="emptyRow"><td colspan="8" class="text-center text-muted py-5">
+                    <tr id="emptyRow"><td colspan="9" class="text-center text-muted py-5">
                         <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
                         No entries yet. Add manually or upload a CSV.
                     </td></tr>
@@ -146,6 +147,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <td><?= $e['student_name'] ? h($e['student_name']) : '<span class="text-muted">—</span>' ?></td>
                         <td><?= $e['course_code']  ? '<span class="badge bg-light text-dark border">' . h($e['course_code']) . '</span>' : '<span class="text-muted">—</span>' ?></td>
                         <td><?= h($e['course_title']) ?></td>
+                        <td class="text-center"><?= ($e['credit'] !== null) ? number_format((float)$e['credit'], 2) : '<span class="text-muted">—</span>' ?></td>
                         <td class="text-center">
                             <span class="badge <?= sr_grade_badge_class($e['letter_grade']) ?> px-2">
                                 <?= h($e['letter_grade']) ?>
@@ -164,6 +166,7 @@ require_once __DIR__ . '/../includes/header.php';
                                         data-course_title="<?= h($e['course_title']) ?>"
                                         data-letter_grade="<?= h($e['letter_grade']) ?>"
                                         data-grade_point="<?= h($e['grade_point'] ?? '') ?>"
+                                        data-credit="<?= h($e['credit'] ?? '') ?>"
                                         title="Edit">
                                     <i class="fas fa-edit"></i>
                                 </button>
@@ -221,6 +224,12 @@ require_once __DIR__ . '/../includes/header.php';
                             <label class="form-label fw-medium">Course Title <span class="text-danger">*</span></label>
                             <input type="text" name="course_title" id="m_course_title" class="form-control"
                                    placeholder="e.g. Introduction to Programming" maxlength="300" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-medium">Credit</label>
+                            <input type="number" name="credit" id="m_credit" class="form-control"
+                                   placeholder="e.g. 3.00" min="0" max="10" step="0.01">
+                            <div class="form-text">Credit hours for this course.</div>
                         </div>
                         <div class="col-md-4">
                             <label class="form-label fw-medium">Letter Grade <span class="text-danger">*</span></label>
@@ -286,6 +295,7 @@ require_once __DIR__ . '/../includes/header.php';
             document.getElementById('m_course_title').value    = d.course_title;
             document.getElementById('m_letter_grade').value    = d.letter_grade;
             document.getElementById('m_grade_point').value     = d.grade_point;
+            document.getElementById('m_credit').value          = d.credit;
             document.getElementById('entryModalLabel').textContent = 'Edit Grade Entry';
             document.getElementById('entryBtnLabel').textContent   = 'Update Entry';
             var modal = new bootstrap.Modal(document.getElementById('addEntryModal'));

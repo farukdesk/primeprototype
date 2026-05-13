@@ -58,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 foreach ($results as $res) {
                     $estmt = $db->prepare(
-                        'SELECT student_id, student_name, course_code, course_title, letter_grade, grade_point
+                        'SELECT student_id, student_name, course_code, course_title, letter_grade, grade_point, credit
                          FROM sr_result_entries
                          WHERE result_id = ? AND student_id = ?
                          ORDER BY course_code ASC, course_title ASC'
@@ -117,6 +117,20 @@ function pub_gp_color(float $gp): string
 
 function pub_cgpa(array $entries): ?float
 {
+    // Credit-weighted GPA: Σ(grade_point × credit) / Σ(credit)
+    $total_points  = 0.0;
+    $total_credits = 0.0;
+    foreach ($entries as $e) {
+        if ($e['grade_point'] !== null && !empty($e['credit'])) {
+            $credit = (float)$e['credit'];
+            $total_points  += (float)$e['grade_point'] * $credit;
+            $total_credits += $credit;
+        }
+    }
+    if ($total_credits > 0) {
+        return round($total_points / $total_credits, 2);
+    }
+    // Fallback: simple average when no credits are stored
     $total = 0.0;
     $count = 0;
     foreach ($entries as $e) {
@@ -696,6 +710,7 @@ function pub_cgpa(array $entries): ?float
                                  <th style="width:3rem;">#</th>
                                  <th>Course Code</th>
                                  <th>Course Title</th>
+                                 <th style="text-align:center;">Credits</th>
                                  <th style="text-align:center;">Letter Grade</th>
                                  <th style="text-align:center;">Grade Point</th>
                               </tr>
@@ -713,31 +728,44 @@ function pub_cgpa(array $entries): ?float
                                  </td>
                                  <td class="rp-course-title"><?= fh($e['course_title']) ?></td>
                                  <td style="text-align:center;">
+                                    <?php if (!empty($e['credit'])): ?>
+                                    <span class="rp-gp" style="color:#374151;"><?= number_format((float)$e['credit'], 2) ?></span>
+                                    <?php else: ?>
+                                    <span style="color:#d1d5db;">—</span>
+                                    <?php endif; ?>
+                                 </td>
+                                 <td style="text-align:center;">
                                     <?= pub_grade_badge($e['letter_grade']) ?>
                                  </td>
-                                  <td style="text-align:center;">
-                                     <?php if (strtoupper($e['letter_grade']) === 'INCOM'): ?>
-                                     <span class="rp-gp" style="color:#6b7280;font-style:italic;">Incom</span>
-                                     <?php elseif ($e['grade_point'] !== null): ?>
-                                     <span class="rp-gp" style="color:<?= pub_gp_color((float)$e['grade_point']) ?>;">
-                                        <?= number_format((float)$e['grade_point'], 2) ?>
-                                     </span>
-                                     <?php else: ?>
-                                     <span style="color:#d1d5db;">—</span>
-                                     <?php endif; ?>
-                                  </td>
-                               </tr>
-                               <?php endforeach; ?>
-                            </tbody>
-                         </table>
-                      </div>
+                                 <td style="text-align:center;">
+                                    <?php if (strtoupper($e['letter_grade']) === 'INCOM'): ?>
+                                    <span class="rp-gp" style="color:#6b7280;font-style:italic;">Incom</span>
+                                    <?php elseif ($e['grade_point'] !== null): ?>
+                                    <span class="rp-gp" style="color:<?= pub_gp_color((float)$e['grade_point']) ?>;">
+                                       <?= number_format((float)$e['grade_point'], 2) ?>
+                                    </span>
+                                    <?php else: ?>
+                                    <span style="color:#d1d5db;">—</span>
+                                    <?php endif; ?>
+                                 </td>
+                              </tr>
+                              <?php endforeach; ?>
+                           </tbody>
+                        </table>
+                     </div>
 
-                      <!-- Card footer: published indicator -->
-                      <div class="rp-card-footer">
-                         <div style="font-size:.8rem;color:#9ca3af;">
-                            <i class="fas fa-check-circle me-1" style="color:#16a34a;"></i> Published
-                         </div>
-                      </div>
+                     <!-- Card footer: GPA + published indicator -->
+                     <?php $gpa = pub_cgpa($entries); ?>
+                     <div class="rp-card-footer">
+                        <div style="font-size:.8rem;color:#9ca3af;">
+                           <i class="fas fa-check-circle me-1" style="color:#16a34a;"></i> Published
+                        </div>
+                        <?php if ($gpa !== null): ?>
+                        <div class="rp-avg">
+                           GPA:&nbsp;<strong style="color:<?= pub_gp_color($gpa); ?>;"><?= number_format($gpa, 2) ?></strong>
+                        </div>
+                        <?php endif; ?>
+                     </div>
 
                   </div><!-- /.rp-result-card -->
                   <?php endforeach; ?>
