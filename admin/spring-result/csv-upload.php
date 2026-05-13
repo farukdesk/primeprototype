@@ -52,12 +52,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
 
     if (empty($errors)) {
         $inserted  = 0;
+        $updated   = 0;
         $skipped   = 0;
         $skip_msgs = [];
-        $stmt = db()->prepare(
+
+        $stmt_insert = db()->prepare(
             'INSERT INTO sr_result_entries
                (result_id, student_id, student_name, course_code, course_title, letter_grade, grade_point, credit)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        );
+        $stmt_find = db()->prepare(
+            'SELECT id, letter_grade, grade_point
+               FROM sr_result_entries
+              WHERE result_id = ? AND student_id = ? AND course_code = ?
+              LIMIT 1'
+        );
+        $stmt_update = db()->prepare(
+            'UPDATE sr_result_entries
+                SET letter_grade = ?, grade_point = ?, student_name = ?, course_title = ?, credit = ?
+              WHERE id = ?'
         );
 
         foreach ($csv_rows as $row_num => $row) {
@@ -90,8 +103,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
             $gp = ($grade_point !== '' && strtoupper($letter_grade) !== 'INCOM') ? (float)$grade_point : sr_grade_point_from_letter($letter_grade);
             $credit_val = ($credit_raw !== '') ? (float)$credit_raw : null;
 
+            // Duplicate detection: same result + student + course_code
+            if ($course_code !== '') {
+                $stmt_find->execute([$result_id, $student_id, $course_code]);
+                $existing = $stmt_find->fetch();
+            } else {
+                $existing = false;
+            }
+
+            if ($existing) {
+                $same_grade = (strtoupper($existing['letter_grade']) === strtoupper($letter_grade));
+                $same_gp    = ($gp === null && $existing['grade_point'] === null)
+                              || ($gp !== null && $existing['grade_point'] !== null
+                                  && abs((float)$existing['grade_point'] - $gp) < 0.0001);
+
+                if ($same_grade && $same_gp) {
+                    // Exact duplicate – skip
+                    $skipped++;
+                    continue;
+                }
+
+                // Grade or grade point changed – update
+                try {
+                    $stmt_update->execute([
+                        $letter_grade,
+                        $gp,
+                        $student_name ?: null,
+                        $course_title,
+                        $credit_val,
+                        $existing['id'],
+                    ]);
+                    $updated++;
+                } catch (Throwable $ex) {
+                    $skipped++;
+                }
+                continue;
+            }
+
             try {
-                $stmt->execute([
+                $stmt_insert->execute([
                     $result_id,
                     $student_id,
                     $student_name ?: null,
@@ -109,6 +159,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
 
         unset($_SESSION[$tmp_key]);
         $msg = $inserted . ' entr' . ($inserted === 1 ? 'y' : 'ies') . ' imported successfully.';
+        if ($updated > 0) $msg .= ' ' . $updated . ' entr' . ($updated === 1 ? 'y' : 'ies') . ' updated (grade changed).';
         if ($skipped > 0) $msg .= ' ' . $skipped . ' row(s) skipped.';
         foreach (array_slice($skip_msgs, 0, 5) as $sm) $msg .= '<br><small class="text-warning">' . $sm . '</small>';
         flash_set('success', $msg);
@@ -400,7 +451,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <li>Rows with invalid Letter Grade are skipped.</li>
                     <li>Grade Point is auto-computed if not mapped.</li>
                     <li>Credit is optional; used for weighted GPA on the public result page.</li>
-                    <li>Duplicate rows (same student + course) are inserted as separate entries.</li>
+                    <li>If a row matches an existing entry (same student + course code), it is skipped when everything is identical, or updated when the letter grade or grade point has changed.</li>
                     <li>Up to 10,000 rows per upload.</li>
                 </ul>
             </div>
