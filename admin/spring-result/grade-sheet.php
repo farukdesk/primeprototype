@@ -169,7 +169,7 @@ $page_title = 'Grade Sheet – ' . ($result['title'] ?? 'Result');
         .sig-subtitle { font-size: 9px; color: #6b7280; margin-top: 2px; }
 
         @media print {
-            @page { size: A3 landscape; margin: 8mm 8mm 8mm 8mm; }
+            @page { size: A3 landscape; margin: 8mm; }
             .screen-controls { display: none !important; }
             body { background: #fff; }
             .print-wrapper { padding: 0; }
@@ -240,7 +240,7 @@ $page_title = 'Grade Sheet – ' . ($result['title'] ?? 'Result');
                         <?php $ce = $sdata['courses'][$code]; ?>
                         <?php $lg = strtoupper(trim($ce['letter_grade'] ?? '')); ?>
                         <?php if ($lg === 'INCOM'): ?>
-                            <span style="color:#888;font-style:italic;">Incom</span>
+                            <span style="color:#888;font-style:italic;">Incomplete</span>
                         <?php else: ?>
                             <?= h($ce['letter_grade']) ?>
                         <?php endif; ?>
