@@ -228,7 +228,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <div class="col-md-4">
                             <label class="form-label fw-medium">Credit</label>
                             <input type="number" name="credit" id="m_credit" class="form-control"
-                                   placeholder="e.g. 3.00" min="0" max="10" step="0.01">
+                                   placeholder="e.g. 3.00" min="0" max="99" step="0.01">
                             <div class="form-text">Credit hours for this course.</div>
                         </div>
                         <div class="col-md-4">

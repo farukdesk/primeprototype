@@ -121,7 +121,7 @@ function pub_cgpa(array $entries): ?float
     $total_points  = 0.0;
     $total_credits = 0.0;
     foreach ($entries as $e) {
-        if ($e['grade_point'] !== null && !empty($e['credit'])) {
+        if ($e['grade_point'] !== null && $e['credit'] !== null && (float)$e['credit'] > 0) {
             $credit = (float)$e['credit'];
             $total_points  += (float)$e['grade_point'] * $credit;
             $total_credits += $credit;
@@ -728,7 +728,7 @@ function pub_cgpa(array $entries): ?float
                                  </td>
                                  <td class="rp-course-title"><?= fh($e['course_title']) ?></td>
                                  <td style="text-align:center;">
-                                    <?php if (!empty($e['credit'])): ?>
+                                    <?php if ($e['credit'] !== null): ?>
                                     <span class="rp-gp" style="color:#374151;"><?= number_format((float)$e['credit'], 2) ?></span>
                                     <?php else: ?>
                                     <span style="color:#d1d5db;">—</span>
