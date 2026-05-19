@@ -160,6 +160,9 @@ function tc_parse_sheet(array $rows, bool $is_cgpa_sheet = false): array
         if ($ri < $data_start) continue;
 
         $id_val = trim((string)($row[$id_col] ?? ''));
+        // Some Excel exports store IDs with a leading apostrophe (text-prefix
+        // marker in XLS/CSV).  Strip it so the ID regex matches correctly.
+        $id_val = ltrim($id_val, "'");
 
         // Skip empty or non-student rows
         if ($id_val === '' || $id_val === '0') continue;
