@@ -8,11 +8,17 @@
  * The last data sheet contains a "Total Credits", "CGPA", and "Remarks" column.
  *
  * The checker re-calculates each student's CGPA from all subject sheets and
- * compares it to the declared CGPA.  Discrepancies are highlighted.
+ * compares it to the declared CGPA.  Discrepancies are highlighted with the
+ * corrected value.
  *
- * CGPA formula:
- *   CGPA = Σ(grade_point × credit_hours) / Σ(credit_hours)
- *   Subjects with "incom." / "F" / blank grade point are excluded from the sum.
+ * CGPA formula (per university specification)
+ * ────────────────────────────────────────────
+ *   Step 1 – Convert letter grade → grade point (A+ = 4.00, A = 3.75, …)
+ *   Step 2 – Quality Points for a course = Credit Hours × Grade Point
+ *   Step 3 – Total Quality Points = Σ(Quality Points across ALL courses)
+ *   Step 4 – Total Credit Hours Attempted = Σ(Credit Hours of all graded courses)
+ *             NOTE: "F" (0.00) is graded → included; "INCOM" (no grade point) → excluded
+ *   Step 5 – CGPA = Total Quality Points / Total Credit Hours Attempted  (rounded to 2 dp)
  */
 
 require_once __DIR__ . '/../includes/auth.php';
@@ -25,6 +31,11 @@ use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 
 $page_title = 'Tabulation Sheet Checker';
+
+// Maximum sheets supported (documented in UI and enforced here)
+const TC_MAX_SHEETS      = 6;
+// Rounding tolerance when comparing declared vs calculated CGPA
+const TC_CGPA_TOLERANCE  = 0.005;
 
 /* ── helpers ────────────────────────────────────────────────────────────────── */
 
@@ -152,9 +163,7 @@ function tc_parse_sheet(array $rows, bool $is_cgpa_sheet = false): array
 
         // Skip empty or non-student rows
         if ($id_val === '' || $id_val === '0') continue;
-        // Student IDs at Prime are long numeric strings (≥9 chars)
-        // or could be the serial number style "1", "2", etc.
-        // We'll accept any row where the id column is numeric and ≥ 8 digits
+        // Student IDs at Prime are long numeric strings (≥ 8 digits)
         if (!preg_match('/^\d{8,}$/', $id_val)) continue;
 
         $name = trim((string)($row[$name_col] ?? ''));
@@ -241,7 +250,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['tabulation_file'])) 
     $file = $_FILES['tabulation_file'];
 
     if ($file['error'] !== UPLOAD_ERR_OK) {
-        $errors[] = 'File upload failed (error code ' . $file['error'] . ').';
+        $errors[] = 'File upload failed (error code ' . (int)$file['error'] . ').';
     } else {
         $allowed_ext = ['csv', 'xls', 'xlsx', 'ods'];
         $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
@@ -254,7 +263,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['tabulation_file'])) 
                 $spreadsheet = IOFactory::load($file['tmp_name']);
                 $sheet_count = $spreadsheet->getSheetCount();
 
-                // Merge student data across all sheets except the CGPA (last) sheet
+                if ($sheet_count > TC_MAX_SHEETS) {
+                    $errors[] = 'The file contains ' . $sheet_count . ' sheets. A maximum of ' . TC_MAX_SHEETS . ' sheets is supported. Please remove extra sheets and re-upload.';
+                } else {
+
+                // Merge student data across all sheets
                 $all_students = [];
 
                 for ($si = 0; $si < $sheet_count; $si++) {
@@ -299,35 +312,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['tabulation_file'])) 
                 }
 
                 // Calculate CGPA for each student
+                // ─────────────────────────────────────────────────────────
+                // Formula: CGPA = Total Quality Points / Total Credit Hours Attempted
+                //   Quality Points for one course = Credit Hours × Grade Point
+                //   "F" grade (0.00) counts as attempted → included
+                //   "INCOM" (null grade point) → NOT yet graded → excluded
                 foreach ($all_students as $id => &$student) {
-                    $sum_gp_cr = 0.0;
-                    $sum_cr    = 0.0;
+                    $total_quality_points       = 0.0;
+                    $total_credit_hours_attempted = 0.0;
 
                     foreach ($student['subjects'] as $subj) {
+                        // Only include courses that have a numeric grade point (handles INCOM exclusion)
+                        // F grade = 0.00 is numeric, so it is correctly included as attempted
                         if ($subj['grade_point'] !== null && $subj['credit'] !== null && $subj['credit'] > 0) {
-                            $sum_gp_cr += $subj['grade_point'] * $subj['credit'];
-                            $sum_cr    += $subj['credit'];
+                            $total_quality_points         += $subj['grade_point'] * $subj['credit'];
+                            $total_credit_hours_attempted += $subj['credit'];
                         }
                     }
 
-                    $calculated_cgpa = $sum_cr > 0 ? tc_round($sum_gp_cr / $sum_cr) : null;
+                    $calculated_cgpa = $total_credit_hours_attempted > 0
+                        ? tc_round($total_quality_points / $total_credit_hours_attempted)
+                        : null;
                     $declared_cgpa   = $student['declared_cgpa'] ?? null;
 
-                    $diff  = ($calculated_cgpa !== null && $declared_cgpa !== null)
-                           ? abs($calculated_cgpa - $declared_cgpa)
-                           : null;
-                    $ok    = $diff !== null && $diff < 0.005;   // allow ±0.005 rounding tolerance
+                    $diff = ($calculated_cgpa !== null && $declared_cgpa !== null)
+                          ? abs($calculated_cgpa - $declared_cgpa)
+                          : null;
+                    $ok   = $diff !== null && $diff < TC_CGPA_TOLERANCE;
 
-                    $student['calculated_cgpa']   = $calculated_cgpa;
-                    $student['cgpa_ok']            = $ok;
-                    $student['cgpa_diff']          = $diff;
-                    $student['sum_weighted']       = $sum_gp_cr;
-                    $student['sum_credits']        = $sum_cr;
-                    $student['subject_count']      = count($student['subjects']);
+                    $student['calculated_cgpa']             = $calculated_cgpa;
+                    $student['cgpa_ok']                     = $ok;
+                    $student['cgpa_diff']                   = $diff;
+                    $student['total_quality_points']        = $total_quality_points;
+                    $student['total_credit_hours_attempted'] = $total_credit_hours_attempted;
+                    // legacy keys kept for template
+                    $student['sum_weighted']  = $total_quality_points;
+                    $student['sum_credits']   = $total_credit_hours_attempted;
+                    $student['subject_count'] = count($student['subjects']);
                 }
                 unset($student);
 
                 $results = $all_students;
+
+                } // end else (sheet_count <= TC_MAX_SHEETS)
 
             } catch (\Throwable $e) {
                 $errors[] = 'Could not read the file: ' . h($e->getMessage());
@@ -367,7 +394,7 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="alert alert-danger">
     <ul class="mb-0">
         <?php foreach ($errors as $err): ?>
-        <li><?= $err ?></li>
+        <li><?= h($err) ?></li>
         <?php endforeach; ?>
     </ul>
 </div>
@@ -402,6 +429,53 @@ require_once __DIR__ . '/../includes/header.php';
                 and the last data sheet has <strong>Total Credits</strong>, <strong>CGPA</strong>, and <strong>Remarks</strong> columns.
             </div>
         </form>
+    </div>
+</div>
+
+<!-- CGPA Formula Reference Card -->
+<div class="card mb-4" style="border-left:4px solid #4f8ef7;">
+    <div class="card-body py-3 px-4">
+        <div class="d-flex align-items-center gap-2 mb-3">
+            <i class="fas fa-calculator text-primary fs-5"></i>
+            <h6 class="mb-0 fw-semibold">CGPA Calculation Formula</h6>
+            <button class="btn btn-sm btn-outline-secondary ms-auto" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#formula-steps" style="border-radius:8px;font-size:.75rem;">
+                <i class="fas fa-chevron-down me-1"></i>Show / Hide Steps
+            </button>
+        </div>
+
+        <div class="p-3 mb-3 rounded" style="background:#f0f4ff;font-family:monospace;font-size:.92rem;">
+            <strong>CGPA</strong> = Total Quality Points Earned &divide; Total Credit Hours Attempted
+            <br><small class="text-muted" style="font-family:sans-serif;">
+                where <em>Quality Points for one course</em> = Credit Hours &times; Grade Point
+            </small>
+        </div>
+
+        <div class="collapse show" id="formula-steps">
+            <ol class="mb-0" style="font-size:.875rem;line-height:1.8;">
+                <li><strong>Step 1 — Convert grades to numbers:</strong>
+                    A+ = 4.00 &nbsp;|&nbsp; A = 3.75 &nbsp;|&nbsp; A− = 3.50 &nbsp;|&nbsp;
+                    B+ = 3.25 &nbsp;|&nbsp; B = 3.00 &nbsp;|&nbsp; B− = 2.75 &nbsp;|&nbsp;
+                    C+ = 2.50 &nbsp;|&nbsp; C = 2.25 &nbsp;|&nbsp; D = 2.00 &nbsp;|&nbsp;
+                    F = 0.00
+                </li>
+                <li><strong>Step 2 — Quality Points per course:</strong>
+                    Multiply each course's Credit Hours by its Grade Point.
+                </li>
+                <li><strong>Step 3 — Total Quality Points:</strong>
+                    Add up all Quality Points across every course in every semester.
+                </li>
+                <li><strong>Step 4 — Total Credit Hours Attempted:</strong>
+                    Add up the Credit Hours of every <em>graded</em> course
+                    (<span class="badge bg-danger" style="font-size:.7rem;">F (0.00) is included</span>
+                     &nbsp;—&nbsp;
+                     <span class="badge bg-secondary" style="font-size:.7rem;">INCOM is excluded</span>).
+                </li>
+                <li><strong>Step 5 — Divide and round:</strong>
+                    CGPA = Total Quality Points ÷ Total Credit Hours Attempted, rounded to 2 decimal places.
+                </li>
+            </ol>
+        </div>
     </div>
 </div>
 
@@ -443,8 +517,9 @@ require_once __DIR__ . '/../includes/header.php';
                         <th class="px-4">#</th>
                         <th>Student ID</th>
                         <th>Name</th>
-                        <th class="text-center">Subjects Found</th>
-                        <th class="text-center">Total Credits (used)</th>
+                        <th class="text-center">Courses Found</th>
+                        <th class="text-center">Total Quality Points</th>
+                        <th class="text-center">Credit Hrs Attempted</th>
                         <th class="text-center">Declared CGPA</th>
                         <th class="text-center">Calculated CGPA</th>
                         <th class="text-center">Status</th>
@@ -476,7 +551,8 @@ require_once __DIR__ . '/../includes/header.php';
                     <td><code><?= h($id) ?></code></td>
                     <td><?= h($s['name']) ?></td>
                     <td class="text-center"><?= $s['subject_count'] ?></td>
-                    <td class="text-center"><?= $s['sum_credits'] > 0 ? number_format($s['sum_credits'], 2) : '—' ?></td>
+                    <td class="text-center"><?= $s['total_quality_points'] > 0 ? number_format($s['total_quality_points'], 4) : '—' ?></td>
+                    <td class="text-center"><?= $s['total_credit_hours_attempted'] > 0 ? number_format($s['total_credit_hours_attempted'], 2) : '—' ?></td>
                     <td class="text-center fw-medium">
                         <?= $declared !== null ? number_format($declared, 2) : '<span class="text-muted">—</span>' ?>
                     </td>
@@ -495,14 +571,17 @@ require_once __DIR__ . '/../includes/header.php';
                 </tr>
                 <?php if (!$ok && $calculated !== null && $declared !== null): ?>
                 <tr class="table-warning">
-                    <td colspan="10" class="px-4 py-2">
-                        <i class="fas fa-info-circle text-warning me-1"></i>
+                    <td colspan="11" class="px-4 py-2">
+                        <i class="fas fa-exclamation-triangle text-danger me-1"></i>
                         <strong><?= h($s['name'] ?: $id) ?>:</strong>
-                        Declared CGPA is <strong><?= number_format($declared, 2) ?></strong> but
-                        calculated value is <strong class="text-danger"><?= number_format($calculated, 2) ?></strong>
-                        (Σ(GP×Cr) = <?= number_format($s['sum_weighted'], 4) ?>,
-                         Σ(Cr) = <?= number_format($s['sum_credits'], 2) ?>).
-                        <strong>Corrected value: <?= number_format($calculated, 2) ?></strong>.
+                        Declared CGPA is <strong><?= number_format($declared, 2) ?></strong>
+                        — recalculated as
+                        <strong class="text-danger"><?= number_format($calculated, 2) ?></strong>
+                        &nbsp;(Total Quality Points = <?= number_format($s['total_quality_points'], 4) ?> &nbsp;÷&nbsp;
+                         Credit Hrs Attempted = <?= number_format($s['total_credit_hours_attempted'], 2) ?>).
+                        &nbsp;<span class="badge bg-danger fs-6 px-3 py-1">
+                            Corrected CGPA: <?= number_format($calculated, 2) ?>
+                        </span>
                     </td>
                 </tr>
                 <?php endif; ?>
