@@ -297,7 +297,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['tabulation_file'])) 
                 }
 
                 if ($spreadsheet === null) {
-                    throw $last_load_error ?? new \RuntimeException('Unable to read the uploaded file with any supported reader.');
+                    throw $last_load_error ?? new \RuntimeException(
+                        'Unable to read the uploaded file. Please verify the file is not corrupted and matches one of the supported formats: CSV, XLS, XLSX, or ODS.'
+                    );
                 }
                 $sheet_count = $spreadsheet->getSheetCount();
 
