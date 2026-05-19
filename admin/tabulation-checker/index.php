@@ -161,7 +161,7 @@ function tc_parse_sheet(array $rows, bool $is_cgpa_sheet = false): array
 
     // Find the index of the first row that actually contains a student ID so
     // we know which rows are header rows.
-    $first_data_row = PHP_INT_MAX;
+    $first_data_row = null;
     foreach ($rows as $ri => $row) {
         if ($ri < $data_start) continue;
         $id_raw = ltrim(trim((string)($row[$id_col] ?? '')), "'");
@@ -173,7 +173,7 @@ function tc_parse_sheet(array $rows, bool $is_cgpa_sheet = false): array
     }
 
     foreach ($rows as $ri => $row) {
-        if ($ri >= $first_data_row) break;
+        if ($first_data_row !== null && $ri >= $first_data_row) break;
         foreach ($row as $ci => $cell) {
             $val = strtolower(trim((string)$cell));
             if ($val === 'grade point') {
@@ -304,7 +304,7 @@ function tc_worksheet_to_array(\PhpOffice\PhpSpreadsheet\Worksheet\Worksheet $ws
             // uses the 'precision' ini (default 14 sig-figs) and produces
             // scientific notation for 15+ digit values, destroying the ID.
             if (is_float($cell) && !is_nan($cell) && !is_infinite($cell)
-                    && floor($cell) === $cell) {
+                    && fmod($cell, 1.0) === 0.0) {
                 $cell = sprintf('%.0f', $cell);
             }
         }
