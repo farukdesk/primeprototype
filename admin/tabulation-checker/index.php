@@ -278,11 +278,17 @@ function tc_parse_sheet(array $rows, bool $is_cgpa_sheet = false): array
 
 /**
  * Convert a PhpSpreadsheet worksheet to a 2-D array (0-indexed rows and cols).
+ *
+ * Float cells that are whole numbers (e.g. student IDs stored as Excel numbers
+ * like 282210004081002.0) are converted to their exact integer string form using
+ * sprintf rather than PHP's default (string) cast, which truncates to
+ * `precision` significant digits (default 14) and produces scientific-notation
+ * strings like "2.82210004081E+14" that cannot be matched against ID patterns.
  */
 function tc_worksheet_to_array(\PhpOffice\PhpSpreadsheet\Worksheet\Worksheet $ws): array
 {
     $data = $ws->toArray(null, true, false, false);
-    // Normalise: make every row the same width
+    // Normalise: make every row the same width and fix float-integer cells.
     $max_cols = 0;
     foreach ($data as $row) {
         $max_cols = max($max_cols, count($row));
@@ -291,7 +297,20 @@ function tc_worksheet_to_array(\PhpOffice\PhpSpreadsheet\Worksheet\Worksheet $ws
         while (count($row) < $max_cols) {
             $row[] = '';
         }
+        foreach ($row as &$cell) {
+            // Float cells that have no fractional part (e.g. numeric IDs,
+            // serial numbers, credit-hour counts stored as integers in Excel)
+            // must be formatted without precision loss.  PHP's (string) cast
+            // uses the 'precision' ini (default 14 sig-figs) and produces
+            // scientific notation for 15+ digit values, destroying the ID.
+            if (is_float($cell) && !is_nan($cell) && !is_infinite($cell)
+                    && floor($cell) === $cell) {
+                $cell = sprintf('%.0f', $cell);
+            }
+        }
+        unset($cell);
     }
+    unset($row);
     return $data;
 }
 
