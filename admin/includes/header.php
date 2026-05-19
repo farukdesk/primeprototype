@@ -256,7 +256,8 @@ $user       = auth_user();
     $is_website_active  = strpos($current_path, '/cms/') !== false || strpos($current_path, '/homepage/') !== false || strpos($current_path, '/pages/') !== false || strpos($current_path, '/policy-procedure/') !== false;
     $is_course_offer_active = strpos($current_path, '/course-offer/') !== false;
     $is_spring_result_active = strpos($current_path, '/spring-result/') !== false;
-    $is_academic_active = strpos($current_path, '/departments/') !== false || strpos($current_path, '/faculty-profiles/') !== false || strpos($current_path, '/students/') !== false || strpos($current_path, '/course-curriculum/') !== false || strpos($current_path, '/clubs/') !== false || strpos($current_path, '/staff-profiles/') !== false || strpos($current_path, '/results/') !== false || strpos($current_path, '/student-verification/') !== false || strpos($current_path, '/cert-verifiers/') !== false || $is_course_offer_active || $is_spring_result_active;
+    $is_tabulation_checker_active = strpos($current_path, '/tabulation-checker/') !== false;
+    $is_academic_active = strpos($current_path, '/departments/') !== false || strpos($current_path, '/faculty-profiles/') !== false || strpos($current_path, '/students/') !== false || strpos($current_path, '/course-curriculum/') !== false || strpos($current_path, '/clubs/') !== false || strpos($current_path, '/staff-profiles/') !== false || strpos($current_path, '/results/') !== false || strpos($current_path, '/student-verification/') !== false || strpos($current_path, '/cert-verifiers/') !== false || $is_course_offer_active || $is_spring_result_active || $is_tabulation_checker_active;
     $is_comms_active    = strpos($current_path, '/contact/') !== false || strpos($current_path, '/support-tickets/') !== false || strpos($current_path, '/knowledge-base/') !== false || strpos($current_path, '/broadcast/') !== false;
     $is_leads_active    = strpos($current_path, '/leads/') !== false;
     $is_admissions_active = strpos($current_path, '/admissions/') !== false;
@@ -754,6 +755,14 @@ $user       = auth_user();
                 <a href="<?= APP_URL ?>/spring-result/index.php"
                    class="<?= $is_spring_result_active ? 'active' : '' ?>">
                     <i class="fas fa-poll"></i> Spring Result
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('tabulation-checker')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/tabulation-checker/index.php"
+                   class="<?= $is_tabulation_checker_active ? 'active' : '' ?>">
+                    <i class="fas fa-check-double"></i> Tabulation Checker
                 </a>
             </li>
             <?php endif; ?>
