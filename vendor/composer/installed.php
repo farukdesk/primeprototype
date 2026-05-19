@@ -1,19 +1,19 @@
 <?php return array(
     'root' => array(
         'name' => '__root__',
-        'pretty_version' => 'dev-copilot/add-excel-upload-options',
-        'version' => 'dev-copilot/add-excel-upload-options',
-        'reference' => '0f7aec4a264b7dfd6eca8807b5fa2424c2533e11',
+        'pretty_version' => 'dev-copilot/fix-php-office-io-factory-error',
+        'version' => 'dev-copilot/fix-php-office-io-factory-error',
+        'reference' => 'cebcac46206ac00164ab88788da39fc31a2e358a',
         'type' => 'library',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
-        'dev' => true,
+        'dev' => false,
     ),
     'versions' => array(
         '__root__' => array(
-            'pretty_version' => 'dev-copilot/add-excel-upload-options',
-            'version' => 'dev-copilot/add-excel-upload-options',
-            'reference' => '0f7aec4a264b7dfd6eca8807b5fa2424c2533e11',
+            'pretty_version' => 'dev-copilot/fix-php-office-io-factory-error',
+            'version' => 'dev-copilot/fix-php-office-io-factory-error',
+            'reference' => 'cebcac46206ac00164ab88788da39fc31a2e358a',
             'type' => 'library',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),

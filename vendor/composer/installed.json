@@ -743,6 +743,6 @@
             "install-path": "../sabberworm/php-css-parser"
         }
     ],
-    "dev": true,
+    "dev": false,
     "dev-package-names": []
 }
