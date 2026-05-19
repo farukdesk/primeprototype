@@ -3,7 +3,7 @@
         'name' => '__root__',
         'pretty_version' => 'dev-copilot/fix-php-office-io-factory-error',
         'version' => 'dev-copilot/fix-php-office-io-factory-error',
-        'reference' => 'cebcac46206ac00164ab88788da39fc31a2e358a',
+        'reference' => '7a93dfab406082abfcde708472d81099a9d34717',
         'type' => 'library',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
@@ -13,7 +13,7 @@
         '__root__' => array(
             'pretty_version' => 'dev-copilot/fix-php-office-io-factory-error',
             'version' => 'dev-copilot/fix-php-office-io-factory-error',
-            'reference' => 'cebcac46206ac00164ab88788da39fc31a2e358a',
+            'reference' => '7a93dfab406082abfcde708472d81099a9d34717',
             'type' => 'library',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),
