@@ -84,50 +84,49 @@ function tc_parse_sheet(array $rows, bool $is_cgpa_sheet = false): array
 {
     $students = [];
 
-    // Detect header row: look for a row containing "Grade" and "Cr" (credit)
+    // ── Step 1: Detect ID / Name column and data start row ───────────────────
     $data_start = 0;
     $id_col     = -1;
     $name_col   = -1;
 
-    foreach ($rows as $ri => $row) {
-        // Scan each cell for "ID" markers
-        foreach ($row as $ci => $cell) {
-            $val = strtolower(trim((string)$cell));
-            if ($val === 'id no.' || $val === 'id no' || $val === 'sl. no.') {
-                $data_start = $ri + 1;
-                $id_col     = $ci;
-                // name is usually the next column
-                $name_col   = $ci + 1;
-                break 2;
-            }
-        }
-    }
-
-    // For Sheet 1 the header structure also has "Sl. No." followed by "ID No."
-    // Re-check: find row where "ID No." appears
+    // Primary scan: look for an explicit "ID No." header cell.
     foreach ($rows as $ri => $row) {
         foreach ($row as $ci => $cell) {
             $val = strtolower(trim((string)$cell));
             if ($val === 'id no.' || $val === 'id no') {
-                if ($ci > 0) {
-                    // The Sl. No. is likely one column to the left
-                    $id_col     = $ci;
-                    $name_col   = $ci + 1;
-                    $data_start = $ri + 1;
-                }
+                $id_col     = $ci;
+                $name_col   = $ci + 1;
+                $data_start = $ri + 1;
                 break 2;
             }
         }
     }
 
-    // If header row not found, fall back: data rows are those whose first
-    // non-empty cell looks like a student ID (long numeric string)
+    // Fallback: some sheets omit the "ID No." header row.  Scan rows for the
+    // first cell that looks like a long numeric student ID (possibly stored as
+    // a float, e.g. "282210004081002.0") and treat that row as data start.
+    if ($id_col < 0) {
+        foreach ($rows as $ri => $row) {
+            foreach ($row as $ci => $cell) {
+                $val  = trim((string)$cell);
+                // Normalize float-formatted IDs ("282210004081002.0" → "282210004081002")
+                $norm = preg_match('/^(\d+)\.0+$/', $val, $m) ? $m[1] : $val;
+                if (preg_match('/^\d{8,}$/', $norm)) {
+                    $id_col     = $ci;
+                    $name_col   = $ci + 1;
+                    $data_start = $ri;   // this row is the first data row
+                    break 2;
+                }
+            }
+        }
+    }
+
     if ($id_col < 0) {
         $id_col   = 0;
         $name_col = 1;
     }
 
-    // CGPA sheet: find Total Credits, CGPA, Remarks columns
+    // ── Step 2: CGPA sheet – locate Total Credits, CGPA, Remarks columns ─────
     $total_credits_col = -1;
     $cgpa_col          = -1;
     $remarks_col       = -1;
@@ -136,7 +135,8 @@ function tc_parse_sheet(array $rows, bool $is_cgpa_sheet = false): array
         foreach ($rows as $ri => $row) {
             foreach ($row as $ci => $cell) {
                 $val = strtolower(trim((string)$cell));
-                if ($val === 'total credits' || $val === 'total credit') {
+                // Accept both "Total Credits" and plain "Credits" headings
+                if (in_array($val, ['total credits', 'total credit', 'credits'], true)) {
                     $total_credits_col = $ci;
                 }
                 if ($val === 'cgpa') {
@@ -150,19 +150,55 @@ function tc_parse_sheet(array $rows, bool $is_cgpa_sheet = false): array
         }
     }
 
-    // Count how many subject blocks exist on this sheet
-    // Each block is 4 columns after [id_col, name_col]
-    // Subject data columns start at name_col + 1
+    // ── Step 3: Detect Grade point and Cr. Hr. column positions ──────────────
+    // Scan every row that appears before the first actual student data row.
+    // This handles sheets with variable block widths: the standard 4-column
+    // layout (Grade | Grade point | Cr. Hr. | Semester) and the 7-column
+    // major-course layout (Course | Title | blank | Grade | Grade point |
+    // Cr. Hr. | Semester) both used in tabulation files from this university.
+    $grade_point_cols = [];
+    $credit_cols      = [];
+
+    // Find the index of the first row that actually contains a student ID so
+    // we know which rows are header rows.
+    $first_data_row = null;
+    foreach ($rows as $ri => $row) {
+        if ($ri < $data_start) continue;
+        $id_raw = ltrim(trim((string)($row[$id_col] ?? '')), "'");
+        $norm   = preg_match('/^(\d+)\.0+$/', $id_raw, $m) ? $m[1] : $id_raw;
+        if ($norm !== '' && $norm !== '0' && preg_match('/^\d{8,}$/', $norm)) {
+            $first_data_row = $ri;
+            break;
+        }
+    }
+
+    foreach ($rows as $ri => $row) {
+        if ($first_data_row !== null && $ri >= $first_data_row) break;
+        foreach ($row as $ci => $cell) {
+            $val = strtolower(trim((string)$cell));
+            if ($val === 'grade point') {
+                $grade_point_cols[] = $ci;
+            }
+            if ($val === 'cr. hr.' || $val === 'cr.hr.' || $val === 'cr hr') {
+                $credit_cols[] = $ci;
+            }
+        }
+    }
+
     $subject_data_start_col = $name_col + 1;
 
-    // Process data rows
+    // ── Step 4: Process data rows ─────────────────────────────────────────────
     foreach ($rows as $ri => $row) {
         if ($ri < $data_start) continue;
 
         $id_val = trim((string)($row[$id_col] ?? ''));
-        // Some Excel exports store IDs with a leading apostrophe (text-prefix
-        // marker in XLS/CSV).  Strip it so the ID regex matches correctly.
+        // Some Excel exports prefix IDs with an apostrophe (text marker).
         $id_val = ltrim($id_val, "'");
+        // Excel stores numeric IDs as floats ("282210004081002.0"); normalise
+        // to a plain integer string so the regex below matches correctly.
+        if (preg_match('/^(\d+)\.0+$/', $id_val, $m)) {
+            $id_val = $m[1];
+        }
 
         // Skip empty or non-student rows
         if ($id_val === '' || $id_val === '0') continue;
@@ -171,24 +207,39 @@ function tc_parse_sheet(array $rows, bool $is_cgpa_sheet = false): array
 
         $name = trim((string)($row[$name_col] ?? ''));
 
-        // Collect all grade_point × credit blocks from this row
-        $subjects = [];
-        $col = $subject_data_start_col;
-
-        // Determine the last usable column
+        // Determine the last column to consider for subject data
         $row_len = count($row);
-
-        // If CGPA sheet, the last 3 columns are Total Credits, CGPA, Remarks
         $end_col = $is_cgpa_sheet && $total_credits_col >= 0
             ? $total_credits_col
             : $row_len;
 
-        while ($col + 3 < $end_col) {
-            $block = tc_parse_subject_block($row, $col);
-            if ($block['grade_point'] !== null || $block['credit'] !== null) {
-                $subjects[] = $block;
+        // Collect grade_point × credit pairs
+        $subjects = [];
+
+        if (!empty($grade_point_cols)) {
+            // Header-guided extraction: works with any block width.
+            foreach ($grade_point_cols as $idx => $gp_col) {
+                if ($gp_col >= $end_col) continue;
+                $cr_col = $credit_cols[$idx] ?? ($gp_col + 1);
+                if ($cr_col >= $end_col) continue;
+                $gp_raw = trim((string)($row[$gp_col] ?? ''));
+                $cr_raw = trim((string)($row[$cr_col] ?? ''));
+                $grade_point = is_numeric($gp_raw) ? (float)$gp_raw : null;
+                $credit      = is_numeric($cr_raw)  ? (float)$cr_raw  : null;
+                if ($grade_point !== null || $credit !== null) {
+                    $subjects[] = ['grade_point' => $grade_point, 'credit' => $credit];
+                }
             }
-            $col += 4;
+        } else {
+            // Fallback: stride 4 columns (Grade | Grade point | Cr. Hr. | Semester)
+            $col = $subject_data_start_col;
+            while ($col + 3 < $end_col) {
+                $block = tc_parse_subject_block($row, $col);
+                if ($block['grade_point'] !== null || $block['credit'] !== null) {
+                    $subjects[] = $block;
+                }
+                $col += 4;
+            }
         }
 
         $entry = [
@@ -197,13 +248,13 @@ function tc_parse_sheet(array $rows, bool $is_cgpa_sheet = false): array
         ];
 
         if ($is_cgpa_sheet) {
-            $entry['total_credits'] = is_numeric($row[$total_credits_col] ?? '')
+            $entry['total_credits'] = ($total_credits_col >= 0 && is_numeric($row[$total_credits_col] ?? ''))
                 ? (float)$row[$total_credits_col]
                 : null;
-            $entry['cgpa'] = is_numeric($row[$cgpa_col] ?? '')
+            $entry['cgpa'] = ($cgpa_col >= 0 && is_numeric($row[$cgpa_col] ?? ''))
                 ? (float)$row[$cgpa_col]
                 : null;
-            $entry['remarks'] = trim((string)($row[$remarks_col] ?? ''));
+            $entry['remarks'] = $remarks_col >= 0 ? trim((string)($row[$remarks_col] ?? '')) : '';
         }
 
         if (isset($students[$id_val])) {
@@ -227,11 +278,17 @@ function tc_parse_sheet(array $rows, bool $is_cgpa_sheet = false): array
 
 /**
  * Convert a PhpSpreadsheet worksheet to a 2-D array (0-indexed rows and cols).
+ *
+ * Float cells that are whole numbers (e.g. student IDs stored as Excel numbers
+ * like 282210004081002.0) are converted to their exact integer string form using
+ * sprintf rather than PHP's default (string) cast, which truncates to
+ * `precision` significant digits (default 14) and produces scientific-notation
+ * strings like "2.82210004081E+14" that cannot be matched against ID patterns.
  */
 function tc_worksheet_to_array(\PhpOffice\PhpSpreadsheet\Worksheet\Worksheet $ws): array
 {
     $data = $ws->toArray(null, true, false, false);
-    // Normalise: make every row the same width
+    // Normalise: make every row the same width and fix float-integer cells.
     $max_cols = 0;
     foreach ($data as $row) {
         $max_cols = max($max_cols, count($row));
@@ -240,7 +297,20 @@ function tc_worksheet_to_array(\PhpOffice\PhpSpreadsheet\Worksheet\Worksheet $ws
         while (count($row) < $max_cols) {
             $row[] = '';
         }
+        foreach ($row as &$cell) {
+            // Float cells that have no fractional part (e.g. numeric IDs,
+            // serial numbers, credit-hour counts stored as integers in Excel)
+            // must be formatted without precision loss.  PHP's (string) cast
+            // uses the 'precision' ini (default 14 sig-figs) and produces
+            // scientific notation for 15+ digit values, destroying the ID.
+            if (is_float($cell) && !is_nan($cell) && !is_infinite($cell)
+                    && fmod($cell, 1.0) === 0.0) {
+                $cell = sprintf('%.0f', $cell);
+            }
+        }
+        unset($cell);
     }
+    unset($row);
     return $data;
 }
 
