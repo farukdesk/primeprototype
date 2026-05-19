@@ -259,8 +259,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['tabulation_file'])) 
             $errors[] = 'Unsupported file type. Please upload CSV, XLS, XLSX, or ODS.';
         } else {
             try {
-                // Load spreadsheet
-                $spreadsheet = IOFactory::load($file['tmp_name']);
+                // Load spreadsheet.
+                // IOFactory::load() uses the file path for format auto-detection;
+                // PHP temp files have no extension, which can cause "File appears
+                // to be corrupt" errors on some formats.  Use the extension the
+                // user provided to pick the correct reader first, then fall back
+                // to trying every other reader before giving up.
+                $reader_class_map = [
+                    'xlsx' => 'Xlsx',
+                    'xls'  => 'Xls',
+                    'ods'  => 'Ods',
+                    'csv'  => 'Csv',
+                ];
+
+                // Try the extension-matched reader first, then the rest.
+                $try_order = [$ext];
+                foreach (array_keys($reader_class_map) as $_k) {
+                    if ($_k !== $ext) $try_order[] = $_k;
+                }
+
+                $spreadsheet = null;
+                $last_load_error = null;
+                foreach ($try_order as $_try_ext) {
+                    if (!isset($reader_class_map[$_try_ext])) continue;
+                    try {
+                        $reader = IOFactory::createReader($reader_class_map[$_try_ext]);
+                        // readDataOnly skips formula/style parsing which can
+                        // choke on non-standard files; we only need raw values.
+                        if (method_exists($reader, 'setReadDataOnly')) {
+                            $reader->setReadDataOnly(true);
+                        }
+                        $spreadsheet = $reader->load($file['tmp_name']);
+                        break;
+                    } catch (\Throwable $_re) {
+                        $last_load_error = $_re;
+                    }
+                }
+
+                if ($spreadsheet === null) {
+                    throw $last_load_error ?? new \RuntimeException('Unable to read the uploaded file with any supported reader.');
+                }
                 $sheet_count = $spreadsheet->getSheetCount();
 
                 if ($sheet_count > TC_MAX_SHEETS) {
