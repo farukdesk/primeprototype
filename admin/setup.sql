@@ -49,7 +49,8 @@ INSERT IGNORE INTO `modules` (`name`, `slug`, `icon`, `sort_order`, `is_active`)
 ('Knowledge Base',       'knowledge-base',  'fas fa-lightbulb',    50, 1),
 ('Support Tickets',      'support-tickets', 'fas fa-headset',      55, 1),
 ('Students',             'students',        'fas fa-user-graduate',60, 1),
-('Change Log',           'change-log',      'fas fa-history',      65, 1);
+('Change Log',           'change-log',      'fas fa-history',      65, 1),
+('Tabulation Checker',   'tabulation-checker', 'fas fa-check-double', 66, 1);
 
 -- ──────────────────────────────────────────────────────────
 -- DEFAULT HOMEPAGE STATS (only if table is empty)
