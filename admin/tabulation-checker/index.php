@@ -23,6 +23,7 @@
 
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/db.php';
+require_access('tabulation-checker');
 
 // PhpSpreadsheet is bundled via composer
 require_once __DIR__ . '/../../vendor/autoload.php';
