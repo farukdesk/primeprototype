@@ -36,7 +36,9 @@ $page_title = 'Tabulation Sheet Checker';
 // Maximum sheets supported (documented in UI and enforced here)
 const TC_MAX_SHEETS      = 6;
 // Rounding tolerance when comparing declared vs calculated CGPA
-const TC_CGPA_TOLERANCE  = 0.005;
+const TC_CGPA_TOLERANCE        = 0.005;
+// Tolerance when comparing a cell's grade point against the expected scale value
+const TC_GRADE_POINT_TOLERANCE = 0.005;
 
 /* ── helpers ────────────────────────────────────────────────────────────────── */
 
@@ -49,19 +51,46 @@ function tc_round(float $v): float
 }
 
 /**
+ * Grade-point lookup table (Prime University grading scale).
+ * Returns the expected grade point for a given letter grade,
+ * or null if the grade is not on the standard scale (e.g. "INCOM", blank).
+ */
+function tc_expected_grade_point(string $grade): ?float
+{
+    static $map = [
+        'A+'  => 4.00,
+        'A'   => 3.75,
+        'A-'  => 3.50,
+        'A−'  => 3.50,  // Unicode minus sign (U+2212)
+        'B+'  => 3.25,
+        'B'   => 3.00,
+        'B-'  => 2.75,
+        'B−'  => 2.75,
+        'C+'  => 2.50,
+        'C'   => 2.25,
+        'D'   => 2.00,
+        'F'   => 0.00,
+    ];
+    return $map[strtoupper(trim($grade))] ?? null;
+}
+
+/**
  * Parse one subject block (4 columns: Grade, Grade Point, Cr. Hr., Semester)
  * starting at column offset $col_offset (0-based) in $row.
- * Returns ['grade_point' => float|null, 'credit' => float|null].
+ * Returns ['grade' => string, 'grade_point' => float|null, 'credit' => float|null].
+ * Note: callers also attach 'sheet', 'row', and 'subj_num' location metadata
+ * to the returned array before storing it in the student's subject list.
  */
 function tc_parse_subject_block(array $row, int $col_offset): array
 {
+    $grade_raw       = trim((string)($row[$col_offset]     ?? ''));
     $grade_point_raw = trim((string)($row[$col_offset + 1] ?? ''));
     $credit_raw      = trim((string)($row[$col_offset + 2] ?? ''));
 
     $grade_point = is_numeric($grade_point_raw) ? (float)$grade_point_raw : null;
     $credit      = is_numeric($credit_raw)      ? (float)$credit_raw      : null;
 
-    return ['grade_point' => $grade_point, 'credit' => $credit];
+    return ['grade' => $grade_raw, 'grade_point' => $grade_point, 'credit' => $credit];
 }
 
 /**
@@ -81,7 +110,7 @@ function tc_parse_subject_block(array $row, int $col_offset): array
  *
  * For the CGPA sheet it also returns 'total_credits', 'cgpa', 'remarks'.
  */
-function tc_parse_sheet(array $rows, bool $is_cgpa_sheet = false): array
+function tc_parse_sheet(array $rows, bool $is_cgpa_sheet = false, string $sheet_name = ''): array
 {
     $students = [];
 
@@ -151,12 +180,13 @@ function tc_parse_sheet(array $rows, bool $is_cgpa_sheet = false): array
         }
     }
 
-    // ── Step 3: Detect Grade point and Cr. Hr. column positions ──────────────
+    // ── Step 3: Detect Grade, Grade point and Cr. Hr. column positions ───────
     // Scan every row that appears before the first actual student data row.
     // This handles sheets with variable block widths: the standard 4-column
     // layout (Grade | Grade point | Cr. Hr. | Semester) and the 7-column
     // major-course layout (Course | Title | blank | Grade | Grade point |
     // Cr. Hr. | Semester) both used in tabulation files from this university.
+    $grade_cols       = [];
     $grade_point_cols = [];
     $credit_cols      = [];
 
@@ -177,6 +207,9 @@ function tc_parse_sheet(array $rows, bool $is_cgpa_sheet = false): array
         if ($first_data_row !== null && $ri >= $first_data_row) break;
         foreach ($row as $ci => $cell) {
             $val = strtolower(trim((string)$cell));
+            if ($val === 'grade') {
+                $grade_cols[] = $ci;
+            }
             if ($val === 'grade point') {
                 $grade_point_cols[] = $ci;
             }
@@ -223,12 +256,22 @@ function tc_parse_sheet(array $rows, bool $is_cgpa_sheet = false): array
                 if ($gp_col >= $end_col) continue;
                 $cr_col = $credit_cols[$idx] ?? ($gp_col + 1);
                 if ($cr_col >= $end_col) continue;
+                // Grade column: from header scan, or the column immediately before Grade Point
+                $gr_col  = $grade_cols[$idx] ?? ($gp_col - 1);
+                $gr_raw  = ($gr_col >= 0 && $gr_col < $end_col) ? trim((string)($row[$gr_col] ?? '')) : '';
                 $gp_raw = trim((string)($row[$gp_col] ?? ''));
                 $cr_raw = trim((string)($row[$cr_col] ?? ''));
                 $grade_point = is_numeric($gp_raw) ? (float)$gp_raw : null;
                 $credit      = is_numeric($cr_raw)  ? (float)$cr_raw  : null;
                 if ($grade_point !== null || $credit !== null) {
-                    $subjects[] = ['grade_point' => $grade_point, 'credit' => $credit];
+                    $subjects[] = [
+                        'grade'       => $gr_raw,
+                        'grade_point' => $grade_point,
+                        'credit'      => $credit,
+                        'sheet'       => $sheet_name,
+                        'row'         => $ri + 1,
+                        'subj_num'    => count($subjects) + 1,
+                    ];
                 }
             }
         } else {
@@ -237,7 +280,11 @@ function tc_parse_sheet(array $rows, bool $is_cgpa_sheet = false): array
             while ($col + 3 < $end_col) {
                 $block = tc_parse_subject_block($row, $col);
                 if ($block['grade_point'] !== null || $block['credit'] !== null) {
-                    $subjects[] = $block;
+                    $subjects[] = $block + [
+                        'sheet'    => $sheet_name,
+                        'row'      => $ri + 1,
+                        'subj_num' => count($subjects) + 1,
+                    ];
                 }
                 $col += 4;
             }
@@ -400,7 +447,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['tabulation_file'])) 
                         }
                     }
 
-                    $sheet_students = tc_parse_sheet($rows, $is_cgpa_sheet);
+                    $sheet_students = tc_parse_sheet($rows, $is_cgpa_sheet, $ws->getTitle());
 
                     foreach ($sheet_students as $id => $data) {
                         if (!isset($all_students[$id])) {
@@ -466,6 +513,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['tabulation_file'])) 
                 }
                 unset($student);
 
+                // ── Grade / Grade-Point consistency check ────────────────────────────────
+                // For each subject that has both a recognisable grade letter and a numeric
+                // grade point, verify the grade point matches the university scale.
+                $grade_errors = [];
+                foreach ($all_students as $id => $student) {
+                    foreach ($student['subjects'] as $subj) {
+                        $grade       = $subj['grade'] ?? '';
+                        $grade_upper = strtoupper(trim($grade));
+                        // Skip blank / INCOM grades
+                        if ($grade_upper === '' || $grade_upper === 'INCOM') continue;
+                        $expected_gp = tc_expected_grade_point($grade_upper);
+                        if ($expected_gp === null) continue;  // unrecognised grade letter
+                        $declared_gp = $subj['grade_point'];
+                        if ($declared_gp === null) continue;
+                        if (abs($declared_gp - $expected_gp) >= TC_GRADE_POINT_TOLERANCE) {
+                            $grade_errors[] = [
+                                'student_id'   => $id,
+                                'student_name' => $student['name'],
+                                'sheet'        => $subj['sheet']    ?? '',
+                                'row'          => $subj['row']      ?? '?',
+                                'subj_num'     => $subj['subj_num'] ?? '?',
+                                'grade'        => $grade,
+                                'declared_gp'  => $declared_gp,
+                                'expected_gp'  => $expected_gp,
+                            ];
+                        }
+                    }
+                }
+
                 $results = $all_students;
 
                 } // end else (sheet_count <= TC_MAX_SHEETS)
@@ -481,6 +557,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['tabulation_file'])) 
 $count_ok    = 0;
 $count_wrong = 0;
 $count_missing = 0;
+$count_grade_errors = isset($grade_errors) ? count($grade_errors) : 0;
 
 foreach ($results as $s) {
     if ($s['declared_cgpa'] === null || $s['calculated_cgpa'] === null) {
@@ -597,22 +674,28 @@ require_once __DIR__ . '/../includes/header.php';
 
 <!-- Summary -->
 <div class="row g-3 mb-4">
-    <div class="col-sm-4">
+    <div class="col-sm-6 col-md-3">
         <div class="card text-center py-3 border-0" style="background:#eafaf1;border-radius:12px;">
             <div class="fw-bold fs-3 text-success"><?= $count_ok ?></div>
             <div class="text-muted small"><i class="fas fa-check-circle text-success me-1"></i>CGPA Correct</div>
         </div>
     </div>
-    <div class="col-sm-4">
+    <div class="col-sm-6 col-md-3">
         <div class="card text-center py-3 border-0" style="background:#fef9e7;border-radius:12px;">
             <div class="fw-bold fs-3 text-danger"><?= $count_wrong ?></div>
             <div class="text-muted small"><i class="fas fa-exclamation-triangle text-danger me-1"></i>CGPA Mismatch</div>
         </div>
     </div>
-    <div class="col-sm-4">
+    <div class="col-sm-6 col-md-3">
         <div class="card text-center py-3 border-0" style="background:#fdf2f8;border-radius:12px;">
             <div class="fw-bold fs-3 text-secondary"><?= $count_missing ?></div>
             <div class="text-muted small"><i class="fas fa-question-circle text-secondary me-1"></i>Cannot Verify</div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-md-3">
+        <div class="card text-center py-3 border-0" style="background:#fff3cd;border-radius:12px;">
+            <div class="fw-bold fs-3 <?= $count_grade_errors > 0 ? 'text-warning' : 'text-secondary' ?>"><?= $count_grade_errors ?></div>
+            <div class="text-muted small"><i class="fas fa-tag <?= $count_grade_errors > 0 ? 'text-warning' : 'text-secondary' ?> me-1"></i>Grade/GP Errors</div>
         </div>
     </div>
 </div>
@@ -711,7 +794,93 @@ require_once __DIR__ . '/../includes/header.php';
     <button class="btn btn-sm btn-outline-secondary" onclick="filterTable('all')">Show All</button>
     <button class="btn btn-sm btn-outline-danger"    onclick="filterTable('mismatch')">Mismatches Only</button>
     <button class="btn btn-sm btn-outline-success"   onclick="filterTable('correct')">Correct Only</button>
+    <?php if (!empty($grade_errors)): ?>
+    <a class="btn btn-sm btn-outline-warning" href="#grade-errors-section">
+        <i class="fas fa-tag me-1"></i>Jump to Grade/GP Errors (<?= count($grade_errors) ?>)
+    </a>
+    <?php endif; ?>
 </div>
+
+<!-- Grade / Grade-Point Errors -->
+<?php if (!empty($grade_errors)): ?>
+<div class="card mt-4" id="grade-errors-section" style="border-left:4px solid #ffc107;">
+    <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center">
+        <h6 class="mb-0 fw-semibold">
+            <i class="fas fa-tag me-2 text-warning"></i>Grade / Grade-Point Errors
+        </h6>
+        <span class="badge bg-warning text-dark"><?= count($grade_errors) ?> error<?= count($grade_errors) !== 1 ? 's' : '' ?></span>
+    </div>
+    <div class="card-body p-0">
+        <div class="alert alert-warning rounded-0 border-0 mb-0 px-4 py-2" style="font-size:.85rem;">
+            <i class="fas fa-info-circle me-1"></i>
+            The Grade Point written in each cell does <strong>not match</strong> the standard grading scale for the declared Grade letter.
+            The table below shows every affected cell with its exact location and the corrected value.
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover mb-0" id="grade-errors-table">
+                <thead class="table-light">
+                    <tr>
+                        <th class="px-4">#</th>
+                        <th>Student ID</th>
+                        <th>Name</th>
+                        <th class="text-center">Sheet</th>
+                        <th class="text-center">Row</th>
+                        <th class="text-center">Subject #</th>
+                        <th class="text-center">Grade</th>
+                        <th class="text-center">Written GP</th>
+                        <th class="text-center">Correct GP</th>
+                        <th>Hint</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($grade_errors as $ei => $ge): ?>
+                <tr class="table-warning">
+                    <td class="px-4"><?= $ei + 1 ?></td>
+                    <td><code><?= h($ge['student_id']) ?></code></td>
+                    <td><?= h($ge['student_name']) ?></td>
+                    <td class="text-center">
+                        <?php if ($ge['sheet'] !== ''): ?>
+                            <span class="badge bg-secondary"><?= h($ge['sheet']) ?></span>
+                        <?php else: ?>
+                            <span class="text-muted">—</span>
+                        <?php endif; ?>
+                    </td>
+                    <td class="text-center">
+                        <?php if ($ge['row'] !== '?'): ?>
+                            Row <?= (int)$ge['row'] ?>
+                        <?php else: ?>
+                            <span class="text-muted">—</span>
+                        <?php endif; ?>
+                    </td>
+                    <td class="text-center">Subject <?= h((string)$ge['subj_num']) ?></td>
+                    <td class="text-center fw-bold">
+                        <span class="badge bg-dark fs-6"><?= h($ge['grade']) ?></span>
+                    </td>
+                    <td class="text-center text-danger fw-bold"><?= number_format($ge['declared_gp'], 2) ?></td>
+                    <td class="text-center text-success fw-bold"><?= number_format($ge['expected_gp'], 2) ?></td>
+                    <td class="small">
+                        <?php
+                            $hint_sheet = $ge['sheet'] !== '' ? 'sheet <strong>' . h($ge['sheet']) . '</strong>, ' : '';
+                            $hint_row   = $ge['row'] !== '?' ? 'row <strong>' . (int)$ge['row'] . '</strong>, ' : '';
+                        ?>
+                        <?= $hint_sheet . $hint_row ?>subject&nbsp;<strong><?= h((string)$ge['subj_num']) ?></strong>:
+                        Grade <strong><?= h($ge['grade']) ?></strong>
+                        should have GP&nbsp;<strong class="text-success"><?= number_format($ge['expected_gp'], 2) ?></strong>,
+                        but <strong class="text-danger"><?= number_format($ge['declared_gp'], 2) ?></strong> was written.
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+<?php elseif (!empty($results)): ?>
+<div class="alert alert-success mt-4" style="border-radius:10px;">
+    <i class="fas fa-check-circle me-2"></i>
+    <strong>All Grade / Grade-Point values are correct</strong> — every grade letter matches the expected grade point on the standard scale.
+</div>
+<?php endif; ?>
 
 <script>
 function filterTable(mode) {
