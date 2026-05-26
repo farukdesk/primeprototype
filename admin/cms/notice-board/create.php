@@ -66,6 +66,52 @@ function nb_upload_attachment(array $file): string|false {
     return $name;
 }
 
+/**
+ * 🚀 Firebase HTTP v1 API Broadcast Function
+ * এই ফাংশনটি ফায়ারবেসের মাধ্যমে মোবাইল অ্যাপে পুশ নোটিফিকেশন পাঠাবে।
+ */
+function send_fcm_v1_notification($title, $body) {
+    // ⚠️ এখানে আপনার ফায়ারবেস প্রজেক্টের সঠিক Project ID-টি বসাবেন
+    $project_id = 'YOUR_FIREBASE_PROJECT_ID_HERE'; 
+    $url = "https://fcm.googleapis.com/v1/projects/{$project_id}/messages:send";
+
+    // ⚠️ আপনার Firebase Service Account এর ওআউথ২ (OAuth2) অ্যাক্সেস টোকেন
+    $access_token = 'YOUR_OAUTH2_ACCESS_TOKEN_HERE';
+
+    $payload = [
+        'message' => [
+            'topic' => 'pumis_broadcast',
+            'notification' => [
+                'title' => $title,
+                'body' => strlen($body) > 120 ? substr(strip_tags($body), 0, 120) . '...' : strip_tags($body)
+            ],
+            'android' => [
+                'notification' => [
+                    'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
+                    'sound' => 'default'
+                ]
+            ]
+        ]
+    ];
+
+    $headers = [
+        'Authorization: Bearer ' . $access_token,
+        'Content-Type: application/json'
+    ];
+
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+    $response = curl_exec($ch);
+    curl_close($ch);
+
+    return $response;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
@@ -124,7 +170,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // Also insert into cms_news if requested
         if ($publish_as_news) {
-            // Use same slug if available in cms_news, otherwise append '-notice'
             $st = $db->prepare('SELECT id FROM cms_news WHERE slug = ?');
             $st->execute([$slug]);
             $news_slug = $st->fetch() ? nb_unique_news_slug($slug . '-notice') : $slug;
@@ -147,6 +192,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $is_super ? 'Notice created and approved.' : 'Notice created – pending super-admin approval.');
 
         if ($is_super) {
+            // 🔥 নোটিশটি সুপার-অ্যাডমিন দ্বারা সরাসরি পাবলিশ হলে সাথে সাথে পুশ নোটিফিকেশন যাবে
+            if ($is_published) {
+                send_fcm_v1_notification($title, $content);
+            }
             flash_set('success', 'Notice <strong>' . h($title) . '</strong> created.');
         } else {
             // Notify super admins by email
@@ -170,7 +219,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect(APP_URL . '/cms/notice-board/index.php');
     }
 
-    save_old(compact('title', 'content_type', 'is_published', 'publish_as_news'));
+     Ester_old(compact('title', 'content_type', 'is_published', 'publish_as_news'));
 }
 
 require_once __DIR__ . '/../../includes/header.php';
@@ -196,11 +245,8 @@ require_once __DIR__ . '/../../includes/header.php';
 
 <form method="POST" enctype="multipart/form-data" novalidate>
     <?= csrf_field() ?>
-
     <div class="row g-4">
-        <!-- Left column: content -->
         <div class="col-lg-8">
-
             <div class="card mb-4">
                 <div class="card-body p-4">
                     <div class="mb-3">
@@ -208,8 +254,6 @@ require_once __DIR__ . '/../../includes/header.php';
                         <input type="text" name="title" class="form-control form-control-lg"
                                value="<?= old('title') ?>" required placeholder="Notice title…" maxlength="255">
                     </div>
-
-                    <!-- Content type toggle -->
                     <div class="mb-3 d-flex align-items-center gap-3">
                         <label class="form-label fw-medium mb-0">Content</label>
                         <div class="btn-group btn-group-sm" role="group">
@@ -225,13 +269,10 @@ require_once __DIR__ . '/../../includes/header.php';
                             </label>
                         </div>
                     </div>
-
                     <textarea id="notice_content" name="content" class="form-control"
                               rows="16"><?= h(old('content','')) ?></textarea>
                 </div>
             </div>
-
-            <!-- Attachment -->
             <div class="card">
                 <div class="card-header py-3 px-4">
                     <h6 class="mb-0 fw-semibold"><i class="fas fa-paperclip me-2 text-muted"></i>Attachment</h6>
@@ -244,12 +285,8 @@ require_once __DIR__ . '/../../includes/header.php';
                     </div>
                 </div>
             </div>
-
         </div>
-
-        <!-- Right column: settings -->
         <div class="col-lg-4">
-
             <div class="card mb-4">
                 <div class="card-header py-3 px-4">
                     <h6 class="mb-0 fw-semibold"><i class="fas fa-cog me-2 text-muted"></i>Publish</h6>
@@ -266,9 +303,7 @@ require_once __DIR__ . '/../../includes/header.php';
                                value="<?= date('Y-m-d\TH:i') ?>">
                         <div class="form-text">Leave blank to use current time.</div>
                     </div>
-
                     <hr class="my-3">
-
                     <div class="form-check form-switch mb-4">
                         <input class="form-check-input" type="checkbox" id="publish_as_news" name="publish_as_news"
                                value="1" <?= old('publish_as_news') ? 'checked' : '' ?>>
@@ -277,7 +312,6 @@ require_once __DIR__ . '/../../includes/header.php';
                             <div class="form-text mt-1 fw-normal">Appears in the news section.</div>
                         </label>
                     </div>
-
                     <div class="d-grid gap-2">
                         <button type="submit" class="btn btn-primary" style="border-radius:10px;">
                             <i class="fas fa-save me-1"></i>
@@ -289,7 +323,6 @@ require_once __DIR__ . '/../../includes/header.php';
                     </div>
                 </div>
             </div>
-
         </div>
     </div>
 </form>
@@ -338,7 +371,6 @@ require_once __DIR__ . '/../../includes/header.php';
     textRadio.addEventListener('change', applyMode);
     applyMode();
 
-    // Publish date visibility
     var pubChk  = document.getElementById('is_published');
     var pubWrap = document.getElementById('pubDateWrap');
     function togglePubDate() { pubWrap.style.display = pubChk.checked ? '' : 'none'; }
