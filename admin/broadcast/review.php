@@ -104,5 +104,37 @@ $msg = 'Broadcast approved and sent to ' . $result['sent'] . ' recipient(s).';
 if ($result['failed'] > 0) {
     $msg .= ' ' . $result['failed'] . ' delivery failure(s) – check the broadcast log.';
 }
+
+// ── Push notification to all admin users with the broadcast module ────────────
+try {
+    require_once __DIR__ . '/../api/includes/fcm.php';
+    $admin_ids = $pdo->query(
+        "SELECT DISTINCT u.id FROM users u
+         JOIN user_groups g ON g.id = u.group_id
+         WHERE u.is_active = 1 AND (g.is_super = 1
+               OR u.id IN (
+                   SELECT uma.user_id FROM user_module_access uma
+                   JOIN modules m ON m.id = uma.module_id
+                   WHERE m.slug = 'broadcast' AND uma.can_view = 1
+               )
+               OR g.id IN (
+                   SELECT gma.group_id FROM group_module_access gma
+                   JOIN modules m ON m.id = gma.module_id
+                   WHERE m.slug = 'broadcast' AND gma.can_view = 1
+               )
+         )"
+    )->fetchAll(\PDO::FETCH_COLUMN);
+    if (!empty($admin_ids)) {
+        send_push_notification(
+            array_map('intval', $admin_ids),
+            'Broadcast Sent',
+            $broadcast['subject'],
+            ['type' => 'broadcast', 'broadcast_id' => (string)$id]
+        );
+    }
+} catch (Throwable $e) {
+    error_log('PUMIS FCM broadcast push failed: ' . $e->getMessage());
+}
+
 flash_set('success', $msg);
 redirect(APP_URL . '/cms/pending-changes/index.php?module=broadcast');

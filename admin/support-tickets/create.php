@@ -115,6 +115,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         st_notify_ticket_created($ticket, $user);
 
+        // ── Push notification to IT staff ─────────────────────────────────
+        try {
+            require_once __DIR__ . '/../api/includes/fcm.php';
+            $staff_ids = db()->query(
+                "SELECT DISTINCT u.id FROM users u
+                 JOIN user_groups g ON g.id = u.group_id
+                 WHERE u.is_active = 1 AND (g.is_super = 1
+                       OR u.id IN (
+                           SELECT uma.user_id FROM user_module_access uma
+                           JOIN modules m ON m.id = uma.module_id
+                           WHERE m.slug = 'support-tickets' AND uma.can_view = 1
+                       )
+                       OR g.id IN (
+                           SELECT gma.group_id FROM group_module_access gma
+                           JOIN modules m ON m.id = gma.module_id
+                           WHERE m.slug = 'support-tickets' AND gma.can_view = 1
+                       )
+                 )"
+            )->fetchAll(\PDO::FETCH_COLUMN);
+            if (!empty($staff_ids)) {
+                send_push_notification(
+                    array_map('intval', $staff_ids),
+                    'New Support Ticket',
+                    '[' . $ticket['priority'] . '] ' . $ticket['title'],
+                    ['type' => 'support_ticket', 'ticket_id' => (string)$ticket_id, 'ticket_number' => $ticket_number]
+                );
+            }
+        } catch (Throwable $e) {
+            error_log('PUMIS FCM support ticket push failed: ' . $e->getMessage());
+        }
+
         foreach ($tag_users as $tag_uid) {
             if ((int)$tag_uid === (int)$user['id']) continue;
             $tu = $pdo->prepare('SELECT * FROM users WHERE id = ? AND is_active = 1');

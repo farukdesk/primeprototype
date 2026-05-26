@@ -1,0 +1,63 @@
+name: pumis_admin
+description: PUMIS – Prime University Management Information System (Admin App)
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # HTTP & API
+  http: ^1.2.1
+  dio: ^5.4.3+1
+
+  # Secure storage (token persistence)
+  flutter_secure_storage: ^9.0.0
+
+  # Firebase
+  firebase_core: ^3.1.1
+  firebase_messaging: ^15.0.4
+
+  # Local notifications (foreground push display)
+  flutter_local_notifications: ^17.1.2
+
+  # Biometric authentication
+  local_auth: ^2.3.0
+
+  # Connectivity / offline detection
+  connectivity_plus: ^6.0.3
+
+  # Navigation
+  go_router: ^14.1.4
+
+  # State management
+  provider: ^6.1.2
+
+  # UI helpers
+  cached_network_image: ^3.3.1
+  shimmer: ^3.0.0
+  lottie: ^3.1.2
+  flutter_svg: ^2.0.10+1
+
+  # Native splash screen
+  flutter_native_splash: ^2.4.0
+
+  # Device info for device_id
+  device_info_plus: ^10.1.0
+
+  # App version info
+  package_info_plus: ^8.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  flutter_native_splash: ^2.4.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
