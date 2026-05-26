@@ -307,10 +307,10 @@ class _OfflineBanner extends StatelessWidget {
       color: const Color(0xFFFF6B6B),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
-        children: const [
-          Icon(Icons.wifi_off_rounded, color: Colors.white, size: 18),
-          SizedBox(width: 10),
-          Expanded(
+        children: [
+          const Icon(Icons.wifi_off_rounded, color: Colors.white, size: 18),
+          const SizedBox(width: 10),
+          const Expanded(
             child: Text(
               'You are offline. Some features may be unavailable.',
               style: TextStyle(color: Colors.white, fontSize: 13),
@@ -364,14 +364,14 @@ class _BiometricIndicator extends StatelessWidget {
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
-          children: const [
-            SizedBox(
+          children: [
+            const SizedBox(
               width: 22,
               height: 22,
               child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
             ),
-            SizedBox(width: 12),
-            Text(
+            const SizedBox(width: 12),
+            const Text(
               'Waiting for biometric…',
               style: TextStyle(color: Colors.white, fontSize: 13),
             ),

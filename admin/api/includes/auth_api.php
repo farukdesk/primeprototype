@@ -43,7 +43,7 @@ function api_ok(array $data = []): void
 }
 
 /**
- * Validate the ****** from the Authorization header.
+ * Validate the bearer token from the Authorization header.
  * Returns the user row on success or calls api_error(401).
  */
 function api_auth(): array

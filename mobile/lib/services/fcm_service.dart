@@ -98,8 +98,10 @@ class FcmService {
 
   static Future<void> _showLocalNotification(RemoteMessage message) async {
     final notification = message.notification;
-    final android      = message.notification?.android;
-    if (notification == null || android == null) return;
+    if (notification == null) return;
+
+    // Use Android-specific icon if available, otherwise null (falls back to app icon)
+    final smallIcon = message.notification?.android?.smallIcon;
 
     await _localNotifications.show(
       notification.hashCode,
@@ -112,7 +114,7 @@ class FcmService {
           channelDescription: _androidChannel.description,
           importance: Importance.high,
           priority: Priority.high,
-          icon: android.smallIcon,
+          icon: smallIcon,
         ),
       ),
       payload: message.data['type'],

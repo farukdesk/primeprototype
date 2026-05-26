@@ -102,10 +102,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       backgroundColor: const Color(0xFF1A1F36),
       title: Row(
         mainAxisSize: MainAxisSize.min,
-        children: const [
-          Icon(Icons.school_rounded, size: 20),
-          SizedBox(width: 8),
-          Text('PUMIS Admin'),
+        children: [
+          const Icon(Icons.school_rounded, size: 20),
+          const SizedBox(width: 8),
+          const Text('PUMIS Admin'),
         ],
       ),
       actions: [
@@ -489,10 +489,10 @@ class _OfflineBanner extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
-        children: const [
-          Icon(Icons.wifi_off_rounded, color: Colors.white, size: 16),
-          SizedBox(width: 8),
-          Text(
+        children: [
+          const Icon(Icons.wifi_off_rounded, color: Colors.white, size: 16),
+          const SizedBox(width: 8),
+          const Text(
             'You are offline — data may be out of date.',
             style: TextStyle(color: Colors.white, fontSize: 12),
           ),
