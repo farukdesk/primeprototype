@@ -319,6 +319,9 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
 .adm-fp-stat .value { font-size: .9rem; font-weight: 600; color: #212529; }
 .adm-address-sep { border: 0; border-top: 2px dashed #dee2e6; margin: 1.25rem 0; }
 .adm-nav-bar { background: #fff; border-top: 1px solid #e9ecef; border-radius: 0 0 12px 12px; }
+/* Academic table: make TomSelect controls fill each cell properly */
+#acadTable .ts-wrapper { width: 100%; min-width: 0; }
+#acadTable td { vertical-align: middle; padding: .25rem .4rem; }
 @media (max-width: 575px) {
     .adm-step-btn .step-label { display: none; }
     .adm-step-btn { padding: .35rem .55rem; }
@@ -916,10 +919,10 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                 <table class="table table-bordered table-sm align-middle mb-0" id="acadTable">
                     <thead class="table-light">
                         <tr>
-                            <th style="min-width:140px">Exam Name</th>
+                            <th style="min-width:160px">Exam Name</th>
                             <th style="min-width:80px">Session</th>
-                            <th style="min-width:115px">Group</th>
-                            <th style="min-width:155px">Board / University</th>
+                            <th style="min-width:130px">Group</th>
+                            <th style="min-width:170px">Board / University</th>
                             <th style="min-width:68px">Year</th>
                             <th style="min-width:85px">Grade</th>
                             <th style="min-width:80px">Marks/GPA</th>
@@ -1329,9 +1332,9 @@ function initAcadRow(tr) {
     var boardSel = tr.querySelector('select.acad-board-sel');
     if (!examSel || !groupSel || !boardSel) return;
     var savedExam = examSel.value, savedGroup = groupSel.value, savedBoard = boardSel.value;
-    var tsExam  = new TomSelect(examSel,  { create:true, allowEmptyOption:true, maxOptions:20, plugins:['clear_button'], placeholder:'— Select / Type —' });
-    var tsGroup = new TomSelect(groupSel, { create:true, allowEmptyOption:true, maxOptions:30, plugins:['clear_button'], placeholder:'— Select —' });
-    var tsBoard = new TomSelect(boardSel, { create:true, allowEmptyOption:true, maxOptions:20, plugins:['clear_button'], placeholder:'— Select —' });
+    var tsExam  = new TomSelect(examSel,  { create:true, allowEmptyOption:true, maxOptions:20, plugins:['clear_button'], placeholder:'— Select / Type —', dropdownParent:'body' });
+    var tsGroup = new TomSelect(groupSel, { create:true, allowEmptyOption:true, maxOptions:30, plugins:['clear_button'], placeholder:'— Select —', dropdownParent:'body' });
+    var tsBoard = new TomSelect(boardSel, { create:true, allowEmptyOption:true, maxOptions:20, plugins:['clear_button'], placeholder:'— Select —', dropdownParent:'body' });
     tr._tsExam = tsExam; tr._tsGroup = tsGroup; tr._tsBoard = tsBoard;
     if (savedExam) {
         var data = ACAD_DATA[savedExam] || { groups:[], boards:[], defaultBoard:null, showGroup:true };
