@@ -327,9 +327,10 @@ foreach ($all_fields as $f) {
         <div class="office-section" style="margin-top:30px">
             <h4>For Office Use Only</h4>
             <div class="info-grid">
-                <div class="info-row"><span class="info-label">Program</span><span class="info-value"><?= h($app['office_program'] ?? '') ?></span></div>
-                <div class="info-row"><span class="info-label">Student ID No</span><span class="info-value"><?= h($app['office_student_id'] ?? '') ?></span></div>
-                <div class="info-row"><span class="info-label">Batch No</span><span class="info-value"><?= h($app['office_batch_no'] ?? '') ?></span></div>
+                <div class="info-row"><span class="info-label">University Batch</span><span class="info-value"><?= h($app['office_university_batch'] ?? '') ?></span></div>
+                <div class="info-row"><span class="info-label">Department Batch</span><span class="info-value"><?= h($app['office_dept_batch'] ?? '') ?></span></div>
+                <div class="info-row"><span class="info-label">Section</span><span class="info-value"><?= h($app['office_section'] ?? '') ?></span></div>
+                <div class="info-row"><span class="info-label">Shift</span><span class="info-value"><?= h($app['office_shift'] ?? '') ?></span></div>
                 <div class="info-row"><span class="info-label">Decision</span><span class="info-value"><?= h($app['office_decision'] ?? '') ?></span></div>
                 <div class="info-row"><span class="info-label">Checked By</span><span class="info-value"><?= h($app['office_checked_by'] ?? '') ?></span></div>
             </div>
