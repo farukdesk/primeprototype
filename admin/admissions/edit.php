@@ -112,11 +112,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $reference_contact      = trim($_POST['reference_contact']      ?? '') ?: null;
     $expelled_answer        = ($_POST['expelled_answer'] ?? 'No') === 'Yes' ? 'Yes' : 'No';
     $expelled_detail        = trim($_POST['expelled_detail']        ?? '') ?: null;
-    $office_program         = trim($_POST['office_program']         ?? '') ?: null;
-    $office_student_id      = trim($_POST['office_student_id']      ?? '') ?: null;
-    $office_batch_no        = trim($_POST['office_batch_no']        ?? '') ?: null;
-    $office_decision        = trim($_POST['office_decision']        ?? '') ?: null;
-    $office_checked_by      = trim($_POST['office_checked_by']      ?? '') ?: null;
+    $office_university_batch = trim($_POST['office_university_batch'] ?? '') ?: null;
+    $office_dept_batch       = trim($_POST['office_dept_batch']       ?? '') ?: null;
+    $office_section          = trim($_POST['office_section']          ?? '') ?: null;
+    $office_shift            = trim($_POST['office_shift']            ?? '') ?: null;
+    $office_decision         = trim($_POST['office_decision']         ?? '') ?: null;
+    $office_checked_by       = trim($_POST['office_checked_by']       ?? '') ?: null;
     $financial_package_id   = (int)($_POST['financial_package_id']  ?? 0) ?: null;
 
     $financial_package_name = null;
@@ -198,7 +199,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 local_guardian_name=?, local_guardian_address_1=?, local_guardian_address_2=?, local_guardian_address_3=?, local_guardian_contact=?,
                 reference_name=?, reference_address_1=?, reference_address_2=?, reference_address_3=?, reference_contact=?,
                 expelled_answer=?, expelled_detail=?,
-                office_program=?, office_student_id=?, office_batch_no=?, office_decision=?, office_checked_by=?,
+                office_university_batch=?, office_dept_batch=?, office_section=?, office_shift=?, office_decision=?, office_checked_by=?,
                 financial_package_id=?, financial_package_name=?, financial_total_semesters=?, financial_total_months=?,
                 financial_tuition_per_semester=?, financial_admission_fee=?, financial_registration_fee_per_semester=?,
                 financial_fixed_institutional_fees=?, financial_english_course_fee=?, financial_form_id_fee=?
@@ -215,7 +216,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $local_guardian_name, $local_guardian_address_1, $local_guardian_address_2, $local_guardian_address_3, $local_guardian_contact,
             $reference_name, $reference_address_1, $reference_address_2, $reference_address_3, $reference_contact,
             $expelled_answer, $expelled_detail,
-            $office_program, $office_student_id, $office_batch_no, $office_decision, $office_checked_by,
+            $office_university_batch, $office_dept_batch, $office_section, $office_shift, $office_decision, $office_checked_by,
             $financial_package_id, $financial_package_name, $financial_total_semesters, $financial_total_months,
             $financial_tuition_per_semester, $financial_admission_fee, $financial_registration_fee_per_semester,
             $financial_fixed_institutional_fees, $financial_english_course_fee, $financial_form_id_fee,
@@ -700,11 +701,12 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                 <div class="card-header bg-white fw-semibold"><i class="fas fa-stamp me-2 text-secondary"></i>For Office Use Only</div>
                 <div class="card-body">
                     <div class="row g-3">
-                        <div class="col-12 col-md-6"><label class="form-label">Program</label><input type="text" name="office_program" class="form-control" value="<?= $v('office_program') ?>"></div>
-                        <div class="col-12 col-md-6"><label class="form-label">Student ID No</label><input type="text" name="office_student_id" class="form-control" value="<?= $v('office_student_id') ?>"></div>
-                        <div class="col-12 col-md-4"><label class="form-label">Batch No</label><input type="text" name="office_batch_no" class="form-control" value="<?= $v('office_batch_no') ?>"></div>
-                        <div class="col-12 col-md-4"><label class="form-label">Decision</label><input type="text" name="office_decision" class="form-control" value="<?= $v('office_decision') ?>"></div>
-                        <div class="col-12 col-md-4"><label class="form-label">Checked By</label><input type="text" name="office_checked_by" class="form-control" value="<?= $v('office_checked_by') ?>"></div>
+                        <div class="col-12 col-md-6"><label class="form-label">University Batch</label><input type="text" name="office_university_batch" class="form-control" value="<?= $v('office_university_batch') ?>"></div>
+                        <div class="col-12 col-md-6"><label class="form-label">Department Batch</label><input type="text" name="office_dept_batch" class="form-control" value="<?= $v('office_dept_batch') ?>"></div>
+                        <div class="col-12 col-md-3"><label class="form-label">Section</label><input type="text" name="office_section" class="form-control" value="<?= $v('office_section') ?>"></div>
+                        <div class="col-12 col-md-3"><label class="form-label">Shift</label><input type="text" name="office_shift" class="form-control" value="<?= $v('office_shift') ?>"></div>
+                        <div class="col-12 col-md-3"><label class="form-label">Decision</label><input type="text" name="office_decision" class="form-control" value="<?= $v('office_decision') ?>"></div>
+                        <div class="col-12 col-md-3"><label class="form-label">Checked By</label><input type="text" name="office_checked_by" class="form-control" value="<?= $v('office_checked_by') ?>"></div>
                     </div>
                 </div>
             </div>

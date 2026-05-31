@@ -258,11 +258,12 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="card-header bg-white fw-semibold"><i class="fas fa-stamp me-2 text-secondary"></i>For Office Use Only</div>
             <div class="card-body">
                 <div class="row g-3">
-                    <div class="col-12 col-md-6"><div class="text-muted small">Program</div><div><?= h($app['office_program'] ?? '—') ?></div></div>
-                    <div class="col-12 col-md-6"><div class="text-muted small">Student ID No</div><div><?= h($app['office_student_id'] ?? '—') ?></div></div>
-                    <div class="col-12 col-md-4"><div class="text-muted small">Batch No</div><div><?= h($app['office_batch_no'] ?? '—') ?></div></div>
-                    <div class="col-12 col-md-4"><div class="text-muted small">Decision</div><div><?= h($app['office_decision'] ?? '—') ?></div></div>
-                    <div class="col-12 col-md-4"><div class="text-muted small">Checked By</div><div><?= h($app['office_checked_by'] ?? '—') ?></div></div>
+                    <div class="col-12 col-md-6"><div class="text-muted small">University Batch</div><div><?= h($app['office_university_batch'] ?? '—') ?></div></div>
+                    <div class="col-12 col-md-6"><div class="text-muted small">Department Batch</div><div><?= h($app['office_dept_batch'] ?? '—') ?></div></div>
+                    <div class="col-12 col-md-3"><div class="text-muted small">Section</div><div><?= h($app['office_section'] ?? '—') ?></div></div>
+                    <div class="col-12 col-md-3"><div class="text-muted small">Shift</div><div><?= h($app['office_shift'] ?? '—') ?></div></div>
+                    <div class="col-12 col-md-3"><div class="text-muted small">Decision</div><div><?= h($app['office_decision'] ?? '—') ?></div></div>
+                    <div class="col-12 col-md-3"><div class="text-muted small">Checked By</div><div><?= h($app['office_checked_by'] ?? '—') ?></div></div>
                 </div>
             </div>
         </div>
