@@ -340,6 +340,36 @@ function adm_status_badge(string $status): string
     return '<span class="badge ' . $cls . '">' . h($label) . '</span>';
 }
 
+// ── Bangladesh geography helpers ──────────────────────────────────────────────
+
+/**
+ * Returns all Bangladesh districts ordered by division then name.
+ */
+function adm_bd_districts(): array
+{
+    static $data = null;
+    if ($data === null) {
+        $data = db()->query(
+            'SELECT id, name, division FROM bd_districts ORDER BY division, name ASC'
+        )->fetchAll(PDO::FETCH_ASSOC);
+    }
+    return $data;
+}
+
+/**
+ * Returns all Bangladesh thanas/upazilas with their district_id.
+ */
+function adm_bd_thanas(): array
+{
+    static $data = null;
+    if ($data === null) {
+        $data = db()->query(
+            'SELECT id, district_id, name FROM bd_thanas ORDER BY name ASC'
+        )->fetchAll(PDO::FETCH_ASSOC);
+    }
+    return $data;
+}
+
 // ── Fetch helpers ─────────────────────────────────────────────────────────────
 
 /**
