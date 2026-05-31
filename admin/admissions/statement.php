@@ -503,7 +503,7 @@ if ($_flash_html): ?>
                         &nbsp;|&nbsp; <em><?= h($sem_type_months_label) ?></em>
                     </span>
                 </td>
-                <td class="amt"><strong><?= number_format($monthly_installment) ?></strong></td>
+                <td class="amt"><strong><?= number_format($monthly_installment, 2) ?></strong></td>
             </tr>
         </tbody>
     </table>
