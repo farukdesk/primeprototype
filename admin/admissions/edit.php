@@ -46,6 +46,14 @@ foreach ($financial_programs as $fp) {
     ];
 }
 
+// ── Bangladesh districts & thanas ─────────────────────────────────────────────
+$bd_districts = adm_bd_districts();
+$bd_thanas    = adm_bd_thanas();
+$bd_thana_map = [];
+foreach ($bd_thanas as $t) {
+    $bd_thana_map[$t['district_id']][] = ['id' => $t['id'], 'name' => $t['name']];
+}
+
 // ── POST handler ──────────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
@@ -69,10 +77,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $blood_group            = trim($_POST['blood_group']            ?? '') ?: null;
     $present_address_1      = trim($_POST['present_address_1']      ?? '') ?: null;
     $present_address_2      = trim($_POST['present_address_2']      ?? '') ?: null;
+    $present_area           = trim($_POST['present_area']           ?? '') ?: null;
+    $present_district_id    = (int)($_POST['present_district_id']   ?? 0) ?: null;
+    $present_thana_id       = (int)($_POST['present_thana_id']      ?? 0) ?: null;
+    $present_post_code      = trim($_POST['present_post_code']      ?? '') ?: null;
     $present_contact        = trim($_POST['present_contact']        ?? '') ?: null;
     $present_email          = trim($_POST['present_email']          ?? '') ?: null;
     $permanent_address_1    = trim($_POST['permanent_address_1']    ?? '') ?: null;
     $permanent_address_2    = trim($_POST['permanent_address_2']    ?? '') ?: null;
+    $permanent_area         = trim($_POST['permanent_area']         ?? '') ?: null;
+    $permanent_district_id  = (int)($_POST['permanent_district_id'] ?? 0) ?: null;
+    $permanent_thana_id     = (int)($_POST['permanent_thana_id']    ?? 0) ?: null;
+    $permanent_post_code    = trim($_POST['permanent_post_code']    ?? '') ?: null;
     $permanent_contact      = trim($_POST['permanent_contact']      ?? '') ?: null;
     $permanent_email        = trim($_POST['permanent_email']        ?? '') ?: null;
     $experience             = trim($_POST['experience']             ?? '') ?: null;
@@ -173,8 +189,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'UPDATE admissions_applications SET
                 status=?, dept_id=?, program_id=?, year=?, semester=?,
                 student_name=?, father_name=?, mother_name=?,
-                present_address_1=?, present_address_2=?, present_contact=?, present_email=?,
-                permanent_address_1=?, permanent_address_2=?, permanent_contact=?, permanent_email=?,
+                present_address_1=?, present_address_2=?, present_area=?, present_district_id=?, present_thana_id=?, present_post_code=?, present_contact=?, present_email=?,
+                permanent_address_1=?, permanent_address_2=?, permanent_area=?, permanent_district_id=?, permanent_thana_id=?, permanent_post_code=?, permanent_contact=?, permanent_email=?,
                 nationality=?, date_of_birth=?, place_of_birth=?, religion=?, nid_birth_cert=?,
                 blood_group=?, sex=?, photo=?, experience=?,
                 guardian_name=?, guardian_profession=?, guardian_address_1=?, guardian_address_2=?,
@@ -190,8 +206,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         )->execute([
             $status, $dept_id, $program_id, $year, $semester,
             $student_name, $father_name, $mother_name,
-            $present_address_1, $present_address_2, $present_contact, $present_email,
-            $permanent_address_1, $permanent_address_2, $permanent_contact, $permanent_email,
+            $present_address_1, $present_address_2, $present_area, $present_district_id, $present_thana_id, $present_post_code, $present_contact, $present_email,
+            $permanent_address_1, $permanent_address_2, $permanent_area, $permanent_district_id, $permanent_thana_id, $permanent_post_code, $permanent_contact, $permanent_email,
             $nationality, $date_of_birth, $place_of_birth, $religion, $nid_birth_cert,
             $blood_group, $sex, $photo, $experience,
             $guardian_name, $guardian_profession, $guardian_address_1, $guardian_address_2,
@@ -444,16 +460,79 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                 <div class="card-header bg-white fw-semibold"><i class="fas fa-map-marker-alt me-2 text-warning"></i>Address</div>
                 <div class="card-body">
                     <div class="row g-3">
-                        <div class="col-12"><strong class="small text-muted text-uppercase">Present Address</strong></div>
-                        <div class="col-12 col-md-6"><label class="form-label">Address Line 1</label><input type="text" name="present_address_1" class="form-control" value="<?= $v('present_address_1') ?>"></div>
-                        <div class="col-12 col-md-6"><label class="form-label">Address Line 2</label><input type="text" name="present_address_2" class="form-control" value="<?= $v('present_address_2') ?>"></div>
-                        <div class="col-12 col-md-6"><label class="form-label">Contact No</label><input type="text" name="present_contact" class="form-control" value="<?= $v('present_contact') ?>"></div>
-                        <div class="col-12 col-md-6"><label class="form-label">Email</label><input type="email" name="present_email" class="form-control" value="<?= $v('present_email') ?>"></div>
-                        <div class="col-12"><hr class="my-1"><strong class="small text-muted text-uppercase">Permanent Address</strong></div>
-                        <div class="col-12 col-md-6"><label class="form-label">Address Line 1</label><input type="text" name="permanent_address_1" class="form-control" value="<?= $v('permanent_address_1') ?>"></div>
-                        <div class="col-12 col-md-6"><label class="form-label">Address Line 2</label><input type="text" name="permanent_address_2" class="form-control" value="<?= $v('permanent_address_2') ?>"></div>
-                        <div class="col-12 col-md-6"><label class="form-label">Contact No</label><input type="text" name="permanent_contact" class="form-control" value="<?= $v('permanent_contact') ?>"></div>
+                        <!-- ── Permanent Address ─────────────────────────────── -->
+                        <div class="col-12"><strong class="small text-muted text-uppercase">Permanent Address</strong></div>
+                        <div class="col-12 col-md-6"><label class="form-label">House No./Building Name</label><input type="text" name="permanent_address_1" class="form-control" value="<?= $v('permanent_address_1') ?>" placeholder="e.g. House 12, ABC Tower"></div>
+                        <div class="col-12 col-md-6"><label class="form-label">Road Name/Street</label><input type="text" name="permanent_address_2" class="form-control" value="<?= $v('permanent_address_2') ?>" placeholder="e.g. Road 5, Mirpur Avenue"></div>
+                        <div class="col-12 col-md-6"><label class="form-label">Area/Locality <span class="text-muted small">(optional)</span></label><input type="text" name="permanent_area" class="form-control" value="<?= $v('permanent_area') ?>" placeholder="e.g. Dhanmondi, Gulshan"></div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">District</label>
+                            <div class="searchable-select-wrap" style="position:relative;">
+                                <input type="text" class="form-control adm-ss-trigger" id="perm_district_search" placeholder="Search district…" autocomplete="off" data-target="permanent_district_id">
+                                <input type="hidden" name="permanent_district_id" id="permanent_district_id" value="<?= $v('permanent_district_id') ?>">
+                                <div class="adm-ss-list" id="perm_district_list" style="position:absolute;top:100%;left:0;right:0;max-height:200px;overflow-y:auto;background:#fff;border:1px solid #dee2e6;border-top:0;border-radius:0 0 6px 6px;z-index:1050;display:none;">
+                                    <div class="adm-ss-item" data-value="" data-label="" style="padding:6px 12px;cursor:pointer;color:#999;font-size:.85rem;">— None —</div>
+                                    <?php $cur_div = ''; foreach ($bd_districts as $dist): if ($dist['division'] !== $cur_div) { $cur_div = $dist['division']; ?><div class="adm-ss-item" data-value="" data-label="" style="padding:3px 12px;font-weight:600;background:#f0f4ff;pointer-events:none;font-size:.75rem;color:#555;">— <?= h($cur_div) ?> Division —</div><?php } ?><div class="adm-ss-item" data-value="<?= $dist['id'] ?>" data-label="<?= h($dist['name']) ?>" style="padding:6px 12px;cursor:pointer;font-size:.85rem;"><?= h($dist['name']) ?></div><?php endforeach; ?>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Thana/Upazila</label>
+                            <div class="searchable-select-wrap" style="position:relative;">
+                                <input type="text" class="form-control adm-ss-trigger" id="perm_thana_search" placeholder="Select district first…" autocomplete="off" data-target="permanent_thana_id">
+                                <input type="hidden" name="permanent_thana_id" id="permanent_thana_id" value="<?= $v('permanent_thana_id') ?>">
+                                <div class="adm-ss-list" id="perm_thana_list" style="position:absolute;top:100%;left:0;right:0;max-height:200px;overflow-y:auto;background:#fff;border:1px solid #dee2e6;border-top:0;border-radius:0 0 6px 6px;z-index:1050;display:none;">
+                                    <div class="adm-ss-item" data-value="" data-label="" data-district="" style="padding:6px 12px;cursor:pointer;color:#999;font-size:.85rem;">— None —</div>
+                                    <?php foreach ($bd_thanas as $th): ?><div class="adm-ss-item" data-value="<?= $th['id'] ?>" data-label="<?= h($th['name']) ?>" data-district="<?= $th['district_id'] ?>" style="padding:6px 12px;cursor:pointer;font-size:.85rem;"><?= h($th['name']) ?></div><?php endforeach; ?>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-3"><label class="form-label">Mobile Number</label><input type="text" name="permanent_contact" class="form-control" value="<?= $v('permanent_contact') ?>" placeholder="01XXXXXXXXX"></div>
+                        <div class="col-12 col-md-3"><label class="form-label">Post Code</label><input type="text" name="permanent_post_code" class="form-control" value="<?= $v('permanent_post_code') ?>" placeholder="e.g. 1207"></div>
                         <div class="col-12 col-md-6"><label class="form-label">Email</label><input type="email" name="permanent_email" class="form-control" value="<?= $v('permanent_email') ?>"></div>
+
+                        <!-- ── Present Address ──────────────────────────────── -->
+                        <div class="col-12"><hr class="my-1">
+                            <div class="d-flex align-items-center gap-3 flex-wrap">
+                                <strong class="small text-muted text-uppercase">Present Address</strong>
+                                <div class="form-check mb-0">
+                                    <input class="form-check-input" type="checkbox" id="same_as_permanent" value="1">
+                                    <label class="form-check-label small" for="same_as_permanent">Same as Permanent Address</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="present_address_fields">
+                        <div class="row g-3">
+                        <div class="col-12 col-md-6"><label class="form-label">House No./Building Name</label><input type="text" name="present_address_1" class="form-control" value="<?= $v('present_address_1') ?>" placeholder="e.g. House 12, ABC Tower"></div>
+                        <div class="col-12 col-md-6"><label class="form-label">Road Name/Street</label><input type="text" name="present_address_2" class="form-control" value="<?= $v('present_address_2') ?>" placeholder="e.g. Road 5, Mirpur Avenue"></div>
+                        <div class="col-12 col-md-6"><label class="form-label">Area/Locality <span class="text-muted small">(optional)</span></label><input type="text" name="present_area" class="form-control" value="<?= $v('present_area') ?>" placeholder="e.g. Dhanmondi, Gulshan"></div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">District</label>
+                            <div class="searchable-select-wrap" style="position:relative;">
+                                <input type="text" class="form-control adm-ss-trigger" id="pres_district_search" placeholder="Search district…" autocomplete="off" data-target="present_district_id">
+                                <input type="hidden" name="present_district_id" id="present_district_id" value="<?= $v('present_district_id') ?>">
+                                <div class="adm-ss-list" id="pres_district_list" style="position:absolute;top:100%;left:0;right:0;max-height:200px;overflow-y:auto;background:#fff;border:1px solid #dee2e6;border-top:0;border-radius:0 0 6px 6px;z-index:1050;display:none;">
+                                    <div class="adm-ss-item" data-value="" data-label="" style="padding:6px 12px;cursor:pointer;color:#999;font-size:.85rem;">— None —</div>
+                                    <?php $cur_div = ''; foreach ($bd_districts as $dist): if ($dist['division'] !== $cur_div) { $cur_div = $dist['division']; ?><div class="adm-ss-item" data-value="" data-label="" style="padding:3px 12px;font-weight:600;background:#f0f4ff;pointer-events:none;font-size:.75rem;color:#555;">— <?= h($cur_div) ?> Division —</div><?php } ?><div class="adm-ss-item" data-value="<?= $dist['id'] ?>" data-label="<?= h($dist['name']) ?>" style="padding:6px 12px;cursor:pointer;font-size:.85rem;"><?= h($dist['name']) ?></div><?php endforeach; ?>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Thana/Upazila</label>
+                            <div class="searchable-select-wrap" style="position:relative;">
+                                <input type="text" class="form-control adm-ss-trigger" id="pres_thana_search" placeholder="Select district first…" autocomplete="off" data-target="present_thana_id">
+                                <input type="hidden" name="present_thana_id" id="present_thana_id" value="<?= $v('present_thana_id') ?>">
+                                <div class="adm-ss-list" id="pres_thana_list" style="position:absolute;top:100%;left:0;right:0;max-height:200px;overflow-y:auto;background:#fff;border:1px solid #dee2e6;border-top:0;border-radius:0 0 6px 6px;z-index:1050;display:none;">
+                                    <div class="adm-ss-item" data-value="" data-label="" data-district="" style="padding:6px 12px;cursor:pointer;color:#999;font-size:.85rem;">— None —</div>
+                                    <?php foreach ($bd_thanas as $th): ?><div class="adm-ss-item" data-value="<?= $th['id'] ?>" data-label="<?= h($th['name']) ?>" data-district="<?= $th['district_id'] ?>" style="padding:6px 12px;cursor:pointer;font-size:.85rem;"><?= h($th['name']) ?></div><?php endforeach; ?>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-3"><label class="form-label">Mobile Number</label><input type="text" name="present_contact" class="form-control" value="<?= $v('present_contact') ?>" placeholder="01XXXXXXXXX"></div>
+                        <div class="col-12 col-md-3"><label class="form-label">Post Code</label><input type="text" name="present_post_code" class="form-control" value="<?= $v('present_post_code') ?>" placeholder="e.g. 1207"></div>
+                        <div class="col-12 col-md-6"><label class="form-label">Email</label><input type="email" name="present_email" class="form-control" value="<?= $v('present_email') ?>"></div>
+                        </div><!-- /row -->
+                        </div><!-- /present_address_fields -->
                     </div>
                 </div>
             </div>
@@ -864,6 +943,148 @@ function toggleExpelled() {
     var yes = document.getElementById('expelled_yes').checked;
     document.getElementById('expelled_detail_wrap').style.display = yes ? '' : 'none';
 }
+
+// ── Address: searchable district/thana selects ────────────────────────────────
+var ADM_THANA_MAP = <?= json_encode($bd_thana_map, JSON_UNESCAPED_UNICODE) ?>;
+
+function admInitAddressSelect(wrap) {
+    var input    = wrap.querySelector('.adm-ss-trigger');
+    if (!input) return;
+    var targetId = input.dataset.target;
+    var targetEl = document.getElementById(targetId);
+    var list     = wrap.querySelector('.adm-ss-list');
+    var items    = Array.from(list.querySelectorAll('.adm-ss-item'));
+
+    var currentVal = targetEl ? targetEl.value : '';
+    if (currentVal) {
+        var match = items.find(function(i) { return String(i.dataset.value) === String(currentVal); });
+        if (match) input.value = match.dataset.label;
+    }
+
+    // Pre-filter thanas if district is already set
+    if (targetId === 'permanent_thana_id' && document.getElementById('permanent_district_id').value) {
+        admFilterThanas('perm_thana_list', 'perm_thana_search', 'permanent_thana_id', document.getElementById('permanent_district_id').value);
+        if (currentVal) {
+            var mth = items.find(function(i) { return String(i.dataset.value) === String(currentVal); });
+            if (mth) input.value = mth.dataset.label;
+        }
+    }
+    if (targetId === 'present_thana_id' && document.getElementById('present_district_id').value) {
+        admFilterThanas('pres_thana_list', 'pres_thana_search', 'present_thana_id', document.getElementById('present_district_id').value);
+        if (currentVal) {
+            var mth2 = items.find(function(i) { return String(i.dataset.value) === String(currentVal); });
+            if (mth2) input.value = mth2.dataset.label;
+        }
+    }
+
+    input.addEventListener('focus', function() { list.style.display = ''; filterAdmList(''); });
+    input.addEventListener('input', function() { filterAdmList(this.value); list.style.display = ''; });
+
+    function filterAdmList(q) {
+        q = q.toLowerCase();
+        items.forEach(function(item) {
+            var header = item.style.pointerEvents === 'none';
+            item.style.display = (header || item.textContent.toLowerCase().includes(q)) ? '' : 'none';
+        });
+    }
+
+    items.forEach(function(item) {
+        if (item.style.pointerEvents === 'none') return;
+        item.addEventListener('mousedown', function(e) {
+            e.preventDefault();
+            if (targetEl) targetEl.value = item.dataset.value;
+            input.value = item.dataset.label;
+            list.style.display = 'none';
+            if (targetId === 'permanent_district_id') {
+                admFilterThanas('perm_thana_list', 'perm_thana_search', 'permanent_thana_id', item.dataset.value, true);
+            }
+            if (targetId === 'present_district_id') {
+                admFilterThanas('pres_thana_list', 'pres_thana_search', 'present_thana_id', item.dataset.value, true);
+            }
+        });
+    });
+
+    document.addEventListener('click', function(e) {
+        if (!wrap.contains(e.target)) list.style.display = 'none';
+    });
+}
+
+function admFilterThanas(listId, searchId, valId, districtId, clearVal) {
+    var list  = document.getElementById(listId);
+    var input = document.getElementById(searchId);
+    var valEl = document.getElementById(valId);
+    input.placeholder = districtId ? 'Search thana…' : 'Select district first…';
+    if (clearVal) {
+        input.value = '';
+        if (valEl) valEl.value = '';
+    }
+    Array.from(list.querySelectorAll('.adm-ss-item')).forEach(function(item) {
+        var d = item.dataset.district;
+        item.style.display = (d === undefined || d === '' || d === districtId) ? '' : 'none';
+    });
+}
+
+document.querySelectorAll('.searchable-select-wrap').forEach(function(wrap) {
+    if (wrap.querySelector('.adm-ss-trigger')) admInitAddressSelect(wrap);
+});
+
+// ── Address: "Same as Permanent" checkbox ─────────────────────────────────────
+(function() {
+    var cb = document.getElementById('same_as_permanent');
+    if (!cb) return;
+
+    cb.addEventListener('change', function() {
+        var isSame = this.checked;
+        var wrap   = document.getElementById('present_address_fields');
+
+        var fields = [
+            ['permanent_address_1', 'present_address_1'],
+            ['permanent_address_2', 'present_address_2'],
+            ['permanent_area',      'present_area'],
+            ['permanent_contact',   'present_contact'],
+            ['permanent_post_code', 'present_post_code'],
+            ['permanent_email',     'present_email'],
+        ];
+        fields.forEach(function(pair) {
+            var src  = document.querySelector('[name="' + pair[0] + '"]');
+            var dest = document.querySelector('[name="' + pair[1] + '"]');
+            if (!src || !dest) return;
+            if (isSame) {
+                dest.value = src.value;
+                dest.setAttribute('readonly', true);
+            } else {
+                dest.removeAttribute('readonly');
+            }
+        });
+
+        var permDistId  = document.getElementById('permanent_district_id');
+        var presDistId  = document.getElementById('present_district_id');
+        var permDistTxt = document.getElementById('perm_district_search');
+        var presDistTxt = document.getElementById('pres_district_search');
+        if (isSame && permDistId && presDistId) {
+            presDistId.value  = permDistId.value;
+            presDistTxt.value = permDistTxt.value;
+            presDistTxt.setAttribute('readonly', true);
+            admFilterThanas('pres_thana_list', 'pres_thana_search', 'present_thana_id', permDistId.value, true);
+        } else if (!isSame && presDistTxt) {
+            presDistTxt.removeAttribute('readonly');
+        }
+
+        var permThanaId  = document.getElementById('permanent_thana_id');
+        var presThanaId  = document.getElementById('present_thana_id');
+        var permThanaTxt = document.getElementById('perm_thana_search');
+        var presThanaTxt = document.getElementById('pres_thana_search');
+        if (isSame && permThanaId && presThanaId) {
+            presThanaId.value  = permThanaId.value;
+            presThanaTxt.value = permThanaTxt.value;
+            presThanaTxt.setAttribute('readonly', true);
+        } else if (!isSame && presThanaTxt) {
+            presThanaTxt.removeAttribute('readonly');
+        }
+
+        if (wrap) wrap.style.opacity = isSame ? '0.6' : '';
+    });
+})();
 </script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
