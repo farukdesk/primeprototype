@@ -14,6 +14,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 csrf_check();
 
 $id = (int)($_POST['id'] ?? 0);
+$redirect_to = trim($_POST['redirect_to'] ?? '');
 
 if ($id > 0) {
     db()->prepare(
@@ -35,4 +36,5 @@ if ($id > 0) {
     flash_set('success', 'Scholarship removed.');
 }
 
-redirect(APP_URL . '/admissions/view.php?id=' . $id);
+$target = $redirect_to === 'statement' ? 'statement.php' : 'view.php';
+redirect(APP_URL . '/admissions/' . $target . '?id=' . $id);
