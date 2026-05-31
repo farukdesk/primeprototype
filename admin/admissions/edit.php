@@ -554,11 +554,11 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                             <tr>
                                 <th style="min-width:160px">Exam Name</th>
                                 <th style="min-width:80px">Session</th>
-                                <th style="min-width:130px">Group</th>
+                                <th style="min-width:130px">Group/Subject</th>
                                 <th style="min-width:170px">Board/University</th>
                                 <th style="min-width:68px">Year</th>
                                 <th style="min-width:85px">Division/Grade</th>
-                                <th style="min-width:80px">Marks/CGPA</th>
+                                <th style="min-width:80px">Marks / GPA / CGPA</th>
                                 <th style="width:38px"></th>
                             </tr>
                         </thead>
@@ -570,23 +570,30 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                             <tr class="acad-row">
                                 <td>
                                     <select name="exam_name[]" class="acad-exam-sel" style="width:100%">
+                                        <?php $all_known_exams_edit = ['SSC','Dakhil','O Level','SSC (Vocational)','HSC','Alim','A Level','Bachelor Degree','Diploma']; ?>
                                         <option value="">— Select —</option>
-                                        <?php foreach (['SSC','Dakhil','O Level','SSC (Vocational)','HSC','Alim','A Level'] as $en): ?>
+                                        <?php foreach ($all_known_exams_edit as $en): ?>
                                         <option value="<?= h($en) ?>" <?= ($ar['exam_name'] ?? '') === $en ? 'selected' : '' ?>><?= h($en) ?></option>
                                         <?php endforeach; ?>
-                                        <?php if (!empty($ar['exam_name']) && !in_array($ar['exam_name'], ['SSC','Dakhil','O Level','SSC (Vocational)','HSC','Alim','A Level'])): ?>
+                                        <?php if (!empty($ar['exam_name']) && !in_array($ar['exam_name'], $all_known_exams_edit)): ?>
                                         <option value="<?= h($ar['exam_name']) ?>" selected><?= h($ar['exam_name']) ?></option>
                                         <?php endif; ?>
                                     </select>
                                 </td>
                                 <td><input type="text" name="acad_session[]" class="form-control form-control-sm" value="<?= h($ar['session'] ?? '') ?>"></td>
                                 <td class="acad-group-td">
-                                    <select name="group_name[]" class="acad-group-sel" style="width:100%">
+                                    <?php $is_subject_mode_edit = in_array($ar['exam_name'] ?? '', ['Bachelor Degree','Diploma']); ?>
+                                    <select name="group_name[]" class="acad-group-sel" style="width:100%" <?= $is_subject_mode_edit ? 'disabled' : '' ?>>
                                         <option value="">— Select —</option>
-                                        <?php if (!empty($ar['group_name'])): ?>
+                                        <?php if (!$is_subject_mode_edit && !empty($ar['group_name'])): ?>
                                         <option value="<?= h($ar['group_name']) ?>" selected><?= h($ar['group_name']) ?></option>
                                         <?php endif; ?>
                                     </select>
+                                    <input type="text" name="group_name[]"
+                                           class="acad-subject-inp form-control form-control-sm<?= $is_subject_mode_edit ? '' : ' d-none' ?>"
+                                           placeholder="Enter subject name"
+                                           value="<?= $is_subject_mode_edit ? h($ar['group_name'] ?? '') : '' ?>"
+                                           <?= $is_subject_mode_edit ? '' : 'disabled' ?>>
                                 </td>
                                 <td>
                                     <select name="board_university[]" class="acad-board-sel" style="width:100%">
@@ -793,54 +800,72 @@ var ACAD_DATA = {
     'SSC': {
         groups: ['Science','Arts','Commerce'],
         boards: ['Barisal','Chattogram','Cumilla','Dhaka','Dinajpur','Jashore','Mymensingh','Rajshahi','Sylhet'],
-        defaultBoard: null, showGroup: true
+        defaultBoard: null, showGroup: true, isSubject: false
     },
     'Dakhil': {
         groups: ['Science','Arts','Commerce'],
         boards: ['Bangladesh Madrasah Education Board'],
-        defaultBoard: 'Bangladesh Madrasah Education Board', showGroup: true
+        defaultBoard: 'Bangladesh Madrasah Education Board', showGroup: true, isSubject: false
     },
     'O Level': {
         groups: [],
         boards: ['Cambridge','Edexcel'],
-        defaultBoard: null, showGroup: false
+        defaultBoard: null, showGroup: false, isSubject: false
     },
     'SSC (Vocational)': {
         groups: ['Electrical','Mechanical','Computer','Civil','Electronics','Refrigeration & Air Conditioning','Welding & Fabrication','Auto Mechanic','Drafting (Civil)','Drafting (Mechanical)'],
         boards: ['Bangladesh Technical Education Board'],
-        defaultBoard: 'Bangladesh Technical Education Board', showGroup: true
+        defaultBoard: 'Bangladesh Technical Education Board', showGroup: true, isSubject: false
     },
     'HSC': {
         groups: ['Science','Arts','Commerce'],
         boards: ['Barisal','Chattogram','Cumilla','Dhaka','Dinajpur','Jashore','Mymensingh','Rajshahi','Sylhet','Madrasah Education Board','Technical Education Board'],
-        defaultBoard: null, showGroup: true
+        defaultBoard: null, showGroup: true, isSubject: false
     },
     'Alim': {
         groups: ['Science','Arts','Commerce'],
         boards: ['Bangladesh Madrasah Education Board'],
-        defaultBoard: 'Bangladesh Madrasah Education Board', showGroup: true
+        defaultBoard: 'Bangladesh Madrasah Education Board', showGroup: true, isSubject: false
     },
     'A Level': {
         groups: [],
         boards: ['Cambridge','Edexcel'],
-        defaultBoard: null, showGroup: false
+        defaultBoard: null, showGroup: false, isSubject: false
+    },
+    'Bachelor Degree': {
+        groups: [], boards: [], defaultBoard: null, showGroup: false, isSubject: true
+    },
+    'Diploma': {
+        groups: [], boards: [], defaultBoard: null, showGroup: false, isSubject: true
     }
 };
 
 function acadUpdateGroupBoard(tr, newExam, setDefault) {
-    var data     = ACAD_DATA[newExam] || { groups: [], boards: [], defaultBoard: null, showGroup: true };
+    var data     = ACAD_DATA[newExam] || { groups: [], boards: [], defaultBoard: null, showGroup: true, isSubject: false };
     var tsGroup  = tr._tsGroup;
     var tsBoard  = tr._tsBoard;
     var groupTd  = tr.querySelector('.acad-group-td');
+    var subjectInp = tr.querySelector('.acad-subject-inp');
+    var tsWrapper  = groupTd ? groupTd.querySelector('.ts-wrapper') : null;
 
-    tsGroup.clearOptions();
-    tsGroup.addOption({ value: '', text: '— Select —' });
-    data.groups.forEach(function(g) { tsGroup.addOption({ value: g, text: g }); });
-    if (!data.showGroup) {
-        tsGroup.setValue('', true);
-        if (groupTd) groupTd.style.opacity = '0.35';
-    } else {
+    if (data.isSubject) {
+        tsGroup.disable();
+        if (tsWrapper) tsWrapper.style.display = 'none';
+        if (subjectInp) { subjectInp.disabled = false; subjectInp.classList.remove('d-none'); }
         if (groupTd) groupTd.style.opacity = '';
+    } else {
+        tsGroup.enable();
+        if (tsWrapper) tsWrapper.style.display = '';
+        if (subjectInp) { subjectInp.disabled = true; subjectInp.value = ''; subjectInp.classList.add('d-none'); }
+        tsGroup.clearOptions();
+        tsGroup.addOption({ value: '', text: '— Select —' });
+        data.groups.forEach(function(g) { tsGroup.addOption({ value: g, text: g }); });
+        if (!data.showGroup) {
+            tsGroup.setValue('', true);
+            if (groupTd) groupTd.style.opacity = '0.35';
+        } else {
+            if (groupTd) groupTd.style.opacity = '';
+        }
     }
 
     tsBoard.clearOptions();
@@ -885,21 +910,30 @@ function initAcadRow(tr) {
     tr._tsBoard = tsBoard;
 
     if (savedExam) {
-        var data = ACAD_DATA[savedExam] || { groups: [], boards: [], defaultBoard: null, showGroup: true };
-        tsGroup.clearOptions();
-        tsGroup.addOption({ value: '', text: '— Select —' });
-        data.groups.forEach(function(g) { tsGroup.addOption({ value: g, text: g }); });
-        if (savedGroup && data.groups.indexOf(savedGroup) === -1) tsGroup.addOption({ value: savedGroup, text: savedGroup });
-        tsGroup.setValue(savedGroup, true);
+        var data = ACAD_DATA[savedExam] || { groups: [], boards: [], defaultBoard: null, showGroup: true, isSubject: false };
+        var groupTd    = tr.querySelector('.acad-group-td');
+        var tsWrapper  = groupTd ? groupTd.querySelector('.ts-wrapper') : null;
+        var subjectInp = tr.querySelector('.acad-subject-inp');
 
-        tsBoard.clearOptions();
-        tsBoard.addOption({ value: '', text: '— Select —' });
-        data.boards.forEach(function(b) { tsBoard.addOption({ value: b, text: b }); });
-        if (savedBoard && data.boards.indexOf(savedBoard) === -1) tsBoard.addOption({ value: savedBoard, text: savedBoard });
-        tsBoard.setValue(savedBoard, true);
+        if (data.isSubject) {
+            tsGroup.disable();
+            if (tsWrapper) tsWrapper.style.display = 'none';
+            if (subjectInp) { subjectInp.disabled = false; subjectInp.classList.remove('d-none'); }
+        } else {
+            tsGroup.clearOptions();
+            tsGroup.addOption({ value: '', text: '— Select —' });
+            data.groups.forEach(function(g) { tsGroup.addOption({ value: g, text: g }); });
+            if (savedGroup && data.groups.indexOf(savedGroup) === -1) tsGroup.addOption({ value: savedGroup, text: savedGroup });
+            tsGroup.setValue(savedGroup, true);
 
-        var groupTd = tr.querySelector('.acad-group-td');
-        if (!data.showGroup && groupTd) groupTd.style.opacity = '0.35';
+            tsBoard.clearOptions();
+            tsBoard.addOption({ value: '', text: '— Select —' });
+            data.boards.forEach(function(b) { tsBoard.addOption({ value: b, text: b }); });
+            if (savedBoard && data.boards.indexOf(savedBoard) === -1) tsBoard.addOption({ value: savedBoard, text: savedBoard });
+            tsBoard.setValue(savedBoard, true);
+
+            if (!data.showGroup && groupTd) groupTd.style.opacity = '0.35';
+        }
     }
 
     tsExam.on('change', function(val) {
@@ -914,10 +948,13 @@ document.getElementById('addAcadRow').addEventListener('click', function() {
     tr.innerHTML = '<td>'
         + '<select name="exam_name[]" class="acad-exam-sel" style="width:100%">'
         + '<option value="">— Select —</option>'
-        + ['SSC','Dakhil','O Level','SSC (Vocational)','HSC','Alim','A Level'].map(function(e){return '<option value="'+e+'">'+e+'</option>';}).join('')
+        + ['SSC','Dakhil','O Level','SSC (Vocational)','HSC','Alim','A Level','Bachelor Degree','Diploma'].map(function(e){return '<option value="'+e+'">'+e+'</option>';}).join('')
         + '</select></td>'
         + '<td><input type="text" name="acad_session[]" class="form-control form-control-sm"></td>'
-        + '<td class="acad-group-td"><select name="group_name[]" class="acad-group-sel" style="width:100%"><option value="">— Select —</option></select></td>'
+        + '<td class="acad-group-td">'
+        +   '<select name="group_name[]" class="acad-group-sel" style="width:100%"><option value="">— Select —</option></select>'
+        +   '<input type="text" name="group_name[]" class="acad-subject-inp form-control form-control-sm d-none" placeholder="Enter subject name" disabled>'
+        + '</td>'
         + '<td><select name="board_university[]" class="acad-board-sel" style="width:100%"><option value="">— Select —</option></select></td>'
         + '<td><input type="text" name="year_of_passing[]" class="form-control form-control-sm" style="width:70px"></td>'
         + '<td><input type="text" name="division_grade[]" class="form-control form-control-sm"></td>'
