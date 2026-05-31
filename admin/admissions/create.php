@@ -944,24 +944,31 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                     <div class="row g-2 align-items-end">
                         <div class="col-12 col-sm-6 col-lg-3">
                             <label class="form-label form-label-sm mb-1">Exam Name</label>
+                            <?php $all_known_exams = ['SSC','Dakhil','O Level','SSC (Vocational)','HSC','Alim','A Level','Bachelor Degree','Diploma']; ?>
                             <select name="exam_name[]" class="acad-exam-sel w-100">
                                 <option value="">— Select —</option>
-                                <?php foreach (['SSC','Dakhil','O Level','SSC (Vocational)','HSC','Alim','A Level'] as $en): ?>
+                                <?php foreach ($all_known_exams as $en): ?>
                                 <option value="<?= h($en) ?>" <?= h($ar['exam_name']) === $en ? 'selected' : '' ?>><?= h($en) ?></option>
                                 <?php endforeach; ?>
-                                <?php if ($ar['exam_name'] !== '' && !in_array($ar['exam_name'], ['SSC','Dakhil','O Level','SSC (Vocational)','HSC','Alim','A Level'])): ?>
+                                <?php if ($ar['exam_name'] !== '' && !in_array($ar['exam_name'], $all_known_exams)): ?>
                                 <option value="<?= h($ar['exam_name']) ?>" selected><?= h($ar['exam_name']) ?></option>
                                 <?php endif; ?>
                             </select>
                         </div>
+                        <?php $is_subject_mode = in_array($ar['exam_name'], ['Bachelor Degree','Diploma']); ?>
                         <div class="col-6 col-sm-3 col-lg-2 acad-group-td">
-                            <label class="form-label form-label-sm mb-1">Group</label>
-                            <select name="group_name[]" class="acad-group-sel w-100">
+                            <label class="form-label form-label-sm mb-1 acad-subject-lbl"><?= $is_subject_mode ? 'Subject' : 'Group' ?></label>
+                            <select name="group_name[]" class="acad-group-sel w-100" <?= $is_subject_mode ? 'disabled' : '' ?>>
                                 <option value="">— Select —</option>
-                                <?php if ($ar['group_name'] !== ''): ?>
+                                <?php if (!$is_subject_mode && $ar['group_name'] !== ''): ?>
                                 <option value="<?= h($ar['group_name']) ?>" selected><?= h($ar['group_name']) ?></option>
                                 <?php endif; ?>
                             </select>
+                            <input type="text" name="group_name[]"
+                                   class="acad-subject-inp form-control form-control-sm<?= $is_subject_mode ? '' : ' d-none' ?>"
+                                   placeholder="Enter subject name"
+                                   value="<?= $is_subject_mode ? h($ar['group_name']) : '' ?>"
+                                   <?= $is_subject_mode ? '' : 'disabled' ?>>
                         </div>
                         <div class="col-12 col-sm-9 col-lg-4">
                             <label class="form-label form-label-sm mb-1">Board / University</label>
@@ -985,7 +992,7 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                             <input type="text" name="division_grade[]" class="form-control form-control-sm" value="<?= h($ar['division_grade']) ?>">
                         </div>
                         <div class="col-4 col-sm-3 col-lg-1">
-                            <label class="form-label form-label-sm mb-1">Marks/GPA</label>
+                            <label class="form-label form-label-sm mb-1 acad-marks-lbl"><?= $is_subject_mode ? 'Marks / GPA / CGPA' : 'Marks/GPA' ?></label>
                             <input type="text" name="total_marks_cgpa[]" class="form-control form-control-sm" value="<?= h($ar['total_marks_cgpa']) ?>">
                         </div>
                         <div class="col-auto ms-auto d-flex align-items-end">
@@ -1312,22 +1319,42 @@ document.getElementById('dept_id').addEventListener('change', function() {
 
 // ── Academic Qualifications ───────────────────────────────────────────────────
 var ACAD_DATA = {
-    'SSC':            { groups:['Science','Arts','Commerce'], boards:['Barisal','Chattogram','Cumilla','Dhaka','Dinajpur','Jashore','Mymensingh','Rajshahi','Sylhet'], defaultBoard:null, showGroup:true },
-    'Dakhil':         { groups:['Science','Arts','Commerce'], boards:['Bangladesh Madrasah Education Board'], defaultBoard:'Bangladesh Madrasah Education Board', showGroup:true },
-    'O Level':        { groups:[], boards:['Cambridge','Edexcel'], defaultBoard:null, showGroup:false },
-    'SSC (Vocational)':{ groups:['Electrical','Mechanical','Computer','Civil','Electronics','Refrigeration & Air Conditioning','Welding & Fabrication','Auto Mechanic','Drafting (Civil)','Drafting (Mechanical)'], boards:['Bangladesh Technical Education Board'], defaultBoard:'Bangladesh Technical Education Board', showGroup:true },
-    'HSC':            { groups:['Science','Arts','Commerce'], boards:['Barisal','Chattogram','Cumilla','Dhaka','Dinajpur','Jashore','Mymensingh','Rajshahi','Sylhet','Madrasah Education Board','Technical Education Board'], defaultBoard:null, showGroup:true },
-    'Alim':           { groups:['Science','Arts','Commerce'], boards:['Bangladesh Madrasah Education Board'], defaultBoard:'Bangladesh Madrasah Education Board', showGroup:true },
-    'A Level':        { groups:[], boards:['Cambridge','Edexcel'], defaultBoard:null, showGroup:false }
+    'SSC':            { groups:['Science','Arts','Commerce'], boards:['Barisal','Chattogram','Cumilla','Dhaka','Dinajpur','Jashore','Mymensingh','Rajshahi','Sylhet'], defaultBoard:null, showGroup:true, isSubject:false },
+    'Dakhil':         { groups:['Science','Arts','Commerce'], boards:['Bangladesh Madrasah Education Board'], defaultBoard:'Bangladesh Madrasah Education Board', showGroup:true, isSubject:false },
+    'O Level':        { groups:[], boards:['Cambridge','Edexcel'], defaultBoard:null, showGroup:false, isSubject:false },
+    'SSC (Vocational)':{ groups:['Electrical','Mechanical','Computer','Civil','Electronics','Refrigeration & Air Conditioning','Welding & Fabrication','Auto Mechanic','Drafting (Civil)','Drafting (Mechanical)'], boards:['Bangladesh Technical Education Board'], defaultBoard:'Bangladesh Technical Education Board', showGroup:true, isSubject:false },
+    'HSC':            { groups:['Science','Arts','Commerce'], boards:['Barisal','Chattogram','Cumilla','Dhaka','Dinajpur','Jashore','Mymensingh','Rajshahi','Sylhet','Madrasah Education Board','Technical Education Board'], defaultBoard:null, showGroup:true, isSubject:false },
+    'Alim':           { groups:['Science','Arts','Commerce'], boards:['Bangladesh Madrasah Education Board'], defaultBoard:'Bangladesh Madrasah Education Board', showGroup:true, isSubject:false },
+    'A Level':        { groups:[], boards:['Cambridge','Edexcel'], defaultBoard:null, showGroup:false, isSubject:false },
+    'Bachelor Degree':{ groups:[], boards:[], defaultBoard:null, showGroup:false, isSubject:true },
+    'Diploma':        { groups:[], boards:[], defaultBoard:null, showGroup:false, isSubject:true }
 };
 
 function acadUpdateGroupBoard(tr, newExam, setDefault) {
-    var data = ACAD_DATA[newExam] || { groups:[], boards:[], defaultBoard:null, showGroup:true };
+    var data = ACAD_DATA[newExam] || { groups:[], boards:[], defaultBoard:null, showGroup:true, isSubject:false };
     var tsGroup = tr._tsGroup, tsBoard = tr._tsBoard, groupTd = tr.querySelector('.acad-group-td');
-    tsGroup.clearOptions(); tsGroup.addOption({ value:'', text:'— Select —' });
-    data.groups.forEach(function(g) { tsGroup.addOption({ value:g, text:g }); });
-    if (!data.showGroup) { tsGroup.setValue('', true); if (groupTd) groupTd.style.opacity='0.35'; }
-    else { if (groupTd) groupTd.style.opacity=''; }
+    var subjectInp = tr.querySelector('.acad-subject-inp');
+    var subjectLbl = tr.querySelector('.acad-subject-lbl');
+    var marksLbl   = tr.querySelector('.acad-marks-lbl');
+    var tsWrapper  = groupTd ? groupTd.querySelector('.ts-wrapper') : null;
+
+    if (data.isSubject) {
+        tsGroup.disable();
+        if (tsWrapper) tsWrapper.style.display = 'none';
+        if (subjectInp) { subjectInp.disabled = false; subjectInp.classList.remove('d-none'); }
+        if (subjectLbl) subjectLbl.textContent = 'Subject';
+        if (groupTd) groupTd.style.opacity = '';
+    } else {
+        tsGroup.enable();
+        if (tsWrapper) tsWrapper.style.display = '';
+        if (subjectInp) { subjectInp.disabled = true; subjectInp.value = ''; subjectInp.classList.add('d-none'); }
+        if (subjectLbl) subjectLbl.textContent = 'Group';
+        tsGroup.clearOptions(); tsGroup.addOption({ value:'', text:'— Select —' });
+        data.groups.forEach(function(g) { tsGroup.addOption({ value:g, text:g }); });
+        if (!data.showGroup) { tsGroup.setValue('', true); if (groupTd) groupTd.style.opacity='0.35'; }
+        else { if (groupTd) groupTd.style.opacity=''; }
+    }
+    if (marksLbl) marksLbl.textContent = data.isSubject ? 'Marks / GPA / CGPA' : 'Marks/GPA';
     tsBoard.clearOptions(); tsBoard.addOption({ value:'', text:'— Select —' });
     data.boards.forEach(function(b) { tsBoard.addOption({ value:b, text:b }); });
     if (setDefault && data.defaultBoard) tsBoard.setValue(data.defaultBoard, true);
@@ -1344,17 +1371,27 @@ function initAcadRow(tr) {
     var tsBoard = new TomSelect(boardSel, { create:true, allowEmptyOption:true, maxOptions:20, plugins:['clear_button'], placeholder:'— Select —', dropdownParent:'body' });
     tr._tsExam = tsExam; tr._tsGroup = tsGroup; tr._tsBoard = tsBoard;
     if (savedExam) {
-        var data = ACAD_DATA[savedExam] || { groups:[], boards:[], defaultBoard:null, showGroup:true };
-        tsGroup.clearOptions(); tsGroup.addOption({ value:'', text:'— Select —' });
-        data.groups.forEach(function(g) { tsGroup.addOption({ value:g, text:g }); });
-        if (savedGroup && data.groups.indexOf(savedGroup) === -1) tsGroup.addOption({ value:savedGroup, text:savedGroup });
-        tsGroup.setValue(savedGroup, true);
-        tsBoard.clearOptions(); tsBoard.addOption({ value:'', text:'— Select —' });
-        data.boards.forEach(function(b) { tsBoard.addOption({ value:b, text:b }); });
-        if (savedBoard && data.boards.indexOf(savedBoard) === -1) tsBoard.addOption({ value:savedBoard, text:savedBoard });
-        tsBoard.setValue(savedBoard, true);
-        var groupTd = tr.querySelector('.acad-group-td');
-        if (!data.showGroup && groupTd) groupTd.style.opacity = '0.35';
+        var data = ACAD_DATA[savedExam] || { groups:[], boards:[], defaultBoard:null, showGroup:true, isSubject:false };
+        var groupTd   = tr.querySelector('.acad-group-td');
+        var tsWrapper = groupTd ? groupTd.querySelector('.ts-wrapper') : null;
+        var subjectInp = tr.querySelector('.acad-subject-inp');
+        var marksLbl   = tr.querySelector('.acad-marks-lbl');
+        if (data.isSubject) {
+            tsGroup.disable();
+            if (tsWrapper) tsWrapper.style.display = 'none';
+            if (subjectInp) { subjectInp.disabled = false; subjectInp.classList.remove('d-none'); }
+            if (marksLbl) marksLbl.textContent = 'Marks / GPA / CGPA';
+        } else {
+            tsGroup.clearOptions(); tsGroup.addOption({ value:'', text:'— Select —' });
+            data.groups.forEach(function(g) { tsGroup.addOption({ value:g, text:g }); });
+            if (savedGroup && data.groups.indexOf(savedGroup) === -1) tsGroup.addOption({ value:savedGroup, text:savedGroup });
+            tsGroup.setValue(savedGroup, true);
+            tsBoard.clearOptions(); tsBoard.addOption({ value:'', text:'— Select —' });
+            data.boards.forEach(function(b) { tsBoard.addOption({ value:b, text:b }); });
+            if (savedBoard && data.boards.indexOf(savedBoard) === -1) tsBoard.addOption({ value:savedBoard, text:savedBoard });
+            tsBoard.setValue(savedBoard, true);
+            if (!data.showGroup && groupTd) groupTd.style.opacity = '0.35';
+        }
     }
     tsExam.on('change', function(val) { acadUpdateGroupBoard(tr, val, true); });
 }
@@ -1363,7 +1400,7 @@ document.getElementById('addAcadRow').addEventListener('click', function() {
     var container = document.getElementById('acadBody');
     var row = document.createElement('div');
     row.className = 'acad-row';
-    var examOpts = ['SSC','Dakhil','O Level','SSC (Vocational)','HSC','Alim','A Level']
+    var examOpts = ['SSC','Dakhil','O Level','SSC (Vocational)','HSC','Alim','A Level','Bachelor Degree','Diploma']
         .map(function(e){ return '<option value="'+e+'">'+e+'</option>'; }).join('');
     row.innerHTML =
         '<div class="row g-2 align-items-end">'
@@ -1372,8 +1409,9 @@ document.getElementById('addAcadRow').addEventListener('click', function() {
         +   '<select name="exam_name[]" class="acad-exam-sel w-100"><option value="">— Select —</option>'+examOpts+'</select>'
         + '</div>'
         + '<div class="col-6 col-sm-3 col-lg-2 acad-group-td">'
-        +   '<label class="form-label form-label-sm mb-1">Group</label>'
+        +   '<label class="form-label form-label-sm mb-1 acad-subject-lbl">Group</label>'
         +   '<select name="group_name[]" class="acad-group-sel w-100"><option value="">— Select —</option></select>'
+        +   '<input type="text" name="group_name[]" class="acad-subject-inp form-control form-control-sm d-none" placeholder="Enter subject name" disabled>'
         + '</div>'
         + '<div class="col-12 col-sm-9 col-lg-4">'
         +   '<label class="form-label form-label-sm mb-1">Board / University</label>'
@@ -1392,7 +1430,7 @@ document.getElementById('addAcadRow').addEventListener('click', function() {
         +   '<input type="text" name="division_grade[]" class="form-control form-control-sm">'
         + '</div>'
         + '<div class="col-4 col-sm-3 col-lg-1">'
-        +   '<label class="form-label form-label-sm mb-1">Marks/GPA</label>'
+        +   '<label class="form-label form-label-sm mb-1 acad-marks-lbl">Marks/GPA</label>'
         +   '<input type="text" name="total_marks_cgpa[]" class="form-control form-control-sm">'
         + '</div>'
         + '<div class="col-auto ms-auto d-flex align-items-end">'
