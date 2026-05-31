@@ -27,15 +27,48 @@ $tuition_total    = $tuition_sem * $total_semesters;
 $reg_total        = $reg_fee_sem * $total_semesters;
 $grand_total      = $admission_fee + $reg_total + $tuition_total + $fixed_total + $english_total + $form_id_fee;
 
-$fixed_per_sem    = $total_semesters > 0 ? round($fixed_total / $total_semesters, 2) : 0.0;
+$fixed_per_sem    = $total_semesters > 0 ? round($fixed_total   / $total_semesters, 2) : 0.0;
 $english_per_sem  = $total_semesters > 0 ? round($english_total / $total_semesters, 2) : 0.0;
 $regular_sem_pay  = $tuition_sem + $reg_fee_sem + $fixed_per_sem + $english_per_sem;
 $admission_payable = $admission_fee + $reg_fee_sem + $form_id_fee;
-$monthly_after_admission = $total_months > 0 ? round(($tuition_total + $fixed_total + $english_total) / $total_months, 2) : 0.0;
 
-$scholarship_amount = (float)($app['scholarship_amount'] ?? 0);
-$scholarship_label  = (string)($app['scholarship_label']  ?? '');
-$first_sem_payable  = max(0.0, $regular_sem_pay - $scholarship_amount);
+// ── Scholarship ───────────────────────────────────────────────────────────────
+$scholarship_amount       = (float)($app['scholarship_amount']             ?? 0);
+$scholarship_label        = (string)($app['scholarship_label']              ?? '');
+$scholarship_type         = (string)($app['scholarship_discount_type']      ?? 'fixed');
+$scholarship_pct          = (float)($app['scholarship_discount_pct']        ?? 0);
+$scholarship_applies_fixed   = (int)($app['scholarship_applies_to_fixed']   ?? 0);
+$scholarship_applies_english = (int)($app['scholarship_applies_to_english'] ?? 0);
+
+// Per-component discounts for first semester
+if ($scholarship_amount > 0 && $scholarship_type === 'percentage' && $scholarship_pct > 0) {
+    $sc_tuition_disc = round(min($tuition_sem,   $tuition_sem   * $scholarship_pct / 100), 2);
+    $sc_fixed_disc   = $scholarship_applies_fixed   ? round(min($fixed_per_sem,   $fixed_per_sem   * $scholarship_pct / 100), 2) : 0.0;
+    $sc_english_disc = $scholarship_applies_english ? round(min($english_per_sem, $english_per_sem * $scholarship_pct / 100), 2) : 0.0;
+} else {
+    // Fixed amount: all goes against tuition
+    $sc_tuition_disc = $scholarship_amount;
+    $sc_fixed_disc   = 0.0;
+    $sc_english_disc = 0.0;
+}
+
+$first_sem_tuition_payable = max(0.0, $tuition_sem   - $sc_tuition_disc);
+$first_sem_fixed_payable   = max(0.0, $fixed_per_sem  - $sc_fixed_disc);
+$first_sem_english_payable = max(0.0, $english_per_sem - $sc_english_disc);
+$total_discount_first_sem  = $sc_tuition_disc + $sc_fixed_disc + $sc_english_disc;
+$total_payable_first_sem   = $first_sem_tuition_payable + $first_sem_fixed_payable + $first_sem_english_payable + $reg_fee_sem;
+
+// Monthly installment based on first-semester actuals
+$mps = $total_semesters > 0 && $total_months > 0
+    ? ($total_months / $total_semesters)
+    : ($total_months > 0 ? $total_months : 1);
+$monthly_installment_base = $first_sem_tuition_payable + $first_sem_fixed_payable + $first_sem_english_payable;
+$monthly_installment      = ($mps > 0) ? (int)round($monthly_installment_base / $mps) : 0;
+
+// Semester type label
+$sem_type_months_label = ($total_semesters <= 8)
+    ? 'Bi-Semester – 6 months'
+    : 'Trimester – 4 months';
 
 $admission_form_fee = round($form_id_fee / 2, 2);
 $admission_id_fee   = round($form_id_fee - $admission_form_fee, 2);
@@ -152,6 +185,11 @@ $page_title         = 'Statement of Payment – ' . ($app['student_name'] ?? 'Ad
             margin-bottom: 4px;
         }
 
+        .fee-table tr.visual-sep td { height: 3px; border: 0; background: transparent; padding: 0; }
+        .fee-table td.indent { padding-left: 14px; }
+        .fee-table td.neg, .fee-table .neg { color: #b91c1c; }
+        .sc-badge { background: #fef9c3; color: #854d0e; border: 1px solid #fde047; border-radius: 3px; padding: 0 4px; font-size: 9.5px; font-weight: 700; }
+
         @media print {
             @page { size: A4 portrait; margin: 0; }
             .screen-controls { display: none !important; }
@@ -178,7 +216,11 @@ $page_title         = 'Statement of Payment – ' . ($app['student_name'] ?? 'Ad
             style="background:#d97706;"
             data-bs-toggle="modal" data-bs-target="#scModal"
             data-label="<?= h($scholarship_label) ?>"
-            data-amount="<?= ($scholarship_amount > 0) ? h(number_format($scholarship_amount, 2)) : '' ?>">
+            data-type="<?= h($scholarship_type) ?>"
+            data-pct="<?= h(number_format($scholarship_pct, 4)) ?>"
+            data-amount="<?= ($scholarship_amount > 0) ? h(number_format($scholarship_amount, 2)) : '' ?>"
+            data-applies-fixed="<?= $scholarship_applies_fixed ?>"
+            data-applies-english="<?= $scholarship_applies_english ?>">
         <i class="fas fa-<?= $scholarship_amount > 0 ? 'edit' : 'plus' ?>"></i>
         <?= $scholarship_amount > 0 ? 'Edit Scholarship' : 'Set Scholarship' ?>
     </button>
@@ -338,28 +380,130 @@ if ($_flash_html): ?>
                 <td colspan="2"><strong>Total Regular Payable per Semester</strong></td>
                 <td class="amt"><strong><?= number_format($regular_sem_pay, 2) ?></strong></td>
             </tr>
+
+            <!-- Scholarship applied in first semester -->
             <tr class="visual-sep"><td colspan="3"></td></tr>
+            <?php if ($scholarship_amount > 0 && $scholarship_label !== ''): ?>
             <tr>
-                <td class="serial">5</td>
-                <td>Total Scholarship (First Semester)
-                    <?php if ($scholarship_amount > 0 && $scholarship_label !== ''): ?>
-                    <span style="font-size:9.5px;color:#6b7280;">– <?= h($scholarship_label) ?></span>
-                    <?php endif; ?>
-                </td>
-                <td class="amt"><?= $scholarship_amount > 0 ? '(' . number_format($scholarship_amount, 2) . ')' : '—' ?></td>
+                <td class="indent" colspan="2"><strong>Scholarship Applied in First Semester</strong></td>
+                <td class="amt"></td>
             </tr>
+
+            <!-- Tuition fee line -->
+            <tr>
+                <td></td>
+                <td class="indent" style="padding-left:22px;">Tuition Fee (1st Semester)</td>
+                <td class="amt"><?= number_format($tuition_sem, 2) ?></td>
+            </tr>
+            <?php if ($scholarship_type === 'percentage' && $scholarship_pct > 0): ?>
+            <?php
+            $sc_scope_parts = ['Tuition Fee'];
+            if ($scholarship_applies_fixed)   $sc_scope_parts[] = 'Institutional &amp; Dev. Fee';
+            if ($scholarship_applies_english) $sc_scope_parts[] = 'English Language Fee';
+            $sc_scope_on = count($sc_scope_parts) > 1
+                ? 'on Overall Cost (' . implode(' + ', $sc_scope_parts) . ')'
+                : 'on Tuition Fee only';
+            ?>
+            <tr>
+                <td></td>
+                <td class="indent" style="padding-left:22px;">
+                    <span class="neg">−</span>
+                    <span class="sc-badge"><?= h($scholarship_label) ?> (<?= number_format($scholarship_pct, 1) ?>%)</span>
+                    — <?= $sc_scope_on ?>
+                </td>
+                <td class="amt neg">− <?= number_format($sc_tuition_disc, 2) ?></td>
+            </tr>
+            <?php else: ?>
+            <tr>
+                <td></td>
+                <td class="indent" style="padding-left:22px;">
+                    <span class="neg">−</span>
+                    <span class="sc-badge"><?= h($scholarship_label) ?></span>
+                </td>
+                <td class="amt neg">− <?= number_format($sc_tuition_disc, 2) ?></td>
+            </tr>
+            <?php endif; ?>
+
+            <?php if ($sc_fixed_disc > 0): ?>
+            <tr>
+                <td></td>
+                <td class="indent" style="padding-left:22px;">Institutional &amp; Dev. Fee (1st Semester)</td>
+                <td class="amt"><?= number_format($fixed_per_sem, 2) ?></td>
+            </tr>
+            <tr>
+                <td></td>
+                <td class="indent" style="padding-left:22px;">
+                    <span class="neg">−</span>
+                    <span class="sc-badge"><?= h($scholarship_label) ?> (<?= number_format($scholarship_pct, 1) ?>%)</span>
+                </td>
+                <td class="amt neg">− <?= number_format($sc_fixed_disc, 2) ?></td>
+            </tr>
+            <?php endif; ?>
+
+            <?php if ($sc_english_disc > 0): ?>
+            <tr>
+                <td></td>
+                <td class="indent" style="padding-left:22px;">English Language Fee (1st Semester)</td>
+                <td class="amt"><?= number_format($english_per_sem, 2) ?></td>
+            </tr>
+            <tr>
+                <td></td>
+                <td class="indent" style="padding-left:22px;">
+                    <span class="neg">−</span>
+                    <span class="sc-badge"><?= h($scholarship_label) ?> (<?= number_format($scholarship_pct, 1) ?>%)</span>
+                </td>
+                <td class="amt neg">− <?= number_format($sc_english_disc, 2) ?></td>
+            </tr>
+            <?php endif; ?>
+
+            <?php else: ?>
+            <tr>
+                <td class="indent" colspan="2">Scholarship(s) Applied in First Semester</td>
+                <td class="amt">—</td>
+            </tr>
+            <?php endif; ?>
+
+            <tr>
+                <td class="indent" colspan="2">Total Scholarship (First Semester)</td>
+                <td class="amt neg">− <?= number_format($total_discount_first_sem, 2) ?></td>
+            </tr>
+
+            <!-- Post-scholarship breakdown for first semester -->
+            <tr>
+                <td class="indent" colspan="2">Total Payable Tuition Fees (After All Scholarship)</td>
+                <td class="amt"><?= number_format($first_sem_tuition_payable, 2) ?></td>
+            </tr>
+            <tr>
+                <td class="indent" colspan="2">Per Semester Institutional &amp; Development Fee</td>
+                <td class="amt"><?= number_format($first_sem_fixed_payable, 2) ?></td>
+            </tr>
+            <tr>
+                <td class="indent" colspan="2">Per Semester English Language Fee</td>
+                <td class="amt"><?= number_format($first_sem_english_payable, 2) ?></td>
+            </tr>
+            <tr>
+                <td class="indent" colspan="2">Per Semester Registration Fee</td>
+                <td class="amt"><?= number_format($reg_fee_sem, 2) ?></td>
+            </tr>
+
             <tr class="subtotal">
                 <td colspan="2"><strong>Total First Semester Payable Amount</strong></td>
-                <td class="amt"><strong><?= number_format($first_sem_payable, 2) ?></strong></td>
+                <td class="amt"><strong><?= number_format($total_payable_first_sem, 2) ?></strong></td>
             </tr>
+
+            <!-- Monthly installment -->
             <tr class="visual-sep"><td colspan="3"></td></tr>
             <tr class="highlight">
                 <td colspan="2"><strong>First Semester Monthly Payment</strong>
                     <span style="font-size:9.5px; color:#92400e; font-weight:400;">
-                        (<?= number_format($tuition_total, 2) ?> Tuition + <?= number_format($fixed_total, 2) ?> Institutional &amp; Dev. Fee + <?= number_format($english_total, 2) ?> English Fee) / <?= ($total_months > 0) ? (int)$total_months : 0 ?> months
+                        (<?= number_format($first_sem_tuition_payable, 2) ?> Tuition
+                        + <?= number_format($first_sem_fixed_payable, 2) ?> Institutional &amp; Dev. Fee
+                        + <?= number_format($first_sem_english_payable, 2) ?> English Fee)
+                        ÷ <?= (int)round($mps) ?> months
+                        &nbsp;|&nbsp; <em><?= h($sem_type_months_label) ?></em>
                     </span>
                 </td>
-                <td class="amt"><strong><?= number_format($monthly_after_admission, 2) ?></strong></td>
+                <td class="amt"><strong><?= number_format($monthly_installment, 2) ?></strong></td>
             </tr>
         </tbody>
     </table>
@@ -445,21 +589,86 @@ if ($_flash_html): ?>
                 </div>
                 <div class="modal-body">
                     <p class="text-muted small mb-3">
-                        The scholarship amount will be shown as a discount on the first semester in the payment statement.
+                        The scholarship will be shown as a discount on the first semester in the payment statement.
                     </p>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Tuition Fee (First Semester)</label>
+                        <input type="text" id="sc-tuition-display" class="form-control bg-light" readonly
+                               value="<?= number_format($tuition_sem, 2) ?>">
+                    </div>
+
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Scholarship Label <span class="text-danger">*</span></label>
                         <input type="text" name="scholarship_label" id="sc-label" class="form-control"
                                placeholder="e.g. Merit Scholarship, Freedom Fighter, Sports Award" required>
                     </div>
+
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Scholarship Amount (BDT) <span class="text-danger">*</span></label>
+                        <label class="form-label fw-semibold">Scholarship Type <span class="text-danger">*</span></label>
+                        <div class="d-flex gap-4">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="discount_type" value="percentage"
+                                       id="sc-type-pct" checked>
+                                <label class="form-check-label" for="sc-type-pct">
+                                    <i class="fas fa-percent me-1 text-secondary"></i>Percentage
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="discount_type" value="fixed"
+                                       id="sc-type-fixed">
+                                <label class="form-check-label" for="sc-type-fixed">
+                                    <i class="fas fa-money-bill-wave me-1 text-secondary"></i>Fixed Amount
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3" id="sc-pct-wrap">
+                        <label class="form-label fw-semibold">Discount % <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <input type="number" name="discount_pct" id="sc-pct"
+                                   class="form-control" step="0.0001" min="0.0001" max="100">
+                            <span class="input-group-text">%</span>
+                        </div>
+                    </div>
+
+                    <div class="mb-3 d-none" id="sc-fixed-wrap">
+                        <label class="form-label fw-semibold">Fixed Scholarship Amount <span class="text-danger">*</span></label>
                         <div class="input-group">
                             <span class="input-group-text">BDT</span>
-                            <input type="number" name="scholarship_amount" id="sc-amount" class="form-control"
-                                   step="0.01" min="0.01" placeholder="e.g. 5000" required>
+                            <input type="number" name="scholarship_amount" id="sc-fixed-amount"
+                                   class="form-control" step="0.01" min="0.01" placeholder="e.g. 5000">
                         </div>
-                        <div class="form-text">Fixed discount applied to the first semester fees.</div>
+                    </div>
+
+                    <div class="mb-3" id="sc-calc-wrap">
+                        <label class="form-label fw-semibold">Scholarship Amount (auto-calculated)</label>
+                        <div class="input-group">
+                            <input type="text" id="sc-calc-amount" class="form-control bg-light" readonly>
+                            <span class="input-group-text">BDT</span>
+                        </div>
+                    </div>
+
+                    <!-- Fee scope: only for percentage type -->
+                    <div class="mb-3" id="sc-scope-wrap">
+                        <label class="form-label fw-semibold small">Also apply discount to:</label>
+                        <div class="d-flex gap-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="applies_to_fixed" value="1"
+                                       id="sc-applies-fixed">
+                                <label class="form-check-label small" for="sc-applies-fixed">
+                                    Institutional &amp; Development Fees
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="applies_to_english" value="1"
+                                       id="sc-applies-english">
+                                <label class="form-check-label small" for="sc-applies-english">
+                                    English Language Fee
+                                </label>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -474,13 +683,85 @@ if ($_flash_html): ?>
 </div>
 
 <script>
-document.getElementById('scModal').addEventListener('show.bs.modal', function(event) {
-    const btn    = event.relatedTarget;
-    const label  = btn ? (btn.dataset.label  || '') : '';
-    const amount = btn ? (btn.dataset.amount || '') : '';
-    document.getElementById('sc-label').value  = label;
-    document.getElementById('sc-amount').value = amount;
-});
+(function() {
+    var tuitionBase = <?= json_encode($tuition_sem) ?>;
+    var fixedBase   = <?= json_encode($fixed_per_sem) ?>;
+    var englishBase = <?= json_encode($english_per_sem) ?>;
+
+    function scSwitchType(type) {
+        var pctWrap    = document.getElementById('sc-pct-wrap');
+        var fixedWrap  = document.getElementById('sc-fixed-wrap');
+        var scopeWrap  = document.getElementById('sc-scope-wrap');
+        var calcWrap   = document.getElementById('sc-calc-wrap');
+        var pctInput   = document.getElementById('sc-pct');
+        var fixedInput = document.getElementById('sc-fixed-amount');
+
+        if (type === 'fixed') {
+            pctWrap.classList.add('d-none');
+            fixedWrap.classList.remove('d-none');
+            scopeWrap.classList.add('d-none');
+            calcWrap.classList.add('d-none');
+            pctInput.removeAttribute('required'); pctInput.value = '';
+            fixedInput.setAttribute('required', 'required');
+            document.getElementById('sc-applies-fixed').checked   = false;
+            document.getElementById('sc-applies-english').checked = false;
+        } else {
+            pctWrap.classList.remove('d-none');
+            fixedWrap.classList.add('d-none');
+            scopeWrap.classList.remove('d-none');
+            calcWrap.classList.remove('d-none');
+            pctInput.setAttribute('required', 'required');
+            fixedInput.removeAttribute('required'); fixedInput.value = '';
+        }
+        scRecalcAmount();
+    }
+
+    function scRecalcAmount() {
+        var typePct = document.getElementById('sc-type-pct');
+        if (!typePct || !typePct.checked) return;
+        var pct = parseFloat(document.getElementById('sc-pct').value) || 0;
+        var base = tuitionBase;
+        if (document.getElementById('sc-applies-fixed').checked)   base += fixedBase;
+        if (document.getElementById('sc-applies-english').checked) base += englishBase;
+        var amt = Math.round(base * pct / 100 * 100) / 100;
+        document.getElementById('sc-calc-amount').value =
+            amt.toLocaleString('en-BD', {minimumFractionDigits:2});
+    }
+
+    document.querySelectorAll('input[name="discount_type"]').forEach(function(r) {
+        r.addEventListener('change', function() { scSwitchType(this.value); });
+    });
+    document.getElementById('sc-pct').addEventListener('input', scRecalcAmount);
+    document.getElementById('sc-applies-fixed').addEventListener('change', scRecalcAmount);
+    document.getElementById('sc-applies-english').addEventListener('change', scRecalcAmount);
+
+    document.getElementById('scModal').addEventListener('show.bs.modal', function(event) {
+        var btn             = event.relatedTarget;
+        var label           = btn ? (btn.dataset.label          || '') : '';
+        var type            = btn ? (btn.dataset.type           || 'fixed') : 'fixed';
+        var pct             = btn ? (btn.dataset.pct            || '') : '';
+        var amount          = btn ? (btn.dataset.amount         || '') : '';
+        var appliesFixed    = btn ? (btn.dataset.appliesFixed   === '1') : false;
+        var appliesEnglish  = btn ? (btn.dataset.appliesEnglish === '1') : false;
+
+        document.getElementById('sc-label').value = label;
+        document.getElementById('sc-applies-fixed').checked   = appliesFixed;
+        document.getElementById('sc-applies-english').checked = appliesEnglish;
+
+        if (type === 'percentage') {
+            document.getElementById('sc-type-pct').checked   = true;
+            document.getElementById('sc-type-fixed').checked = false;
+            scSwitchType('percentage');
+            document.getElementById('sc-pct').value = pct;
+            scRecalcAmount();
+        } else {
+            document.getElementById('sc-type-pct').checked   = false;
+            document.getElementById('sc-type-fixed').checked = true;
+            scSwitchType('fixed');
+            document.getElementById('sc-fixed-amount').value = amount;
+        }
+    });
+})();
 </script>
 <?php endif; ?>
 
