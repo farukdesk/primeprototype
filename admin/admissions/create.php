@@ -1238,10 +1238,10 @@ function admInitAddressSelect(wrap) {
             input.value = item.dataset.label;
             list.style.display = 'none';
             if (targetId === 'permanent_district_id') {
-                admFilterThanas('perm_thana_list', 'perm_thana_search', 'permanent_thana_id', item.dataset.value);
+                admFilterThanas('perm_thana_list', 'perm_thana_search', 'permanent_thana_id', item.dataset.value, true);
             }
             if (targetId === 'present_district_id') {
-                admFilterThanas('pres_thana_list', 'pres_thana_search', 'present_thana_id', item.dataset.value);
+                admFilterThanas('pres_thana_list', 'pres_thana_search', 'present_thana_id', item.dataset.value, true);
             }
         });
     });
@@ -1251,13 +1251,16 @@ function admInitAddressSelect(wrap) {
     });
 }
 
-function admFilterThanas(listId, searchId, valId, districtId) {
+function admFilterThanas(listId, searchId, valId, districtId, clearVal) {
+    clearVal = (clearVal !== false);
     var list    = document.getElementById(listId);
     var input   = document.getElementById(searchId);
     var valEl   = document.getElementById(valId);
     input.placeholder = districtId ? 'Search thana…' : 'Select district first…';
-    input.value = '';
-    if (valEl) valEl.value = '';
+    if (clearVal) {
+        input.value = '';
+        if (valEl) valEl.value = '';
+    }
     Array.from(list.querySelectorAll('.adm-ss-item')).forEach(function(item) {
         var d = item.dataset.district;
         item.style.display = (d === undefined || d === '' || d === districtId) ? '' : 'none';
@@ -1307,7 +1310,7 @@ document.querySelectorAll('.searchable-select-wrap').forEach(function(wrap) {
             presDistId.value  = permDistId.value;
             presDistTxt.value = permDistTxt.value;
             presDistTxt.setAttribute('readonly', true);
-            admFilterThanas('pres_thana_list', 'pres_thana_search', 'present_thana_id', permDistId.value);
+            admFilterThanas('pres_thana_list', 'pres_thana_search', 'present_thana_id', permDistId.value, true);
         } else if (!isSame && presDistTxt) {
             presDistTxt.removeAttribute('readonly');
         }
