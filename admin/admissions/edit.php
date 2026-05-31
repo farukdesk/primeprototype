@@ -262,6 +262,11 @@ require_once __DIR__ . '/../includes/header.php';
 echo '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.min.css">';
 echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>';
 ?>
+<style>
+/* Academic table: make TomSelect controls fill each cell properly */
+#acadTable .ts-wrapper { width: 100%; min-width: 0; }
+#acadTable td { vertical-align: middle; padding: .25rem .4rem; }
+</style>
 
 <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
     <div>
@@ -547,8 +552,14 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                     <table class="table table-bordered mb-0" id="acadTable">
                         <thead class="table-light">
                             <tr>
-                                <th>Exam Name</th><th>Session</th><th>Group</th>
-                                <th>Board/University</th><th>Year</th><th>Division/Grade</th><th>Marks/CGPA</th><th></th>
+                                <th style="min-width:160px">Exam Name</th>
+                                <th style="min-width:80px">Session</th>
+                                <th style="min-width:130px">Group</th>
+                                <th style="min-width:170px">Board/University</th>
+                                <th style="min-width:68px">Year</th>
+                                <th style="min-width:85px">Division/Grade</th>
+                                <th style="min-width:80px">Marks/CGPA</th>
+                                <th style="width:38px"></th>
                             </tr>
                         </thead>
                         <tbody id="acadBody">
@@ -853,17 +864,20 @@ function initAcadRow(tr) {
     var tsExam = new TomSelect(examSel, {
         create: true, allowEmptyOption: true, maxOptions: 20,
         plugins: ['clear_button'],
-        placeholder: '— Select / Type —'
+        placeholder: '— Select / Type —',
+        dropdownParent: 'body'
     });
     var tsGroup = new TomSelect(groupSel, {
         create: true, allowEmptyOption: true, maxOptions: 30,
         plugins: ['clear_button'],
-        placeholder: '— Select / Type —'
+        placeholder: '— Select / Type —',
+        dropdownParent: 'body'
     });
     var tsBoard = new TomSelect(boardSel, {
         create: true, allowEmptyOption: true, maxOptions: 20,
         plugins: ['clear_button'],
-        placeholder: '— Select / Type —'
+        placeholder: '— Select / Type —',
+        dropdownParent: 'body'
     });
 
     tr._tsExam  = tsExam;

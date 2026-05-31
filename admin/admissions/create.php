@@ -1339,9 +1339,9 @@ function initAcadRow(tr) {
     var boardSel = tr.querySelector('select.acad-board-sel');
     if (!examSel || !groupSel || !boardSel) return;
     var savedExam = examSel.value, savedGroup = groupSel.value, savedBoard = boardSel.value;
-    var tsExam  = new TomSelect(examSel,  { create:true, allowEmptyOption:true, maxOptions:20, plugins:['clear_button'], placeholder:'— Select / Type —' });
-    var tsGroup = new TomSelect(groupSel, { create:true, allowEmptyOption:true, maxOptions:30, plugins:['clear_button'], placeholder:'— Select —' });
-    var tsBoard = new TomSelect(boardSel, { create:true, allowEmptyOption:true, maxOptions:20, plugins:['clear_button'], placeholder:'— Select —' });
+    var tsExam  = new TomSelect(examSel,  { create:true, allowEmptyOption:true, maxOptions:20, plugins:['clear_button'], placeholder:'— Select / Type —', dropdownParent:'body' });
+    var tsGroup = new TomSelect(groupSel, { create:true, allowEmptyOption:true, maxOptions:30, plugins:['clear_button'], placeholder:'— Select —', dropdownParent:'body' });
+    var tsBoard = new TomSelect(boardSel, { create:true, allowEmptyOption:true, maxOptions:20, plugins:['clear_button'], placeholder:'— Select —', dropdownParent:'body' });
     tr._tsExam = tsExam; tr._tsGroup = tsGroup; tr._tsBoard = tsBoard;
     if (savedExam) {
         var data = ACAD_DATA[savedExam] || { groups:[], boards:[], defaultBoard:null, showGroup:true };
