@@ -17,6 +17,7 @@ csrf_check();
 $id     = (int)($_POST['id'] ?? 0);
 $label  = trim($_POST['scholarship_label']  ?? '');
 $amount = (float)($_POST['scholarship_amount'] ?? 0);
+$redirect_to = trim($_POST['redirect_to'] ?? '');
 
 $errors = [];
 
@@ -55,4 +56,5 @@ if (empty($errors)) {
     flash_set('error', implode(' ', $errors));
 }
 
-redirect(APP_URL . '/admissions/view.php?id=' . $id);
+$target = $redirect_to === 'statement' ? 'statement.php' : 'view.php';
+redirect(APP_URL . '/admissions/' . $target . '?id=' . $id);

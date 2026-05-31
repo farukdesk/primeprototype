@@ -48,6 +48,10 @@ $page_title         = 'Statement of Payment – ' . ($app['student_name'] ?? 'Ad
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= h($page_title) ?></title>
+    <!-- Bootstrap 5 (modal support) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <!-- Font Awesome 6 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: Arial, sans-serif; font-size: 12px; line-height: 1.25; background: #f0f2f5; color: #222; }
@@ -151,6 +155,8 @@ $page_title         = 'Statement of Payment – ' . ($app['student_name'] ?? 'Ad
         @media print {
             @page { size: A4 portrait; margin: 0; }
             .screen-controls { display: none !important; }
+            .modal { display: none !important; }
+            .alert { display: none !important; }
             body { background: #fff; line-height: 1.1; }
             .print-wrapper { padding: 0; }
             .statement-page {
@@ -167,10 +173,50 @@ $page_title         = 'Statement of Payment – ' . ($app['student_name'] ?? 'Ad
 <div class="screen-controls">
     <button onclick="window.print()">🖨 Print / Save as PDF</button>
     <a href="<?= APP_URL ?>/admissions/index.php" class="back-btn">← Back to Admissions</a>
+    <?php if ($has_package && adm_can_edit()): ?>
+    <button type="button"
+            style="background:#d97706;"
+            data-bs-toggle="modal" data-bs-target="#scModal"
+            data-label="<?= h($scholarship_label) ?>"
+            data-amount="<?= ($scholarship_amount > 0) ? h(number_format($scholarship_amount, 2)) : '' ?>">
+        <i class="fas fa-<?= $scholarship_amount > 0 ? 'edit' : 'plus' ?>"></i>
+        <?= $scholarship_amount > 0 ? 'Edit Scholarship' : 'Set Scholarship' ?>
+    </button>
+    <?php if ($scholarship_amount > 0): ?>
+    <form method="post" action="<?= APP_URL ?>/admissions/remove-scholarship.php"
+          onsubmit="return confirm('Remove scholarship from this application?');"
+          style="display:inline;">
+        <?= csrf_field() ?>
+        <input type="hidden" name="id" value="<?= $id ?>">
+        <input type="hidden" name="redirect_to" value="statement">
+        <button type="submit" style="background:#dc2626;">
+            <i class="fas fa-times"></i> Remove Scholarship
+        </button>
+    </form>
+    <?php endif; ?>
+    <?php endif; ?>
     <span><?= h($app['app_number']) ?> — <?= h($app['student_name']) ?></span>
 </div>
 
 <div class="print-wrapper">
+
+<?php
+$_flash_html = '';
+foreach (['success', 'error', 'warning', 'info'] as $_ft) {
+    $_fm = flash_get($_ft);
+    if ($_fm) {
+        $_cls = $_ft === 'error' ? 'danger' : $_ft;
+        $_flash_html .= '<div class="alert alert-' . $_cls . ' alert-dismissible fade show mb-2" role="alert">'
+            . strip_tags($_fm, '<strong><em><b><i>')
+            . '<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
+    }
+}
+if ($_flash_html): ?>
+<div style="max-width:794px; margin:0 auto 12px;">
+    <?= $_flash_html ?>
+</div>
+<?php endif; ?>
+
 <div class="statement-page">
 
     <div class="univ-header">
@@ -381,6 +427,65 @@ $page_title         = 'Statement of Payment – ' . ($app['student_name'] ?? 'Ad
 
 </div>
 </div>
+
+<?php if ($has_package && adm_can_edit()): ?>
+<!-- ── Scholarship Modal ── -->
+<div class="modal fade" id="scModal" tabindex="-1" aria-labelledby="scModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <form method="post" action="<?= APP_URL ?>/admissions/set-scholarship.php" novalidate>
+            <?= csrf_field() ?>
+            <input type="hidden" name="id" value="<?= $id ?>">
+            <input type="hidden" name="redirect_to" value="statement">
+            <div class="modal-content">
+                <div class="modal-header" style="background:#d97706; color:#fff;">
+                    <h5 class="modal-title" id="scModalLabel">
+                        <i class="fas fa-graduation-cap me-2"></i>Add / Edit Scholarship
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-3">
+                        The scholarship amount will be shown as a discount on the first semester in the payment statement.
+                    </p>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Scholarship Label <span class="text-danger">*</span></label>
+                        <input type="text" name="scholarship_label" id="sc-label" class="form-control"
+                               placeholder="e.g. Merit Scholarship, Freedom Fighter, Sports Award" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Scholarship Amount (BDT) <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text">BDT</span>
+                            <input type="number" name="scholarship_amount" id="sc-amount" class="form-control"
+                                   step="0.01" min="0.01" placeholder="e.g. 5000" required>
+                        </div>
+                        <div class="form-text">Fixed discount applied to the first semester fees.</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning text-dark">
+                        <i class="fas fa-save me-1"></i> Save Scholarship
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+document.getElementById('scModal').addEventListener('show.bs.modal', function(event) {
+    const btn    = event.relatedTarget;
+    const label  = btn ? (btn.dataset.label  || '') : '';
+    const amount = btn ? (btn.dataset.amount || '') : '';
+    document.getElementById('sc-label').value  = label;
+    document.getElementById('sc-amount').value = amount;
+});
+</script>
+<?php endif; ?>
+
+<!-- Bootstrap JS (required for modal) -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
 </body>
 </html>
