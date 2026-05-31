@@ -83,8 +83,13 @@ require_once __DIR__ . '/../includes/header.php';
         <!-- Scholarship -->
         <?php if (!empty($app['financial_package_name']) && adm_can_edit()): ?>
         <?php
-        $sc_amount = (float)($app['scholarship_amount'] ?? 0);
-        $sc_label  = (string)($app['scholarship_label']  ?? '');
+        $sc_amount          = (float)($app['scholarship_amount']             ?? 0);
+        $sc_label           = (string)($app['scholarship_label']              ?? '');
+        $sc_type            = (string)($app['scholarship_discount_type']      ?? 'fixed');
+        $sc_pct             = (float)($app['scholarship_discount_pct']        ?? 0);
+        $sc_applies_fixed   = (int)($app['scholarship_applies_to_fixed']      ?? 0);
+        $sc_applies_english = (int)($app['scholarship_applies_to_english']    ?? 0);
+        $sc_tuition         = (float)($app['financial_tuition_per_semester']  ?? 0);
         ?>
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-header bg-white d-flex justify-content-between align-items-center">
@@ -92,7 +97,11 @@ require_once __DIR__ . '/../includes/header.php';
                 <button type="button" class="btn btn-warning btn-sm"
                         data-bs-toggle="modal" data-bs-target="#scModal"
                         data-label="<?= h($sc_label) ?>"
-                        data-amount="<?= h(number_format($sc_amount, 2)) ?>">
+                        data-type="<?= h($sc_type) ?>"
+                        data-pct="<?= h(number_format($sc_pct, 4)) ?>"
+                        data-amount="<?= h(number_format($sc_amount, 2)) ?>"
+                        data-applies-fixed="<?= $sc_applies_fixed ?>"
+                        data-applies-english="<?= $sc_applies_english ?>">
                     <i class="fas fa-<?= $sc_amount > 0 ? 'edit' : 'plus' ?> me-1"></i>
                     <?= $sc_amount > 0 ? 'Edit Scholarship' : 'Add Scholarship' ?>
                 </button>
@@ -102,7 +111,20 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
                         <div class="fw-semibold"><?= h($sc_label) ?></div>
-                        <div class="text-success fw-semibold">BDT <?= number_format($sc_amount, 2) ?> discount on first semester</div>
+                        <?php if ($sc_type === 'percentage' && $sc_pct > 0): ?>
+                        <div class="text-success fw-semibold">
+                            <?= number_format($sc_pct, 4) ?>% discount
+                            <?php
+                            $scope = ['Tuition Fee'];
+                            if ($sc_applies_fixed)   $scope[] = 'Institutional &amp; Dev. Fee';
+                            if ($sc_applies_english) $scope[] = 'English Language Fee';
+                            ?>
+                            on <?= implode(' + ', $scope) ?>
+                            — BDT <?= number_format($sc_amount, 2) ?> off first semester
+                        </div>
+                        <?php else: ?>
+                        <div class="text-success fw-semibold">BDT <?= number_format($sc_amount, 2) ?> fixed discount on first semester</div>
+                        <?php endif; ?>
                     </div>
                     <form method="post" action="<?= APP_URL ?>/admissions/remove-scholarship.php"
                           onsubmit="return confirm('Remove scholarship from this application?');">
@@ -340,8 +362,14 @@ function confirmDelete(id, label) {
                 </div>
                 <div class="modal-body">
                     <p class="text-muted small mb-3">
-                        The scholarship amount will be shown as a discount on the first semester in the payment statement.
+                        The scholarship will be shown as a discount on the first semester in the payment statement.
                     </p>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Tuition Fee (First Semester)</label>
+                        <input type="text" id="sc-tuition-display" class="form-control bg-light" readonly
+                               value="<?= number_format($sc_tuition, 2) ?>">
+                    </div>
 
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Scholarship Label <span class="text-danger">*</span></label>
@@ -350,13 +378,70 @@ function confirmDelete(id, label) {
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Scholarship Amount (BDT) <span class="text-danger">*</span></label>
+                        <label class="form-label fw-semibold">Scholarship Type <span class="text-danger">*</span></label>
+                        <div class="d-flex gap-4">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="discount_type" value="percentage"
+                                       id="sc-type-pct" checked>
+                                <label class="form-check-label" for="sc-type-pct">
+                                    <i class="fas fa-percent me-1 text-secondary"></i>Percentage
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="discount_type" value="fixed"
+                                       id="sc-type-fixed">
+                                <label class="form-check-label" for="sc-type-fixed">
+                                    <i class="fas fa-money-bill-wave me-1 text-secondary"></i>Fixed Amount
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3" id="sc-pct-wrap">
+                        <label class="form-label fw-semibold">Discount % <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <input type="number" name="discount_pct" id="sc-pct"
+                                   class="form-control" step="0.0001" min="0.0001" max="100">
+                            <span class="input-group-text">%</span>
+                        </div>
+                    </div>
+
+                    <div class="mb-3 d-none" id="sc-fixed-wrap">
+                        <label class="form-label fw-semibold">Fixed Scholarship Amount <span class="text-danger">*</span></label>
                         <div class="input-group">
                             <span class="input-group-text">BDT</span>
-                            <input type="number" name="scholarship_amount" id="sc-amount" class="form-control"
-                                   step="0.01" min="0.01" placeholder="e.g. 5000" required>
+                            <input type="number" name="scholarship_amount" id="sc-fixed-amount"
+                                   class="form-control" step="0.01" min="0.01" placeholder="e.g. 5000">
                         </div>
-                        <div class="form-text">Fixed discount applied to the first semester fees.</div>
+                    </div>
+
+                    <div class="mb-3" id="sc-calc-wrap">
+                        <label class="form-label fw-semibold">Scholarship Amount (auto-calculated)</label>
+                        <div class="input-group">
+                            <input type="text" id="sc-calc-amount" class="form-control bg-light" readonly>
+                            <span class="input-group-text">BDT</span>
+                        </div>
+                    </div>
+
+                    <!-- Fee scope: only for percentage type -->
+                    <div class="mb-3" id="sc-scope-wrap">
+                        <label class="form-label fw-semibold small">Also apply discount to:</label>
+                        <div class="d-flex gap-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="applies_to_fixed" value="1"
+                                       id="sc-applies-fixed">
+                                <label class="form-check-label small" for="sc-applies-fixed">
+                                    Institutional &amp; Development Fees
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="applies_to_english" value="1"
+                                       id="sc-applies-english">
+                                <label class="form-check-label small" for="sc-applies-english">
+                                    English Language Fee
+                                </label>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -371,14 +456,85 @@ function confirmDelete(id, label) {
 </div>
 
 <script>
-// Pre-fill scholarship modal with existing values when opened
-document.getElementById('scModal').addEventListener('show.bs.modal', function(event) {
-    const btn    = event.relatedTarget;
-    const label  = btn ? (btn.dataset.label  || '') : '';
-    const amount = btn ? (btn.dataset.amount || '') : '';
-    document.getElementById('sc-label').value  = label;
-    document.getElementById('sc-amount').value = amount;
-});
+(function() {
+    var tuitionBase = <?= json_encode($sc_tuition) ?>;
+    var fixedBase   = <?= json_encode((float)($app['financial_fixed_institutional_fees'] ?? 0) / max(1, (int)($app['financial_total_semesters'] ?? 1))) ?>;
+    var englishBase = <?= json_encode((float)($app['financial_english_course_fee']       ?? 0) / max(1, (int)($app['financial_total_semesters'] ?? 1))) ?>;
+
+    function scSwitchType(type) {
+        var pctWrap    = document.getElementById('sc-pct-wrap');
+        var fixedWrap  = document.getElementById('sc-fixed-wrap');
+        var scopeWrap  = document.getElementById('sc-scope-wrap');
+        var calcWrap   = document.getElementById('sc-calc-wrap');
+        var pctInput   = document.getElementById('sc-pct');
+        var fixedInput = document.getElementById('sc-fixed-amount');
+
+        if (type === 'fixed') {
+            pctWrap.classList.add('d-none');
+            fixedWrap.classList.remove('d-none');
+            scopeWrap.classList.add('d-none');
+            calcWrap.classList.add('d-none');
+            pctInput.removeAttribute('required'); pctInput.value = '';
+            fixedInput.setAttribute('required', 'required');
+            document.getElementById('sc-applies-fixed').checked   = false;
+            document.getElementById('sc-applies-english').checked = false;
+        } else {
+            pctWrap.classList.remove('d-none');
+            fixedWrap.classList.add('d-none');
+            scopeWrap.classList.remove('d-none');
+            calcWrap.classList.remove('d-none');
+            pctInput.setAttribute('required', 'required');
+            fixedInput.removeAttribute('required'); fixedInput.value = '';
+        }
+        scRecalcAmount();
+    }
+
+    function scRecalcAmount() {
+        var typePct = document.getElementById('sc-type-pct');
+        if (!typePct || !typePct.checked) return;
+        var pct = parseFloat(document.getElementById('sc-pct').value) || 0;
+        var base = tuitionBase;
+        if (document.getElementById('sc-applies-fixed').checked)   base += fixedBase;
+        if (document.getElementById('sc-applies-english').checked) base += englishBase;
+        var amt = Math.round(base * pct / 100 * 100) / 100;
+        document.getElementById('sc-calc-amount').value =
+            amt.toLocaleString('en-BD', {minimumFractionDigits:2});
+    }
+
+    document.querySelectorAll('input[name="discount_type"]').forEach(function(r) {
+        r.addEventListener('change', function() { scSwitchType(this.value); });
+    });
+    document.getElementById('sc-pct').addEventListener('input', scRecalcAmount);
+    document.getElementById('sc-applies-fixed').addEventListener('change', scRecalcAmount);
+    document.getElementById('sc-applies-english').addEventListener('change', scRecalcAmount);
+
+    document.getElementById('scModal').addEventListener('show.bs.modal', function(event) {
+        var btn             = event.relatedTarget;
+        var label           = btn ? (btn.dataset.label          || '') : '';
+        var type            = btn ? (btn.dataset.type           || 'fixed') : 'fixed';
+        var pct             = btn ? (btn.dataset.pct            || '') : '';
+        var amount          = btn ? (btn.dataset.amount         || '') : '';
+        var appliesFixed    = btn ? (btn.dataset.appliesFixed   === '1') : false;
+        var appliesEnglish  = btn ? (btn.dataset.appliesEnglish === '1') : false;
+
+        document.getElementById('sc-label').value = label;
+        document.getElementById('sc-applies-fixed').checked   = appliesFixed;
+        document.getElementById('sc-applies-english').checked = appliesEnglish;
+
+        if (type === 'percentage') {
+            document.getElementById('sc-type-pct').checked   = true;
+            document.getElementById('sc-type-fixed').checked = false;
+            scSwitchType('percentage');
+            document.getElementById('sc-pct').value = pct;
+            scRecalcAmount();
+        } else {
+            document.getElementById('sc-type-pct').checked   = false;
+            document.getElementById('sc-type-fixed').checked = true;
+            scSwitchType('fixed');
+            document.getElementById('sc-fixed-amount').value = amount;
+        }
+    });
+})();
 </script>
 <?php endif; ?>
 
