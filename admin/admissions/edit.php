@@ -554,7 +554,7 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                             <tr>
                                 <th style="min-width:160px">Exam Name</th>
                                 <th style="min-width:80px">Session</th>
-                                <th style="min-width:130px">Group / Subject</th>
+                                <th style="min-width:130px">Group/Subject</th>
                                 <th style="min-width:170px">Board/University</th>
                                 <th style="min-width:68px">Year</th>
                                 <th style="min-width:85px">Division/Grade</th>
