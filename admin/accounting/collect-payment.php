@@ -13,6 +13,7 @@ foreach ($cash_accounts as $a) {
     $cash_account_labels_by_id[(int)$a['id']] = $a['code'] . ' – ' . $a['name'];
 }
 $errors          = [];
+$sms_enabled     = acc_setting('sms_enabled', '0') === '1';
 
 // ── One-time payment nonce helpers (prevent duplicate payment on browser refresh / POST replay) ──
 function payment_nonce_generate(): void {
@@ -492,7 +493,6 @@ if (in_array($_GET['tab'] ?? '', ['student', 'general', 'admission'], true)) {
     $active_tab = $_GET['tab'];
 }
 
-$sms_enabled = acc_setting('sms_enabled', '0') === '1';
 $adm_notification_note = $sms_enabled
     ? 'Student Copy invoice email and payment SMS are sent to the applicant with their Student ID.'
     : 'Student Copy invoice email is sent to the applicant with their Student ID (SMS currently disabled).';
