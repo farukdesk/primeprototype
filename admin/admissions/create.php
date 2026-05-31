@@ -780,7 +780,7 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                                    placeholder="Select district first…" autocomplete="off" data-target="permanent_thana_id">
                             <input type="hidden" name="permanent_thana_id" id="permanent_thana_id"
                                    value="<?= h($_POST['permanent_thana_id'] ?? '') ?>">
-                            <div class="adm-ss-list" id="perm_thana_list" data-current-district=""
+                            <div class="adm-ss-list" id="perm_thana_list" data-current-district="<?= h($_POST['permanent_district_id'] ?? '') ?>"
                                  style="position:absolute;top:100%;left:0;right:0;max-height:200px;overflow-y:auto;background:#fff;border:1px solid #dee2e6;border-top:0;border-radius:0 0 6px 6px;z-index:1050;display:none">
                                 <div class="adm-ss-item" data-value="" data-label="" data-district="" style="padding:6px 12px;cursor:pointer;color:#999;font-size:.85rem">— None —</div>
                                 <?php foreach ($bd_thanas as $th): ?>
@@ -866,7 +866,7 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                                        placeholder="Select district first…" autocomplete="off" data-target="present_thana_id">
                                 <input type="hidden" name="present_thana_id" id="present_thana_id"
                                        value="<?= h($_POST['present_thana_id'] ?? '') ?>">
-                                <div class="adm-ss-list" id="pres_thana_list" data-current-district=""
+                                <div class="adm-ss-list" id="pres_thana_list" data-current-district="<?= h($_POST['present_district_id'] ?? '') ?>"
                                      style="position:absolute;top:100%;left:0;right:0;max-height:200px;overflow-y:auto;background:#fff;border:1px solid #dee2e6;border-top:0;border-radius:0 0 6px 6px;z-index:1050;display:none">
                                     <div class="adm-ss-item" data-value="" data-label="" data-district="" style="padding:6px 12px;cursor:pointer;color:#999;font-size:.85rem">— None —</div>
                                     <?php foreach ($bd_thanas as $th): ?>
@@ -1653,7 +1653,7 @@ document.querySelectorAll('.searchable-select-wrap').forEach(function(wrap) {
     }
 
     // Init
-    goTo(<?= $errors ? 1 : 1 ?>);
+    goTo(1);
 
     prevBtn.addEventListener('click', function() { goTo(current - 1); });
     nextBtn.addEventListener('click', function() { goTo(current + 1); });
