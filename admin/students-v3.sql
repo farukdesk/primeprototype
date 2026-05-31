@@ -321,15 +321,18 @@ INSERT IGNORE INTO `bd_districts` (`id`, `name`, `division`) VALUES
 -- ─── Thanas / Upazilas ────────────────────────────────────────
 -- Dhaka District (id=1)
 INSERT IGNORE INTO `bd_thanas` (`district_id`, `name`) VALUES
-(1, 'Dhamrai'), (1, 'Dohar'), (1, 'Keraniganj'), (1, 'Nawabganj'), (1, 'Savar'),
-(1, 'Demra'), (1, 'Uttara'), (1, 'Mirpur'), (1, 'Motijheel'), (1, 'Gulshan');
+(1, 'Kotwali'), (1, 'Mohammadpur'), (1, 'Lalbagh'), (1, 'Sutrapur'),
+(1, 'Motijheel'), (1, 'Demra'), (1, 'Sabujbagh'), (1, 'Mirpur'),
+(1, 'Gulshan'), (1, 'Uttara'), (1, 'Pallabi'), (1, 'Cantonment'),
+(1, 'Dhanmondi'), (1, 'Tejgaon'), (1, 'Ramna'),
+(1, 'Keraniganj'), (1, 'Dohar'), (1, 'Nawabganj'), (1, 'Savar'), (1, 'Dhamrai');
 -- Faridpur (id=2)
 INSERT IGNORE INTO `bd_thanas` (`district_id`, `name`) VALUES
 (2, 'Faridpur Sadar'), (2, 'Alfadanga'), (2, 'Boalmari'), (2, 'Char Bhadrasan'),
-(2, 'Madhukali'), (2, 'Nagarkanda'), (2, 'Sadarpur'), (2, 'Saltha');
+(2, 'Bhanga'), (2, 'Madhukali'), (2, 'Nagarkanda'), (2, 'Sadarpur'), (2, 'Saltha');
 -- Gazipur (id=3)
 INSERT IGNORE INTO `bd_thanas` (`district_id`, `name`) VALUES
-(3, 'Gazipur Sadar'), (3, 'Kaliakair'), (3, 'Kaliganj'), (3, 'Kapasia'), (3, 'Sreepur');
+(3, 'Gazipur Sadar'), (3, 'Tongi'), (3, 'Kaliakair'), (3, 'Kaliganj'), (3, 'Kapasia'), (3, 'Sreepur');
 -- Gopalganj (id=4)
 INSERT IGNORE INTO `bd_thanas` (`district_id`, `name`) VALUES
 (4, 'Gopalganj Sadar'), (4, 'Kashiani'), (4, 'Kotalipara'), (4, 'Muksudpur'), (4, 'Tungipara');
@@ -382,8 +385,10 @@ INSERT IGNORE INTO `bd_thanas` (`district_id`, `name`) VALUES
 (16, 'Kachua'), (16, 'Matlab Dakshin'), (16, 'Matlab Uttar'), (16, 'Shahrasti');
 -- Chittagong (id=17)
 INSERT IGNORE INTO `bd_thanas` (`district_id`, `name`) VALUES
-(17, 'Chittagong Sadar'), (17, 'Anwara'), (17, 'Banshkhali'), (17, 'Boalkhali'),
-(17, 'Chandanaish'), (17, 'Fatikchhari'), (17, 'Hathazari'), (17, 'Karnaphuli'),
+(17, 'Kotwali'), (17, 'Panchlaish'), (17, 'Chandgaon'), (17, 'Bandor'),
+(17, 'Pahartali'), (17, 'Double Muring'),
+(17, 'Anwara'), (17, 'Banshkhali'), (17, 'Boalkhali'),
+(17, 'Chandanaish'), (17, 'Fatikchhari'), (17, 'Hathazari'),
 (17, 'Lohagara'), (17, 'Mirsharai'), (17, 'Patiya'), (17, 'Rangunia'),
 (17, 'Raozan'), (17, 'Sandwip'), (17, 'Satkania'), (17, 'Sitakunda');
 -- Cox's Bazar (id=18)
@@ -392,9 +397,9 @@ INSERT IGNORE INTO `bd_thanas` (`district_id`, `name`) VALUES
 (18, 'Pekua'), (18, 'Ramu'), (18, 'Teknaf'), (18, 'Ukhia');
 -- Cumilla (id=19)
 INSERT IGNORE INTO `bd_thanas` (`district_id`, `name`) VALUES
-(19, 'Cumilla Sadar'), (19, 'Barura'), (19, 'Brahmanpara'), (19, 'Burichang'),
+(19, 'Cumilla Sadar Adarsha'), (19, 'Cumilla Sadar South'), (19, 'Barura'), (19, 'Brahmanpara'), (19, 'Burichang'),
 (19, 'Chandina'), (19, 'Chauddagram'), (19, 'Daudkandi'), (19, 'Debidwar'),
-(19, 'Homna'), (19, 'Laksam'), (19, 'Lalmai'), (19, 'Meghna'),
+(19, 'Homna'), (19, 'Laksam'), (19, 'Meghna'),
 (19, 'Monohorgonj'), (19, 'Muradnagar'), (19, 'Nangalkot'), (19, 'Titas');
 -- Feni (id=20)
 INSERT IGNORE INTO `bd_thanas` (`district_id`, `name`) VALUES
@@ -432,7 +437,7 @@ INSERT IGNORE INTO `bd_thanas` (`district_id`, `name`) VALUES
 -- Natore (id=28)
 INSERT IGNORE INTO `bd_thanas` (`district_id`, `name`) VALUES
 (28, 'Natore Sadar'), (28, 'Bagatipara'), (28, 'Baraigram'), (28, 'Gurudaspur'),
-(28, 'Lalpur'), (28, 'Singra');
+(28, 'Lalpur'), (28, 'Naldanga'), (28, 'Singra');
 -- Chapainawabganj (id=29)
 INSERT IGNORE INTO `bd_thanas` (`district_id`, `name`) VALUES
 (29, 'Chapainawabganj Sadar'), (29, 'Bholahat'), (29, 'Gomastapur'), (29, 'Nachole'), (29, 'Shibganj');
@@ -442,7 +447,8 @@ INSERT IGNORE INTO `bd_thanas` (`district_id`, `name`) VALUES
 (30, 'Chatmohar'), (30, 'Faridpur'), (30, 'Ishwardi'), (30, 'Santhia'), (30, 'Sujanagar');
 -- Rajshahi (id=31)
 INSERT IGNORE INTO `bd_thanas` (`district_id`, `name`) VALUES
-(31, 'Rajshahi Sadar'), (31, 'Bagha'), (31, 'Bagmara'), (31, 'Charghat'),
+(31, 'Boalia'), (31, 'Rajpara'),
+(31, 'Bagha'), (31, 'Bagmara'), (31, 'Charghat'),
 (31, 'Durgapur'), (31, 'Godagari'), (31, 'Mohanpur'), (31, 'Paba'), (31, 'Puthia'), (31, 'Tanore');
 -- Sirajganj (id=32)
 INSERT IGNORE INTO `bd_thanas` (`district_id`, `name`) VALUES
@@ -465,8 +471,9 @@ INSERT IGNORE INTO `bd_thanas` (`district_id`, `name`) VALUES
 (36, 'Maheshpur'), (36, 'Shailkupa');
 -- Khulna (id=37)
 INSERT IGNORE INTO `bd_thanas` (`district_id`, `name`) VALUES
-(37, 'Khulna Sadar'), (37, 'Batiaghata'), (37, 'Dacope'), (37, 'Dumuria'),
-(37, 'Dighalia'), (37, 'Koyra'), (37, 'Paikgachha'), (37, 'Phultala'), (37, 'Rupsa'), (37, 'Terokhada');
+(37, 'Khulna Sadar'), (37, 'Sonadanga'), (37, 'Daulatpur'),
+(37, 'Batiaghata'), (37, 'Dacope'), (37, 'Dumuria'),
+(37, 'Dighalia'), (37, 'Koyra'), (37, 'Phultala'), (37, 'Rupsa'), (37, 'Terokhada');
 -- Kushtia (id=38)
 INSERT IGNORE INTO `bd_thanas` (`district_id`, `name`) VALUES
 (38, 'Kushtia Sadar'), (38, 'Bheramara'), (38, 'Daulatpur'), (38, 'Khoksa'),
@@ -510,7 +517,7 @@ INSERT IGNORE INTO `bd_thanas` (`district_id`, `name`) VALUES
 -- Habiganj (id=49)
 INSERT IGNORE INTO `bd_thanas` (`district_id`, `name`) VALUES
 (49, 'Habiganj Sadar'), (49, 'Ajmiriganj'), (49, 'Bahubal'), (49, 'Baniachong'),
-(49, 'Chunarughat'), (49, 'Lakhai'), (49, 'Madhabpur'), (49, 'Nabiganj'), (49, 'Shayestaganj');
+(49, 'Chunarughat'), (49, 'Lakhai'), (49, 'Madhabpur'), (49, 'Nabiganj');
 -- Moulvibazar (id=50)
 INSERT IGNORE INTO `bd_thanas` (`district_id`, `name`) VALUES
 (50, 'Moulvibazar Sadar'), (50, 'Barlekha'), (50, 'Juri'), (50, 'Kamalganj'),
@@ -524,7 +531,7 @@ INSERT IGNORE INTO `bd_thanas` (`district_id`, `name`) VALUES
 INSERT IGNORE INTO `bd_thanas` (`district_id`, `name`) VALUES
 (52, 'Sylhet Sadar'), (52, 'Balaganj'), (52, 'Beanibazar'), (52, 'Bishwanath'),
 (52, 'Companiganj'), (52, 'Fenchuganj'), (52, 'Golapganj'), (52, 'Gowainghat'),
-(52, 'Jaintiapur'), (52, 'Kanaighat'), (52, 'Osmaninagar'), (52, 'South Surma'), (52, 'Zakiganj');
+(52, 'Jaintiapur'), (52, 'Kanaighat'), (52, 'South Surma'), (52, 'Zakiganj');
 -- Dinajpur (id=53)
 INSERT IGNORE INTO `bd_thanas` (`district_id`, `name`) VALUES
 (53, 'Dinajpur Sadar'), (53, 'Birampur'), (53, 'Birganj'), (53, 'Biral'),
@@ -562,7 +569,7 @@ INSERT IGNORE INTO `bd_thanas` (`district_id`, `name`) VALUES
 INSERT IGNORE INTO `bd_thanas` (`district_id`, `name`) VALUES
 (62, 'Mymensingh Sadar'), (62, 'Bhaluka'), (62, 'Dhobaura'), (62, 'Fulbaria'),
 (62, 'Gaffargaon'), (62, 'Gauripur'), (62, 'Haluaghat'), (62, 'Ishwarganj'),
-(62, 'Muktagachha'), (62, 'Nandail'), (62, 'Phulpur'), (62, 'Trishal');
+(62, 'Muktagachha'), (62, 'Nandail'), (62, 'Phulpur'), (62, 'Tarakanda'), (62, 'Trishal');
 -- Netrokona (id=63)
 INSERT IGNORE INTO `bd_thanas` (`district_id`, `name`) VALUES
 (63, 'Netrokona Sadar'), (63, 'Atpara'), (63, 'Barhatta'), (63, 'Durgapur'),
