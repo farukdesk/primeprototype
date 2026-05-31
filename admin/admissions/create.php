@@ -319,9 +319,13 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
 .adm-fp-stat .value { font-size: .9rem; font-weight: 600; color: #212529; }
 .adm-address-sep { border: 0; border-top: 2px dashed #dee2e6; margin: 1.25rem 0; }
 .adm-nav-bar { background: #fff; border-top: 1px solid #e9ecef; border-radius: 0 0 12px 12px; }
-/* Academic table: make TomSelect controls fill each cell properly */
-#acadTable .ts-wrapper { width: 100%; min-width: 0; }
-#acadTable td { vertical-align: middle; padding: .25rem .4rem; }
+.acad-row { background: #fff; border: 1px solid #dee2e6; border-radius: .375rem; margin-bottom: .5rem; padding: .5rem; }
+#acadBody .acad-row + .acad-row { border-top-color: #dee2e6; border-top-left-radius: 0; border-top-right-radius: 0; margin-top: -.0625rem; }
+#acadBody .acad-row:first-child { border-top-left-radius: .375rem; border-top-right-radius: .375rem; }
+#acadBody .acad-row:last-child  { border-bottom-left-radius: .375rem; border-bottom-right-radius: .375rem; }
+#acadBody .acad-row:not(:first-child) { border-top-left-radius: 0; border-top-right-radius: 0; }
+#acadBody .acad-row:not(:last-child)  { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.acad-group-td.ts-hidden-accessible ~ .ts-wrapper { opacity: 0.35; pointer-events: none; }
 @media (max-width: 575px) {
     .adm-step-btn .step-label { display: none; }
     .adm-step-btn { padding: .35rem .55rem; }
@@ -915,78 +919,81 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                     <i class="fas fa-plus me-1"></i>Add Row
                 </button>
             </div>
-            <div class="table-responsive">
-                <table class="table table-bordered table-sm align-middle mb-0" id="acadTable">
-                    <thead class="table-light">
-                        <tr>
-                            <th style="min-width:160px">Exam Name</th>
-                            <th style="min-width:80px">Session</th>
-                            <th style="min-width:130px">Group</th>
-                            <th style="min-width:170px">Board / University</th>
-                            <th style="min-width:68px">Year</th>
-                            <th style="min-width:85px">Grade</th>
-                            <th style="min-width:80px">Marks/GPA</th>
-                            <th style="width:38px"></th>
-                        </tr>
-                    </thead>
-                    <tbody id="acadBody">
-                        <?php
-                        $prev_acad = [];
-                        if (!empty($_POST['exam_name'])) {
-                            foreach ($_POST['exam_name'] as $idx => $en) {
-                                $prev_acad[] = [
-                                    'exam_name'        => $en,
-                                    'session'          => $_POST['acad_session'][$idx] ?? '',
-                                    'group_name'       => $_POST['group_name'][$idx] ?? '',
-                                    'board_university' => $_POST['board_university'][$idx] ?? '',
-                                    'year_of_passing'  => $_POST['year_of_passing'][$idx] ?? '',
-                                    'division_grade'   => $_POST['division_grade'][$idx] ?? '',
-                                    'total_marks_cgpa' => $_POST['total_marks_cgpa'][$idx] ?? '',
-                                ];
-                            }
-                        }
-                        if (empty($prev_acad)) {
-                            $prev_acad = [['exam_name'=>'','session'=>'','group_name'=>'','board_university'=>'','year_of_passing'=>'','division_grade'=>'','total_marks_cgpa'=>'']];
-                        }
-                        foreach ($prev_acad as $idx => $ar):
-                        ?>
-                        <tr class="acad-row">
-                            <td>
-                                <select name="exam_name[]" class="acad-exam-sel" style="width:100%">
-                                    <option value="">— Select —</option>
-                                    <?php foreach (['SSC','Dakhil','O Level','SSC (Vocational)','HSC','Alim','A Level'] as $en): ?>
-                                    <option value="<?= h($en) ?>" <?= h($ar['exam_name']) === $en ? 'selected' : '' ?>><?= h($en) ?></option>
-                                    <?php endforeach; ?>
-                                    <?php if ($ar['exam_name'] !== '' && !in_array($ar['exam_name'], ['SSC','Dakhil','O Level','SSC (Vocational)','HSC','Alim','A Level'])): ?>
-                                    <option value="<?= h($ar['exam_name']) ?>" selected><?= h($ar['exam_name']) ?></option>
-                                    <?php endif; ?>
-                                </select>
-                            </td>
-                            <td><input type="text" name="acad_session[]" class="form-control form-control-sm" value="<?= h($ar['session']) ?>"></td>
-                            <td class="acad-group-td">
-                                <select name="group_name[]" class="acad-group-sel" style="width:100%">
-                                    <option value="">— Select —</option>
-                                    <?php if ($ar['group_name'] !== ''): ?>
-                                    <option value="<?= h($ar['group_name']) ?>" selected><?= h($ar['group_name']) ?></option>
-                                    <?php endif; ?>
-                                </select>
-                            </td>
-                            <td>
-                                <select name="board_university[]" class="acad-board-sel" style="width:100%">
-                                    <option value="">— Select —</option>
-                                    <?php if ($ar['board_university'] !== ''): ?>
-                                    <option value="<?= h($ar['board_university']) ?>" selected><?= h($ar['board_university']) ?></option>
-                                    <?php endif; ?>
-                                </select>
-                            </td>
-                            <td><input type="text" name="year_of_passing[]" class="form-control form-control-sm" value="<?= h($ar['year_of_passing']) ?>" style="width:65px"></td>
-                            <td><input type="text" name="division_grade[]" class="form-control form-control-sm" value="<?= h($ar['division_grade']) ?>"></td>
-                            <td><input type="text" name="total_marks_cgpa[]" class="form-control form-control-sm" value="<?= h($ar['total_marks_cgpa']) ?>"></td>
-                            <td><button type="button" class="btn btn-sm btn-outline-danger removeRow"><i class="fas fa-times"></i></button></td>
-                        </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
+            <div class="px-3 pt-3 pb-3" id="acadBody">
+                <?php
+                $prev_acad = [];
+                if (!empty($_POST['exam_name'])) {
+                    foreach ($_POST['exam_name'] as $idx => $en) {
+                        $prev_acad[] = [
+                            'exam_name'        => $en,
+                            'session'          => $_POST['acad_session'][$idx] ?? '',
+                            'group_name'       => $_POST['group_name'][$idx] ?? '',
+                            'board_university' => $_POST['board_university'][$idx] ?? '',
+                            'year_of_passing'  => $_POST['year_of_passing'][$idx] ?? '',
+                            'division_grade'   => $_POST['division_grade'][$idx] ?? '',
+                            'total_marks_cgpa' => $_POST['total_marks_cgpa'][$idx] ?? '',
+                        ];
+                    }
+                }
+                if (empty($prev_acad)) {
+                    $prev_acad = [['exam_name'=>'','session'=>'','group_name'=>'','board_university'=>'','year_of_passing'=>'','division_grade'=>'','total_marks_cgpa'=>'']];
+                }
+                foreach ($prev_acad as $idx => $ar):
+                ?>
+                <div class="acad-row">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-12 col-sm-6 col-lg-3">
+                            <label class="form-label form-label-sm mb-1">Exam Name</label>
+                            <select name="exam_name[]" class="acad-exam-sel w-100">
+                                <option value="">— Select —</option>
+                                <?php foreach (['SSC','Dakhil','O Level','SSC (Vocational)','HSC','Alim','A Level'] as $en): ?>
+                                <option value="<?= h($en) ?>" <?= h($ar['exam_name']) === $en ? 'selected' : '' ?>><?= h($en) ?></option>
+                                <?php endforeach; ?>
+                                <?php if ($ar['exam_name'] !== '' && !in_array($ar['exam_name'], ['SSC','Dakhil','O Level','SSC (Vocational)','HSC','Alim','A Level'])): ?>
+                                <option value="<?= h($ar['exam_name']) ?>" selected><?= h($ar['exam_name']) ?></option>
+                                <?php endif; ?>
+                            </select>
+                        </div>
+                        <div class="col-6 col-sm-3 col-lg-2 acad-group-td">
+                            <label class="form-label form-label-sm mb-1">Group</label>
+                            <select name="group_name[]" class="acad-group-sel w-100">
+                                <option value="">— Select —</option>
+                                <?php if ($ar['group_name'] !== ''): ?>
+                                <option value="<?= h($ar['group_name']) ?>" selected><?= h($ar['group_name']) ?></option>
+                                <?php endif; ?>
+                            </select>
+                        </div>
+                        <div class="col-12 col-sm-9 col-lg-4">
+                            <label class="form-label form-label-sm mb-1">Board / University</label>
+                            <select name="board_university[]" class="acad-board-sel w-100">
+                                <option value="">— Select —</option>
+                                <?php if ($ar['board_university'] !== ''): ?>
+                                <option value="<?= h($ar['board_university']) ?>" selected><?= h($ar['board_university']) ?></option>
+                                <?php endif; ?>
+                            </select>
+                        </div>
+                        <div class="col-6 col-sm-3 col-lg-1">
+                            <label class="form-label form-label-sm mb-1">Session</label>
+                            <input type="text" name="acad_session[]" class="form-control form-control-sm" value="<?= h($ar['session']) ?>" placeholder="e.g. 2020">
+                        </div>
+                        <div class="col-4 col-sm-3 col-lg-1">
+                            <label class="form-label form-label-sm mb-1">Year</label>
+                            <input type="text" name="year_of_passing[]" class="form-control form-control-sm" value="<?= h($ar['year_of_passing']) ?>" placeholder="YYYY">
+                        </div>
+                        <div class="col-4 col-sm-3 col-lg-1">
+                            <label class="form-label form-label-sm mb-1">Grade</label>
+                            <input type="text" name="division_grade[]" class="form-control form-control-sm" value="<?= h($ar['division_grade']) ?>">
+                        </div>
+                        <div class="col-4 col-sm-3 col-lg-1">
+                            <label class="form-label form-label-sm mb-1">Marks/GPA</label>
+                            <input type="text" name="total_marks_cgpa[]" class="form-control form-control-sm" value="<?= h($ar['total_marks_cgpa']) ?>">
+                        </div>
+                        <div class="col-auto ms-auto d-flex align-items-end">
+                            <button type="button" class="btn btn-sm btn-outline-danger removeRow" title="Remove row"><i class="fas fa-times"></i></button>
+                        </div>
+                    </div>
+                </div>
+                <?php endforeach; ?>
             </div>
         </div>
 
@@ -1353,34 +1360,58 @@ function initAcadRow(tr) {
 }
 
 document.getElementById('addAcadRow').addEventListener('click', function() {
-    var tbody = document.getElementById('acadBody');
-    var tr = document.createElement('tr');
-    tr.className = 'acad-row';
-    tr.innerHTML = '<td><select name="exam_name[]" class="acad-exam-sel" style="width:100%"><option value="">— Select —</option>'
-        + ['SSC','Dakhil','O Level','SSC (Vocational)','HSC','Alim','A Level'].map(function(e){return '<option value="'+e+'">'+e+'</option>';}).join('')
-        + '</select></td>'
-        + '<td><input type="text" name="acad_session[]" class="form-control form-control-sm"></td>'
-        + '<td class="acad-group-td"><select name="group_name[]" class="acad-group-sel" style="width:100%"><option value="">— Select —</option></select></td>'
-        + '<td><select name="board_university[]" class="acad-board-sel" style="width:100%"><option value="">— Select —</option></select></td>'
-        + '<td><input type="text" name="year_of_passing[]" class="form-control form-control-sm" style="width:65px"></td>'
-        + '<td><input type="text" name="division_grade[]" class="form-control form-control-sm"></td>'
-        + '<td><input type="text" name="total_marks_cgpa[]" class="form-control form-control-sm"></td>'
-        + '<td><button type="button" class="btn btn-sm btn-outline-danger removeRow"><i class="fas fa-times"></i></button></td>';
-    tbody.appendChild(tr);
-    initAcadRow(tr);
+    var container = document.getElementById('acadBody');
+    var row = document.createElement('div');
+    row.className = 'acad-row';
+    var examOpts = ['SSC','Dakhil','O Level','SSC (Vocational)','HSC','Alim','A Level']
+        .map(function(e){ return '<option value="'+e+'">'+e+'</option>'; }).join('');
+    row.innerHTML =
+        '<div class="row g-2 align-items-end">'
+        + '<div class="col-12 col-sm-6 col-lg-3">'
+        +   '<label class="form-label form-label-sm mb-1">Exam Name</label>'
+        +   '<select name="exam_name[]" class="acad-exam-sel w-100"><option value="">— Select —</option>'+examOpts+'</select>'
+        + '</div>'
+        + '<div class="col-6 col-sm-3 col-lg-2 acad-group-td">'
+        +   '<label class="form-label form-label-sm mb-1">Group</label>'
+        +   '<select name="group_name[]" class="acad-group-sel w-100"><option value="">— Select —</option></select>'
+        + '</div>'
+        + '<div class="col-12 col-sm-9 col-lg-4">'
+        +   '<label class="form-label form-label-sm mb-1">Board / University</label>'
+        +   '<select name="board_university[]" class="acad-board-sel w-100"><option value="">— Select —</option></select>'
+        + '</div>'
+        + '<div class="col-6 col-sm-3 col-lg-1">'
+        +   '<label class="form-label form-label-sm mb-1">Session</label>'
+        +   '<input type="text" name="acad_session[]" class="form-control form-control-sm" placeholder="e.g. 2020">'
+        + '</div>'
+        + '<div class="col-4 col-sm-3 col-lg-1">'
+        +   '<label class="form-label form-label-sm mb-1">Year</label>'
+        +   '<input type="text" name="year_of_passing[]" class="form-control form-control-sm" placeholder="YYYY">'
+        + '</div>'
+        + '<div class="col-4 col-sm-3 col-lg-1">'
+        +   '<label class="form-label form-label-sm mb-1">Grade</label>'
+        +   '<input type="text" name="division_grade[]" class="form-control form-control-sm">'
+        + '</div>'
+        + '<div class="col-4 col-sm-3 col-lg-1">'
+        +   '<label class="form-label form-label-sm mb-1">Marks/GPA</label>'
+        +   '<input type="text" name="total_marks_cgpa[]" class="form-control form-control-sm">'
+        + '</div>'
+        + '<div class="col-auto ms-auto d-flex align-items-end">'
+        +   '<button type="button" class="btn btn-sm btn-outline-danger removeRow" title="Remove row"><i class="fas fa-times"></i></button>'
+        + '</div>'
+        + '</div>';
+    container.appendChild(row);
+    initAcadRow(row);
 });
 
 document.getElementById('acadBody').addEventListener('click', function(e) {
     if (e.target.closest('.removeRow')) {
-        var row = e.target.closest('tr');
-        if (document.querySelectorAll('#acadBody tr').length > 1) row.remove();
+        var row = e.target.closest('.acad-row');
+        if (document.querySelectorAll('#acadBody .acad-row').length > 1) row.remove();
     }
 });
 
-document.querySelectorAll('#acadBody tr.acad-row').forEach(function(tr) {
-    var groupSel = tr.querySelector('select.acad-group-sel');
-    if (groupSel && groupSel.parentElement.tagName === 'TD') groupSel.parentElement.classList.add('acad-group-td');
-    initAcadRow(tr);
+document.querySelectorAll('#acadBody .acad-row').forEach(function(row) {
+    initAcadRow(row);
 });
 
 // ── Photo preview ─────────────────────────────────────────────────────────────
