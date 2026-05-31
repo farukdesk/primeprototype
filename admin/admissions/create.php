@@ -319,11 +319,12 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
 .adm-fp-stat .value { font-size: .9rem; font-weight: 600; color: #212529; }
 .adm-address-sep { border: 0; border-top: 2px dashed #dee2e6; margin: 1.25rem 0; }
 .adm-nav-bar { background: #fff; border-top: 1px solid #e9ecef; border-radius: 0 0 12px 12px; }
-.acad-row { background: #fff; }
-.acad-row + .acad-row { border-top: 0 !important; border-radius: 0 !important; margin-top: -1px !important; }
-.acad-row:first-child { border-radius: .375rem .375rem 0 0 !important; }
-.acad-row:last-child  { border-radius: 0 0 .375rem .375rem !important; margin-top: -1px !important; }
-.acad-row:only-child  { border-radius: .375rem !important; margin-top: 0 !important; }
+.acad-row { background: #fff; border: 1px solid #dee2e6; border-radius: .375rem; margin-bottom: .5rem; padding: .5rem; }
+#acadBody .acad-row + .acad-row { border-top-color: #dee2e6; border-top-left-radius: 0; border-top-right-radius: 0; margin-top: -.0625rem; }
+#acadBody .acad-row:first-child { border-top-left-radius: .375rem; border-top-right-radius: .375rem; }
+#acadBody .acad-row:last-child  { border-bottom-left-radius: .375rem; border-bottom-right-radius: .375rem; }
+#acadBody .acad-row:not(:first-child) { border-top-left-radius: 0; border-top-right-radius: 0; }
+#acadBody .acad-row:not(:last-child)  { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
 .acad-group-td.ts-hidden-accessible ~ .ts-wrapper { opacity: 0.35; pointer-events: none; }
 @media (max-width: 575px) {
     .adm-step-btn .step-label { display: none; }
@@ -939,7 +940,7 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                 }
                 foreach ($prev_acad as $idx => $ar):
                 ?>
-                <div class="acad-row border rounded bg-white mb-2 p-2">
+                <div class="acad-row">
                     <div class="row g-2 align-items-end">
                         <div class="col-12 col-sm-6 col-lg-3">
                             <label class="form-label form-label-sm mb-1">Exam Name</label>
@@ -1361,7 +1362,7 @@ function initAcadRow(tr) {
 document.getElementById('addAcadRow').addEventListener('click', function() {
     var container = document.getElementById('acadBody');
     var row = document.createElement('div');
-    row.className = 'acad-row border rounded bg-white mb-2 p-2';
+    row.className = 'acad-row';
     var examOpts = ['SSC','Dakhil','O Level','SSC (Vocational)','HSC','Alim','A Level']
         .map(function(e){ return '<option value="'+e+'">'+e+'</option>'; }).join('');
     row.innerHTML =
