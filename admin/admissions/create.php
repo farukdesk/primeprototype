@@ -1222,7 +1222,7 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                         <label class="form-label">Decision</label>
                         <input type="text" name="office_decision" class="form-control" value="<?= h($_POST['office_decision'] ?? '') ?>">
                     </div>
-                    <div class="col-12 col-sm-6">
+                    <div class="col-12 col-sm-4">
                         <label class="form-label">Checked By</label>
                         <input type="text" name="office_checked_by" class="form-control" value="<?= h($_POST['office_checked_by'] ?? '') ?>">
                     </div>
