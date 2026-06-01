@@ -238,7 +238,7 @@ $printed_at = date('d M Y, h:i A');
         <div class="doc-header">
             <div class="brand">
                 <?php if ($logo_url): ?>
-                <img src="<?= h($logo_url) ?>" alt="Prime University">
+                <img src="<?= h($logo_url) ?>" alt="University Logo">
                 <?php endif; ?>
                 <div>
                     <h1>Lead Management Report</h1>
@@ -289,7 +289,7 @@ $printed_at = date('d M Y, h:i A');
 
         <?php if (empty($leads)): ?>
         <div class="empty-state">
-            <i class="fas fa-funnel-dollar fa-2x mb-2"></i>
+            <i class="fas fa-search fa-2x mb-2"></i>
             <div>No leads found for the selected filters.</div>
         </div>
         <?php else: ?>
