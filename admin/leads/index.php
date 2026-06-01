@@ -70,7 +70,7 @@ $sort_sql = match (in_array($f_sort, $valid_sorts, true) ? $f_sort : 'date_desc'
     'name_asc'    => 'l.first_name ASC, l.last_name ASC',
     'name_desc'   => 'l.first_name DESC, l.last_name DESC',
     'status_asc'  => 'l.status ASC',
-    'followup_asc'=> 'l.next_followup_date IS NULL ASC, l.next_followup_date ASC',
+    'followup_asc'=> 'CASE WHEN l.next_followup_date IS NULL THEN 1 ELSE 0 END, l.next_followup_date ASC',
     default       => 'l.created_at DESC',
 };
 
