@@ -131,6 +131,7 @@ $filter_qs = http_build_query(array_filter([
     'sort'     => $f_sort !== 'date_desc' ? $f_sort : '',
     'followup' => $f_followup,
 ]));
+$print_url = APP_URL . '/leads/print.php' . ($filter_qs !== '' ? '?' . $filter_qs : '');
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -140,8 +141,11 @@ require_once __DIR__ . '/../includes/header.php';
         <h4 class="mb-0 fw-semibold"><i class="fas fa-funnel-dollar me-2 text-primary"></i>Lead Management</h4>
         <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small"><li class="breadcrumb-item"><a href="<?= APP_URL ?>">Dashboard</a></li><li class="breadcrumb-item active">Leads</li></ol></nav>
     </div>
-    <?php if (leads_can_create()): ?>
     <div class="d-flex gap-2">
+        <a href="<?= $print_url ?>" class="btn btn-outline-dark btn-sm" target="_blank" rel="noopener">
+            <i class="fas fa-print me-1"></i> Print
+        </a>
+        <?php if (leads_can_create()): ?>
         <a href="<?= APP_URL ?>/leads/fb-settings.php" class="btn btn-outline-secondary btn-sm" title="Facebook Messenger Settings">
             <i class="fab fa-facebook-messenger me-1"></i> FB Settings
         </a>
@@ -151,8 +155,8 @@ require_once __DIR__ . '/../includes/header.php';
         <a href="<?= APP_URL ?>/leads/create.php" class="btn btn-primary btn-sm">
             <i class="fas fa-plus me-1"></i> Add Lead
         </a>
+        <?php endif; ?>
     </div>
-    <?php endif; ?>
 </div>
 
 <?= flash_show() ?>
@@ -502,4 +506,3 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
-
