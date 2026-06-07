@@ -88,8 +88,15 @@ $_svg_arrow = '<svg width="16" height="15" viewBox="0 0 16 15" fill="none" xmlns
                            <a href="<?= fh($item['url']) ?>"<?= $target_attr ?>><?= fh($item['label']) ?></a>
                            <div class="it-submenu submenu it-megamenu-wrap">
                               <div class="row gx-50">
+                              <?php
+                              $col_count = count($item['children']);
+                              if ($col_count <= 2)      $mega_col = 'col-xl-6';
+                              elseif ($col_count === 3) $mega_col = 'col-xl-4';
+                              elseif ($col_count === 4) $mega_col = 'col-xl-3';
+                              else                      $mega_col = 'col-xl';
+                              ?>
                               <?php foreach ($item['children'] as $col): ?>
-                                 <div class="col-xl-3">
+                                 <div class="<?= $mega_col ?>">
                                     <div class="it-megamenu-item">
                                        <h4 class="it-megamenu-title"><?= fh($col['label']) ?></h4>
                                        <?php if (!empty($col['children'])): ?>
