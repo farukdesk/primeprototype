@@ -451,7 +451,7 @@ if ($db) {
                            <a href="?q=<?= urlencode($search) ?>&batch=<?= urlencode($f_batch) ?>&page=1"
                               class="<?= !$f_dept ? 'active' : '' ?>">
                               All Departments
-                              <span class="badge-count"><?= $total + ($f_dept ? 0 : 0) ?></span>
+                              <span class="badge-count">                              <?= $total ?></span>
                            </a>
                         </li>
                         <?php foreach ($departments as $d): ?>

@@ -63,9 +63,6 @@ if ($search !== '') {
 
 $sql_where = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
-$total = (int)db()->prepare("SELECT COUNT(*) FROM alumni a $sql_where")
-              ->execute($params) ? db()->prepare("SELECT COUNT(*) FROM alumni a $sql_where")
-              ->execute($params) : 0;
 $count_st = db()->prepare("SELECT COUNT(*) FROM alumni a $sql_where");
 $count_st->execute($params);
 $total = (int)$count_st->fetchColumn();
