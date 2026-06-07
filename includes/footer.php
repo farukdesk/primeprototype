@@ -55,11 +55,11 @@ for ($i = 1; $i <= 5; $i++) {
 
 $bottom_link_defaults = [
     1 => ['Academic Calendar', '#'],
-    2 => ['Prime ERP',         '#'],
-    3 => ['Webmail',           '#'],
-    4 => ['Admin',             'admin/'],
-    5 => ['Alumni',            'alumni.php'],
-    6 => ['Contact',           'contact.php'],
+    2 => ['Prime ERP', '#'],
+    3 => ['Webmail', '#'],
+    4 => ['Admin', 'admin/'],
+    5 => ['Alumni', 'alumni.php'],
+    6 => ['Contact', 'contact.php'],
 ];
 $bottom_links = [];
 for ($i = 1; $i <= 6; $i++) {
