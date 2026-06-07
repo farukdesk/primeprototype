@@ -21,6 +21,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $student_id   = trim($_POST['student_id']   ?? '');
     $name         = trim($_POST['name']         ?? '');
     $batch        = trim($_POST['batch']        ?? '');
+    $phone        = trim($_POST['phone']        ?? '');
+    $email        = trim($_POST['email']        ?? '');
     $company      = trim($_POST['company']      ?? '');
     $position     = trim($_POST['position']     ?? '');
     $linkedin_url = trim($_POST['linkedin_url'] ?? '');
@@ -31,6 +33,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $is_active    = isset($_POST['is_active']) ? 1 : 0;
 
     if ($name === '') $errors[] = 'Name is required.';
+    if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL))
+        $errors[] = 'Email must be a valid email address.';
     if ($linkedin_url !== '' && !filter_var($linkedin_url, FILTER_VALIDATE_URL))
         $errors[] = 'LinkedIn URL must be a valid URL.';
     if ($fb_url !== '' && !filter_var($fb_url, FILTER_VALIDATE_URL))
@@ -75,18 +79,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (empty($errors)) {
         db()->prepare(
-            'UPDATE alumni SET dept_id=?,student_id=?,name=?,batch=?,company=?,position=?,linkedin_url=?,fb_url=?,photo=?,
+            'UPDATE alumni SET dept_id=?,student_id=?,name=?,batch=?,phone=?,email=?,company=?,position=?,linkedin_url=?,fb_url=?,photo=?,
              status=?,admin_notes=?,sort_order=?,is_active=? WHERE id=?'
         )->execute([
-            $dept_id ?: null, $student_id ?: null, $name, $batch ?: null, $company ?: null,
-            $position ?: null, $linkedin_url ?: null, $fb_url ?: null,
+            $dept_id ?: null, $student_id ?: null, $name, $batch ?: null,
+            $phone ?: null, $email ?: null,
+            $company ?: null, $position ?: null, $linkedin_url ?: null, $fb_url ?: null,
             $photo, $status, $admin_notes ?: null, $sort_order, $is_active, $id
         ]);
         flash_set('success', 'Alumni <strong>' . h($name) . '</strong> updated.');
         redirect(APP_URL . '/alumni/index.php?tab=' . $status);
     }
 
-    save_old(compact('dept_id','student_id','name','batch','company','position','linkedin_url','fb_url','status','admin_notes','sort_order'));
+    save_old(compact('dept_id','student_id','name','batch','phone','email','company','position','linkedin_url','fb_url','status','admin_notes','sort_order'));
 }
 
 require_once __DIR__ . '/../includes/header.php';
@@ -145,6 +150,18 @@ require_once __DIR__ . '/../includes/header.php';
                     <label class="form-label fw-medium">Batch</label>
                     <input type="text" name="batch" class="form-control" style="border-radius:10px;"
                            value="<?= old('batch', h($alumni['batch'] ?? '')) ?>" maxlength="100" placeholder="e.g. 26th">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-medium">Phone Number</label>
+                    <input type="tel" name="phone" class="form-control" style="border-radius:10px;"
+                           value="<?= old('phone', h($alumni['phone'] ?? '')) ?>" maxlength="30" placeholder="e.g. +880 1700-000000">
+                    <div class="form-text">Admin-only. Not shown on public page.</div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-medium">Email Address</label>
+                    <input type="email" name="email" class="form-control" style="border-radius:10px;"
+                           value="<?= old('email', h($alumni['email'] ?? '')) ?>" maxlength="200" placeholder="e.g. your@email.com">
+                    <div class="form-text">Admin-only. Not shown on public page.</div>
                 </div>
                 <div class="col-md-6">
                     <label class="form-label fw-medium">Current Company</label>

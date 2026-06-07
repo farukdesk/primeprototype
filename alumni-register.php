@@ -20,17 +20,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $student_id   = trim($_POST['student_id']   ?? '');
     $name         = trim($_POST['name']         ?? '');
     $batch        = trim($_POST['batch']        ?? '');
+    $phone        = trim($_POST['phone']        ?? '');
+    $email        = trim($_POST['email']        ?? '');
     $company      = trim($_POST['company']      ?? '');
     $position     = trim($_POST['position']     ?? '');
     $linkedin_url = trim($_POST['linkedin_url'] ?? '');
     $fb_url       = trim($_POST['fb_url']       ?? '');
 
-    $form_values = compact('dept_id','student_id','name','batch','company','position','linkedin_url','fb_url');
+    $form_values = compact('dept_id','student_id','name','batch','phone','email','company','position','linkedin_url','fb_url');
 
     // Basic validation
     if ($name === '')         $errors[] = 'Full name is required.';
     if (mb_strlen($name) > 200) $errors[] = 'Name must be 200 characters or fewer.';
     if ($student_id !== '' && mb_strlen($student_id) > 50) $errors[] = 'Student ID must be 50 characters or fewer.';
+    if ($phone !== '' && mb_strlen($phone) > 30) $errors[] = 'Phone must be 30 characters or fewer.';
+    if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) $errors[] = 'Please enter a valid email address.';
     if ($linkedin_url !== '' && !filter_var($linkedin_url, FILTER_VALIDATE_URL))
         $errors[] = 'LinkedIn URL must be a valid URL (include https://).';
     if ($fb_url !== '' && !filter_var($fb_url, FILTER_VALIDATE_URL))
@@ -74,11 +78,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($errors) && $db) {
         try {
             $db->prepare(
-                'INSERT INTO alumni (dept_id, student_id, name, batch, company, position, linkedin_url, fb_url, photo, status, is_active)
-                 VALUES (?,?,?,?,?,?,?,?,?,\'pending\',0)'
+                'INSERT INTO alumni (dept_id, student_id, name, batch, phone, email, company, position, linkedin_url, fb_url, photo, status, is_active)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,\'pending\',0)'
             )->execute([
-                $dept_id ?: null, $student_id ?: null, $name, $batch ?: null, $company ?: null,
-                $position ?: null, $linkedin_url ?: null, $fb_url ?: null, $photo
+                $dept_id ?: null, $student_id ?: null, $name, $batch ?: null, $phone ?: null, $email ?: null,
+                $company ?: null, $position ?: null, $linkedin_url ?: null, $fb_url ?: null, $photo
             ]);
             $success    = true;
             $form_values = [];
@@ -278,7 +282,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                            </div>
                            <div class="col-md-6">
                               <label>Department</label>
-                              <select name="dept_id" class="form-select">
+                              <select name="dept_id" id="regDeptSelect" class="form-select">
                                  <option value="0">— Select Your Department —</option>
                                  <?php foreach ($departments as $d): ?>
                                  <option value="<?= $d['id'] ?>"
@@ -293,6 +297,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                               <input type="text" name="batch" class="form-control" maxlength="100"
                                      placeholder="e.g. 26th or Spring 2018"
                                      value="<?= fh($form_values['batch'] ?? '') ?>">
+                           </div>
+                           <div class="col-md-6">
+                              <label>Phone Number</label>
+                              <input type="tel" name="phone" class="form-control" maxlength="30"
+                                     placeholder="e.g. +880 1700-000000"
+                                     value="<?= fh($form_values['phone'] ?? '') ?>">
+                              <div class="form-text">Not shown publicly. For admin contact only.</div>
+                           </div>
+                           <div class="col-md-6">
+                              <label>Email Address</label>
+                              <input type="email" name="email" class="form-control" maxlength="200"
+                                     placeholder="e.g. your@email.com"
+                                     value="<?= fh($form_values['email'] ?? '') ?>">
+                              <div class="form-text">Not shown publicly. For admin contact only.</div>
                            </div>
                            <div class="col-md-6">
                               <label>Current Company / Organisation</label>
@@ -355,6 +373,12 @@ document.getElementById('photoInput').addEventListener('change', function () {
       reader.onload = function (e) { preview.src = e.target.result; preview.style.opacity = '1'; };
       reader.readAsDataURL(this.files[0]);
    }
+});
+
+// Destroy nice-select on department select so native dropdown renders correctly
+// (nice-select.css is not loaded on this page, causing options to show inline)
+$(function () {
+    $('#regDeptSelect').niceSelect('destroy');
 });
 </script>
 </body>

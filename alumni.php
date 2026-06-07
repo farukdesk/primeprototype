@@ -440,7 +440,7 @@ if ($db) {
                </p>
 
                <!-- Search bar -->
-               <form method="GET" class="alumni-search-bar wow fadeInUp" data-wow-delay=".3s">
+               <form id="alumniSearchForm" method="GET" class="alumni-search-bar wow fadeInUp" data-wow-delay=".3s">
                   <input type="text" name="q" value="<?= fh($search) ?>"
                          placeholder="Search by name, company, position…">
                   <select name="dept">
@@ -665,7 +665,7 @@ if ($db) {
          <div class="alumni-cta wow fadeInUp" data-wow-delay=".1s">
             <div class="row align-items-center gy-3">
                <div class="col-lg-8">
-                  <h4 style="font-weight:700;margin-bottom:8px;"><i class="fas fa-user-graduate me-2" style="color:#FFB81C;"></i> Are you a Prime University alumnus?</h4>
+                  <h4 style="font-weight:700;margin-bottom:8px;color:#fff;"><i class="fas fa-user-graduate me-2" style="color:#FFB81C;"></i> Are you a Prime University alumnus?</h4>
                   <p style="color:rgba(255,255,255,.8);margin:0;font-size:1rem;">
                      Join our alumni directory. Share your journey, inspire current students, and stay connected with your university.
                   </p>
@@ -692,6 +692,12 @@ if ($db) {
 <script>
 // Re-init WOW animations when page ready
 if (typeof WOW !== 'undefined') { new WOW({ offset: 30 }).init(); }
+
+// Destroy nice-select on alumni search form so native selects render correctly
+// (nice-select.css is not loaded on this page, causing options to show inline)
+$(function () {
+    $('#alumniSearchForm select').niceSelect('destroy');
+});
 </script>
 </body>
 </html>
