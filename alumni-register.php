@@ -308,7 +308,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                            <div class="col-md-6">
                               <label>Email Address</label>
                               <input type="email" name="email" class="form-control" maxlength="200"
-                                     placeholder="e.g. your@email.com"
+                                     placeholder="e.g. alumni@example.com"
                                      value="<?= fh($form_values['email'] ?? '') ?>">
                               <div class="form-text">Not shown publicly. For admin contact only.</div>
                            </div>
