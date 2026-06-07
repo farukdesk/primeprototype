@@ -38,6 +38,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'contact_phone', 'contact_email',
         'contact_address', 'contact_address_url',
         'copyright_text',
+        'bottom_link_1_text', 'bottom_link_1_url',
+        'bottom_link_2_text', 'bottom_link_2_url',
+        'bottom_link_3_text', 'bottom_link_3_url',
+        'bottom_link_4_text', 'bottom_link_4_url',
+        'bottom_link_5_text', 'bottom_link_5_url',
+        'bottom_link_6_text', 'bottom_link_6_url',
     ];
 
     $stmt = db()->prepare(
@@ -278,6 +284,48 @@ require_once __DIR__ . '/../../includes/header.php';
     </div>
 
 </div><!-- /.row -->
+
+<!-- Bottom Bar Portal Links -->
+<div class="row g-4 mt-0">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header py-3 px-4">
+                <h6 class="mb-0 fw-semibold"><i class="fas fa-bars me-2 text-muted"></i>Bottom Bar Portal Links <span class="text-muted fw-normal small">(shown on the right side of the copyright bar)</span></h6>
+            </div>
+            <div class="card-body p-4">
+                <p class="text-muted small mb-3">Up to 6 links displayed as a pipe-separated row on the right of the footer bar (e.g. Academic Calendar | Prime ERP | Webmail …).</p>
+                <?php
+                $bottom_link_defaults = [
+                    1 => ['Academic Calendar', '#'],
+                    2 => ['Prime ERP',         '#'],
+                    3 => ['Webmail',            '#'],
+                    4 => ['Admin',              'admin/'],
+                    5 => ['Alumni',             'alumni.php'],
+                    6 => ['Contact',            'contact.php'],
+                ];
+                for ($i = 1; $i <= 6; $i++):
+                    [$defText, $defUrl] = $bottom_link_defaults[$i];
+                ?>
+                <div class="row g-2 mb-2 align-items-center">
+                    <div class="col-auto" style="min-width:60px;">
+                        <span class="badge bg-secondary">Link <?= $i ?></span>
+                    </div>
+                    <div class="col-4">
+                        <input type="text" name="bottom_link_<?= $i ?>_text" class="form-control form-control-sm"
+                               value="<?= h($settings["bottom_link_{$i}_text"] ?? $defText) ?>"
+                               placeholder="Label" maxlength="80">
+                    </div>
+                    <div class="col">
+                        <input type="text" name="bottom_link_<?= $i ?>_url" class="form-control form-control-sm"
+                               value="<?= h($settings["bottom_link_{$i}_url"] ?? $defUrl) ?>"
+                               placeholder="URL or page.php" maxlength="500">
+                    </div>
+                </div>
+                <?php endfor; ?>
+            </div>
+        </div>
+    </div>
+</div>
 
 <div class="mt-4">
     <button type="submit" class="btn btn-primary" style="border-radius:10px;">

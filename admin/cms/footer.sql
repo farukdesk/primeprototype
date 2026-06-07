@@ -42,7 +42,19 @@ INSERT INTO `cms_footer_settings` (`setting_key`, `setting_value`) VALUES
   ('contact_email',     'info@primeuniversity.ac.bd'),
   ('contact_address',   '114/116, Mazar Rd, Dhaka-1216'),
   ('contact_address_url', 'https://maps.google.com/?q=Prime+University+Dhaka'),
-  ('copyright_text',    'Prime University')
+  ('copyright_text',    'Prime University'),
+  ('bottom_link_1_text', 'Academic Calendar'),
+  ('bottom_link_1_url',  '#'),
+  ('bottom_link_2_text', 'Prime ERP'),
+  ('bottom_link_2_url',  '#'),
+  ('bottom_link_3_text', 'Webmail'),
+  ('bottom_link_3_url',  '#'),
+  ('bottom_link_4_text', 'Admin'),
+  ('bottom_link_4_url',  'admin/'),
+  ('bottom_link_5_text', 'Alumni'),
+  ('bottom_link_5_url',  'alumni.php'),
+  ('bottom_link_6_text', 'Contact'),
+  ('bottom_link_6_url',  'contact.php')
 ON DUPLICATE KEY UPDATE `setting_value` = VALUES(`setting_value`);
 
 -- Register module in modules table (super-admin only, no group access required)
