@@ -276,7 +276,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                      value="<?= fh($form_values['student_id'] ?? '') ?>">
                               <div class="form-text">Your university student ID number.</div>
                            </div>
-                           <div class="col-12">
+                           <div class="col-md-6">
                               <label>Department</label>
                               <select name="dept_id" class="form-select">
                                  <option value="0">— Select Your Department —</option>

@@ -159,7 +159,7 @@ if ($db) {
          flex-wrap: wrap;
       }
       .alumni-search-bar input[type="text"] {
-         flex: 1 1 200px;
+         flex: 1 1 160px;
          min-width: 0;
          border: 1.5px solid rgba(255,255,255,.35);
          background: rgba(255,255,255,.15);
