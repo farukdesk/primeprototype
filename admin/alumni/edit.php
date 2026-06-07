@@ -18,6 +18,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
     $dept_id      = (int)($_POST['dept_id']     ?? 0);
+    $student_id   = trim($_POST['student_id']   ?? '');
     $name         = trim($_POST['name']         ?? '');
     $batch        = trim($_POST['batch']        ?? '');
     $company      = trim($_POST['company']      ?? '');
@@ -74,10 +75,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (empty($errors)) {
         db()->prepare(
-            'UPDATE alumni SET dept_id=?,name=?,batch=?,company=?,position=?,linkedin_url=?,fb_url=?,photo=?,
+            'UPDATE alumni SET dept_id=?,student_id=?,name=?,batch=?,company=?,position=?,linkedin_url=?,fb_url=?,photo=?,
              status=?,admin_notes=?,sort_order=?,is_active=? WHERE id=?'
         )->execute([
-            $dept_id ?: null, $name, $batch ?: null, $company ?: null,
+            $dept_id ?: null, $student_id ?: null, $name, $batch ?: null, $company ?: null,
             $position ?: null, $linkedin_url ?: null, $fb_url ?: null,
             $photo, $status, $admin_notes ?: null, $sort_order, $is_active, $id
         ]);
@@ -85,7 +86,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect(APP_URL . '/alumni/index.php?tab=' . $status);
     }
 
-    save_old(compact('dept_id','name','batch','company','position','linkedin_url','fb_url','status','admin_notes','sort_order'));
+    save_old(compact('dept_id','student_id','name','batch','company','position','linkedin_url','fb_url','status','admin_notes','sort_order'));
 }
 
 require_once __DIR__ . '/../includes/header.php';
@@ -122,6 +123,11 @@ require_once __DIR__ . '/../includes/header.php';
                     <label class="form-label fw-medium">Full Name <span class="text-danger">*</span></label>
                     <input type="text" name="name" class="form-control" style="border-radius:10px;"
                            value="<?= old('name', h($alumni['name'])) ?>" required maxlength="200">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-medium">Student ID</label>
+                    <input type="text" name="student_id" class="form-control" style="border-radius:10px;"
+                           value="<?= old('student_id', h($alumni['student_id'] ?? '')) ?>" maxlength="50" placeholder="e.g. 201-15-2345">
                 </div>
                 <div class="col-md-6">
                     <label class="form-label fw-medium">Department</label>

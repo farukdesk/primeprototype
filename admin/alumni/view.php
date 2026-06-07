@@ -118,6 +118,8 @@ require_once __DIR__ . '/../includes/header.php';
                 <dl class="row mb-0">
                     <dt class="col-sm-4 text-muted fw-normal">Department</dt>
                     <dd class="col-sm-8"><?= h($alumni['dept_name'] ?? '—') ?></dd>
+                    <dt class="col-sm-4 text-muted fw-normal">Student ID</dt>
+                    <dd class="col-sm-8"><?= h($alumni['student_id'] ?? '—') ?></dd>
                     <dt class="col-sm-4 text-muted fw-normal">Batch</dt>
                     <dd class="col-sm-8"><?= h($alumni['batch'] ?? '—') ?></dd>
                     <dt class="col-sm-4 text-muted fw-normal">Company</dt>

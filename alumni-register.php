@@ -17,6 +17,7 @@ if ($db) {
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $dept_id      = (int)($_POST['dept_id']     ?? 0);
+    $student_id   = trim($_POST['student_id']   ?? '');
     $name         = trim($_POST['name']         ?? '');
     $batch        = trim($_POST['batch']        ?? '');
     $company      = trim($_POST['company']      ?? '');
@@ -24,11 +25,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $linkedin_url = trim($_POST['linkedin_url'] ?? '');
     $fb_url       = trim($_POST['fb_url']       ?? '');
 
-    $form_values = compact('dept_id','name','batch','company','position','linkedin_url','fb_url');
+    $form_values = compact('dept_id','student_id','name','batch','company','position','linkedin_url','fb_url');
 
     // Basic validation
     if ($name === '')         $errors[] = 'Full name is required.';
     if (mb_strlen($name) > 200) $errors[] = 'Name must be 200 characters or fewer.';
+    if ($student_id !== '' && mb_strlen($student_id) > 50) $errors[] = 'Student ID must be 50 characters or fewer.';
     if ($linkedin_url !== '' && !filter_var($linkedin_url, FILTER_VALIDATE_URL))
         $errors[] = 'LinkedIn URL must be a valid URL (include https://).';
     if ($fb_url !== '' && !filter_var($fb_url, FILTER_VALIDATE_URL))
@@ -72,10 +74,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($errors) && $db) {
         try {
             $db->prepare(
-                'INSERT INTO alumni (dept_id, name, batch, company, position, linkedin_url, fb_url, photo, status, is_active)
-                 VALUES (?,?,?,?,?,?,?,?,\'pending\',0)'
+                'INSERT INTO alumni (dept_id, student_id, name, batch, company, position, linkedin_url, fb_url, photo, status, is_active)
+                 VALUES (?,?,?,?,?,?,?,?,?,\'pending\',0)'
             )->execute([
-                $dept_id ?: null, $name, $batch ?: null, $company ?: null,
+                $dept_id ?: null, $student_id ?: null, $name, $batch ?: null, $company ?: null,
                 $position ?: null, $linkedin_url ?: null, $fb_url ?: null, $photo
             ]);
             $success    = true;
@@ -101,55 +103,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
    <link rel="stylesheet" href="/assets/css/spacing.css">
    <link rel="stylesheet" href="/assets/css/main.css">
    <style>
-      .reg-hero {
-         background: linear-gradient(135deg, #002147 0%, #003d82 60%, #D21034 100%);
-         padding: 80px 0 60px;
-      }
-      .reg-card {
-         background: #fff;
-         border-radius: 20px;
-         box-shadow: 0 20px 60px rgba(0,33,71,0.12);
-         overflow: hidden;
-      }
-      .reg-card .form-control, .reg-card .form-select {
-         border-radius: 10px;
-         padding: 12px 16px;
-         border: 1.5px solid #e0e6ef;
-         font-size: .95rem;
-         transition: border-color .2s;
-      }
-      .reg-card .form-control:focus, .reg-card .form-select:focus {
-         border-color: #002147;
-         box-shadow: 0 0 0 3px rgba(0,33,71,0.08);
-      }
-      .reg-card label { font-weight: 600; color: #002147; margin-bottom: 6px; font-size: .88rem; }
-      .reg-card .form-text { color: #8898aa; font-size: .8rem; }
-      .btn-submit {
-         background: linear-gradient(135deg, #002147, #003d82);
-         color: #fff;
-         border: none;
-         border-radius: 12px;
-         padding: 14px 40px;
-         font-size: 1rem;
-         font-weight: 600;
-         letter-spacing: .5px;
-         transition: transform .2s, box-shadow .2s;
-      }
-      .btn-submit:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,33,71,0.25); color:#fff; }
-      .photo-preview { width:110px;height:110px;border-radius:50%;object-fit:cover;border:4px solid #002147; }
-      .steps-bar { display:flex; gap:0; margin-bottom:36px; }
-      .steps-bar .step { flex:1;text-align:center;font-size:.8rem;color:#8898aa;font-weight:500;position:relative; }
-      .steps-bar .step.active { color:#002147; font-weight:700; }
-      .steps-bar .step::before {
-         content:'';display:block;width:32px;height:32px;border-radius:50%;
-         background:#e0e6ef;margin:0 auto 6px;
-         font-size:.9rem;line-height:32px;font-weight:700;color:#8898aa;
-      }
-      .steps-bar .step.active::before { background:#002147;color:#fff; }
-      .steps-bar .step.done::before { background:#27ae60;color:#fff; }
-      .success-card { text-align:center;padding:60px 30px; }
-      .success-card .success-icon { width:90px;height:90px;border-radius:50%;background:#e8f8ef;
-         display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:2.5rem;color:#27ae60; }
+     .reg-hero {
+        background: linear-gradient(135deg, #002147 0%, #003d82 60%, #D21034 100%);
+        padding: 80px 0 60px;
+     }
+     .reg-card {
+        background: #fff;
+        border-radius: 20px;
+        box-shadow: 0 20px 60px rgba(0,33,71,0.12);
+        overflow: hidden;
+     }
+     .reg-card .form-control, .reg-card .form-select {
+        border-radius: 10px;
+        padding: 12px 16px;
+        border: 1.5px solid #e0e6ef;
+        font-size: .95rem;
+        transition: border-color .2s;
+        max-width: 100%;
+        width: 100%;
+     }
+     .reg-card .form-control:focus, .reg-card .form-select:focus {
+        border-color: #002147;
+        box-shadow: 0 0 0 3px rgba(0,33,71,0.08);
+     }
+     .reg-card label { font-weight: 600; color: #002147; margin-bottom: 6px; font-size: .88rem; }
+     .reg-card .form-text { color: #8898aa; font-size: .8rem; }
+     .btn-submit {
+        background: linear-gradient(135deg, #002147, #003d82);
+        color: #fff;
+        border: none;
+        border-radius: 12px;
+        padding: 14px 40px;
+        font-size: 1rem;
+        font-weight: 600;
+        letter-spacing: .5px;
+        transition: transform .2s, box-shadow .2s;
+     }
+     .btn-submit:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,33,71,0.25); color:#fff; }
+     .photo-preview { width:110px;height:110px;border-radius:50%;object-fit:cover;border:4px solid #002147; }
+     .success-card { text-align:center;padding:60px 30px; }
+     .success-card .success-icon { width:90px;height:90px;border-radius:50%;background:#e8f8ef;
+        display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:2.5rem;color:#27ae60; }
+     @media (max-width: 575px) {
+        .reg-hero { padding: 50px 0 40px; }
+        .reg-card > div:first-child { padding: 20px 20px !important; }
+        .reg-card .p-4.p-md-5 { padding: 20px !important; }
+        .btn-submit { width: 100%; }
+     }
    </style>
 <?php include __DIR__ . '/includes/meta-pixel.php'; ?>
 </head>
@@ -270,6 +270,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                      value="<?= fh($form_values['name'] ?? '') ?>">
                            </div>
                            <div class="col-md-6">
+                              <label>Student ID</label>
+                              <input type="text" name="student_id" class="form-control" maxlength="50"
+                                     placeholder="e.g. 201-15-2345"
+                                     value="<?= fh($form_values['student_id'] ?? '') ?>">
+                              <div class="form-text">Your university student ID number.</div>
+                           </div>
+                           <div class="col-12">
                               <label>Department</label>
                               <select name="dept_id" class="form-select">
                                  <option value="0">— Select Your Department —</option>
