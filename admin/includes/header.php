@@ -260,6 +260,7 @@ $user       = auth_user();
     $is_academic_active = strpos($current_path, '/departments/') !== false || strpos($current_path, '/faculty-profiles/') !== false || strpos($current_path, '/students/') !== false || strpos($current_path, '/course-curriculum/') !== false || strpos($current_path, '/clubs/') !== false || strpos($current_path, '/staff-profiles/') !== false || strpos($current_path, '/results/') !== false || strpos($current_path, '/student-verification/') !== false || strpos($current_path, '/cert-verifiers/') !== false || $is_course_offer_active || $is_spring_result_active || $is_tabulation_checker_active;
     $is_comms_active    = strpos($current_path, '/contact/') !== false || strpos($current_path, '/support-tickets/') !== false || strpos($current_path, '/knowledge-base/') !== false || strpos($current_path, '/broadcast/') !== false;
     $is_leads_active    = strpos($current_path, '/leads/') !== false;
+    $is_alumni_active   = strpos($current_path, '/alumni/') !== false;
     $is_admissions_active = strpos($current_path, '/admissions/') !== false;
     $is_gallery_active       = strpos($current_path, '/gallery/') !== false;
     $is_jobs_active          = strpos($current_path, '/jobs/') !== false;
@@ -828,6 +829,56 @@ $user       = auth_user();
                 <a href="<?= APP_URL ?>/admissions/settings.php"
                    class="<?= strpos($current_path, '/admissions/settings') !== false ? 'active' : '' ?>">
                     <i class="fas fa-cog"></i> Settings
+                </a>
+            </li>
+            <?php endif; ?>
+        </ul>
+    </div>
+    <?php endif; ?>
+
+    <!-- ── Alumni ── -->
+    <?php if (is_super_admin() || can_access('alumni')): ?>
+    <button class="nav-group-toggle <?= $is_alumni_active ? '' : 'collapsed' ?>"
+            data-bs-toggle="collapse" data-bs-target="#grp-alumni"
+            aria-expanded="<?= $is_alumni_active ? 'true' : 'false' ?>">
+        <i class="fas fa-user-graduate grp-icon" style="color:#27ae60"></i>
+        Alumni
+        <?php
+        // Pending approvals badge
+        try {
+            $_al_pending = (int)db()->query("SELECT COUNT(*) FROM alumni WHERE status='pending'")->fetchColumn();
+            if ($_al_pending > 0): ?>
+        <span class="badge bg-warning text-dark ms-1" style="font-size:.65rem;"><?= $_al_pending ?></span>
+        <?php endif;
+        } catch (Throwable $e) {}
+        ?>
+        <i class="fas fa-chevron-down toggle-icon"></i>
+    </button>
+    <div class="collapse <?= $is_alumni_active ? 'show' : '' ?>" id="grp-alumni">
+        <ul class="nav flex-column grp-items">
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/alumni/index.php?tab=pending"
+                   class="<?= ($is_alumni_active && ($_GET['tab'] ?? '') === 'pending') ? 'active' : '' ?>">
+                    <i class="fas fa-clock"></i> Pending Approval
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/alumni/index.php?tab=approved"
+                   class="<?= ($is_alumni_active && ($_GET['tab'] ?? '') === 'approved') ? 'active' : '' ?>">
+                    <i class="fas fa-check-circle"></i> Approved
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/alumni/index.php?tab=all"
+                   class="<?= ($is_alumni_active && ($_GET['tab'] ?? '') === 'all') ? 'active' : '' ?>">
+                    <i class="fas fa-list"></i> All Alumni
+                </a>
+            </li>
+            <?php if (is_super_admin() || can_access('alumni', 'can_create')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/alumni/create.php"
+                   class="<?= strpos($current_path, '/alumni/create') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-plus"></i> Add Alumni
                 </a>
             </li>
             <?php endif; ?>
