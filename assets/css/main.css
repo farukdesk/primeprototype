@@ -26404,7 +26404,7 @@ input[type=radio] {
   font-size: .82rem;
 }
 .pu-footer__bottom-links a {
-  color: var(--puf-text-light);
+  color: #fff;
   text-decoration: none;
   padding: 0 6px;
   transition: color .2s ease;
