@@ -122,6 +122,10 @@ require_once __DIR__ . '/../includes/header.php';
                     <dd class="col-sm-8"><?= h($alumni['student_id'] ?? '—') ?></dd>
                     <dt class="col-sm-4 text-muted fw-normal">Batch</dt>
                     <dd class="col-sm-8"><?= h($alumni['batch'] ?? '—') ?></dd>
+                    <dt class="col-sm-4 text-muted fw-normal">Phone</dt>
+                    <dd class="col-sm-8"><?= $alumni['phone'] ? h($alumni['phone']) : '—' ?></dd>
+                    <dt class="col-sm-4 text-muted fw-normal">Email</dt>
+                    <dd class="col-sm-8"><?= $alumni['email'] ? '<a href="mailto:'.h($alumni['email']).'">'.h($alumni['email']).'</a>' : '—' ?></dd>
                     <dt class="col-sm-4 text-muted fw-normal">Company</dt>
                     <dd class="col-sm-8"><?= h($alumni['company'] ?? '—') ?></dd>
                     <dt class="col-sm-4 text-muted fw-normal">Position</dt>
