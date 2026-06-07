@@ -56,9 +56,9 @@ if ($f_dept) {
     $params[] = $f_dept;
 }
 if ($search !== '') {
-    $where[]  = '(a.name LIKE ? OR a.company LIKE ? OR a.position LIKE ? OR a.batch LIKE ?)';
+    $where[]  = '(a.name LIKE ? OR a.student_id LIKE ? OR a.company LIKE ? OR a.position LIKE ? OR a.batch LIKE ?)';
     $s = '%' . $search . '%';
-    $params = array_merge($params, [$s, $s, $s, $s]);
+    $params = array_merge($params, [$s, $s, $s, $s, $s]);
 }
 
 $sql_where = $where ? 'WHERE ' . implode(' AND ', $where) : '';
@@ -189,8 +189,11 @@ require_once __DIR__ . '/../includes/header.php';
                                 <?php endif; ?>
                                 <div>
                                     <div class="fw-medium"><?= h($a['name']) ?></div>
+                                    <?php if ($a['student_id']): ?>
+                                    <small class="text-muted">ID: <?= h($a['student_id']) ?></small>
+                                    <?php endif; ?>
                                     <?php if ($a['dept_name']): ?>
-                                    <small class="text-muted"><?= h($a['dept_name']) ?></small>
+                                    <small class="text-muted d-block"><?= h($a['dept_name']) ?></small>
                                     <?php endif; ?>
                                 </div>
                             </div>

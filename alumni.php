@@ -152,46 +152,70 @@ if ($db) {
          background: rgba(255,255,255,.12);
          backdrop-filter: blur(10px);
          border-radius: 14px;
-         padding: 16px 24px;
+         padding: 16px 20px;
          display: flex;
-         gap: 12px;
+         gap: 10px;
          align-items: center;
          flex-wrap: wrap;
       }
-      .alumni-search-bar input {
-         flex: 1;
-         min-width: 200px;
-         border: none;
+      .alumni-search-bar input[type="text"] {
+         flex: 1 1 160px;
+         min-width: 0;
+         border: 1.5px solid rgba(255,255,255,.35);
          background: rgba(255,255,255,.15);
          color: #fff;
-         border-radius: 10px;
-         padding: 10px 18px;
-         font-size: .95rem;
-      }
-      .alumni-search-bar input::placeholder { color: rgba(255,255,255,.6); }
-      .alumni-search-bar input:focus { outline: 2px solid rgba(255,184,28,.5); background: rgba(255,255,255,.22); }
-      .alumni-search-bar select {
-         background: rgba(255,255,255,.15);
-         color: #fff;
-         border: none;
          border-radius: 10px;
          padding: 10px 16px;
-         font-size: .9rem;
+         font-size: .95rem;
+      }
+      .alumni-search-bar input[type="text"]::placeholder { color: rgba(255,255,255,.65); }
+      .alumni-search-bar input[type="text"]:focus {
+         outline: none;
+         border-color: #FFB81C;
+         background: rgba(255,255,255,.22);
+      }
+      .alumni-search-bar select {
+         flex: 1 1 160px;
+         min-width: 0;
+         background: #002147;
+         color: #fff;
+         border: 1.5px solid rgba(255,255,255,.35);
+         border-radius: 10px;
+         padding: 10px 14px;
+         font-size: .88rem;
          cursor: pointer;
+         -webkit-appearance: none;
+         appearance: none;
       }
       .alumni-search-bar select option { background: #002147; color: #fff; }
       .alumni-search-bar .btn-search {
+         flex-shrink: 0;
          background: #FFB81C;
          color: #002147;
          border: none;
          border-radius: 10px;
-         padding: 10px 24px;
+         padding: 10px 22px;
          font-weight: 700;
          font-size: .9rem;
          transition: background .2s;
          white-space: nowrap;
       }
       .alumni-search-bar .btn-search:hover { background: #e5a800; }
+      .alumni-search-bar .btn-clear {
+         flex-shrink: 0;
+         color: rgba(255,255,255,.8);
+         font-size: .875rem;
+         text-decoration: none;
+         white-space: nowrap;
+         padding: 6px 4px;
+      }
+      .alumni-search-bar .btn-clear:hover { color: #fff; }
+      @media (max-width: 575px) {
+         .alumni-search-bar { padding: 14px 14px; gap: 8px; }
+         .alumni-search-bar input[type="text"],
+         .alumni-search-bar select { flex: 1 1 100%; }
+         .alumni-search-bar .btn-search { flex: 1 1 auto; text-align: center; }
+      }
 
       /* ── Cards ── */
       .alumni-card {
@@ -361,6 +385,14 @@ if ($db) {
          .alumni-hero { padding: 60px 0 50px; }
          .alumni-stats-bar { gap: 20px; padding: 16px 20px; }
          .alumni-stats-bar .stat .num { font-size: 1.3rem; }
+         .alumni-sidebar { margin-bottom: 20px; }
+         .alumni-sidebar .sidebar-card { position: static; }
+         .alumni-cta { padding: 24px 20px; }
+         .alumni-card-photo { padding: 18px 14px 0; }
+         .alumni-card-photo img,
+         .alumni-card-photo .photo-placeholder { width: 80px; height: 80px; font-size: 1.6rem; }
+         .alumni-card-body { padding: 12px 12px 14px; }
+         .alumni-card-name { font-size: .88rem; }
       }
    </style>
 <?php include __DIR__ . '/includes/meta-pixel.php'; ?>
@@ -409,9 +441,15 @@ if ($db) {
 
                <!-- Search bar -->
                <form method="GET" class="alumni-search-bar wow fadeInUp" data-wow-delay=".3s">
-                  <?php if ($f_dept): ?><input type="hidden" name="dept" value="<?= $f_dept ?>"><?php endif; ?>
                   <input type="text" name="q" value="<?= fh($search) ?>"
-                         placeholder="Search alumni by name, company, position…">
+                         placeholder="Search by name, company, position…">
+                  <select name="dept">
+                     <option value="0">All Departments</option>
+                     <?php foreach ($departments as $d): ?>
+                     <?php if ((int)$d['alumni_count'] < 1) continue; ?>
+                     <option value="<?= $d['id'] ?>" <?= $f_dept === (int)$d['id'] ? 'selected' : '' ?>><?= fh($d['name']) ?></option>
+                     <?php endforeach; ?>
+                  </select>
                   <?php if (!empty($batches)): ?>
                   <select name="batch">
                      <option value="">All Batches</option>
@@ -422,7 +460,7 @@ if ($db) {
                   <?php endif; ?>
                   <button type="submit" class="btn-search"><i class="fas fa-search me-1"></i> Search</button>
                   <?php if ($search || $f_dept || $f_batch): ?>
-                  <a href="/alumni.php" style="color:rgba(255,255,255,.7);font-size:.875rem;align-self:center;">
+                  <a href="/alumni.php" class="btn-clear">
                      <i class="fas fa-times me-1"></i> Clear
                   </a>
                   <?php endif; ?>
@@ -451,7 +489,7 @@ if ($db) {
                            <a href="?q=<?= urlencode($search) ?>&batch=<?= urlencode($f_batch) ?>&page=1"
                               class="<?= !$f_dept ? 'active' : '' ?>">
                               All Departments
-                              <span class="badge-count">                              <?= $total ?></span>
+                              <span class="badge-count"><?= $total ?></span>
                            </a>
                         </li>
                         <?php foreach ($departments as $d): ?>
