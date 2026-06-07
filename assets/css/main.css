@@ -26396,6 +26396,26 @@ input[type=radio] {
   color: #e74c3c;
   font-size: .9rem;
 }
+.pu-footer__bottom-links {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0;
+  font-size: .82rem;
+}
+.pu-footer__bottom-links a {
+  color: var(--puf-text-light);
+  text-decoration: none;
+  padding: 0 6px;
+  transition: color .2s ease;
+}
+.pu-footer__bottom-links a:hover {
+  color: var(--puf-accent);
+}
+.pu-footer__bottom-sep {
+  color: var(--puf-border);
+  user-select: none;
+}
 
 /* ── Responsive ────────────────────────────────────────────────────────── */
 @media (max-width: 991px) {

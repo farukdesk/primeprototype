@@ -52,6 +52,23 @@ for ($i = 1; $i <= 5; $i++) {
         $col3_links[] = ['text' => $text3, 'url' => $url3 ?: '#'];
     }
 }
+
+$bottom_link_defaults = [
+    1 => ['Academic Calendar', '#'],
+    2 => ['Prime ERP', '#'],
+    3 => ['Webmail', '#'],
+    4 => ['Admin', 'admin/'],
+    5 => ['Alumni', 'alumni.php'],
+    6 => ['Contact', 'contact.php'],
+];
+$bottom_links = [];
+for ($i = 1; $i <= 6; $i++) {
+    $btext = trim($fs["bottom_link_{$i}_text"] ?? $bottom_link_defaults[$i][0]);
+    $burl  = trim($fs["bottom_link_{$i}_url"]  ?? $bottom_link_defaults[$i][1]);
+    if ($btext !== '') {
+        $bottom_links[] = ['text' => $btext, 'url' => $burl ?: '#'];
+    }
+}
 ?>
 <!-- FOOTER -->
 <footer class="pu-footer">
@@ -179,16 +196,26 @@ for ($i = 1; $i <= 5; $i++) {
    <div class="pu-footer__bottom">
       <div class="container">
          <div class="row align-items-center gy-2">
-            <div class="col-md-6 text-center text-md-start">
+            <div class="col-12 col-md-4 text-center text-md-start">
                <p class="pu-footer__copy mb-0">
                   &copy; <?= date('Y') ?> <a href="/"><?= fh($copyright_text) ?></a>. All Rights Reserved.
                </p>
             </div>
-            <div class="col-md-6 text-center text-md-end">
+            <div class="col-12 col-md-4 text-center">
                <p class="pu-footer__copy mb-0">
                   Designed with <span class="pu-footer__heart">&#10084;</span> for Excellence in Education
                </p>
             </div>
+            <?php if ($bottom_links): ?>
+            <div class="col-12 col-md-4 text-center text-md-end">
+               <nav class="pu-footer__bottom-links" aria-label="Portal links">
+                  <?php foreach ($bottom_links as $idx => $bl): ?>
+                  <?php if ($idx > 0): ?><span class="pu-footer__bottom-sep" aria-hidden="true">|</span><?php endif; ?>
+                  <a href="<?= fh($bl['url']) ?>"><?= fh($bl['text']) ?></a>
+                  <?php endforeach; ?>
+               </nav>
+            </div>
+            <?php endif; ?>
          </div>
       </div>
    </div>
