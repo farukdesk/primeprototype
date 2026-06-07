@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS `alumni` (
   PRIMARY KEY (`id`),
   KEY `idx_alumni_dept`   (`dept_id`),
   KEY `idx_alumni_status` (`status`),
-  CONSTRAINT `fk_alumni_dept` FOREIGN KEY (`dept_id`)
+  CONSTRAINT `fk_alumni_module_dept` FOREIGN KEY (`dept_id`)
       REFERENCES `dept_departments` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
