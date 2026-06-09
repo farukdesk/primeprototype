@@ -68,6 +68,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $dob                  = trim($_POST['dob']                  ?? '');
     $blood_group          = trim($_POST['blood_group']          ?? '');
     $nid                  = trim($_POST['nid']                  ?? '');
+    $marital_status       = trim($_POST['marital_status']       ?? '');
+    $passport_no          = trim($_POST['passport_no']          ?? '');
     $semester_type        = trim($_POST['semester_type']        ?? '');
     $batch                = trim($_POST['batch']                ?? '');
     $batch_id             = (int)($_POST['batch_id']            ?? 0);
@@ -86,6 +88,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $total_payable        = trim($_POST['total_payable']        ?? '');
     $monthly_installment  = trim($_POST['monthly_installment']  ?? '');
     $ref_number           = trim($_POST['ref_number']           ?? '');
+
+    // Guardian
+    $guardian_name         = trim($_POST['guardian_name']         ?? '');
+    $guardian_profession   = trim($_POST['guardian_profession']   ?? '');
+    $guardian_address      = trim($_POST['guardian_address']      ?? '');
+    $guardian_phone        = trim($_POST['guardian_phone']        ?? '');
+    $guardian_relationship = trim($_POST['guardian_relationship'] ?? '');
+
+    // Reference person
+    $reference_name    = trim($_POST['reference_name']    ?? '');
+    $reference_address = trim($_POST['reference_address'] ?? '');
+    $reference_contact = trim($_POST['reference_contact'] ?? '');
+    $reference_email   = trim($_POST['reference_email']   ?? '');
+
+    // Local guardian
+    $local_guardian_name    = trim($_POST['local_guardian_name']    ?? '');
+    $local_guardian_contact = trim($_POST['local_guardian_contact'] ?? '');
+    $local_guardian_address = trim($_POST['local_guardian_address'] ?? '');
+    $local_guardian_email   = trim($_POST['local_guardian_email']   ?? '');
+
+    // Waiver credits
+    $total_waiver_credits = trim($_POST['total_waiver_credits'] ?? '');
 
     // Derive faculty_label from selected department
     $dept_faculty_label = null;
@@ -186,13 +210,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 present_address, permanent_address, nationality, country,
                 district_id, thana_id, faculty_label,
                 email, phone,
-                dob, blood_group, nid,
+                dob, blood_group, nid, marital_status, passport_no,
                 place_of_birth, sex, religion, photo,
                 poor_meritorious, freedom_fighter_quota,
+                guardian_name, guardian_profession, guardian_address, guardian_phone, guardian_relationship,
+                reference_name, reference_address, reference_contact, reference_email,
+                local_guardian_name, local_guardian_contact, local_guardian_address, local_guardian_email,
                 waiver_percent, form_fee, regi_fee, tuition_fee, misc_fee,
-                project_fee, total_fee, waiver_amount, total_payable, monthly_installment,
+                project_fee, total_fee, waiver_amount, total_waiver_credits, total_payable, monthly_installment,
                 ref_number, status, created_by)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
         )->execute([
             $student_id,
             $dept_id,
@@ -224,12 +251,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $dob                  !== '' ? $dob : null,
             $blood_group          ?: null,
             $nid                  ?: null,
+            $marital_status       ?: null,
+            $passport_no          ?: null,
             $place_of_birth       ?: null,
             $sex                  ?: null,
             $religion             ?: null,
             $photo_name,
             $poor_meritorious,
             $freedom_fighter,
+            $guardian_name         ?: null,
+            $guardian_profession   ?: null,
+            $guardian_address      ?: null,
+            $guardian_phone        ?: null,
+            $guardian_relationship ?: null,
+            $reference_name        ?: null,
+            $reference_address     ?: null,
+            $reference_contact     ?: null,
+            $reference_email       ?: null,
+            $local_guardian_name    ?: null,
+            $local_guardian_contact ?: null,
+            $local_guardian_address ?: null,
+            $local_guardian_email   ?: null,
             $waiver_percent       ?: null,
             $form_fee             !== '' ? (int)$form_fee    : null,
             $regi_fee             !== '' ? (int)$regi_fee    : null,
@@ -238,6 +280,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $project_fee          !== '' ? (int)$project_fee : null,
             $total_fee            !== '' ? (int)$total_fee   : null,
             $waiver_amount        !== '' ? (int)$waiver_amount : null,
+            $total_waiver_credits !== '' ? (float)$total_waiver_credits : null,
             $total_payable        ?: null,
             $monthly_installment  ?: null,
             $ref_number           ?: null,
@@ -707,6 +750,19 @@ require_once __DIR__ . '/../includes/header.php';
                         <label class="form-label">NID Number</label>
                         <input type="text" class="form-control" name="nid" value="<?= old('nid') ?>" maxlength="50" placeholder="National ID">
                     </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label">Marital Status</label>
+                        <select name="marital_status" class="form-select">
+                            <option value="">— Select —</option>
+                            <?php foreach (['Single','Married','Divorced','Widowed'] as $ms): ?>
+                            <option value="<?= $ms ?>" <?= old('marital_status') === $ms ? 'selected' : '' ?>><?= $ms ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label">Passport No.</label>
+                        <input type="text" class="form-control" name="passport_no" value="<?= old('passport_no') ?>" maxlength="100" placeholder="Optional">
+                    </div>
                 </div>
             </div>
 
@@ -842,6 +898,113 @@ require_once __DIR__ . '/../includes/header.php';
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <!-- ── Guardian, Reference, Local Guardian ─────────────────────────── -->
+        <div class="row g-4 mt-1">
+            <!-- Guardian -->
+            <div class="col-12 col-lg-4">
+                <div class="parent-sub">
+                    <div class="parent-sub-header" style="color:#0891b2;">
+                        <i class="fas fa-user-shield"></i> Guardian
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label">Full Name</label>
+                            <input type="text" class="form-control" name="guardian_name" value="<?= old('guardian_name') ?>" maxlength="200">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Relationship</label>
+                            <input type="text" class="form-control" name="guardian_relationship" value="<?= old('guardian_relationship') ?>" maxlength="100" placeholder="e.g. Uncle">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Phone</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-phone"></i></span>
+                                <input type="text" class="form-control" name="guardian_phone" value="<?= old('guardian_phone') ?>" maxlength="30">
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Profession</label>
+                            <input type="text" class="form-control" name="guardian_profession" value="<?= old('guardian_profession') ?>" maxlength="200">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Address</label>
+                            <textarea class="form-control" name="guardian_address" rows="2"><?= old('guardian_address') ?></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Reference Person -->
+            <div class="col-12 col-lg-4">
+                <div class="parent-sub">
+                    <div class="parent-sub-header" style="color:#7c3aed;">
+                        <i class="fas fa-address-card"></i> Reference Person
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label">Full Name</label>
+                            <input type="text" class="form-control" name="reference_name" value="<?= old('reference_name') ?>" maxlength="200">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Contact No.</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-phone"></i></span>
+                                <input type="text" class="form-control" name="reference_contact" value="<?= old('reference_contact') ?>" maxlength="30">
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Email</label>
+                            <input type="email" class="form-control" name="reference_email" value="<?= old('reference_email') ?>" maxlength="200">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Address</label>
+                            <textarea class="form-control" name="reference_address" rows="2"><?= old('reference_address') ?></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Local Guardian -->
+            <div class="col-12 col-lg-4">
+                <div class="parent-sub">
+                    <div class="parent-sub-header" style="color:#16a34a;">
+                        <i class="fas fa-home"></i> Local Guardian
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label">Full Name</label>
+                            <input type="text" class="form-control" name="local_guardian_name" value="<?= old('local_guardian_name') ?>" maxlength="200">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Contact No.</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-phone"></i></span>
+                                <input type="text" class="form-control" name="local_guardian_contact" value="<?= old('local_guardian_contact') ?>" maxlength="30">
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Email</label>
+                            <input type="email" class="form-control" name="local_guardian_email" value="<?= old('local_guardian_email') ?>" maxlength="200">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Address</label>
+                            <textarea class="form-control" name="local_guardian_address" rows="2"><?= old('local_guardian_address') ?></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Waiver Credits -->
+        <div class="row g-3 mt-1">
+            <div class="col-12 col-md-4">
+                <label class="form-label">Total Waiver Credits</label>
+                <input type="number" class="form-control" name="total_waiver_credits"
+                       value="<?= old('total_waiver_credits') ?>" min="0" step="0.01" placeholder="0.00">
+                <div class="form-text">Total credit hours waived (from import).</div>
             </div>
         </div>
     </div>

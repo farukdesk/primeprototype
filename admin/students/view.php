@@ -398,6 +398,7 @@ $statusChipClass = match($student['status']) {
 <div class="sv-section-nav">
     <a href="#sv-personal"><i class="fas fa-user me-1"></i>Personal</a>
     <a href="#sv-parents"><i class="fas fa-users me-1"></i>Parents</a>
+    <a href="#sv-guardian"><i class="fas fa-user-shield me-1"></i>Guardian</a>
     <a href="#sv-quals"><i class="fas fa-graduation-cap me-1"></i>Qualifications</a>
     <a href="#sv-files"><i class="fas fa-folder-open me-1"></i>Files</a>
     <a href="#sv-comments"><i class="fas fa-comments me-1"></i>Comments</a>
@@ -423,6 +424,8 @@ $statusChipClass = match($student['status']) {
                     ['fas fa-birthday-cake', 'Date of Birth',     $student['dob']],
                     ['fas fa-map-marker-alt','Place of Birth',    $student['place_of_birth']],
                     ['fas fa-id-card',       'NID',               $student['nid']],
+                    ['fas fa-ring',          'Marital Status',    $student['marital_status'] ?? null],
+                    ['fas fa-passport',      'Passport No.',      $student['passport_no'] ?? null],
                     ['fas fa-pray',          'Religion',          $student['religion']],
                     ['fas fa-globe',         'Nationality',       $student['nationality']],
                     ['fas fa-flag',          'Country',           (!empty($student['country']) && $student['country'] !== 'Bangladesh') ? $student['country'] : null],
@@ -430,6 +433,7 @@ $statusChipClass = match($student['status']) {
                     ['fas fa-map-pin',       'Thana / Upazila',   $student['thana_name'] ?? null],
                     ['fas fa-home',          'Present Address',   $student['present_address']],
                     ['fas fa-map-marked-alt','Permanent Address', $student['permanent_address']],
+                    ['fas fa-certificate',   'Waiver Credits',    !empty($student['total_waiver_credits']) ? $student['total_waiver_credits'] . ' cr.' : null],
                 ];
                 $hasAny = false;
                 foreach ($personalInfo as [$icon, $lbl, $val]) {
@@ -542,6 +546,139 @@ $statusChipClass = match($student['status']) {
         </div>
     </div>
 </div>
+
+<?php
+// Guardian, reference and local guardian visibility checks
+$hasGuardian      = !empty($student['guardian_name']) || !empty($student['guardian_phone']) || !empty($student['guardian_address']);
+$hasReference     = !empty($student['reference_name']) || !empty($student['reference_contact']) || !empty($student['reference_email']);
+$hasLocalGuardian = !empty($student['local_guardian_name']) || !empty($student['local_guardian_contact']);
+?>
+<?php if ($hasGuardian || $hasReference || $hasLocalGuardian): ?>
+<div class="sv-card mb-2" id="sv-guardian">
+    <div class="sv-card-header">
+        <div class="sv-card-header-icon" style="background:#ecfeff;color:#0891b2;"><i class="fas fa-user-shield"></i></div>
+        <h6 class="sv-card-header-title">Guardian &amp; Reference</h6>
+    </div>
+    <div class="sv-card-body">
+        <div class="row g-4">
+            <?php if ($hasGuardian): ?>
+            <div class="col-12 col-lg-4">
+                <div class="sv-parent-block h-100">
+                    <div class="sv-parent-label" style="color:#0891b2;"><i class="fas fa-user-shield me-1"></i>Guardian</div>
+                    <?php if ($student['guardian_name']): ?>
+                    <div class="sv-info-row">
+                        <div class="sv-info-icon"><i class="fas fa-user"></i></div>
+                        <div class="sv-info-label">Name</div>
+                        <div class="sv-info-value fw-semibold"><?= h($student['guardian_name']) ?></div>
+                    </div>
+                    <?php endif; ?>
+                    <?php if ($student['guardian_relationship'] ?? null): ?>
+                    <div class="sv-info-row">
+                        <div class="sv-info-icon"><i class="fas fa-link"></i></div>
+                        <div class="sv-info-label">Relationship</div>
+                        <div class="sv-info-value"><?= h($student['guardian_relationship']) ?></div>
+                    </div>
+                    <?php endif; ?>
+                    <?php if ($student['guardian_phone'] ?? null): ?>
+                    <div class="sv-info-row">
+                        <div class="sv-info-icon"><i class="fas fa-phone"></i></div>
+                        <div class="sv-info-label">Phone</div>
+                        <div class="sv-info-value"><?= h($student['guardian_phone']) ?></div>
+                    </div>
+                    <?php endif; ?>
+                    <?php if ($student['guardian_profession'] ?? null): ?>
+                    <div class="sv-info-row">
+                        <div class="sv-info-icon"><i class="fas fa-briefcase"></i></div>
+                        <div class="sv-info-label">Profession</div>
+                        <div class="sv-info-value"><?= h($student['guardian_profession']) ?></div>
+                    </div>
+                    <?php endif; ?>
+                    <?php if ($student['guardian_address'] ?? null): ?>
+                    <div class="sv-info-row">
+                        <div class="sv-info-icon"><i class="fas fa-map-marker-alt"></i></div>
+                        <div class="sv-info-label">Address</div>
+                        <div class="sv-info-value"><?= nl2br(h($student['guardian_address'])) ?></div>
+                    </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <?php endif; ?>
+
+            <?php if ($hasReference): ?>
+            <div class="col-12 col-lg-4">
+                <div class="sv-parent-block h-100">
+                    <div class="sv-parent-label" style="color:#7c3aed;"><i class="fas fa-address-card me-1"></i>Reference Person</div>
+                    <?php if ($student['reference_name'] ?? null): ?>
+                    <div class="sv-info-row">
+                        <div class="sv-info-icon"><i class="fas fa-user"></i></div>
+                        <div class="sv-info-label">Name</div>
+                        <div class="sv-info-value fw-semibold"><?= h($student['reference_name']) ?></div>
+                    </div>
+                    <?php endif; ?>
+                    <?php if ($student['reference_contact'] ?? null): ?>
+                    <div class="sv-info-row">
+                        <div class="sv-info-icon"><i class="fas fa-phone"></i></div>
+                        <div class="sv-info-label">Contact</div>
+                        <div class="sv-info-value"><?= h($student['reference_contact']) ?></div>
+                    </div>
+                    <?php endif; ?>
+                    <?php if ($student['reference_email'] ?? null): ?>
+                    <div class="sv-info-row">
+                        <div class="sv-info-icon"><i class="fas fa-envelope"></i></div>
+                        <div class="sv-info-label">Email</div>
+                        <div class="sv-info-value"><?= h($student['reference_email']) ?></div>
+                    </div>
+                    <?php endif; ?>
+                    <?php if ($student['reference_address'] ?? null): ?>
+                    <div class="sv-info-row">
+                        <div class="sv-info-icon"><i class="fas fa-map-marker-alt"></i></div>
+                        <div class="sv-info-label">Address</div>
+                        <div class="sv-info-value"><?= nl2br(h($student['reference_address'])) ?></div>
+                    </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <?php endif; ?>
+
+            <?php if ($hasLocalGuardian): ?>
+            <div class="col-12 col-lg-4">
+                <div class="sv-parent-block h-100">
+                    <div class="sv-parent-label" style="color:#16a34a;"><i class="fas fa-home me-1"></i>Local Guardian</div>
+                    <?php if ($student['local_guardian_name'] ?? null): ?>
+                    <div class="sv-info-row">
+                        <div class="sv-info-icon"><i class="fas fa-user"></i></div>
+                        <div class="sv-info-label">Name</div>
+                        <div class="sv-info-value fw-semibold"><?= h($student['local_guardian_name']) ?></div>
+                    </div>
+                    <?php endif; ?>
+                    <?php if ($student['local_guardian_contact'] ?? null): ?>
+                    <div class="sv-info-row">
+                        <div class="sv-info-icon"><i class="fas fa-phone"></i></div>
+                        <div class="sv-info-label">Contact</div>
+                        <div class="sv-info-value"><?= h($student['local_guardian_contact']) ?></div>
+                    </div>
+                    <?php endif; ?>
+                    <?php if ($student['local_guardian_email'] ?? null): ?>
+                    <div class="sv-info-row">
+                        <div class="sv-info-icon"><i class="fas fa-envelope"></i></div>
+                        <div class="sv-info-label">Email</div>
+                        <div class="sv-info-value"><?= h($student['local_guardian_email']) ?></div>
+                    </div>
+                    <?php endif; ?>
+                    <?php if ($student['local_guardian_address'] ?? null): ?>
+                    <div class="sv-info-row">
+                        <div class="sv-info-icon"><i class="fas fa-map-marker-alt"></i></div>
+                        <div class="sv-info-label">Address</div>
+                        <div class="sv-info-value"><?= nl2br(h($student['local_guardian_address'])) ?></div>
+                    </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <?php endif; ?>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 
 <!-- ══════════════════════════════════════════════════════════
      ACADEMIC QUALIFICATIONS
