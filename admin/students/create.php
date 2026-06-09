@@ -280,7 +280,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $project_fee          !== '' ? (int)$project_fee : null,
             $total_fee            !== '' ? (int)$total_fee   : null,
             $waiver_amount        !== '' ? (int)$waiver_amount : null,
-            $total_waiver_credits !== '' ? (float)$total_waiver_credits : null,
+            $total_waiver_credits !== '' ? $total_waiver_credits : null,
             $total_payable        ?: null,
             $monthly_installment  ?: null,
             $ref_number           ?: null,

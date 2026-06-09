@@ -297,7 +297,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $project_fee          !== '' ? (int)$project_fee : null,
             $total_fee            !== '' ? (int)$total_fee   : null,
             $waiver_amount        !== '' ? (int)$waiver_amount : null,
-            $total_waiver_credits !== '' ? (float)$total_waiver_credits : null,
+            $total_waiver_credits !== '' ? $total_waiver_credits : null,
             $total_payable        ?: null,
             $monthly_installment  ?: null,
             $ref_number           ?: null,
@@ -855,7 +855,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <label class="form-label fw-semibold">Total Waiver Credits</label>
                 <input type="number" class="form-control" name="total_waiver_credits"
                        value="<?= h($student['total_waiver_credits'] ?? '') ?>" min="0" step="0.01" placeholder="0.00">
-                <div class="form-text">Total credit hours waived.</div>
+                <div class="form-text">Total credit hours waived (from import).</div>
             </div>
         </div>
     </div>
