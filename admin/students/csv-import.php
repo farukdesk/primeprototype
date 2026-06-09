@@ -73,7 +73,7 @@
  *  waiver_courses, total_waiver_credits, certificate_map).
  */
 
-@ini_set('memory_limit', '256M');
+ini_set('memory_limit', '256M');
 
 require_once __DIR__ . '/../includes/auth.php';
 require_access('students', 'can_create');
@@ -597,10 +597,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'previ
                 if ($handle === false) {
                     $read_err = 'Could not open the uploaded file.';
                 } else {
-                    // Auto-detect delimiter: tabs vs commas in first line
+                    // Auto-detect delimiter: tabs vs commas in first line (default to comma)
                     $first_line = fgets($handle);
                     rewind($handle);
-                    $delim = (substr_count($first_line, "\t") > substr_count($first_line, ',')) ? "\t" : ',';
+                    $delim = ($first_line !== false && $first_line !== ''
+                              && substr_count($first_line, "\t") > substr_count($first_line, ','))
+                             ? "\t" : ',';
                     while (($raw = fgetcsv($handle, 0, $delim, '"', '\\')) !== false) {
                         $all_rows[] = array_map('strval', $raw);
                     }
@@ -834,18 +836,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                 $set_parts = [];
                 $params    = [];
 
+                // Allowed column names for dynamic SQL (whitelist prevents accidental injection
+                // if the $str_fields/$int_fields/$num_fields arrays are ever modified)
+                static $allowed_cols = null;
+                if ($allowed_cols === null) {
+                    $allowed_cols = array_fill_keys([
+                        'full_name','faculty_label','admitted_semester','year','batch','sex',
+                        'place_of_birth','marital_status','nationality','religion','blood_group',
+                        'nid','passport_no','photo','present_address','phone','email','country',
+                        'father_name','mother_name',
+                        'guardian_name','guardian_profession','guardian_address',
+                        'guardian_phone','guardian_relationship',
+                        'reference_name','reference_address','reference_contact','reference_email',
+                        'local_guardian_name','local_guardian_contact',
+                        'local_guardian_address','local_guardian_email',
+                        'waiver_courses','certificate_map',
+                        'dept_id','program_id','batch_id','district_id','thana_id',
+                        'dob','total_waiver_credits',
+                    ], true);
+                }
+
                 foreach ($str_fields as $col => $val) {
-                    if ($val === null || $val === '') continue;
+                    if (!isset($allowed_cols[$col]) || $val === null || $val === '') continue;
                     $set_parts[] = "`$col` = CASE WHEN (`$col` IS NULL OR `$col` = '') THEN ? ELSE `$col` END";
                     $params[]    = $val;
                 }
                 foreach ($int_fields as $col => $val) {
-                    if ($val === null) continue;
+                    if (!isset($allowed_cols[$col]) || $val === null) continue;
                     $set_parts[] = "`$col` = CASE WHEN `$col` IS NULL THEN ? ELSE `$col` END";
                     $params[]    = $val;
                 }
                 foreach ($num_fields as $col => $val) {
-                    if ($val === null || $val === '') continue;
+                    if (!isset($allowed_cols[$col]) || $val === null || $val === '') continue;
                     $set_parts[] = "`$col` = CASE WHEN `$col` IS NULL THEN ? ELSE `$col` END";
                     $params[]    = $val;
                 }
@@ -921,7 +943,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                     $batch ? $batch['name']     : ($r['batch_raw'] ?: null),
                     $batch ? (int)$batch['id']  : null,
                     $r['full_name'],
-                    $r['faculty_label'] ?: ($dept['faculty_label'] ?? null),
+                    $r['faculty_label'] ?? $dept['faculty_label'] ?? null,
                     $r['sex'],
                     $r['dob'],
                     $r['place_of_birth'],
