@@ -377,7 +377,7 @@ function ci_validate_row(
     $pass_raw    = trim($row['passport_no']          ?? '');
     $photo_raw   = trim($row['photo_url']            ?? $row['photo']              ?? '');
     $addr_raw    = trim($row['address']              ?? '');
-    $mob_raw     = ci_normalize_phone($row['contact_no'] ?? $row['mobile_number'] ?? $row['mobile'] ?? '');
+    $mob_raw     = ci_normalize_phone((string)($row['contact_no'] ?? $row['mobile_number'] ?? $row['mobile'] ?? ''));
     $email_raw   = trim($row['email']                ?? '');
 
     // ── Academic placement ────────────────────────────────────
@@ -782,10 +782,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
             if ($b_row) {
                 $batch = $b_row;
             } else {
-                $pdo->prepare(
-                    'INSERT INTO student_batches (name, is_active, sort_order) VALUES (?, 1, 0)'
-                )->execute([$r['batch_raw']]);
-                $batch = ['id' => (int)$pdo->lastInsertId(), 'name' => $r['batch_raw']];
+                try {
+                    $pdo->prepare(
+                        'INSERT INTO student_batches (name, is_active, sort_order) VALUES (?, 1, 0)'
+                    )->execute([$r['batch_raw']]);
+                    $batch = ['id' => (int)$pdo->lastInsertId(), 'name' => $r['batch_raw']];
+                } catch (PDOException $e) {
+                    // Concurrent insert – re-fetch
+                    $b_chk->execute([$r['batch_raw']]);
+                    $batch = $b_chk->fetch(PDO::FETCH_ASSOC) ?: null;
+                }
             }
             $r['batch_row'] = $batch;
         }
@@ -800,14 +806,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
             if ($d_row) {
                 $r['district'] = $d_row;
             } else {
-                $pdo->prepare(
-                    "INSERT INTO bd_districts (name, division) VALUES (?, '')"
-                )->execute([$r['district_raw']]);
-                $r['district'] = [
-                    'id'       => (int)$pdo->lastInsertId(),
-                    'name'     => $r['district_raw'],
-                    'division' => '',
-                ];
+                try {
+                    $pdo->prepare(
+                        "INSERT INTO bd_districts (name, division) VALUES (?, '')"
+                    )->execute([$r['district_raw']]);
+                    $r['district'] = [
+                        'id'       => (int)$pdo->lastInsertId(),
+                        'name'     => $r['district_raw'],
+                        'division' => '',
+                    ];
+                } catch (PDOException $e) {
+                    // Concurrent insert – re-fetch
+                    $d_chk->execute([$r['district_raw']]);
+                    $r['district'] = $d_chk->fetch(PDO::FETCH_ASSOC) ?: null;
+                }
             }
         }
 
@@ -821,13 +833,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
             if ($t_row) {
                 $r['thana'] = $t_row;
             } else {
-                $pdo->prepare(
-                    'INSERT INTO bd_thanas (district_id, name) VALUES (?, ?)'
-                )->execute([(int)$r['district']['id'], $r['thana_raw']]);
-                $r['thana'] = [
-                    'id'   => (int)$pdo->lastInsertId(),
-                    'name' => $r['thana_raw'],
-                ];
+                try {
+                    $pdo->prepare(
+                        'INSERT INTO bd_thanas (district_id, name) VALUES (?, ?)'
+                    )->execute([(int)$r['district']['id'], $r['thana_raw']]);
+                    $r['thana'] = [
+                        'id'   => (int)$pdo->lastInsertId(),
+                        'name' => $r['thana_raw'],
+                    ];
+                } catch (PDOException $e) {
+                    // Concurrent insert – re-fetch
+                    $t_chk->execute([(int)$r['district']['id'], $r['thana_raw']]);
+                    $r['thana'] = $t_chk->fetch(PDO::FETCH_ASSOC) ?: null;
+                }
             }
         }
 
