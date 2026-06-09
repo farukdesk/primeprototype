@@ -216,6 +216,22 @@ function ci_parse_date(string $raw): ?string {
 }
 
 /**
+ * Normalise a Bangladesh phone number.
+ * If the number is exactly 10 digits and starts with 1, prepend 0 (e.g. 1712345678 → 01712345678).
+ * If it is already 11 digits, return as-is.
+ */
+function ci_normalize_phone(string $raw): string {
+    $raw = trim($raw);
+    if ($raw === '') return $raw;
+    $digits = preg_replace('/\D/', '', $raw);
+    if ($digits === '') return $raw;
+    if (strlen($digits) === 10 && $digits[0] === '1') {
+        return '0' . $digits;
+    }
+    return $digits;
+}
+
+/**
  * Normalise a gender string to Male/Female/Other or null.
  */
 function ci_parse_sex(string $raw): ?string {
@@ -361,7 +377,7 @@ function ci_validate_row(
     $pass_raw    = trim($row['passport_no']          ?? '');
     $photo_raw   = trim($row['photo_url']            ?? $row['photo']              ?? '');
     $addr_raw    = trim($row['address']              ?? '');
-    $mob_raw     = trim($row['contact_no']           ?? $row['mobile_number']      ?? $row['mobile'] ?? '');
+    $mob_raw     = ci_normalize_phone((string)($row['contact_no'] ?? $row['mobile_number'] ?? $row['mobile'] ?? ''));
     $email_raw   = trim($row['email']                ?? '');
 
     // ── Academic placement ────────────────────────────────────
@@ -442,7 +458,7 @@ function ci_validate_row(
     if ($batch_raw !== '') {
         $batch = ci_resolve_batch($batch_raw, $batch_by_name);
         if ($batch === null) {
-            $warnings[] = 'Batch "' . h($batch_raw) . '" not found in references – will be stored as text.';
+            $warnings[] = 'Batch "' . h($batch_raw) . '" not found – will be inserted as a new batch.';
         }
     }
 
@@ -451,14 +467,14 @@ function ci_validate_row(
     if ($district_raw !== '') {
         $district = ci_resolve_district($district_raw, $district_by_name);
         if ($district === null) {
-            $warnings[] = 'District "' . h($district_raw) . '" not found – will be left blank.';
+            $warnings[] = 'District "' . h($district_raw) . '" not found – will be inserted as new.';
         }
     }
     $thana = null;
     if ($thana_raw !== '' && $district !== null) {
         $thana = ci_resolve_thana($thana_raw, (int)$district['id'], $thana_by_did_name);
         if ($thana === null) {
-            $warnings[] = 'Thana "' . h($thana_raw) . '" not found in district – will be left blank.';
+            $warnings[] = 'Thana "' . h($thana_raw) . '" not found in district – will be inserted as new.';
         }
     }
 
@@ -755,6 +771,83 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
         $batch     = $r['batch_row'];
         $sid_in    = $r['student_id'];
         $is_upsert = ($r['action'] === 'update') && $upsert_mode;
+
+        // ── Auto-create missing batch ─────────────────────────────────────────
+        if ($batch === null && ($r['batch_raw'] ?? '') !== '') {
+            $b_chk = $pdo->prepare(
+                'SELECT id, name FROM student_batches WHERE LOWER(name) = LOWER(?) LIMIT 1'
+            );
+            $b_chk->execute([$r['batch_raw']]);
+            $b_row = $b_chk->fetch(PDO::FETCH_ASSOC);
+            if ($b_row) {
+                $batch = $b_row;
+            } else {
+                try {
+                    $pdo->prepare(
+                        'INSERT INTO student_batches (name, is_active, sort_order) VALUES (?, 1, 0)'
+                    )->execute([$r['batch_raw']]);
+                    $batch = ['id' => (int)$pdo->lastInsertId(), 'name' => $r['batch_raw']];
+                } catch (PDOException $e) {
+                    // Concurrent insert – re-fetch
+                    $b_chk->execute([$r['batch_raw']]);
+                    $batch = $b_chk->fetch(PDO::FETCH_ASSOC) ?: null;
+                }
+            }
+            $r['batch_row'] = $batch;
+        }
+
+        // ── Auto-create missing district ──────────────────────────────────────
+        if ($r['district'] === null && ($r['district_raw'] ?? '') !== '') {
+            $d_chk = $pdo->prepare(
+                'SELECT id, name, division FROM bd_districts WHERE LOWER(name) = LOWER(?) LIMIT 1'
+            );
+            $d_chk->execute([$r['district_raw']]);
+            $d_row = $d_chk->fetch(PDO::FETCH_ASSOC);
+            if ($d_row) {
+                $r['district'] = $d_row;
+            } else {
+                try {
+                    $pdo->prepare(
+                        "INSERT INTO bd_districts (name, division) VALUES (?, '')"
+                    )->execute([$r['district_raw']]);
+                    $r['district'] = [
+                        'id'       => (int)$pdo->lastInsertId(),
+                        'name'     => $r['district_raw'],
+                        'division' => '',
+                    ];
+                } catch (PDOException $e) {
+                    // Concurrent insert – re-fetch
+                    $d_chk->execute([$r['district_raw']]);
+                    $r['district'] = $d_chk->fetch(PDO::FETCH_ASSOC) ?: null;
+                }
+            }
+        }
+
+        // ── Auto-create missing thana ─────────────────────────────────────────
+        if ($r['thana'] === null && ($r['thana_raw'] ?? '') !== '' && $r['district'] !== null) {
+            $t_chk = $pdo->prepare(
+                'SELECT id, name FROM bd_thanas WHERE district_id = ? AND LOWER(name) = LOWER(?) LIMIT 1'
+            );
+            $t_chk->execute([(int)$r['district']['id'], $r['thana_raw']]);
+            $t_row = $t_chk->fetch(PDO::FETCH_ASSOC);
+            if ($t_row) {
+                $r['thana'] = $t_row;
+            } else {
+                try {
+                    $pdo->prepare(
+                        'INSERT INTO bd_thanas (district_id, name) VALUES (?, ?)'
+                    )->execute([(int)$r['district']['id'], $r['thana_raw']]);
+                    $r['thana'] = [
+                        'id'   => (int)$pdo->lastInsertId(),
+                        'name' => $r['thana_raw'],
+                    ];
+                } catch (PDOException $e) {
+                    // Concurrent insert – re-fetch
+                    $t_chk->execute([(int)$r['district']['id'], $r['thana_raw']]);
+                    $r['thana'] = $t_chk->fetch(PDO::FETCH_ASSOC) ?: null;
+                }
+            }
+        }
 
         // Re-check whether the student already exists (session data may be stale)
         $existing_pk = false;
