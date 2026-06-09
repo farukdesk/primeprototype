@@ -1203,45 +1203,74 @@ $upsert_active = $_SESSION['csv_import_upsert'] ?? false;
 </div>
 <?php endif; ?>
 
-<?php if ($total_count > CI_PREVIEW_LIMIT): ?>
-<div class="alert alert-secondary mb-3" style="font-size:.875rem;">
-    <i class="fas fa-info-circle me-1"></i>
-    Showing the first <strong><?= CI_PREVIEW_LIMIT ?></strong> of <?= $total_count ?> rows.
-    All <?= $valid_count ?> valid rows will be processed on confirm.
-</div>
-<?php endif; ?>
-
 <div class="card">
     <div class="card-header py-3 px-4">
         <h6 class="mb-0 fw-semibold">
             <i class="fas fa-table me-2 text-muted"></i>
-            Preview (<?= min($total_count, CI_PREVIEW_LIMIT) ?> of <?= $total_count ?> rows shown)
+            Preview (<?= $total_count ?> row<?= $total_count !== 1 ? 's' : '' ?>)
         </h6>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
-            <table class="table table-hover table-sm mb-0" style="font-size:.8rem;">
+            <table class="table table-hover table-sm mb-0" style="font-size:.8rem; white-space:nowrap;">
                 <thead class="table-light">
                     <tr>
                         <th class="px-3">#</th>
                         <th>Row</th>
                         <th>Action</th>
+                        <th>Status</th>
                         <th>ID</th>
                         <th>Name</th>
-                        <th>Dept</th>
-                        <th>Program</th>
-                        <th>Semester</th>
-                        <th>Batch</th>
+                        <th>Gender</th>
+                        <th>DOB</th>
+                        <th>Place of Birth</th>
+                        <th>Marital Status</th>
+                        <th>Nationality</th>
+                        <th>Religion</th>
+                        <th>Blood Group</th>
+                        <th>NID / Birth Cert</th>
+                        <th>Passport No</th>
                         <th>Phone</th>
                         <th>Email</th>
-                        <th>Status</th>
+                        <th>Address</th>
+                        <th>Country</th>
+                        <th>District</th>
+                        <th>Thana</th>
+                        <th>Faculty</th>
+                        <th>Dept</th>
+                        <th>Program</th>
+                        <th>Year</th>
+                        <th>Semester</th>
+                        <th>Batch</th>
+                        <th>Father's Name</th>
+                        <th>Mother's Name</th>
+                        <th>Guardian Name</th>
+                        <th>Guardian Profession</th>
+                        <th>Guardian Address</th>
+                        <th>Guardian Phone</th>
+                        <th>Guardian Relationship</th>
+                        <th>Reference Name</th>
+                        <th>Reference Address</th>
+                        <th>Reference Contact</th>
+                        <th>Reference Email</th>
+                        <th>Local Guardian Name</th>
+                        <th>Local Guardian Contact</th>
+                        <th>Local Guardian Address</th>
+                        <th>Local Guardian Email</th>
+                        <th>Qualifications</th>
+                        <th>Waiver Courses</th>
+                        <th>Total Waiver Credits</th>
+                        <th>Certificate Map</th>
+                        <th>Photo URL</th>
                     </tr>
                 </thead>
                 <tbody>
-                <?php foreach (array_slice($preview_rows, 0, CI_PREVIEW_LIMIT) as $i => $r):
+                <?php foreach ($preview_rows as $i => $r):
                     $has_errors   = !empty($r['errors']);
                     $has_warnings = !empty($r['warnings']);
                     $row_cls = $has_errors ? 'table-danger' : ($has_warnings ? 'table-warning' : '');
+                    $dash    = '<span class="text-muted">—</span>';
+                    $cell    = fn($v) => $v !== null && $v !== '' ? h($v) : $dash;
                 ?>
                 <tr class="<?= $row_cls ?>">
                     <td class="px-3"><?= $i + 1 ?></td>
@@ -1256,6 +1285,21 @@ $upsert_active = $_SESSION['csv_import_upsert'] ?? false;
                         <?php endif; ?>
                     </td>
                     <td>
+                        <?php if ($has_errors): ?>
+                            <span class="text-danger fw-semibold"><i class="fas fa-times-circle me-1"></i>Error</span>
+                            <ul class="mb-0 ps-3 mt-1" style="font-size:.75rem;white-space:normal;min-width:200px;">
+                                <?php foreach ($r['errors'] as $e): ?><li><?= $e ?></li><?php endforeach; ?>
+                            </ul>
+                        <?php elseif ($has_warnings): ?>
+                            <span class="text-warning fw-semibold"><i class="fas fa-exclamation-triangle me-1"></i>Warning</span>
+                            <ul class="mb-0 ps-3 mt-1" style="font-size:.75rem;white-space:normal;min-width:200px;">
+                                <?php foreach ($r['warnings'] as $w): ?><li><?= $w ?></li><?php endforeach; ?>
+                            </ul>
+                        <?php else: ?>
+                            <span class="text-success"><i class="fas fa-check-circle me-1"></i>OK</span>
+                        <?php endif; ?>
+                    </td>
+                    <td>
                         <?php if ($r['student_id'] !== ''): ?>
                             <code style="font-size:.75rem;"><?= h($r['student_id']) ?></code>
                         <?php else: ?>
@@ -1263,13 +1307,45 @@ $upsert_active = $_SESSION['csv_import_upsert'] ?? false;
                         <?php endif; ?>
                     </td>
                     <td><?= h($r['full_name']) ?></td>
+                    <td><?= $cell($r['sex']) ?></td>
+                    <td><?= $cell($r['dob']) ?></td>
+                    <td><?= $cell($r['place_of_birth']) ?></td>
+                    <td><?= $cell($r['marital_status']) ?></td>
+                    <td><?= $cell($r['nationality']) ?></td>
+                    <td><?= $cell($r['religion']) ?></td>
+                    <td><?= $cell($r['blood_group']) ?></td>
+                    <td><?= $cell($r['nid']) ?></td>
+                    <td><?= $cell($r['passport_no']) ?></td>
+                    <td><?= $cell($r['phone']) ?></td>
+                    <td><?= $cell($r['email']) ?></td>
+                    <td style="white-space:normal;min-width:160px;"><?= $cell($r['present_address']) ?></td>
+                    <td><?= $cell($r['country']) ?></td>
+                    <td>
+                        <?php if ($r['district']): ?>
+                            <?= h($r['district']['name'] ?? $r['district_raw']) ?>
+                        <?php elseif ($r['district_raw'] !== ''): ?>
+                            <span class="text-warning" title="Not matched"><?= h($r['district_raw']) ?></span>
+                        <?php else: ?>
+                            <?= $dash ?>
+                        <?php endif; ?>
+                    </td>
+                    <td>
+                        <?php if ($r['thana']): ?>
+                            <?= h($r['thana']['name'] ?? $r['thana_raw']) ?>
+                        <?php elseif ($r['thana_raw'] !== ''): ?>
+                            <span class="text-warning" title="Not matched"><?= h($r['thana_raw']) ?></span>
+                        <?php else: ?>
+                            <?= $dash ?>
+                        <?php endif; ?>
+                    </td>
+                    <td><?= $cell($r['faculty_label']) ?></td>
                     <td>
                         <?php if ($r['dept']): ?>
                             <?= h($r['dept']['name']) ?>
                         <?php elseif (isset($r['dept'])): ?>
                             <span class="text-danger">—</span>
                         <?php else: ?>
-                            <span class="text-muted">—</span>
+                            <?= $dash ?>
                         <?php endif; ?>
                     </td>
                     <td>
@@ -1278,34 +1354,50 @@ $upsert_active = $_SESSION['csv_import_upsert'] ?? false;
                         <?php elseif ($r['program_raw'] !== ''): ?>
                             <span class="text-warning" title="Not matched"><?= h($r['program_raw']) ?></span>
                         <?php else: ?>
-                            <span class="text-muted">—</span>
+                            <?= $dash ?>
                         <?php endif; ?>
                     </td>
-                    <td><?= h($r['admitted_semester']) ?></td>
+                    <td><?= $cell($r['year']) ?></td>
+                    <td><?= $cell($r['admitted_semester']) ?></td>
                     <td>
                         <?php if ($r['batch_row']): ?>
                             <?= h($r['batch_row']['name']) ?>
                         <?php elseif ($r['batch_raw'] !== ''): ?>
                             <span class="text-warning"><?= h($r['batch_raw']) ?></span>
                         <?php else: ?>
-                            <span class="text-muted">—</span>
+                            <?= $dash ?>
                         <?php endif; ?>
                     </td>
-                    <td><?= $r['phone'] ? h($r['phone']) : '<span class="text-muted">—</span>' ?></td>
-                    <td><?= $r['email'] ? h($r['email']) : '<span class="text-muted">—</span>' ?></td>
+                    <td><?= $cell($r['father_name']) ?></td>
+                    <td><?= $cell($r['mother_name']) ?></td>
+                    <td><?= $cell($r['guardian_name']) ?></td>
+                    <td><?= $cell($r['guardian_profession']) ?></td>
+                    <td style="white-space:normal;min-width:140px;"><?= $cell($r['guardian_address']) ?></td>
+                    <td><?= $cell($r['guardian_phone']) ?></td>
+                    <td><?= $cell($r['guardian_relationship']) ?></td>
+                    <td><?= $cell($r['reference_name']) ?></td>
+                    <td style="white-space:normal;min-width:140px;"><?= $cell($r['reference_address']) ?></td>
+                    <td><?= $cell($r['reference_contact']) ?></td>
+                    <td><?= $cell($r['reference_email']) ?></td>
+                    <td><?= $cell($r['local_guardian_name']) ?></td>
+                    <td><?= $cell($r['local_guardian_contact']) ?></td>
+                    <td style="white-space:normal;min-width:140px;"><?= $cell($r['local_guardian_address']) ?></td>
+                    <td><?= $cell($r['local_guardian_email']) ?></td>
                     <td>
-                        <?php if ($has_errors): ?>
-                            <span class="text-danger fw-semibold"><i class="fas fa-times-circle me-1"></i>Error</span>
-                            <ul class="mb-0 ps-3 mt-1" style="font-size:.75rem;">
-                                <?php foreach ($r['errors'] as $e): ?><li><?= $e ?></li><?php endforeach; ?>
-                            </ul>
-                        <?php elseif ($has_warnings): ?>
-                            <span class="text-warning fw-semibold"><i class="fas fa-exclamation-triangle me-1"></i>Warning</span>
-                            <ul class="mb-0 ps-3 mt-1" style="font-size:.75rem;">
-                                <?php foreach ($r['warnings'] as $w): ?><li><?= $w ?></li><?php endforeach; ?>
-                            </ul>
+                        <?php if (!empty($r['qualifications'])): ?>
+                            <span class="badge bg-secondary"><?= count($r['qualifications']) ?> record(s)</span>
                         <?php else: ?>
-                            <span class="text-success"><i class="fas fa-check-circle me-1"></i>OK</span>
+                            <?= $dash ?>
+                        <?php endif; ?>
+                    </td>
+                    <td><?= $r['waiver_courses'] !== null && $r['waiver_courses'] !== '' ? '<span class="badge bg-secondary">yes</span>' : $dash ?></td>
+                    <td><?= $r['total_waiver_credits'] !== null && $r['total_waiver_credits'] !== '' ? h($r['total_waiver_credits']) : $dash ?></td>
+                    <td><?= $r['certificate_map'] !== null && $r['certificate_map'] !== '' ? '<span class="badge bg-secondary">yes</span>' : $dash ?></td>
+                    <td>
+                        <?php if (!empty($r['photo'])): ?>
+                            <a href="<?= h($r['photo']) ?>" target="_blank" style="font-size:.75rem;">link</a>
+                        <?php else: ?>
+                            <?= $dash ?>
                         <?php endif; ?>
                     </td>
                 </tr>
