@@ -390,7 +390,7 @@ if ($sale_row && !$form_success && !$already_submitted) {
     <div class="container d-flex align-items-center justify-content-between">
         <a href="/" class="d-flex align-items-center gap-2 text-decoration-none">
             <img src="<?= aff_h($_form_logo_url) ?>" alt="Prime University"
-                 style="height:48px; max-width:180px; object-fit:contain;"
+                 style="height:40px; max-width:180px; object-fit:contain;"
                  onerror="this.style.display='none'">
         </a>
         <a href="/" class="btn btn-sm btn-outline-light">Home</a>
@@ -1104,6 +1104,18 @@ if ($sale_row && !$form_success && !$already_submitted) {
         else if (v.length > 2) out = v.substring(0,2) + '/' + v.substring(2);
         else out = v;
         dobEl.value = out;
+        // Basic range hint when fully entered
+        if (v.length === 8) {
+            var dd = parseInt(v.substring(0,2), 10);
+            var mm = parseInt(v.substring(2,4), 10);
+            if (dd < 1 || dd > 31 || mm < 1 || mm > 12) {
+                dobEl.setCustomValidity('Please enter a valid date in DD/MM/YYYY format.');
+            } else {
+                dobEl.setCustomValidity('');
+            }
+        } else {
+            dobEl.setCustomValidity('');
+        }
     });
     dobEl.addEventListener('keydown', function(e) {
         if (e.key === 'Backspace') {
