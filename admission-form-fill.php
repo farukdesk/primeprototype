@@ -10,6 +10,15 @@ require_once __DIR__ . '/includes/config.php';
 
 $page_title = 'Admission Form – Student Details | Prime University';
 
+// ── Logo (use CMS footer logo if configured, else fall back to white asset) ───
+$_form_logo_url = '/assets/img/logo/logo-white.png';
+try {
+    $_fs_logo = get_footer_settings();
+    if (!empty($_fs_logo['logo_footer'])) {
+        $_form_logo_url = ADMIN_UPLOAD_URL . '/logos/' . $_fs_logo['logo_footer'];
+    }
+} catch (Throwable $_le) {}
+
 // ── Helper: HTML-escape ───────────────────────────────────────────────────────
 function aff_h(mixed $v): string
 {
@@ -43,7 +52,7 @@ if ($raw_token === '') {
         if (!$token_row) {
             $token_error = 'Invalid link. Please use the exact link sent to you.';
         } elseif ($token_row['used_at'] !== null) {
-            $token_error = 'This link has already been used. Your details have been submitted.';
+            $token_error = 'This link has already been used. If you want to make changes, please contact your admission counselor.';
         } elseif (strtotime($token_row['expires_at']) < time()) {
             $token_error = 'This link has expired (valid for 24 hours). Please contact the admissions office.';
         } elseif ($token_row['sale_status'] !== 'pending') {
@@ -110,6 +119,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $sale_row && !$already_submitted) {
         $gender                = in_array($_POST['gender'] ?? '', ['Male','Female','Other'], true)
                                   ? $_POST['gender'] : null;
         $date_of_birth         = trim($_POST['date_of_birth']         ?? '') ?: null;
+        // Convert DD/MM/YYYY → YYYY-MM-DD for storage
+        if ($date_of_birth && preg_match('#^(\d{2})/(\d{2})/(\d{4})$#', $date_of_birth, $_dm)) {
+            $date_of_birth = checkdate((int)$_dm[2], (int)$_dm[1], (int)$_dm[3])
+                ? "{$_dm[3]}-{$_dm[2]}-{$_dm[1]}" : null;
+        }
         $blood_group           = trim($_POST['blood_group']           ?? '') ?: null;
         $nationality           = trim($_POST['nationality']           ?? '') ?: null;
         $place_of_birth        = trim($_POST['place_of_birth']        ?? '') ?: null;
@@ -140,6 +154,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $sale_row && !$already_submitted) {
         }
 
         if ($student_name === '') $form_errors[] = 'Student Full Name is required.';
+
+        // ── Extra sections ────────────────────────────────────────────────────
+        $experience             = trim($_POST['experience']             ?? '') ?: null;
+        $guardian_name          = trim($_POST['guardian_name']          ?? '') ?: null;
+        $guardian_profession    = trim($_POST['guardian_profession']    ?? '') ?: null;
+        $guardian_relationship  = trim($_POST['guardian_relationship']  ?? '') ?: null;
+        $guardian_monthly_income = trim($_POST['guardian_monthly_income'] ?? '') ?: null;
+        $guardian_address_1     = trim($_POST['guardian_address_1']     ?? '') ?: null;
+        $guardian_address_2     = trim($_POST['guardian_address_2']     ?? '') ?: null;
+        $guardian_phone         = trim($_POST['guardian_phone']         ?? '') ?: null;
+        $guardian_email         = trim($_POST['guardian_email']         ?? '') ?: null;
+        $local_guardian_name    = trim($_POST['local_guardian_name']    ?? '') ?: null;
+        $local_guardian_address_1 = trim($_POST['local_guardian_address_1'] ?? '') ?: null;
+        $local_guardian_address_2 = trim($_POST['local_guardian_address_2'] ?? '') ?: null;
+        $local_guardian_address_3 = trim($_POST['local_guardian_address_3'] ?? '') ?: null;
+        $local_guardian_contact = trim($_POST['local_guardian_contact'] ?? '') ?: null;
+        $reference_name         = trim($_POST['reference_name']         ?? '') ?: null;
+        $reference_address_1    = trim($_POST['reference_address_1']    ?? '') ?: null;
+        $reference_address_2    = trim($_POST['reference_address_2']    ?? '') ?: null;
+        $reference_address_3    = trim($_POST['reference_address_3']    ?? '') ?: null;
+        $reference_contact      = trim($_POST['reference_contact']      ?? '') ?: null;
+
+        // Academic records (array fields; filter fully-empty rows)
+        $acad_rows = [];
+        $acad_exams  = (array)($_POST['acad_exam']  ?? []);
+        $acad_sess   = (array)($_POST['acad_session'] ?? []);
+        $acad_group  = (array)($_POST['acad_group']  ?? []);
+        $acad_board  = (array)($_POST['acad_board']  ?? []);
+        $acad_year   = (array)($_POST['acad_year']   ?? []);
+        $acad_grade  = (array)($_POST['acad_grade']  ?? []);
+        $acad_cgpa   = (array)($_POST['acad_cgpa']   ?? []);
+        foreach ($acad_exams as $i => $ex) {
+            $row = [
+                'exam_name'       => trim($ex                   ?? '') ?: null,
+                'session'         => trim($acad_sess[$i]        ?? '') ?: null,
+                'group_name'      => trim($acad_group[$i]       ?? '') ?: null,
+                'board_university'=> trim($acad_board[$i]       ?? '') ?: null,
+                'year_of_passing' => trim($acad_year[$i]        ?? '') ?: null,
+                'division_grade'  => trim($acad_grade[$i]       ?? '') ?: null,
+                'total_marks_cgpa'=> trim($acad_cgpa[$i]        ?? '') ?: null,
+            ];
+            if (array_filter($row)) { // skip all-empty rows
+                $acad_rows[] = $row;
+            }
+        }
     }
 
     if (empty($form_errors)) {
@@ -157,8 +216,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $sale_row && !$already_submitted) {
                     permanent_district_id, permanent_thana_id, permanent_post_code,
                     present_same_as_permanent,
                     present_address_1, present_address_2, present_area,
-                    present_district_id, present_thana_id, present_post_code)
-                 VALUES (?,?, ?,?,?,?,?, ?,?,?,?,?, ?,?,?, ?,?,?, ?, ?,?,?, ?,?,?)'
+                    present_district_id, present_thana_id, present_post_code,
+                    experience,
+                    guardian_name, guardian_profession, guardian_relationship, guardian_monthly_income,
+                    guardian_address_1, guardian_address_2, guardian_phone, guardian_email,
+                    local_guardian_name, local_guardian_address_1, local_guardian_address_2,
+                    local_guardian_address_3, local_guardian_contact,
+                    reference_name, reference_address_1, reference_address_2,
+                    reference_address_3, reference_contact)
+                 VALUES (?,?, ?,?,?,?,?, ?,?,?,?,?, ?,?,?, ?,?,?, ?, ?,?,?, ?,?,?,
+                         ?, ?,?,?,?, ?,?,?,?, ?,?,?,?,?, ?,?,?,?,?)'
             )->execute([
                 $sale_row['form_sale_id'], $sale_row['id'],
                 $student_name, $father_name ?: null, $mother_name ?: null,
@@ -169,7 +236,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $sale_row && !$already_submitted) {
                 $same_as_permanent,
                 $present_address_1, $present_address_2, $present_area,
                 $present_district_id, $present_thana_id, $present_post_code,
+                $experience,
+                $guardian_name, $guardian_profession, $guardian_relationship, $guardian_monthly_income,
+                $guardian_address_1, $guardian_address_2, $guardian_phone, $guardian_email,
+                $local_guardian_name, $local_guardian_address_1, $local_guardian_address_2,
+                $local_guardian_address_3, $local_guardian_contact,
+                $reference_name, $reference_address_1, $reference_address_2,
+                $reference_address_3, $reference_contact,
             ]);
+
+            // Insert academic qualification rows
+            if (!empty($acad_rows)) {
+                $acad_stmt = $db->prepare(
+                    'INSERT INTO adm_form_sale_academic_records
+                       (form_sale_id, exam_name, session, group_name, board_university,
+                        year_of_passing, division_grade, total_marks_cgpa, sort_order)
+                     VALUES (?,?,?,?,?,?,?,?,?)'
+                );
+                foreach ($acad_rows as $sort => $ar) {
+                    $acad_stmt->execute([
+                        $sale_row['form_sale_id'],
+                        $ar['exam_name'], $ar['session'], $ar['group_name'], $ar['board_university'],
+                        $ar['year_of_passing'], $ar['division_grade'], $ar['total_marks_cgpa'],
+                        $sort,
+                    ]);
+                }
+            }
 
             // Mark token as used
             $db->prepare(
@@ -243,6 +335,53 @@ if ($sale_row && !$form_success && !$already_submitted) {
         .aff-ss-item:hover { background: #f0f4ff; }
         .aff-ss-item.header-item { background: #f0f4ff; font-weight: 600; font-size: .75rem; color: #555; pointer-events: none; }
         .aff-ss-item.none-item { color: #999; }
+        /* ── Radio & checkbox – override any site-wide toggle/switch styling ── */
+        .aff-form-card .form-check-input[type="radio"] {
+            -webkit-appearance: none; appearance: none;
+            width: 1.15em; height: 1.15em; border-radius: 50% !important;
+            border: 2px solid #adb5bd; background-color: #fff;
+            cursor: pointer; flex-shrink: 0; margin-top: .2em;
+            transition: border-color .15s, background-color .15s;
+        }
+        .aff-form-card .form-check-input[type="radio"]:checked {
+            background-color: #0d6efd; border-color: #0d6efd;
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='2' fill='%23fff'/%3e%3c/svg%3e");
+            background-repeat: no-repeat; background-position: center;
+        }
+        .aff-form-card .form-check-input[type="checkbox"] {
+            -webkit-appearance: none; appearance: none;
+            width: 1.15em; height: 1.15em; border-radius: 0.2em !important;
+            border: 2px solid #adb5bd; background-color: #fff;
+            cursor: pointer; flex-shrink: 0; margin-top: .2em;
+            transition: border-color .15s, background-color .15s;
+        }
+        .aff-form-card .form-check-input[type="checkbox"]:checked {
+            background-color: #0d6efd; border-color: #0d6efd;
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3e%3cpath fill='none' stroke='%23fff' stroke-width='3' d='m6 10 3 3 6-6'/%3e%3c/svg%3e");
+            background-repeat: no-repeat; background-position: center; background-size: .8em;
+        }
+        /* Also fix same-as-permanent checkbox in card-header (outside .aff-form-card .card-body) */
+        .aff-present-header .form-check-input[type="checkbox"] {
+            -webkit-appearance: none; appearance: none;
+            width: 1.15em; height: 1.15em; border-radius: 0.2em !important;
+            border: 2px solid #adb5bd; background-color: #fff;
+            cursor: pointer; flex-shrink: 0; margin-top: .2em;
+        }
+        .aff-present-header .form-check-input[type="checkbox"]:checked {
+            background-color: #0d6efd; border-color: #0d6efd;
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3e%3cpath fill='none' stroke='%23fff' stroke-width='3' d='m6 10 3 3 6-6'/%3e%3c/svg%3e");
+            background-repeat: no-repeat; background-position: center; background-size: .8em;
+        }
+        /* Responsive table for academic qualifications */
+        .aff-acad-table { width: 100%; border-collapse: collapse; }
+        .aff-acad-table th { background: #f8f9fa; font-size: .78rem; font-weight: 600; padding: 8px 6px; white-space: nowrap; }
+        .aff-acad-table td { padding: 4px 4px; vertical-align: middle; }
+        .aff-acad-table .form-control { font-size: .85rem; }
+        @media (max-width: 767.98px) {
+            .aff-acad-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+            .aff-acad-table { min-width: 700px; }
+            .aff-hero { padding: 40px 0 60px; }
+        }
     </style>
 </head>
 <body>
@@ -250,8 +389,9 @@ if ($sale_row && !$form_success && !$already_submitted) {
 <header style="background:#0f1f4a; padding: 12px 0;">
     <div class="container d-flex align-items-center justify-content-between">
         <a href="/" class="d-flex align-items-center gap-2 text-decoration-none">
-            <img src="/assets/img/logo/logo-white.png" alt="Prime University" style="height:40px;" onerror="this.style.display='none'">
-            <span style="color:#fff;font-weight:700;font-size:1.1rem;">Prime University</span>
+            <img src="<?= aff_h($_form_logo_url) ?>" alt="Prime University"
+                 style="height:48px; max-width:180px; object-fit:contain;"
+                 onerror="this.style.display='none'">
         </a>
         <a href="/" class="btn btn-sm btn-outline-light">Home</a>
     </div>
@@ -290,8 +430,8 @@ if ($sale_row && !$form_success && !$already_submitted) {
                     <a href="/" class="btn btn-primary">Return to Homepage</a>
                 </div>
 
-                <?php elseif ($form_success || $already_submitted): ?>
-                <!-- ── Success ─────────────────────────────────────────────────── -->
+                <?php elseif ($form_success): ?>
+                <!-- ── Fresh success ───────────────────────────────────────────── -->
                 <div class="aff-form-card card p-5 text-center">
                     <div class="mb-4"><i class="fas fa-check-circle fa-4x text-success opacity-90"></i></div>
                     <h4 class="fw-bold text-success mb-2">Details Submitted Successfully!</h4>
@@ -300,6 +440,20 @@ if ($sale_row && !$form_success && !$already_submitted) {
                     </p>
                     <p class="text-muted mb-4">
                         Our admissions team will review your details and get back to you. Please bring your original documents on the day of admission.
+                    </p>
+                    <a href="/" class="btn btn-primary"><i class="fas fa-home me-1"></i> Return to Homepage</a>
+                </div>
+
+                <?php elseif ($already_submitted): ?>
+                <!-- ── Already submitted ───────────────────────────────────────── -->
+                <div class="aff-form-card card p-5 text-center">
+                    <div class="mb-4"><i class="fas fa-info-circle fa-4x text-primary opacity-75"></i></div>
+                    <h4 class="fw-bold text-primary mb-2">Details Already Submitted</h4>
+                    <p class="text-muted mb-2">
+                        Your details for Form No. <strong class="text-dark"><?= aff_h($sale_row['form_number']) ?></strong> have already been received.
+                    </p>
+                    <p class="text-muted mb-4">
+                        If you wish to make any changes, please contact your admission counselor directly.
                     </p>
                     <a href="/" class="btn btn-primary"><i class="fas fa-home me-1"></i> Return to Homepage</a>
                 </div>
@@ -363,8 +517,11 @@ if ($sale_row && !$form_success && !$already_submitted) {
                                 </div>
                                 <div class="col-12 col-sm-6 col-md-4">
                                     <label class="form-label fw-semibold">Date of Birth</label>
-                                    <input type="date" name="date_of_birth" class="form-control"
-                                           value="<?= aff_h($old['date_of_birth'] ?? '') ?>">
+                                    <input type="text" name="date_of_birth" id="date_of_birth" class="form-control"
+                                           value="<?= aff_h($old['date_of_birth'] ?? '') ?>"
+                                           placeholder="DD/MM/YYYY" maxlength="10" autocomplete="off"
+                                           inputmode="numeric">
+                                    <div class="form-text">Format: DD/MM/YYYY</div>
                                 </div>
                                 <div class="col-12 col-sm-6 col-md-4">
                                     <label class="form-label fw-semibold">Blood Group</label>
@@ -483,7 +640,7 @@ if ($sale_row && !$form_success && !$already_submitted) {
 
                     <!-- ── Present Address ────────────────────────────────────── -->
                     <div class="aff-form-card card mb-4">
-                        <div class="card-header bg-white py-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
+                        <div class="card-header bg-white py-3 d-flex align-items-center justify-content-between flex-wrap gap-2 aff-present-header">
                             <span class="fw-semibold"><i class="fas fa-map-pin me-2 text-danger"></i>Present Address</span>
                             <div class="form-check mb-0">
                                 <input class="form-check-input" type="checkbox" name="same_as_permanent" id="same_as_permanent" value="1"
@@ -551,6 +708,205 @@ if ($sale_row && !$form_success && !$already_submitted) {
                                     <label class="form-label fw-semibold">Post Code</label>
                                     <input type="text" name="present_post_code" id="present_post_code" class="form-control"
                                            value="<?= aff_h($old['present_post_code'] ?? '') ?>" placeholder="e.g. 1207">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ── Academic Qualifications ───────────────────────────── -->
+                    <div class="aff-form-card card mb-4">
+                        <div class="card-header bg-white fw-semibold py-3">
+                            <i class="fas fa-graduation-cap me-2 text-success"></i>Academic Qualifications
+                        </div>
+                        <div class="card-body">
+                            <div class="aff-acad-wrap">
+                                <table class="aff-acad-table" id="aff_acad_table">
+                                    <thead>
+                                        <tr>
+                                            <th>Exam Name</th>
+                                            <th>Session</th>
+                                            <th>Group</th>
+                                            <th>Board / University</th>
+                                            <th>Year</th>
+                                            <th>Division / Grade</th>
+                                            <th>Marks / CGPA</th>
+                                            <th></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="aff_acad_body">
+                                        <?php
+                                        $acad_old_rows = [];
+                                        if (!empty($old['acad_exam'])) {
+                                            foreach ((array)$old['acad_exam'] as $i => $ex) {
+                                                $acad_old_rows[] = [
+                                                    'exam_name'       => $old['acad_exam'][$i]    ?? '',
+                                                    'session'         => $old['acad_session'][$i] ?? '',
+                                                    'group_name'      => $old['acad_group'][$i]   ?? '',
+                                                    'board_university'=> $old['acad_board'][$i]   ?? '',
+                                                    'year_of_passing' => $old['acad_year'][$i]    ?? '',
+                                                    'division_grade'  => $old['acad_grade'][$i]   ?? '',
+                                                    'total_marks_cgpa'=> $old['acad_cgpa'][$i]    ?? '',
+                                                ];
+                                            }
+                                        }
+                                        // Default: 3 blank rows if no old data
+                                        if (empty($acad_old_rows)) {
+                                            $acad_old_rows = array_fill(0, 3, ['exam_name'=>'','session'=>'','group_name'=>'','board_university'=>'','year_of_passing'=>'','division_grade'=>'','total_marks_cgpa'=>'']);
+                                        }
+                                        foreach ($acad_old_rows as $ar):
+                                        ?>
+                                        <tr>
+                                            <td><input type="text" name="acad_exam[]" class="form-control" value="<?= aff_h($ar['exam_name']) ?>" placeholder="e.g. SSC"></td>
+                                            <td><input type="text" name="acad_session[]" class="form-control" value="<?= aff_h($ar['session']) ?>" placeholder="e.g. 2019-20"></td>
+                                            <td><input type="text" name="acad_group[]" class="form-control" value="<?= aff_h($ar['group_name']) ?>" placeholder="e.g. Science"></td>
+                                            <td><input type="text" name="acad_board[]" class="form-control" value="<?= aff_h($ar['board_university']) ?>" placeholder="e.g. Dhaka Board"></td>
+                                            <td><input type="text" name="acad_year[]" class="form-control" value="<?= aff_h($ar['year_of_passing']) ?>" placeholder="e.g. 2020"></td>
+                                            <td><input type="text" name="acad_grade[]" class="form-control" value="<?= aff_h($ar['division_grade']) ?>" placeholder="e.g. A+"></td>
+                                            <td><input type="text" name="acad_cgpa[]" class="form-control" value="<?= aff_h($ar['total_marks_cgpa']) ?>" placeholder="e.g. 5.00"></td>
+                                            <td><button type="button" class="btn btn-sm btn-outline-danger aff-acad-del" title="Remove row"><i class="fas fa-times"></i></button></td>
+                                        </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="mt-2">
+                                <button type="button" id="aff_acad_add" class="btn btn-sm btn-outline-success">
+                                    <i class="fas fa-plus me-1"></i>Add Row
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ── Experience ─────────────────────────────────────────── -->
+                    <div class="aff-form-card card mb-4">
+                        <div class="card-header bg-white fw-semibold py-3">
+                            <i class="fas fa-briefcase me-2 text-secondary"></i>Experience <span class="text-muted fw-normal small">(Optional)</span>
+                        </div>
+                        <div class="card-body">
+                            <label class="form-label fw-semibold">Work / Professional Experience</label>
+                            <textarea name="experience" class="form-control" rows="4"
+                                      placeholder="Describe any relevant work or professional experience…"><?= aff_h($old['experience'] ?? '') ?></textarea>
+                        </div>
+                    </div>
+
+                    <!-- ── Guardian Particulars ───────────────────────────────── -->
+                    <div class="aff-form-card card mb-4">
+                        <div class="card-header bg-white fw-semibold py-3">
+                            <i class="fas fa-user-friends me-2 text-info"></i>Guardian Particulars
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label fw-semibold">Guardian's Name</label>
+                                    <input type="text" name="guardian_name" class="form-control"
+                                           value="<?= aff_h($old['guardian_name'] ?? '') ?>" placeholder="Full name">
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label fw-semibold">Profession</label>
+                                    <input type="text" name="guardian_profession" class="form-control"
+                                           value="<?= aff_h($old['guardian_profession'] ?? '') ?>" placeholder="e.g. Business, Service">
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label fw-semibold">Relationship</label>
+                                    <input type="text" name="guardian_relationship" class="form-control"
+                                           value="<?= aff_h($old['guardian_relationship'] ?? '') ?>" placeholder="e.g. Father, Mother, Uncle">
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label fw-semibold">Monthly Average Income</label>
+                                    <input type="text" name="guardian_monthly_income" class="form-control"
+                                           value="<?= aff_h($old['guardian_monthly_income'] ?? '') ?>" placeholder="e.g. 50,000 BDT">
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label fw-semibold">Address Line 1</label>
+                                    <input type="text" name="guardian_address_1" class="form-control"
+                                           value="<?= aff_h($old['guardian_address_1'] ?? '') ?>" placeholder="House / Building">
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label fw-semibold">Address Line 2</label>
+                                    <input type="text" name="guardian_address_2" class="form-control"
+                                           value="<?= aff_h($old['guardian_address_2'] ?? '') ?>" placeholder="Road / Area / City">
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label fw-semibold">Phone</label>
+                                    <input type="text" name="guardian_phone" class="form-control"
+                                           value="<?= aff_h($old['guardian_phone'] ?? '') ?>" placeholder="Mobile number">
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label fw-semibold">Email</label>
+                                    <input type="text" name="guardian_email" class="form-control"
+                                           value="<?= aff_h($old['guardian_email'] ?? '') ?>" placeholder="Email address (optional)">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ── Local Guardian ─────────────────────────────────────── -->
+                    <div class="aff-form-card card mb-4">
+                        <div class="card-header bg-white fw-semibold py-3">
+                            <i class="fas fa-house-user me-2 text-warning"></i>Local Guardian
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-12">
+                                    <label class="form-label fw-semibold">Name</label>
+                                    <input type="text" name="local_guardian_name" class="form-control"
+                                           value="<?= aff_h($old['local_guardian_name'] ?? '') ?>" placeholder="Local guardian's full name">
+                                </div>
+                                <div class="col-12 col-sm-4">
+                                    <label class="form-label fw-semibold">Address Line 1</label>
+                                    <input type="text" name="local_guardian_address_1" class="form-control"
+                                           value="<?= aff_h($old['local_guardian_address_1'] ?? '') ?>" placeholder="House / Building">
+                                </div>
+                                <div class="col-12 col-sm-4">
+                                    <label class="form-label fw-semibold">Address Line 2</label>
+                                    <input type="text" name="local_guardian_address_2" class="form-control"
+                                           value="<?= aff_h($old['local_guardian_address_2'] ?? '') ?>" placeholder="Road / Area">
+                                </div>
+                                <div class="col-12 col-sm-4">
+                                    <label class="form-label fw-semibold">Address Line 3</label>
+                                    <input type="text" name="local_guardian_address_3" class="form-control"
+                                           value="<?= aff_h($old['local_guardian_address_3'] ?? '') ?>" placeholder="City / District">
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label fw-semibold">Contact No.</label>
+                                    <input type="text" name="local_guardian_contact" class="form-control"
+                                           value="<?= aff_h($old['local_guardian_contact'] ?? '') ?>" placeholder="Mobile number">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ── Reference ──────────────────────────────────────────── -->
+                    <div class="aff-form-card card mb-4">
+                        <div class="card-header bg-white fw-semibold py-3">
+                            <i class="fas fa-address-card me-2 text-purple" style="color:#7c3aed;"></i>Reference
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-12">
+                                    <label class="form-label fw-semibold">Reference Name</label>
+                                    <input type="text" name="reference_name" class="form-control"
+                                           value="<?= aff_h($old['reference_name'] ?? '') ?>" placeholder="Name of reference person">
+                                </div>
+                                <div class="col-12 col-sm-4">
+                                    <label class="form-label fw-semibold">Address Line 1</label>
+                                    <input type="text" name="reference_address_1" class="form-control"
+                                           value="<?= aff_h($old['reference_address_1'] ?? '') ?>" placeholder="House / Building">
+                                </div>
+                                <div class="col-12 col-sm-4">
+                                    <label class="form-label fw-semibold">Address Line 2</label>
+                                    <input type="text" name="reference_address_2" class="form-control"
+                                           value="<?= aff_h($old['reference_address_2'] ?? '') ?>" placeholder="Road / Area">
+                                </div>
+                                <div class="col-12 col-sm-4">
+                                    <label class="form-label fw-semibold">Address Line 3</label>
+                                    <input type="text" name="reference_address_3" class="form-control"
+                                           value="<?= aff_h($old['reference_address_3'] ?? '') ?>" placeholder="City / District">
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label fw-semibold">Contact No.</label>
+                                    <input type="text" name="reference_contact" class="form-control"
+                                           value="<?= aff_h($old['reference_contact'] ?? '') ?>" placeholder="Mobile number">
                                 </div>
                             </div>
                         </div>
@@ -735,6 +1091,62 @@ if ($sale_row && !$form_success && !$already_submitted) {
         });
         togglePresent();
     }
+})();
+
+// ── Date of Birth mask (DD/MM/YYYY) ──────────────────────────────────────────
+(function() {
+    var dobEl = document.getElementById('date_of_birth');
+    if (!dobEl) return;
+    dobEl.addEventListener('input', function(e) {
+        var v = dobEl.value.replace(/[^\d]/g, '').substring(0, 8);
+        var out = '';
+        if (v.length > 4) out = v.substring(0,2) + '/' + v.substring(2,4) + '/' + v.substring(4);
+        else if (v.length > 2) out = v.substring(0,2) + '/' + v.substring(2);
+        else out = v;
+        dobEl.value = out;
+    });
+    dobEl.addEventListener('keydown', function(e) {
+        if (e.key === 'Backspace') {
+            var v = dobEl.value;
+            if (v.endsWith('/')) {
+                e.preventDefault();
+                dobEl.value = v.slice(0, -1);
+            }
+        }
+    });
+})();
+
+// ── Academic qualification rows ───────────────────────────────────────────────
+(function() {
+    var tbody   = document.getElementById('aff_acad_body');
+    var addBtn  = document.getElementById('aff_acad_add');
+    if (!tbody || !addBtn) return;
+
+    function makeRow() {
+        var tr = document.createElement('tr');
+        tr.innerHTML =
+            '<td><input type="text" name="acad_exam[]" class="form-control" placeholder="e.g. SSC"></td>' +
+            '<td><input type="text" name="acad_session[]" class="form-control" placeholder="e.g. 2019-20"></td>' +
+            '<td><input type="text" name="acad_group[]" class="form-control" placeholder="e.g. Science"></td>' +
+            '<td><input type="text" name="acad_board[]" class="form-control" placeholder="e.g. Dhaka Board"></td>' +
+            '<td><input type="text" name="acad_year[]" class="form-control" placeholder="e.g. 2020"></td>' +
+            '<td><input type="text" name="acad_grade[]" class="form-control" placeholder="e.g. A+"></td>' +
+            '<td><input type="text" name="acad_cgpa[]" class="form-control" placeholder="e.g. 5.00"></td>' +
+            '<td><button type="button" class="btn btn-sm btn-outline-danger aff-acad-del" title="Remove row"><i class="fas fa-times"></i></button></td>';
+        return tr;
+    }
+
+    addBtn.addEventListener('click', function() {
+        tbody.appendChild(makeRow());
+    });
+
+    tbody.addEventListener('click', function(e) {
+        var delBtn = e.target.closest('.aff-acad-del');
+        if (!delBtn) return;
+        var row = delBtn.closest('tr');
+        if (tbody.querySelectorAll('tr').length > 1) row.remove();
+        else row.querySelectorAll('input').forEach(function(i) { i.value = ''; });
+    });
 })();
 </script>
 <?php endif; ?>
