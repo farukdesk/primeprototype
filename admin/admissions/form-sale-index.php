@@ -147,7 +147,7 @@ require_once __DIR__ . '/../includes/header.php';
                             ?>
                             <?php if ($link_active): ?>
                             <button type="button" class="btn btn-sm btn-outline-info" title="Copy Fill-up Link"
-                                    onclick="copyFillLink('<?= h(addslashes($fill_url)) ?>', this)">
+                                    onclick="copyFillLink('<?= h($fill_url) ?>', this)">
                                 <i class="fas fa-link"></i>
                             </button>
                             <?php elseif ($link_used): ?>

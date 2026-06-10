@@ -579,8 +579,7 @@ if ($sale_row && !$form_success && !$already_submitted) {
 <script>
 // ── Searchable select widget ──────────────────────────────────────────────────
 (function() {
-    // Thana data (district → thanas)
-    var thanaData = <?= json_encode($bd_thana_map, JSON_HEX_TAG) ?>;
+    // Thana data not needed directly; thanas are already rendered in DOM per district
 
     function initSearchableSelect(searchEl, hiddenEl, listEl) {
         if (!searchEl || !hiddenEl || !listEl) return;
@@ -692,10 +691,17 @@ if ($sale_row && !$form_success && !$already_submitted) {
     function togglePresent() {
         if (!presFields) return;
         var locked = sameChk && sameChk.checked;
-        presFields.querySelectorAll('input, select').forEach(function(el) {
+        presFields.querySelectorAll('input').forEach(function(el) {
             el.readOnly = locked;
-            if (locked) el.style.opacity = '0.55';
-            else        el.style.opacity = '';
+            el.style.opacity = locked ? '0.55' : '';
+        });
+        presFields.querySelectorAll('select').forEach(function(el) {
+            el.disabled = locked;
+            el.style.opacity = locked ? '0.55' : '';
+        });
+        presFields.querySelectorAll('.aff-ss-trigger').forEach(function(el) {
+            el.readOnly = locked;
+            el.style.opacity = locked ? '0.55' : '';
         });
     }
 
