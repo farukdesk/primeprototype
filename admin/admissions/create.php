@@ -38,13 +38,60 @@ $pending_forms = db()->query(
             sd.present_area        AS sd_pres_area,
             sd.present_district_id AS sd_pres_district_id,
             sd.present_thana_id    AS sd_pres_thana_id,
-            sd.present_post_code   AS sd_pres_post_code
+            sd.present_post_code   AS sd_pres_post_code,
+            sd.experience          AS sd_experience,
+            sd.guardian_name       AS sd_guardian_name,
+            sd.guardian_profession AS sd_guardian_profession,
+            sd.guardian_relationship AS sd_guardian_relationship,
+            sd.guardian_monthly_income AS sd_guardian_monthly_income,
+            sd.guardian_address_1  AS sd_guardian_address_1,
+            sd.guardian_address_2  AS sd_guardian_address_2,
+            sd.guardian_phone      AS sd_guardian_phone,
+            sd.guardian_email      AS sd_guardian_email,
+            sd.local_guardian_name AS sd_local_guardian_name,
+            sd.local_guardian_address_1 AS sd_local_guardian_address_1,
+            sd.local_guardian_address_2 AS sd_local_guardian_address_2,
+            sd.local_guardian_address_3 AS sd_local_guardian_address_3,
+            sd.local_guardian_contact AS sd_local_guardian_contact,
+            sd.reference_name      AS sd_reference_name,
+            sd.reference_address_1 AS sd_reference_address_1,
+            sd.reference_address_2 AS sd_reference_address_2,
+            sd.reference_address_3 AS sd_reference_address_3,
+            sd.reference_contact   AS sd_reference_contact
      FROM adm_form_sales fs
      LEFT JOIN adm_form_sale_student_details sd ON sd.form_sale_id = fs.id
      WHERE fs.status = \'pending\'
      ORDER BY fs.sold_at DESC
      LIMIT 200'
 )->fetchAll();
+
+// ── Academic records for pending form sales (for autofill) ───────────────────
+$sd_acad_map = [];
+if (!empty($pending_forms)) {
+    $fs_ids = array_column($pending_forms, 'id');
+    $in_placeholders = implode(',', array_fill(0, count($fs_ids), '?'));
+    try {
+        $acad_raw = db()->prepare(
+            "SELECT form_sale_id, exam_name, session, group_name, board_university,
+                    year_of_passing, division_grade, total_marks_cgpa
+             FROM adm_form_sale_academic_records
+             WHERE form_sale_id IN ($in_placeholders)
+             ORDER BY sort_order ASC"
+        );
+        $acad_raw->execute($fs_ids);
+        foreach ($acad_raw->fetchAll() as $ar) {
+            $sd_acad_map[(int)$ar['form_sale_id']][] = [
+                'exam_name'        => $ar['exam_name']        ?? '',
+                'session'          => $ar['session']          ?? '',
+                'group_name'       => $ar['group_name']       ?? '',
+                'board_university' => $ar['board_university'] ?? '',
+                'year_of_passing'  => $ar['year_of_passing']  ?? '',
+                'division_grade'   => $ar['division_grade']   ?? '',
+                'total_marks_cgpa' => $ar['total_marks_cgpa'] ?? '',
+            ];
+        }
+    } catch (Throwable $_ae) {}
+}
 
 // ── Departments & programs ────────────────────────────────────────────────────
 $departments = db()->query(
@@ -548,7 +595,27 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                             data-sd-pres-area="<?= h($pf['sd_pres_area'] ?? '') ?>"
                             data-sd-pres-district="<?= h($pf['sd_pres_district_id'] ?? '') ?>"
                             data-sd-pres-thana="<?= h($pf['sd_pres_thana_id'] ?? '') ?>"
-                            data-sd-pres-post="<?= h($pf['sd_pres_post_code'] ?? '') ?>">
+                            data-sd-pres-post="<?= h($pf['sd_pres_post_code'] ?? '') ?>"
+                            data-sd-experience="<?= h($pf['sd_experience'] ?? '') ?>"
+                            data-sd-guardian-name="<?= h($pf['sd_guardian_name'] ?? '') ?>"
+                            data-sd-guardian-profession="<?= h($pf['sd_guardian_profession'] ?? '') ?>"
+                            data-sd-guardian-relationship="<?= h($pf['sd_guardian_relationship'] ?? '') ?>"
+                            data-sd-guardian-income="<?= h($pf['sd_guardian_monthly_income'] ?? '') ?>"
+                            data-sd-guardian-addr1="<?= h($pf['sd_guardian_address_1'] ?? '') ?>"
+                            data-sd-guardian-addr2="<?= h($pf['sd_guardian_address_2'] ?? '') ?>"
+                            data-sd-guardian-phone="<?= h($pf['sd_guardian_phone'] ?? '') ?>"
+                            data-sd-guardian-email="<?= h($pf['sd_guardian_email'] ?? '') ?>"
+                            data-sd-lg-name="<?= h($pf['sd_local_guardian_name'] ?? '') ?>"
+                            data-sd-lg-addr1="<?= h($pf['sd_local_guardian_address_1'] ?? '') ?>"
+                            data-sd-lg-addr2="<?= h($pf['sd_local_guardian_address_2'] ?? '') ?>"
+                            data-sd-lg-addr3="<?= h($pf['sd_local_guardian_address_3'] ?? '') ?>"
+                            data-sd-lg-contact="<?= h($pf['sd_local_guardian_contact'] ?? '') ?>"
+                            data-sd-ref-name="<?= h($pf['sd_reference_name'] ?? '') ?>"
+                            data-sd-ref-addr1="<?= h($pf['sd_reference_address_1'] ?? '') ?>"
+                            data-sd-ref-addr2="<?= h($pf['sd_reference_address_2'] ?? '') ?>"
+                            data-sd-ref-addr3="<?= h($pf['sd_reference_address_3'] ?? '') ?>"
+                            data-sd-ref-contact="<?= h($pf['sd_reference_contact'] ?? '') ?>"
+                            data-sd-acad="<?= h(json_encode($sd_acad_map[(int)$pf['id']] ?? [], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP)) ?>">
                             <td class="ps-3 fw-semibold text-warning"><?= h($pf['form_number']) ?></td>
                             <td>
                                 <?= h($pf['buyer_name']) ?>
@@ -2010,6 +2077,164 @@ document.querySelectorAll('.searchable-select-wrap').forEach(function(wrap) {
                 var sameChk = document.getElementById('same_as_permanent');
                 if (sameChk) sameChk.checked = true;
             }
+
+            // Experience
+            var expEl = document.querySelector('[name="experience"]');
+            if (expEl && !expEl.value && r.dataset.sdExperience) expEl.value = r.dataset.sdExperience;
+
+            // Guardian Particulars
+            var guardianTextFields = {
+                guardian_name:           r.dataset.sdGuardianName,
+                guardian_profession:     r.dataset.sdGuardianProfession,
+                guardian_monthly_income: r.dataset.sdGuardianIncome,
+                guardian_address_1:      r.dataset.sdGuardianAddr1,
+                guardian_address_2:      r.dataset.sdGuardianAddr2,
+                guardian_phone:          r.dataset.sdGuardianPhone,
+                guardian_email:          r.dataset.sdGuardianEmail,
+            };
+            Object.keys(guardianTextFields).forEach(function(f) {
+                var el = document.querySelector('[name="' + f + '"]');
+                if (el && !el.value && guardianTextFields[f]) el.value = guardianTextFields[f];
+            });
+            // Guardian relationship (select – may be free-text from student form)
+            if (r.dataset.sdGuardianRelationship) {
+                var grSel = document.querySelector('[name="guardian_relationship"]');
+                if (grSel && !grSel.value) {
+                    var grOpt = grSel.querySelector('option[value="' + r.dataset.sdGuardianRelationship + '"]');
+                    if (!grOpt) {
+                        var newOpt = document.createElement('option');
+                        newOpt.value = r.dataset.sdGuardianRelationship;
+                        newOpt.textContent = r.dataset.sdGuardianRelationship;
+                        grSel.appendChild(newOpt);
+                    }
+                    grSel.value = r.dataset.sdGuardianRelationship;
+                }
+            }
+
+            // Local Guardian
+            var lgFields = {
+                local_guardian_name:      r.dataset.sdLgName,
+                local_guardian_address_1: r.dataset.sdLgAddr1,
+                local_guardian_address_2: r.dataset.sdLgAddr2,
+                local_guardian_address_3: r.dataset.sdLgAddr3,
+                local_guardian_contact:   r.dataset.sdLgContact,
+            };
+            Object.keys(lgFields).forEach(function(f) {
+                var el = document.querySelector('[name="' + f + '"]');
+                if (el && !el.value && lgFields[f]) el.value = lgFields[f];
+            });
+
+            // Reference
+            var refFields = {
+                reference_name:      r.dataset.sdRefName,
+                reference_address_1: r.dataset.sdRefAddr1,
+                reference_address_2: r.dataset.sdRefAddr2,
+                reference_address_3: r.dataset.sdRefAddr3,
+                reference_contact:   r.dataset.sdRefContact,
+            };
+            Object.keys(refFields).forEach(function(f) {
+                var el = document.querySelector('[name="' + f + '"]');
+                if (el && !el.value && refFields[f]) el.value = refFields[f];
+            });
+
+            // Academic Qualifications (from adm_form_sale_academic_records)
+            try {
+                var acadData = JSON.parse(r.dataset.sdAcad || '[]');
+                if (acadData && acadData.length) {
+                    var acadContainer = document.getElementById('acadBody');
+                    if (acadContainer) {
+                        // Only fill if all existing rows have no exam selected
+                        var existingAcadRows = Array.from(acadContainer.querySelectorAll('.acad-row'));
+                        var allAcadEmpty = existingAcadRows.every(function(row) {
+                            return !row._tsExam || !row._tsExam.getValue();
+                        });
+                        if (allAcadEmpty) {
+                            existingAcadRows.forEach(function(row) { row.remove(); });
+                        }
+                        var examOptsList = ['SSC','Dakhil','O Level','SSC (Vocational)','HSC','Alim','A Level','Bachelor Degree','Diploma'];
+                        var examOptsHtml = examOptsList.map(function(e) {
+                            return '<option value="' + e + '">' + e + '</option>';
+                        }).join('');
+                        acadData.forEach(function(ar) {
+                            if (!ar.exam_name) return;
+                            var newRow = document.createElement('div');
+                            newRow.className = 'acad-row';
+                            newRow.innerHTML =
+                                '<div class="row g-2 align-items-end">'
+                                + '<div class="col-12 col-sm-6 col-lg-3">'
+                                +   '<label class="form-label form-label-sm mb-1">Exam Name</label>'
+                                +   '<select name="exam_name[]" class="acad-exam-sel w-100"><option value="">— Select —</option>' + examOptsHtml + '</select>'
+                                + '</div>'
+                                + '<div class="col-6 col-sm-3 col-lg-2 acad-group-td">'
+                                +   '<label class="form-label form-label-sm mb-1 acad-subject-lbl">Group</label>'
+                                +   '<select name="group_name[]" class="acad-group-sel w-100"><option value="">— Select —</option></select>'
+                                +   '<input type="text" name="group_name[]" class="acad-subject-inp form-control form-control-sm d-none" placeholder="Enter subject name" disabled>'
+                                + '</div>'
+                                + '<div class="col-12 col-sm-9 col-lg-4">'
+                                +   '<label class="form-label form-label-sm mb-1">Board / University</label>'
+                                +   '<select name="board_university[]" class="acad-board-sel w-100"><option value="">— Select —</option></select>'
+                                + '</div>'
+                                + '<div class="col-6 col-sm-3 col-lg-1">'
+                                +   '<label class="form-label form-label-sm mb-1">Session</label>'
+                                +   '<input type="text" name="acad_session[]" class="form-control form-control-sm" placeholder="e.g. 2020">'
+                                + '</div>'
+                                + '<div class="col-4 col-sm-3 col-lg-1">'
+                                +   '<label class="form-label form-label-sm mb-1">Year</label>'
+                                +   '<input type="text" name="year_of_passing[]" class="form-control form-control-sm" placeholder="YYYY">'
+                                + '</div>'
+                                + '<div class="col-4 col-sm-3 col-lg-1">'
+                                +   '<label class="form-label form-label-sm mb-1">Grade</label>'
+                                +   '<input type="text" name="division_grade[]" class="form-control form-control-sm">'
+                                + '</div>'
+                                + '<div class="col-4 col-sm-3 col-lg-1">'
+                                +   '<label class="form-label form-label-sm mb-1 acad-marks-lbl">Marks/GPA</label>'
+                                +   '<input type="text" name="total_marks_cgpa[]" class="form-control form-control-sm">'
+                                + '</div>'
+                                + '<div class="col-auto ms-auto d-flex align-items-end">'
+                                +   '<button type="button" class="btn btn-sm btn-outline-danger removeRow" title="Remove row"><i class="fas fa-times"></i></button>'
+                                + '</div>'
+                                + '</div>';
+                            acadContainer.appendChild(newRow);
+                            initAcadRow(newRow);
+                            // Set exam (fires acadUpdateGroupBoard synchronously)
+                            if (newRow._tsExam) {
+                                if (!newRow._tsExam.getOption(ar.exam_name)) {
+                                    newRow._tsExam.addOption({ value: ar.exam_name, text: ar.exam_name });
+                                }
+                                newRow._tsExam.setValue(ar.exam_name); // fires change → acadUpdateGroupBoard
+                            }
+                            // Set group/board after acadUpdateGroupBoard has run
+                            var isSubjectMode = ACAD_DATA[ar.exam_name] && ACAD_DATA[ar.exam_name].isSubject;
+                            if (ar.group_name) {
+                                if (isSubjectMode) {
+                                    var subjInp = newRow.querySelector('.acad-subject-inp');
+                                    if (subjInp) subjInp.value = ar.group_name;
+                                } else if (newRow._tsGroup) {
+                                    if (!newRow._tsGroup.getOption(ar.group_name)) {
+                                        newRow._tsGroup.addOption({ value: ar.group_name, text: ar.group_name });
+                                    }
+                                    newRow._tsGroup.setValue(ar.group_name, true);
+                                }
+                            }
+                            if (ar.board_university && newRow._tsBoard) {
+                                if (!newRow._tsBoard.getOption(ar.board_university)) {
+                                    newRow._tsBoard.addOption({ value: ar.board_university, text: ar.board_university });
+                                }
+                                newRow._tsBoard.setValue(ar.board_university, true);
+                            }
+                            // Simple text fields
+                            var sessEl  = newRow.querySelector('[name="acad_session[]"]');
+                            var yearEl  = newRow.querySelector('[name="year_of_passing[]"]');
+                            var gradeEl = newRow.querySelector('[name="division_grade[]"]');
+                            var marksEl = newRow.querySelector('[name="total_marks_cgpa[]"]');
+                            if (sessEl  && ar.session)          sessEl.value  = ar.session;
+                            if (yearEl  && ar.year_of_passing)  yearEl.value  = ar.year_of_passing;
+                            if (gradeEl && ar.division_grade)   gradeEl.value = ar.division_grade;
+                            if (marksEl && ar.total_marks_cgpa) marksEl.value = ar.total_marks_cgpa;
+                        });
+                    }
+                }
+            } catch (_acadErr) {}
         }
     }
 
