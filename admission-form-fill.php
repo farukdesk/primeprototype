@@ -302,7 +302,6 @@ if ($sale_row && !$form_success && !$already_submitted) {
     <link rel="stylesheet" href="/assets/css/font-awesome-pro.css">
     <link rel="stylesheet" href="/assets/css/main.css">
     <style>
-        *, *::before, *::after { box-sizing: border-box; }
         body { background: #eef2f8; }
         .aff-hero {
             position: relative; overflow: hidden;
@@ -358,11 +357,11 @@ if ($sale_row && !$form_success && !$already_submitted) {
         .aff-form-card .form-check-input[type="radio"],
         .aff-form-card .form-check-input[type="checkbox"],
         .aff-present-header .form-check-input[type="checkbox"] {
-            display: block !important;      /* Bootstrap 5 float-based layout needs this */
+            display: block !important;      /* override main.css display:inline-block */
             position: static !important;    /* override main.css position:relative */
             top: auto !important;           /* override main.css top:-1px */
             margin-right: 0 !important;     /* override main.css margin-right:10px */
-            float: left;                    /* Bootstrap 5 form-check pattern */
+            float: left;                    /* keeps label text beside the input */
             -webkit-appearance: none;
             appearance: none;
             border: 2px solid #adb5bd;

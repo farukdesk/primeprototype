@@ -2151,7 +2151,7 @@ document.querySelectorAll('.searchable-select-wrap').forEach(function(wrap) {
                         if (allAcadEmpty) {
                             existingAcadRows.forEach(function(row) { row.remove(); });
                         }
-                        var examOptsList = ['SSC','Dakhil','O Level','SSC (Vocational)','HSC','Alim','A Level','Bachelor Degree','Diploma'];
+                        var examOptsList = Object.keys(ACAD_DATA);
                         var examOptsHtml = examOptsList.map(function(e) {
                             return '<option value="' + e + '">' + e + '</option>';
                         }).join('');
@@ -2204,7 +2204,9 @@ document.querySelectorAll('.searchable-select-wrap').forEach(function(wrap) {
                                 newRow._tsExam.setValue(ar.exam_name); // fires change → acadUpdateGroupBoard
                             }
                             // Set group/board after acadUpdateGroupBoard has run
-                            var isSubjectMode = ACAD_DATA[ar.exam_name] && ACAD_DATA[ar.exam_name].isSubject;
+                            var acadEntry = ACAD_DATA[ar.exam_name];
+                            // If exam not in ACAD_DATA, default to subject-input mode to avoid data loss
+                            var isSubjectMode = acadEntry ? acadEntry.isSubject : true;
                             if (ar.group_name) {
                                 if (isSubjectMode) {
                                     var subjInp = newRow.querySelector('.acad-subject-inp');
