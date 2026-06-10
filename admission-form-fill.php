@@ -302,85 +302,159 @@ if ($sale_row && !$form_success && !$already_submitted) {
     <link rel="stylesheet" href="/assets/css/font-awesome-pro.css">
     <link rel="stylesheet" href="/assets/css/main.css">
     <style>
-        body { background: #f5f7fb; }
+        body { background: #eef2f8; }
         .aff-hero {
             position: relative; overflow: hidden;
-            padding: 60px 0 80px;
-            background: linear-gradient(135deg, #0f1f4a 0%, #163d88 55%, #2563eb 100%);
+            padding: 56px 0 76px;
+            background: linear-gradient(135deg, #0a1736 0%, #14327a 55%, #1d54c8 100%);
         }
-        .aff-hero h1 { color: #fff; font-size: clamp(1.6rem, 4vw, 2.6rem); font-weight: 800; margin-bottom: 10px; }
-        .aff-hero p { color: rgba(255,255,255,.82); }
+        .aff-hero::after {
+            content: ''; position: absolute; right: -80px; bottom: -60px;
+            width: 320px; height: 320px; border-radius: 50%;
+            background: rgba(255,255,255,.04); pointer-events: none;
+        }
+        .aff-hero h1 { color: #fff; font-size: clamp(1.55rem, 4vw, 2.4rem); font-weight: 800; margin-bottom: 8px; letter-spacing: -.01em; }
+        .aff-hero p { color: rgba(255,255,255,.80); font-size: .95rem; }
         .aff-hero .breadcrumb-nav a,
-        .aff-hero .breadcrumb-nav span { color: rgba(255,255,255,.75); font-size: .88rem; }
-        .aff-hero .breadcrumb-nav a:hover { color: #fff; }
-        .aff-hero .sep { margin: 0 7px; color: rgba(255,255,255,.4); }
-        .aff-form-card { border: none; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,.08); }
-        .aff-section-label {
-            display: block; font-size: .68rem; font-weight: 700; letter-spacing: .09em;
-            text-transform: uppercase; color: #adb5bd; margin-bottom: .6rem;
+        .aff-hero .breadcrumb-nav span { color: rgba(255,255,255,.70); font-size: .85rem; }
+        .aff-hero .breadcrumb-nav a:hover { color: #fff; text-decoration: none; }
+        .aff-hero .sep { margin: 0 6px; color: rgba(255,255,255,.35); }
+        .aff-form-card {
+            border: none; border-radius: 14px;
+            box-shadow: 0 2px 16px rgba(0,0,0,.07), 0 1px 4px rgba(0,0,0,.04);
+            overflow: hidden;
         }
-        .aff-address-sep { border: 0; border-top: 2px dashed #dee2e6; margin: 1.25rem 0; }
+        .aff-form-card .card-header {
+            background: linear-gradient(90deg, #f8f9fc 0%, #fff 100%);
+            border-bottom: 1px solid #eef0f5;
+            padding: .85rem 1.25rem;
+            font-size: .92rem;
+        }
+        .aff-section-label {
+            display: block; font-size: .67rem; font-weight: 700; letter-spacing: .1em;
+            text-transform: uppercase; color: #9ea6b4; margin-bottom: .55rem;
+        }
+        .aff-address-sep { border: 0; border-top: 2px dashed #e2e6ee; margin: 1.25rem 0; }
         .form-number-badge {
             display: inline-flex; align-items: center; gap: 8px;
-            background: rgba(255,198,0,.18); color: #fff; border-radius: 999px;
-            padding: 6px 16px; font-size: .85rem; font-weight: 600;
-            border: 1px solid rgba(255,198,0,.35);
+            background: rgba(255,198,0,.16); color: #fff; border-radius: 999px;
+            padding: 5px 16px; font-size: .84rem; font-weight: 600;
+            border: 1px solid rgba(255,198,0,.32);
         }
-        .form-number-badge span { color: #ffc600; font-size: 1rem; }
+        .form-number-badge span { color: #ffc600; font-size: .96rem; }
         /* Searchable select */
         .aff-ss-list { display: none; position: absolute; top: 100%; left: 0; right: 0;
             max-height: 200px; overflow-y: auto; background: #fff;
-            border: 1px solid #dee2e6; border-top: 0; border-radius: 0 0 6px 6px; z-index: 1050; }
-        .aff-ss-item { padding: 6px 12px; cursor: pointer; font-size: .85rem; }
-        .aff-ss-item:hover { background: #f0f4ff; }
-        .aff-ss-item.header-item { background: #f0f4ff; font-weight: 600; font-size: .75rem; color: #555; pointer-events: none; }
-        .aff-ss-item.none-item { color: #999; }
-        /* ── Radio & checkbox – override any site-wide toggle/switch styling ── */
-        .aff-form-card .form-check-input[type="radio"] {
-            -webkit-appearance: none; appearance: none;
-            width: 1.15em; height: 1.15em; border-radius: 50% !important;
-            border: 2px solid #adb5bd; background-color: #fff;
-            cursor: pointer; flex-shrink: 0; margin-top: .2em;
-            transition: border-color .15s, background-color .15s;
-        }
-        .aff-form-card .form-check-input[type="radio"]:checked {
-            background-color: #0d6efd; border-color: #0d6efd;
-            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='2' fill='%23fff'/%3e%3c/svg%3e");
-            background-repeat: no-repeat; background-position: center;
-        }
-        .aff-form-card .form-check-input[type="checkbox"] {
-            -webkit-appearance: none; appearance: none;
-            width: 1.15em; height: 1.15em; border-radius: 0.2em !important;
-            border: 2px solid #adb5bd; background-color: #fff;
-            cursor: pointer; flex-shrink: 0; margin-top: .2em;
-            transition: border-color .15s, background-color .15s;
-        }
-        .aff-form-card .form-check-input[type="checkbox"]:checked {
-            background-color: #0d6efd; border-color: #0d6efd;
-            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3e%3cpath fill='none' stroke='%23fff' stroke-width='3' d='m6 10 3 3 6-6'/%3e%3c/svg%3e");
-            background-repeat: no-repeat; background-position: center; background-size: .8em;
-        }
-        /* Also fix same-as-permanent checkbox in card-header (outside .aff-form-card .card-body) */
+            border: 1px solid #dee2e6; border-top: 0; border-radius: 0 0 8px 8px;
+            z-index: 1050; box-shadow: 0 4px 16px rgba(0,0,0,.1); }
+        .aff-ss-item { padding: 7px 14px; cursor: pointer; font-size: .86rem; }
+        .aff-ss-item:hover { background: #f0f5ff; color: #0d6efd; }
+        .aff-ss-item.header-item { background: #f0f4ff; font-weight: 700; font-size: .74rem; color: #6c7a99; pointer-events: none; padding: 4px 14px; }
+        .aff-ss-item.none-item { color: #9ea6b4; }
+        /* ── Radio & checkbox – fully reset global main.css overrides & re-style ── */
+        /* main.css sets: input[type=radio] { display:inline-block; position:relative; top:-1px; margin-right:10px; width:15px; height:15px }
+           We must explicitly reset ALL those properties here with higher specificity. */
+        .aff-form-card .form-check-input[type="radio"],
+        .aff-form-card .form-check-input[type="checkbox"],
         .aff-present-header .form-check-input[type="checkbox"] {
-            -webkit-appearance: none; appearance: none;
-            width: 1.15em; height: 1.15em; border-radius: 0.2em !important;
-            border: 2px solid #adb5bd; background-color: #fff;
-            cursor: pointer; flex-shrink: 0; margin-top: .2em;
+            display: block !important;      /* override main.css display:inline-block */
+            position: static !important;    /* override main.css position:relative */
+            top: auto !important;           /* override main.css top:-1px */
+            margin-right: 0 !important;     /* override main.css margin-right:10px */
+            float: left;                    /* keeps label text beside the input */
+            -webkit-appearance: none;
+            appearance: none;
+            border: 2px solid #adb5bd;
+            background-color: #fff;
+            cursor: pointer;
+            flex-shrink: 0;
+            margin-top: .25em;
+            vertical-align: top;
+            background-repeat: no-repeat;
+            background-position: center;
+            background-size: contain;
+            transition: border-color .15s, background-color .15s, box-shadow .15s;
         }
+        .aff-form-card .form-check-input[type="radio"],
+        .aff-present-header .form-check-input[type="radio"] {
+            width: 1.1em !important;
+            height: 1.1em !important;
+            border-radius: 50% !important;
+        }
+        .aff-form-card .form-check-input[type="checkbox"],
+        .aff-present-header .form-check-input[type="checkbox"] {
+            width: 1.1em !important;
+            height: 1.1em !important;
+            border-radius: 0.25em !important;
+        }
+        .aff-form-card .form-check-input[type="radio"]:checked,
+        .aff-present-header .form-check-input[type="radio"]:checked {
+            background-color: #0d6efd !important;
+            border-color: #0d6efd !important;
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='2' fill='%23fff'/%3e%3c/svg%3e") !important;
+        }
+        .aff-form-card .form-check-input[type="checkbox"]:checked,
         .aff-present-header .form-check-input[type="checkbox"]:checked {
-            background-color: #0d6efd; border-color: #0d6efd;
-            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3e%3cpath fill='none' stroke='%23fff' stroke-width='3' d='m6 10 3 3 6-6'/%3e%3c/svg%3e");
-            background-repeat: no-repeat; background-position: center; background-size: .8em;
+            background-color: #0d6efd !important;
+            border-color: #0d6efd !important;
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3e%3cpath fill='none' stroke='%23fff' stroke-width='3' d='m6 10 3 3 6-6'/%3e%3c/svg%3e") !important;
+            background-size: .75em !important;
+        }
+        .aff-form-card .form-check-input:focus,
+        .aff-present-header .form-check-input:focus {
+            border-color: #86b7fe;
+            box-shadow: 0 0 0 .2rem rgba(13,110,253,.25);
+            outline: 0;
+        }
+        /* Ensure the label sits next to the input correctly */
+        .aff-form-card .form-check,
+        .aff-present-header .form-check {
+            padding-left: 1.6em;
+        }
+        .aff-form-card .form-check-label,
+        .aff-present-header .form-check-label {
+            cursor: pointer;
         }
         /* Responsive table for academic qualifications */
         .aff-acad-table { width: 100%; border-collapse: collapse; }
-        .aff-acad-table th { background: #f8f9fa; font-size: .78rem; font-weight: 600; padding: 8px 6px; white-space: nowrap; }
-        .aff-acad-table td { padding: 4px 4px; vertical-align: middle; }
+        .aff-acad-table th { background: #f4f6fb; font-size: .77rem; font-weight: 700; padding: 9px 7px; white-space: nowrap; color: #495057; border-bottom: 2px solid #dee2e6; }
+        .aff-acad-table td { padding: 5px 5px; vertical-align: middle; }
+        .aff-acad-table tr:not(:last-child) td { border-bottom: 1px solid #f0f2f5; }
         .aff-acad-table .form-control { font-size: .85rem; }
+        /* Submit button styling */
+        .aff-submit-btn {
+            background: linear-gradient(135deg, #0d6efd 0%, #1d54c8 100%);
+            border: none; padding: .75rem 2.5rem; font-size: 1rem; font-weight: 600;
+            border-radius: 8px; letter-spacing: .01em;
+            box-shadow: 0 4px 12px rgba(13,110,253,.3);
+            transition: box-shadow .2s, transform .1s;
+        }
+        .aff-submit-btn:hover { box-shadow: 0 6px 18px rgba(13,110,253,.4); transform: translateY(-1px); }
+        .aff-submit-btn:active { transform: translateY(0); }
+        /* Form inputs refinement */
+        .aff-form-card .form-control,
+        .aff-form-card .form-select {
+            border-color: #dde1ea;
+            border-radius: 7px;
+            font-size: .9rem;
+            transition: border-color .15s, box-shadow .15s;
+        }
+        .aff-form-card .form-control:focus,
+        .aff-form-card .form-select:focus {
+            border-color: #86b7fe;
+            box-shadow: 0 0 0 .2rem rgba(13,110,253,.18);
+        }
+        .aff-form-card .form-label { font-size: .875rem; }
+        .aff-form-card .card-body { padding: 1.3rem; }
         @media (max-width: 767.98px) {
             .aff-acad-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-            .aff-acad-table { min-width: 700px; }
-            .aff-hero { padding: 40px 0 60px; }
+            .aff-acad-table { min-width: 680px; }
+            .aff-hero { padding: 36px 0 56px; }
+            .aff-form-card .card-body { padding: 1rem; }
+        }
+        @media (max-width: 575.98px) {
+            section { padding: 28px 0 60px !important; }
+            .aff-form-card .card-header { padding: .7rem 1rem; }
         }
     </style>
 </head>
@@ -416,10 +490,10 @@ if ($sale_row && !$form_success && !$already_submitted) {
 </section>
 
 <!-- ── Main Content ───────────────────────────────────────────────────────────── -->
-<section style="padding: 50px 0 80px;">
+<section style="padding: 44px 0 80px;">
     <div class="container">
         <div class="row justify-content-center">
-            <div class="col-12 col-lg-9">
+            <div class="col-12 col-lg-10 col-xl-9">
 
                 <?php if ($token_error !== ''): ?>
                 <!-- ── Token Error ─────────────────────────────────────────────── -->
@@ -912,8 +986,8 @@ if ($sale_row && !$form_success && !$already_submitted) {
                         </div>
                     </div>
 
-                    <div class="d-grid gap-2 d-sm-flex justify-content-sm-end">
-                        <button type="submit" class="btn btn-primary btn-lg px-5">
+                    <div class="d-grid gap-2 d-sm-flex justify-content-sm-end mt-2">
+                        <button type="submit" class="btn btn-primary aff-submit-btn">
                             <i class="fas fa-paper-plane me-2"></i>Submit Details
                         </button>
                     </div>
