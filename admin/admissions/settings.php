@@ -1036,6 +1036,7 @@ foreach ($map2 as $key => $m) $all_mapped[$key] = isset($all_mapped[$key]) ? 'bo
                         <code>{{form_number}}</code> <code>{{buyer_name}}</code>
                         <code>{{buyer_mobile}}</code> <code>{{form_price}}</code>
                         <code>{{sold_date}}</code> <code>{{app_name}}</code>
+                        <code>{{student_form_link}}</code>
                     </div>
                 </div>
 
@@ -1077,6 +1078,7 @@ foreach ($map2 as $key => $m) $all_mapped[$key] = isset($all_mapped[$key]) ? 'bo
                         <code>{{form_number}}</code> <code>{{buyer_name}}</code>
                         <code>{{buyer_mobile}}</code> <code>{{form_price}}</code>
                         <code>{{sold_date}}</code> <code>{{app_name}}</code> <code>{{logo_url}}</code>
+                        <code>{{student_form_link}}</code>
                     </div>
                 </div>
             </div>

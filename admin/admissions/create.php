@@ -15,10 +15,34 @@ $errors     = [];
 
 // ── Pending form sales for the link section ───────────────────────────────────
 $pending_forms = db()->query(
-    'SELECT id, form_number, buyer_name, buyer_mobile, buyer_email, sold_at
-     FROM adm_form_sales
-     WHERE status = \'pending\'
-     ORDER BY sold_at DESC
+    'SELECT fs.id, fs.form_number, fs.buyer_name, fs.buyer_mobile, fs.buyer_email, fs.sold_at,
+            sd.student_name  AS sd_student_name,
+            sd.father_name   AS sd_father_name,
+            sd.mother_name   AS sd_mother_name,
+            sd.gender        AS sd_gender,
+            sd.date_of_birth AS sd_date_of_birth,
+            sd.blood_group   AS sd_blood_group,
+            sd.nationality   AS sd_nationality,
+            sd.place_of_birth AS sd_place_of_birth,
+            sd.nid_birth_cert AS sd_nid_birth_cert,
+            sd.religion      AS sd_religion,
+            sd.permanent_address_1  AS sd_perm_addr1,
+            sd.permanent_address_2  AS sd_perm_addr2,
+            sd.permanent_area       AS sd_perm_area,
+            sd.permanent_district_id AS sd_perm_district_id,
+            sd.permanent_thana_id   AS sd_perm_thana_id,
+            sd.permanent_post_code  AS sd_perm_post_code,
+            sd.present_same_as_permanent AS sd_same_as_perm,
+            sd.present_address_1   AS sd_pres_addr1,
+            sd.present_address_2   AS sd_pres_addr2,
+            sd.present_area        AS sd_pres_area,
+            sd.present_district_id AS sd_pres_district_id,
+            sd.present_thana_id    AS sd_pres_thana_id,
+            sd.present_post_code   AS sd_pres_post_code
+     FROM adm_form_sales fs
+     LEFT JOIN adm_form_sale_student_details sd ON sd.form_sale_id = fs.id
+     WHERE fs.status = \'pending\'
+     ORDER BY fs.sold_at DESC
      LIMIT 200'
 )->fetchAll();
 
@@ -501,9 +525,37 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                             data-form-number="<?= h($pf['form_number']) ?>"
                             data-name="<?= h($pf['buyer_name']) ?>"
                             data-mobile="<?= h($pf['buyer_mobile']) ?>"
-                            data-email="<?= h($pf['buyer_email'] ?? '') ?>">
+                            data-email="<?= h($pf['buyer_email'] ?? '') ?>"
+                            data-sd-student-name="<?= h($pf['sd_student_name'] ?? '') ?>"
+                            data-sd-father-name="<?= h($pf['sd_father_name'] ?? '') ?>"
+                            data-sd-mother-name="<?= h($pf['sd_mother_name'] ?? '') ?>"
+                            data-sd-gender="<?= h($pf['sd_gender'] ?? '') ?>"
+                            data-sd-dob="<?= h($pf['sd_date_of_birth'] ?? '') ?>"
+                            data-sd-blood-group="<?= h($pf['sd_blood_group'] ?? '') ?>"
+                            data-sd-nationality="<?= h($pf['sd_nationality'] ?? '') ?>"
+                            data-sd-place-of-birth="<?= h($pf['sd_place_of_birth'] ?? '') ?>"
+                            data-sd-nid="<?= h($pf['sd_nid_birth_cert'] ?? '') ?>"
+                            data-sd-religion="<?= h($pf['sd_religion'] ?? '') ?>"
+                            data-sd-perm-addr1="<?= h($pf['sd_perm_addr1'] ?? '') ?>"
+                            data-sd-perm-addr2="<?= h($pf['sd_perm_addr2'] ?? '') ?>"
+                            data-sd-perm-area="<?= h($pf['sd_perm_area'] ?? '') ?>"
+                            data-sd-perm-district="<?= h($pf['sd_perm_district_id'] ?? '') ?>"
+                            data-sd-perm-thana="<?= h($pf['sd_perm_thana_id'] ?? '') ?>"
+                            data-sd-perm-post="<?= h($pf['sd_perm_post_code'] ?? '') ?>"
+                            data-sd-same-as-perm="<?= $pf['sd_same_as_perm'] ?? '' ?>"
+                            data-sd-pres-addr1="<?= h($pf['sd_pres_addr1'] ?? '') ?>"
+                            data-sd-pres-addr2="<?= h($pf['sd_pres_addr2'] ?? '') ?>"
+                            data-sd-pres-area="<?= h($pf['sd_pres_area'] ?? '') ?>"
+                            data-sd-pres-district="<?= h($pf['sd_pres_district_id'] ?? '') ?>"
+                            data-sd-pres-thana="<?= h($pf['sd_pres_thana_id'] ?? '') ?>"
+                            data-sd-pres-post="<?= h($pf['sd_pres_post_code'] ?? '') ?>">
                             <td class="ps-3 fw-semibold text-warning"><?= h($pf['form_number']) ?></td>
-                            <td><?= h($pf['buyer_name']) ?></td>
+                            <td>
+                                <?= h($pf['buyer_name']) ?>
+                                <?php if (!empty($pf['sd_student_name'])): ?>
+                                <span class="badge bg-success ms-1" title="Student details submitted"><i class="fas fa-check-circle"></i></span>
+                                <?php endif; ?>
+                            </td>
                             <td class="text-muted small"><?= h($pf['buyer_mobile']) ?></td>
                             <td class="d-none d-md-table-cell text-muted small"><?= $pf['buyer_email'] ? h($pf['buyer_email']) : '—' ?></td>
                             <td class="d-none d-sm-table-cell text-muted small text-end pe-3"><?= h(date('d M Y', strtotime($pf['sold_at']))) ?></td>
@@ -1841,9 +1893,123 @@ document.querySelectorAll('.searchable-select-wrap').forEach(function(wrap) {
             var nameInput   = document.querySelector('[name="student_name"]');
             var mobileInput = document.querySelector('[name="present_contact"]');
             var emailInput  = document.querySelector('[name="present_email"]');
-            if (nameInput   && !nameInput.value)   nameInput.value   = r.dataset.name;
+            if (nameInput   && !nameInput.value)   nameInput.value   = r.dataset.sdStudentName || r.dataset.name;
             if (mobileInput && !mobileInput.value) mobileInput.value = r.dataset.mobile;
             if (emailInput  && !emailInput.value && r.dataset.email) emailInput.value = r.dataset.email;
+
+            // Pre-fill student details if available
+            var sd = {
+                father_name:     r.dataset.sdFatherName,
+                mother_name:     r.dataset.sdMotherName,
+                gender:          r.dataset.sdGender,
+                date_of_birth:   r.dataset.sdDob,
+                blood_group:     r.dataset.sdBloodGroup,
+                nationality:     r.dataset.sdNationality,
+                place_of_birth:  r.dataset.sdPlaceOfBirth,
+                nid_birth_cert:  r.dataset.sdNid,
+                religion:        r.dataset.sdReligion,
+            };
+            // Text inputs / date
+            ['father_name','mother_name','date_of_birth','nationality','place_of_birth','nid_birth_cert'].forEach(function(f) {
+                var el = document.querySelector('[name="' + f + '"]');
+                if (el && !el.value && sd[f]) el.value = sd[f];
+            });
+            // Radio: gender (sex)
+            if (sd.gender) {
+                var sexRadio = document.querySelector('[name="sex"][value="' + sd.gender + '"]');
+                if (sexRadio) sexRadio.checked = true;
+            }
+            // Select: blood_group
+            if (sd.blood_group) {
+                var bgSel = document.querySelector('[name="blood_group"]');
+                if (bgSel && !bgSel.value) bgSel.value = sd.blood_group;
+            }
+            // Select: religion
+            if (sd.religion) {
+                var relSel = document.querySelector('[name="religion"]');
+                if (relSel && !relSel.value) relSel.value = sd.religion;
+            }
+
+            // Permanent address
+            var permFields = {
+                permanent_address_1: r.dataset.sdPermAddr1,
+                permanent_address_2: r.dataset.sdPermAddr2,
+                permanent_area:      r.dataset.sdPermArea,
+                permanent_post_code: r.dataset.sdPermPost,
+            };
+            ['permanent_address_1','permanent_address_2','permanent_area','permanent_post_code'].forEach(function(f) {
+                var el = document.querySelector('[name="' + f + '"]');
+                if (el && !el.value && permFields[f]) el.value = permFields[f];
+            });
+            // Permanent contact / email
+            var permContact = document.querySelector('[name="permanent_contact"]');
+            var permEmail   = document.querySelector('[name="permanent_email"]');
+            if (permContact && !permContact.value && r.dataset.mobile) permContact.value = r.dataset.mobile;
+            if (permEmail   && !permEmail.value   && r.dataset.email)  permEmail.value   = r.dataset.email;
+
+            // Permanent district + thana via searchable select
+            if (r.dataset.sdPermDistrict) {
+                var permDistHid = document.getElementById('permanent_district_id');
+                var permDistSrch = document.getElementById('perm_district_search');
+                if (permDistHid && !permDistHid.value) {
+                    permDistHid.value = r.dataset.sdPermDistrict;
+                    // Update display text
+                    var permDistItem = document.querySelector('#perm_district_list [data-value="' + r.dataset.sdPermDistrict + '"]');
+                    if (permDistItem && permDistSrch) permDistSrch.value = permDistItem.dataset.label;
+                    permDistHid.dispatchEvent(new Event('change'));
+                }
+            }
+            if (r.dataset.sdPermThana) {
+                var permThanaHid = document.getElementById('permanent_thana_id');
+                var permThanaSrch = document.getElementById('perm_thana_search');
+                if (permThanaHid && !permThanaHid.value) {
+                    permThanaHid.value = r.dataset.sdPermThana;
+                    var permThanaItem = document.querySelector('#perm_thana_list [data-value="' + r.dataset.sdPermThana + '"]');
+                    if (permThanaItem && permThanaSrch) permThanaSrch.value = permThanaItem.dataset.label;
+                }
+            }
+
+            // Present address
+            var presAddr1 = r.dataset.sdSameAsPerm === '1' ? r.dataset.sdPermAddr1 : r.dataset.sdPresAddr1;
+            var presAddr2 = r.dataset.sdSameAsPerm === '1' ? r.dataset.sdPermAddr2 : r.dataset.sdPresAddr2;
+            var presArea  = r.dataset.sdSameAsPerm === '1' ? r.dataset.sdPermArea  : r.dataset.sdPresArea;
+            var presPost  = r.dataset.sdSameAsPerm === '1' ? r.dataset.sdPermPost  : r.dataset.sdPresPost;
+            var presDistId = r.dataset.sdSameAsPerm === '1' ? r.dataset.sdPermDistrict : r.dataset.sdPresDistrict;
+            var presThanaId = r.dataset.sdSameAsPerm === '1' ? r.dataset.sdPermThana : r.dataset.sdPresThana;
+
+            var presF = { present_address_1: presAddr1, present_address_2: presAddr2, present_area: presArea, present_post_code: presPost };
+            ['present_address_1','present_address_2','present_area','present_post_code'].forEach(function(f) {
+                var el = document.querySelector('[name="' + f + '"]');
+                if (el && !el.value && presF[f]) el.value = presF[f];
+            });
+            var presContact = document.querySelector('[name="present_contact"]');
+            if (presContact && !presContact.value && r.dataset.mobile) presContact.value = r.dataset.mobile;
+
+            if (presDistId) {
+                var presDistHid  = document.getElementById('present_district_id');
+                var presDistSrch = document.getElementById('pres_district_search');
+                if (presDistHid && !presDistHid.value) {
+                    presDistHid.value = presDistId;
+                    var presDistItem = document.querySelector('#pres_district_list [data-value="' + presDistId + '"]');
+                    if (presDistItem && presDistSrch) presDistSrch.value = presDistItem.dataset.label;
+                    presDistHid.dispatchEvent(new Event('change'));
+                }
+            }
+            if (presThanaId) {
+                var presThanaHid  = document.getElementById('present_thana_id');
+                var presThanaSrch = document.getElementById('pres_thana_search');
+                if (presThanaHid && !presThanaHid.value) {
+                    presThanaHid.value = presThanaId;
+                    var presThanaItem = document.querySelector('#pres_thana_list [data-value="' + presThanaId + '"]');
+                    if (presThanaItem && presThanaSrch) presThanaSrch.value = presThanaItem.dataset.label;
+                }
+            }
+
+            // Check "same as permanent" checkbox if applicable
+            if (r.dataset.sdSameAsPerm === '1') {
+                var sameChk = document.getElementById('same_as_permanent');
+                if (sameChk) sameChk.checked = true;
+            }
         }
     }
 

@@ -48,6 +48,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ]);
         $sale_id = (int)db()->lastInsertId();
 
+        // ── Generate 24-hour student details fill-up token ────────────────────
+        $fill_token  = bin2hex(random_bytes(32));
+        $fill_expiry = date('Y-m-d H:i:s', strtotime('+24 hours'));
+        db()->prepare(
+            'INSERT INTO adm_form_sale_tokens (form_sale_id, token, expires_at)
+             VALUES (?, ?, ?)'
+        )->execute([$sale_id, $fill_token, $fill_expiry]);
+        $student_form_link = SITE_URL . '/admission-form-fill.php?token=' . $fill_token;
+
         log_change(
             'admissions', 'CREATE', $sale_id,
             'Form Sale ' . $form_number,
@@ -62,12 +71,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // ── Notifications ─────────────────────────────────────────────────────
         $notif_vars = [
-            'form_number'  => $form_number,
-            'buyer_name'   => $buyer_name,
-            'buyer_mobile' => $buyer_mobile,
-            'form_price'   => number_format((float)$form_price, 2),
-            'sold_date'    => date('d/m/Y'),
-            'app_name'     => APP_NAME,
+            'form_number'       => $form_number,
+            'buyer_name'        => $buyer_name,
+            'buyer_mobile'      => $buyer_mobile,
+            'form_price'        => number_format((float)$form_price, 2),
+            'sold_date'         => date('d/m/Y'),
+            'app_name'          => APP_NAME,
+            'student_form_link' => $student_form_link,
         ];
 
         // SMS notification

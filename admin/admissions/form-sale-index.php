@@ -41,9 +41,11 @@ $total_pages = max(1, (int)ceil($total_rows / $per_page));
 $page        = min($page, $total_pages);
 $offset      = ($page - 1) * $per_page;
 
-$sql = 'SELECT fs.*, u.full_name AS sold_by_name
+$sql = 'SELECT fs.*, u.full_name AS sold_by_name,
+               t.token AS fill_token, t.expires_at AS token_expires_at, t.used_at AS token_used_at
         FROM adm_form_sales fs
-        LEFT JOIN users u ON u.id = fs.sold_by'
+        LEFT JOIN users u ON u.id = fs.sold_by
+        LEFT JOIN adm_form_sale_tokens t ON t.form_sale_id = fs.id'
      . $where_sql
      . ' ORDER BY fs.sold_at DESC LIMIT ' . $per_page . ' OFFSET ' . $offset;
 
@@ -136,6 +138,28 @@ require_once __DIR__ . '/../includes/header.php';
                     <td class="text-muted small"><?= h($sale['sold_by_name'] ?? '—') ?></td>
                     <td class="text-end pe-4">
                         <div class="d-flex justify-content-end gap-1">
+                            <?php if ($sale['status'] === 'pending' && $sale['fill_token']): ?>
+                            <?php
+                                $link_active  = $sale['token_used_at'] === null && strtotime($sale['token_expires_at']) >= time();
+                                $link_expired = $sale['token_used_at'] === null && strtotime($sale['token_expires_at']) < time();
+                                $link_used    = $sale['token_used_at'] !== null;
+                                $fill_url     = SITE_URL . '/admission-form-fill.php?token=' . $sale['fill_token'];
+                            ?>
+                            <?php if ($link_active): ?>
+                            <button type="button" class="btn btn-sm btn-outline-info" title="Copy Fill-up Link"
+                                    onclick="copyFillLink('<?= h($fill_url) ?>', this)">
+                                <i class="fas fa-link"></i>
+                            </button>
+                            <?php elseif ($link_used): ?>
+                            <button type="button" class="btn btn-sm btn-outline-success" disabled title="Form details submitted by student">
+                                <i class="fas fa-check-circle"></i>
+                            </button>
+                            <?php elseif ($link_expired): ?>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" disabled title="Fill-up link expired">
+                                <i class="fas fa-clock"></i>
+                            </button>
+                            <?php endif; ?>
+                            <?php endif; ?>
                             <a href="<?= APP_URL ?>/admissions/form-sale-print.php?id=<?= $sale['id'] ?>"
                                class="btn btn-sm btn-outline-success" title="Print Invoice" target="_blank">
                                 <i class="fas fa-print"></i>
@@ -201,6 +225,28 @@ function confirmCancel(id, label) {
     document.getElementById('cancelId').value = id;
     document.getElementById('cancelLabel').textContent = label;
     new bootstrap.Modal(document.getElementById('cancelModal')).show();
+}
+function copyFillLink(url, btn) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(function() {
+            var orig = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-check text-success"></i>';
+            setTimeout(function() { btn.innerHTML = orig; }, 2000);
+        }).catch(function() { fallbackCopy(url, btn); });
+    } else {
+        fallbackCopy(url, btn);
+    }
+}
+function fallbackCopy(url, btn) {
+    var ta = document.createElement('textarea');
+    ta.value = url; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    try { document.execCommand('copy');
+        var orig = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-check text-success"></i>';
+        setTimeout(function() { btn.innerHTML = orig; }, 2000);
+    } catch(e) { alert('Copy link:\n' + url); }
+    document.body.removeChild(ta);
 }
 </script>
 
