@@ -20,7 +20,7 @@ $stmt = db()->prepare(
      WHERE (a.app_number LIKE ? OR a.student_name LIKE ? OR s.student_id LIKE ?)
        AND a.status = \'ready_for_admission\'
        AND s.status = \'Active\'
-     ORDER BY a.student_name
+     ORDER BY s.full_name
      LIMIT 15'
 );
 $stmt->execute([$like, $like, $like]);

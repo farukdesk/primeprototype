@@ -427,15 +427,14 @@ searchInput.addEventListener('input', function () {
                     var a = document.createElement('a');
                     a.href = '#';
                     a.className = 'list-group-item list-group-item-action';
-                    var label = st.full_name + ' (' + st.student_id + ')';
-                    if (st.app_number) { label += ' — Form: ' + st.app_number; }
-                    a.textContent = label;
+                    var displayLabel = st.full_name + ' (' + st.student_id + ')' + (st.app_number ? ' — Form: ' + st.app_number : '');
+                    a.textContent = displayLabel;
                     a.addEventListener('click', function(e) {
                         e.preventDefault();
                         studentIdInp.value  = st.id;
                         studentHidden.value = st.full_name + ' (' + st.student_id + ')';
                         searchInput.value   = st.full_name + ' (' + st.student_id + ')';
-                        studentDisp.textContent = st.full_name + ' (' + st.student_id + ')' + (st.app_number ? ' — Form: ' + st.app_number : '');
+                        studentDisp.textContent = displayLabel;
                         studentDisp.classList.remove('text-muted');
                         suggestions.style.display = 'none';
                     });
