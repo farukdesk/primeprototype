@@ -183,8 +183,9 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="col-md-7">
                     <label class="form-label fw-semibold">Search Student <span class="text-danger">*</span></label>
                     <input type="text" id="student-search-input" class="form-control"
-                           placeholder="Type name or student ID…"
+                           placeholder="Type name, student ID, or form number…"
                            value="<?= h(old('student_search', '')) ?>">
+                    <div class="form-text">Only students with a <strong>Ready for Admission</strong> application are shown.</div>
                     <div id="student-suggestions"
                          class="list-group mt-1 position-absolute z-3"
                          style="max-width:420px;display:none;"></div>
@@ -426,13 +427,14 @@ searchInput.addEventListener('input', function () {
                     var a = document.createElement('a');
                     a.href = '#';
                     a.className = 'list-group-item list-group-item-action';
-                    a.textContent = st.full_name + ' (' + st.student_id + ')';
+                    var displayLabel = st.full_name + ' (' + st.student_id + ')' + (st.app_number ? ' — Form: ' + st.app_number : '');
+                    a.textContent = displayLabel;
                     a.addEventListener('click', function(e) {
                         e.preventDefault();
                         studentIdInp.value  = st.id;
                         studentHidden.value = st.full_name + ' (' + st.student_id + ')';
                         searchInput.value   = st.full_name + ' (' + st.student_id + ')';
-                        studentDisp.textContent = st.full_name + ' (' + st.student_id + ')';
+                        studentDisp.textContent = displayLabel;
                         studentDisp.classList.remove('text-muted');
                         suggestions.style.display = 'none';
                     });
