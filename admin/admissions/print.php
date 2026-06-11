@@ -672,11 +672,6 @@ foreach ($all_fields as $f) {
             <li style="margin-bottom:6px">Engaging in or encouraging any behaviour or activity that threatens or intimidates any potential participant in a judicial process.</li>
             <li style="margin-bottom:6px">Possession and distribution of unauthorized printed materials inimical to public interest.</li>
             <li style="margin-bottom:6px">Membership in political subversive organization.</li>
-            <li style="margin-bottom:6px">Violation of other disseminated university regulations, policies, or rules.</li>
-            <li style="margin-bottom:6px">A violation of any criminal law.</li>
-            <li style="margin-bottom:6px">Engaging in or encouraging any behaviour or activity that threatens or intimidates any potential participant in a judicial process.</li>
-            <li style="margin-bottom:6px">Possession and distribution of unauthorized printed materials inimical to public interest.</li>
-            <li style="margin-bottom:6px">Membership in political subversive organization.</li>
         </ol>
 
         <div style="margin-top:60px;display:flex;justify-content:space-between;font-size:14px">
