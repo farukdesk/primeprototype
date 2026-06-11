@@ -38,7 +38,7 @@ try {
     );
     $stmt->execute([$like, $like, $like]);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-} catch (Exception $e) {
+} catch (PDOException $e) {
     // admissions_applications may not exist; fall back to a direct students-only search.
     try {
         $stmt = db()->prepare(
@@ -50,7 +50,7 @@ try {
         );
         $stmt->execute([$like, $like]);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    } catch (Exception $e2) {
+    } catch (PDOException $e2) {
         // Database unavailable; return empty array so the caller gets valid JSON.
     }
 }

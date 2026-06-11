@@ -440,7 +440,10 @@ searchInput.addEventListener('input', function () {
                 });
                 suggestions.style.display = 'block';
             })
-            .catch(function() { suggestions.style.display = 'none'; });
+            .catch(function() {
+                suggestions.style.display = 'none';
+                console.error('Student search request failed.');
+            });
     }, 300);
 });
 
