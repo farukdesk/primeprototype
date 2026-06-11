@@ -11,22 +11,6 @@ require_access('admissions');
 $id           = (int)($_GET['id'] ?? 0);
 $app          = adm_get($id);
 $acad_records = adm_get_academic_records($id);
-$all_fields   = adm_get_all_fields();
-
-$tpl1     = adm_get_template(1);
-$tpl2     = adm_get_template(2);
-$map1     = adm_get_mappings(1);
-$map2     = adm_get_mappings(2);
-
-$has_templates = $tpl1 || $tpl2;
-
-$tpl_base_url = UPLOAD_URL . '/' . ADM_TPL_SUBDIR . '/';
-
-// Build a keyed array: field_key => field_label
-$field_labels = [];
-foreach ($all_fields as $f) {
-    $field_labels[$f['field_key']] = $f['field_label'];
-}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -52,28 +36,6 @@ foreach ($all_fields as $f) {
         .screen-controls span { font-size: 13px; opacity: 0.85; }
 
         .print-wrapper { padding: 60px 20px 40px; }
-
-        /* Template overlay pages */
-        .template-page {
-            position: relative;
-            display: inline-block;
-            margin-bottom: 30px;
-            background: #fff;
-            box-shadow: 0 2px 12px rgba(0,0,0,.15);
-            page-break-after: always;
-        }
-        .template-page img.tpl-bg {
-            display: block;
-            width: 794px;
-            height: auto;
-        }
-        .field-overlay {
-            position: absolute;
-            white-space: nowrap;
-            line-height: 1;
-            pointer-events: none;
-            color: #000;
-        }
 
         /* Clean print page (no template) */
         .clean-page {
@@ -103,7 +65,7 @@ foreach ($all_fields as $f) {
             .screen-controls { display: none !important; }
             body { background: #fff; }
             .print-wrapper { padding: 0; }
-            .template-page, .clean-page { box-shadow: none; }
+            .clean-page { box-shadow: none; }
         }
     </style>
 </head>
@@ -118,79 +80,6 @@ foreach ($all_fields as $f) {
 
 <div class="print-wrapper">
 
-<?php if ($has_templates): ?>
-    <!-- ── Template overlay mode ── -->
-
-    <?php foreach ([1, 2] as $page_num):
-        $tpl = ($page_num === 1) ? $tpl1 : $tpl2;
-        $map = ($page_num === 1) ? $map1 : $map2;
-        if (!$tpl) continue;
-
-        $img_url   = $tpl_base_url . h($tpl['stored_file']);
-        $is_pdf    = $tpl['file_type'] === 'pdf';
-    ?>
-    <div style="text-align:center">
-        <div class="template-page">
-            <?php if ($is_pdf): ?>
-            <p style="padding:20px;color:#666">PDF template (Page <?= $page_num ?>): <?= h($tpl['original_name']) ?><br>
-            Overlay fields shown below.</p>
-            <?php else: ?>
-            <img class="tpl-bg" src="<?= $img_url ?>" alt="Page <?= $page_num ?> template">
-            <?php endif; ?>
-
-            <?php
-            // Build 0-based indexed academic records for qual_ field resolution
-            $acad_indexed = array_values($acad_records);
-            foreach ($map as $field_key => $mapping):
-                $value     = adm_field_value($app, $field_key, $acad_indexed);
-                $font_size = (int)($mapping['font_size'] ?? 10);
-                $x         = (float)$mapping['x_percent'];
-                $y         = (float)$mapping['y_percent'];
-            ?>
-            <?php if ($field_key === 'photo' && $value !== ''): ?>
-            <img src="<?= UPLOAD_URL . '/' . ADM_PHOTO_SUBDIR . '/' . h($value) ?>"
-                 class="field-overlay"
-                 style="left:<?= $x ?>%;top:<?= $y ?>%;width:80px;height:100px;object-fit:cover;border:1px solid #ccc;pointer-events:none;"
-                 alt="Photo">
-            <?php elseif ($field_key !== 'photo' && $value !== ''): ?>
-            <div class="field-overlay" style="left:<?= $x ?>%;top:<?= $y ?>%;font-size:<?= $font_size ?>pt">
-                <?= h($value) ?>
-            </div>
-            <?php endif; ?>
-            <?php endforeach; ?>
-        </div>
-    </div>
-    <?php endforeach; ?>
-
-    <!-- Academic records appear as a separate section below templates -->
-    <?php if ($acad_records): ?>
-    <div style="width:794px;margin:0 auto 20px;background:#fff;padding:20px 30px;box-shadow:0 1px 6px rgba(0,0,0,.1)">
-        <h3 style="font-size:13px;margin-bottom:8px;border-bottom:1px solid #ccc;padding-bottom:4px">Academic Qualifications</h3>
-        <table class="acad-table">
-            <thead>
-                <tr>
-                    <th>Exam</th><th>Session</th><th>Group</th>
-                    <th>Board/University</th><th>Year</th><th>Division/Grade</th><th>Marks/CGPA</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php foreach ($acad_records as $ar): ?>
-                <tr>
-                    <td><?= h($ar['exam_name'] ?? '') ?></td>
-                    <td><?= h($ar['session'] ?? '') ?></td>
-                    <td><?= h($ar['group_name'] ?? '') ?></td>
-                    <td><?= h($ar['board_university'] ?? '') ?></td>
-                    <td><?= h($ar['year_of_passing'] ?? '') ?></td>
-                    <td><?= h($ar['division_grade'] ?? '') ?></td>
-                    <td><?= h($ar['total_marks_cgpa'] ?? '') ?></td>
-                </tr>
-                <?php endforeach; ?>
-            </tbody>
-        </table>
-    </div>
-    <?php endif; ?>
-
-<?php else: ?>
     <!-- ── Styled Admission Form Layout ── -->
     <?php
     // Embed logo as base64 data URI
@@ -681,8 +570,6 @@ foreach ($all_fields as $f) {
             <div style="text-align:right;font-size:11px;color:#555;align-self:flex-end;font-weight:bold">Page-02</div>
         </div>
     </div>
-
-<?php endif; ?>
 
 </div><!-- /print-wrapper -->
 </body>
