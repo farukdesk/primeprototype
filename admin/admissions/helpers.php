@@ -553,6 +553,8 @@ function adm_field_value(array $app, string $field_key, array $acad_records = []
             return (string)($app['program_name'] ?? '');
         case 'app_number':
             return (string)($app['app_number'] ?? '');
+        case 'assigned_student_id':
+            return (string)($app['assigned_student_id'] ?? '');
         case 'date_of_birth':
             if (!empty($app['date_of_birth'])) {
                 $dt = DateTime::createFromFormat('Y-m-d', $app['date_of_birth']);

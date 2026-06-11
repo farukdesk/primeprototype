@@ -48,6 +48,7 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="card-body">
                 <div class="row g-3">
                     <div class="col-6 col-md-4"><div class="text-muted small">Application Number</div><div class="fw-semibold"><?= h($app['app_number']) ?></div></div>
+                    <div class="col-6 col-md-4"><div class="text-muted small">Assigned Student ID</div><div class="fw-semibold"><?php if (!empty($app['assigned_student_id'])): ?><code class="text-success"><?= h($app['assigned_student_id']) ?></code><?php else: ?><span class="text-muted">—</span><?php endif; ?></div></div>
                     <div class="col-6 col-md-4"><div class="text-muted small">Status</div><div><?= adm_status_badge($app['status']) ?></div></div>
                     <div class="col-6 col-md-4"><div class="text-muted small">Created</div><div><?= h(date('d M Y, g:i A', strtotime($app['created_at']))) ?></div></div>
                     <div class="col-6 col-md-4"><div class="text-muted small">Department</div><div><?= h($app['dept_name'] ?? '—') ?></div></div>

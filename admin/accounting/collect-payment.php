@@ -378,13 +378,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'admissi
             $voucher_number = $voucher['voucher_number'] ?? '—';
             $currency       = acc_currency();
 
-            // Generate & assign student ID if not yet assigned and settings exist
-            $assigned_sid = $applicant['office_student_id'] ?? '';
+            // Use student ID already assigned at form-creation time; fall back to legacy
+            // office_student_id or generate a new one if neither is set.
+            $assigned_sid = $applicant['assigned_student_id'] ?? $applicant['office_student_id'] ?? '';
             if ($assigned_sid === '' && !empty($applicant['program_id'])) {
                 $new_sid = adm_sid_generate((int)$applicant['program_id']);
                 if ($new_sid !== '') {
                     db()->prepare(
-                        'UPDATE admissions_applications SET office_student_id = ? WHERE id = ?'
+                        'UPDATE admissions_applications SET assigned_student_id = ? WHERE id = ?'
                     )->execute([$new_sid, $app_id]);
                     $assigned_sid = $new_sid;
                 }
@@ -395,9 +396,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'admissi
                 "UPDATE admissions_applications SET status = 'admission_complete' WHERE id = ?"
             )->execute([$app_id]);
 
-            // Create student record in students module (if not already exists)
+            // Activate student record (created at form-creation time with Not Admitted Yet)
             if ($assigned_sid !== '') {
-                acc_create_student_from_applicant($applicant, $assigned_sid);
+                $stu_chk = db()->prepare('SELECT id FROM students WHERE student_id = ? LIMIT 1');
+                $stu_chk->execute([$assigned_sid]);
+                $stu_existing_id = (int)($stu_chk->fetchColumn() ?: 0);
+                if ($stu_existing_id) {
+                    db()->prepare("UPDATE students SET status = 'Active' WHERE id = ?")
+                        ->execute([$stu_existing_id]);
+                } else {
+                    acc_create_student_from_applicant($applicant, $assigned_sid);
+                }
             }
 
             // Retrieve cf_settings for fee breakdown in notifications

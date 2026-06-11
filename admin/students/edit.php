@@ -160,7 +160,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($dept_id   <= 0)     $errors[] = 'Department is required.';
     if ($admitted_sem === '') $errors[] = 'Admitted semester is required.';
 
-    $valid_statuses = ['Active', 'Inactive', 'Graduated', 'Dropped'];
+    $valid_statuses = ['Active', 'Inactive', 'Graduated', 'Dropped', 'Not Admitted Yet'];
     if (!in_array($status, $valid_statuses, true)) $status = 'Active';
 
     $valid_semester_types = ['bi_semester', 'trimester', ''];
@@ -406,7 +406,7 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="col-12 col-md-3">
                 <label class="form-label fw-semibold">Status</label>
                 <select name="status" class="form-select">
-                    <?php foreach (['Active','Inactive','Graduated','Dropped'] as $s): ?>
+                    <?php foreach (['Active','Inactive','Graduated','Dropped','Not Admitted Yet'] as $s): ?>
                     <option value="<?= $s ?>" <?= $student['status'] === $s ? 'selected' : '' ?>><?= $s ?></option>
                     <?php endforeach; ?>
                 </select>

@@ -196,10 +196,11 @@ function sm_photo_url(?string $photo): string
 function sm_status_badge(string $status): string
 {
     $map = [
-        'Active'    => 'bg-success',
-        'Inactive'  => 'bg-secondary',
-        'Graduated' => 'bg-info text-dark',
-        'Dropped'   => 'bg-danger',
+        'Active'           => 'bg-success',
+        'Inactive'         => 'bg-secondary',
+        'Graduated'        => 'bg-info text-dark',
+        'Dropped'          => 'bg-danger',
+        'Not Admitted Yet' => 'bg-warning text-dark',
     ];
     $cls = $map[$status] ?? 'bg-secondary';
     return '<span class="badge ' . $cls . '">' . h($status) . '</span>';
