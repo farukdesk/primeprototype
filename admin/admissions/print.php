@@ -75,7 +75,7 @@ $acad_records = adm_get_academic_records($id);
             .screen-controls { display: none !important; }
             body { background: #fff; }
             .print-wrapper { padding: 0; }
-            .clean-page { box-shadow: none; }
+            .clean-page, .page-start, .form-page { box-shadow: none !important; }
             .avoid-break { page-break-inside: avoid; break-inside: avoid; }
             .page-start { page-break-before: always; break-before: page; }
         }
@@ -154,8 +154,8 @@ $acad_records = adm_get_academic_records($id);
     $expelled = ($app['expelled_answer'] ?? 'No');
     ?>
 
-    <!-- Admission Form – Page 1 -->
-    <div style="max-width:800px;margin:0 auto 40px auto;background:#fff;padding:30px;border:1px solid #bdc3c7;box-sizing:border-box;position:relative;box-shadow:0 4px 15px rgba(0,0,0,.05)">
+    <!-- Admission Form – Page 1 (personal information) -->
+    <div class="form-page" style="max-width:800px;margin:0 auto 40px auto;background:#fff;padding:30px;border:1px solid #bdc3c7;box-sizing:border-box;position:relative;box-shadow:0 4px 15px rgba(0,0,0,.05)">
 
         <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
             <tr>
@@ -294,8 +294,11 @@ $acad_records = adm_get_academic_records($id);
                 </td>
             </tr>
         </table>
+    </div>
 
-        <div class="avoid-break">
+    <!-- Admission Form – Page 2 (academic qualifications) -->
+    <div class="page-start form-page" style="max-width:800px;margin:0 auto 40px auto;background:#fff;padding:30px;border:1px solid #bdc3c7;box-sizing:border-box;box-shadow:0 4px 15px rgba(0,0,0,.05)">
+
         <h2 style="color:#d32f2f;font-size:16px;margin:25px 0 12px 0;border-bottom:2px solid #2b327a;padding-bottom:5px;text-transform:uppercase">Academic Qualifications :</h2>
 
         <table style="width:100%;border-collapse:collapse;font-size:12px;text-align:center;margin-bottom:30px">
@@ -330,7 +333,6 @@ $acad_records = adm_get_academic_records($id);
                 <?php endforeach; ?>
             </tbody>
         </table>
-        </div><!-- /avoid-break academic -->
 
         <div style="font-size:14px;margin-top:25px;margin-bottom:35px">
             <span style="color:#2b327a;font-weight:bold;margin-right:10px">Experience :</span>
@@ -343,8 +345,8 @@ $acad_records = adm_get_academic_records($id);
         </div>
     </div>
 
-    <!-- Admission Form – Page 2 -->
-    <div class="page-start" style="max-width:800px;margin:0 auto 40px auto;background:#fff;padding:40px 30px 30px 30px;border:1px solid #bdc3c7;box-sizing:border-box;box-shadow:0 4px 15px rgba(0,0,0,.05)">
+    <!-- Admission Form – Page 3 (guardian & office use) -->
+    <div class="page-start form-page" style="max-width:800px;margin:0 auto 40px auto;background:#fff;padding:40px 30px 30px 30px;border:1px solid #bdc3c7;box-sizing:border-box;box-shadow:0 4px 15px rgba(0,0,0,.05)">
 
         <h2 style="color:#d32f2f;font-size:16px;margin:0 0 20px 0;border-bottom:2px solid #2b327a;padding-bottom:5px;text-transform:uppercase">Particulars of Guardian:</h2>
 
@@ -503,8 +505,8 @@ $acad_records = adm_get_academic_records($id);
         </div>
     </div>
 
-    <!-- Student Code of Conduct – Page 1 -->
-    <div class="page-start" style="max-width:800px;margin:0 auto 40px auto;background:#fff;padding:40px 30px;border:1px solid #bdc3c7;box-sizing:border-box;box-shadow:0 4px 15px rgba(0,0,0,.05)">
+    <!-- Student Code of Conduct – Page 4 -->
+    <div class="page-start form-page" style="max-width:800px;margin:0 auto 40px auto;background:#fff;padding:40px 30px;border:1px solid #bdc3c7;box-sizing:border-box;box-shadow:0 4px 15px rgba(0,0,0,.05)">
         <table style="width:100%;border-collapse:collapse;margin-bottom:15px">
             <tr>
                 <td style="width:10%"><img src="<?= h($logo_uri) ?>" alt="Prime University" style="width:45px;height:50px;object-fit:contain"></td>
@@ -550,8 +552,8 @@ $acad_records = adm_get_academic_records($id);
         <div style="text-align:right;font-size:11px;color:#555;margin-top:30px"></div>
     </div>
 
-    <!-- Student Code of Conduct – Page 2 -->
-    <div class="page-start" style="max-width:800px;margin:0 auto;background:#fff;padding:40px 30px;border:1px solid #bdc3c7;box-sizing:border-box;box-shadow:0 4px 15px rgba(0,0,0,.05)">
+    <!-- Student Code of Conduct – Page 5 -->
+    <div class="page-start form-page" style="max-width:800px;margin:0 auto;background:#fff;padding:40px 30px;border:1px solid #bdc3c7;box-sizing:border-box;box-shadow:0 4px 15px rgba(0,0,0,.05)">
         <table style="width:100%;border-collapse:collapse;margin-bottom:15px">
             <tr>
                 <td style="width:10%"><img src="<?= h($logo_uri) ?>" alt="Prime University" style="width:45px;height:50px;object-fit:contain"></td>
