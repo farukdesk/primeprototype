@@ -262,6 +262,7 @@ $user       = auth_user();
     $is_leads_active    = strpos($current_path, '/leads/') !== false;
     $is_alumni_active   = strpos($current_path, '/alumni/') !== false;
     $is_admissions_active = strpos($current_path, '/admissions/') !== false;
+    $is_top_sheet_active  = strpos($current_path, '/admissions/top-sheet') !== false;
     $is_gallery_active       = strpos($current_path, '/gallery/') !== false;
     $is_jobs_active          = strpos($current_path, '/jobs/') !== false;
     $is_library_active       = strpos($current_path, '/library/') !== false;
@@ -806,7 +807,7 @@ $user       = auth_user();
         <ul class="nav flex-column grp-items">
             <li class="nav-item">
                 <a href="<?= APP_URL ?>/admissions/index.php"
-                   class="<?= (strpos($current_path, '/admissions/') !== false && strpos($current_path, '/create') === false && strpos($current_path, '/settings') === false && strpos($current_path, '/form-sale') === false) ? 'active' : '' ?>">
+                   class="<?= (strpos($current_path, '/admissions/') !== false && strpos($current_path, '/create') === false && strpos($current_path, '/settings') === false && strpos($current_path, '/form-sale') === false && !$is_top_sheet_active) ? 'active' : '' ?>">
                     <i class="fas fa-list"></i> All Applications
                 </a>
             </li>
@@ -824,10 +825,16 @@ $user       = auth_user();
                     <i class="fas fa-receipt"></i> Form Sale
                 </a>
             </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/admissions/top-sheet.php"
+                   class="<?= $is_top_sheet_active ? 'active' : '' ?>">
+                    <i class="fas fa-table"></i> Top Sheet
+                </a>
+            </li>
             <?php if (is_super_admin() || can_access('admissions', 'can_edit')): ?>
             <li class="nav-item">
                 <a href="<?= APP_URL ?>/admissions/settings.php"
-                   class="<?= strpos($current_path, '/admissions/settings') !== false ? 'active' : '' ?>">
+                   class="<?= (strpos($current_path, '/admissions/settings') !== false && !$is_top_sheet_active) ? 'active' : '' ?>">
                     <i class="fas fa-cog"></i> Settings
                 </a>
             </li>
