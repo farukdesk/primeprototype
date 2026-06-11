@@ -193,11 +193,11 @@ $acad_records = adm_get_academic_records($id);
                 <td style="width:50px;font-weight:bold;color:#2b327a">Year :</td>
                 <td style="width:90px"><div style="background:#f0f1fa;border:1px solid #cbd0f5;padding:5px 10px;text-align:center;font-weight:bold"><?= h($app['year'] ?? '') ?></div></td>
                 <td style="width:70px;font-weight:bold;color:#2b327a;text-align:center">Spring :</td>
-                <td style="width:90px"><div style="background:#f0f1fa;border:1px solid #cbd0f5;padding:5px 10px;height:18px;text-align:center;font-weight:bold"><?= h($sem_spring) ?></div></td>
+                <td style="width:90px"><div style="background:#f0f1fa;border:1px solid #cbd0f5;padding:4px 10px;min-height:28px;text-align:center;font-weight:bold;line-height:20px;overflow:hidden"><?= h($sem_spring) ?></div></td>
                 <td style="width:80px;font-weight:bold;color:#2b327a;text-align:center">Summer :</td>
-                <td style="width:90px"><div style="background:#f0f1fa;border:1px solid #cbd0f5;padding:5px 10px;height:18px;text-align:center;font-weight:bold"><?= h($sem_summer) ?></div></td>
+                <td style="width:90px"><div style="background:#f0f1fa;border:1px solid #cbd0f5;padding:4px 10px;min-height:28px;text-align:center;font-weight:bold;line-height:20px;overflow:hidden"><?= h($sem_summer) ?></div></td>
                 <td style="width:50px;font-weight:bold;color:#2b327a;text-align:center">Fall :</td>
-                <td><div style="background:#f0f1fa;border:1px solid #cbd0f5;padding:5px 10px;height:18px;width:80px;text-align:center;font-weight:bold"><?= h($sem_fall) ?></div></td>
+                <td><div style="background:#f0f1fa;border:1px solid #cbd0f5;padding:4px 10px;min-height:28px;width:80px;text-align:center;font-weight:bold;line-height:20px;overflow:hidden"><?= h($sem_fall) ?></div></td>
             </tr>
         </table>
 
@@ -205,7 +205,7 @@ $acad_records = adm_get_academic_records($id);
             <tr style="height:40px">
                 <td style="width:160px;font-weight:500">Name of the Student<br><span style="font-size:12px;color:#666">(Block Letter)</span></td>
                 <td style="width:15px;text-align:center;color:#2b327a;font-weight:bold">:</td>
-                <td colspan="3"><div style="background:#fffde6;border:1px solid #ffe680;padding:7px 12px;font-weight:bold"><?= h($app['student_name'] ?? '') ?></div></td>
+                <td colspan="3"><div style="background:#fffde6;border:1px solid #ffe680;padding:7px 12px;font-weight:bold;text-transform:uppercase"><?= h($app['student_name'] ?? '') ?></div></td>
             </tr>
             <tr style="height:40px">
                 <td style="font-weight:500">Father's Name</td>
@@ -452,8 +452,8 @@ $acad_records = adm_get_academic_records($id);
             <p style="margin:0;text-align:justify"><span style="color:#2b327a;font-weight:bold">* Please submit the following along with this Application Form :</span> a) Four copies of passport size photograph; b) Attested copies of certificates and mark sheets/ grade sheets, c) Testimonial/ Letter of recommendation from institution last attended and d) Birth Certificate or NID Photocopy.</p>
         </div>
 
-        <div style="border:2px solid #2b327a;background:#f7f8fc;border-radius:16px;padding:22px 25px;font-size:14px;box-sizing:border-box">
-            <h3 style="text-align:center;margin:0 auto 22px auto;font-size:16px;color:#2b327a;font-weight:bold;border-bottom:2px solid #2b327a;padding-bottom:4px;display:table;text-transform:uppercase">For Office Use Only</h3>
+        <div style="border:2px solid #2b327a;background:#f7f8fc;border-radius:6px;padding:22px 25px;font-size:14px;box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact">
+            <h3 style="text-align:center;margin:0 auto 22px auto;font-size:16px;color:#2b327a;font-weight:bold;border-bottom:2px solid #2b327a;padding-bottom:4px;text-transform:uppercase">For Office Use Only</h3>
             <table style="width:100%;border-collapse:collapse">
                 <tr style="height:40px">
                     <td style="width:95px;font-weight:500">Program :</td>
