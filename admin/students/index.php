@@ -20,7 +20,7 @@ $f_sem_type = trim($_GET['sem_type'] ?? '');
 $page     = max(1, (int)($_GET['page'] ?? 1));
 $per_page = 20;
 
-$valid_statuses  = ['Active', 'Inactive', 'Graduated', 'Dropped'];
+$valid_statuses  = ['Active', 'Inactive', 'Graduated', 'Dropped', 'Not Admitted Yet'];
 $valid_sem_types = ['bi_semester', 'trimester'];
 
 $where  = [];

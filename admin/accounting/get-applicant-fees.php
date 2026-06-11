@@ -55,14 +55,15 @@ try {
             'present_contact'  => $applicant['present_contact'] ?? '',
             'present_email'    => $applicant['present_email'] ?? '',
             'status'           => $applicant['status'],
-            'office_student_id'=> $applicant['office_student_id'] ?? '',
+            'assigned_student_id' => $applicant['assigned_student_id'] ?? '',
+            'office_student_id'=> $applicant['assigned_student_id'] ?? $applicant['office_student_id'] ?? '',
         ],
         'admission_fee_base'=> $admission_fee_base,
         'form_id_fee'       => $form_id_fee,
         'suggested_fee'     => $suggested_fee,
         'already_paid'      => $already_paid,
         'income_account_id' => $income_account_id,
-        'can_assign_sid'    => ($has_sid_settings && empty($applicant['office_student_id'])),
+        'can_assign_sid'    => ($has_sid_settings && empty($applicant['assigned_student_id']) && empty($applicant['office_student_id'])),
     ]);
 } catch (Throwable $e) {
     error_log('get-applicant-fees.php error: ' . $e->getMessage());

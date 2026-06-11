@@ -347,7 +347,7 @@ $acad_records = adm_get_academic_records($id);
                     <td style="width:95px;font-weight:500">Program :</td>
                     <td style="border-bottom:1px solid #cbd0f5"><?= h($app['program_name'] ?? '') ?></td>
                     <td style="width:115px;font-weight:500;padding-left:30px">Student ID. No :</td>
-                    <td style="border-bottom:1px solid #cbd0f5"><?= h($app['office_university_batch'] ?? '') ?></td>
+                    <td style="border-bottom:1px solid #cbd0f5"><?= h($app['assigned_student_id'] ?? '') ?></td>
                 </tr>
                 <tr style="height:38px">
                     <td style="font-weight:500">Batch No. :</td>
