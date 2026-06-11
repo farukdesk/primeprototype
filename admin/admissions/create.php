@@ -322,32 +322,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             )->execute([$assigned_student_id, $app_id]);
 
             // Pre-create student with "Not Admitted Yet" – activated upon payment
+            // Use INSERT IGNORE so a duplicate student_id (unique constraint) is silently skipped.
             $adm_sem_val = is_array($semesters_raw)
                 ? trim($semesters_raw[0] ?? '')
                 : (trim($semesters_raw) ?: null);
-            $dup_check = db()->prepare('SELECT id FROM students WHERE student_id = ? LIMIT 1');
-            $dup_check->execute([$assigned_student_id]);
-            if (!$dup_check->fetchColumn()) {
-                db()->prepare(
-                    'INSERT INTO students
-                         (student_id, dept_id, program_id, admitted_semester,
-                          full_name, email, phone, sex, dob,
-                          status, created_by)
-                     VALUES (?,?,?,?,?,?,?,?,?,?,?)'
-                )->execute([
-                    $assigned_student_id,
-                    $dept_id     ?: null,
-                    $program_id  ?: null,
-                    $adm_sem_val ?: null,
-                    $student_name,
-                    $present_email   ?: null,
-                    $present_contact ?: null,
-                    $sex             ?: null,
-                    $date_of_birth   ?: null,
-                    'Not Admitted Yet',
-                    $user['id'],
-                ]);
-            }
+            db()->prepare(
+                'INSERT IGNORE INTO students
+                     (student_id, dept_id, program_id, admitted_semester,
+                      full_name, email, phone, sex, dob,
+                      status, created_by)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?)'
+            )->execute([
+                $assigned_student_id,
+                $dept_id     ?: null,
+                $program_id  ?: null,
+                $adm_sem_val ?: null,
+                $student_name,
+                $present_email   ?: null,
+                $present_contact ?: null,
+                $sex             ?: null,
+                $date_of_birth   ?: null,
+                'Not Admitted Yet',
+                $user['id'],
+            ]);
         }
 
         flash_set('success', 'Application ' . $app_number . ' created successfully.'
