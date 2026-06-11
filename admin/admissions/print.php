@@ -370,7 +370,10 @@ $acad_records = adm_get_academic_records($id);
         </table>
 
         <div style="text-align:right;margin-bottom:35px;font-size:13px;padding-right:5px">
-            <div style="border-top:1px solid #444;width:190px;display:inline-block;text-align:center;padding-top:5px;font-weight:500">Signature of Guardian</div>
+            <div style="width:220px;display:inline-block;text-align:center">
+                <div style="height:55px"></div>
+                <div style="border-top:2px solid #444;padding-top:6px;font-weight:bold">Signature of Guardian</div>
+            </div>
         </div>
 
         <div style="display:flex;justify-content:space-between;font-size:14px;margin-bottom:35px">
@@ -440,10 +443,10 @@ $acad_records = adm_get_academic_records($id);
         </div>
 
         <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:35px">
-            <tr>
+            <tr style="height:80px">
                 <td style="width:40%;vertical-align:bottom"><span style="font-weight:500">Date :</span> <div style="display:inline-block;width:70%;border-bottom:1px solid #2b327a;height:15px"></div></td>
                 <td></td>
-                <td style="width:38%;text-align:center;vertical-align:bottom"><div style="border-top:1px solid #444;padding-top:5px;width:100%;font-weight:500">Signature of the Student</div></td>
+                <td style="width:38%;text-align:center;vertical-align:bottom"><div style="border-top:1px solid #444;padding-top:6px;width:100%;font-weight:bold">Signature of the Student</div></td>
             </tr>
         </table>
 
@@ -467,15 +470,21 @@ $acad_records = adm_get_academic_records($id);
                     <td style="padding-left:30px;font-weight:500">Decision :</td>
                     <td style="border-bottom:1px solid #cbd0f5"><?= h($app['office_decision'] ?? '') ?></td>
                 </tr>
-                <tr style="height:60px">
+                <tr style="height:95px">
                     <td style="vertical-align:bottom;padding-bottom:5px;font-weight:500">Checked By :</td>
                     <td style="border-bottom:1px solid #cbd0f5;vertical-align:bottom;width:35%"><?= h($app['office_checked_by'] ?? '') ?></td>
-                    <td colspan="2" style="vertical-align:bottom;text-align:right;padding-bottom:5px"><div style="border-top:1px solid #2b327a;width:240px;display:inline-block;text-align:center;padding-top:6px;font-weight:500;color:#2b327a">Signature of the admission authority</div></td>
+                    <td colspan="2" style="vertical-align:bottom;text-align:right;padding-bottom:5px"><div style="border-top:2px solid #2b327a;width:260px;display:inline-block;text-align:center;padding-top:6px;font-weight:bold;color:#2b327a">Signature of the admission authority</div></td>
                 </tr>
             </table>
-            <div style="display:flex;justify-content:space-between;margin-top:30px;font-family:'Times New Roman',Times,serif;font-size:18px;font-weight:bold;color:#2b327a;padding:0 40px">
-                <span style="border-top:1px dashed #cbd0f5;width:80px;text-align:center;padding-top:5px">Head</span>
-                <span style="border-top:1px dashed #cbd0f5;width:80px;text-align:center;padding-top:5px">Dean</span>
+            <div style="display:flex;justify-content:space-between;margin-top:30px;font-family:'Times New Roman',Times,serif;font-size:15px;font-weight:bold;color:#2b327a;padding:0 20px">
+                <div style="text-align:center">
+                    <div style="height:50px"></div>
+                    <div style="border-top:1px solid #2b327a;width:130px;text-align:center;padding-top:5px">Head</div>
+                </div>
+                <div style="text-align:center">
+                    <div style="height:50px"></div>
+                    <div style="border-top:1px solid #2b327a;width:130px;text-align:center;padding-top:5px">Dean</div>
+                </div>
             </div>
         </div>
         <div style="text-align:right;font-size:11px;color:#555;margin-top:12px;font-weight:bold">Page 2 of 4</div>
@@ -566,7 +575,7 @@ $acad_records = adm_get_academic_records($id);
         </ol>
 
         <div style="margin-top:60px;display:flex;justify-content:space-between;font-size:14px">
-            <div style="width:250px;border-top:1px solid #444;text-align:center;padding-top:6px;font-weight:bold;margin-top:40px">
+            <div style="width:250px;border-top:2px solid #444;text-align:center;padding-top:6px;font-weight:bold;margin-top:60px">
                 Signature of the Student
             </div>
             <div style="text-align:right;font-size:11px;color:#555;align-self:flex-end;font-weight:bold">Page 4 of 4</div>
