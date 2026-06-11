@@ -11,23 +11,20 @@ if (strlen($q) < 2) { echo '[]'; exit; }
 
 $like = "%$q%";
 
-// Search active students directly, so that students created via manual entry,
-// bulk upload, or CSV import are found even if they have no admissions_applications
-// record. A correlated subquery fetches the most-recent app_number for display
-// purposes only (does not filter results). App-number search is still supported
-// via an EXISTS subquery.
+// Search all students regardless of status or admission application record.
+// A correlated subquery fetches the most-recent app_number for display purposes
+// only (does not filter results). App-number search is still supported via an
+// EXISTS subquery.
 $stmt = db()->prepare(
     'SELECT DISTINCT
-            s.id, s.student_id, s.full_name,
+            s.id, s.student_id, s.full_name, s.status,
             (SELECT a2.app_number
                FROM admissions_applications a2
               WHERE TRIM(a2.student_name) = TRIM(s.full_name)
-                AND a2.status IN (\'ready_for_admission\', \'admission_complete\')
               ORDER BY a2.id DESC
               LIMIT 1) AS app_number
      FROM students s
-     WHERE s.status = \'Active\'
-       AND (
+     WHERE (
            s.student_id LIKE ?
            OR s.full_name LIKE ?
            OR EXISTS (
