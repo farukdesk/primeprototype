@@ -439,7 +439,8 @@ searchInput.addEventListener('input', function () {
                     suggestions.appendChild(a);
                 });
                 suggestions.style.display = 'block';
-            });
+            })
+            .catch(function() { suggestions.style.display = 'none'; });
     }, 300);
 });
 
