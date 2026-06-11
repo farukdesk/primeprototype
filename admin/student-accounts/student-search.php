@@ -11,14 +11,33 @@ if (strlen($q) < 2) { echo '[]'; exit; }
 
 $like = "%$q%";
 
-// Search students who have a ready_for_admission application.
-// Match by form number (app_number), applicant name, or student ID.
+// Search enrolled students who have a ready_for_admission or admission_complete
+// application. Students are only created in the students table after the
+// admission_complete transition, so both statuses must be included for
+// form-number search to work.
+//
+// The admissions_applications table has no FK to students; the only link is
+// the student name (full_name = student_name), because acc_create_student_from_applicant
+// populates students.full_name directly from admissions_applications.student_name.
+// TRIM() guards against accidental leading/trailing whitespace differences.
+//
+// The most-recent app_number per student is resolved via a correlated subquery
+// (ORDER BY id DESC) to avoid arbitrary GROUP BY / MAX behaviour when a student
+// has more than one application.
 $stmt = db()->prepare(
-    'SELECT s.id, s.student_id, s.full_name, a.app_number
+    'SELECT DISTINCT
+            s.id, s.student_id, s.full_name,
+            (SELECT a2.app_number
+               FROM admissions_applications a2
+              WHERE TRIM(a2.student_name) = TRIM(s.full_name)
+                AND a2.status IN (\'ready_for_admission\', \'admission_complete\')
+              ORDER BY a2.id DESC
+              LIMIT 1) AS app_number
      FROM admissions_applications a
-     INNER JOIN students s ON s.full_name = a.student_name
+     INNER JOIN students s
+             ON TRIM(s.full_name) = TRIM(a.student_name)
      WHERE (a.app_number LIKE ? OR a.student_name LIKE ? OR s.student_id LIKE ?)
-       AND a.status = \'ready_for_admission\'
+       AND a.status IN (\'ready_for_admission\', \'admission_complete\')
        AND s.status = \'Active\'
      ORDER BY s.full_name
      LIMIT 15'
