@@ -217,46 +217,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $financial_form_id_fee = null;
 
     if ($student_name === '') $errors[] = 'Student name is required.';
-    if (!$financial_package_id) {
-        $errors[] = 'Please assign a financial package.';
-    } elseif (!isset($financial_programs_by_id[$financial_package_id])) {
-        $errors[] = 'Selected financial package is invalid.';
-    } else {
-        $pkg = $financial_programs_by_id[$financial_package_id];
-        $financial_package_name = $pkg['program_name'];
-        $financial_total_semesters = (int)$pkg['total_semesters'];
-        $financial_total_months = (int)$pkg['total_months'];
-        $financial_tuition_per_semester = (float)$pkg['tuition_per_semester'];
-        $financial_admission_fee = (float)$pkg['admission_fees'];
-        $financial_registration_fee_per_semester = (float)$pkg['reg_fee_per_semester'];
-        $financial_fixed_institutional_fees = (float)$pkg['fixed_institutional_fees'];
-        $financial_english_course_fee = (float)$pkg['english_course_fee'];
-        $financial_form_id_fee = (float)$pkg['form_id_fee'];
-    }
-
-    // Scholarship amount computation
-    if ($scholarship_label !== '' && $financial_tuition_per_semester !== null) {
-        $sc_total_sems   = max(1, (int)$financial_total_semesters);
-        $sc_fixed_sem    = round((float)$financial_fixed_institutional_fees / $sc_total_sems, 2);
-        $sc_english_sem  = round((float)$financial_english_course_fee       / $sc_total_sems, 2);
-        if ($sc_discount_type === 'percentage') {
-            if ($sc_discount_pct >= 0.0001 && $sc_discount_pct <= 100) {
-                $scholarship_amount  = round($financial_tuition_per_semester * $sc_discount_pct / 100, 2);
-                if ($sc_applies_fixed)   $scholarship_amount += round($sc_fixed_sem   * $sc_discount_pct / 100, 2);
-                if ($sc_applies_english) $scholarship_amount += round($sc_english_sem * $sc_discount_pct / 100, 2);
-                $scholarship_amount = round($scholarship_amount, 2);
-            } else {
-                $scholarship_label = '';
-            }
-        } else {
-            if ($sc_fixed_input >= 0.01) {
-                $scholarship_amount = round($sc_fixed_input, 2);
-                $sc_discount_pct    = 0.0;
-            } else {
-                $scholarship_label = '';
-            }
-        }
-    }
 
     // Form sale link
     $form_sale_id     = (int)($_POST['form_sale_id'] ?? 0) ?: null;
@@ -508,11 +468,6 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                     <span class="step-num">6</span>
                     <span class="step-label">Office</span>
                 </button>
-                <span class="adm-step-divider px-1">›</span>
-                <button type="button" class="adm-step-btn" data-step="7" id="admStep7">
-                    <span class="step-num">7</span>
-                    <span class="step-label">Scholarship</span>
-                </button>
             </div>
         </div>
     </div>
@@ -698,70 +653,6 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                                 <label class="form-check-label" for="sem_<?= $sem ?>"><?= $sem ?></label>
                             </div>
                             <?php endforeach; ?>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Financial Package -->
-        <div class="card border-0 shadow-sm mb-4">
-            <div class="adm-card-hdr d-flex align-items-center gap-2">
-                <span class="card-icon bg-success bg-opacity-10"><i class="fas fa-coins text-success"></i></span>
-                <span class="fw-semibold">Financial Package <span class="text-danger">*</span></span>
-            </div>
-            <div class="card-body">
-                <div class="row g-3 align-items-start">
-                    <div class="col-12 col-md-6">
-                        <label class="form-label fw-medium">Select Package</label>
-                        <select name="financial_package_id" id="financial_package_id" class="form-select" required>
-                            <option value="">— Select Financial Package —</option>
-                            <?php
-                            $current_fp_dtype = '';
-                            foreach ($financial_programs as $fp):
-                                if ($fp['degree_type_name'] !== $current_fp_dtype) {
-                                    if ($current_fp_dtype !== '') echo '</optgroup>';
-                                    echo '<optgroup label="' . h($fp['degree_type_name']) . '">';
-                                    $current_fp_dtype = $fp['degree_type_name'];
-                                }
-                            ?>
-                            <option value="<?= (int)$fp['id'] ?>" <?= (int)($_POST['financial_package_id'] ?? 0) === (int)$fp['id'] ? 'selected' : '' ?>>
-                                <?= h($fp['program_name']) ?>
-                            </option>
-                            <?php endforeach; if ($current_fp_dtype !== '') echo '</optgroup>'; ?>
-                        </select>
-                        <div class="form-text">Fee snapshot is saved with the application for statement generation.</div>
-                    </div>
-                    <div class="col-12 col-md-6" id="fp_preview_wrap" style="display:none">
-                        <label class="form-label fw-medium">Package Summary</label>
-                        <div class="adm-fp-summary">
-                            <div class="fw-semibold mb-2 small" id="financial_package_name_view"></div>
-                            <div class="row g-2">
-                                <div class="col-6">
-                                    <div class="adm-fp-stat">
-                                        <div class="label">Semesters</div>
-                                        <div class="value" id="financial_total_semesters_view"></div>
-                                    </div>
-                                </div>
-                                <div class="col-6">
-                                    <div class="adm-fp-stat">
-                                        <div class="label">Months</div>
-                                        <div class="value" id="financial_total_months_view"></div>
-                                    </div>
-                                </div>
-                                <div class="col-6">
-                                    <div class="adm-fp-stat">
-                                        <div class="label">Tuition / Semester</div>
-                                        <div class="value text-success" id="financial_tuition_per_semester_view"></div>
-                                    </div>
-                                </div>
-                                <div class="col-6">
-                                    <div class="adm-fp-stat">
-                                        <div class="label">Admission Fee</div>
-                                        <div class="value text-primary" id="financial_admission_fee_view"></div>
-                                    </div>
-                                </div>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -1391,128 +1282,13 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
 
     </div><!-- /Pane 6 -->
 
-    <!-- ════════════════════════════════════════════════════════════════════════
-         Pane 7 — Scholarship / Waiver
-    ════════════════════════════════════════════════════════════════════════════ -->
-    <div class="adm-tab-pane" id="admPane7">
-
-        <div class="card border-0 shadow-sm mb-4" style="border-left:4px solid #ffc107 !important">
-            <div class="adm-card-hdr d-flex align-items-center gap-2">
-                <span class="card-icon bg-warning bg-opacity-15"><i class="fas fa-graduation-cap text-warning"></i></span>
-                <span class="fw-semibold">Scholarship / Waiver</span>
-                <small class="text-muted fw-normal">— optional, shown as discount on first semester</small>
-            </div>
-            <div class="card-body">
-                <p class="text-muted small mb-3">
-                    Leave the label blank to skip scholarship. The scholarship will be shown as a discount on the first semester in the payment statement.
-                </p>
-
-                <div class="row g-3">
-                    <div class="col-12 col-md-6">
-                        <label class="form-label fw-semibold">Tuition Fee (First Semester)</label>
-                        <div class="input-group">
-                            <span class="input-group-text">BDT</span>
-                            <input type="text" id="sc-tuition-display" class="form-control bg-light" readonly value="">
-                        </div>
-                    </div>
-                </div>
-
-                <hr class="my-3">
-
-                <div class="row g-3">
-                    <div class="col-12">
-                        <label class="form-label fw-semibold">Scholarship Label</label>
-                        <input type="text" name="scholarship_label" id="sc-label" class="form-control"
-                               placeholder="e.g. Merit Scholarship, Freedom Fighter, Sports Award"
-                               value="<?= h($_POST['scholarship_label'] ?? '') ?>">
-                        <div class="form-text">Required only if you want to assign a scholarship/waiver.</div>
-                    </div>
-
-                    <div class="col-12">
-                        <label class="form-label fw-semibold">Scholarship Type</label>
-                        <div class="d-flex gap-4">
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="discount_type" value="percentage"
-                                       id="sc-type-pct"
-                                       <?= (($_POST['discount_type'] ?? 'percentage') === 'percentage') ? 'checked' : '' ?>>
-                                <label class="form-check-label" for="sc-type-pct">
-                                    <i class="fas fa-percent me-1 text-secondary"></i>Percentage
-                                </label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="discount_type" value="fixed"
-                                       id="sc-type-fixed"
-                                       <?= (($_POST['discount_type'] ?? '') === 'fixed') ? 'checked' : '' ?>>
-                                <label class="form-check-label" for="sc-type-fixed">
-                                    <i class="fas fa-money-bill-wave me-1 text-secondary"></i>Fixed Amount
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="col-12 col-md-4" id="sc-pct-wrap">
-                        <label class="form-label fw-semibold">Discount %</label>
-                        <div class="input-group">
-                            <input type="number" name="discount_pct" id="sc-pct"
-                                   class="form-control" step="0.0001" min="0.0001" max="100"
-                                   value="<?= h($_POST['discount_pct'] ?? '') ?>">
-                            <span class="input-group-text">%</span>
-                        </div>
-                    </div>
-
-                    <div class="col-12 col-md-4 d-none" id="sc-fixed-wrap">
-                        <label class="form-label fw-semibold">Fixed Scholarship Amount</label>
-                        <div class="input-group">
-                            <span class="input-group-text">BDT</span>
-                            <input type="number" name="scholarship_amount_fixed" id="sc-fixed-amount"
-                                   class="form-control" step="0.01" min="0.01" placeholder="e.g. 5000"
-                                   value="<?= h($_POST['scholarship_amount_fixed'] ?? '') ?>">
-                        </div>
-                    </div>
-
-                    <div class="col-12 col-md-4" id="sc-calc-wrap">
-                        <label class="form-label fw-semibold">Scholarship Amount (auto-calculated)</label>
-                        <div class="input-group">
-                            <input type="text" id="sc-calc-amount" class="form-control bg-light" readonly>
-                            <span class="input-group-text">BDT</span>
-                        </div>
-                    </div>
-
-                    <!-- Fee scope: only for percentage type -->
-                    <div class="col-12" id="sc-scope-wrap">
-                        <label class="form-label fw-semibold small">Also apply discount to:</label>
-                        <div class="d-flex gap-3">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" name="applies_to_fixed" value="1"
-                                       id="sc-applies-fixed"
-                                       <?= isset($_POST['applies_to_fixed']) ? 'checked' : '' ?>>
-                                <label class="form-check-label small" for="sc-applies-fixed">
-                                    Institutional &amp; Development Fees
-                                </label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" name="applies_to_english" value="1"
-                                       id="sc-applies-english"
-                                       <?= isset($_POST['applies_to_english']) ? 'checked' : '' ?>>
-                                <label class="form-check-label small" for="sc-applies-english">
-                                    English Language Fee
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-    </div><!-- /Pane 7 -->
-
     <!-- Step Navigation Footer -->
     <div class="card border-0 shadow-sm mb-5">
         <div class="card-body d-flex align-items-center justify-content-between flex-wrap gap-2 py-3">
             <button type="button" id="admPrevBtn" class="btn btn-outline-secondary" style="display:none">
                 <i class="fas fa-chevron-left me-1"></i>Previous
             </button>
-            <span id="admStepCounter" class="text-muted small order-last order-sm-0 w-100 w-sm-auto text-center text-sm-start">Step 1 of 7</span>
+            <span id="admStepCounter" class="text-muted small order-last order-sm-0 w-100 w-sm-auto text-center text-sm-start">Step 1 of 6</span>
             <div class="d-flex gap-2 ms-auto">
                 <button type="button" id="admNextBtn" class="btn btn-primary px-4">
                     Next <i class="fas fa-chevron-right ms-1"></i>
@@ -1544,43 +1320,6 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
 </form>
 
 <script>
-var financialPrograms = <?= json_encode($financial_programs_map, JSON_HEX_TAG) ?>;
-
-// Scholarship base values (updated when financial package changes)
-var scTuitionBase = 0, scFixedBase = 0, scEnglishBase = 0;
-
-function renderFinancialPackagePreview(packageId) {
-    var data = packageId && financialPrograms[packageId] ? financialPrograms[packageId] : null;
-    var wrap = document.getElementById('fp_preview_wrap');
-    if (wrap) wrap.style.display = data ? '' : 'none';
-    if (!data) {
-        scTuitionBase = 0; scFixedBase = 0; scEnglishBase = 0;
-        var td = document.getElementById('sc-tuition-display');
-        if (td) td.value = '';
-        scRecalcAmount();
-        return;
-    }
-    document.getElementById('financial_package_name_view').textContent = data.program_name;
-    document.getElementById('financial_total_semesters_view').textContent = data.total_semesters;
-    document.getElementById('financial_total_months_view').textContent = data.total_months;
-    document.getElementById('financial_tuition_per_semester_view').textContent = 'BDT ' + Number(data.tuition_per_semester).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
-    document.getElementById('financial_admission_fee_view').textContent = 'BDT ' + Number(data.admission_fees).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
-    // Update scholarship bases
-    var sems = Math.max(1, data.total_semesters);
-    scTuitionBase = Number(data.tuition_per_semester) || 0;
-    scFixedBase   = Math.round(Number(data.fixed_institutional_fees) / sems * 100) / 100;
-    scEnglishBase = Math.round(Number(data.english_course_fee)       / sems * 100) / 100;
-    var td = document.getElementById('sc-tuition-display');
-    if (td) td.value = Number(scTuitionBase).toLocaleString('en-BD', {minimumFractionDigits:2});
-    scRecalcAmount();
-}
-
-var financialPackageSel = document.getElementById('financial_package_id');
-if (financialPackageSel) {
-    financialPackageSel.addEventListener('change', function() { renderFinancialPackagePreview(this.value); });
-    renderFinancialPackagePreview(financialPackageSel.value);
-}
-
 // ── Department → Program ──────────────────────────────────────────────────────
 var deptPrograms = <?= json_encode($programs_by_dept, JSON_HEX_TAG) ?>;
 
@@ -2252,62 +1991,9 @@ document.querySelectorAll('.searchable-select-wrap').forEach(function(wrap) {
     }
 })();
 
-// ── Scholarship / Waiver ──────────────────────────────────────────────────────
-function scRecalcAmount() {
-    var typePct = document.getElementById('sc-type-pct');
-    if (!typePct || !typePct.checked) return;
-    var pct = parseFloat(document.getElementById('sc-pct').value) || 0;
-    var base = scTuitionBase;
-    if (document.getElementById('sc-applies-fixed').checked)   base += scFixedBase;
-    if (document.getElementById('sc-applies-english').checked) base += scEnglishBase;
-    var amt = Math.round(base * pct / 100 * 100) / 100;
-    var el = document.getElementById('sc-calc-amount');
-    if (el) el.value = amt.toLocaleString('en-BD', {minimumFractionDigits:2});
-}
-
-function scSwitchType(type) {
-    var pctWrap    = document.getElementById('sc-pct-wrap');
-    var fixedWrap  = document.getElementById('sc-fixed-wrap');
-    var scopeWrap  = document.getElementById('sc-scope-wrap');
-    var calcWrap   = document.getElementById('sc-calc-wrap');
-    var pctInput   = document.getElementById('sc-pct');
-    var fixedInput = document.getElementById('sc-fixed-amount');
-    if (!pctWrap) return;
-    if (type === 'fixed') {
-        pctWrap.classList.add('d-none');
-        fixedWrap.classList.remove('d-none');
-        scopeWrap.classList.add('d-none');
-        calcWrap.classList.add('d-none');
-        pctInput.value = '';
-    } else {
-        pctWrap.classList.remove('d-none');
-        fixedWrap.classList.add('d-none');
-        scopeWrap.classList.remove('d-none');
-        calcWrap.classList.remove('d-none');
-        fixedInput.value = '';
-    }
-    scRecalcAmount();
-}
-
-(function() {
-    var radios = document.querySelectorAll('input[name="discount_type"]');
-    radios.forEach(function(r) {
-        r.addEventListener('change', function() { scSwitchType(this.value); });
-    });
-    var pctEl = document.getElementById('sc-pct');
-    if (pctEl) pctEl.addEventListener('input', scRecalcAmount);
-    var afEl = document.getElementById('sc-applies-fixed');
-    if (afEl) afEl.addEventListener('change', scRecalcAmount);
-    var aeEl = document.getElementById('sc-applies-english');
-    if (aeEl) aeEl.addEventListener('change', scRecalcAmount);
-    // Set initial UI state from POST value
-    var checkedType = document.querySelector('input[name="discount_type"]:checked');
-    if (checkedType) scSwitchType(checkedType.value);
-})();
-
 // ── Step Wizard Navigation ────────────────────────────────────────────────────
 (function() {
-    var TOTAL   = 7;
+    var TOTAL   = 6;
     var current = 1;
     var panes   = [], stepBtns = [];
     for (var i = 1; i <= TOTAL; i++) {
