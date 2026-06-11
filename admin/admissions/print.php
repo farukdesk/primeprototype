@@ -334,19 +334,52 @@ $acad_records = adm_get_academic_records($id);
             </tbody>
         </table>
 
-        <div style="font-size:14px;margin-top:25px;margin-bottom:35px">
+        <div style="font-size:14px;margin-top:25px;margin-bottom:25px">
             <span style="color:#2b327a;font-weight:bold;margin-right:10px">Experience :</span>
             <div style="display:inline-block;width:85%;border-bottom:1px dotted #2b327a;color:#444;padding-left:5px"><?= h($app['experience'] ?? '') ?></div>
             <div style="border-bottom:1px dotted #2b327a;margin-top:20px;height:15px;width:100%"></div>
         </div>
 
-        <div style="text-align:center;font-size:12px;color:#777;font-style:italic;margin-top:50px;border-top:1px solid #eee;padding-top:10px">
+        <div class="avoid-break" style="border:2px solid #2b327a;background:#f7f8fc;border-radius:6px;padding:18px 25px;font-size:14px;box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact">
+            <h3 style="text-align:center;margin:0 auto 16px auto;font-size:16px;color:#2b327a;font-weight:bold;border-bottom:2px solid #2b327a;padding-bottom:4px;text-transform:uppercase">For Office Use Only</h3>
+            <table style="width:100%;border-collapse:collapse">
+                <tr style="height:38px">
+                    <td style="width:95px;font-weight:500">Program :</td>
+                    <td style="border-bottom:1px solid #cbd0f5"><?= h($app['program_name'] ?? '') ?></td>
+                    <td style="width:115px;font-weight:500;padding-left:30px">Student ID. No :</td>
+                    <td style="border-bottom:1px solid #cbd0f5"><?= h($app['assigned_student_id'] ?? '') ?></td>
+                </tr>
+                <tr style="height:38px">
+                    <td style="font-weight:500">Batch No. :</td>
+                    <td style="border-bottom:1px solid #cbd0f5"><?= h($app['office_dept_batch'] ?? '') ?></td>
+                    <td style="padding-left:30px;font-weight:500">Decision :</td>
+                    <td style="border-bottom:1px solid #cbd0f5"><?= h($app['office_decision'] ?? '') ?></td>
+                </tr>
+                <tr style="height:75px">
+                    <td style="vertical-align:bottom;padding-bottom:5px;font-weight:500">Checked By :</td>
+                    <td style="border-bottom:1px solid #cbd0f5;vertical-align:bottom;width:35%"><?= h($app['office_checked_by'] ?? '') ?></td>
+                    <td colspan="2" style="vertical-align:bottom;text-align:right;padding-bottom:5px"><div style="border-top:2px solid #2b327a;width:260px;display:inline-block;text-align:center;padding-top:6px;font-weight:bold;color:#2b327a">Signature of the admission authority</div></td>
+                </tr>
+            </table>
+            <div style="display:flex;justify-content:space-between;margin-top:20px;font-family:'Times New Roman',Times,serif;font-size:15px;font-weight:bold;color:#2b327a;padding:0 20px">
+                <div style="text-align:center">
+                    <div style="height:38px"></div>
+                    <div style="border-top:1px solid #2b327a;width:130px;text-align:center;padding-top:5px">Head</div>
+                </div>
+                <div style="text-align:center">
+                    <div style="height:38px"></div>
+                    <div style="border-top:1px solid #2b327a;width:130px;text-align:center;padding-top:5px">Dean</div>
+                </div>
+            </div>
+        </div>
+
+        <div style="text-align:center;font-size:12px;color:#777;font-style:italic;margin-top:25px;border-top:1px solid #eee;padding-top:10px">
             Please see the overleaf
         </div>
     </div>
 
-    <!-- Admission Form – Page 3 (guardian & office use) -->
-    <div class="page-start form-page" style="max-width:800px;margin:0 auto 40px auto;background:#fff;padding:40px 30px 30px 30px;border:1px solid #bdc3c7;box-sizing:border-box;box-shadow:0 4px 15px rgba(0,0,0,.05)">
+    <!-- Admission Form – Page 3 (guardian & undertaking) -->
+    <div class="page-start form-page" style="max-width:800px;margin:0 auto 40px auto;background:#fff;padding:30px;border:1px solid #bdc3c7;box-sizing:border-box;box-shadow:0 4px 15px rgba(0,0,0,.05)">
 
         <h2 style="color:#d32f2f;font-size:16px;margin:0 0 20px 0;border-bottom:2px solid #2b327a;padding-bottom:5px;text-transform:uppercase">Particulars of Guardian:</h2>
 
@@ -385,14 +418,14 @@ $acad_records = adm_get_academic_records($id);
             </tr>
         </table>
 
-        <div style="text-align:right;margin-bottom:35px;font-size:13px;padding-right:5px">
+        <div style="text-align:right;margin-bottom:10px;font-size:13px;padding-right:5px">
             <div style="width:220px;display:inline-block;text-align:center">
-                <div style="height:55px"></div>
+                <div style="height:25px"></div>
                 <div style="border-top:2px solid #444;padding-top:6px;font-weight:bold">Signature of Guardian</div>
             </div>
         </div>
 
-        <div style="display:flex;justify-content:space-between;font-size:14px;margin-bottom:35px">
+        <div style="display:flex;justify-content:space-between;font-size:14px;margin-bottom:10px">
             <div style="width:48%">
                 <h3 style="color:#2b327a;font-size:15px;margin:0 0 15px 0;border-bottom:2px solid #2b327a;padding-bottom:4px;font-weight:bold;text-transform:uppercase">Local Guardian :</h3>
                 <table style="width:100%;border-collapse:collapse">
@@ -436,7 +469,7 @@ $acad_records = adm_get_academic_records($id);
             </div>
         </div>
 
-        <div style="font-size:13.5px;margin-bottom:30px;background:#fffde6;padding:12px;border:1px dashed #ffcc00;border-radius:4px">
+        <div style="font-size:13.5px;margin-bottom:10px;background:#fffde6;padding:10px;border:1px dashed #ffcc00;border-radius:4px">
             <p style="margin:0 0 8px 0;font-weight:bold;color:#2b327a">* Have you ever been dismissed from any examination or expelled from any institution of learning?</p>
             <div>
                 <span style="border:1px solid #2b327a;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;margin-right:5px;vertical-align:middle;font-weight:bold;font-size:12px"><?= ($expelled === 'No') ? '✓' : '' ?></span>
@@ -449,7 +482,7 @@ $acad_records = adm_get_academic_records($id);
             </div>
         </div>
 
-        <div style="margin-bottom:55px">
+        <div style="margin-bottom:15px">
             <div style="text-align:center;margin-bottom:15px">
                 <span style="font-size:15px;font-weight:bold;color:#fff;background-color:#d32f2f;padding:4px 20px;border-radius:3px;text-transform:uppercase">Undertaking</span>
             </div>
@@ -458,56 +491,23 @@ $acad_records = adm_get_academic_records($id);
             </p>
         </div>
 
-        <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:35px">
-            <tr style="height:80px">
+        <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:10px">
+            <tr style="height:40px">
                 <td style="width:40%;vertical-align:bottom"><span style="font-weight:500">Date :</span> <div style="display:inline-block;width:70%;border-bottom:1px solid #2b327a;height:15px"></div></td>
                 <td></td>
                 <td style="width:38%;text-align:center;vertical-align:bottom"><div style="border-top:1px solid #444;padding-top:6px;width:100%;font-weight:bold">Signature of the Student</div></td>
             </tr>
         </table>
 
-        <div style="font-size:12.5px;line-height:1.6;margin-bottom:35px;background:#f0f1fa;padding:12px;border-left:4px solid #2b327a">
+        <div style="font-size:12.5px;line-height:1.6;margin-bottom:0;background:#f0f1fa;padding:10px;border-left:4px solid #2b327a">
             <span style="color:#d32f2f;font-weight:bold;display:block;margin-bottom:4px">Note :</span>
             <p style="margin:0;text-align:justify"><span style="color:#2b327a;font-weight:bold">* Please submit the following along with this Application Form :</span> a) Four copies of passport size photograph; b) Attested copies of certificates and mark sheets/ grade sheets, c) Testimonial/ Letter of recommendation from institution last attended and d) Birth Certificate or NID Photocopy.</p>
-        </div>
-
-        <div class="avoid-break" style="border:2px solid #2b327a;background:#f7f8fc;border-radius:6px;padding:22px 25px;font-size:14px;box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact">
-            <h3 style="text-align:center;margin:0 auto 22px auto;font-size:16px;color:#2b327a;font-weight:bold;border-bottom:2px solid #2b327a;padding-bottom:4px;text-transform:uppercase">For Office Use Only</h3>
-            <table style="width:100%;border-collapse:collapse">
-                <tr style="height:40px">
-                    <td style="width:95px;font-weight:500">Program :</td>
-                    <td style="border-bottom:1px solid #cbd0f5"><?= h($app['program_name'] ?? '') ?></td>
-                    <td style="width:115px;font-weight:500;padding-left:30px">Student ID. No :</td>
-                    <td style="border-bottom:1px solid #cbd0f5"><?= h($app['assigned_student_id'] ?? '') ?></td>
-                </tr>
-                <tr style="height:40px">
-                    <td style="font-weight:500">Batch No. :</td>
-                    <td style="border-bottom:1px solid #cbd0f5"><?= h($app['office_dept_batch'] ?? '') ?></td>
-                    <td style="padding-left:30px;font-weight:500">Decision :</td>
-                    <td style="border-bottom:1px solid #cbd0f5"><?= h($app['office_decision'] ?? '') ?></td>
-                </tr>
-                <tr style="height:95px">
-                    <td style="vertical-align:bottom;padding-bottom:5px;font-weight:500">Checked By :</td>
-                    <td style="border-bottom:1px solid #cbd0f5;vertical-align:bottom;width:35%"><?= h($app['office_checked_by'] ?? '') ?></td>
-                    <td colspan="2" style="vertical-align:bottom;text-align:right;padding-bottom:5px"><div style="border-top:2px solid #2b327a;width:260px;display:inline-block;text-align:center;padding-top:6px;font-weight:bold;color:#2b327a">Signature of the admission authority</div></td>
-                </tr>
-            </table>
-            <div style="display:flex;justify-content:space-between;margin-top:30px;font-family:'Times New Roman',Times,serif;font-size:15px;font-weight:bold;color:#2b327a;padding:0 20px">
-                <div style="text-align:center">
-                    <div style="height:50px"></div>
-                    <div style="border-top:1px solid #2b327a;width:130px;text-align:center;padding-top:5px">Head</div>
-                </div>
-                <div style="text-align:center">
-                    <div style="height:50px"></div>
-                    <div style="border-top:1px solid #2b327a;width:130px;text-align:center;padding-top:5px">Dean</div>
-                </div>
-            </div>
         </div>
     </div>
 
     <!-- Student Code of Conduct – Page 4 -->
-    <div class="page-start form-page" style="max-width:800px;margin:0 auto 40px auto;background:#fff;padding:40px 30px;border:1px solid #bdc3c7;box-sizing:border-box;box-shadow:0 4px 15px rgba(0,0,0,.05)">
-        <table style="width:100%;border-collapse:collapse;margin-bottom:15px">
+    <div class="page-start form-page" style="max-width:800px;margin:0 auto 40px auto;background:#fff;padding:30px;border:1px solid #bdc3c7;box-sizing:border-box;box-shadow:0 4px 15px rgba(0,0,0,.05)">
+        <table style="width:100%;border-collapse:collapse;margin-bottom:10px">
             <tr>
                 <td style="width:10%"><img src="<?= h($logo_uri) ?>" alt="Prime University" style="width:45px;height:50px;object-fit:contain"></td>
                 <td>
@@ -517,39 +517,37 @@ $acad_records = adm_get_academic_records($id);
             </tr>
         </table>
 
-        <div style="text-align:center;margin:25px 0 15px 0">
-            <h1 style="font-family:'Times New Roman',Times,serif;font-size:38px;color:#d32f2f;font-style:italic;margin:0;font-weight:normal">Student Code of Conduct</h1>
-            <div style="font-weight:bold;font-size:16px;margin-top:5px;border-top:1px solid #2b327a;border-bottom:1px solid #2b327a;padding:4px 0;display:inline-block">Rules &amp; Responsibilities for Students</div>
+        <div style="text-align:center;margin:12px 0 8px 0">
+            <h1 style="font-family:'Times New Roman',Times,serif;font-size:34px;color:#d32f2f;font-style:italic;margin:0;font-weight:normal">Student Code of Conduct</h1>
+            <div style="font-weight:bold;font-size:15px;margin-top:4px;border-top:1px solid #2b327a;border-bottom:1px solid #2b327a;padding:3px 0;display:inline-block">Rules &amp; Responsibilities for Students</div>
         </div>
 
-        <p style="font-size:12.5px;text-align:justify;color:#333;line-height:1.5;margin-bottom:15px">
+        <p style="font-size:12px;text-align:justify;color:#333;line-height:1.45;margin-bottom:8px">
             The Prime University Student Code of Conduct has been formulated with the goal of upholding standard mission of smooth disciplinary activities. It is the responsibility of the Prime University to prepare the "Students Code of Conduct" and make that available to all members to the University community so that in case of violations and subsequent convening of the "Disciplinary Committee" measures and procedures may be clear to all parties concerned. The violations of code of conduct shall invoke disciplinary process as prescribed in these rules. Sanction will be commensurate with the seriousness of the offence and may include suspension or extreme, expulsion from the university. Repeated offences justify increasingly severe sanction.
         </p>
 
-        <div style="background-color:#d32f2f;color:white;padding:6px 15px;font-weight:bold;font-size:14px;margin-bottom:15px;border-radius:2px">
+        <div style="background-color:#d32f2f;color:white;padding:5px 15px;font-weight:bold;font-size:14px;margin-bottom:8px;border-radius:2px">
             The following shall be considered as offences
         </div>
 
-        <ol style="font-size:12.5px;color:#222;padding-left:20px;line-height:1.7;margin:0">
-            <li style="margin-bottom:6px">Entering the University premise without Identity Cards.</li>
-            <li style="margin-bottom:6px">Smoking or taking liquors, drugs, etc. inside the University premises.</li>
-            <li style="margin-bottom:6px">Playing cards.</li>
-            <li style="margin-bottom:6px">Writing, drawing or painting on any university property.</li>
-            <li style="margin-bottom:6px">Putting on attire that is lewd, indecent, or obscene.</li>
-            <li style="margin-bottom:6px">Cheating in the Examinations.</li>
-            <li style="margin-bottom:6px">Disorderly conduct, including obstructive and disruptive behaviour that interferes with teaching, research, administration, or other university or university-authorized activity.</li>
-            <li style="margin-bottom:6px">Failure to comply with the directions of authorized university officials in the performance of their duties, including failure to identify oneself when requested to do so; failure to comply with the terms of a disciplinary sanction; or refusal to vacate a university facility when directed to do so.</li>
-            <li style="margin-bottom:6px">Unauthorized entry, use, or occupancy of university facilities.</li>
-            <li style="margin-bottom:6px">Interfering with an individual's personal safety, academic efforts, employment or participation in university-sponsored activities; injuring that person or damaging his or her property; or using "fighting words" that are spoken face-to-face as a personal insult.</li>
-            <li style="margin-bottom:6px">Intentionally obstructing or blocking access to university facilities, property, or programs.</li>
-            <li style="margin-bottom:6px">Engagement, solicitation, initiation, encouragement, abetment, organization, facilitation, or provocation of any sort of political activity inside and in the adjacent area of the university premises.</li>
-            <li style="margin-bottom:6px">Dishonest conduct including false accusation of misconduct, forgery, alteration, or misuse of any university document, record, or identification; and giving to a university official information known to be false.</li>
-            <li style="margin-bottom:6px">Assuming another person's identity or role through deception or without proper authorization.</li>
-            <li style="margin-bottom:6px">Knowingly initiating, transmitting, filing, or circulating a false report or warning concerning an impending bombing, fire, or other emergency or catastrophe.</li>
-            <li style="margin-bottom:6px">Unauthorized release or use of any university access codes for computer systems, duplicating systems, and other university equipment.</li>
+        <ol style="font-size:12px;color:#222;padding-left:20px;line-height:1.55;margin:0">
+            <li style="margin-bottom:3px">Entering the University premise without Identity Cards.</li>
+            <li style="margin-bottom:3px">Smoking or taking liquors, drugs, etc. inside the University premises.</li>
+            <li style="margin-bottom:3px">Playing cards.</li>
+            <li style="margin-bottom:3px">Writing, drawing or painting on any university property.</li>
+            <li style="margin-bottom:3px">Putting on attire that is lewd, indecent, or obscene.</li>
+            <li style="margin-bottom:3px">Cheating in the Examinations.</li>
+            <li style="margin-bottom:3px">Disorderly conduct, including obstructive and disruptive behaviour that interferes with teaching, research, administration, or other university or university-authorized activity.</li>
+            <li style="margin-bottom:3px">Failure to comply with the directions of authorized university officials in the performance of their duties, including failure to identify oneself when requested to do so; failure to comply with the terms of a disciplinary sanction; or refusal to vacate a university facility when directed to do so.</li>
+            <li style="margin-bottom:3px">Unauthorized entry, use, or occupancy of university facilities.</li>
+            <li style="margin-bottom:3px">Interfering with an individual's personal safety, academic efforts, employment or participation in university-sponsored activities; injuring that person or damaging his or her property; or using "fighting words" that are spoken face-to-face as a personal insult.</li>
+            <li style="margin-bottom:3px">Intentionally obstructing or blocking access to university facilities, property, or programs.</li>
+            <li style="margin-bottom:3px">Engagement, solicitation, initiation, encouragement, abetment, organization, facilitation, or provocation of any sort of political activity inside and in the adjacent area of the university premises.</li>
+            <li style="margin-bottom:3px">Dishonest conduct including false accusation of misconduct, forgery, alteration, or misuse of any university document, record, or identification; and giving to a university official information known to be false.</li>
+            <li style="margin-bottom:3px">Assuming another person's identity or role through deception or without proper authorization.</li>
+            <li style="margin-bottom:3px">Knowingly initiating, transmitting, filing, or circulating a false report or warning concerning an impending bombing, fire, or other emergency or catastrophe.</li>
+            <li style="margin-bottom:3px">Unauthorized release or use of any university access codes for computer systems, duplicating systems, and other university equipment.</li>
         </ol>
-
-        <div style="text-align:right;font-size:11px;color:#555;margin-top:30px"></div>
     </div>
 
     <!-- Student Code of Conduct – Page 5 -->
