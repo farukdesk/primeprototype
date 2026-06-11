@@ -185,7 +185,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <input type="text" id="student-search-input" class="form-control"
                            placeholder="Type name, student ID, or form number…"
                            value="<?= h(old('student_search', '')) ?>">
-                    <div class="form-text">Only students with a <strong>Ready for Admission</strong> application are shown.</div>
+                    <div class="form-text">Only enrolled students (with a <strong>Ready for Admission</strong> or <strong>Admission Complete</strong> application) are shown.</div>
                     <div id="student-suggestions"
                          class="list-group mt-1 position-absolute z-3"
                          style="max-width:420px;display:none;"></div>
