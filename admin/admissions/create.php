@@ -105,24 +105,6 @@ foreach (db()->query(
     $programs_by_dept[(int)$p['dept_id']][] = $p;
 }
 
-$financial_programs = adm_get_financial_programs();
-$financial_programs_by_id = [];
-$financial_programs_map = [];
-foreach ($financial_programs as $fp) {
-    $financial_programs_by_id[(int)$fp['id']] = $fp;
-    $financial_programs_map[(int)$fp['id']] = [
-        'program_name'             => $fp['program_name'],
-        'total_semesters'          => (int)$fp['total_semesters'],
-        'total_months'             => (int)$fp['total_months'],
-        'tuition_per_semester'     => (float)$fp['tuition_per_semester'],
-        'admission_fees'           => (float)$fp['admission_fees'],
-        'reg_fee_per_semester'     => (float)$fp['reg_fee_per_semester'],
-        'fixed_institutional_fees' => (float)$fp['fixed_institutional_fees'],
-        'english_course_fee'       => (float)$fp['english_course_fee'],
-        'form_id_fee'              => (float)$fp['form_id_fee'],
-    ];
-}
-
 // ── Bangladesh districts & thanas ─────────────────────────────────────────────
 $bd_districts = adm_bd_districts();
 $bd_thanas    = adm_bd_thanas();
@@ -195,26 +177,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $office_shift            = trim($_POST['office_shift']            ?? '') ?: null;
     $office_decision         = trim($_POST['office_decision']         ?? '') ?: null;
     $office_checked_by       = trim($_POST['office_checked_by']       ?? '') ?: null;
-    $financial_package_id   = (int)($_POST['financial_package_id']  ?? 0) ?: null;
-
-    $scholarship_label      = trim($_POST['scholarship_label']     ?? '');
-    $sc_discount_type       = in_array($_POST['discount_type']     ?? '', ['percentage', 'fixed'], true)
-                              ? $_POST['discount_type'] : 'percentage';
-    $sc_discount_pct        = (float)($_POST['discount_pct']       ?? 0);
-    $sc_fixed_input         = (float)($_POST['scholarship_amount_fixed'] ?? 0);
-    $sc_applies_fixed       = isset($_POST['applies_to_fixed'])    ? 1 : 0;
-    $sc_applies_english     = isset($_POST['applies_to_english'])  ? 1 : 0;
-    $scholarship_amount     = 0.0;
-
-    $financial_package_name = null;
-    $financial_total_semesters = null;
-    $financial_total_months = null;
-    $financial_tuition_per_semester = null;
-    $financial_admission_fee = null;
-    $financial_registration_fee_per_semester = null;
-    $financial_fixed_institutional_fees = null;
-    $financial_english_course_fee = null;
-    $financial_form_id_fee = null;
 
     if ($student_name === '') $errors[] = 'Student name is required.';
 
@@ -283,10 +245,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $reference_name, $reference_address_1, $reference_address_2, $reference_address_3, $reference_contact,
             $expelled_answer, $expelled_detail,
             $office_university_batch, $office_dept_batch, $office_section, $office_shift, $office_decision, $office_checked_by,
-            $financial_package_id, $financial_package_name, $financial_total_semesters, $financial_total_months,
-            $financial_tuition_per_semester, $financial_admission_fee, $financial_registration_fee_per_semester,
-            $financial_fixed_institutional_fees, $financial_english_course_fee, $financial_form_id_fee,
-            $scholarship_label ?: null, $scholarship_amount, $sc_discount_type, $sc_discount_pct, $sc_applies_fixed, $sc_applies_english,
             $user['id'],
         ];
         $application_placeholders = implode(',', array_fill(0, count($application_values), '?'));
@@ -305,10 +263,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 reference_name, reference_address_1, reference_address_2, reference_address_3, reference_contact,
                  expelled_answer, expelled_detail,
                  office_university_batch, office_dept_batch, office_section, office_shift, office_decision, office_checked_by,
-                 financial_package_id, financial_package_name, financial_total_semesters, financial_total_months,
-                 financial_tuition_per_semester, financial_admission_fee, financial_registration_fee_per_semester,
-                 financial_fixed_institutional_fees, financial_english_course_fee, financial_form_id_fee,
-                 scholarship_label, scholarship_amount, scholarship_discount_type, scholarship_discount_pct, scholarship_applies_to_fixed, scholarship_applies_to_english,
                  created_by)
              VALUES (' . $application_placeholders . ')'
         )->execute($application_values);

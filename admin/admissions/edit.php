@@ -28,23 +28,6 @@ foreach (db()->query(
     $programs_by_dept[(int)$p['dept_id']][] = $p;
 }
 
-$financial_programs = adm_get_financial_programs();
-$financial_programs_by_id = [];
-$financial_programs_map = [];
-foreach ($financial_programs as $fp) {
-    $financial_programs_by_id[(int)$fp['id']] = $fp;
-    $financial_programs_map[(int)$fp['id']] = [
-        'program_name'             => $fp['program_name'],
-        'total_semesters'          => (int)$fp['total_semesters'],
-        'total_months'             => (int)$fp['total_months'],
-        'tuition_per_semester'     => (float)$fp['tuition_per_semester'],
-        'admission_fees'           => (float)$fp['admission_fees'],
-        'reg_fee_per_semester'     => (float)$fp['reg_fee_per_semester'],
-        'fixed_institutional_fees' => (float)$fp['fixed_institutional_fees'],
-        'english_course_fee'       => (float)$fp['english_course_fee'],
-        'form_id_fee'              => (float)$fp['form_id_fee'],
-    ];
-}
 
 // ── Bangladesh districts & thanas ─────────────────────────────────────────────
 $bd_districts = adm_bd_districts();
@@ -118,75 +101,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $office_shift            = trim($_POST['office_shift']            ?? '') ?: null;
     $office_decision         = trim($_POST['office_decision']         ?? '') ?: null;
     $office_checked_by       = trim($_POST['office_checked_by']       ?? '') ?: null;
-    $financial_package_id   = (int)($_POST['financial_package_id']  ?? 0) ?: null;
-
-    $scholarship_label      = trim($_POST['scholarship_label']     ?? '');
-    $sc_discount_type       = in_array($_POST['discount_type']     ?? '', ['percentage', 'fixed'], true)
-                              ? $_POST['discount_type'] : 'percentage';
-    $sc_discount_pct        = (float)($_POST['discount_pct']       ?? 0);
-    $sc_fixed_input         = (float)($_POST['scholarship_amount_fixed'] ?? 0);
-    $sc_applies_fixed       = isset($_POST['applies_to_fixed'])    ? 1 : 0;
-    $sc_applies_english     = isset($_POST['applies_to_english'])  ? 1 : 0;
-    $scholarship_amount     = 0.0;
-
-    $financial_package_name = null;
-    $financial_total_semesters = null;
-    $financial_total_months = null;
-    $financial_tuition_per_semester = null;
-    $financial_admission_fee = null;
-    $financial_registration_fee_per_semester = null;
-    $financial_fixed_institutional_fees = null;
-    $financial_english_course_fee = null;
-    $financial_form_id_fee = null;
 
     if ($student_name === '') $errors[] = 'Student name is required.';
-    if ($financial_package_id && !isset($financial_programs_by_id[$financial_package_id])) {
-        $errors[] = 'Selected financial package is invalid.';
-    } elseif ($financial_package_id) {
-        $pkg = $financial_programs_by_id[$financial_package_id];
-        $financial_package_name = $pkg['program_name'];
-        $financial_total_semesters = (int)$pkg['total_semesters'];
-        $financial_total_months = (int)$pkg['total_months'];
-        $financial_tuition_per_semester = (float)$pkg['tuition_per_semester'];
-        $financial_admission_fee = (float)$pkg['admission_fees'];
-        $financial_registration_fee_per_semester = (float)$pkg['reg_fee_per_semester'];
-        $financial_fixed_institutional_fees = (float)$pkg['fixed_institutional_fees'];
-        $financial_english_course_fee = (float)$pkg['english_course_fee'];
-        $financial_form_id_fee = (float)$pkg['form_id_fee'];
-    }
-
-    // Scholarship amount computation
-    if ($scholarship_label !== '') {
-        $sc_tuition_sem  = $financial_tuition_per_semester !== null
-                           ? $financial_tuition_per_semester
-                           : (float)($app['financial_tuition_per_semester'] ?? 0);
-        $sc_total_sems   = max(1, (int)($financial_total_semesters ?? $app['financial_total_semesters'] ?? 1));
-        $sc_fixed_total  = $financial_fixed_institutional_fees !== null
-                           ? $financial_fixed_institutional_fees
-                           : (float)($app['financial_fixed_institutional_fees'] ?? 0);
-        $sc_english_total = $financial_english_course_fee !== null
-                           ? $financial_english_course_fee
-                           : (float)($app['financial_english_course_fee'] ?? 0);
-        $sc_fixed_sem    = round($sc_fixed_total  / $sc_total_sems, 2);
-        $sc_english_sem  = round($sc_english_total / $sc_total_sems, 2);
-        if ($sc_discount_type === 'percentage') {
-            if ($sc_discount_pct >= 0.0001 && $sc_discount_pct <= 100) {
-                $scholarship_amount  = round($sc_tuition_sem * $sc_discount_pct / 100, 2);
-                if ($sc_applies_fixed)   $scholarship_amount += round($sc_fixed_sem   * $sc_discount_pct / 100, 2);
-                if ($sc_applies_english) $scholarship_amount += round($sc_english_sem * $sc_discount_pct / 100, 2);
-                $scholarship_amount = round($scholarship_amount, 2);
-            } else {
-                $scholarship_label = '';
-            }
-        } else {
-            if ($sc_fixed_input >= 0.01) {
-                $scholarship_amount = round($sc_fixed_input, 2);
-                $sc_discount_pct    = 0.0;
-            } else {
-                $scholarship_label = '';
-            }
-        }
-    }
 
     // Academic records
     $acad_rows = [];
@@ -241,12 +157,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 local_guardian_name=?, local_guardian_address_1=?, local_guardian_address_2=?, local_guardian_address_3=?, local_guardian_contact=?,
                 reference_name=?, reference_address_1=?, reference_address_2=?, reference_address_3=?, reference_contact=?,
                 expelled_answer=?, expelled_detail=?,
-                office_university_batch=?, office_dept_batch=?, office_section=?, office_shift=?, office_decision=?, office_checked_by=?,
-                financial_package_id=?, financial_package_name=?, financial_total_semesters=?, financial_total_months=?,
-                financial_tuition_per_semester=?, financial_admission_fee=?, financial_registration_fee_per_semester=?,
-                financial_fixed_institutional_fees=?, financial_english_course_fee=?, financial_form_id_fee=?,
-                scholarship_label=?, scholarship_amount=?, scholarship_discount_type=?, scholarship_discount_pct=?,
-                scholarship_applies_to_fixed=?, scholarship_applies_to_english=?
+                office_university_batch=?, office_dept_batch=?, office_section=?, office_shift=?, office_decision=?, office_checked_by=?
              WHERE id=?'
         )->execute([
             $status, $dept_id, $program_id, $year, $semester,
@@ -261,10 +172,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $reference_name, $reference_address_1, $reference_address_2, $reference_address_3, $reference_contact,
             $expelled_answer, $expelled_detail,
             $office_university_batch, $office_dept_batch, $office_section, $office_shift, $office_decision, $office_checked_by,
-            $financial_package_id, $financial_package_name, $financial_total_semesters, $financial_total_months,
-            $financial_tuition_per_semester, $financial_admission_fee, $financial_registration_fee_per_semester,
-            $financial_fixed_institutional_fees, $financial_english_course_fee, $financial_form_id_fee,
-            $scholarship_label ?: null, $scholarship_amount, $sc_discount_type, $sc_discount_pct, $sc_applies_fixed, $sc_applies_english,
             $id,
         ]);
 
@@ -303,18 +210,6 @@ $v = function(string $key) use ($app): string {
 
 // Parse saved semesters
 $saved_semesters = array_map('trim', explode(',', $app['semester'] ?? ''));
-
-// Scholarship pre-fill: normalise between DB keys and POST keys
-$sc_pre_label      = (string)($app['scholarship_label']             ?? '');
-$sc_pre_type       = (string)($app['discount_type']                 ?? $app['scholarship_discount_type']   ?? 'percentage');
-$sc_pre_pct        = (string)($app['discount_pct']                  ?? $app['scholarship_discount_pct']    ?? '');
-$sc_pre_fixed_amt  = (string)($app['scholarship_amount_fixed']      ?? '');
-$sc_pre_applies_fixed   = isset($app['applies_to_fixed'])
-                          ? (bool)$app['applies_to_fixed']
-                          : (bool)($app['scholarship_applies_to_fixed'] ?? 0);
-$sc_pre_applies_english = isset($app['applies_to_english'])
-                          ? (bool)$app['applies_to_english']
-                          : (bool)($app['scholarship_applies_to_english'] ?? 0);
 
 require_once __DIR__ . '/../includes/header.php';
 echo '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.min.css">';
@@ -401,163 +296,6 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                                     <label class="form-check-label" for="sem_<?= $sem ?>"><?= $sem ?></label>
                                 </div>
                                 <?php endforeach; ?>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Section 1.5: Financial Package -->
-            <div class="card border-0 shadow-sm mb-4">
-                <div class="card-header bg-white fw-semibold"><i class="fas fa-coins me-2 text-success"></i>Financial Package</div>
-                <div class="card-body">
-                    <div class="row g-3">
-                        <div class="col-12 col-md-8">
-                            <label class="form-label">Assign Financial Package</label>
-                            <select name="financial_package_id" id="financial_package_id" class="form-select">
-                                <option value="">— Select Financial Package —</option>
-                                <?php
-                                $current_fp_dtype = '';
-                                foreach ($financial_programs as $fp):
-                                    if ($fp['degree_type_name'] !== $current_fp_dtype) {
-                                        if ($current_fp_dtype !== '') echo '</optgroup>';
-                                        echo '<optgroup label="' . h($fp['degree_type_name']) . '">';
-                                        $current_fp_dtype = $fp['degree_type_name'];
-                                    }
-                                ?>
-                                <option value="<?= (int)$fp['id'] ?>" <?= (int)($app['financial_package_id'] ?? 0) === (int)$fp['id'] ? 'selected' : '' ?>>
-                                    <?= h($fp['program_name']) ?>
-                                </option>
-                                <?php endforeach; if ($current_fp_dtype !== '') echo '</optgroup>'; ?>
-                            </select>
-                            <div class="form-text">Financial package is snapshotted on save and used in statement generation.</div>
-                        </div>
-                        <div class="col-12 col-md-4">
-                            <label class="form-label">Package Name</label>
-                            <input type="text" id="financial_package_name_view" class="form-control bg-light" readonly
-                                   value="<?= h($app['financial_package_name'] ?? '') ?>">
-                        </div>
-                        <div class="col-6 col-md-3">
-                            <label class="form-label">Semesters</label>
-                            <input type="text" id="financial_total_semesters_view" class="form-control bg-light" readonly
-                                   value="<?= h($app['financial_total_semesters'] ?? '') ?>">
-                        </div>
-                        <div class="col-6 col-md-3">
-                            <label class="form-label">Months</label>
-                            <input type="text" id="financial_total_months_view" class="form-control bg-light" readonly
-                                   value="<?= h($app['financial_total_months'] ?? '') ?>">
-                        </div>
-                        <div class="col-6 col-md-3">
-                            <label class="form-label">Tuition / Semester</label>
-                            <input type="text" id="financial_tuition_per_semester_view" class="form-control bg-light" readonly
-                                   value="<?= h($app['financial_tuition_per_semester'] ?? '') ?>">
-                        </div>
-                        <div class="col-6 col-md-3">
-                            <label class="form-label">Admission Fee</label>
-                            <input type="text" id="financial_admission_fee_view" class="form-control bg-light" readonly
-                                   value="<?= h($app['financial_admission_fee'] ?? '') ?>">
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Section 1.7: Scholarship / Waiver -->
-            <div class="card border-0 shadow-sm mb-4" style="border-left:4px solid #ffc107 !important">
-                <div class="card-header bg-white fw-semibold"><i class="fas fa-graduation-cap me-2 text-warning"></i>Scholarship / Waiver</div>
-                <div class="card-body">
-                    <p class="text-muted small mb-3">
-                        Leave the label blank to remove/skip scholarship. Discount is applied to the first semester in the payment statement.
-                    </p>
-                    <div class="row g-3">
-                        <div class="col-12 col-md-6">
-                            <label class="form-label fw-semibold">Tuition Fee (First Semester)</label>
-                            <div class="input-group">
-                                <span class="input-group-text">BDT</span>
-                                <input type="text" id="sc-tuition-display" class="form-control bg-light" readonly
-                                       value="<?= h(number_format((float)($app['financial_tuition_per_semester'] ?? 0), 2)) ?>">
-                            </div>
-                        </div>
-                    </div>
-                    <hr class="my-3">
-                    <div class="row g-3">
-                        <div class="col-12">
-                            <label class="form-label fw-semibold">Scholarship Label</label>
-                            <input type="text" name="scholarship_label" id="sc-label" class="form-control"
-                                   placeholder="e.g. Merit Scholarship, Freedom Fighter, Sports Award"
-                                   value="<?= h($sc_pre_label) ?>">
-                            <div class="form-text">Required only if you want to assign a scholarship/waiver.</div>
-                        </div>
-
-                        <div class="col-12">
-                            <label class="form-label fw-semibold">Scholarship Type</label>
-                            <div class="d-flex gap-4">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="discount_type" value="percentage"
-                                           id="sc-type-pct"
-                                           <?= ($sc_pre_type === 'percentage') ? 'checked' : '' ?>>
-                                    <label class="form-check-label" for="sc-type-pct">
-                                        <i class="fas fa-percent me-1 text-secondary"></i>Percentage
-                                    </label>
-                                </div>
-                                <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="discount_type" value="fixed"
-                                           id="sc-type-fixed"
-                                           <?= ($sc_pre_type === 'fixed') ? 'checked' : '' ?>>
-                                    <label class="form-check-label" for="sc-type-fixed">
-                                        <i class="fas fa-money-bill-wave me-1 text-secondary"></i>Fixed Amount
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="col-12 col-md-4" id="sc-pct-wrap">
-                            <label class="form-label fw-semibold">Discount %</label>
-                            <div class="input-group">
-                                <input type="number" name="discount_pct" id="sc-pct"
-                                       class="form-control" step="0.0001" min="0.0001" max="100"
-                                       value="<?= h($sc_pre_pct) ?>">
-                                <span class="input-group-text">%</span>
-                            </div>
-                        </div>
-
-                        <div class="col-12 col-md-4 d-none" id="sc-fixed-wrap">
-                            <label class="form-label fw-semibold">Fixed Scholarship Amount</label>
-                            <div class="input-group">
-                                <span class="input-group-text">BDT</span>
-                                <input type="number" name="scholarship_amount_fixed" id="sc-fixed-amount"
-                                       class="form-control" step="0.01" min="0.01" placeholder="e.g. 5000"
-                                       value="<?= h($sc_pre_fixed_amt) ?>">
-                            </div>
-                        </div>
-
-                        <div class="col-12 col-md-4" id="sc-calc-wrap">
-                            <label class="form-label fw-semibold">Scholarship Amount (auto-calculated)</label>
-                            <div class="input-group">
-                                <input type="text" id="sc-calc-amount" class="form-control bg-light" readonly>
-                                <span class="input-group-text">BDT</span>
-                            </div>
-                        </div>
-
-                        <!-- Fee scope: only for percentage type -->
-                        <div class="col-12" id="sc-scope-wrap">
-                            <label class="form-label fw-semibold small">Also apply discount to:</label>
-                            <div class="d-flex gap-3">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" name="applies_to_fixed" value="1"
-                                           id="sc-applies-fixed"
-                                           <?= $sc_pre_applies_fixed ? 'checked' : '' ?>>
-                                    <label class="form-check-label small" for="sc-applies-fixed">
-                                        Institutional &amp; Development Fees
-                                    </label>
-                                </div>
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" name="applies_to_english" value="1"
-                                           id="sc-applies-english"
-                                           <?= $sc_pre_applies_english ? 'checked' : '' ?>>
-                                    <label class="form-check-label small" for="sc-applies-english">
-                                        English Language Fee
-                                    </label>
-                                </div>
                             </div>
                         </div>
                     </div>
@@ -905,43 +643,6 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
 </form>
 
 <script>
-var financialPrograms = <?= json_encode($financial_programs_map, JSON_HEX_TAG) ?>;
-
-// Scholarship base values (updated when financial package changes)
-var scTuitionBase = <?= json_encode((float)($app['financial_tuition_per_semester'] ?? 0)) ?>;
-var scTotalSems   = <?= json_encode(max(1, (int)($app['financial_total_semesters'] ?? 1))) ?>;
-var scFixedBase   = Math.round(<?= json_encode((float)($app['financial_fixed_institutional_fees'] ?? 0)) ?> / scTotalSems * 100) / 100;
-var scEnglishBase = Math.round(<?= json_encode((float)($app['financial_english_course_fee'] ?? 0)) ?>       / scTotalSems * 100) / 100;
-
-function renderFinancialPackagePreview(packageId) {
-    var data = packageId && financialPrograms[packageId] ? financialPrograms[packageId] : null;
-    document.getElementById('financial_package_name_view').value = data ? data.program_name : '';
-    document.getElementById('financial_total_semesters_view').value = data ? data.total_semesters : '';
-    document.getElementById('financial_total_months_view').value = data ? data.total_months : '';
-    document.getElementById('financial_tuition_per_semester_view').value = data ? Number(data.tuition_per_semester).toFixed(2) : '';
-    document.getElementById('financial_admission_fee_view').value = data ? Number(data.admission_fees).toFixed(2) : '';
-    // Update scholarship bases
-    if (data) {
-        var sems = Math.max(1, data.total_semesters);
-        scTuitionBase = Number(data.tuition_per_semester) || 0;
-        scFixedBase   = Math.round(Number(data.fixed_institutional_fees) / sems * 100) / 100;
-        scEnglishBase = Math.round(Number(data.english_course_fee)       / sems * 100) / 100;
-    } else {
-        scTuitionBase = 0; scFixedBase = 0; scEnglishBase = 0;
-    }
-    var td = document.getElementById('sc-tuition-display');
-    if (td) td.value = Number(scTuitionBase).toFixed(2);
-    scRecalcAmount();
-}
-
-var financialPackageSel = document.getElementById('financial_package_id');
-if (financialPackageSel) {
-    financialPackageSel.addEventListener('change', function() {
-        renderFinancialPackagePreview(this.value);
-    });
-    renderFinancialPackagePreview(financialPackageSel.value);
-}
-
 var deptPrograms = <?= json_encode($programs_by_dept, JSON_HEX_TAG) ?>;
 
 document.getElementById('dept_id').addEventListener('change', function() {
@@ -1315,61 +1016,6 @@ document.querySelectorAll('.searchable-select-wrap').forEach(function(wrap) {
 
         if (wrap) wrap.style.opacity = isSame ? '0.6' : '';
     });
-})();
-
-// ── Scholarship / Waiver ──────────────────────────────────────────────────────
-function scRecalcAmount() {
-    var typePct = document.getElementById('sc-type-pct');
-    if (!typePct || !typePct.checked) return;
-    var pct = parseFloat(document.getElementById('sc-pct').value) || 0;
-    var base = scTuitionBase;
-    if (document.getElementById('sc-applies-fixed').checked)   base += scFixedBase;
-    if (document.getElementById('sc-applies-english').checked) base += scEnglishBase;
-    var amt = Math.round(base * pct / 100 * 100) / 100;
-    var el = document.getElementById('sc-calc-amount');
-    if (el) el.value = amt.toLocaleString('en-BD', {minimumFractionDigits:2});
-}
-
-function scSwitchType(type) {
-    var pctWrap    = document.getElementById('sc-pct-wrap');
-    var fixedWrap  = document.getElementById('sc-fixed-wrap');
-    var scopeWrap  = document.getElementById('sc-scope-wrap');
-    var calcWrap   = document.getElementById('sc-calc-wrap');
-    var pctInput   = document.getElementById('sc-pct');
-    var fixedInput = document.getElementById('sc-fixed-amount');
-    if (!pctWrap) return;
-    if (type === 'fixed') {
-        pctWrap.classList.add('d-none');
-        fixedWrap.classList.remove('d-none');
-        scopeWrap.classList.add('d-none');
-        calcWrap.classList.add('d-none');
-        pctInput.value = '';
-    } else {
-        pctWrap.classList.remove('d-none');
-        fixedWrap.classList.add('d-none');
-        scopeWrap.classList.remove('d-none');
-        calcWrap.classList.remove('d-none');
-        fixedInput.value = '';
-    }
-    scRecalcAmount();
-}
-
-(function() {
-    var radios = document.querySelectorAll('input[name="discount_type"]');
-    radios.forEach(function(r) {
-        r.addEventListener('change', function() { scSwitchType(this.value); });
-    });
-    var pctEl = document.getElementById('sc-pct');
-    if (pctEl) pctEl.addEventListener('input', scRecalcAmount);
-    var afEl = document.getElementById('sc-applies-fixed');
-    if (afEl) afEl.addEventListener('change', scRecalcAmount);
-    var aeEl = document.getElementById('sc-applies-english');
-    if (aeEl) aeEl.addEventListener('change', scRecalcAmount);
-    // Set initial UI state
-    var checkedType = document.querySelector('input[name="discount_type"]:checked');
-    if (checkedType) scSwitchType(checkedType.value);
-    // Initial calc (for percentage pre-fill on edit)
-    scRecalcAmount();
 })();
 </script>
 
