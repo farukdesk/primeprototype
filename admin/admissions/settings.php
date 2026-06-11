@@ -493,11 +493,6 @@ require_once __DIR__ . '/../includes/header.php';
         </a>
     </li>
     <li class="nav-item">
-        <a class="nav-link <?= $active_tab === 'mapping' ? 'active' : '' ?>" href="?tab=mapping">
-            <i class="fas fa-map-marked-alt me-1"></i> Field Mapping
-        </a>
-    </li>
-    <li class="nav-item">
         <a class="nav-link <?= $active_tab === 'invoice_template' ? 'active' : '' ?>" href="?tab=invoice_template">
             <i class="fas fa-file-invoice me-1"></i> Invoice Template
         </a>
@@ -623,121 +618,6 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
     </div>
     <?php endforeach; ?>
-</div>
-
-<?php elseif ($active_tab === 'mapping'): ?>
-<!-- ══════════════════════════════════════════════════════════
-     Tab B: Field Mapping
-══════════════════════════════════════════════════════════ -->
-<ul class="nav nav-pills mb-3">
-    <li class="nav-item">
-        <a class="nav-link <?= $map_page === 1 ? 'active' : '' ?>" href="?tab=mapping&map_page=1">
-            Page 1 (Front)
-        </a>
-    </li>
-    <li class="nav-item">
-        <a class="nav-link <?= $map_page === 2 ? 'active' : '' ?>" href="?tab=mapping&map_page=2">
-            Page 2 (Back)
-        </a>
-    </li>
-</ul>
-
-<?php
-$cur_tpl = ($map_page === 1) ? $tpl1 : $tpl2;
-$cur_map = ($map_page === 1) ? $map1 : $map2;
-
-// Build a map of field_key → which page it's mapped to (for badge display)
-$all_mapped = [];
-foreach ($map1 as $key => $m) $all_mapped[$key] = 1;
-foreach ($map2 as $key => $m) $all_mapped[$key] = isset($all_mapped[$key]) ? 'both' : 2;
-?>
-
-<div class="row g-4">
-    <!-- Left: Image canvas -->
-    <div class="col-12 col-lg-8">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white fw-semibold d-flex justify-content-between align-items-center">
-                <span><i class="fas fa-map-marker-alt me-2 text-danger"></i>Page <?= $map_page ?> Template</span>
-                <div class="d-flex align-items-center gap-2">
-                    <label class="mb-0 small">Font Size:</label>
-                    <input type="number" id="fontSizeInput" class="form-control form-control-sm" value="10" min="6" max="24" style="width:65px">
-                </div>
-            </div>
-            <div class="card-body p-0">
-                <?php if ($cur_tpl && $cur_tpl['file_type'] !== 'pdf'): ?>
-                <div id="imgContainer" style="position:relative;display:inline-block;cursor:crosshair;width:100%">
-                    <img id="tplImage" src="<?= $tpl_base_url . h($cur_tpl['stored_file']) ?>"
-                         style="display:block;width:100%;height:auto;user-select:none" alt="Template">
-                    <!-- Existing mapped field labels will be injected by JS -->
-                </div>
-                <?php elseif ($cur_tpl && $cur_tpl['file_type'] === 'pdf'): ?>
-                <div class="p-4 text-center text-muted">
-                    <i class="fas fa-file-pdf fa-4x text-danger mb-3 d-block"></i>
-                    <p>This page uses a PDF template. Visual field placement on PDF is not supported.<br>
-                       You can still set X/Y coordinates manually using the fields on the right.</p>
-                </div>
-                <?php else: ?>
-                <div class="p-4 text-center text-muted">
-                    <i class="fas fa-image fa-4x mb-3 d-block"></i>
-                    <p>No template uploaded for this page.<br>
-                       <a href="?tab=templates">Upload a template first</a> to enable visual mapping.</p>
-                </div>
-                <?php endif; ?>
-            </div>
-            <?php if ($cur_tpl): ?>
-            <div class="card-footer bg-white">
-                <div id="statusMsg" class="text-muted small">
-                    <i class="fas fa-info-circle me-1"></i>
-                    Select a field from the right panel, then click on the image to place it.
-                </div>
-            </div>
-            <?php endif; ?>
-        </div>
-    </div>
-
-    <!-- Right: Field list -->
-    <div class="col-12 col-lg-4">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white fw-semibold">
-                <i class="fas fa-list me-2 text-primary"></i>Fields
-                <span class="badge bg-secondary ms-1 small" id="selectedFieldBadge" style="display:none"></span>
-            </div>
-            <div class="card-body p-0">
-                <div style="max-height:600px;overflow-y:auto">
-                    <?php foreach ($all_fields as $f):
-                        $fk = $f['field_key'];
-                        $is_mapped_here = isset($cur_map[$fk]);
-                        $mapped_page    = $all_mapped[$fk] ?? null;
-                    ?>
-                    <div class="field-item d-flex align-items-center justify-content-between px-3 py-2 border-bottom"
-                         data-field-key="<?= h($fk) ?>"
-                         data-field-label="<?= h($f['field_label']) ?>"
-                         style="cursor:pointer;transition:background .15s"
-                         onmouseover="this.style.background='#f8f9fa'"
-                         onmouseout="this.style.background=selectedField===this?'#e3f2fd':''">
-                        <div>
-                            <div class="small fw-semibold"><?= h($f['field_label']) ?></div>
-                            <div class="text-muted" style="font-size:10px"><?= h($fk) ?></div>
-                        </div>
-                        <div class="d-flex align-items-center gap-1">
-                            <?php if ($is_mapped_here): ?>
-                            <span class="badge bg-success" style="font-size:9px">P<?= $map_page ?></span>
-                            <button type="button" class="btn btn-xs btn-outline-danger remove-mapping-btn"
-                                    data-field-key="<?= h($fk) ?>" style="font-size:10px;padding:1px 5px" title="Remove mapping">
-                                <i class="fas fa-times"></i>
-                            </button>
-                            <?php elseif ($mapped_page): ?>
-                            <span class="badge bg-info" style="font-size:9px">P<?= $mapped_page ?></span>
-                            <?php else: ?>
-                            <span class="badge bg-light text-muted border" style="font-size:9px">—</span>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-                    <?php endforeach; ?>
-                </div>
-            </div>
-        </div>
-    </div>
 </div>
 
 <?php elseif ($active_tab === 'invoice_template'): ?>
@@ -1102,7 +982,7 @@ var mapPage   = <?= $map_page ?>;
 var tplBaseUrl = '<?= $tpl_base_url ?>';
 
 // ── Existing mappings ─────────────────────────────────────────────────────────
-var existingMappings = <?= json_encode(($active_tab === 'mapping') ? $cur_map : [], JSON_HEX_TAG) ?>;
+var existingMappings = [];
 
 // ── Field selection state ─────────────────────────────────────────────────────
 var selectedField  = null; // DOM element
