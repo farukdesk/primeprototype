@@ -73,7 +73,6 @@ $acad_records = adm_get_academic_records($id);
 
 <div class="screen-controls">
     <button onclick="window.print()">🖨 Print</button>
-    <a href="<?= APP_URL ?>/admissions/statement.php?id=<?= (int)$app['id'] ?>" target="_blank" style="background:#16a34a;">Statement</a>
     <a href="javascript:window.close()" class="back-btn">✕ Close</a>
     <span><?= h($app['app_number']) ?> — <?= h($app['student_name']) ?></span>
 </div>
@@ -277,9 +276,9 @@ $acad_records = adm_get_academic_records($id);
                 <td style="font-weight:500">Sex</td>
                 <td style="text-align:center;color:#2b327a">:</td>
                 <td colspan="4">
-                    <span style="border:1px solid #2b327a;width:12px;height:12px;display:inline-block;margin-right:5px;vertical-align:middle;background:<?= ($sex === 'Male') ? '#2b327a' : '#fff' ?>"></span> Male
+                    <span style="border:1px solid #2b327a;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;margin-right:5px;vertical-align:middle;font-weight:bold;font-size:12px"><?= ($sex === 'Male') ? '✓' : '' ?></span> Male
                     <span style="font-weight:bold;color:#2b327a;margin-left:25px;margin-right:25px;vertical-align:middle"><?= ($sex === 'Male') ? 'M' : ($sex === 'Female' ? 'F' : '') ?></span>
-                    <span style="border:1px solid #2b327a;width:12px;height:12px;display:inline-block;margin-right:5px;vertical-align:middle;background:<?= ($sex === 'Female') ? '#2b327a' : '#fff' ?>"></span> Female
+                    <span style="border:1px solid #2b327a;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;margin-right:5px;vertical-align:middle;font-weight:bold;font-size:12px"><?= ($sex === 'Female') ? '✓' : '' ?></span> Female
                 </td>
             </tr>
         </table>
@@ -325,7 +324,9 @@ $acad_records = adm_get_academic_records($id);
             <div style="border-bottom:1px dotted #2b327a;margin-top:20px;height:15px;width:100%"></div>
         </div>
 
-        <div style="text-align:center;font-size:12px;color:#777;font-style:italic;margin-top:50px;border-top:1px solid #eee;padding-top:10px">Please see the overleaf</div>
+        <div style="text-align:center;font-size:12px;color:#777;font-style:italic;margin-top:50px;border-top:1px solid #eee;padding-top:10px">
+            Please see the overleaf &nbsp;&nbsp;&nbsp; <strong>Page 1 of 4</strong>
+        </div>
     </div>
 
     <!-- Admission Form – Page 2 -->
@@ -419,9 +420,9 @@ $acad_records = adm_get_academic_records($id);
         <div style="font-size:13.5px;margin-bottom:30px;background:#fffde6;padding:12px;border:1px dashed #ffcc00;border-radius:4px">
             <p style="margin:0 0 8px 0;font-weight:bold;color:#2b327a">* Have you ever been dismissed from any examination or expelled from any institution of learning?</p>
             <div>
-                <span style="border:1px solid #2b327a;width:12px;height:12px;display:inline-block;margin-right:5px;vertical-align:middle;background:<?= ($expelled === 'No') ? '#2b327a' : '#fff' ?>"></span>
+                <span style="border:1px solid #2b327a;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;margin-right:5px;vertical-align:middle;font-weight:bold;font-size:12px"><?= ($expelled === 'No') ? '✓' : '' ?></span>
                 <span style="font-weight:bold;margin-right:25px;vertical-align:middle">NO</span>
-                <span style="border:1px solid #2b327a;width:12px;height:12px;display:inline-block;margin-right:5px;vertical-align:middle;background:<?= ($expelled === 'Yes') ? '#2b327a' : '#fff' ?>"></span>
+                <span style="border:1px solid #2b327a;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;margin-right:5px;vertical-align:middle;font-weight:bold;font-size:12px"><?= ($expelled === 'Yes') ? '✓' : '' ?></span>
                 <span style="font-weight:bold;vertical-align:middle">Yes</span>
                 <?php if ($expelled === 'Yes' && ($app['expelled_detail'] ?? '')): ?>
                 <span style="margin-left:10px;font-style:italic;color:#333"><?= h($app['expelled_detail']) ?></span>
@@ -477,6 +478,7 @@ $acad_records = adm_get_academic_records($id);
                 <span style="border-top:1px dashed #cbd0f5;width:80px;text-align:center;padding-top:5px">Dean</span>
             </div>
         </div>
+        <div style="text-align:right;font-size:11px;color:#555;margin-top:12px;font-weight:bold">Page 2 of 4</div>
     </div>
 
     <!-- Student Code of Conduct – Page 1 -->
@@ -523,7 +525,7 @@ $acad_records = adm_get_academic_records($id);
             <li style="margin-bottom:6px">Unauthorized release or use of any university access codes for computer systems, duplicating systems, and other university equipment.</li>
         </ol>
 
-        <div style="text-align:right;font-size:11px;color:#555;margin-top:30px;font-weight:bold">Page-01</div>
+        <div style="text-align:right;font-size:11px;color:#555;margin-top:30px;font-weight:bold">Page 3 of 4</div>
     </div>
 
     <!-- Student Code of Conduct – Page 2 -->
@@ -567,7 +569,7 @@ $acad_records = adm_get_academic_records($id);
             <div style="width:250px;border-top:1px solid #444;text-align:center;padding-top:6px;font-weight:bold;margin-top:40px">
                 Signature of the Student
             </div>
-            <div style="text-align:right;font-size:11px;color:#555;align-self:flex-end;font-weight:bold">Page-02</div>
+            <div style="text-align:right;font-size:11px;color:#555;align-self:flex-end;font-weight:bold">Page 4 of 4</div>
         </div>
     </div>
 
