@@ -141,6 +141,7 @@ $user       = auth_user();
             color: #333;
             cursor: pointer;
         }
+        #topbar .user-menu .dropdown-toggle::after { display: none; }
         #topbar .user-menu .avatar {
             width: 34px; height: 34px;
             border-radius: 50%;
