@@ -49,10 +49,13 @@ function sfp_get_package(int $id): array|false
                 s.student_id      AS student_sid,
                 s.admitted_semester,
                 s.status          AS student_status,
-                u.full_name       AS assigned_by_name
+                u.full_name       AS assigned_by_name,
+                cp.bi_semester_start_month,
+                cp.tri_semester_start_month
          FROM sfp_packages p
          JOIN students s   ON s.id = p.student_id
          LEFT JOIN users u ON u.id = p.assigned_by
+         LEFT JOIN cf_programs cp ON cp.id = p.cf_program_id
          WHERE p.id = ?'
     );
     $stmt->execute([$id]);
