@@ -384,10 +384,10 @@ $statusChipClass = match($student['status'] ?? '') {
                            placeholder="your@email.com" maxlength="150">
                 </div>
                 <div class="col-12">
-                    <label class="form-label fw-semibold" style="font-size:.82rem;">
+                    <label class="form-label fw-semibold" for="present_address" style="font-size:.82rem;">
                         <i class="fas fa-home me-1 text-muted"></i>Present Address
                     </label>
-                    <textarea class="form-control" name="present_address" rows="3"
+                    <textarea class="form-control" id="present_address" name="present_address" rows="3"
                               placeholder="Enter your present address…" maxlength="500"><?= h($student['present_address'] ?? '') ?></textarea>
                 </div>
                 <div class="col-12">
