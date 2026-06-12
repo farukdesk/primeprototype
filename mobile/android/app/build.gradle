@@ -1,6 +1,5 @@
 plugins {
     id "com.android.application"
-    id "kotlin-android"
     id "dev.flutter.flutter-gradle-plugin"
     id "com.google.gms.google-services"   // Firebase
 }
@@ -10,6 +9,9 @@ def keystorePropertiesFile = rootProject.file('key.properties')
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
 }
+
+def flutterVersionCode = rootProject.hasProperty('flutter.versionCode') ? rootProject.property('flutter.versionCode').toInteger() : 1
+def flutterVersionName = rootProject.hasProperty('flutter.versionName') ? rootProject.property('flutter.versionName') : '1.0'
 
 android {
     namespace "bd.ac.primeuniversity.pumisadmin"
@@ -25,15 +27,11 @@ android {
         jvmTarget = '1.8'
     }
 
-    sourceSets {
-        main.java.srcDirs += 'src/main/kotlin'
-    }
-
     defaultConfig {
         applicationId "bd.ac.primeuniversity.pumisadmin"
         minSdkVersion 23            // Required for biometric & secure storage
         targetSdkVersion flutter.targetSdkVersion
-        versionCode    flutterVersionCode.toInteger()
+        versionCode    flutterVersionCode
         versionName    flutterVersionName
         multiDexEnabled true
     }
