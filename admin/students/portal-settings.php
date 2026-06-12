@@ -101,7 +101,7 @@ require_once __DIR__ . '/../includes/header.php';
     <ul class="mb-0 ps-3"><?php foreach ($errors as $e): ?><li><?= h($e) ?></li><?php endforeach; ?></ul>
 </div>
 <?php endif; ?>
-<?= flash_get_html() ?>
+<?php flash_show(); ?>
 <?= $test_msg ?>
 
 <form method="POST" novalidate>
