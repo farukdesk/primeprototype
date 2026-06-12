@@ -102,6 +102,34 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
+<!-- Scholarships & Waivers -->
+<div class="card border-0 shadow-sm mb-3" id="scholarshipCard" style="display:none;">
+    <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between">
+        <span class="fw-semibold">
+            <i class="fas fa-graduation-cap me-2 text-warning"></i>Applied Scholarships &amp; Waivers
+        </span>
+        <button type="button" class="btn btn-sm btn-outline-secondary"
+                data-bs-toggle="collapse" data-bs-target="#scholarshipCollapse">
+            <i class="fas fa-list me-1"></i>Details
+        </button>
+    </div>
+    <div class="collapse show" id="scholarshipCollapse">
+        <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle mb-0" id="scholarshipTable">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-4">Semester</th>
+                        <th>Scholarship / Waiver Title</th>
+                        <th class="text-end">Discount</th>
+                        <th class="text-center">Scope</th>
+                    </tr>
+                </thead>
+                <tbody id="scholarshipTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
 <!-- Payment Transaction History -->
 <div class="card border-0 shadow-sm mb-4" id="transactionHistoryCard" style="display:none;">
     <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between">
@@ -347,6 +375,49 @@ function escHtml(str) {
     return d.innerHTML;
 }
 
+function renderScholarships(semesters) {
+    const card  = document.getElementById('scholarshipCard');
+    const tbody = document.getElementById('scholarshipTableBody');
+    tbody.innerHTML = '';
+
+    let hasAny = false;
+    semesters.forEach(sf => {
+        const scholarships = sf.scholarships || [];
+        if (!scholarships.length) return;
+
+        const semLabel = sf.semester_label || ('Semester ' + sf.semester_number);
+        scholarships.forEach((sc, idx) => {
+            hasAny = true;
+            const isFixed = sc.discount_type === 'fixed';
+            const discountStr = isFixed
+                ? (CURRENCY + '\u00a0' + parseFloat(sc.fixed_amount || sc.amount).toLocaleString('en-BD', {minimumFractionDigits: 2}))
+                : (parseFloat(sc.discount_pct).toFixed(1) + '%');
+
+            let scopeBadges = '';
+            scopeBadges += '<span class="badge bg-success-subtle text-success border border-success-subtle me-1">Tuition</span>';
+            if (sc.applies_to_fixed)   scopeBadges += '<span class="badge bg-warning-subtle text-warning border border-warning-subtle me-1">Fixed Fee</span>';
+            if (sc.applies_to_english) scopeBadges += '<span class="badge bg-info-subtle text-info border border-info-subtle me-1">English Fee</span>';
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="ps-4 small fw-semibold text-muted">${idx === 0 ? escHtml(semLabel) : ''}</td>
+                <td>
+                    <span class="badge rounded-pill bg-success bg-opacity-10 text-success border border-success border-opacity-25"
+                          style="font-size:.8rem;font-weight:500;">
+                        <i class="fas fa-tag me-1"></i>${escHtml(sc.label)}
+                    </span>
+                </td>
+                <td class="text-end fw-semibold ${isFixed ? 'text-success' : 'text-warning'}">${discountStr}</td>
+                <td class="text-center small">${scopeBadges}</td>`;
+            tbody.appendChild(tr);
+        });
+    });
+
+    if (hasAny) {
+        card.style.display = '';
+    }
+}
+
 function renderTransactionHistory(payments) {
     const card       = document.getElementById('transactionHistoryCard');
     const tbody      = document.getElementById('transactionTableBody');
@@ -414,6 +485,7 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
         renderFeeSummary(data);
+        renderScholarships(data.summary.semesters || []);
         renderTransactionHistory(data.payments || []);
     })
     .catch(() => {
