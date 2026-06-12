@@ -85,8 +85,6 @@ require_once __DIR__ . '/../includes/header.php';
 
     <form method="post" action="">
         <?= csrf_field() ?>
-        <input type="hidden" name="action" value="change_password">
-
         <div class="mb-3">
             <label class="form-label fw-semibold">Current Password</label>
             <input type="password" name="current_password" class="form-control" required autocomplete="current-password">
