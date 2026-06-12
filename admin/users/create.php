@@ -15,6 +15,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username       = trim($_POST['username']        ?? '');
     $email          = trim($_POST['email']           ?? '');
     $phone          = trim($_POST['phone']           ?? '');
+    $student_sid    = trim($_POST['student_sid']     ?? '');
     $selected_groups = array_map('intval', (array)($_POST['group_ids'] ?? []));
     $primary_group_id = (int)($_POST['primary_group_id'] ?? 0);
     $password       = $_POST['password']  ?? '';
@@ -65,9 +66,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $hash = password_hash($password, PASSWORD_BCRYPT, ['cost' => BCRYPT_COST]);
         $db   = db();
         $db->prepare(
-            'INSERT INTO users (group_id, username, email, password, full_name, phone, is_active)
-             VALUES (?,?,?,?,?,?,?)'
-        )->execute([$primary_group_id, $username, $email, $hash, $full_name, $phone ?: null, $is_active]);
+            'INSERT INTO users (group_id, username, email, password, full_name, phone, student_sid, is_active)
+             VALUES (?,?,?,?,?,?,?,?)'
+        )->execute([$primary_group_id, $username, $email, $hash, $full_name, $phone ?: null, $student_sid ?: null, $is_active]);
 
         $new_user_id = (int)$db->lastInsertId();
 
@@ -93,7 +94,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect(APP_URL . '/users/index.php');
     }
 
-    save_old(compact('full_name', 'username', 'email', 'phone', 'primary_group_id') + ['group_ids_post' => $selected_groups]);
+        save_old(compact('full_name', 'username', 'email', 'phone', 'student_sid', 'primary_group_id') + ['group_ids_post' => $selected_groups]);
 }
 
 $old_selected = $_SESSION['old']['group_ids_post'] ?? [];
@@ -150,6 +151,13 @@ require_once __DIR__ . '/../includes/header.php';
                     <label class="form-label fw-medium">Phone</label>
                     <input type="text" name="phone" class="form-control"
                            value="<?= old('phone') ?>" maxlength="30">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-medium">Student ID
+                        <small class="text-muted">(links this user to their student fee record)</small>
+                    </label>
+                    <input type="text" name="student_sid" class="form-control"
+                           value="<?= old('student_sid') ?>" maxlength="50" autocomplete="off">
                 </div>
                 <div class="col-md-6">
                     <label class="form-label fw-medium">Password <span class="text-danger">*</span></label>

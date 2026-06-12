@@ -295,6 +295,7 @@ $user       = auth_user();
     $is_scholarship_active = strpos($current_path, '/scholarship/') !== false;
     $is_fee_package_active = strpos($current_path, '/student-accounts/') !== false;
     $is_medical_active = strpos($current_path, '/medical-center/') !== false;
+    $is_student_portal_active = strpos($current_path, '/accounting/student-portal') !== false;
     ?>
 
     <!-- Dashboard -->
@@ -304,6 +305,18 @@ $user       = auth_user();
             <a href="<?= APP_URL ?>/index.php"
                class="<?= preg_match('#/admin/index\.php$#', $current_path) ? 'active' : '' ?>">
                 <i class="fas fa-tachometer-alt"></i> Dashboard
+            </a>
+        </li>
+    </ul>
+    <?php endif; ?>
+
+    <!-- ── Student Accounts Portal (shown only to users with student-accounts-portal access) ── -->
+    <?php if (!is_super_admin() && can_access('student-accounts-portal')): ?>
+    <ul class="nav flex-column mt-2">
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/accounting/student-portal.php"
+               class="<?= $is_student_portal_active ? 'active' : '' ?>">
+                <i class="fas fa-file-invoice-dollar"></i> Accounts
             </a>
         </li>
     </ul>
