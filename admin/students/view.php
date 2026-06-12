@@ -1299,7 +1299,7 @@ $hasLocalGuardian = !empty($student['local_guardian_name']) || !empty($student['
                         <?php
                         $actionLabels = [
                             'created'        => ['success', 'Account Created'],
-                            'password_reset'  => ['warning', 'Password Reset'],
+                            'password_reset' => ['warning', 'Password Reset'],
                         ];
                         [$cls, $label] = $actionLabels[$pl['action']] ?? ['secondary', ucfirst($pl['action'])];
                         ?>

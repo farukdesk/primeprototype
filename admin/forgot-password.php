@@ -201,7 +201,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <span class="input-group-text"><i class="fas fa-user"></i></span>
                 <input type="text" id="login_hint" name="login_hint" class="form-control"
                        placeholder="Enter email or Student ID"
-                       value="<?= h($_POST['login_hint'] ?? '') ?>" required autocomplete="email username">
+                       value="<?= h($_POST['login_hint'] ?? '') ?>" required autocomplete="username">
             </div>
         </div>
 
