@@ -58,6 +58,10 @@ function sm_merge_columns(): array
  */
 function sm_student_child_tables(): array
 {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
     $stmt = db()->prepare(
         "SELECT TABLE_NAME, COLUMN_NAME
            FROM information_schema.KEY_COLUMN_USAGE
@@ -84,7 +88,22 @@ function sm_student_child_tables(): array
             $refs[] = $extra;
         }
     }
-    return $refs;
+    return $cached = $refs;
+}
+
+/** Whether the students table has a portal_user_id column (cached). */
+function sm_has_portal_column(): bool
+{
+    static $has = null;
+    if ($has === null) {
+        $stmt = db()->prepare(
+            "SELECT 1 FROM information_schema.COLUMNS
+              WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'students' AND COLUMN_NAME = 'portal_user_id'"
+        );
+        $stmt->execute();
+        $has = (bool)$stmt->fetchColumn();
+    }
+    return $has;
 }
 
 /**
@@ -94,37 +113,79 @@ function sm_student_child_tables(): array
  */
 function sm_find_duplicate_pairs(): array
 {
-    $sql = "SELECT a.id AS a_id, b.id AS b_id
-              FROM students a
-              JOIN students b
-                ON a.id < b.id
-               AND a.student_id <> b.student_id
-               AND TRIM(LEADING '0' FROM a.student_id) = TRIM(LEADING '0' FROM b.student_id)";
-    $pairs = [];
-    foreach (db()->query($sql)->fetchAll() as $row) {
-        $a = sm_get_student((int)$row['a_id']);
-        $b = sm_get_student((int)$row['b_id']);
-        if (!$a || !$b) continue;
-
-        $pkg = db()->prepare('SELECT COUNT(*) FROM sfp_packages WHERE student_id = ?');
-        $pkg->execute([(int)$a['id']]);
-        $a_pkg = (int)$pkg->fetchColumn() > 0;
-        $pkg->execute([(int)$b['id']]);
-        $b_pkg = (int)$pkg->fetchColumn() > 0;
-
-        // Keep the record with a fee package; fall back to the one whose ID
-        // starts with a leading zero (per business rule), then to the older row.
-        if ($a_pkg !== $b_pkg) {
-            [$keep, $dup] = $a_pkg ? [$a, $b] : [$b, $a];
-        } elseif (str_starts_with($a['student_id'], '0') !== str_starts_with($b['student_id'], '0')) {
-            [$keep, $dup] = str_starts_with($a['student_id'], '0') ? [$a, $b] : [$b, $a];
-        } else {
-            [$keep, $dup] = [$a, $b];
+    // Single light scan of (id, student_id); duplicates are grouped in PHP.
+    // This avoids the previous non-indexable O(n^2) self-join on
+    // TRIM(LEADING '0' ...), which timed out on large student tables.
+    $groups = [];
+    $stmt = db()->query('SELECT id, student_id FROM students');
+    while ($row = $stmt->fetch()) {
+        $sid = (string)$row['student_id'];
+        $norm = ltrim($sid, '0');
+        if ($norm === '') {
+            $norm = '0';
         }
-        $pkg_by_id = [(int)$a['id'] => $a_pkg, (int)$b['id'] => $b_pkg];
-        $keep['has_pkg'] = $pkg_by_id[(int)$keep['id']];
-        $dup['has_pkg']  = $pkg_by_id[(int)$dup['id']];
-        $pairs[] = ['keep' => $keep, 'dup' => $dup];
+        $groups[$norm][] = ['id' => (int)$row['id'], 'student_id' => $sid];
+    }
+
+    // Keep only groups containing at least two different raw IDs.
+    $dup_groups = [];
+    $involved_ids = [];
+    foreach ($groups as $members) {
+        if (count($members) < 2) continue;
+        $distinct = array_unique(array_column($members, 'student_id'));
+        if (count($distinct) < 2) continue;
+        $dup_groups[] = $members;
+        foreach ($members as $m) {
+            $involved_ids[] = $m['id'];
+        }
+    }
+    unset($groups);
+    if (!$dup_groups) {
+        return [];
+    }
+
+    // Batch-fetch fee-package flags for all involved students in one query.
+    $has_pkg = [];
+    foreach (array_chunk($involved_ids, 500) as $chunk) {
+        $ph = implode(',', array_fill(0, count($chunk), '?'));
+        $pkg = db()->prepare("SELECT DISTINCT student_id FROM sfp_packages WHERE student_id IN ($ph)");
+        $pkg->execute($chunk);
+        foreach ($pkg->fetchAll() as $r) {
+            $has_pkg[(int)$r['student_id']] = true;
+        }
+    }
+
+    $pairs = [];
+    foreach ($dup_groups as $members) {
+        for ($i = 0; $i < count($members); $i++) {
+            for ($j = $i + 1; $j < count($members); $j++) {
+                [$ma, $mb] = $members[$i]['id'] < $members[$j]['id']
+                    ? [$members[$i], $members[$j]]
+                    : [$members[$j], $members[$i]];
+                if ($ma['student_id'] === $mb['student_id']) continue;
+
+                $a = sm_get_student($ma['id']);
+                $b = sm_get_student($mb['id']);
+                if (!$a || !$b) continue;
+
+                $a_pkg = !empty($has_pkg[(int)$a['id']]);
+                $b_pkg = !empty($has_pkg[(int)$b['id']]);
+
+                // Keep the record with a fee package; fall back to the one whose ID
+                // starts with a leading zero (per business rule), then to the older row.
+                if ($a_pkg !== $b_pkg) {
+                    [$keep, $dup] = $a_pkg ? [$a, $b] : [$b, $a];
+                } elseif (str_starts_with($a['student_id'], '0') !== str_starts_with($b['student_id'], '0')) {
+                    [$keep, $dup] = str_starts_with($a['student_id'], '0') ? [$a, $b] : [$b, $a];
+                } else {
+                    [$keep, $dup] = [$a, $b];
+                }
+                $pkg_by_id = [(int)$a['id'] => $a_pkg, (int)$b['id'] => $b_pkg];
+                $keep['has_pkg'] = $pkg_by_id[(int)$keep['id']];
+                $dup['has_pkg']  = $pkg_by_id[(int)$dup['id']];
+                $pairs[] = ['keep' => $keep, 'dup' => $dup];
+            }
+        }
     }
     return $pairs;
 }
@@ -167,12 +228,7 @@ function sm_merge_students(array $keep, array $dup): void
         }
 
         // Portal account: keep takes the duplicate's portal account if it has none.
-        $cols = db()->prepare(
-            "SELECT 1 FROM information_schema.COLUMNS
-              WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'students' AND COLUMN_NAME = 'portal_user_id'"
-        );
-        $cols->execute();
-        if ($cols->fetchColumn()) {
+        if (sm_has_portal_column()) {
             $row = db()->prepare('SELECT id, portal_user_id FROM students WHERE id IN (?, ?)');
             $row->execute([$keep_id, $dup_id]);
             $portal = array_column($row->fetchAll(), 'portal_user_id', 'id');
@@ -225,6 +281,10 @@ function sm_merge_students(array $keep, array $dup): void
 // ── Handle merge POST ─────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
+
+    // Merging many pairs can exceed the default PHP execution time.
+    @set_time_limit(0);
+    ignore_user_abort(true);
 
     $pairs   = sm_find_duplicate_pairs();
     $by_dup  = [];
