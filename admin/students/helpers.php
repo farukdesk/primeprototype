@@ -761,4 +761,144 @@ function sp_notify_students_notice(array $notice, string $type, int $dept_id = 0
             ]
         );
     }
+
+    // ── FCM Push Notifications to student mobile app ─────────────────────────
+    sp_send_fcm_notice_push($notice, $type, $dept_id, $dept_name);
+}
+
+/**
+ * Send FCM push notification to all portal students (or a single department)
+ * when a new notice is published.  Tokens are stored in student_push_tokens.
+ *
+ * @param array  $notice   The notice row (must have 'title' and optionally 'content').
+ * @param string $type     'university' or 'department'
+ * @param int    $dept_id  When $type='department', only sends to students in this dept.
+ * @param string $dept_name Human-readable department name (used in notification body).
+ */
+function sp_send_fcm_notice_push(array $notice, string $type, int $dept_id = 0, string $dept_name = ''): void
+{
+    // Read FCM server key configured in admin settings
+    static $server_key = null;
+    if ($server_key === null) {
+        try {
+            $row = db()->query(
+                "SELECT `value` FROM settings WHERE `key` = 'student_fcm_server_key' LIMIT 1"
+            )->fetch();
+            $server_key = $row ? trim((string)$row['value']) : '';
+            // Fall back to the shared admin FCM key if no student-specific key is set
+            if ($server_key === '') {
+                $row2 = db()->query(
+                    "SELECT `value` FROM settings WHERE `key` = 'fcm_server_key' LIMIT 1"
+                )->fetch();
+                $server_key = $row2 ? trim((string)$row2['value']) : '';
+            }
+        } catch (Throwable $e) {
+            $server_key = '';
+        }
+    }
+
+    if ($server_key === '') {
+        error_log('PUMIS Student FCM: server key is not configured.');
+        return;
+    }
+
+    // Fetch FCM tokens for the relevant students
+    try {
+        if ($type === 'department' && $dept_id > 0) {
+            $stmt = db()->prepare(
+                "SELECT DISTINCT spt.fcm_token
+                 FROM student_push_tokens spt
+                 JOIN users u ON u.id = spt.user_id
+                 JOIN students s ON s.portal_user_id = u.id
+                 WHERE s.dept_id = ?
+                   AND u.is_active = 1
+                   AND spt.fcm_token IS NOT NULL
+                   AND spt.fcm_token != ''"
+            );
+            $stmt->execute([$dept_id]);
+        } else {
+            $stmt = db()->prepare(
+                "SELECT DISTINCT spt.fcm_token
+                 FROM student_push_tokens spt
+                 JOIN users u ON u.id = spt.user_id
+                 JOIN students s ON s.portal_user_id = u.id
+                 WHERE u.is_active = 1
+                   AND spt.fcm_token IS NOT NULL
+                   AND spt.fcm_token != ''"
+            );
+            $stmt->execute();
+        }
+        $tokens = $stmt->fetchAll(\PDO::FETCH_COLUMN);
+    } catch (Throwable $e) {
+        error_log('PUMIS Student FCM: could not fetch tokens – ' . $e->getMessage());
+        return;
+    }
+
+    if (empty($tokens)) {
+        return;
+    }
+
+    // Build notification payload
+    $title = $notice['title'] ?? 'New Notice';
+    $body_text = '';
+    if (!empty($notice['content'])) {
+        $body_text = mb_strimwidth(strip_tags((string)$notice['content']), 0, 120, '…');
+    }
+    if ($body_text === '' && $type === 'department' && $dept_name !== '') {
+        $body_text = $dept_name . ' has posted a new notice.';
+    }
+    if ($body_text === '') {
+        $body_text = ($type === 'department' ? 'New department notice.' : 'New university notice.');
+    }
+
+    $data_payload = [
+        'notice_type' => $type,
+        'dept_id'     => (string)$dept_id,
+        'screen'      => 'notices',
+    ];
+
+    // Send in batches of 500 (FCM legacy multicast limit is 1000)
+    foreach (array_chunk($tokens, 500) as $batch) {
+        _sp_fcm_multicast($server_key, $batch, $title, $body_text, $data_payload);
+    }
+}
+
+/**
+ * Send a single FCM multicast message to up to 500 device tokens.
+ */
+function _sp_fcm_multicast(string $server_key, array $tokens, string $title, string $body, array $data): void
+{
+    $payload = json_encode([
+        'registration_ids' => $tokens,
+        'notification'     => [
+            'title'        => $title,
+            'body'         => $body,
+            'sound'        => 'default',
+            'badge'        => '1',
+            'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
+        ],
+        'data'             => array_merge($data, ['title' => $title, 'body' => $body]),
+        'priority'         => 'high',
+        'content_available'=> true,
+    ]);
+
+    $ch = curl_init('https://fcm.googleapis.com/fcm/send');
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 15,
+        CURLOPT_HTTPHEADER     => [
+            'Content-Type: application/json',
+            'Authorization: key=' . $server_key,
+        ],
+        CURLOPT_POSTFIELDS     => $payload,
+    ]);
+
+    $response = curl_exec($ch);
+    $http     = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($http !== 200 || $response === false) {
+        error_log('PUMIS Student FCM multicast: HTTP ' . $http . ' – ' . ($response ?: 'no response'));
+    }
 }
