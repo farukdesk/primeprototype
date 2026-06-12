@@ -45,6 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username         = trim($_POST['username']        ?? '');
     $email            = trim($_POST['email']           ?? '');
     $phone            = trim($_POST['phone']           ?? '');
+    $student_sid      = trim($_POST['student_sid']     ?? '');
     $password         = $_POST['password']  ?? '';
     $password2        = $_POST['password2'] ?? '';
     $selected_groups  = array_map('intval', (array)($_POST['group_ids'] ?? []));
@@ -95,12 +96,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($password !== '') {
             $hash = password_hash($password, PASSWORD_BCRYPT, ['cost' => BCRYPT_COST]);
             $db->prepare(
-                'UPDATE users SET group_id=?, username=?, email=?, password=?, full_name=?, phone=?, is_active=? WHERE id=?'
-            )->execute([$primary_group_id, $username, $email, $hash, $full_name, $phone ?: null, $is_active, $id]);
+                'UPDATE users SET group_id=?, username=?, email=?, password=?, full_name=?, phone=?, student_sid=?, is_active=? WHERE id=?'
+            )->execute([$primary_group_id, $username, $email, $hash, $full_name, $phone ?: null, $student_sid ?: null, $is_active, $id]);
         } else {
             $db->prepare(
-                'UPDATE users SET group_id=?, username=?, email=?, full_name=?, phone=?, is_active=? WHERE id=?'
-            )->execute([$primary_group_id, $username, $email, $full_name, $phone ?: null, $is_active, $id]);
+                'UPDATE users SET group_id=?, username=?, email=?, full_name=?, phone=?, student_sid=?, is_active=? WHERE id=?'
+            )->execute([$primary_group_id, $username, $email, $full_name, $phone ?: null, $student_sid ?: null, $is_active, $id]);
         }
 
         // Update multi-group assignments (super admin only, or when groups changed)
@@ -201,6 +202,15 @@ require_once __DIR__ . '/../includes/header.php';
                     <input type="text" name="phone" class="form-control"
                            value="<?= h($edit_user['phone'] ?? '') ?>" maxlength="30">
                 </div>
+                <?php if (is_super_admin()): ?>
+                <div class="col-md-6">
+                    <label class="form-label fw-medium">Student ID
+                        <small class="text-muted">(links user to their student fee record)</small>
+                    </label>
+                    <input type="text" name="student_sid" class="form-control"
+                           value="<?= h($edit_user['student_sid'] ?? '') ?>" maxlength="50" autocomplete="off">
+                </div>
+                <?php endif; ?>
                 <div class="col-md-6">
                     <label class="form-label fw-medium">New Password
                         <small class="text-muted">(leave blank to keep current)</small>
