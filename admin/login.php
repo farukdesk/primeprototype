@@ -157,11 +157,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <?= csrf_field() ?>
 
         <div class="mb-3">
-            <label for="login" class="form-label">Username or Email</label>
+            <label for="login" class="form-label">Username, Email or Student ID</label>
             <div class="input-group">
                 <span class="input-group-text"><i class="fas fa-user"></i></span>
                 <input type="text" id="login" name="login" class="form-control"
-                       placeholder="Enter username or email"
+                       placeholder="Enter username, email or student ID"
                        value="<?= old('login') ?>" required autocomplete="username">
             </div>
         </div>

@@ -16,22 +16,51 @@ $error   = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
-    $email = trim($_POST['email'] ?? '');
+    $login_hint = trim($_POST['login_hint'] ?? '');
 
     // CAPTCHA verification
     if (!captcha_verify_request()) {
         $error = 'CAPTCHA verification failed. Please verify that you are not a robot.';
-    } elseif ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $error = 'Please enter a valid email address.';
+    } elseif ($login_hint === '') {
+        $error = 'Please enter your email address or Student ID.';
     } else {
-        // Look up the user (always show generic success to prevent enumeration)
-        $stmt = db()->prepare(
-            'SELECT id, full_name, email FROM users WHERE email = ? AND is_active = 1 LIMIT 1'
-        );
-        $stmt->execute([$email]);
-        $user = $stmt->fetch();
+        // Resolve user: try email first, then username (student ID), then students.student_id
+        $user = null;
 
-        if ($user) {
+        if (filter_var($login_hint, FILTER_VALIDATE_EMAIL)) {
+            // Email lookup
+            $stmt = db()->prepare(
+                'SELECT id, full_name, email FROM users WHERE email = ? AND is_active = 1 LIMIT 1'
+            );
+            $stmt->execute([$login_hint]);
+            $user = $stmt->fetch() ?: null;
+        }
+
+        if (!$user) {
+            // Username lookup (student ID is set as username for portal accounts)
+            $stmt = db()->prepare(
+                'SELECT id, full_name, email FROM users WHERE username = ? AND is_active = 1 LIMIT 1'
+            );
+            $stmt->execute([$login_hint]);
+            $user = $stmt->fetch() ?: null;
+        }
+
+        if (!$user) {
+            // Fallback: look up student by student_id, get linked portal user
+            $stmt = db()->prepare(
+                'SELECT u.id, u.full_name, u.email
+                 FROM students s
+                 JOIN users u ON u.id = s.portal_user_id
+                 WHERE s.student_id = ? AND u.is_active = 1
+                 LIMIT 1'
+            );
+            $stmt->execute([$login_hint]);
+            $user = $stmt->fetch() ?: null;
+        }
+
+        if ($user && !empty($user['email'])) {
+            $email = $user['email'];
+
             // Delete any existing token for this email
             db()->prepare('DELETE FROM password_resets WHERE email = ?')->execute([$email]);
 
@@ -143,7 +172,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="alert alert-success d-flex align-items-start gap-2">
         <i class="fas fa-check-circle mt-1"></i>
         <div>
-            If that email address is registered, a password reset link has been sent.
+            If that account is registered, a password reset link has been sent to the associated email address.
             Please check your inbox (and spam folder).
         </div>
     </div>
@@ -154,7 +183,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     <h5 class="fw-semibold mb-1" style="color:#1a1f36;">Forgot Password?</h5>
     <p class="text-muted mb-4" style="font-size:.85rem;">
-        Enter your registered email address and we'll send you a link to reset your password.
+        Enter your registered email address or Student ID and we'll send a reset link to your email.
     </p>
 
     <?php if ($error): ?>
@@ -167,12 +196,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <?= csrf_field() ?>
 
         <div class="mb-4">
-            <label for="email" class="form-label">Email Address</label>
+            <label for="login_hint" class="form-label">Email or Student ID</label>
             <div class="input-group">
-                <span class="input-group-text"><i class="fas fa-envelope"></i></span>
-                <input type="email" id="email" name="email" class="form-control"
-                       placeholder="Enter your email address"
-                       value="<?= h($_POST['email'] ?? '') ?>" required autocomplete="email">
+                <span class="input-group-text"><i class="fas fa-user"></i></span>
+                <input type="text" id="login_hint" name="login_hint" class="form-control"
+                       placeholder="Enter email or Student ID"
+                       value="<?= h($_POST['login_hint'] ?? '') ?>" required autocomplete="username">
             </div>
         </div>
 

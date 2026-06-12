@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_access('students');
 require_once __DIR__ . '/helpers.php';
+require_once __DIR__ . '/../includes/mailer.php';
 
 $id      = (int)($_GET['id'] ?? 0);
 $student = sm_get_student($id);
@@ -71,6 +72,180 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         redirect(APP_URL . '/students/view.php?id=' . $id . '#comments');
     }
+
+    // ── Create portal user account ────────────────────────────────────────
+    if ($action === 'create_portal_user' && $is_staff) {
+        // Verify student has an email address
+        if (empty($student['email'])) {
+            flash_set('error', 'Cannot create portal account: student has no email address.');
+            redirect(APP_URL . '/students/view.php?id=' . $id . '#sv-portal');
+        }
+
+        // Check if a portal account already exists
+        $existing_portal = sp_get_portal_user($id);
+        if ($existing_portal) {
+            flash_set('error', 'A portal account already exists for this student.');
+            redirect(APP_URL . '/students/view.php?id=' . $id . '#sv-portal');
+        }
+
+        // Determine target user group
+        $group_name = sp_get_setting('default_group_name', 'Students');
+        $grp_stmt   = db()->prepare('SELECT id FROM user_groups WHERE name = ? AND is_active = 1 LIMIT 1');
+        $grp_stmt->execute([$group_name]);
+        $grp = $grp_stmt->fetch();
+        if (!$grp) {
+            flash_set('error', 'User group "' . h($group_name) . '" not found. Please create it in User Groups or update Portal Settings.');
+            redirect(APP_URL . '/students/view.php?id=' . $id . '#sv-portal');
+        }
+        $group_id = (int)$grp['id'];
+
+        // Check for duplicate email
+        $dup_email = db()->prepare('SELECT id FROM users WHERE email = ? LIMIT 1');
+        $dup_email->execute([$student['email']]);
+        if ($dup_email->fetch()) {
+            flash_set('error', 'A user account with this email (' . h($student['email']) . ') already exists. Link the account manually or contact IT.');
+            redirect(APP_URL . '/students/view.php?id=' . $id . '#sv-portal');
+        }
+
+        // Use student_id as username (unique by design); handle collision defensively
+        $base_username = preg_replace('/[^a-zA-Z0-9_]/', '', $student['student_id']);
+        if ($base_username === '') {
+            $base_username = 'stu' . $id;
+        }
+        $username = $base_username;
+        $dup_user = db()->prepare('SELECT id FROM users WHERE username = ? LIMIT 1');
+        $dup_user->execute([$username]);
+        if ($dup_user->fetch()) {
+            // Very unlikely, but add suffix just in case
+            $username = $base_username . '_' . $id;
+        }
+
+        $plain_password = sp_generate_password(12);
+        $hash           = password_hash($plain_password, PASSWORD_BCRYPT, ['cost' => BCRYPT_COST]);
+
+        $db = db();
+        $db->prepare(
+            'INSERT INTO users (group_id, username, email, password, full_name, phone, is_active)
+             VALUES (?,?,?,?,?,?,1)'
+        )->execute([
+            $group_id,
+            $username,
+            $student['email'],
+            $hash,
+            $student['full_name'],
+            $student['phone'] ?: null,
+        ]);
+        $new_user_id = (int)$db->lastInsertId();
+
+        // Multi-group assignment
+        $db->prepare(
+            'INSERT IGNORE INTO user_group_assignments (user_id, group_id, is_primary) VALUES (?,?,1)'
+        )->execute([$new_user_id, $group_id]);
+
+        // Link the portal user to the student record
+        $db->prepare('UPDATE students SET portal_user_id = ? WHERE id = ?')
+           ->execute([$new_user_id, $id]);
+
+        // Audit log
+        log_change('students', 'UPDATE', $id,
+            $student['full_name'] . ' (' . $student['student_id'] . ')',
+            'portal_user_id', null, (string)$new_user_id,
+            'Portal account created (user_id=' . $new_user_id . ', username=' . $username . ')');
+
+        // Log to student_portal_log
+        $email_sent = 0;
+        $sms_sent   = 0;
+
+        // Send welcome email
+        if (sp_get_setting('email_enabled', '1') === '1') {
+            $email_sent = (int)send_template_email(
+                'student_portal_welcome',
+                $student['email'],
+                $student['full_name'],
+                [
+                    'full_name'  => $student['full_name'],
+                    'student_id' => $student['student_id'],
+                    'username'   => $username,
+                    'password'   => $plain_password,
+                    'login_url'  => APP_URL . '/login.php',
+                ]
+            );
+        }
+
+        // Send welcome SMS
+        if (sp_get_setting('sms_enabled', '0') === '1' && !empty($student['phone'])) {
+            $sms_sent = (int)sp_send_welcome_sms($student);
+        }
+
+        // Record in portal log
+        $db->prepare(
+            'INSERT INTO student_portal_log (student_id, user_id, action, email_sent, sms_sent, created_by)
+             VALUES (?,?,?,?,?,?)'
+        )->execute([$id, $new_user_id, 'created', $email_sent, $sms_sent, $user['id']]);
+
+        $msg = 'Portal account created for <strong>' . h($student['full_name']) . '</strong>.';
+        if ($email_sent) {
+            $msg .= ' Welcome email sent.';
+        }
+        if ($sms_sent) {
+            $msg .= ' SMS sent.';
+        }
+        flash_set('success', $msg);
+        redirect(APP_URL . '/students/view.php?id=' . $id . '#sv-portal');
+    }
+
+    // ── Reset portal user password ────────────────────────────────────────
+    if ($action === 'reset_portal_password' && $is_staff) {
+        $portal_user = sp_get_portal_user($id);
+        if (!$portal_user) {
+            flash_set('error', 'No portal account linked to this student.');
+            redirect(APP_URL . '/students/view.php?id=' . $id . '#sv-portal');
+        }
+
+        $plain_password = sp_generate_password(12);
+        $hash           = password_hash($plain_password, PASSWORD_BCRYPT, ['cost' => BCRYPT_COST]);
+
+        db()->prepare('UPDATE users SET password = ? WHERE id = ?')
+           ->execute([$hash, $portal_user['id']]);
+
+        log_change('students', 'UPDATE', $id,
+            $student['full_name'] . ' (' . $student['student_id'] . ')',
+            'portal_password_reset', null, null,
+            'Portal account password reset by ' . $user['full_name']);
+
+        $email_sent = 0;
+        if (sp_get_setting('email_enabled', '1') === '1') {
+            $email_sent = (int)send_template_email(
+                'student_portal_welcome',
+                $student['email'],
+                $student['full_name'],
+                [
+                    'full_name'  => $student['full_name'],
+                    'student_id' => $student['student_id'],
+                    'username'   => $portal_user['username'],
+                    'password'   => $plain_password,
+                    'login_url'  => APP_URL . '/login.php',
+                ]
+            );
+        }
+
+        $sms_sent = 0;
+        if (sp_get_setting('sms_enabled', '0') === '1' && !empty($student['phone'])) {
+            $sms_sent = (int)sp_send_welcome_sms($student);
+        }
+
+        db()->prepare(
+            'INSERT INTO student_portal_log (student_id, user_id, action, email_sent, sms_sent, created_by)
+             VALUES (?,?,?,?,?,?)'
+        )->execute([$id, $portal_user['id'], 'password_reset', $email_sent, $sms_sent, $user['id']]);
+
+        $msg = 'Password has been reset for <strong>' . h($student['full_name']) . '\'s</strong> portal account.';
+        if ($email_sent) {
+            $msg .= ' New credentials emailed.';
+        }
+        flash_set('success', $msg);
+        redirect(APP_URL . '/students/view.php?id=' . $id . '#sv-portal');
+    }
 }
 
 // ── Fetch related data ────────────────────────────────────────────────────────
@@ -114,6 +289,21 @@ $results_stmt = db()->prepare(
 );
 $results_stmt->execute([$id]);
 $results = $results_stmt->fetchAll();
+
+// Portal account
+$portal_user = sp_get_portal_user($id);
+
+// Portal account activity log
+$portal_log_stmt = db()->prepare(
+    'SELECT pl.*, u.full_name AS done_by_name
+     FROM student_portal_log pl
+     LEFT JOIN users u ON u.id = pl.created_by
+     WHERE pl.student_id = ?
+     ORDER BY pl.created_at DESC
+     LIMIT 20'
+);
+$portal_log_stmt->execute([$id]);
+$portal_log = $portal_log_stmt->fetchAll();
 
 require_once __DIR__ . '/../includes/header.php';
 
@@ -404,6 +594,14 @@ $statusChipClass = match($student['status']) {
     <a href="#sv-comments"><i class="fas fa-comments me-1"></i>Comments</a>
     <?php if (!empty($results)): ?>
     <a href="#sv-results"><i class="fas fa-chart-bar me-1"></i>Results</a>
+    <?php endif; ?>
+    <?php if ($is_staff): ?>
+    <a href="#sv-portal" style="<?= $portal_user ? 'border-color:#bbf7d0;color:#16a34a;background:#f0fdf4;' : '' ?>">
+        <i class="fas fa-user-lock me-1"></i>Portal Account
+        <?php if ($portal_user): ?>
+        <span class="badge ms-1" style="background:#16a34a;color:#fff;font-size:.65rem;">Active</span>
+        <?php endif; ?>
+    </a>
     <?php endif; ?>
 </div>
 
@@ -948,5 +1146,186 @@ $hasLocalGuardian = !empty($student['local_guardian_name']) || !empty($student['
     </div>
 </div>
 <?php endif; ?>
+
+<?php if ($is_staff): ?>
+<!-- ══════════════════════════════════════════════════════════
+     PORTAL ACCOUNT
+═══════════════════════════════════════════════════════════ -->
+<div class="sv-card mb-4" id="sv-portal">
+    <div class="sv-card-header">
+        <div class="sv-card-header-icon" style="background:#f0fdf4;color:#16a34a;"><i class="fas fa-user-lock"></i></div>
+        <h6 class="sv-card-header-title">Student Portal Account</h6>
+        <?php if ($portal_user): ?>
+        <span class="badge ms-2" style="background:#f0fdf4;color:#16a34a;font-size:.72rem;">
+            <i class="fas fa-check-circle me-1"></i>Active
+        </span>
+        <?php else: ?>
+        <span class="badge ms-2" style="background:#fef9c3;color:#92400e;font-size:.72rem;">
+            <i class="fas fa-times-circle me-1"></i>No Account
+        </span>
+        <?php endif; ?>
+        <?php if (is_super_admin() || can_access('student-portal-settings')): ?>
+        <a href="<?= APP_URL ?>/students/portal-settings.php" class="btn btn-sm ms-auto"
+           style="background:#f1f5f9;color:#475569;border:1.5px solid #e2e8f0;border-radius:9px;font-size:.8rem;font-weight:600;">
+            <i class="fas fa-cog me-1"></i> Portal Settings
+        </a>
+        <?php endif; ?>
+    </div>
+    <div class="sv-card-body">
+
+        <?php if ($portal_user): ?>
+        <!-- Account exists -->
+        <div class="row g-3 mb-4">
+            <div class="col-12 col-md-6">
+                <div class="p-3" style="background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;">
+                    <div class="sv-info-row">
+                        <div class="sv-info-icon"><i class="fas fa-id-badge"></i></div>
+                        <div class="sv-info-label">Username</div>
+                        <div class="sv-info-value"><code><?= h($portal_user['username']) ?></code></div>
+                    </div>
+                    <div class="sv-info-row">
+                        <div class="sv-info-icon"><i class="fas fa-envelope"></i></div>
+                        <div class="sv-info-label">Email</div>
+                        <div class="sv-info-value"><?= h($portal_user['email']) ?></div>
+                    </div>
+                    <div class="sv-info-row">
+                        <div class="sv-info-icon"><i class="fas fa-layer-group"></i></div>
+                        <div class="sv-info-label">Group</div>
+                        <div class="sv-info-value"><?= h($portal_user['group_name']) ?></div>
+                    </div>
+                    <div class="sv-info-row">
+                        <div class="sv-info-icon"><i class="fas fa-circle" style="color:<?= $portal_user['is_active'] ? '#22c55e' : '#ef4444' ?>;font-size:.6rem;"></i></div>
+                        <div class="sv-info-label">Status</div>
+                        <div class="sv-info-value">
+                            <?= $portal_user['is_active']
+                                ? '<span class="badge bg-success">Active</span>'
+                                : '<span class="badge bg-danger">Inactive</span>' ?>
+                        </div>
+                    </div>
+                    <?php if ($portal_user['last_login']): ?>
+                    <div class="sv-info-row">
+                        <div class="sv-info-icon"><i class="fas fa-sign-in-alt"></i></div>
+                        <div class="sv-info-label">Last Login</div>
+                        <div class="sv-info-value"><?= date('M d, Y H:i', strtotime($portal_user['last_login'])) ?></div>
+                    </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <div class="col-12 col-md-6">
+                <div class="p-3 d-flex flex-column gap-2" style="background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;height:100%;">
+                    <p class="fw-semibold mb-2" style="font-size:.875rem;color:#1e293b;">Actions</p>
+                    <!-- Reset password -->
+                    <form method="POST" action=""
+                          onsubmit="return confirm('Reset this student\'s portal password? A new password will be generated and (if configured) emailed to the student.');">
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="action" value="reset_portal_password">
+                        <button type="submit" class="btn btn-warning btn-sm w-100" style="border-radius:9px;font-weight:600;">
+                            <i class="fas fa-key me-1"></i> Reset Password &amp; Re-send Credentials
+                        </button>
+                    </form>
+                    <!-- Edit user in users module -->
+                    <?php if (is_super_admin() || can_access('users', 'can_edit')): ?>
+                    <a href="<?= APP_URL ?>/users/edit.php?id=<?= $portal_user['id'] ?>"
+                       class="btn btn-sm btn-outline-primary w-100" style="border-radius:9px;font-weight:600;">
+                        <i class="fas fa-user-edit me-1"></i> Edit User Account
+                    </a>
+                    <?php endif; ?>
+                    <!-- Reset password link -->
+                    <?php if (is_super_admin() || can_access('users', 'can_edit')): ?>
+                    <a href="<?= APP_URL ?>/users/reset-password.php?id=<?= $portal_user['id'] ?>"
+                       class="btn btn-sm btn-outline-secondary w-100" style="border-radius:9px;font-weight:600;">
+                        <i class="fas fa-unlock-alt me-1"></i> Manual Password Change
+                    </a>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+
+        <?php else: ?>
+        <!-- No account yet -->
+        <div class="text-center py-4">
+            <div style="width:64px;height:64px;border-radius:50%;background:#f1f5f9;
+                        display:flex;align-items:center;justify-content:center;
+                        margin:0 auto 16px;font-size:1.6rem;color:#94a3b8;">
+                <i class="fas fa-user-slash"></i>
+            </div>
+            <p class="text-muted mb-3" style="font-size:.9rem;">
+                This student does not yet have a portal account.
+            </p>
+            <?php if (empty($student['email'])): ?>
+            <div class="alert alert-warning d-inline-block" style="border-radius:10px;font-size:.85rem;">
+                <i class="fas fa-exclamation-triangle me-1"></i>
+                An email address is required before creating a portal account.
+                <a href="<?= APP_URL ?>/students/edit.php?id=<?= $id ?>" class="alert-link">Edit student</a> to add one.
+            </div>
+            <?php else: ?>
+            <form method="POST" action=""
+                  onsubmit="return confirm('Create a portal account for <?= h(addslashes($student['full_name'])) ?>?\n\nA login will be created using their student ID (<?= h(addslashes($student['student_id'])) ?>) as username and email (<?= h(addslashes($student['email'])) ?>). Credentials will be sent via email/SMS if configured.');">
+                <?= csrf_field() ?>
+                <input type="hidden" name="action" value="create_portal_user">
+                <button type="submit" class="btn btn-success px-5" style="border-radius:10px;font-weight:600;font-size:.9rem;">
+                    <i class="fas fa-user-plus me-2"></i> Create Portal Account
+                </button>
+            </form>
+            <p class="text-muted mt-2" style="font-size:.78rem;">
+                Username will be set to the student ID: <code><?= h($student['student_id']) ?></code><br>
+                Email: <strong><?= h($student['email']) ?></strong>
+            </p>
+            <?php endif; ?>
+        </div>
+        <?php endif; ?>
+
+        <!-- Activity log -->
+        <?php if (!empty($portal_log)): ?>
+        <hr style="border-color:#f0f3f8;margin:16px 0 12px;">
+        <p class="fw-semibold mb-2" style="font-size:.82rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em;">
+            <i class="fas fa-history me-1"></i> Activity Log
+        </p>
+        <div class="table-responsive">
+            <table class="sv-table" style="font-size:.82rem;">
+                <thead>
+                    <tr>
+                        <th style="padding-left:12px;">Action</th>
+                        <th>Email Sent</th>
+                        <th>SMS Sent</th>
+                        <th>By</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($portal_log as $pl): ?>
+                <tr>
+                    <td style="padding-left:12px;">
+                        <?php
+                        $actionLabels = [
+                            'created'        => ['success', 'Account Created'],
+                            'password_reset' => ['warning', 'Password Reset'],
+                        ];
+                        [$cls, $label] = $actionLabels[$pl['action']] ?? ['secondary', ucfirst($pl['action'])];
+                        ?>
+                        <span class="badge bg-<?= $cls ?>"><?= $label ?></span>
+                    </td>
+                    <td>
+                        <?= $pl['email_sent']
+                            ? '<span class="text-success"><i class="fas fa-check"></i> Sent</span>'
+                            : '<span class="text-muted">—</span>' ?>
+                    </td>
+                    <td>
+                        <?= $pl['sms_sent']
+                            ? '<span class="text-success"><i class="fas fa-check"></i> Sent</span>'
+                            : '<span class="text-muted">—</span>' ?>
+                    </td>
+                    <td><?= h($pl['done_by_name'] ?? '—') ?></td>
+                    <td><?= date('M d, Y H:i', strtotime($pl['created_at'])) ?></td>
+                </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <?php endif; ?>
+
+    </div>
+</div>
+<?php endif; // $is_staff ?>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>

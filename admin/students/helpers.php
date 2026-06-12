@@ -552,3 +552,121 @@ function sm_get_student(int $id): array
 
     return $student;
 }
+
+// ── Student Portal Helpers ────────────────────────────────────────────────────
+
+/**
+ * Read a student_portal_settings value.
+ */
+function sp_get_setting(string $key, string $default = ''): string
+{
+    static $cache = [];
+    if (!isset($cache[$key])) {
+        $stmt = db()->prepare('SELECT setting_value FROM student_portal_settings WHERE setting_key = ?');
+        $stmt->execute([$key]);
+        $row = $stmt->fetch();
+        $cache[$key] = $row !== false ? (string)$row['setting_value'] : $default;
+    }
+    return $cache[$key];
+}
+
+/**
+ * Send a student portal SMS via FastSMS BD.
+ * Uses credentials stored in student_portal_settings.
+ */
+function sp_send_sms(string $mobile, string $message): bool
+{
+    if (sp_get_setting('sms_enabled', '0') !== '1') {
+        return false;
+    }
+
+    $api_key   = sp_get_setting('sms_api_key', '');
+    $sender_id = sp_get_setting('sms_sender_id', '');
+
+    if ($api_key === '' || $sender_id === '' || $mobile === '') {
+        return false;
+    }
+
+    // Normalize to 880… format
+    $mobile = preg_replace('/\D/', '', $mobile);
+    if (str_starts_with($mobile, '0')) {
+        $mobile = '880' . substr($mobile, 1);
+    }
+
+    $url = 'https://smsapi.fastsmsbd.com/smsapiv3?' . http_build_query([
+        'apikey'  => $api_key,
+        'sender'  => $sender_id,
+        'msisdn'  => $mobile,
+        'smstext' => $message,
+    ]);
+
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+    $response = curl_exec($ch);
+    $errno    = curl_errno($ch);
+    curl_close($ch);
+
+    return ($errno === 0 && $response !== false);
+}
+
+/**
+ * Send the portal welcome SMS to a student using the configured template.
+ */
+function sp_send_welcome_sms(array $student): bool
+{
+    $template = sp_get_setting(
+        'sms_template',
+        'Dear {{student_name}}, your Student Portal is ready. Please check your email for the login URL, username and password. Thank you.'
+    );
+    $message = str_replace('{{student_name}}', $student['full_name'], $template);
+    $phone   = trim($student['phone'] ?? '');
+    if ($phone === '') {
+        return false;
+    }
+    return sp_send_sms($phone, $message);
+}
+
+/**
+ * Return the portal user row linked to a student, or null.
+ */
+function sp_get_portal_user(int $student_id): ?array
+{
+    $stmt = db()->prepare(
+        'SELECT u.id, u.username, u.email, u.full_name, u.is_active, u.last_login,
+                g.name AS group_name
+         FROM students s
+         JOIN users u ON u.id = s.portal_user_id
+         JOIN user_groups g ON g.id = u.group_id
+         WHERE s.id = ?'
+    );
+    $stmt->execute([$student_id]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+/**
+ * Generate a cryptographically secure random password.
+ * Ensures at least one upper, lower, digit and symbol.
+ */
+function sp_generate_password(int $length = 12): string
+{
+    $upper   = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    $lower   = 'abcdefghjkmnpqrstuvwxyz';
+    $digits  = '23456789';
+    $symbols = '@#$!%*?&';
+    $all     = $upper . $lower . $digits . $symbols;
+
+    $password  = $upper[random_int(0, strlen($upper) - 1)];
+    $password .= $lower[random_int(0, strlen($lower) - 1)];
+    $password .= $digits[random_int(0, strlen($digits) - 1)];
+    $password .= $symbols[random_int(0, strlen($symbols) - 1)];
+
+    for ($i = 4; $i < $length; $i++) {
+        $password .= $all[random_int(0, strlen($all) - 1)];
+    }
+
+    // Shuffle so the fixed-position chars above are not predictable
+    return str_shuffle($password);
+}
