@@ -7,11 +7,25 @@
  * Usage: student-invoice.php?voucher_id=123
  */
 require_once __DIR__ . '/../includes/auth.php';
-require_access('student-accounts-portal');
+auth_check();
+
+if (!is_portal_student()) {
+    require_access('student-accounts-portal');
+}
+
 require_once __DIR__ . '/helpers.php';
 
-$user        = auth_user();
-$student_sid = trim((string)($user['student_sid'] ?? ''));
+$user = auth_user();
+
+if (is_portal_student()) {
+    // Portal student: look up their student_id from the students table
+    $sp_stmt = db()->prepare('SELECT student_id FROM students WHERE portal_user_id = ? LIMIT 1');
+    $sp_stmt->execute([(int)$user['id']]);
+    $sp_row      = $sp_stmt->fetch();
+    $student_sid = trim((string)($sp_row['student_id'] ?? ''));
+} else {
+    $student_sid = trim((string)($user['student_sid'] ?? ''));
+}
 
 if ($student_sid === '') {
     die('Your account is not linked to a student record. Please contact the accounts office.');
