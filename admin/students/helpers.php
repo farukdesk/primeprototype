@@ -685,7 +685,8 @@ function sp_notify_students_notice(array $notice, string $type, int $dept_id = 0
 {
     require_once __DIR__ . '/../includes/mailer.php';
 
-    $portal_url = defined('APP_URL') ? APP_URL . '/students/my-notices.php?tab=' . ($type === 'department' ? 'department' : 'university') : '';
+    $tab        = $type === 'department' ? 'department' : 'university';
+    $portal_url = defined('APP_URL') ? APP_URL . '/students/my-notices.php?tab=' . $tab : '';
 
     // Build recipient list
     $sql = 'SELECT s.name, u.email
@@ -730,12 +731,19 @@ function sp_notify_students_notice(array $notice, string $type, int $dept_id = 0
         $excerpt = mb_strimwidth($clean, 0, 300, '…');
     }
 
-    $notice_type  = $type === 'department' ? 'Department Notice' : 'University Notice';
+    $notice_type = $type === 'department' ? 'Department Notice' : 'University Notice';
+
     $dept_name_html = '';
     if ($type === 'department' && $dept_name !== '') {
-        $dept_name_html = '<div class="dept-badge">&#127979; ' . htmlspecialchars($dept_name, ENT_QUOTES, 'UTF-8') . '</div>';
+        $dept_name_html = '<div class="dept-badge">&#127979; '
+            . htmlspecialchars($dept_name, ENT_QUOTES, 'UTF-8') . '</div>';
     }
-    $excerpt_html = $excerpt !== '' ? '<div class="notice-excerpt">' . nl2br(htmlspecialchars($excerpt, ENT_QUOTES, 'UTF-8')) . '</div>' : '';
+
+    $excerpt_html = '';
+    if ($excerpt !== '') {
+        $excerpt_html = '<div class="notice-excerpt">'
+            . nl2br(htmlspecialchars($excerpt, ENT_QUOTES, 'UTF-8')) . '</div>';
+    }
 
     foreach ($recipients as $r) {
         send_template_email(

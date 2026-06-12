@@ -40,7 +40,11 @@ if ($module === 'news') {
     redirect(APP_URL . '/cms/news/index.php?approval=pending');
 
 } else {
-    $stmt = $db->prepare('SELECT * FROM cms_notices WHERE id = ?');
+    $stmt = $db->prepare(
+        'SELECT id, title, content, content_type, is_approved, is_published,
+                published_at, attachment, attachment_original_name, attachment_size
+         FROM cms_notices WHERE id = ?'
+    );
     $stmt->execute([$id]);
     $rec = $stmt->fetch();
     if (!$rec || $rec['is_approved']) {

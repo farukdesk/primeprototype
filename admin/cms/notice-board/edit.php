@@ -175,10 +175,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             log_change('cms-notice-board', 'UPDATE', $id, $title, null, null, null,
                 'Notice updated directly by super admin.');
 
-            // Notify all portal students when a notice is newly published & approved
+            // Notify all portal students when a notice becomes newly published.
+            // Super admins bypass the separate approval step, so notify whenever
+            // is_published changes from 0 → 1 regardless of prior approval state.
             $was_published = (int)$notice['is_published'];
-            $was_approved  = (int)$notice['is_approved'];
-            if ($is_published && !$was_published && $was_approved) {
+            if ($is_published && !$was_published) {
                 require_once __DIR__ . '/../../includes/mailer.php';
                 require_once __DIR__ . '/../../students/helpers.php';
                 sp_notify_students_notice(
