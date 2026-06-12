@@ -299,13 +299,19 @@ $user       = auth_user();
     $is_student_portal_active = strpos($current_path, '/accounting/student-portal') !== false;
     ?>
 
-    <!-- ── Student Portal: show ONLY My Profile for student users ── -->
+    <!-- ── Student Portal: show ONLY My Profile and My Finances for student users ── -->
     <?php if (is_portal_student()): ?>
     <ul class="nav flex-column mt-2">
         <li class="nav-item">
             <a href="<?= APP_URL ?>/students/my-profile.php"
                class="<?= strpos($current_path, '/students/my-profile') !== false ? 'active' : '' ?>">
                 <i class="fas fa-id-card"></i> My Profile
+            </a>
+        </li>
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/students/my-finances.php"
+               class="<?= strpos($current_path, '/students/my-finances') !== false ? 'active' : '' ?>">
+                <i class="fas fa-file-invoice-dollar"></i> My Finances
             </a>
         </li>
     </ul>
