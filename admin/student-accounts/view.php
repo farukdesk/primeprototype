@@ -30,19 +30,18 @@ $reg_fee_per_sem     = (float)($pkg['reg_fee_per_semester'] ?? 0.0);
 $form_id_fee         = (float)($pkg['form_id_fee'] ?? 0.0);
 
 // Also fetch current global values for comparison (optional display)
-$cf_settings_global  = db()->query('SELECT reg_fee_per_semester, form_id_fee, bi_semester_start_month, tri_semester_start_month, start_month FROM cf_settings WHERE id = 1')->fetch();
+$cf_settings_global  = db()->query('SELECT reg_fee_per_semester, form_id_fee, start_month FROM cf_settings WHERE id = 1')->fetch();
 
 // Determine which start month to use based on total_semesters
 $is_bi_semester_program = ($pkg['total_semesters'] ?? 0) <= SFP_MAX_BI_SEMESTER_COUNT;
-if ($cf_settings_global) {
-    // Use the appropriate field based on program type, or fall back to legacy start_month
-    if ($is_bi_semester_program && $cf_settings_global['bi_semester_start_month'] !== null) {
-        $start_month = (int)$cf_settings_global['bi_semester_start_month'];
-    } elseif (!$is_bi_semester_program && $cf_settings_global['tri_semester_start_month'] !== null) {
-        $start_month = (int)$cf_settings_global['tri_semester_start_month'];
-    } else {
-        $start_month = (int)($cf_settings_global['start_month'] ?? CF_DEFAULT_START_MONTH);
-    }
+$program_start_month = $is_bi_semester_program
+    ? (int)($pkg['bi_semester_start_month'] ?? 0)
+    : (int)($pkg['tri_semester_start_month'] ?? 0);
+
+if ($program_start_month >= 1 && $program_start_month <= 12) {
+    $start_month = $program_start_month;
+} elseif ($cf_settings_global) {
+    $start_month = (int)($cf_settings_global['start_month'] ?? CF_DEFAULT_START_MONTH);
 } else {
     $start_month = CF_DEFAULT_START_MONTH;
 }
