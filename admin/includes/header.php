@@ -340,6 +340,12 @@ if (is_portal_student()) {
                 <i class="fas fa-file-invoice-dollar"></i> My Finances
             </a>
         </li>
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/students/my-notices.php"
+               class="<?= strpos($current_path, '/students/my-notices') !== false ? 'active' : '' ?>">
+                <i class="fas fa-bell"></i> My Notices
+            </a>
+        </li>
     </ul>
     <?php else: ?>
 

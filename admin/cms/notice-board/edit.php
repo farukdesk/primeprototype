@@ -175,6 +175,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             log_change('cms-notice-board', 'UPDATE', $id, $title, null, null, null,
                 'Notice updated directly by super admin.');
 
+            // Notify all portal students when a notice becomes newly published.
+            // Super admins bypass the separate approval step, so notify whenever
+            // is_published changes from 0 → 1 regardless of prior approval state.
+            $was_published = (int)$notice['is_published'];
+            if ($is_published && !$was_published) {
+                require_once __DIR__ . '/../../includes/mailer.php';
+                require_once __DIR__ . '/../../students/helpers.php';
+                sp_notify_students_notice(
+                    array_merge($notice, ['title' => $title, 'content' => $content, 'published_at' => $published_at]),
+                    'university'
+                );
+            }
+
             flash_set('success', 'Notice <strong>' . h($title) . '</strong> updated.');
             redirect(APP_URL . '/cms/notice-board/index.php');
 

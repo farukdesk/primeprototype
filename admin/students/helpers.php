@@ -670,3 +670,95 @@ function sp_generate_password(int $length = 12): string
     // Shuffle so the fixed-position chars above are not predictable
     return str_shuffle($password);
 }
+
+// ── Notice notification helper ────────────────────────────────────────────────
+
+/**
+ * Send a "student_notice_published" email to all portal students who have an email.
+ *
+ * @param  array  $notice     Row from cms_notices or dept_notices.
+ * @param  string $type       'university' or 'department'
+ * @param  int    $dept_id    Required when $type='department'; limits recipients to that dept.
+ * @param  string $dept_name  Human-readable department name for the email body.
+ */
+function sp_notify_students_notice(array $notice, string $type, int $dept_id = 0, string $dept_name = ''): void
+{
+    require_once __DIR__ . '/../includes/mailer.php';
+
+    $tab        = $type === 'department' ? 'department' : 'university';
+    $portal_url = defined('APP_URL') ? APP_URL . '/students/my-notices.php?tab=' . $tab : '';
+
+    // Build recipient list
+    $sql = 'SELECT s.name, u.email
+            FROM students s
+            JOIN users u ON u.id = s.portal_user_id
+            WHERE s.portal_user_id IS NOT NULL
+              AND u.is_active = 1
+              AND u.email IS NOT NULL
+              AND u.email != \'\'';
+    $params = [];
+
+    if ($type === 'department' && $dept_id > 0) {
+        $sql    .= ' AND s.dept_id = ?';
+        $params[] = $dept_id;
+    }
+
+    try {
+        $stmt = db()->prepare($sql);
+        $stmt->execute($params);
+        $recipients = $stmt->fetchAll();
+    } catch (Throwable $e) {
+        return;
+    }
+
+    if (empty($recipients)) {
+        return;
+    }
+
+    // Prepare notice metadata
+    $notice_date = '';
+    if (!empty($notice['published_at'])) {
+        $notice_date = date('d F, Y', strtotime($notice['published_at']));
+    } elseif (!empty($notice['notice_date'])) {
+        $notice_date = date('d F, Y', strtotime($notice['notice_date']));
+    } elseif (!empty($notice['created_at'])) {
+        $notice_date = date('d F, Y', strtotime($notice['created_at']));
+    }
+
+    $excerpt = '';
+    if (!empty($notice['content'])) {
+        $clean   = strip_tags($notice['content']);
+        $excerpt = mb_strimwidth($clean, 0, 300, '…');
+    }
+
+    $notice_type = $type === 'department' ? 'Department Notice' : 'University Notice';
+
+    $dept_name_html = '';
+    if ($type === 'department' && $dept_name !== '') {
+        $dept_name_html = '<div class="dept-badge">&#127979; '
+            . htmlspecialchars($dept_name, ENT_QUOTES, 'UTF-8') . '</div>';
+    }
+
+    $excerpt_html = '';
+    if ($excerpt !== '') {
+        $excerpt_html = '<div class="notice-excerpt">'
+            . nl2br(htmlspecialchars($excerpt, ENT_QUOTES, 'UTF-8')) . '</div>';
+    }
+
+    foreach ($recipients as $r) {
+        send_template_email(
+            'student_notice_published',
+            $r['email'],
+            $r['name'],
+            [
+                'student_name'    => $r['name'],
+                'notice_title'    => $notice['title'],
+                'notice_date'     => $notice_date,
+                'notice_type'     => $notice_type,
+                'dept_name_html'  => $dept_name_html,
+                'excerpt_html'    => $excerpt_html,
+                'portal_url'      => $portal_url,
+            ]
+        );
+    }
+}
