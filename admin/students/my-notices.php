@@ -87,6 +87,34 @@ function pagination_pages(int $current, int $total): array {
     return $pages;
 }
 
+// ── Helper: render pagination nav ────────────────────────────────────────────
+function render_pagination(string $label, string $base, int $page, int $total_pages, int $offset, int $per_page, int $total): void {
+    if ($total_pages <= 1) return;
+    echo '<nav aria-label="' . h($label) . '" class="mt-4">';
+    echo '<ul class="pagination pagination-sm justify-content-center flex-wrap gap-1 mb-0">';
+    // Previous
+    echo '<li class="page-item' . ($page <= 1 ? ' disabled' : '') . '">';
+    echo '<a class="page-link rounded" href="' . h($base . ($page - 1)) . '" aria-label="Previous">';
+    echo '<i class="fas fa-chevron-left"></i><span class="visually-hidden">Previous</span></a></li>';
+    // Page numbers
+    foreach (pagination_pages($page, $total_pages) as $p) {
+        if ($p === '…') {
+            echo '<li class="page-item disabled"><span class="page-link">…</span></li>';
+        } else {
+            echo '<li class="page-item' . ($p === $page ? ' active' : '') . '">';
+            echo '<a class="page-link rounded" href="' . h($base . $p) . '">' . $p . '</a></li>';
+        }
+    }
+    // Next
+    echo '<li class="page-item' . ($page >= $total_pages ? ' disabled' : '') . '">';
+    echo '<a class="page-link rounded" href="' . h($base . ($page + 1)) . '" aria-label="Next">';
+    echo '<i class="fas fa-chevron-right"></i><span class="visually-hidden">Next</span></a></li>';
+    echo '</ul>';
+    echo '<p class="text-center text-muted small mt-2 mb-0">'
+        . 'Showing ' . ($offset + 1) . '–' . min($offset + $per_page, $total) . ' of ' . $total . ' notices'
+        . '</p></nav>';
+}
+
 // ── University Notices (published & approved, paginated) ─────────────────────
 $university_notices = [];
 if ($active_tab === 'university') {
@@ -242,36 +270,11 @@ require_once __DIR__ . '/../includes/header.php';
 
 <?php
 // ── University Notices Pagination ─────────────────────────────────────────────
-if ($active_tab === 'university' && $total_pages > 1):
-    $base = '?tab=university&page=';
+if ($active_tab === 'university') {
+    render_pagination('University notices pagination', '?tab=university&page=',
+        $page, $total_pages, $offset, $per_page, $university_total);
+}
 ?>
-<nav aria-label="University notices pagination" class="mt-4">
-    <ul class="pagination pagination-sm justify-content-center flex-wrap gap-1 mb-0">
-        <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>">
-            <a class="page-link rounded" href="<?= h($base . ($page - 1)) ?>" aria-label="Previous">
-                <i class="fas fa-chevron-left"></i>
-            </a>
-        </li>
-        <?php foreach (pagination_pages($page, $total_pages) as $p): ?>
-            <?php if ($p === '…'): ?>
-            <li class="page-item disabled"><span class="page-link">…</span></li>
-            <?php else: ?>
-            <li class="page-item <?= $p === $page ? 'active' : '' ?>">
-                <a class="page-link rounded" href="<?= h($base . $p) ?>"><?= $p ?></a>
-            </li>
-            <?php endif; ?>
-        <?php endforeach; ?>
-        <li class="page-item <?= $page >= $total_pages ? 'disabled' : '' ?>">
-            <a class="page-link rounded" href="<?= h($base . ($page + 1)) ?>" aria-label="Next">
-                <i class="fas fa-chevron-right"></i>
-            </a>
-        </li>
-    </ul>
-    <p class="text-center text-muted small mt-2 mb-0">
-        Showing <?= $offset + 1 ?>–<?= min($offset + $per_page, $university_total) ?> of <?= $university_total ?> notices
-    </p>
-</nav>
-<?php endif; ?>
 
 <?php else: ?>
 <!-- ── Department Notices ─────────────────────────────────────────────────── -->
@@ -339,36 +342,11 @@ if ($active_tab === 'university' && $total_pages > 1):
 
 <?php
 // ── Department Notices Pagination ─────────────────────────────────────────────
-if ($active_tab === 'department' && $total_pages > 1):
-    $base = '?tab=department&page=';
+if ($active_tab === 'department') {
+    render_pagination('Department notices pagination', '?tab=department&page=',
+        $page, $total_pages, $offset, $per_page, $dept_total);
+}
 ?>
-<nav aria-label="Department notices pagination" class="mt-4">
-    <ul class="pagination pagination-sm justify-content-center flex-wrap gap-1 mb-0">
-        <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>">
-            <a class="page-link rounded" href="<?= h($base . ($page - 1)) ?>" aria-label="Previous">
-                <i class="fas fa-chevron-left"></i>
-            </a>
-        </li>
-        <?php foreach (pagination_pages($page, $total_pages) as $p): ?>
-            <?php if ($p === '…'): ?>
-            <li class="page-item disabled"><span class="page-link">…</span></li>
-            <?php else: ?>
-            <li class="page-item <?= $p === $page ? 'active' : '' ?>">
-                <a class="page-link rounded" href="<?= h($base . $p) ?>"><?= $p ?></a>
-            </li>
-            <?php endif; ?>
-        <?php endforeach; ?>
-        <li class="page-item <?= $page >= $total_pages ? 'disabled' : '' ?>">
-            <a class="page-link rounded" href="<?= h($base . ($page + 1)) ?>" aria-label="Next">
-                <i class="fas fa-chevron-right"></i>
-            </a>
-        </li>
-    </ul>
-    <p class="text-center text-muted small mt-2 mb-0">
-        Showing <?= $offset + 1 ?>–<?= min($offset + $per_page, $dept_total) ?> of <?= $dept_total ?> notices
-    </p>
-</nav>
-<?php endif; ?>
 <?php endif; ?>
 
 <style>
