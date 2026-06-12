@@ -319,6 +319,25 @@ function flash_show(): void {
     }
 }
 
+/**
+ * Check whether the currently logged-in user is a Student Portal user.
+ * Returns true when a students row is linked to the current user via portal_user_id.
+ */
+function is_portal_student(): bool {
+    static $cache = [];
+    $user = auth_user();
+    if (!$user) return false;
+    $uid = (int)$user['id'];
+    if (!array_key_exists($uid, $cache)) {
+        try {
+            $stmt = db()->prepare('SELECT id FROM students WHERE portal_user_id = ? LIMIT 1');
+            $stmt->execute([$uid]);
+            $cache[$uid] = ($stmt->fetch() !== false);
+        } catch (Throwable $e) { $cache[$uid] = false; }
+    }
+    return $cache[$uid];
+}
+
 // ── Misc helpers ─────────────────────────────────────────────────────────────
 function redirect(string $url, int $code = 302): never {
     header('Location: ' . $url, true, $code);

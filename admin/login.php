@@ -41,6 +41,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             // Redirect non-dashboard users to their primary area
             if (!$user['is_super'] && !can_access('dashboard')) {
+                if (is_portal_student()) {
+                    redirect(APP_URL . '/students/my-profile.php');
+                }
                 if (can_access('faculty-profile')) {
                     redirect(APP_URL . '/faculty-profiles/my-profile.php');
                 }
