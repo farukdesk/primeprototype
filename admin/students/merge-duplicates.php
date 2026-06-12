@@ -282,7 +282,9 @@ function sm_merge_students(array $keep, array $dup): void
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
-    // Merging many pairs can exceed the default PHP execution time.
+    // Merging many pairs can exceed the default PHP execution time. Keep the
+    // merge running to completion even if the browser disconnects, so a
+    // gateway timeout cannot leave the batch half-done mid-transaction.
     @set_time_limit(0);
     ignore_user_abort(true);
 
