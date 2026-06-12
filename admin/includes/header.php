@@ -1702,6 +1702,8 @@ $user       = auth_user();
                 <?php if (is_portal_student()): ?>
                 <li><a class="dropdown-item" href="<?= APP_URL ?>/students/my-profile.php">
                     <i class="fas fa-id-card me-2 text-muted"></i>My Profile</a></li>
+                <li><a class="dropdown-item" href="<?= APP_URL ?>/students/change-password.php">
+                    <i class="fas fa-lock me-2 text-muted"></i>Change Password</a></li>
                 <?php else: ?>
                 <li><a class="dropdown-item" href="<?= APP_URL ?>/users/edit.php?id=<?= $user['id'] ?>">
                     <i class="fas fa-user-edit me-2 text-muted"></i>My Profile</a></li>
