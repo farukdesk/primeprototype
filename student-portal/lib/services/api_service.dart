@@ -33,7 +33,7 @@ class ApiService {
       onRequest: (opts, handler) async {
         final token    = await StorageService.getToken();
         final deviceId = await StorageService.getDeviceId();
-        if (token    != null) opts.headers['Authorization'] = '******';
+        if (token    != null) opts.headers['Authorization'] = 'Bearer $token';
         if (deviceId != null) opts.headers['X-Device-ID']   = deviceId;
         handler.next(opts);
       },

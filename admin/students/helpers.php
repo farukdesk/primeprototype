@@ -806,25 +806,25 @@ function sp_send_fcm_notice_push(array $notice, string $type, int $dept_id = 0, 
     try {
         if ($type === 'department' && $dept_id > 0) {
             $stmt = db()->prepare(
-                'SELECT DISTINCT spt.fcm_token
+                "SELECT DISTINCT spt.fcm_token
                  FROM student_push_tokens spt
                  JOIN users u ON u.id = spt.user_id
                  JOIN students s ON s.portal_user_id = u.id
                  WHERE s.dept_id = ?
                    AND u.is_active = 1
                    AND spt.fcm_token IS NOT NULL
-                   AND spt.fcm_token != \'\''
+                   AND spt.fcm_token != ''"
             );
             $stmt->execute([$dept_id]);
         } else {
             $stmt = db()->prepare(
-                'SELECT DISTINCT spt.fcm_token
+                "SELECT DISTINCT spt.fcm_token
                  FROM student_push_tokens spt
                  JOIN users u ON u.id = spt.user_id
                  JOIN students s ON s.portal_user_id = u.id
                  WHERE u.is_active = 1
                    AND spt.fcm_token IS NOT NULL
-                   AND spt.fcm_token != \'\''
+                   AND spt.fcm_token != ''"
             );
             $stmt->execute();
         }
