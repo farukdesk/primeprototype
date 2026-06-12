@@ -66,9 +66,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (empty($errors)) {
+        $was_active = (int)$notice['is_active'];
         db()->prepare(
             'UPDATE dept_notices SET title=?, content=?, attachment=?, notice_date=?, is_active=? WHERE id=?'
         )->execute([$title, $content ?: null, $attachment, $notice_date ?: null, $is_active, $id]);
+
+        // Notify portal students when a notice is newly activated
+        if ($is_active && !$was_active) {
+            require_once __DIR__ . '/../../students/helpers.php';
+            sp_notify_students_notice(
+                ['title' => $title, 'content' => $content, 'notice_date' => $notice_date ?: null, 'created_at' => date('Y-m-d H:i:s')],
+                'department',
+                $dept_id,
+                $dept['name']
+            );
+        }
 
         flash_set('success', "Notice <strong>" . h($title) . "</strong> updated.");
         redirect(APP_URL . '/departments/notices/index.php?dept_id=' . $dept_id);

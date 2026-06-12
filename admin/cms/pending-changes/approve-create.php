@@ -4,6 +4,7 @@
  */
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../change-log/helpers.php';
+require_once __DIR__ . '/../../students/helpers.php';
 require_super_admin();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -39,7 +40,7 @@ if ($module === 'news') {
     redirect(APP_URL . '/cms/news/index.php?approval=pending');
 
 } else {
-    $stmt = $db->prepare('SELECT id, title, is_approved FROM cms_notices WHERE id = ?');
+    $stmt = $db->prepare('SELECT * FROM cms_notices WHERE id = ?');
     $stmt->execute([$id]);
     $rec = $stmt->fetch();
     if (!$rec || $rec['is_approved']) {
@@ -52,5 +53,12 @@ if ($module === 'news') {
     log_change('cms-notice-board', 'UPDATE', $id, $rec['title'], 'is_approved', '0', '1',
         'New notice approved by ' . $reviewer['full_name'] . '.');
     flash_set('success', 'Notice <strong>' . h($rec['title']) . '</strong> approved.');
+
+    // Notify all portal students by email (only if notice is also published)
+    if ($rec['is_published']) {
+        require_once __DIR__ . '/../../includes/mailer.php';
+        sp_notify_students_notice($rec, 'university');
+    }
+
     redirect(APP_URL . '/cms/notice-board/index.php?approval=pending');
 }

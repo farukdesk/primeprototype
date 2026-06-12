@@ -61,6 +61,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
              VALUES (?,?,?,?,?,?)'
         )->execute([$dept_id, $title, $content ?: null, $attachment, $notice_date ?: null, $is_active]);
 
+        // Notify portal students in this department
+        if ($is_active) {
+            require_once __DIR__ . '/../../students/helpers.php';
+            sp_notify_students_notice(
+                ['title' => $title, 'content' => $content, 'notice_date' => $notice_date ?: null, 'created_at' => date('Y-m-d H:i:s')],
+                'department',
+                $dept_id,
+                $dept['name']
+            );
+        }
+
         flash_set('success', "Notice <strong>" . h($title) . "</strong> added.");
         redirect(APP_URL . '/departments/notices/index.php?dept_id=' . $dept_id);
     }
