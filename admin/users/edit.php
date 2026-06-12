@@ -96,7 +96,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($password !== '') {
             $hash = password_hash($password, PASSWORD_BCRYPT, ['cost' => BCRYPT_COST]);
             $db->prepare(
-                'UPDATE users SET group_id=?, username=?, email=?, ****** full_name=?, phone=?, student_sid=?, is_active=? WHERE id=?'
+                'UPDATE users SET group_id=?, username=?, email=?, password=?, full_name=?, phone=?, student_sid=?, is_active=? WHERE id=?'
             )->execute([$primary_group_id, $username, $email, $hash, $full_name, $phone ?: null, $student_sid ?: null, $is_active, $id]);
         } else {
             $db->prepare(
