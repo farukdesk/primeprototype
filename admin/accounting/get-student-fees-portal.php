@@ -54,6 +54,37 @@ try {
         }
     }
 
+    // Fetch per-semester scholarships for this package
+    $sc_stmt = db()->prepare(
+        'SELECT ss.sf_id, ss.label, ss.discount_pct, ss.discount_type,
+                ss.fixed_amount, ss.amount, ss.applies_to_fixed, ss.applies_to_english
+         FROM sfp_semester_scholarships ss
+         JOIN sfp_semester_fees sf ON sf.id = ss.sf_id
+         WHERE sf.package_id = ?
+         ORDER BY ss.sf_id, ss.created_at ASC, ss.id ASC'
+    );
+    $sc_stmt->execute([(int)$student['package_id']]);
+    $sc_rows = $sc_stmt->fetchAll();
+    $sc_by_sfid = [];
+    foreach ($sc_rows as $sc) {
+        $sc_by_sfid[(int)$sc['sf_id']][] = [
+            'label'             => $sc['label'],
+            'discount_type'     => $sc['discount_type'] ?? 'percentage',
+            'discount_pct'      => (float)$sc['discount_pct'],
+            'fixed_amount'      => (float)$sc['fixed_amount'],
+            'amount'            => (float)$sc['amount'],
+            'applies_to_fixed'  => (bool)$sc['applies_to_fixed'],
+            'applies_to_english'=> (bool)$sc['applies_to_english'],
+        ];
+    }
+
+    // Attach scholarships to each semester entry in the summary
+    foreach ($summary['semesters'] as &$sem) {
+        $sf_id = (int)($sem['id'] ?? 0);
+        $sem['scholarships'] = $sc_by_sfid[$sf_id] ?? [];
+    }
+    unset($sem);
+
     // Payment transaction history for this student only
     $raw_payments = acc_get_student_payments((int)$student['package_id']);
     $payments = array_map(function ($p) use ($month_labels_map) {

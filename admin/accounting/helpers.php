@@ -1063,6 +1063,8 @@ function acc_student_fee_summary(int $student_id): ?array
             $monthly_rows[] = [
                 'month_number' => $m,
                 'month_label'  => $month_info['label'],
+                'cal_month'    => $month_info['month'],
+                'cal_year'     => $month_info['year'],
                 'due'          => round($m_due, 2),
                 'paid'         => round($m_paid, 2),
                 'out'          => round(max(0.0, $m_due - $m_paid), 2),

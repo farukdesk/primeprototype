@@ -82,6 +82,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <th class="text-end">Total Due</th>
                         <th class="text-end">Paid</th>
                         <th class="text-end fw-bold">Outstanding</th>
+                        <th class="text-center">Due Date</th>
                         <th class="text-center">Status</th>
                     </tr>
                 </thead>
@@ -92,6 +93,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <td class="text-end" id="footTotalDue"></td>
                         <td class="text-end" id="footTotalPaid"></td>
                         <td class="text-end text-danger" id="footTotalOut"></td>
+                        <td></td>
                         <td></td>
                     </tr>
                 </tfoot>
@@ -144,6 +146,13 @@ require_once __DIR__ . '/../includes/header.php';
 const APP_URL = <?= json_encode(APP_URL) ?>;
 const CURRENCY = <?= json_encode(acc_currency()) ?>;
 
+// Today's date (no time component)
+const TODAY = new Date();
+TODAY.setHours(0, 0, 0, 0);
+
+// Monthly payment due day
+const DUE_DAY = 10;
+
 function fmt(n) {
     return CURRENCY + ' ' + parseFloat(n).toLocaleString('en-BD', {minimumFractionDigits: 2, maximumFractionDigits: 2});
 }
@@ -158,6 +167,47 @@ function feeTypeLabel(type) {
         other:            'Other Fee',
     };
     return map[type] || type;
+}
+
+/**
+ * Determine due-date status for a monthly row.
+ * Returns one of: 'overdue' | 'due_now' | 'upcoming' | 'paid' | null (no date)
+ */
+function monthStatus(calMonth, calYear, out) {
+    if (!calMonth || !calYear) return null;
+    const dueDate = new Date(calYear, calMonth - 1, DUE_DAY);
+    dueDate.setHours(0, 0, 0, 0);
+    if (out <= 0) return 'paid';
+    if (dueDate < TODAY) return 'overdue';
+    if (dueDate.getTime() === TODAY.getTime()) return 'due_now';
+    return 'upcoming';
+}
+
+function formatDueDate(calMonth, calYear) {
+    if (!calMonth || !calYear) return '—';
+    const d = new Date(calYear, calMonth - 1, DUE_DAY);
+    return d.toLocaleDateString('en-BD', {day: '2-digit', month: 'short', year: 'numeric'});
+}
+
+function statusBadge(status) {
+    switch (status) {
+        case 'overdue':
+            return '<span class="badge bg-danger border border-danger">' +
+                   '<i class="fas fa-exclamation-circle me-1"></i>Overdue</span>' +
+                   '<div class="small text-danger mt-1" style="font-size:.7rem;">Late fees may apply</div>';
+        case 'due_now':
+            return '<span class="badge bg-warning text-dark border border-warning">' +
+                   '<i class="fas fa-clock me-1"></i>Due Today</span>';
+        case 'upcoming':
+            return '<span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">' +
+                   '<i class="fas fa-calendar me-1"></i>Upcoming</span>';
+        case 'paid':
+            return '<span class="badge bg-success-subtle text-success border border-success-subtle">' +
+                   '<i class="fas fa-check me-1"></i>Paid</span>';
+        default:
+            return '<span class="badge bg-danger-subtle text-danger border border-danger-subtle">' +
+                   '<i class="fas fa-clock me-1"></i>Due</span>';
+    }
 }
 
 function renderFeeSummary(data) {
@@ -175,60 +225,98 @@ function renderFeeSummary(data) {
     tbody.innerHTML = '';
 
     let grandDue = 0, grandPaid = 0, grandOut = 0;
+    let currentlyDueOut = 0; // outstanding for overdue + due_now rows only
 
-    function addSectionRow(label) {
+    function addSectionRow(label, scholarships) {
         const tr = document.createElement('tr');
         tr.className = 'table-secondary';
-        tr.innerHTML = `<td colspan="5" class="ps-4 py-1 small fw-semibold text-muted">
-            <i class="fas fa-chevron-right me-1"></i>${label}
+
+        let scHtml = '';
+        if (scholarships && scholarships.length > 0) {
+            scHtml = '<div class="d-flex flex-wrap gap-1 mt-1">';
+            scholarships.forEach(sc => {
+                const typeStr = sc.discount_type === 'fixed'
+                    ? (CURRENCY + ' ' + parseFloat(sc.fixed_amount || sc.amount).toLocaleString('en-BD', {minimumFractionDigits: 2}))
+                    : (parseFloat(sc.discount_pct).toFixed(1) + '%');
+                let extras = '';
+                if (sc.applies_to_fixed)   extras += '<span class="badge bg-warning text-dark ms-1" style="font-size:.6rem;">+Fixed</span>';
+                if (sc.applies_to_english) extras += '<span class="badge bg-info text-dark ms-1" style="font-size:.6rem;">+ENG</span>';
+                scHtml += `<span class="badge rounded-pill bg-success bg-opacity-10 text-success border border-success border-opacity-25" style="font-size:.72rem;font-weight:500;">
+                    <i class="fas fa-tag me-1"></i>${escHtml(sc.label)}&nbsp;(${typeStr})${extras}
+                </span>`;
+            });
+            scHtml += '</div>';
+        }
+
+        tr.innerHTML = `<td colspan="6" class="ps-4 py-2 small fw-semibold text-muted">
+            <i class="fas fa-chevron-right me-1"></i>${label}${scHtml}
         </td>`;
         tbody.appendChild(tr);
     }
 
-    function addRow(label, due, paid, out) {
+    function addRow(label, due, paid, out, calMonth, calYear) {
         grandDue  += due;
         grandPaid += paid;
         grandOut  += out;
 
-        const tr  = document.createElement('tr');
+        const status  = monthStatus(calMonth, calYear, out);
+        const dueDateStr = formatDueDate(calMonth, calYear);
         const pct = (due > 0 && out > 0) ? Math.round((out / due) * 100) : 0;
 
+        // Only count as "currently due" for overdue and due-today rows
+        if (status === 'overdue' || status === 'due_now') {
+            currentlyDueOut += out;
+        }
+
+        // Outstanding cell colour: upcoming rows use muted styling instead of red
+        const outColour = out > 0
+            ? (status === 'upcoming' ? 'text-secondary' : 'text-danger')
+            : 'text-success';
+
+        const tr  = document.createElement('tr');
         tr.innerHTML = `
             <td class="ps-4">
                 <div class="small">${label}</div>
                 ${due > 0 && out > 0
                     ? `<div class="progress mt-1" style="height:3px;width:100px;">
                            <div class="progress-bar bg-success" style="width:${100 - pct}%"></div>
-                           <div class="progress-bar bg-danger opacity-50" style="width:${pct}%"></div>
+                           <div class="progress-bar ${status === 'upcoming' ? 'bg-secondary' : 'bg-danger'} opacity-50" style="width:${pct}%"></div>
                        </div>`
                     : ''}
             </td>
             <td class="text-end small">${due > 0 ? fmt(due) : '—'}</td>
             <td class="text-end small text-success">${paid > 0 ? fmt(paid) : '—'}</td>
-            <td class="text-end small fw-semibold ${out > 0 ? 'text-danger' : 'text-success'}">
+            <td class="text-end small fw-semibold ${outColour}">
                 ${out > 0 ? fmt(out) : (due > 0 ? '<i class="fas fa-check-circle"></i> Paid' : '—')}
             </td>
+            <td class="text-center small text-muted">${dueDateStr}</td>
             <td class="text-center">
-                ${out > 0
-                    ? '<span class="badge bg-danger-subtle text-danger border border-danger-subtle"><i class="fas fa-clock me-1"></i>Due</span>'
-                    : (due > 0 ? '<span class="badge bg-success-subtle text-success border border-success-subtle"><i class="fas fa-check me-1"></i>Paid</span>' : '—')}
+                ${due > 0
+                    ? (status !== null
+                        ? statusBadge(status)
+                        : (out > 0
+                            ? '<span class="badge bg-danger-subtle text-danger border border-danger-subtle"><i class="fas fa-clock me-1"></i>Due</span>'
+                            : '<span class="badge bg-success-subtle text-success border border-success-subtle"><i class="fas fa-check me-1"></i>Paid</span>'))
+                    : '—'}
             </td>`;
         tbody.appendChild(tr);
     }
 
     const t = s.totals;
 
-    addSectionRow('Admission');
-    addRow('Admission Fee', t.admission.due, t.admission.paid, t.admission.out);
+    addSectionRow('Admission', []);
+    addRow('Admission Fee', t.admission.due, t.admission.paid, t.admission.out, null, null);
 
     s.semesters.forEach(sf => {
         const semLabel = sf.semester_label || ('Semester ' + sf.semester_number);
-        addSectionRow(semLabel);
-        addRow(semLabel + ' – Registration Fee', sf.reg_fee, sf.reg_paid, sf.reg_out);
+        addSectionRow(semLabel, sf.scholarships || []);
+        addRow(semLabel + ' – Registration Fee', sf.reg_fee, sf.reg_paid, sf.reg_out, null, null);
         sf.monthly_rows.forEach(mr => {
             addRow(
                 semLabel + ' – Month ' + mr.month_number + (mr.month_label ? ' (' + mr.month_label + ')' : ''),
-                mr.due, mr.paid, mr.out
+                mr.due, mr.paid, mr.out,
+                mr.cal_month || null,
+                mr.cal_year  || null
             );
         });
     });
@@ -239,13 +327,24 @@ function renderFeeSummary(data) {
 
     const badge = document.getElementById('totalOutstandingBadge');
     if (grandOut > 0) {
-        badge.textContent   = 'Outstanding: ' + fmt(grandOut);
+        // Show currently-due amount prominently; note total outstanding separately
+        let badgeText = 'Outstanding: ' + fmt(currentlyDueOut);
+        if (grandOut > currentlyDueOut) {
+            badgeText += ' (Total: ' + fmt(grandOut) + ')';
+        }
+        badge.textContent   = badgeText;
         badge.style.display = '';
     } else {
         badge.style.display = 'none';
     }
 
     document.getElementById('feeScheduleCard').style.display = '';
+}
+
+function escHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str || '';
+    return d.innerHTML;
 }
 
 function renderTransactionHistory(payments) {
@@ -266,7 +365,7 @@ function renderTransactionHistory(payments) {
             const monText   = p.month_number
                 ? ('Month ' + p.month_number + (p.month_label ? ' (' + p.month_label + ')' : ''))
                 : (p.fee_type === 'semester_tuition' ? 'Lump sum' : '—');
-            const statusBadge = p.voucher_status === 'posted'
+            const voucherStatusBadge = p.voucher_status === 'posted'
                 ? '<span class="badge bg-success-subtle text-success border border-success-subtle">Posted</span>'
                 : '<span class="badge bg-warning text-dark">' + p.voucher_status + '</span>';
             const dateStr = p.voucher_date
@@ -292,7 +391,7 @@ function renderTransactionHistory(payments) {
                         <i class="fas fa-print me-1"></i>Student Copy
                     </a>
                 </td>
-                <td>${statusBadge}</td>`;
+                <td>${voucherStatusBadge}</td>`;
             tbody.appendChild(tr);
         });
     }
