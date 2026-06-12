@@ -36,34 +36,122 @@ if (!$student) {
 // ── Active tab (university|department) ───────────────────────────────────────
 $active_tab = in_array($_GET['tab'] ?? '', ['department'], true) ? 'department' : 'university';
 
-// ── University Notices (published & approved) ────────────────────────────────
-$university_notices = [];
+// ── Pagination settings ───────────────────────────────────────────────────────
+$per_page = 5;
+$page     = max(1, (int)($_GET['page'] ?? 1));
+
+// ── University Notices – total count (for badge) ─────────────────────────────
+$university_total = 0;
 try {
     $stmt = db()->prepare(
-        'SELECT id, title, content, content_type, attachment, attachment_original_name,
-                attachment_size, published_at, created_at
-         FROM cms_notices
-         WHERE is_published = 1 AND is_approved = 1
-         ORDER BY published_at DESC, id DESC
-         LIMIT 50'
+        'SELECT COUNT(*) FROM cms_notices WHERE is_published = 1 AND is_approved = 1'
     );
     $stmt->execute();
-    $university_notices = $stmt->fetchAll();
+    $university_total = (int)$stmt->fetchColumn();
 } catch (Throwable $e) {}
 
-// ── Department Notices (active, for student's department) ────────────────────
-$dept_notices = [];
+// ── Department Notices – total count (for badge) ─────────────────────────────
+$dept_total = 0;
 try {
     $stmt = db()->prepare(
-        'SELECT id, title, content, attachment, notice_date, created_at
-         FROM dept_notices
-         WHERE dept_id = ? AND is_active = 1
-         ORDER BY notice_date DESC, id DESC
-         LIMIT 50'
+        'SELECT COUNT(*) FROM dept_notices WHERE dept_id = ? AND is_active = 1'
     );
     $stmt->execute([$student['dept_id']]);
-    $dept_notices = $stmt->fetchAll();
+    $dept_total = (int)$stmt->fetchColumn();
 } catch (Throwable $e) {}
+
+// ── Clamp page to valid range for active tab ─────────────────────────────────
+$active_total = $active_tab === 'university' ? $university_total : $dept_total;
+$total_pages  = max(1, (int)ceil($active_total / $per_page));
+$page         = min($page, $total_pages);
+$offset       = ($page - 1) * $per_page;
+
+// ── Helper: build page-number list with ellipsis ──────────────────────────────
+function pagination_pages(int $current, int $total): array {
+    if ($total <= 7) {
+        return range(1, $total);
+    }
+    $window = 2; // pages on each side of current
+    $pages  = [];
+    $pages[] = 1;
+    if ($current - $window > 2) {
+        $pages[] = '…';
+    }
+    for ($i = max(2, $current - $window); $i <= min($total - 1, $current + $window); $i++) {
+        $pages[] = $i;
+    }
+    if ($current + $window < $total - 1) {
+        $pages[] = '…';
+    }
+    $pages[] = $total;
+    return $pages;
+}
+
+// ── Helper: render pagination nav ────────────────────────────────────────────
+function render_pagination(string $label, string $base, int $page, int $total_pages, int $offset, int $per_page, int $total): void {
+    if ($total_pages <= 1) return;
+    echo '<nav aria-label="' . h($label) . '" class="mt-4">';
+    echo '<ul class="pagination pagination-sm justify-content-center flex-wrap gap-1 mb-0">';
+    // Previous
+    echo '<li class="page-item' . ($page <= 1 ? ' disabled' : '') . '">';
+    echo '<a class="page-link rounded" href="' . h($base . ($page - 1)) . '" aria-label="Previous">';
+    echo '<i class="fas fa-chevron-left"></i><span class="visually-hidden">Previous</span></a></li>';
+    // Page numbers
+    foreach (pagination_pages($page, $total_pages) as $p) {
+        if ($p === '…') {
+            echo '<li class="page-item disabled"><span class="page-link">…</span></li>';
+        } else {
+            echo '<li class="page-item' . ($p === $page ? ' active' : '') . '">';
+            echo '<a class="page-link rounded" href="' . h($base . $p) . '">' . $p . '</a></li>';
+        }
+    }
+    // Next
+    echo '<li class="page-item' . ($page >= $total_pages ? ' disabled' : '') . '">';
+    echo '<a class="page-link rounded" href="' . h($base . ($page + 1)) . '" aria-label="Next">';
+    echo '<i class="fas fa-chevron-right"></i><span class="visually-hidden">Next</span></a></li>';
+    echo '</ul>';
+    echo '<p class="text-center text-muted small mt-2 mb-0">'
+        . 'Showing ' . ($offset + 1) . '–' . min($offset + $per_page, $total) . ' of ' . $total . ' notices'
+        . '</p></nav>';
+}
+
+// ── University Notices (published & approved, paginated) ─────────────────────
+$university_notices = [];
+if ($active_tab === 'university') {
+    try {
+        $stmt = db()->prepare(
+            'SELECT id, title, content, content_type, attachment, attachment_original_name,
+                    attachment_size, published_at, created_at
+             FROM cms_notices
+             WHERE is_published = 1 AND is_approved = 1
+             ORDER BY published_at DESC, id DESC
+             LIMIT :limit OFFSET :offset'
+        );
+        $stmt->bindValue(':limit',  $per_page, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', $offset,   PDO::PARAM_INT);
+        $stmt->execute();
+        $university_notices = $stmt->fetchAll();
+    } catch (Throwable $e) {}
+}
+
+// ── Department Notices (active, for student's department, paginated) ──────────
+$dept_notices = [];
+if ($active_tab === 'department') {
+    try {
+        $stmt = db()->prepare(
+            'SELECT id, title, content, attachment, notice_date, created_at
+             FROM dept_notices
+             WHERE dept_id = :dept_id AND is_active = 1
+             ORDER BY notice_date DESC, id DESC
+             LIMIT :limit OFFSET :offset'
+        );
+        $stmt->bindValue(':dept_id', $student['dept_id'], PDO::PARAM_INT);
+        $stmt->bindValue(':limit',   $per_page,           PDO::PARAM_INT);
+        $stmt->bindValue(':offset',  $offset,             PDO::PARAM_INT);
+        $stmt->execute();
+        $dept_notices = $stmt->fetchAll();
+    } catch (Throwable $e) {}
+}
 
 $page_title = 'My Notices';
 require_once __DIR__ . '/../includes/header.php';
@@ -91,7 +179,7 @@ require_once __DIR__ . '/../includes/header.php';
            style="border-radius:10px 10px 0 0; <?= $active_tab === 'university' ? 'background:#4f8ef7;color:#fff;border-color:#4f8ef7;' : '' ?>">
             <i class="fas fa-university me-2"></i>University Notice
             <span class="badge ms-1 <?= $active_tab === 'university' ? 'bg-white text-primary' : 'bg-primary' ?>">
-                <?= count($university_notices) ?>
+                <?= $university_total ?>
             </span>
         </a>
     </li>
@@ -101,7 +189,7 @@ require_once __DIR__ . '/../includes/header.php';
            style="border-radius:10px 10px 0 0; <?= $active_tab === 'department' ? 'background:#4f8ef7;color:#fff;border-color:#4f8ef7;' : '' ?>">
             <i class="fas fa-building me-2"></i><?= h($student['dept_name']) ?> Notice
             <span class="badge ms-1 <?= $active_tab === 'department' ? 'bg-white text-primary' : 'bg-primary' ?>">
-                <?= count($dept_notices) ?>
+                <?= $dept_total ?>
             </span>
         </a>
     </li>
@@ -180,6 +268,14 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
 <?php endif; ?>
 
+<?php
+// ── University Notices Pagination ─────────────────────────────────────────────
+if ($active_tab === 'university') {
+    render_pagination('University notices pagination', '?tab=university&page=',
+        $page, $total_pages, $offset, $per_page, $university_total);
+}
+?>
+
 <?php else: ?>
 <!-- ── Department Notices ─────────────────────────────────────────────────── -->
 <?php if (empty($dept_notices)): ?>
@@ -243,6 +339,14 @@ require_once __DIR__ . '/../includes/header.php';
     <?php endforeach; ?>
     </div>
 <?php endif; ?>
+
+<?php
+// ── Department Notices Pagination ─────────────────────────────────────────────
+if ($active_tab === 'department') {
+    render_pagination('Department notices pagination', '?tab=department&page=',
+        $page, $total_pages, $offset, $per_page, $dept_total);
+}
+?>
 <?php endif; ?>
 
 <style>
@@ -250,6 +354,19 @@ require_once __DIR__ . '/../includes/header.php';
 .notice-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,.10) !important; }
 .nav-tabs .nav-link:not(.active) { color: #6b7280; }
 .nav-tabs .nav-link:not(.active):hover { background: #f3f4f6; border-color: #e5e7eb; }
+.pagination .page-link {
+    min-width: 36px;
+    text-align: center;
+    border-radius: 8px !important;
+    font-size: .85rem;
+}
+.pagination .page-item.active .page-link {
+    background-color: #4f8ef7;
+    border-color: #4f8ef7;
+}
+@media (max-width: 480px) {
+    .pagination .page-link { min-width: 32px; font-size: .78rem; padding: .3rem .5rem; }
+}
 </style>
 <script>
 function toggleNotice(btn, id) {
