@@ -5,6 +5,32 @@
  */
 $page_title = $page_title ?? APP_NAME;
 $user       = auth_user();
+
+// For student portal users, look up the student's profile photo for the topbar avatar
+$_portal_student_photo_url = '';
+if (is_portal_student()) {
+    try {
+        $__stmt = db()->prepare(
+            'SELECT photo FROM students WHERE portal_user_id = ? LIMIT 1'
+        );
+        $__stmt->execute([(int)$user['id']]);
+        $__row = $__stmt->fetch();
+        if ($__row && $__row['photo']) {
+            $__photo     = $__row['photo'];
+            $__new_path  = UPLOAD_DIR . '/students/photos/' . $__photo;
+            if (is_file($__new_path)) {
+                $_portal_student_photo_url = UPLOAD_URL . '/students/photos/' . rawurlencode($__photo);
+            } else {
+                // Legacy path
+                $__base = rtrim(defined('SITE_URL') ? SITE_URL : dirname(APP_URL), '/');
+                $_portal_student_photo_url = $__base . '/upload_spic/' . rawurlencode($__photo);
+            }
+        }
+        unset($__stmt, $__row, $__photo, $__new_path, $__base);
+    } catch (Throwable $__e) {
+        error_log('header.php: could not load portal student photo – ' . $__e->getMessage());
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -1700,7 +1726,14 @@ $user       = auth_user();
 
         <div class="user-menu dropdown">
             <button class="dropdown-toggle" data-bs-toggle="dropdown">
-                <div class="avatar"><?= strtoupper(substr($user['full_name'] ?? 'A', 0, 1)) ?></div>
+                <div class="avatar">
+                    <?php if ($_portal_student_photo_url): ?>
+                    <img src="<?= h($_portal_student_photo_url) ?>" alt="Photo"
+                         style="width:100%;height:100%;object-fit:cover;border-radius:50%;">
+                    <?php else: ?>
+                    <?= strtoupper(substr($user['full_name'] ?? 'A', 0, 1)) ?>
+                    <?php endif; ?>
+                </div>
                 <span><?= h($user['full_name'] ?? 'Admin') ?></span>
                 <i class="fas fa-chevron-down" style="font-size:.7rem;opacity:.6"></i>
             </button>

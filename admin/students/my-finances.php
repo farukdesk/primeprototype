@@ -338,7 +338,12 @@ function renderFeeSummary(data) {
     s.semesters.forEach(sf => {
         const semLabel = sf.semester_label || ('Semester ' + sf.semester_number);
         addSectionRow(semLabel, sf.scholarships || []);
-        addRow(semLabel + ' – Registration Fee', sf.reg_fee, sf.reg_paid, sf.reg_out, null, null);
+        // Use the first month's calendar date as the registration fee due period so
+        // semesters that haven't started yet are shown as "Upcoming" rather than "Due".
+        const firstMonth = sf.monthly_rows && sf.monthly_rows.length ? sf.monthly_rows[0] : null;
+        addRow(semLabel + ' – Registration Fee', sf.reg_fee, sf.reg_paid, sf.reg_out,
+               firstMonth ? (firstMonth.cal_month || null) : null,
+               firstMonth ? (firstMonth.cal_year  || null) : null);
         sf.monthly_rows.forEach(mr => {
             addRow(
                 semLabel + ' – Month ' + mr.month_number + (mr.month_label ? ' (' + mr.month_label + ')' : ''),
