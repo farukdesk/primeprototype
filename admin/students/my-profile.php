@@ -51,16 +51,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     $action = $_POST['action'] ?? '';
 
-    // ── Update contact details (phone & email) ────────────────────────────
+    // ── Update contact details (phone, email & present address) ─────────
     if ($action === 'update_contact') {
-        $phone = trim($_POST['phone'] ?? '');
-        $email = trim($_POST['email'] ?? '');
+        $phone           = trim($_POST['phone'] ?? '');
+        $email           = trim($_POST['email'] ?? '');
+        $present_address = trim($_POST['present_address'] ?? '');
 
         if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
             flash_set('error', 'Invalid email address.');
         } else {
-            db()->prepare('UPDATE students SET phone = ?, email = ? WHERE id = ?')
-               ->execute([$phone ?: null, $email ?: null, $id]);
+            db()->prepare('UPDATE students SET phone = ?, email = ?, present_address = ? WHERE id = ?')
+               ->execute([$phone ?: null, $email ?: null, $present_address ?: null, $id]);
             // Keep portal user account in sync
             db()->prepare('UPDATE users SET phone = ?, email = ? WHERE id = ?')
                ->execute([$phone ?: null, $email ?: null, $user['id']]);
@@ -359,7 +360,7 @@ $statusChipClass = match($student['status'] ?? '') {
     <div class="sv-card-header">
         <div class="sv-card-header-icon" style="background:#eff6ff;color:#2563eb;"><i class="fas fa-pen"></i></div>
         <h6 class="sv-card-header-title">Update Contact Details</h6>
-        <small class="ms-auto text-muted" style="font-size:.75rem;">You can update your phone and email</small>
+        <small class="ms-auto text-muted" style="font-size:.75rem;">You can update your phone, email and present address</small>
     </div>
     <div class="sv-card-body">
         <form method="POST" action="">
@@ -381,6 +382,13 @@ $statusChipClass = match($student['status'] ?? '') {
                     <input type="email" class="form-control" name="email"
                            value="<?= h($student['email'] ?? '') ?>"
                            placeholder="your@email.com" maxlength="150">
+                </div>
+                <div class="col-12">
+                    <label class="form-label fw-semibold" style="font-size:.82rem;">
+                        <i class="fas fa-home me-1 text-muted"></i>Present Address
+                    </label>
+                    <textarea class="form-control" name="present_address" rows="3"
+                              placeholder="Enter your present address…" maxlength="500"><?= h($student['present_address'] ?? '') ?></textarea>
                 </div>
                 <div class="col-12">
                     <button type="submit" class="btn btn-primary px-4" style="border-radius:9px;font-weight:600;">
