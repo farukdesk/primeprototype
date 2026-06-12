@@ -16,6 +16,13 @@
  *
  * The import can be run multiple times safely: students that already have a
  * photo are skipped unless "Overwrite existing photos" is checked.
+ *
+ * ZIP upload mode
+ * ───────────────
+ * Alternatively, a ZIP file of photos (up to several GB) can be uploaded
+ * directly on this page.  Each image filename (without extension) must be the
+ * student ID, e.g. "25010101.jpg".  Sub-folder names inside the ZIP are
+ * ignored.  Matching is case-insensitive and tolerant of leading zeros.
  */
 
 require_once __DIR__ . '/../includes/auth.php';
@@ -28,7 +35,7 @@ if (!sm_can_create()) {
 }
 
 set_time_limit(0);
-ini_set('memory_limit', '256M');
+ini_set('memory_limit', '512M');
 
 // ── Paths ─────────────────────────────────────────────────────────────────────
 // UPLOAD_DIR = {site_root}/admin/uploads  →  site root is two levels up.
@@ -225,10 +232,183 @@ $overwritten = [];
 $skipped_dup = [];
 $skipped_no_map  = [];   // student not found in old DB mapping
 $skipped_no_file = [];   // mapping found but file missing from upload_spic/
+$skipped_nostu   = [];   // ZIP mode: no matching student for this filename
 $errors      = [];
 $results     = null;     // null = not yet run
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'zip') {
+    // ── ZIP upload mode ───────────────────────────────────────────────────────
+    csrf_check();
+
+    $overwrite = isset($_POST['overwrite']) && $_POST['overwrite'] === '1';
+
+    if (!class_exists('ZipArchive')) {
+        flash_set('error', 'PHP ZipArchive extension is not available on this server.');
+    } elseif (empty($_FILES['zip_file']['name']) || ($_FILES['zip_file']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+        $err_code = $_FILES['zip_file']['error'] ?? UPLOAD_ERR_NO_FILE;
+        if (in_array($err_code, [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true)) {
+            flash_set('error', 'The ZIP file is too large for the server upload limit. '
+                . 'Current limits: upload_max_filesize=' . ini_get('upload_max_filesize')
+                . ', post_max_size=' . ini_get('post_max_size') . '.');
+        } else {
+            flash_set('error', 'Please choose a ZIP file to upload.');
+        }
+    } else {
+        $tmp_zip  = $_FILES['zip_file']['tmp_name'];
+        $zip_mime = (new finfo(FILEINFO_MIME_TYPE))->file($tmp_zip);
+        $zip_ext  = strtolower(pathinfo($_FILES['zip_file']['name'], PATHINFO_EXTENSION));
+
+        $valid_zip_mimes = [
+            'application/zip',
+            'application/x-zip-compressed',
+            'application/octet-stream',
+            'multipart/x-zip',
+        ];
+
+        if ($zip_ext !== 'zip' || !in_array($zip_mime, $valid_zip_mimes, true)) {
+            flash_set('error', 'Only ZIP files are accepted.');
+        } else {
+            $zip = new ZipArchive();
+            if ($zip->open($tmp_zip) !== true) {
+                flash_set('error', 'Could not open the ZIP file. It may be corrupt.');
+            } else {
+                // ── Pre-load all students (case-insensitive, leading-zero
+                //    tolerant lookup) to avoid N+1 queries ────────────────────
+                $all_students_stmt = db()->query(
+                    "SELECT id, student_id, full_name, photo FROM students"
+                );
+                $student_map = [];  // student_id (lowercase) => row
+                $zero_map    = [];  // student_id w/o leading zeros => lowercase key
+                foreach ($all_students_stmt->fetchAll() as $row) {
+                    $key = strtolower(trim((string)$row['student_id']));
+                    if ($key === '') continue;
+                    $student_map[$key] = $row;
+                    $zkey = ltrim($key, '0');
+                    if ($zkey !== '' && $zkey !== $key && !isset($zero_map[$zkey])) {
+                        $zero_map[$zkey] = $key;
+                    }
+                }
+
+                if (!is_dir($photos_dir)) {
+                    mkdir($photos_dir, 0755, true);
+                }
+
+                $finfo       = new finfo(FILEINFO_MIME_TYPE);
+                $update_stmt = db()->prepare(
+                    "UPDATE students SET photo = ? WHERE id = ?"
+                );
+
+                // ── Walk every entry in the ZIP ────────────────────────────────
+                for ($i = 0; $i < $zip->numFiles; $i++) {
+                    $entry = $zip->getNameIndex($i);
+
+                    // Skip directory entries
+                    if (substr($entry, -1) === '/') continue;
+
+                    $ext = strtolower(pathinfo($entry, PATHINFO_EXTENSION));
+                    if (!in_array($ext, SM_PHOTO_EXTS, true)) continue;
+
+                    $original_name  = basename($entry);
+                    $student_id_raw = pathinfo($original_name, PATHINFO_FILENAME);
+                    $sid_key        = strtolower(trim($student_id_raw));
+
+                    if ($sid_key === '') {
+                        $errors[] = ['student_id' => $entry, 'name' => '', 'reason' => 'Could not derive a student ID from the filename.'];
+                        continue;
+                    }
+
+                    // ── Match student (exact, then leading-zero tolerant) ──────
+                    if (!isset($student_map[$sid_key])) {
+                        $zkey = ltrim($sid_key, '0');
+                        if ($zkey !== '' && isset($zero_map[$zkey])) {
+                            $sid_key = $zero_map[$zkey];
+                        } elseif ($zkey !== '' && isset($student_map[$zkey])) {
+                            $sid_key = $zkey;
+                        }
+                    }
+
+                    if (!isset($student_map[$sid_key])) {
+                        $skipped_nostu[] = [
+                            'path'       => $entry,
+                            'student_id' => $student_id_raw,
+                        ];
+                        continue;
+                    }
+
+                    $student = $student_map[$sid_key];
+                    $stu_pk  = (int)$student['id'];
+
+                    // ── Duplicate / overwrite logic ────────────────────────────
+                    if ($student['photo'] && !$overwrite) {
+                        $skipped_dup[] = [
+                            'student_id' => $student['student_id'],
+                            'name'       => $student['full_name'],
+                        ];
+                        continue;
+                    }
+
+                    // ── Read image content from ZIP ────────────────────────────
+                    $raw_content = $zip->getFromIndex($i);
+                    if ($raw_content === false) {
+                        $errors[] = ['student_id' => $student['student_id'], 'name' => $student['full_name'], 'reason' => 'Could not read file from ZIP.'];
+                        continue;
+                    }
+
+                    // ── Validate MIME type via magic bytes ─────────────────────
+                    $mime = $finfo->buffer($raw_content);
+                    if (!in_array($mime, SM_PHOTO_MIMES, true)) {
+                        $errors[] = ['student_id' => $student['student_id'], 'name' => $student['full_name'], 'reason' => 'File does not appear to be a valid image (detected MIME: ' . $mime . ').'];
+                        unset($raw_content);
+                        continue;
+                    }
+
+                    // ── Save new photo to disk ─────────────────────────────────
+                    do {
+                        $stored_name = bin2hex(random_bytes(12)) . '.' . $ext;
+                        $dest_path   = $photos_dir . '/' . $stored_name;
+                    } while (file_exists($dest_path));
+
+                    if (file_put_contents($dest_path, $raw_content) === false) {
+                        $errors[] = ['student_id' => $student['student_id'], 'name' => $student['full_name'], 'reason' => 'Failed to write file to disk.'];
+                        unset($raw_content);
+                        continue;
+                    }
+                    unset($raw_content);
+
+                    // ── Remove old photo file (if replacing) ───────────────────
+                    $old_photo = $student['photo'];
+                    if ($old_photo) {
+                        $old_path = $photos_dir . '/' . $old_photo;
+                        if (is_file($old_path)) {
+                            @unlink($old_path);
+                        }
+                    }
+
+                    // ── Update database ────────────────────────────────────────
+                    $update_stmt->execute([$stored_name, $stu_pk]);
+
+                    // Update local map so the same student isn't double-processed
+                    $student_map[$sid_key]['photo'] = $stored_name;
+
+                    if ($old_photo) {
+                        $overwritten[] = [
+                            'student_id' => $student['student_id'],
+                            'name'       => $student['full_name'],
+                        ];
+                    } else {
+                        $assigned[] = [
+                            'student_id' => $student['student_id'],
+                            'name'       => $student['full_name'],
+                        ];
+                    }
+                }
+
+                $zip->close();
+                $results = true;
+            }
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
     $overwrite = isset($_POST['overwrite']) && $_POST['overwrite'] === '1';
@@ -431,7 +611,38 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="text-muted small">File Missing in upload_spic/</div>
         </div>
     </div>
+    <div class="col-6 col-md-3">
+        <div class="card border-secondary text-center py-3">
+            <div class="fs-2 fw-bold text-secondary"><?= count($skipped_nostu) ?></div>
+            <div class="text-muted small">No Matching Student</div>
+        </div>
+    </div>
 </div>
+
+<?php if (!empty($skipped_nostu)): ?>
+<div class="card mb-3">
+    <div class="card-header bg-secondary text-white">
+        <i class="fas fa-user-slash me-1"></i> No Matching Student (<?= count($skipped_nostu) ?>)
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive" style="max-height:300px;overflow-y:auto;">
+            <table class="table table-sm table-striped mb-0">
+                <thead class="table-light sticky-top">
+                    <tr><th>Student ID (from filename)</th><th>File in ZIP</th></tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($skipped_nostu as $r): ?>
+                    <tr>
+                        <td><code><?= h($r['student_id']) ?></code></td>
+                        <td class="text-muted small"><?= h($r['path']) ?></td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 
 <?php if (!empty($assigned)): ?>
 <div class="card mb-3">
@@ -549,6 +760,64 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="row justify-content-center">
     <div class="col-lg-8">
 
+        <!-- ── Option 1: ZIP upload ─────────────────────────────────────────── -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-file-archive me-2"></i>Upload ZIP of Photos</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">
+                    Upload a ZIP file containing student photos. Each image filename
+                    (without the extension) must be the <strong>Student ID</strong>,
+                    e.g. <code>25010101.jpg</code>. Sub-folder names inside the ZIP are
+                    ignored. Matching is case-insensitive and tolerant of leading zeros.
+                </p>
+                <p class="text-muted">
+                    Supported formats: JPG, JPEG, PNG, GIF, WEBP.
+                    Large ZIP files (1&nbsp;GB+) are supported &mdash; the upload may take several
+                    minutes depending on your connection. Do not close this page while uploading.
+                </p>
+
+                <form method="post" enctype="multipart/form-data" id="zip-upload-form">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="mode" value="zip">
+
+                    <div class="mb-3">
+                        <label for="zip_file" class="form-label fw-semibold">ZIP File</label>
+                        <input type="file" name="zip_file" id="zip_file" class="form-control"
+                               accept=".zip,application/zip" required>
+                    </div>
+
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" name="overwrite"
+                               value="1" id="zip_overwrite">
+                        <label class="form-check-label" for="zip_overwrite">
+                            <strong>Overwrite existing photos</strong>
+                            <span class="text-muted d-block" style="font-size:.85rem;">
+                                By default students who already have a photo are skipped.
+                                Check this to replace their photo with the one from the ZIP.
+                            </span>
+                        </label>
+                    </div>
+
+                    <button type="submit" class="btn btn-success" id="zip-upload-btn">
+                        <i class="fas fa-upload me-1"></i> Upload &amp; Import
+                    </button>
+                </form>
+
+                <script>
+                document.getElementById('zip-upload-form').addEventListener('submit', function () {
+                    var btn = document.getElementById('zip-upload-btn');
+                    btn.disabled = true;
+                    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Uploading&hellip; please wait';
+                });
+                </script>
+            </div>
+        </div>
+
+        <div class="text-center text-muted mb-4">— or —</div>
+
+        <!-- ── Option 2: legacy SQL + upload_spic import ───────────────────── -->
         <div class="card mb-4">
             <div class="card-header">
                 <h5 class="mb-0"><i class="fas fa-history me-2"></i>Legacy Photo Import from upload_spic/</h5>
