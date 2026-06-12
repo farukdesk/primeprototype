@@ -68,7 +68,10 @@ function sm_student_child_tables(): array
     $stmt->execute();
     $refs = [];
     foreach ($stmt->fetchAll() as $row) {
-        $refs[] = [$row['TABLE_NAME'], $row['COLUMN_NAME']];
+        if (preg_match('/^[A-Za-z0-9_]+$/', $row['TABLE_NAME'])
+            && preg_match('/^[A-Za-z0-9_]+$/', $row['COLUMN_NAME'])) {
+            $refs[] = [$row['TABLE_NAME'], $row['COLUMN_NAME']];
+        }
     }
     // Tables that reference students.id without a declared foreign key.
     foreach ([['student_portal_log', 'student_id']] as $extra) {
@@ -253,6 +256,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $done++;
         } catch (Throwable $e) {
             $fail++;
+            error_log('Student merge failed (dup id ' . $dup_id . '): ' . $e->getMessage());
         }
     }
 
