@@ -4,6 +4,9 @@ auth_check();
 
 // Redirect users who do not have dashboard access to their appropriate area.
 if (!is_super_admin() && !can_access('dashboard')) {
+    if (is_portal_student()) {
+        redirect(APP_URL . '/students/my-profile.php');
+    }
     if (can_access('faculty-profile')) {
         redirect(APP_URL . '/faculty-profiles/my-profile.php');
     }

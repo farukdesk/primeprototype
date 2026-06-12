@@ -248,7 +248,7 @@ $user       = auth_user();
 <nav id="sidebar">
     <a href="<?= APP_URL ?>/index.php" class="brand">
         <img src="<?= APP_URL ?>/../assets/img/logo/favicon.png" alt="PU" onerror="this.style.display='none'">
-        <span>Prime University<br><small style="font-weight:400;font-size:.7rem;opacity:.7">Admin Panel</small></span>
+        <span>Prime University<br><small style="font-weight:400;font-size:.7rem;opacity:.7"><?= is_portal_student() ? 'Student Portal' : 'Admin Panel' ?></small></span>
     </a>
 
     <?php
@@ -297,6 +297,18 @@ $user       = auth_user();
     $is_medical_active = strpos($current_path, '/medical-center/') !== false;
     $is_student_portal_active = strpos($current_path, '/accounting/student-portal') !== false;
     ?>
+
+    <!-- ── Student Portal: show ONLY My Profile for student users ── -->
+    <?php if (is_portal_student()): ?>
+    <ul class="nav flex-column mt-2">
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/students/my-profile.php"
+               class="<?= strpos($current_path, '/students/my-profile') !== false ? 'active' : '' ?>">
+                <i class="fas fa-id-card"></i> My Profile
+            </a>
+        </li>
+    </ul>
+    <?php else: ?>
 
     <!-- Dashboard -->
     <?php if (is_super_admin() || can_access('dashboard')): ?>
@@ -1659,6 +1671,8 @@ $user       = auth_user();
     </ul>
     <?php endif; ?>
 
+    <?php endif; // end is_portal_student() else block ?>
+
     <div style="padding: 20px; margin-top: auto;">
         <a href="<?= APP_URL ?>/logout.php"
            style="display:flex;align-items:center;gap:8px;color:#e74c3c;font-size:.85rem;text-decoration:none;">
@@ -1684,10 +1698,15 @@ $user       = auth_user();
                 <i class="fas fa-chevron-down" style="font-size:.7rem;opacity:.6"></i>
             </button>
             <ul class="dropdown-menu dropdown-menu-end shadow border-0" style="border-radius:12px;font-size:.875rem;">
+                <?php if (is_portal_student()): ?>
+                <li><a class="dropdown-item" href="<?= APP_URL ?>/students/my-profile.php">
+                    <i class="fas fa-id-card me-2 text-muted"></i>My Profile</a></li>
+                <?php else: ?>
                 <li><a class="dropdown-item" href="<?= APP_URL ?>/users/edit.php?id=<?= $user['id'] ?>">
                     <i class="fas fa-user-edit me-2 text-muted"></i>My Profile</a></li>
                 <li><a class="dropdown-item" href="<?= APP_URL ?>/my-signature/index.php">
                     <i class="fas fa-pen-nib me-2 text-muted"></i>My Signature</a></li>
+                <?php endif; ?>
                 <li><hr class="dropdown-divider"></li>
                 <li><a class="dropdown-item text-danger" href="<?= APP_URL ?>/logout.php">
                     <i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
