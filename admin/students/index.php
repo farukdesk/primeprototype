@@ -132,6 +132,11 @@ require_once __DIR__ . '/../includes/header.php';
         <a href="<?= APP_URL ?>/students/csv-import.php" class="btn btn-outline-success" style="border-radius:10px;font-size:.875rem;">
             <i class="fas fa-file-csv me-1"></i> Bulk CSV Import
         </a>
+        <?php if (sm_can_delete()): ?>
+        <a href="<?= APP_URL ?>/students/merge-duplicates.php" class="btn btn-outline-danger" style="border-radius:10px;font-size:.875rem;">
+            <i class="fas fa-compress-arrows-alt me-1"></i> Merge Duplicates
+        </a>
+        <?php endif; ?>
         <a href="<?= APP_URL ?>/students/create.php" class="btn btn-primary" style="border-radius:10px;font-size:.875rem;">
             <i class="fas fa-user-plus me-1"></i> Add Student
         </a>
