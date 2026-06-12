@@ -43,7 +43,7 @@ if (!$student) {
     redirect(APP_URL . '/index.php');
 }
 
-$id = (int)$student['id'];
+$id = (int)$student['id']; // Always scoped to the authenticated portal user – never taken from user input
 $page_title = 'My Profile';
 
 // ── Handle POST actions ───────────────────────────────────────────────────────

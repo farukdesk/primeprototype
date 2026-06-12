@@ -41,15 +41,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             // Redirect non-dashboard users to their primary area
             if (!$user['is_super'] && !can_access('dashboard')) {
-                // Check if this is a student portal user
-                try {
-                    $sp_stmt = db()->prepare('SELECT id FROM students WHERE portal_user_id = ? LIMIT 1');
-                    $sp_stmt->execute([$user['id']]);
-                    if ($sp_stmt->fetch()) {
-                        redirect(APP_URL . '/students/my-profile.php');
-                    }
-                } catch (Throwable $_sp_ex) {}
-
+                if (is_portal_student()) {
+                    redirect(APP_URL . '/students/my-profile.php');
+                }
                 if (can_access('faculty-profile')) {
                     redirect(APP_URL . '/faculty-profiles/my-profile.php');
                 }
