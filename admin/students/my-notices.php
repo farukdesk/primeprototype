@@ -18,7 +18,7 @@ $user = auth_user();
 $student = null;
 try {
     $stmt = db()->prepare(
-        'SELECT s.id, s.dept_id, s.name, d.name AS dept_name
+        'SELECT s.id, s.dept_id, s.full_name, d.name AS dept_name
          FROM students s
          JOIN dept_departments d ON d.id = s.dept_id
          WHERE s.portal_user_id = ?
