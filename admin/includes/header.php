@@ -27,7 +27,9 @@ if (is_portal_student()) {
             }
         }
         unset($__stmt, $__row, $__photo, $__new_path, $__base);
-    } catch (Throwable $__e) { /* silently ignore – fall back to letter avatar */ }
+    } catch (Throwable $__e) {
+        error_log('header.php: could not load portal student photo – ' . $__e->getMessage());
+    }
 }
 ?>
 <!DOCTYPE html>
