@@ -20,6 +20,8 @@ define('APP_URL',     'https://primeuniversity.ac.bd/admin'); // no trailing sla
 define('APP_VERSION', '1.0.0');
 define('SITE_URL',    'https://primeuniversity.ac.bd');       // root domain, no trailing slash
 define('LOGO_URL',    SITE_URL . '/assets/img/logo/logo-black.png'); // absolute URL for logo
+define('OLD_ERP_SETTLEMENT_MARKER', '[OLD_ERP_SETTLED:ADMISSION+FORM+ID+SUMMER2026_REG]');
+define('OLD_ERP_SETTLEMENT_NOTE', 'Old ERP settled: Admission Fee + Form Fee + ID Card Fee + Summer 2026 Registration Fee.');
 
 // ── Session ──────────────────────────────────────────────────────────────────
 define('SESSION_NAME',     'pu_admin_sess');

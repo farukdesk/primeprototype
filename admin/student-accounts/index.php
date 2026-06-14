@@ -6,6 +6,32 @@ require_once __DIR__ . '/helpers.php';
 $page_title = 'Student Accounts';
 $db         = db();
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'mark_old_erp_fees_paid') {
+    csrf_check();
+    if (!sfp_can_edit()) {
+        http_response_code(403);
+        die('Access denied.');
+    }
+
+    $stmt = $db->prepare(
+        'UPDATE sfp_packages
+         SET note = TRIM(CONCAT_WS("\n", NULLIF(TRIM(COALESCE(note, "")), ""), ?, ?))
+         WHERE COALESCE(note, "") NOT LIKE ?'
+    );
+    $stmt->execute([
+        OLD_ERP_SETTLEMENT_NOTE,
+        OLD_ERP_SETTLEMENT_MARKER,
+        '%' . OLD_ERP_SETTLEMENT_MARKER . '%',
+    ]);
+
+    $count = (int)$stmt->rowCount();
+    flash_set('success', $count > 0
+        ? $count . ' student account(s) tagged as already settled in old ERP.'
+        : 'All student accounts were already tagged as settled in old ERP.'
+    );
+    redirect(APP_URL . '/student-accounts/index.php');
+}
+
 // ── Filters ───────────────────────────────────────────────────────────────────
 $search = trim($_GET['q'] ?? '');
 
@@ -73,6 +99,16 @@ require_once __DIR__ . '/../includes/header.php';
         <a href="<?= APP_URL ?>/student-accounts/bulk-import.php" class="btn btn-outline-success btn-sm">
             <i class="fas fa-file-import me-1"></i> Bulk PDF / CSV Import
         </a>
+        <?php if (sfp_can_edit()): ?>
+        <form method="post" class="d-inline"
+              onsubmit="return confirm('This will mark Admission + Form + ID Card and only one semester Registration (Summer 2026) as paid from old ERP for all student accounts. Continue?');">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="mark_old_erp_fees_paid">
+            <button type="submit" class="btn btn-outline-warning btn-sm">
+                <i class="fas fa-check-double me-1"></i> Mark Old ERP Fees Paid (All)
+            </button>
+        </form>
+        <?php endif; ?>
     </div>
     <?php endif; ?>
 </div>
