@@ -7,7 +7,7 @@
  *   2) a CSV export of old-ERP student ledgers.
  *
  * Actions (POST JSON responses):
- *   action=upload  – Accept ZIP, extract to temp dir, return {session_key, total, programs_sample}
+ *   action=upload  – Accept ZIP/CSV input and return {session_key, total}
  *   action=batch   – Process N PDFs; return {done, offset, created, skipped, failed, rows[]}
  *   action=cleanup – Remove the temp directory for the session
  *
@@ -157,11 +157,13 @@ function bip_date(string $s): ?string
     $s = trim($s);
     // Already YYYY-MM-DD
     if (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $s, $m)) {
-        return $s;
+        return checkdate((int)$m[2], (int)$m[3], (int)$m[1]) ? $s : null;
     }
     // DD-MM-YYYY or D-M-YYYY
     if (preg_match('/^(\d{1,2})-(\d{1,2})-(\d{4})$/', $s, $m)) {
-        return sprintf('%04d-%02d-%02d', $m[3], $m[2], $m[1]);
+        return checkdate((int)$m[2], (int)$m[1], (int)$m[3])
+            ? sprintf('%04d-%02d-%02d', $m[3], $m[2], $m[1])
+            : null;
     }
     return null;
 }
@@ -500,7 +502,7 @@ function bip_import_student(
         3.00, // safety_net_gpa_threshold default
         $monthly_fixed_fee,
         $monthly_english_fee,
-        'Imported from old ERP (bulk PDF import)',
+        'Imported from old ERP (bulk PDF/CSV import)',
         $user_id,
     ]);
     $package_id = (int)$db->lastInsertId();
@@ -786,10 +788,12 @@ function bip_manifest_from_csv(string $csv_path): array
             throw new RuntimeException('The uploaded CSV file is empty.');
         }
 
+        if (isset($headers[0])) {
+            $headers[0] = preg_replace('/^\xEF\xBB\xBF/', '', (string)$headers[0]);
+        }
+
         $headers = array_map(static function ($header): string {
-            $header = (string)$header;
-            $header = preg_replace('/^\xEF\xBB\xBF/', '', $header);
-            return trim($header);
+            return trim((string)$header);
         }, $headers);
 
         if (!in_array('Student ID', $headers, true)) {
