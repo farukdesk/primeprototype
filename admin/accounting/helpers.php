@@ -1652,8 +1652,20 @@ function acc_send_fee_invoice_email(array $student, array $payment_info, array $
  */
 function acc_get_applicant_by_appnumber(string $app_number): ?array
 {
+    $has_assigned_sid = (bool)db()->query(
+        "SHOW COLUMNS FROM admissions_applications LIKE 'assigned_student_id'"
+    )->fetchColumn();
+    $has_office_sid = (bool)db()->query(
+        "SHOW COLUMNS FROM admissions_applications LIKE 'office_student_id'"
+    )->fetchColumn();
+    $assigned_sid_col = $has_assigned_sid ? 'a.assigned_student_id' : 'NULL AS assigned_student_id';
+    $office_sid_col   = $has_office_sid ? 'a.office_student_id' : 'NULL AS office_student_id';
+
     $stmt = db()->prepare(
-        'SELECT a.*,
+        'SELECT a.id, a.app_number, a.student_name, a.present_contact, a.present_email,
+                a.dept_id, a.program_id, a.status,
+                ' . $assigned_sid_col . ',
+                ' . $office_sid_col . ',
                 d.name AS dept_name, p.program_name
          FROM admissions_applications a
          LEFT JOIN dept_departments d        ON d.id = a.dept_id
