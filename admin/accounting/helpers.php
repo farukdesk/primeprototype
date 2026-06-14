@@ -1118,7 +1118,7 @@ function acc_student_fee_summary(int $student_id): ?array
         'totals'      => [
             'admission'    => ['due' => $admission_due,     'paid' => $admission_paid,     'out' => max(0.0, $admission_due - $admission_paid)],
             'admission_breakdown' => [
-                'admission_fee' => $admission_base_due,
+                'admission_base_fee' => $admission_base_due,
                 'form_fee'      => $form_fee_due,
                 'id_card_fee'   => $id_card_fee_due,
             ],
