@@ -13,6 +13,7 @@ require_once __DIR__ . '/../change-log/helpers.php';
 const ACC_INVOICE_CUSTOM_LOGO_FILE = 'Prime_University_Invoice logo.png';
 const ACC_STUDENT_FORM_FEE = 500.0;
 const ACC_STUDENT_ID_CARD_FEE = 500.0;
+const ACC_OLD_ERP_SETTLEMENT_MARKER = '[OLD_ERP_SETTLED:ADMISSION+FORM+ID+SUMMER2026_REG]';
 
 // ── Permission helpers ────────────────────────────────────────────────────────
 
@@ -973,6 +974,33 @@ function acc_split_form_id_fee(float $total_fee): array
     ];
 }
 
+function acc_package_has_old_erp_settlement(array $pkg): bool
+{
+    $note = (string)($pkg['note'] ?? '');
+    return $note !== '' && stripos($note, ACC_OLD_ERP_SETTLEMENT_MARKER) !== false;
+}
+
+function acc_old_erp_virtual_credits(array $pkg, int $num_semesters): array
+{
+    if (!acc_package_has_old_erp_settlement($pkg)) {
+        return ['admission' => 0.0, 'registration' => 0.0];
+    }
+
+    $admission_credit = max(
+        0.0,
+        (float)($pkg['admission_fees'] ?? 0) + acc_package_form_id_fee($pkg)
+    );
+
+    $reg_per_semester = max(0.0, (float)($pkg['reg_fee_per_semester'] ?? 0.0));
+    $reg_total_due    = $reg_per_semester * max(0, $num_semesters);
+    $registration_credit = min($reg_per_semester, $reg_total_due);
+
+    return [
+        'admission'    => $admission_credit,
+        'registration' => $registration_credit,
+    ];
+}
+
 function acc_package_payment_start(array $pkg, array $semester_fees = []): array
 {
     $note = (string)($pkg['note'] ?? '');
@@ -1060,6 +1088,9 @@ function acc_student_fee_summary(int $student_id): ?array
     // Registration totals (per-semester distribution handled in the loop below)
     $reg_due  = $reg_fee * $num_semesters;
     $reg_paid = $total_paid_for('registration');
+    $old_erp_credits = acc_old_erp_virtual_credits($pkg, $num_semesters);
+    $admission_paid += (float)$old_erp_credits['admission'];
+    $reg_paid += (float)$old_erp_credits['registration'];
 
     // Per-semester tuition + monthly breakdown
     $months     = (float)($pkg['total_months'] ?? 0);
@@ -2164,8 +2195,9 @@ function acc_total_outstanding(int $package_id): float
     $num_sems      = (int)($sem_row[0] ?? 0);
     $tuition_total = (float)($sem_row[1] ?? 0);
 
+    $form_id_total_fee = acc_package_form_id_fee($pkg);
     $total_due = (float)$pkg['admission_fees']
-               + acc_student_form_id_total_fee()
+               + $form_id_total_fee
                + ($reg_fee * $num_sems)
                + (float)$pkg['fixed_institutional_fees']
                + (float)$pkg['english_course_fee']
@@ -2174,6 +2206,8 @@ function acc_total_outstanding(int $package_id): float
     $paid_stmt = $db->prepare('SELECT COALESCE(SUM(amount),0) FROM sfp_payments WHERE package_id = ?');
     $paid_stmt->execute([$package_id]);
     $total_paid = (float)$paid_stmt->fetchColumn();
+    $legacy = acc_old_erp_virtual_credits($pkg, $num_sems);
+    $total_paid += (float)$legacy['admission'] + (float)$legacy['registration'];
 
     return max(0.0, $total_due - $total_paid);
 }
