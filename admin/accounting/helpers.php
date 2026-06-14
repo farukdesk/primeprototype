@@ -1653,8 +1653,7 @@ function acc_send_fee_invoice_email(array $student, array $payment_info, array $
 function acc_get_applicant_by_appnumber(string $app_number): ?array
 {
     $stmt = db()->prepare(
-        'SELECT a.id, a.app_number, a.student_name, a.present_contact, a.present_email,
-                a.dept_id, a.program_id, a.status, a.office_student_id,
+        'SELECT a.*,
                 d.name AS dept_name, p.program_name
          FROM admissions_applications a
          LEFT JOIN dept_departments d        ON d.id = a.dept_id
