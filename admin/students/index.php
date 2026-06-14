@@ -12,12 +12,14 @@ $is_staff   = sm_is_staff();
 $dept_scope = get_dept_scope();
 
 // ── Filters ───────────────────────────────────────────────────────────────────
-$search   = trim($_GET['search']   ?? '');
-$f_dept   = (int)($_GET['dept']    ?? 0);
-$f_status = $_GET['status']        ?? '';
-$f_sem    = trim($_GET['semester'] ?? '');
+$search     = trim($_GET['search']   ?? '');
+$f_dept     = (int)($_GET['dept']    ?? 0);
+$f_status   = $_GET['status']        ?? '';
+$f_sem      = trim($_GET['semester'] ?? '');
 $f_sem_type = trim($_GET['sem_type'] ?? '');
-$page     = max(1, (int)($_GET['page'] ?? 1));
+$f_program  = (int)($_GET['program'] ?? 0);
+$f_batch    = (int)($_GET['batch']   ?? 0);
+$page       = max(1, (int)($_GET['page'] ?? 1));
 $per_page = 20;
 
 $valid_statuses  = ['Active', 'Inactive', 'Graduated', 'Dropped', 'Not Admitted Yet'];
@@ -49,6 +51,14 @@ if ($f_sem !== '') {
 if (in_array($f_sem_type, $valid_sem_types, true)) {
     $where[]  = 's.semester_type = ?';
     $params[] = $f_sem_type;
+}
+if ($f_program > 0) {
+    $where[]  = 's.program_id = ?';
+    $params[] = $f_program;
+}
+if ($f_batch > 0) {
+    $where[]  = 's.batch_id = ?';
+    $params[] = $f_batch;
 }
 
 // Apply department scope restriction for non-super-admins
@@ -104,6 +114,18 @@ if ($dept_scope !== null) {
         fn($d) => in_array((int)$d['id'], $dept_scope, true)
     ));
 }
+
+// ── Programs for filter ───────────────────────────────────────────────────────
+$all_programs = sm_program_data();
+if ($dept_scope !== null) {
+    $all_programs = array_values(array_filter(
+        $all_programs,
+        fn($p) => in_array((int)$p['dept_id'], $dept_scope, true)
+    ));
+}
+
+// ── Batches for filter ────────────────────────────────────────────────────────
+$batches = sm_batches();
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -196,7 +218,7 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="card mb-4">
     <div class="card-body py-3 px-4">
         <form method="GET" action="" class="row g-2 align-items-end">
-            <div class="col-12 col-md-4">
+            <div class="col-12 col-md-3">
                 <label class="form-label fw-semibold" style="font-size:.8rem;">Search</label>
                 <input type="text" name="search" class="form-control form-control-sm"
                        placeholder="ID, name, email, phone…"
@@ -204,11 +226,35 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
             <div class="col-6 col-md-2">
                 <label class="form-label fw-semibold" style="font-size:.8rem;">Department</label>
-                <select name="dept" class="form-select form-select-sm">
+                <select name="dept" id="filter_dept" class="form-select form-select-sm">
                     <option value="">All Depts</option>
                     <?php foreach ($departments as $d): ?>
                     <option value="<?= $d['id'] ?>" <?= $f_dept == $d['id'] ? 'selected' : '' ?>>
                         <?= h($d['name']) ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold" style="font-size:.8rem;">Program</label>
+                <select name="program" id="filter_program" class="form-select form-select-sm">
+                    <option value="">All Programs</option>
+                    <?php foreach ($all_programs as $p): ?>
+                    <option value="<?= $p['id'] ?>"
+                            data-dept="<?= $p['dept_id'] ?>"
+                            <?= $f_program == $p['id'] ? 'selected' : '' ?>>
+                        <?= h($p['program_name']) ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold" style="font-size:.8rem;">Batch</label>
+                <select name="batch" class="form-select form-select-sm">
+                    <option value="">All Batches</option>
+                    <?php foreach ($batches as $b): ?>
+                    <option value="<?= $b['id'] ?>" <?= $f_batch == $b['id'] ? 'selected' : '' ?>>
+                        <?= h($b['name']) ?>
                     </option>
                     <?php endforeach; ?>
                 </select>
@@ -364,3 +410,26 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
+<script>
+(function () {
+    var deptSel    = document.getElementById('filter_dept');
+    var programSel = document.getElementById('filter_program');
+    if (!deptSel || !programSel) return;
+
+    function filterPrograms() {
+        var deptId = deptSel.value;
+        var opts   = programSel.querySelectorAll('option[data-dept]');
+        opts.forEach(function (opt) {
+            var show = !deptId || opt.dataset.dept === deptId;
+            opt.hidden   = !show;
+            opt.disabled = !show;
+            if (!show && opt.selected) {
+                programSel.value = '';
+            }
+        });
+    }
+
+    deptSel.addEventListener('change', filterPrograms);
+    filterPrograms(); // run on page load to respect pre-selected dept
+}());
+</script>
