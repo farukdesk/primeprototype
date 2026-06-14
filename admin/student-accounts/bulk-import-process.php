@@ -223,7 +223,7 @@ function bip_parse_pdf_text(string $text): array
     }
 
     // ── Beginning Semester ───────────────────────────────────────────────────
-    if (preg_match('/Beg[ia]n+ing Semester\s+([^\n\t]+?)\s+Total Semesters/i', $text, $m)) {
+    if (preg_match('/Beg(?:inning|ining) Semester\s+([^\n\t]+?)\s+Total Semesters/i', $text, $m)) {
         $data['beginning_semester'] = trim($m[1]);
     }
 
@@ -233,10 +233,7 @@ function bip_parse_pdf_text(string $text): array
     }
 
     // ── Admission Fee ────────────────────────────────────────────────────────
-    // Must match "Admission Fee" NOT preceded by "Admission Form"
-    if (preg_match('/(?<!Form &amp; ID Card )Admission Fee\s+([\d,]+)/i', $text, $m)) {
-        $data['admission_fee'] = bip_num($m[1]);
-    } elseif (preg_match('/Admission Fee\s+([\d,]+)/i', $text, $m)) {
+    if (preg_match('/Admission Fee\s+([\d,]+)/i', $text, $m)) {
         $data['admission_fee'] = bip_num($m[1]);
     }
 
