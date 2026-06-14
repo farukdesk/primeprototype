@@ -328,7 +328,7 @@ require_once __DIR__ . '/../includes/header.php';
             if (resp.done || offset >= totalFiles) {
                 onComplete();
             } else {
-                setTimeout(processBatch, 50);
+                setTimeout(processBatch, 150);
             }
         });
     }

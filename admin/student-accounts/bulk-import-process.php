@@ -109,13 +109,28 @@ function bip_extract_text(string $filepath): string
         $text .= bip_parse_content_stream($decoded) . ' ';
     }
 
-    // Try pdftotext as fallback if PHP pass yielded no useful text
-    if (trim($text) === '' && function_exists('shell_exec')) {
-        $which = shell_exec('which pdftotext 2>/dev/null');
-        if (is_string($which) && trim($which) !== '') {
-            $out = shell_exec('pdftotext ' . escapeshellarg($filepath) . ' - 2>/dev/null');
-            if (is_string($out) && trim($out) !== '') {
-                $text = $out;
+    // Try pdftotext as fallback if PHP pass yielded no useful text.
+    // Only invoke pdftotext when the file is confirmed to be inside the expected
+    // temp directory so that the shell argument is always a sanitised path.
+    if (trim($text) === '' && function_exists('shell_exec') && function_exists('exec')) {
+        // Resolve real paths to guard against symlinks / path traversal
+        $real_tmp  = realpath(sys_get_temp_dir());
+        $real_file = realpath($filepath);
+        if ($real_file !== false && $real_tmp !== false
+            && strpos($real_file, $real_tmp . DIRECTORY_SEPARATOR) === 0
+        ) {
+            // Locate pdftotext via `which`; use exec() for a cleaner call
+            $which_out = [];
+            exec('which pdftotext 2>/dev/null', $which_out);
+            $pdftotext_bin = isset($which_out[0]) ? trim($which_out[0]) : '';
+
+            if ($pdftotext_bin !== '' && is_executable($pdftotext_bin)) {
+                $cmd_out = [];
+                exec($pdftotext_bin . ' ' . escapeshellarg($real_file) . ' - 2>/dev/null', $cmd_out);
+                $out = implode("\n", $cmd_out);
+                if (trim($out) !== '') {
+                    $text = $out;
+                }
             }
         }
     }
@@ -410,7 +425,7 @@ function bip_import_student(
     $reg_fee_total   = $pdf['registration_fee_total'];
     $concession      = $pdf['concession'];
     $monthly_payment = $pdf['monthly_payment'];
-    $program_name    = $pdf['program_name'] ?: ($student['full_name'] ?? 'Unknown Programme');
+    $program_name    = $pdf['program_name'] ?: 'Unknown Programme';
 
     // Compute total_months from monthly payment when possible
     // monthly = (payable - admission - reg_total) / total_months
@@ -592,9 +607,11 @@ function bip_import_student(
         }
 
         // Post receipt voucher
+        $month_part = isset($tx['month_label']) && $tx['month_label'] !== ''
+            ? ' ' . $tx['month_label'] : '';
+        $receipt_part = $receipt !== '' ? ' [Rcpt:' . $receipt . ']' : '';
         $narration = 'ERP Import: ' . ucfirst(str_replace('_', ' ', $fee_type))
-            . ($tx['month_label'] ?? '')
-            . ($receipt ? ' [Rcpt:' . $receipt . ']' : '');
+            . $month_part . $receipt_part;
 
         try {
             $voucher_id = acc_post_voucher('receipt', $date, [
@@ -687,17 +704,22 @@ function bip_temp_dir_create(): string
 
 function bip_temp_dir_remove(string $dir): void
 {
-    if (!$dir || !is_dir($dir) || strpos($dir, sys_get_temp_dir()) !== 0) {
-        return; // Safety: only remove within sys_get_temp_dir
-    }
+    if ($dir === '') return;
+    // Resolve real paths to guard against symlinks / relative traversal
+    $real_dir = realpath($dir);
+    $real_tmp = realpath(sys_get_temp_dir());
+    if ($real_dir === false || $real_tmp === false) return;
+    // Safety: only remove directories that are inside sys_get_temp_dir
+    if (strpos($real_dir, $real_tmp . DIRECTORY_SEPARATOR) !== 0) return;
+    if (!is_dir($real_dir)) return;
     $files = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS),
+        new RecursiveDirectoryIterator($real_dir, RecursiveDirectoryIterator::SKIP_DOTS),
         RecursiveIteratorIterator::CHILD_FIRST
     );
     foreach ($files as $f) {
         $f->isDir() ? rmdir($f->getPathname()) : unlink($f->getPathname());
     }
-    rmdir($dir);
+    rmdir($real_dir);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -760,7 +782,15 @@ if ($action === 'upload') {
             // extractTo preserves directory structure; find actual extracted path
             $extracted = $tmp_dir . DIRECTORY_SEPARATOR . $entry;
             if (is_file($extracted) && $extracted !== $dest) {
-                rename($extracted, $dest);
+                if (!rename($extracted, $dest)) {
+                    // rename can fail across filesystems; fall back to copy+unlink
+                    if (copy($extracted, $dest)) {
+                        unlink($extracted);
+                    } else {
+                        error_log('bip upload: failed to move ' . $extracted . ' to ' . $dest);
+                        continue;
+                    }
+                }
             }
 
             if (is_file($dest)) {
