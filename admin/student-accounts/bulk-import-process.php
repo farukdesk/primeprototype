@@ -14,6 +14,11 @@
  * PHP session is used to store the temp-dir path and manifest keyed by session_key.
  */
 
+// Buffer all output so that PHP warnings/notices (display_errors HTML) cannot
+// corrupt the JSON response.  bip_json() calls ob_end_clean() before echoing.
+ob_start();
+ini_set('display_errors', '0');
+
 require_once __DIR__ . '/../includes/auth.php';
 require_access('student-accounts', 'can_create');
 require_once __DIR__ . '/helpers.php';
@@ -30,6 +35,10 @@ $action = trim($_POST['action'] ?? $_GET['action'] ?? '');
 
 function bip_json(array $data): void
 {
+    // Discard any buffered PHP error/warning HTML before sending clean JSON.
+    if (ob_get_level() > 0) {
+        ob_end_clean();
+    }
     echo json_encode($data, JSON_UNESCAPED_UNICODE);
     exit;
 }
