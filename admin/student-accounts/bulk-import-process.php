@@ -378,6 +378,51 @@ function bip_parse_pdf_text(string $text): array
 // Returns ['status'=>'created'|'skipped'|'failed', 'message'=>..., 'student_name'=>...]
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Find a student by ID, tolerating leading-zero mismatches.
+ *
+ * The old ERP sometimes stored IDs with leading zeros ("021050101001") while
+ * the current system may have dropped them ("21050101001"), or vice versa.
+ * We try three strategies in order:
+ *   1. Exact match.
+ *   2. Leading-zeros-stripped match (CSV has "0…" but DB has no leading zero).
+ *   3. SQL TRIM(LEADING '0') match (DB has "0…" but CSV has no leading zero).
+ */
+function bip_find_student(PDO $db, string $sid): array|false
+{
+    $stmt = $db->prepare('SELECT * FROM students WHERE student_id = ? LIMIT 1');
+    $stmt->execute([$sid]);
+    $student = $stmt->fetch();
+    if ($student !== false) {
+        return $student;
+    }
+
+    // Strategy 2: strip leading zeros from the supplied ID
+    $sid_stripped = ltrim($sid, '0');
+    if ($sid_stripped !== '' && $sid_stripped !== $sid) {
+        $stmt->execute([$sid_stripped]);
+        $student = $stmt->fetch();
+        if ($student !== false) {
+            return $student;
+        }
+    }
+
+    // Strategy 3: compare numeric values via SQL TRIM (handles DB IDs with leading zeros)
+    $numeric = $sid_stripped !== '' ? $sid_stripped : ltrim($sid, '0');
+    if ($numeric !== '') {
+        $stmt2 = $db->prepare(
+            "SELECT * FROM students WHERE TRIM(LEADING '0' FROM student_id) = ? LIMIT 1"
+        );
+        $stmt2->execute([$numeric]);
+        $student = $stmt2->fetch();
+        if ($student !== false) {
+            return $student;
+        }
+    }
+
+    return false;
+}
+
 function bip_import_student(
     string $student_sid,
     array  $pdf,
@@ -389,9 +434,7 @@ function bip_import_student(
     $db = db();
 
     // ── 1. Find student ──────────────────────────────────────────────────────
-    $s_stmt = $db->prepare('SELECT * FROM students WHERE student_id = ? LIMIT 1');
-    $s_stmt->execute([$student_sid]);
-    $student = $s_stmt->fetch();
+    $student = bip_find_student($db, $student_sid);
     if (!$student) {
         return ['status' => 'failed', 'message' => 'Student not found in DB (ID: ' . $student_sid . ')'];
     }
@@ -893,7 +936,12 @@ function bip_temp_dir_remove(string $dir): void
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     bip_error('POST required.');
 }
-csrf_check();
+
+// Use bip_error() so failures return valid JSON instead of a plain-text die()
+if (!csrf_verify()) {
+    http_response_code(403);
+    bip_error('Session expired or CSRF token mismatch. Please refresh the page and try again.');
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ACTION: upload
