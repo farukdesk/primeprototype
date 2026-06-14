@@ -431,8 +431,12 @@ function bip_payment_start_from_semester_text(string $value, ?array $cf_program)
     }
 
     if ($month === null && $cf_program !== null) {
-        $is_bi = bip_determine_months_per_semester(['beginning_semester' => $value, 'total_semesters' => (int)($cf_program['total_semesters'] ?? 0)], $cf_program) === 6;
-        $fallback_month = $is_bi
+        $semester_hint = [
+            'beginning_semester' => $value,
+            'total_semesters'    => (int)($cf_program['total_semesters'] ?? 0),
+        ];
+        $is_bi_semester = bip_determine_months_per_semester($semester_hint, $cf_program) === 6;
+        $fallback_month = $is_bi_semester
             ? (int)($cf_program['bi_semester_start_month'] ?? 0)
             : (int)($cf_program['tri_semester_start_month'] ?? 0);
         if ($fallback_month >= 1 && $fallback_month <= 12) {
@@ -489,10 +493,11 @@ function bip_determine_payment_start(array $pdf, array $student, ?array $cf_prog
         }
     }
 
+    $current_year = (int)date('Y');
     return [
         'month' => $fallback_month,
-        'year'  => (int)date('Y'),
-        'token' => sprintf('%02d-%04d', $fallback_month, (int)date('Y')),
+        'year'  => $current_year,
+        'token' => sprintf('%02d-%04d', $fallback_month, $current_year),
     ];
 }
 
