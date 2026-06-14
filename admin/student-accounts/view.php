@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_access('student-accounts');
 require_once __DIR__ . '/helpers.php';
+require_once __DIR__ . '/../accounting/helpers.php';
 
 $id  = (int)($_GET['id'] ?? 0);
 $pkg = sfp_get_package($id);
@@ -27,8 +28,8 @@ $sem_english_portion = sfp_semester_english_portion($pkg);
 // Use snapshotted registration fee from the package (not global cf_settings)
 // This ensures displayed fees match the student's actual obligations
 $reg_fee_per_sem     = (float)($pkg['reg_fee_per_semester'] ?? 0.0);
-$form_fee_one_time   = 500.0;
-$id_card_fee_one_time = 500.0;
+$form_fee_one_time   = acc_student_form_fee_amount();
+$id_card_fee_one_time = acc_student_id_card_fee_amount();
 $form_id_fee         = $form_fee_one_time + $id_card_fee_one_time;
 
 // Also fetch current global values for comparison (optional display)

@@ -11,6 +11,8 @@ require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../change-log/helpers.php';
 
 const ACC_INVOICE_CUSTOM_LOGO_FILE = 'Prime_University_Invoice logo.png';
+const ACC_STUDENT_FORM_FEE = 500.0;
+const ACC_STUDENT_ID_CARD_FEE = 500.0;
 
 // ── Permission helpers ────────────────────────────────────────────────────────
 
@@ -935,12 +937,12 @@ function acc_get_student_by_sid(string $student_sid): ?array
  */
 function acc_student_form_fee_amount(): float
 {
-    return 500.0;
+    return ACC_STUDENT_FORM_FEE;
 }
 
 function acc_student_id_card_fee_amount(): float
 {
-    return 500.0;
+    return ACC_STUDENT_ID_CARD_FEE;
 }
 
 function acc_student_form_id_total_fee(): float
