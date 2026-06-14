@@ -315,8 +315,26 @@ require_once __DIR__ . '/../../includes/header.php';
                         <th class="text-end">Amount (<?= h($currency) ?>)</th>
                     </tr>
                 </thead>
+                <?php
+                $ft_colors = [
+                    'admission'        => 'primary',
+                    'registration'     => 'success',
+                    'semester_tuition' => 'info',
+                    'fixed_fee'        => 'warning',
+                    'english_fee'      => 'secondary',
+                    'other'            => 'dark',
+                ];
+                $pm_icons = [
+                    'cash'           => 'fa-money-bill-wave',
+                    'bank'           => 'fa-university',
+                    'mobile_banking' => 'fa-mobile-alt',
+                ];
+                ?>
                 <tbody id="tableBody">
-                    <?php foreach ($rows as $i => $r): ?>
+                    <?php foreach ($rows as $i => $r):
+                        $ft_color = $ft_colors[$r['fee_type']] ?? 'secondary';
+                        $pm_icon  = $pm_icons[$r['payment_method']] ?? 'fa-credit-card';
+                    ?>
                     <tr class="data-row" data-page="<?= floor($i / 10) + 1 ?>">
                         <td class="text-center text-muted small"><?= $i + 1 ?></td>
                         <td class="fw-semibold"><?= h($r['student_name']) ?></td>
@@ -332,26 +350,11 @@ require_once __DIR__ . '/../../includes/header.php';
                             </span>
                         </td>
                         <td>
-                            <?php
-                            $ft_colors = [
-                                'admission'        => 'primary',
-                                'registration'     => 'success',
-                                'semester_tuition' => 'info',
-                                'fixed_fee'        => 'warning',
-                                'english_fee'      => 'secondary',
-                                'other'            => 'dark',
-                            ];
-                            $ft_color = $ft_colors[$r['fee_type']] ?? 'secondary';
-                            ?>
                             <span class="badge bg-<?= $ft_color ?> bg-opacity-10 text-<?= $ft_color ?> border border-<?= $ft_color ?> border-opacity-25" style="font-size:.75rem">
                                 <?= h(acc_fee_type_label($r['fee_type'])) ?>
                             </span>
                         </td>
                         <td>
-                            <?php
-                            $pm_icons = ['cash' => 'fa-money-bill-wave', 'bank' => 'fa-university', 'mobile_banking' => 'fa-mobile-alt'];
-                            $pm_icon  = $pm_icons[$r['payment_method']] ?? 'fa-credit-card';
-                            ?>
                             <i class="fas <?= $pm_icon ?> text-muted me-1" style="font-size:.75rem"></i>
                             <?= h(acc_payment_method_label($r['payment_method'], $r['mobile_banking_provider'])) ?>
                         </td>
