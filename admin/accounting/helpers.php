@@ -975,7 +975,7 @@ function acc_student_fee_summary(int $student_id): ?array
     $reg_fee     = (float)($pkg['reg_fee_per_semester'] ?? 0.0);
     $form_fee_due = acc_student_form_fee_amount();
     $id_card_fee_due = acc_student_id_card_fee_amount();
-    $form_id_fee = acc_student_form_id_total_fee();
+    $form_id_total_fee = acc_student_form_id_total_fee();
 
     // Semester fee rows
     $sf_stmt = $db->prepare(
@@ -1013,7 +1013,7 @@ function acc_student_fee_summary(int $student_id): ?array
 
     // Admission-day one-time fees
     $admission_base_due  = (float)$pkg['admission_fees'];
-    $admission_due  = $admission_base_due + $form_id_fee;
+    $admission_due  = $admission_base_due + $form_id_total_fee;
     $admission_paid = $total_paid_for('admission');
 
     // Registration totals (per-semester distribution handled in the loop below)
@@ -1113,7 +1113,7 @@ function acc_student_fee_summary(int $student_id): ?array
 
     return [
         'package'     => $pkg,
-        'cf_settings' => ['reg_fee_per_semester' => $reg_fee, 'form_id_fee' => $form_id_fee],
+        'cf_settings' => ['reg_fee_per_semester' => $reg_fee, 'form_id_fee' => $form_id_total_fee],
         'semesters'   => $semesters_enriched,
         'totals'      => [
             'admission'    => ['due' => $admission_due,     'paid' => $admission_paid,     'out' => max(0.0, $admission_due - $admission_paid)],
