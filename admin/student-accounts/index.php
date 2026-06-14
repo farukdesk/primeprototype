@@ -6,7 +6,7 @@ require_once __DIR__ . '/helpers.php';
 $page_title = 'Student Accounts';
 $db         = db();
 $old_erp_settlement_marker = '[OLD_ERP_SETTLED:ADMISSION+FORM+ID+SUMMER2026_REG]';
-$old_erp_settlement_note   = 'Old ERP settled: Admission Fee + Form Fee (৳ 500.00) + ID Card Fee (৳ 500.00) + Summer 2026 Registration Fee.';
+$old_erp_settlement_note   = 'Old ERP settled: Admission Fee + Form Fee + ID Card Fee + Summer 2026 Registration Fee.';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'mark_old_erp_fees_paid') {
     csrf_check();

@@ -2195,9 +2195,9 @@ function acc_total_outstanding(int $package_id): float
     $num_sems      = (int)($sem_row[0] ?? 0);
     $tuition_total = (float)($sem_row[1] ?? 0);
 
-    $form_id_total_fee = acc_package_form_id_fee($pkg);
+    $package_form_id_fee = acc_package_form_id_fee($pkg);
     $total_due = (float)$pkg['admission_fees']
-               + $form_id_total_fee
+               + $package_form_id_fee
                + ($reg_fee * $num_sems)
                + (float)$pkg['fixed_institutional_fees']
                + (float)$pkg['english_course_fee']
