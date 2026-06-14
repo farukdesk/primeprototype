@@ -11,6 +11,8 @@ require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../change-log/helpers.php';
 
 const ACC_INVOICE_CUSTOM_LOGO_FILE = 'Prime_University_Invoice logo.png';
+const ACC_STUDENT_FORM_FEE = 500.0;
+const ACC_STUDENT_ID_CARD_FEE = 500.0;
 
 // ── Permission helpers ────────────────────────────────────────────────────────
 
@@ -933,6 +935,21 @@ function acc_get_student_by_sid(string $student_sid): ?array
  *
  * Outstanding = obligation − paid (floor at 0).
  */
+function acc_student_form_fee_amount(): float
+{
+    return ACC_STUDENT_FORM_FEE;
+}
+
+function acc_student_id_card_fee_amount(): float
+{
+    return ACC_STUDENT_ID_CARD_FEE;
+}
+
+function acc_student_form_id_total_fee(): float
+{
+    return acc_student_form_fee_amount() + acc_student_id_card_fee_amount();
+}
+
 function acc_student_fee_summary(int $student_id): ?array
 {
     $db = db();
@@ -953,10 +970,12 @@ function acc_student_fee_summary(int $student_id): ?array
     $package_id  = (int)$pkg['id'];
     $start_month = acc_package_start_month($pkg);
 
-    // Use snapshotted registration and form fees from the package (not global cf_settings)
-    // This ensures each student retains their originally assigned fees
+    // Registration fee remains snapshotted on the package (not global cf_settings)
+    // Form fee and ID card fee are fixed accounting constants (500 + 500)
     $reg_fee     = (float)($pkg['reg_fee_per_semester'] ?? 0.0);
-    $form_id_fee = (float)($pkg['form_id_fee'] ?? 0.0);
+    $form_fee_due = acc_student_form_fee_amount();
+    $id_card_fee_due = acc_student_id_card_fee_amount();
+    $form_id_total_fee = acc_student_form_id_total_fee();
 
     // Semester fee rows
     $sf_stmt = $db->prepare(
@@ -992,8 +1011,9 @@ function acc_student_fee_summary(int $student_id): ?array
 
     // ── Obligations ────────────────────────────────────────────────────────────
 
-    // Admission (one-time)
-    $admission_due  = (float)$pkg['admission_fees'];
+    // Admission-day one-time fees
+    $admission_base_due  = (float)$pkg['admission_fees'];
+    $admission_due  = $admission_base_due + $form_id_total_fee;
     $admission_paid = $total_paid_for('admission');
 
     // Registration totals (per-semester distribution handled in the loop below)
@@ -1093,10 +1113,15 @@ function acc_student_fee_summary(int $student_id): ?array
 
     return [
         'package'     => $pkg,
-        'cf_settings' => ['reg_fee_per_semester' => $reg_fee, 'form_id_fee' => $form_id_fee],
+        'cf_settings' => ['reg_fee_per_semester' => $reg_fee, 'form_id_fee' => $form_id_total_fee],
         'semesters'   => $semesters_enriched,
         'totals'      => [
             'admission'    => ['due' => $admission_due,     'paid' => $admission_paid,     'out' => max(0.0, $admission_due - $admission_paid)],
+            'admission_breakdown' => [
+                'admission_base_fee' => $admission_base_due,
+                'form_fee'      => $form_fee_due,
+                'id_card_fee'   => $id_card_fee_due,
+            ],
             'registration' => ['due' => $reg_due,           'paid' => $reg_paid,           'out' => max(0.0, $reg_due - $reg_paid)],
             'tuition'      => ['due' => $total_tuition_due, 'paid' => $total_tuition_paid, 'out' => max(0.0, $total_tuition_due - $total_tuition_paid)],
             'fixed'        => ['due' => 0, 'paid' => 0, 'out' => 0], // included in monthly fee
@@ -1924,7 +1949,7 @@ function acc_send_admission_complete_email(array $applicant, string $student_id,
 function acc_fee_type_label(string $fee_type): string
 {
     return match ($fee_type) {
-        'admission'        => 'Admission Fee',
+        'admission'        => 'Admission + Form & ID Card Fee',
         'registration'     => 'Registration Fee',
         'semester_tuition' => 'Semester Tuition Fee',
         'fixed_fee'        => 'Fixed Institutional Fee',
@@ -2086,6 +2111,7 @@ function acc_total_outstanding(int $package_id): float
     $tuition_total = (float)($sem_row[1] ?? 0);
 
     $total_due = (float)$pkg['admission_fees']
+               + acc_student_form_id_total_fee()
                + ($reg_fee * $num_sems)
                + (float)$pkg['fixed_institutional_fees']
                + (float)$pkg['english_course_fee']
