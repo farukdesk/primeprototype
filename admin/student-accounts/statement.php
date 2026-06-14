@@ -5,6 +5,7 @@
  */
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/helpers.php';
+require_once __DIR__ . '/../accounting/helpers.php';
 
 auth_check();
 require_access('student-accounts');
@@ -30,9 +31,6 @@ $student_stmt = db()->prepare(
 );
 $student_stmt->execute([$pkg['student_id']]);
 $student = $student_stmt->fetch();
-
-// ── Fetch cf_settings (reg fee, form_id_fee) ─────────────────────────────────
-$cf = db()->query('SELECT * FROM cf_settings WHERE id = 1')->fetch();
 
 // ── Fetch first-semester fee row & scholarships ───────────────────────────────
 $sf_stmt = db()->prepare(
@@ -60,9 +58,9 @@ if ($sf1) {
 
 // Fees breakdown (totals for the whole programme)
 $admission_fee     = (float)($pkg['admission_fees'] ?? 0);        // one-time, paid at admission
-$reg_fee_total     = ($cf ? (float)$cf['reg_fee_per_semester'] : 0) * (float)$pkg['total_semesters'];
-$reg_fee_1st_sem   = $cf ? (float)$cf['reg_fee_per_semester'] : 0;
-$form_id_fee       = $cf ? (float)$cf['form_id_fee'] : 0;
+$reg_fee_1st_sem   = (float)($pkg['reg_fee_per_semester'] ?? 0.0);
+$reg_fee_total     = $reg_fee_1st_sem * (float)$pkg['total_semesters'];
+$form_id_fee       = acc_package_form_id_fee($pkg);
 $english_fee_total = (float)$pkg['english_course_fee'];
 $tuition_total     = (float)$pkg['standard_tuition_full'];
 $fixed_total       = (float)$pkg['fixed_institutional_fees'];
@@ -96,9 +94,9 @@ $total_payable_first_sem = $first_sem_tuition_payable + $first_sem_fixed_payable
 // Payment made at admission
 $admission_payment_admission = $admission_fee;
 $admission_payment_reg       = $reg_fee_1st_sem;
-// form + ID card are bundled in form_id_fee; split evenly for display
-$admission_form_fee = (int)floor($form_id_fee / 2);
-$admission_id_fee   = $form_id_fee - $admission_form_fee;
+$split_form_id_fee = acc_split_form_id_fee($form_id_fee);
+$admission_form_fee = (float)$split_form_id_fee['form_fee'];
+$admission_id_fee   = (float)$split_form_id_fee['id_card_fee'];
 $total_paid_at_admission = $admission_payment_admission + $admission_payment_reg + $form_id_fee;
 
 // Duration of payment

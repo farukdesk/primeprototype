@@ -157,6 +157,350 @@ function bip_num(string $s): float
     return (float)str_replace([',', ' '], '', $s);
 }
 
+function bip_parse_month_year(string $s): ?array
+{
+    $s = trim($s);
+    if ($s === '') {
+        return null;
+    }
+
+    if (preg_match('/^(\d{1,2})[-\/](\d{4})$/', $s, $m)) {
+        $month = (int)$m[1];
+        $year  = (int)$m[2];
+        if ($month >= 1 && $month <= 12) {
+            return [
+                'month' => $month,
+                'year'  => $year,
+                'token' => sprintf('%02d-%04d', $month, $year),
+            ];
+        }
+    }
+
+    if (preg_match('/^(January|February|March|April|May|June|July|August|September|October|November|December)[\s\-\/,]+(\d{4})$/i', $s, $m)) {
+        $month_map = [
+            'january' => 1, 'february' => 2, 'march' => 3, 'april' => 4,
+            'may' => 5, 'june' => 6, 'july' => 7, 'august' => 8,
+            'september' => 9, 'october' => 10, 'november' => 11, 'december' => 12,
+        ];
+        $month = $month_map[strtolower($m[1])] ?? 0;
+        $year  = (int)$m[2];
+        if ($month >= 1 && $month <= 12) {
+            return [
+                'month' => $month,
+                'year'  => $year,
+                'token' => sprintf('%02d-%04d', $month, $year),
+            ];
+        }
+    }
+
+    return null;
+}
+
+function bip_row_value(array $row, array $keys): string
+{
+    foreach ($keys as $key) {
+        if (array_key_exists($key, $row)) {
+            return trim((string)$row[$key]);
+        }
+    }
+
+    return '';
+}
+
+function bip_normalize_program_name(string $value): string
+{
+    $value = strtolower(trim($value));
+    if ($value === '') {
+        return '';
+    }
+
+    $value = str_replace(['&', '+'], ' and ', $value);
+    $value = preg_replace('/\b(b\.?\s*sc\.?|bachelor\s+of\s+science|bachelor\s+of\s+arts|bachelor\s+of|master\s+of|bs|ba)\b/u', ' ', $value);
+    $value = preg_replace('/\bin\b/u', ' ', $value);
+    $value = preg_replace('/\bprogramme\b/u', 'program', $value);
+    $value = preg_replace('/\bdual\b/u', ' ', $value);
+    $value = preg_replace('/[^a-z0-9]+/u', ' ', $value);
+    $value = preg_replace('/\s+/u', ' ', trim($value));
+
+    return $value;
+}
+
+function bip_program_alias_candidates(string $program_name): array
+{
+    $candidates = [];
+    $raw        = trim($program_name);
+    $norm       = bip_normalize_program_name($raw);
+
+    if ($raw !== '') {
+        $candidates[] = strtolower($raw);
+    }
+    if ($norm !== '') {
+        $candidates[] = $norm;
+    }
+
+    if (preg_match('/\(([A-Za-z.\-\s]+)\)/', $raw, $m)) {
+        $abbr = bip_normalize_program_name($m[1]);
+        if ($abbr !== '') {
+            $candidates[] = $abbr;
+        }
+    }
+
+    $aliases = [
+        'cse'                                          => 'cse',
+        'computer science and engineering'             => 'cse',
+        'computer science engineering'                 => 'cse',
+        'eee'                                          => 'eee',
+        'electrical and electronic engineering'        => 'eee',
+        'electrical electronic engineering'            => 'eee',
+        'ce'                                           => 'ce',
+        'civil engineering'                            => 'ce',
+        'fdae'                                         => 'fdae',
+        'fade'                                         => 'fdae',
+        'fashion design and apparel engineering'       => 'fdae',
+        'bba'                                          => 'bba',
+        'business administration'                      => 'bba',
+        'llb'                                          => 'llb',
+        'laws ll b hons'                               => 'llb',
+        'laws llb hons'                                => 'llb',
+    ];
+
+    if ($norm !== '' && isset($aliases[$norm])) {
+        $candidates[] = $aliases[$norm];
+    }
+
+    $has_diploma = str_contains(' ' . $norm . ' ', ' diploma ');
+    if (preg_match('/\bcse\b/', $norm)) {
+        $candidates[] = $has_diploma ? 'cse-diploma' : 'cse';
+    }
+    if (preg_match('/\beee\b/', $norm) || str_contains($norm, 'electrical')) {
+        $candidates[] = $has_diploma ? 'eee-diploma' : 'eee';
+    }
+    if (preg_match('/\bce\b/', $norm) || str_contains($norm, 'civil engineering')) {
+        $candidates[] = $has_diploma ? 'ce-diploma' : 'ce';
+    }
+    if (str_contains($norm, 'fashion design') || str_contains($norm, 'apparel engineering')) {
+        $candidates[] = 'fdae';
+    }
+
+    return array_values(array_unique(array_filter($candidates)));
+}
+
+function bip_find_cf_program(PDO $db, string $program_name): ?array
+{
+    static $programs = null;
+    static $by_slug = [];
+    static $by_name = [];
+    static $by_acronym = [];
+
+    if ($programs === null) {
+        $programs = $db->query(
+            'SELECT id, program_slug, program_name, total_semesters, total_months,
+                    admission_fees, admission_fee_base, admission_fee_m,
+                    reg_fee_per_semester, form_id_fee,
+                    bi_semester_start_month, tri_semester_start_month
+             FROM cf_programs
+             WHERE is_active = 1
+             ORDER BY sort_order, program_name'
+        )->fetchAll();
+
+        foreach ($programs as $program) {
+            $slug = strtolower(trim((string)$program['program_slug']));
+            if ($slug !== '') {
+                $by_slug[$slug] = $program;
+            }
+
+            $norm_name = bip_normalize_program_name((string)$program['program_name']);
+            if ($norm_name !== '' && !isset($by_name[$norm_name])) {
+                $by_name[$norm_name] = $program;
+            }
+
+            if (preg_match('/\(([A-Za-z.\-\s]+)\)/', (string)$program['program_name'], $m)) {
+                $abbr = bip_normalize_program_name($m[1]);
+                if ($abbr !== '' && !isset($by_acronym[$abbr])) {
+                    $by_acronym[$abbr] = $program;
+                }
+            }
+        }
+    }
+
+    foreach (bip_program_alias_candidates($program_name) as $candidate) {
+        $slug_candidate = strtolower(trim($candidate));
+        if ($slug_candidate !== '' && isset($by_slug[$slug_candidate])) {
+            return $by_slug[$slug_candidate];
+        }
+
+        $norm_candidate = bip_normalize_program_name($candidate);
+        if ($norm_candidate !== '' && isset($by_name[$norm_candidate])) {
+            return $by_name[$norm_candidate];
+        }
+        if ($norm_candidate !== '' && isset($by_acronym[$norm_candidate])) {
+            return $by_acronym[$norm_candidate];
+        }
+
+        foreach ($programs as $program) {
+            $program_name_norm = bip_normalize_program_name((string)$program['program_name']);
+            if ($norm_candidate !== '' && (
+                str_contains($program_name_norm, $norm_candidate)
+                || str_contains($norm_candidate, $program_name_norm)
+            )) {
+                return $program;
+            }
+        }
+    }
+
+    return null;
+}
+
+function bip_determine_months_per_semester(array $pdf, ?array $cf_program): int
+{
+    $beginning = strtolower(trim((string)($pdf['beginning_semester'] ?? '')));
+    if ($beginning !== '' && str_contains($beginning, 'dual')) {
+        return 6;
+    }
+
+    $total_semesters = max(1, (int)($pdf['total_semesters'] ?? 0));
+    $cf_total_sem    = (int)($cf_program['total_semesters'] ?? 0);
+    $cf_total_months = (int)($cf_program['total_months'] ?? 0);
+
+    if ($cf_total_sem > 0 && $cf_total_months > 0 && $cf_total_sem === $total_semesters) {
+        $ratio = (int)round($cf_total_months / $cf_total_sem);
+        if ($ratio >= 5) {
+            return 6;
+        }
+        if ($ratio >= 1) {
+            return 4;
+        }
+    }
+
+    return $total_semesters <= SFP_MAX_BI_SEMESTER_COUNT ? 6 : 4;
+}
+
+function bip_payment_start_from_transactions(array $transactions): ?array
+{
+    $first = null;
+    foreach ($transactions as $tx) {
+        if (($tx['fee_type'] ?? '') !== 'semester_tuition' || empty($tx['month_label'])) {
+            continue;
+        }
+
+        $month = bip_parse_month_year(str_replace('-', ' ', (string)$tx['month_label']));
+        if ($month === null && preg_match('/^([A-Za-z]+)-(\d{4})$/', (string)$tx['month_label'], $m)) {
+            $month = bip_parse_month_year($m[1] . ' ' . $m[2]);
+        }
+        if ($month === null) {
+            continue;
+        }
+
+        $serial = $month['year'] * 12 + $month['month'];
+        if ($first === null || $serial < $first['serial']) {
+            $first = $month + ['serial' => $serial];
+        }
+    }
+
+    return $first === null ? null : [
+        'month' => $first['month'],
+        'year'  => $first['year'],
+        'token' => $first['token'],
+    ];
+}
+
+function bip_payment_start_from_semester_text(string $value, ?array $cf_program): ?array
+{
+    $value = trim($value);
+    if ($value === '') {
+        return null;
+    }
+
+    $year = null;
+    if (preg_match('/\b(2\d{3})\b/', $value, $m)) {
+        $year = (int)$m[1];
+    }
+
+    $month = null;
+    $map = [
+        'spring' => 1, 'summer' => 5, 'fall' => 9,
+        'jan' => 1, 'feb' => 2, 'mar' => 3, 'apr' => 4,
+        'may' => 5, 'jun' => 6, 'jul' => 7, 'aug' => 8,
+        'sep' => 9, 'oct' => 10, 'nov' => 11, 'dec' => 12,
+    ];
+    foreach ($map as $keyword => $mapped_month) {
+        if (stripos($value, $keyword) !== false) {
+            $month = $mapped_month;
+            break;
+        }
+    }
+
+    if ($month === null && $cf_program !== null) {
+        $semester_hint = [
+            'beginning_semester' => $value,
+            'total_semesters'    => (int)($cf_program['total_semesters'] ?? 0),
+        ];
+        $is_bi_semester = bip_determine_months_per_semester($semester_hint, $cf_program) === 6;
+        $fallback_month = $is_bi_semester
+            ? (int)($cf_program['bi_semester_start_month'] ?? 0)
+            : (int)($cf_program['tri_semester_start_month'] ?? 0);
+        if ($fallback_month >= 1 && $fallback_month <= 12) {
+            $month = $fallback_month;
+        }
+    }
+
+    if ($month === null || $year === null) {
+        return null;
+    }
+
+    return [
+        'month' => $month,
+        'year'  => $year,
+        'token' => sprintf('%02d-%04d', $month, $year),
+    ];
+}
+
+function bip_determine_payment_start(array $pdf, array $student, ?array $cf_program): array
+{
+    $parsed_month = (int)($pdf['payment_start_month'] ?? 0);
+    $parsed_year  = (int)($pdf['payment_start_year'] ?? 0);
+    if ($parsed_month >= 1 && $parsed_month <= 12 && $parsed_year >= 2000) {
+        return [
+            'month' => $parsed_month,
+            'year'  => $parsed_year,
+            'token' => sprintf('%02d-%04d', $parsed_month, $parsed_year),
+        ];
+    }
+
+    $tx_start = bip_payment_start_from_transactions($pdf['transactions'] ?? []);
+    if ($tx_start !== null) {
+        return $tx_start;
+    }
+
+    $semester_start = bip_payment_start_from_semester_text((string)($pdf['beginning_semester'] ?? ''), $cf_program);
+    if ($semester_start !== null) {
+        return $semester_start;
+    }
+
+    $student_start = bip_payment_start_from_semester_text((string)($student['admitted_semester'] ?? ''), $cf_program);
+    if ($student_start !== null) {
+        return $student_start;
+    }
+
+    $fallback_month = 1;
+    if ($cf_program !== null) {
+        $fallback_months_per_sem = bip_determine_months_per_semester($pdf, $cf_program);
+        $fallback_month = $fallback_months_per_sem >= 6
+            ? (int)($cf_program['bi_semester_start_month'] ?? 1)
+            : (int)($cf_program['tri_semester_start_month'] ?? 1);
+        if ($fallback_month < 1 || $fallback_month > 12) {
+            $fallback_month = 1;
+        }
+    }
+
+    $current_year = (int)date('Y');
+    return [
+        'month' => $fallback_month,
+        'year'  => $current_year,
+        'token' => sprintf('%02d-%04d', $fallback_month, $current_year),
+    ];
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Date normaliser: "30-12-2025" or "2026-02-17" → "YYYY-MM-DD"
 // ─────────────────────────────────────────────────────────────────────────────
@@ -479,45 +823,41 @@ function bip_import_student(
     $monthly_payment = $pdf['monthly_payment'];
     $program_name    = $pdf['program_name'] ?: 'Unknown Programme';
 
-    // Compute total_months from monthly payment when possible
-    // monthly = (payable - admission - reg_total) / total_months
-    $payable_total = $tuition_full + $fixed_fees + $english_fee - $concession;
-    $monthly_base  = $payable_total - $admission_fee - $reg_fee_total;
-    $total_months  = ($monthly_payment > 0 && $monthly_base > 0)
-        ? (int)round($monthly_base / $monthly_payment)
-        : $total_semesters * 6;
-
-    if ($total_months <= 0) {
-        $total_months = $total_semesters * 6;
+    $cf_program    = $program_name !== '' ? bip_find_cf_program($db, $program_name) : null;
+    $cf_program_id = $cf_program['id'] ?? null;
+    if ($cf_program !== null && !empty($cf_program['program_name'])) {
+        $program_name = (string)$cf_program['program_name'];
     }
 
-    $months_per_semester = $total_semesters > 0
-        ? round($total_months / $total_semesters, 2)
-        : 6.0;
+    if ($total_semesters <= 0) {
+        $total_semesters = (int)($cf_program['total_semesters'] ?? 0);
+    }
+    if ($total_semesters <= 0) {
+        $total_semesters = 8;
+    }
 
+    $months_per_semester = (float)bip_determine_months_per_semester($pdf, $cf_program);
+    $total_months        = (int)round($total_semesters * $months_per_semester);
     $tuition_per_semester = $total_semesters > 0
         ? round($tuition_full / $total_semesters, 2)
         : $tuition_full;
-
-    $reg_fee_per_semester = $total_semesters > 0
-        ? round($reg_fee_total / $total_semesters, 2)
-        : 0.0;
-
-    // Try to match cf_program
-    $cf_program_id = null;
-    if ($program_name !== '') {
-        $prog_stmt = $db->prepare(
-            'SELECT id FROM cf_programs
-             WHERE program_name LIKE ? OR program_slug LIKE ?
-             LIMIT 1'
-        );
-        $prog_stmt->execute(['%' . $program_name . '%', '%' . strtolower(str_replace(' ', '-', $program_name)) . '%']);
-        $cf_program_id = $prog_stmt->fetchColumn() ?: null;
+    $reg_fee_per_semester = (float)($cf_program['reg_fee_per_semester'] ?? 0);
+    if ($reg_fee_per_semester <= 0 && $total_semesters > 0) {
+        $reg_fee_per_semester = round($reg_fee_total / $total_semesters, 2);
+    }
+    $form_id_fee = (float)($cf_program['form_id_fee'] ?? 0);
+    if ($form_id_fee <= 0) {
+        $form_id_fee = acc_student_form_id_total_fee();
+    }
+    if ($admission_fee <= 0 && $cf_program !== null) {
+        $admission_fee = (float)($cf_program['admission_fee_base'] ?? $cf_program['admission_fees'] ?? $cf_program['admission_fee_m'] ?? 0);
     }
 
     // ── 4. Insert package ────────────────────────────────────────────────────
     $monthly_fixed_fee   = $total_months > 0 ? round($fixed_fees / $total_months, 4) : 0;
     $monthly_english_fee = $total_months > 0 ? round($english_fee / $total_months, 4) : 0;
+    $payment_start = bip_determine_payment_start($pdf, $student, $cf_program);
+    $import_note   = 'Imported from old ERP (bulk PDF/CSV import). Payment start: ' . $payment_start['token'] . '.';
 
     $db->prepare(
         'INSERT INTO sfp_packages
@@ -544,14 +884,14 @@ function bip_import_student(
         (int)$fixed_fees,
         (int)$english_fee,
         $reg_fee_per_semester,
-        0,    // form_id_fee – not in old ERP breakdown, set to 0
+        $form_id_fee,
         null, // safety_net_cap
         null, // safety_net_per_semester
         70,   // attendance_requirement default
         3.00, // safety_net_gpa_threshold default
         $monthly_fixed_fee,
         $monthly_english_fee,
-        'Imported from old ERP (bulk PDF/CSV import)',
+        $import_note,
         $user_id,
     ]);
     $package_id = (int)$db->lastInsertId();
@@ -594,28 +934,9 @@ function bip_import_student(
         $sf_by_sem[(int)$sf['semester_number']] = (int)$sf['id'];
     }
 
-    $months_int = max(1, (int)round($months_per_semester));
-
-    // Determine start month from "Beginning Semester" or admission semester
-    $start_month = 1;
-    $start_year  = (int)date('Y');
-    $beg = $pdf['beginning_semester'] ?: ($student['admitted_semester'] ?? '');
-    if (preg_match('/\b(\d{4})\b/', $beg, $ym)) {
-        $start_year = (int)$ym[1];
-    }
-    // Try to map month name from semester label
-    $sem_month_map = [
-        'spring' => 1, 'summer' => 5, 'fall' => 9,
-        'jan' => 1, 'feb' => 2, 'mar' => 3, 'apr' => 4,
-        'may' => 5, 'jun' => 6, 'jul' => 7, 'aug' => 8,
-        'sep' => 9, 'oct' => 10, 'nov' => 11, 'dec' => 12,
-    ];
-    foreach ($sem_month_map as $keyword => $mnum) {
-        if (stripos($beg, $keyword) !== false) {
-            $start_month = $mnum;
-            break;
-        }
-    }
+    $months_int  = max(1, (int)round($months_per_semester));
+    $start_month = (int)$payment_start['month'];
+    $start_year  = (int)$payment_start['year'];
 
     $month_names_map = [
         'january' => 1, 'february' => 2, 'march' => 3, 'april' => 4,
@@ -801,26 +1122,31 @@ function bip_parse_csv_transactions(string $raw): array
 
 function bip_parse_csv_row(array $row): ?array
 {
-    $student_sid = trim((string)($row['Student ID'] ?? ''));
+    $student_sid = bip_row_value($row, ['Student ID']);
     if ($student_sid === '') {
         return null;
     }
 
-    $total_semesters = (int)preg_replace('/\D+/', '', (string)($row['Total Semesters'] ?? '0'));
+    $total_semesters = (int)preg_replace('/\D+/', '', bip_row_value($row, ['Total Semesters']));
+    $payment_start   = bip_parse_month_year(
+        bip_row_value($row, ['Admission MM-YYYY', 'Admission', 'Admission Month', 'Payment Start Month'])
+    );
 
     return [
-        'student_name'             => trim((string)($row['Student Name'] ?? '')),
-        'program_name'             => trim((string)($row['Program'] ?? '')),
-        'beginning_semester'       => trim((string)($row['Beginning Semester'] ?? '')),
+        'student_name'             => bip_row_value($row, ['Student Name']),
+        'program_name'             => bip_row_value($row, ['Program', 'Programme']),
+        'beginning_semester'       => bip_row_value($row, ['Beginning Semester']),
         'total_semesters'          => $total_semesters,
-        'admission_fee'            => bip_num((string)($row['Admission Fee'] ?? '0')),
-        'registration_fee_total'   => bip_num((string)($row['Registration Fee'] ?? '0')),
-        'english_course_fee'       => bip_num((string)($row['English Language Course Fee'] ?? '0')),
-        'tuition_full'             => bip_num((string)($row['Tuition Fee/Credit'] ?? '0')),
-        'fixed_institutional_fees' => bip_num((string)($row['Miscellaneous/Semester Fee'] ?? '0')),
-        'concession'               => bip_num((string)($row['Concession'] ?? '0')),
-        'monthly_payment'          => bip_num((string)($row['Monthly Payment'] ?? '0')),
-        'transactions'             => bip_parse_csv_transactions((string)($row['Transaction History'] ?? '')),
+        'admission_fee'            => bip_num(bip_row_value($row, ['Admission Fee'])),
+        'registration_fee_total'   => bip_num(bip_row_value($row, ['Registration Fee'])),
+        'english_course_fee'       => bip_num(bip_row_value($row, ['English Language Course Fee'])),
+        'tuition_full'             => bip_num(bip_row_value($row, ['Tuition Fee/Credit'])),
+        'fixed_institutional_fees' => bip_num(bip_row_value($row, ['Miscellaneous/Semester Fee'])),
+        'concession'               => bip_num(bip_row_value($row, ['Concession'])),
+        'monthly_payment'          => bip_num(bip_row_value($row, ['Monthly Payment'])),
+        'payment_start_month'      => (int)($payment_start['month'] ?? 0),
+        'payment_start_year'       => (int)($payment_start['year'] ?? 0),
+        'transactions'             => bip_parse_csv_transactions(bip_row_value($row, ['Transaction History'])),
     ];
 }
 

@@ -26,27 +26,22 @@ $sem_fixed_portion   = sfp_semester_fixed_portion($pkg);
 $sem_english_portion = sfp_semester_english_portion($pkg);
 
 // Registration fee remains snapshotted on the package (not global cf_settings)
-// Form fee and ID card fee use shared accounting constants (500 + 500)
+// Form fee and ID card fee prefer the snapshotted package total, then fall back to shared defaults.
 $reg_fee_per_sem     = (float)($pkg['reg_fee_per_semester'] ?? 0.0);
-$form_fee_one_time   = acc_student_form_fee_amount();
-$id_card_fee_one_time = acc_student_id_card_fee_amount();
-$form_id_fee         = $form_fee_one_time + $id_card_fee_one_time;
+$form_id_fee         = acc_package_form_id_fee($pkg);
+$split_form_id_fee   = acc_split_form_id_fee($form_id_fee);
+$form_fee_one_time   = (float)$split_form_id_fee['form_fee'];
+$id_card_fee_one_time = (float)$split_form_id_fee['id_card_fee'];
 
 // Also fetch current global values for comparison (optional display)
 $cf_settings_global  = db()->query('SELECT reg_fee_per_semester, form_id_fee, start_month FROM cf_settings WHERE id = 1')->fetch();
 
-// Determine which start month to use based on total_semesters
-$is_bi_semester_program = ($pkg['total_semesters'] ?? 0) <= SFP_MAX_BI_SEMESTER_COUNT;
-$program_start_month = $is_bi_semester_program
-    ? (int)($pkg['bi_semester_start_month'] ?? 0)
-    : (int)($pkg['tri_semester_start_month'] ?? 0);
-
-if ($program_start_month >= 1 && $program_start_month <= 12) {
-    $start_month = $program_start_month;
-} elseif ($cf_settings_global) {
-    $start_month = (int)($cf_settings_global['start_month'] ?? CF_DEFAULT_START_MONTH);
-} else {
-    $start_month = CF_DEFAULT_START_MONTH;
+$payment_start = acc_package_payment_start($pkg, $semester_fees);
+$start_month   = (int)($payment_start['month'] ?? 0);
+if ($start_month < 1 || $start_month > 12) {
+    $start_month = $cf_settings_global
+        ? (int)($cf_settings_global['start_month'] ?? CF_DEFAULT_START_MONTH)
+        : CF_DEFAULT_START_MONTH;
 }
 
 // Semester 1 reg fee is now shown in the registration column together with all other semesters.
