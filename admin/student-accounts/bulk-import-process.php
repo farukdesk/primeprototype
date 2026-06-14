@@ -1,9 +1,10 @@
 <?php
 /**
- * Student Accounts – Bulk PDF Import (AJAX backend)
+ * Student Accounts – Bulk PDF / CSV Import (AJAX backend)
  *
- * Accepts a ZIP file of Prime University old-ERP student payment PDFs.
- * Each PDF filename (without extension) must be the student ID, e.g. "02826105101071.pdf".
+ * Accepts either:
+ *   1) a ZIP file of Prime University old-ERP student payment PDFs, or
+ *   2) a CSV export of old-ERP student ledgers.
  *
  * Actions (POST JSON responses):
  *   action=upload  – Accept ZIP, extract to temp dir, return {session_key, total, programs_sample}
@@ -651,7 +652,7 @@ function bip_import_student(
         $package_id,
         ($student['full_name'] ?? $student_sid) . ' – ' . $program_name,
         null, null, null,
-        'Package imported from old ERP PDF bulk upload.'
+        'Package imported from old ERP bulk upload.'
     );
 
     return [
@@ -660,6 +661,168 @@ function bip_import_student(
         'student_name' => $student['full_name'],
         'package_id'   => $package_id,
     ];
+}
+
+function bip_pick_last_date(string $value): ?string
+{
+    if (preg_match_all('/\d{4}-\d{2}-\d{2}|\d{1,2}-\d{1,2}-\d{4}/', $value, $matches)) {
+        foreach (array_reverse($matches[0]) as $candidate) {
+            $date = bip_date($candidate);
+            if ($date !== null) {
+                return $date;
+            }
+        }
+    }
+
+    return null;
+}
+
+function bip_pick_last_token(string $value): string
+{
+    $parts = preg_split('/\s+/', trim($value)) ?: [];
+    if (empty($parts)) {
+        return '';
+    }
+
+    return (string)end($parts);
+}
+
+function bip_parse_csv_transactions(string $raw): array
+{
+    $raw = trim($raw);
+    if ($raw === '') {
+        return [];
+    }
+
+    $decoded = json_decode($raw, true);
+    if (!is_array($decoded)) {
+        return [];
+    }
+
+    $month_names = 'January|February|March|April|May|June|July|August|September|October|November|December';
+    $transactions = [];
+
+    foreach ($decoded as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+
+        $head = trim((string)($row['Head'] ?? ''));
+        if ($head === '') {
+            continue;
+        }
+
+        $date = bip_pick_last_date((string)($row['Date'] ?? ''));
+        $received = bip_num((string)($row['Received'] ?? '0'));
+        if ($date === null || $received <= 0) {
+            continue;
+        }
+
+        $tx = [
+            'head'     => $head,
+            'payable'  => bip_num((string)($row['Payable'] ?? '0')),
+            'date'     => $date,
+            'receipt'  => bip_pick_last_token((string)($row['Receipt'] ?? '')),
+            'received' => $received,
+        ];
+
+        if (preg_match('/^(' . $month_names . ')-\d{4}$/i', $head)) {
+            $tx['fee_type'] = 'semester_tuition';
+            $tx['month_label'] = $head;
+            $transactions[] = $tx;
+            continue;
+        }
+
+        if (strcasecmp($head, 'Admission Fee') === 0) {
+            $tx['fee_type'] = 'admission';
+            $transactions[] = $tx;
+            continue;
+        }
+
+        if (strcasecmp($head, 'Registration Fee') === 0) {
+            $tx['fee_type'] = 'registration';
+            $transactions[] = $tx;
+        }
+    }
+
+    return $transactions;
+}
+
+function bip_parse_csv_row(array $row): ?array
+{
+    $student_sid = trim((string)($row['Student ID'] ?? ''));
+    if ($student_sid === '') {
+        return null;
+    }
+
+    $total_semesters = (int)preg_replace('/\D+/', '', (string)($row['Total Semesters'] ?? '0'));
+
+    return [
+        'student_name'             => trim((string)($row['Student Name'] ?? '')),
+        'program_name'             => trim((string)($row['Program'] ?? '')),
+        'beginning_semester'       => trim((string)($row['Beginning Semester'] ?? '')),
+        'total_semesters'          => $total_semesters,
+        'admission_fee'            => bip_num((string)($row['Admission Fee'] ?? '0')),
+        'registration_fee_total'   => bip_num((string)($row['Registration Fee'] ?? '0')),
+        'english_course_fee'       => bip_num((string)($row['English Language Course Fee'] ?? '0')),
+        'tuition_full'             => bip_num((string)($row['Tuition Fee/Credit'] ?? '0')),
+        'fixed_institutional_fees' => bip_num((string)($row['Miscellaneous/Semester Fee'] ?? '0')),
+        'concession'               => bip_num((string)($row['Concession'] ?? '0')),
+        'monthly_payment'          => bip_num((string)($row['Monthly Payment'] ?? '0')),
+        'transactions'             => bip_parse_csv_transactions((string)($row['Transaction History'] ?? '')),
+    ];
+}
+
+function bip_manifest_from_csv(string $csv_path): array
+{
+    $handle = @fopen($csv_path, 'rb');
+    if (!$handle) {
+        throw new RuntimeException('Could not open the uploaded CSV file.');
+    }
+
+    try {
+        $headers = fgetcsv($handle);
+        if ($headers === false) {
+            throw new RuntimeException('The uploaded CSV file is empty.');
+        }
+
+        $headers = array_map(static function ($header): string {
+            $header = (string)$header;
+            $header = preg_replace('/^\xEF\xBB\xBF/', '', $header);
+            return trim($header);
+        }, $headers);
+
+        if (!in_array('Student ID', $headers, true)) {
+            throw new RuntimeException('CSV must include a "Student ID" column.');
+        }
+
+        $manifest = [];
+        while (($values = fgetcsv($handle)) !== false) {
+            if ($values === [null] || $values === []) {
+                continue;
+            }
+
+            $row = [];
+            foreach ($headers as $index => $header) {
+                $row[$header] = trim((string)($values[$index] ?? ''));
+            }
+
+            $parsed = bip_parse_csv_row($row);
+            if ($parsed === null) {
+                continue;
+            }
+
+            $manifest[] = [
+                'sid'    => trim((string)$row['Student ID']),
+                'data'   => $parsed,
+                'source' => 'csv',
+            ];
+        }
+    } finally {
+        fclose($handle);
+    }
+
+    return $manifest;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -736,20 +899,13 @@ csrf_check();
 // ─────────────────────────────────────────────────────────────────────────────
 
 if ($action === 'upload') {
-    if (!class_exists('ZipArchive')) {
-        bip_error('PHP ZipArchive extension is not available on this server.');
+    if (empty($_FILES['import_file']['name']) || ($_FILES['import_file']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+        bip_error('No ZIP or CSV file uploaded, or upload error occurred.');
     }
 
-    if (empty($_FILES['zip_file']['name']) || ($_FILES['zip_file']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
-        bip_error('No ZIP file uploaded or upload error.');
-    }
-
-    $zip_ext  = strtolower(pathinfo((string)$_FILES['zip_file']['name'], PATHINFO_EXTENSION));
-    $zip_mime = (new finfo(FILEINFO_MIME_TYPE))->file($_FILES['zip_file']['tmp_name']);
-    $valid_mimes = ['application/zip', 'application/x-zip-compressed', 'application/octet-stream', 'multipart/x-zip'];
-
-    if ($zip_ext !== 'zip' || !in_array($zip_mime, $valid_mimes, true)) {
-        bip_error('Only ZIP files are accepted.');
+    $file_ext = strtolower(pathinfo((string)$_FILES['import_file']['name'], PATHINFO_EXTENSION));
+    if (!in_array($file_ext, ['zip', 'csv'], true)) {
+        bip_error('Only ZIP and CSV files are accepted.');
     }
 
     $cash_account_id   = (int)($_POST['cash_account_id']   ?? 0);
@@ -757,55 +913,74 @@ if ($action === 'upload') {
     if (!$cash_account_id)   bip_error('Cash / received-into account is required.');
     if (!$income_account_id) bip_error('Income account is required.');
 
-    // Extract ZIP
-    $zip = new ZipArchive();
-    if ($zip->open($_FILES['zip_file']['tmp_name']) !== true) {
-        bip_error('Could not open the ZIP file. It may be corrupt.');
-    }
-
     try {
-        $tmp_dir  = bip_temp_dir_create();
+        $tmp_dir = '';
         $manifest = [];
-        $programs_seen = [];
 
-        for ($i = 0; $i < $zip->numFiles; $i++) {
-            $entry = $zip->getNameIndex($i);
-            if (substr($entry, -1) === '/') continue;
-            if (strtolower(pathinfo($entry, PATHINFO_EXTENSION)) !== 'pdf') continue;
+        if ($file_ext === 'zip') {
+            if (!class_exists('ZipArchive')) {
+                bip_error('PHP ZipArchive extension is not available on this server.');
+            }
 
-            $sid  = pathinfo(basename($entry), PATHINFO_FILENAME);
-            if ($sid === '') continue;
+            $zip_mime = (new finfo(FILEINFO_MIME_TYPE))->file($_FILES['import_file']['tmp_name']);
+            $valid_mimes = ['application/zip', 'application/x-zip-compressed', 'application/octet-stream', 'multipart/x-zip'];
+            if (!in_array($zip_mime, $valid_mimes, true)) {
+                bip_error('The uploaded ZIP file is not valid.');
+            }
 
-            $dest = $tmp_dir . DIRECTORY_SEPARATOR . $sid . '.pdf';
-            $zip->extractTo($tmp_dir, $entry);
+            $zip = new ZipArchive();
+            if ($zip->open($_FILES['import_file']['tmp_name']) !== true) {
+                bip_error('Could not open the ZIP file. It may be corrupt.');
+            }
 
-            // extractTo preserves directory structure; find actual extracted path
-            $extracted = $tmp_dir . DIRECTORY_SEPARATOR . $entry;
-            if (is_file($extracted) && $extracted !== $dest) {
-                if (!rename($extracted, $dest)) {
-                    // rename can fail across filesystems; fall back to copy+unlink
-                    if (copy($extracted, $dest)) {
-                        unlink($extracted);
-                    } else {
-                        error_log('bip upload: failed to move ' . $extracted . ' to ' . $dest);
-                        continue;
+            $tmp_dir = bip_temp_dir_create();
+
+            for ($i = 0; $i < $zip->numFiles; $i++) {
+                $entry = $zip->getNameIndex($i);
+                if (substr($entry, -1) === '/') continue;
+                if (strtolower(pathinfo($entry, PATHINFO_EXTENSION)) !== 'pdf') continue;
+
+                $sid  = pathinfo(basename($entry), PATHINFO_FILENAME);
+                if ($sid === '') continue;
+
+                $dest = $tmp_dir . DIRECTORY_SEPARATOR . $sid . '.pdf';
+                $zip->extractTo($tmp_dir, $entry);
+
+                // extractTo preserves directory structure; find actual extracted path
+                $extracted = $tmp_dir . DIRECTORY_SEPARATOR . $entry;
+                if (is_file($extracted) && $extracted !== $dest) {
+                    if (!rename($extracted, $dest)) {
+                        // rename can fail across filesystems; fall back to copy+unlink
+                        if (copy($extracted, $dest)) {
+                            unlink($extracted);
+                        } else {
+                            error_log('bip upload: failed to move ' . $extracted . ' to ' . $dest);
+                            continue;
+                        }
                     }
                 }
-            }
 
-            if (is_file($dest)) {
-                $manifest[] = ['sid' => $sid, 'path' => $dest];
+                if (is_file($dest)) {
+                    $manifest[] = ['sid' => $sid, 'path' => $dest, 'source' => 'pdf'];
+                }
             }
+            $zip->close();
+        } else {
+            $manifest = bip_manifest_from_csv($_FILES['import_file']['tmp_name']);
         }
-        $zip->close();
 
     } catch (Throwable $e) {
-        bip_error('Failed to extract ZIP: ' . $e->getMessage());
+        if ($tmp_dir !== '') {
+            bip_temp_dir_remove($tmp_dir);
+        }
+        bip_error('Failed to prepare import file: ' . $e->getMessage());
     }
 
     if (empty($manifest)) {
-        bip_temp_dir_remove($tmp_dir);
-        bip_error('No PDF files found in the ZIP archive.');
+        if ($tmp_dir !== '') {
+            bip_temp_dir_remove($tmp_dir);
+        }
+        bip_error($file_ext === 'zip' ? 'No PDF files found in the ZIP archive.' : 'No student rows found in the CSV file.');
     }
 
     // Save manifest + settings to session
@@ -836,7 +1011,7 @@ if ($action === 'batch') {
 
     $session = bip_session_get($session_key);
     if (!$session) {
-        bip_error('Import session not found or expired. Please re-upload the ZIP file.');
+        bip_error('Import session not found or expired. Please re-upload the ZIP or CSV file.');
     }
 
     $manifest          = $session['manifest'];
@@ -855,22 +1030,33 @@ if ($action === 'batch') {
 
     foreach ($batch as $item) {
         $sid  = $item['sid'];
-        $path = $item['path'];
+        $source = $item['source'] ?? 'pdf';
 
-        if (!is_file($path)) {
-            $rows[]  = ['sid' => $sid, 'status' => 'failed', 'message' => 'PDF file not found in temp dir'];
-            $failed++;
-            continue;
+        if ($source === 'csv') {
+            $pdf = $item['data'] ?? null;
+            if (!is_array($pdf)) {
+                $rows[]  = ['sid' => $sid, 'status' => 'failed', 'message' => 'CSV row data is missing'];
+                $failed++;
+                continue;
+            }
+        } else {
+            $path = $item['path'] ?? '';
+
+            if (!is_file($path)) {
+                $rows[]  = ['sid' => $sid, 'status' => 'failed', 'message' => 'PDF file not found in temp dir'];
+                $failed++;
+                continue;
+            }
+
+            $text = bip_extract_text($path);
+            if (trim($text) === '') {
+                $rows[]  = ['sid' => $sid, 'status' => 'failed', 'message' => 'Could not extract text from PDF'];
+                $failed++;
+                continue;
+            }
+
+            $pdf = bip_parse_pdf_text($text);
         }
-
-        $text = bip_extract_text($path);
-        if (trim($text) === '') {
-            $rows[]  = ['sid' => $sid, 'status' => 'failed', 'message' => 'Could not extract text from PDF'];
-            $failed++;
-            continue;
-        }
-
-        $pdf = bip_parse_pdf_text($text);
 
         try {
             $result = bip_import_student(

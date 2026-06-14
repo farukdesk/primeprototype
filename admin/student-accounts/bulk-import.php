@@ -1,10 +1,10 @@
 <?php
 /**
- * Student Accounts – Bulk PDF Import (UI)
+ * Student Accounts – Bulk PDF / CSV Import (UI)
  *
- * Upload a ZIP file of Prime University old-ERP student payment PDFs.
- * Each PDF filename (without extension) must be the student ID,
- * e.g. "02826105101071.pdf".
+ * Upload either:
+ *   1) a ZIP file of Prime University old-ERP student payment PDFs, or
+ *   2) a CSV export matching the old-ERP student ledger format.
  *
  * Processing is done in AJAX batches to handle 10,000+ files without
  * hitting PHP execution time limits.
@@ -15,7 +15,7 @@ require_access('student-accounts', 'can_create');
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/../accounting/helpers.php';
 
-$page_title    = 'Bulk PDF Import – Student Accounts';
+$page_title    = 'Bulk PDF / CSV Import – Student Accounts';
 $cash_accounts = acc_cash_accounts();
 $income_accounts = acc_income_accounts();
 
@@ -25,12 +25,12 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <div>
         <h1 class="h3 mb-0">
-            <i class="fas fa-file-import me-2 text-success"></i>Bulk PDF Import
+            <i class="fas fa-file-import me-2 text-success"></i>Bulk PDF / CSV Import
         </h1>
         <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small">
             <li class="breadcrumb-item"><a href="<?= APP_URL ?>/index.php">Dashboard</a></li>
             <li class="breadcrumb-item"><a href="<?= APP_URL ?>/student-accounts/index.php">Student Accounts</a></li>
-            <li class="breadcrumb-item active">Bulk PDF Import</li>
+            <li class="breadcrumb-item active">Bulk PDF / CSV Import</li>
         </ol></nav>
     </div>
     <a href="<?= APP_URL ?>/student-accounts/index.php" class="btn btn-outline-secondary btn-sm">
@@ -47,10 +47,10 @@ require_once __DIR__ . '/../includes/header.php';
         <div>
             <strong>How it works</strong>
             <ol class="mb-0 mt-1 ps-3 small">
-                <li>Export student payment PDFs from the old ERP. Each PDF must be named with the student ID (e.g. <code>02826105101071.pdf</code>).</li>
-                <li>Bundle all PDFs into a single ZIP file.</li>
+                <li>For PDF import, export student payment PDFs from the old ERP and name each file with the student ID (e.g. <code>02826105101071.pdf</code>), then bundle them into a single ZIP file.</li>
+                <li>For CSV import, upload a ledger CSV that matches the old ERP export columns, including the <code>Transaction History</code> field.</li>
                 <li>Choose the default cash/bank account and income account that will receive these historical payments in the ledger.</li>
-                <li>Upload the ZIP. The system processes files in batches, creates each student's fee package, applies any concession as a scholarship, and records the transaction history.</li>
+                <li>Upload the ZIP or CSV. The system processes records in batches, creates each student's fee package, applies any concession as a scholarship, and records the transaction history.</li>
                 <li>Students not found in the system, or those that already have a package (when overwrite is disabled), are reported as skipped.</li>
             </ol>
         </div>
@@ -64,7 +64,7 @@ require_once __DIR__ . '/../includes/header.php';
 <div id="step-upload">
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-header bg-success text-white fw-semibold py-3">
-        <i class="fas fa-upload me-2"></i>Upload ZIP File
+        <i class="fas fa-upload me-2"></i>Upload ZIP or CSV File
     </div>
     <div class="card-body">
         <form id="upload-form" novalidate>
@@ -72,13 +72,13 @@ require_once __DIR__ . '/../includes/header.php';
 
             <div class="row g-3">
 
-                <!-- ZIP file -->
+                <!-- Import file -->
                 <div class="col-12">
                     <label class="form-label fw-semibold">
-                        ZIP File <span class="text-danger">*</span>
-                        <small class="text-muted fw-normal ms-1">Each PDF inside must be named with the student ID</small>
+                        Import File <span class="text-danger">*</span>
+                        <small class="text-muted fw-normal ms-1">Upload a ZIP of student-ID-named PDFs or a CSV ledger export</small>
                     </label>
-                    <input type="file" name="zip_file" id="zip_file" class="form-control" accept=".zip" required>
+                    <input type="file" name="import_file" id="import_file" class="form-control" accept=".zip,.csv,text/csv" required>
                 </div>
 
                 <!-- Cash account -->
@@ -116,7 +116,7 @@ require_once __DIR__ . '/../includes/header.php';
                             <strong>Overwrite</strong> existing student packages
                             <small class="text-muted d-block">
                                 If unchecked, students who already have a fee package are skipped.
-                                If checked, the existing package (and all its payments) will be deleted and re-created from the PDF.
+                                If checked, the existing package (and all its payments) will be deleted and re-created from the uploaded data.
                             </small>
                         </label>
                     </div>
@@ -144,7 +144,7 @@ require_once __DIR__ . '/../includes/header.php';
         <span id="progress-title">Processing…</span>
     </div>
     <div class="card-body">
-        <p class="text-muted small mb-2" id="progress-label">Uploading ZIP file…</p>
+        <p class="text-muted small mb-2" id="progress-label">Uploading file…</p>
         <div class="progress mb-3" style="height:22px;">
             <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated bg-success"
                  role="progressbar" style="width:0%">0%</div>
@@ -206,7 +206,7 @@ require_once __DIR__ . '/../includes/header.php';
 (function () {
     'use strict';
 
-    const BATCH_SIZE = 20;          // PDFs per AJAX call
+    const BATCH_SIZE = 20;          // records per AJAX call
     const PROCESS_URL = '<?= APP_URL ?>/student-accounts/bulk-import-process.php';
     const CSRF_TOKEN  = <?= json_encode($_SESSION['csrf_token'] ?? '') ?>;
 
@@ -258,8 +258,8 @@ require_once __DIR__ . '/../includes/header.php';
     $('upload-form').addEventListener('submit', function (e) {
         e.preventDefault();
 
-        const zipFile = $('zip_file').files[0];
-        if (!zipFile) { showAlert('Please select a ZIP file.', 'danger'); return; }
+        const importFile = $('import_file').files[0];
+        if (!importFile) { showAlert('Please select a ZIP or CSV file.', 'danger'); return; }
 
         const cashId   = $('cash_account_id').value;
         const incomeId = $('income_account_id').value;
@@ -271,12 +271,12 @@ require_once __DIR__ . '/../includes/header.php';
         $('upload-btn').disabled = true;
         $('step-upload').style.display = 'none';
         $('step-progress').style.display = 'block';
-        setProgress(2, 'Uploading ZIP file…');
+        setProgress(2, 'Uploading file…');
 
         const fd = new FormData();
         fd.append('action', 'upload');
         fd.append('_token', CSRF_TOKEN);
-        fd.append('zip_file', zipFile);
+        fd.append('import_file', importFile);
         fd.append('cash_account_id', cashId);
         fd.append('income_account_id', incomeId);
         fd.append('overwrite', $('overwrite').checked ? '1' : '0');
@@ -287,7 +287,7 @@ require_once __DIR__ . '/../includes/header.php';
                 if (!resp.success) { onError(resp.error || 'Upload failed.'); return; }
                 sessionKey = resp.session_key;
                 totalFiles = resp.total;
-                setProgress(5, 'ZIP uploaded. Found ' + totalFiles + ' PDF files. Starting import…');
+                setProgress(5, 'Upload completed. Found ' + totalFiles + ' record(s). Starting import…');
                 $('progress-stats').style.removeProperty('display');
                 processBatch();
             })
@@ -323,7 +323,7 @@ require_once __DIR__ . '/../includes/header.php';
             offset = resp.offset;
 
             const pct = totalFiles > 0 ? (offset / totalFiles) * 95 + 5 : 100;
-            setProgress(pct, 'Processing… ' + offset + ' / ' + totalFiles + ' files');
+            setProgress(pct, 'Processing… ' + offset + ' / ' + totalFiles + ' records');
 
             if (resp.done || offset >= totalFiles) {
                 onComplete();
@@ -345,7 +345,7 @@ require_once __DIR__ . '/../includes/header.php';
 
         // Build summary cards
         const sumHtml = [
-            makeCard(totalFiles, 'Total PDFs', 'primary', 'fa-file-pdf'),
+            makeCard(totalFiles, 'Total Records', 'primary', 'fa-file-import'),
             makeCard(cntCreated, 'Created',    'success', 'fa-check-circle'),
             makeCard(cntSkipped, 'Skipped',    'warning', 'fa-forward'),
             makeCard(cntFailed,  'Failed',     'danger',  'fa-times-circle'),
