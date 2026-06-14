@@ -950,6 +950,29 @@ function acc_student_form_id_total_fee(): float
     return acc_student_form_fee_amount() + acc_student_id_card_fee_amount();
 }
 
+function acc_package_form_id_fee(array $pkg): float
+{
+    $snapshot = (float)($pkg['form_id_fee'] ?? 0);
+    return $snapshot > 0 ? $snapshot : acc_student_form_id_total_fee();
+}
+
+function acc_package_payment_start(array $pkg, array $semester_fees = []): array
+{
+    $note = (string)($pkg['note'] ?? '');
+    if (preg_match('/Payment start:\s*(\d{1,2})-(\d{4})/i', $note, $m)) {
+        $month = (int)$m[1];
+        $year  = (int)$m[2];
+        if ($month >= 1 && $month <= 12) {
+            return ['month' => $month, 'year' => $year];
+        }
+    }
+
+    return [
+        'month' => acc_package_start_month($pkg),
+        'year'  => acc_package_start_year($pkg, $semester_fees),
+    ];
+}
+
 function acc_student_fee_summary(int $student_id): ?array
 {
     $db = db();
@@ -968,14 +991,18 @@ function acc_student_fee_summary(int $student_id): ?array
     if (!$pkg) return null;
 
     $package_id  = (int)$pkg['id'];
-    $start_month = acc_package_start_month($pkg);
-
     // Registration fee remains snapshotted on the package (not global cf_settings)
     // Form fee and ID card fee are fixed accounting constants (500 + 500)
     $reg_fee     = (float)($pkg['reg_fee_per_semester'] ?? 0.0);
-    $form_fee_due = acc_student_form_fee_amount();
-    $id_card_fee_due = acc_student_id_card_fee_amount();
-    $form_id_total_fee = acc_student_form_id_total_fee();
+    $form_id_total_fee = acc_package_form_id_fee($pkg);
+    $default_form_id_total = acc_student_form_id_total_fee();
+    if (abs($form_id_total_fee - $default_form_id_total) < 0.01) {
+        $form_fee_due    = acc_student_form_fee_amount();
+        $id_card_fee_due = acc_student_id_card_fee_amount();
+    } else {
+        $form_fee_due    = round($form_id_total_fee / 2, 2);
+        $id_card_fee_due = round($form_id_total_fee - $form_fee_due, 2);
+    }
 
     // Semester fee rows
     $sf_stmt = $db->prepare(
@@ -984,7 +1011,9 @@ function acc_student_fee_summary(int $student_id): ?array
     $sf_stmt->execute([$package_id]);
     $semester_fees = $sf_stmt->fetchAll();
     $num_semesters = count($semester_fees);
-    $start_year = acc_package_start_year($pkg, $semester_fees);
+    $payment_start = acc_package_payment_start($pkg, $semester_fees);
+    $start_month   = (int)$payment_start['month'];
+    $start_year    = (int)$payment_start['year'];
 
     // Paid amounts per fee_type and per semester_fee_id
     $paid_stmt = $db->prepare(
@@ -2036,6 +2065,14 @@ function acc_transaction_number_exists(string $transaction_number): bool
  */
 function acc_package_start_month(array $pkg): int
 {
+    $note = (string)($pkg['note'] ?? '');
+    if (preg_match('/Payment start:\s*(\d{1,2})-(\d{4})/i', $note, $m)) {
+        $month = (int)$m[1];
+        if ($month >= 1 && $month <= 12) {
+            return $month;
+        }
+    }
+
     $total_semesters = (int)($pkg['total_semesters'] ?? 0);
     $is_bi = $total_semesters > 0 && $total_semesters <= 8;
     $start = $is_bi
@@ -2049,6 +2086,11 @@ function acc_package_start_month(array $pkg): int
  */
 function acc_package_start_year(array $pkg, array $semester_fees): int
 {
+    $note = (string)($pkg['note'] ?? '');
+    if (preg_match('/Payment start:\s*(\d{1,2})-(\d{4})/i', $note, $m)) {
+        return (int)$m[2];
+    }
+
     $candidates = [];
     if (!empty($pkg['admitted_semester'])) {
         $candidates[] = (string)$pkg['admitted_semester'];
