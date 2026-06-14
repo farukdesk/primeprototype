@@ -991,6 +991,7 @@ function acc_old_erp_virtual_credits(array $pkg, int $num_semesters): array
     }
 
     $reg_per_semester = max(0.0, (float)($pkg['reg_fee_per_semester'] ?? 0.0));
+    // Old ERP settlement covers one registration fee only (Summer 2026).
     $registration_credit = $num_semesters > 0 ? $reg_per_semester : 0.0;
 
     return [

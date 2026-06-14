@@ -101,7 +101,7 @@ require_once __DIR__ . '/../includes/header.php';
         </a>
         <?php if (sfp_can_edit()): ?>
         <form method="post" class="d-inline"
-              onsubmit="return confirm('This will mark Admission + Form + ID Card and Summer 2026 Registration as paid from old ERP for all student accounts. Continue?');">
+              onsubmit="return confirm('This will mark Admission + Form + ID Card and only one semester Registration (Summer 2026) as paid from old ERP for all student accounts. Continue?');">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="mark_old_erp_fees_paid">
             <button type="submit" class="btn btn-outline-warning btn-sm">
