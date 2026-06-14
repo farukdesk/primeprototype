@@ -13,7 +13,6 @@ require_once __DIR__ . '/../change-log/helpers.php';
 const ACC_INVOICE_CUSTOM_LOGO_FILE = 'Prime_University_Invoice logo.png';
 const ACC_STUDENT_FORM_FEE = 500.0;
 const ACC_STUDENT_ID_CARD_FEE = 500.0;
-const ACC_OLD_ERP_SETTLEMENT_MARKER = '[OLD_ERP_SETTLED:ADMISSION+FORM+ID+SUMMER2026_REG]';
 
 // ── Permission helpers ────────────────────────────────────────────────────────
 
@@ -977,7 +976,7 @@ function acc_split_form_id_fee(float $total_fee): array
 function acc_package_has_old_erp_settlement(array $pkg): bool
 {
     $note = (string)($pkg['note'] ?? '');
-    return $note !== '' && stripos($note, ACC_OLD_ERP_SETTLEMENT_MARKER) !== false;
+    return $note !== '' && stripos($note, OLD_ERP_SETTLEMENT_MARKER) !== false;
 }
 
 function acc_old_erp_virtual_credits(array $pkg, int $num_semesters): array
@@ -986,14 +985,13 @@ function acc_old_erp_virtual_credits(array $pkg, int $num_semesters): array
         return ['admission' => 0.0, 'registration' => 0.0];
     }
 
-    $admission_credit = max(
-        0.0,
-        (float)($pkg['admission_fees'] ?? 0) + acc_package_form_id_fee($pkg)
-    );
+    $admission_credit = (float)($pkg['admission_fees'] ?? 0) + acc_package_form_id_fee($pkg);
+    if ($admission_credit < 0) {
+        $admission_credit = 0.0;
+    }
 
     $reg_per_semester = max(0.0, (float)($pkg['reg_fee_per_semester'] ?? 0.0));
-    $reg_total_due    = $reg_per_semester * max(0, $num_semesters);
-    $registration_credit = min($reg_per_semester, $reg_total_due);
+    $registration_credit = $num_semesters > 0 ? $reg_per_semester : 0.0;
 
     return [
         'admission'    => $admission_credit,

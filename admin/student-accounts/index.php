@@ -5,8 +5,6 @@ require_once __DIR__ . '/helpers.php';
 
 $page_title = 'Student Accounts';
 $db         = db();
-$old_erp_settlement_marker = '[OLD_ERP_SETTLED:ADMISSION+FORM+ID+SUMMER2026_REG]';
-$old_erp_settlement_note   = 'Old ERP settled: Admission Fee + Form Fee + ID Card Fee + Summer 2026 Registration Fee.';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'mark_old_erp_fees_paid') {
     csrf_check();
@@ -21,9 +19,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'mark_
          WHERE COALESCE(note, "") NOT LIKE ?'
     );
     $stmt->execute([
-        $old_erp_settlement_note,
-        $old_erp_settlement_marker,
-        '%' . $old_erp_settlement_marker . '%',
+        OLD_ERP_SETTLEMENT_NOTE,
+        OLD_ERP_SETTLEMENT_MARKER,
+        '%' . OLD_ERP_SETTLEMENT_MARKER . '%',
     ]);
 
     $count = (int)$stmt->rowCount();
