@@ -66,9 +66,14 @@ require_once __DIR__ . '/../includes/header.php';
         <p class="text-muted mb-0 small">Snapshotted fee structures assigned to students.</p>
     </div>
     <?php if (sfp_can_create()): ?>
-    <a href="<?= APP_URL ?>/student-accounts/create.php" class="btn btn-success btn-sm">
-        <i class="fas fa-plus me-1"></i> Assign Package
-    </a>
+    <div class="d-flex gap-2">
+        <a href="<?= APP_URL ?>/student-accounts/create.php" class="btn btn-success btn-sm">
+            <i class="fas fa-plus me-1"></i> Assign Package
+        </a>
+        <a href="<?= APP_URL ?>/student-accounts/bulk-import.php" class="btn btn-outline-success btn-sm">
+            <i class="fas fa-file-import me-1"></i> Bulk PDF / CSV Import
+        </a>
+    </div>
     <?php endif; ?>
 </div>
 
