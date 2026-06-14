@@ -208,7 +208,8 @@ require_once __DIR__ . '/../includes/header.php';
 
     const BATCH_SIZE = 20;          // records per AJAX call
     const PROCESS_URL = '<?= APP_URL ?>/student-accounts/bulk-import-process.php';
-    const CSRF_TOKEN  = <?= json_encode($_SESSION['csrf_token'] ?? '') ?>;
+    const CSRF_TOKEN  = <?= json_encode(csrf_token()) ?>;
+    const CSRF_FIELD  = <?= json_encode(CSRF_TOKEN_NAME) ?>;
 
     let sessionKey  = null;
     let totalFiles  = 0;
@@ -240,7 +241,7 @@ require_once __DIR__ . '/../includes/header.php';
     // ── AJAX helper ──────────────────────────────────────────────────────────
 
     function post(data, callback) {
-        data._token = CSRF_TOKEN;
+        data[CSRF_FIELD] = CSRF_TOKEN;
         const fd = new FormData();
         for (const [k, v] of Object.entries(data)) {
             if (v instanceof File) { fd.append(k, v); }
@@ -275,7 +276,7 @@ require_once __DIR__ . '/../includes/header.php';
 
         const fd = new FormData();
         fd.append('action', 'upload');
-        fd.append('_token', CSRF_TOKEN);
+        fd.append(CSRF_FIELD, CSRF_TOKEN);
         fd.append('import_file', importFile);
         fd.append('cash_account_id', cashId);
         fd.append('income_account_id', incomeId);
