@@ -1225,7 +1225,7 @@ require_once __DIR__ . '/../includes/header.php';
         return map[type] || type;
     }
 
-    function admissionFeeLabelFromSummary() {
+    function admissionChargesLabelFromSummary() {
         const breakdown = currentSummary?.totals?.admission_breakdown || {};
         const formFee = Number(breakdown.form_fee ?? STUDENT_FORM_FEE);
         const idFee = Number(breakdown.id_card_fee ?? STUDENT_ID_CARD_FEE);
@@ -1365,7 +1365,7 @@ require_once __DIR__ . '/../includes/header.php';
                 semester_number:   null,
                 month_number:      null,
                 out:               t.admission.out,
-                label:             admissionFeeLabelFromSummary(),
+                label:             admissionChargesLabelFromSummary(),
                 income_account_id: incomeAccountsMap['admission'] ?? 0,
                 cal_month:         null, cal_year: null,
             });
@@ -1849,7 +1849,7 @@ require_once __DIR__ . '/../includes/header.php';
 
         // ── Admission Fee ────────────────────────────────────────────────────
         addSectionRow('Admission');
-        addRow(admissionFeeLabelFromSummary(), t.admission.due, t.admission.paid, t.admission.out,
+        addRow(admissionChargesLabelFromSummary(), t.admission.due, t.admission.paid, t.admission.out,
                'admission', null, null, null, null, null);
 
         // ── Per-semester: Registration + Monthly overall fees ────────────────

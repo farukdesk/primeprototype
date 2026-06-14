@@ -970,8 +970,8 @@ function acc_student_fee_summary(int $student_id): ?array
     $package_id  = (int)$pkg['id'];
     $start_month = acc_package_start_month($pkg);
 
-    // Use snapshotted registration fee from the package (not global cf_settings)
-    // This ensures each student retains their originally assigned fees
+    // Registration fee remains snapshotted on the package (not global cf_settings)
+    // Form fee and ID card fee are fixed accounting constants (500 + 500)
     $reg_fee     = (float)($pkg['reg_fee_per_semester'] ?? 0.0);
     $form_fee_due = acc_student_form_fee_amount();
     $id_card_fee_due = acc_student_id_card_fee_amount();

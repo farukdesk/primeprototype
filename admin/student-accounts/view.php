@@ -25,8 +25,8 @@ $all_scholarships = sfp_get_all_semester_scholarships($id);
 $sem_fixed_portion   = sfp_semester_fixed_portion($pkg);
 $sem_english_portion = sfp_semester_english_portion($pkg);
 
-// Use snapshotted registration fee from the package (not global cf_settings)
-// This ensures displayed fees match the student's actual obligations
+// Registration fee remains snapshotted on the package (not global cf_settings)
+// Form fee and ID card fee use shared accounting constants (500 + 500)
 $reg_fee_per_sem     = (float)($pkg['reg_fee_per_semester'] ?? 0.0);
 $form_fee_one_time   = acc_student_form_fee_amount();
 $id_card_fee_one_time = acc_student_id_card_fee_amount();
