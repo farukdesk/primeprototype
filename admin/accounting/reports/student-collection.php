@@ -39,6 +39,9 @@ $rows = db()->prepare(
     "SELECT
          s.student_id        AS sid,
          s.full_name         AS student_name,
+         d.name              AS dept_name,
+         ap.program_name,
+         s.admitted_semester AS batch,
          v.voucher_date      AS collection_date,
          v.voucher_number    AS invoice_no,
          p.fee_type,
@@ -47,8 +50,10 @@ $rows = db()->prepare(
          p.amount,
          p.id                AS payment_id
      FROM sfp_payments p
-     JOIN students       s ON s.id = p.student_id
-     JOIN acc_vouchers   v ON v.id = p.voucher_id
+     JOIN students                s  ON s.id  = p.student_id
+     JOIN acc_vouchers            v  ON v.id  = p.voucher_id
+     LEFT JOIN dept_departments   d  ON d.id  = s.dept_id
+     LEFT JOIN dept_academic_programs ap ON ap.id = s.program_id
      WHERE $where_sql
      ORDER BY v.voucher_date DESC, p.id DESC"
 );
@@ -72,20 +77,30 @@ require_once __DIR__ . '/../../includes/header.php';
             <li class="breadcrumb-item active">Student Collection Report</li>
         </ol></nav>
     </div>
-    <button onclick="window.print()" class="btn btn-outline-secondary btn-sm no-print"><i class="fas fa-print me-1"></i> Print</button>
+    <div class="d-flex gap-2 no-print">
+        <button onclick="printA4()" class="btn btn-outline-secondary btn-sm"><i class="fas fa-print me-1"></i> Print A4</button>
+    </div>
 </div>
 
 <!-- ── Filters ── -->
 <div class="card border-0 shadow-sm mb-3 no-print">
     <div class="card-body p-3">
-        <form method="get" class="row g-2 align-items-end">
+        <!-- Shortcut date buttons -->
+        <div class="mb-2 d-flex flex-wrap gap-1">
+            <span class="small fw-semibold me-1 align-self-center text-muted">Quick:</span>
+            <button type="button" class="btn btn-outline-primary btn-sm sc-btn" data-range="today">Today</button>
+            <button type="button" class="btn btn-outline-primary btn-sm sc-btn" data-range="week">This Week</button>
+            <button type="button" class="btn btn-outline-primary btn-sm sc-btn" data-range="month">This Month</button>
+            <button type="button" class="btn btn-outline-primary btn-sm sc-btn" data-range="year">This Year</button>
+        </div>
+        <form method="get" id="filterForm" class="row g-2 align-items-end">
             <div class="col-auto">
                 <label class="form-label small fw-semibold mb-1">From</label>
-                <input type="date" name="date_from" class="form-control form-control-sm" value="<?= h($date_from) ?>">
+                <input type="date" name="date_from" id="date_from" class="form-control form-control-sm" value="<?= h($date_from) ?>">
             </div>
             <div class="col-auto">
                 <label class="form-label small fw-semibold mb-1">To</label>
-                <input type="date" name="date_to" class="form-control form-control-sm" value="<?= h($date_to) ?>">
+                <input type="date" name="date_to" id="date_to" class="form-control form-control-sm" value="<?= h($date_to) ?>">
             </div>
             <div class="col-auto">
                 <label class="form-label small fw-semibold mb-1">Fee Type</label>
@@ -150,6 +165,8 @@ require_once __DIR__ . '/../../includes/header.php';
                         <th>#</th>
                         <th>Student ID</th>
                         <th>Student Name</th>
+                        <th>Program</th>
+                        <th>Batch</th>
                         <th>Collection Date</th>
                         <th>Invoice No</th>
                         <th>Fee Type</th>
@@ -163,6 +180,8 @@ require_once __DIR__ . '/../../includes/header.php';
                         <td class="text-muted"><?= $i + 1 ?></td>
                         <td class="fw-semibold"><?= h($r['sid']) ?></td>
                         <td><?= h($r['student_name']) ?></td>
+                        <td><?= h($r['program_name'] ?? '—') ?></td>
+                        <td><?= h($r['batch'] ?? '—') ?></td>
                         <td class="text-muted"><?= date('d M Y', strtotime($r['collection_date'])) ?></td>
                         <td><span class="badge bg-light text-dark border"><?= h($r['invoice_no']) ?></span></td>
                         <td><?= h(acc_fee_type_label($r['fee_type'])) ?></td>
@@ -173,7 +192,7 @@ require_once __DIR__ . '/../../includes/header.php';
                 </tbody>
                 <tfoot class="table-light">
                     <tr>
-                        <td colspan="7" class="text-end fw-bold">Grand Total</td>
+                        <td colspan="9" class="text-end fw-bold">Grand Total</td>
                         <td class="text-end fw-bold"><?= $currency ?> <?= number_format($total, 2) ?></td>
                     </tr>
                 </tfoot>
@@ -189,6 +208,40 @@ require_once __DIR__ . '/../../includes/header.php';
     #main-wrapper { margin-left: 0 !important; }
     .card { box-shadow: none !important; border: 1px solid #dee2e6 !important; }
 }
+@page { size: A4 portrait; margin: 15mm; }
 </style>
+
+<script>
+(function () {
+    // Shortcut date buttons
+    var today = new Date();
+    function fmt(d) {
+        return d.toISOString().slice(0, 10);
+    }
+    document.querySelectorAll('.sc-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var range = this.dataset.range;
+            var from, to = fmt(today);
+            if (range === 'today') {
+                from = to;
+            } else if (range === 'week') {
+                var d = new Date(today);
+                d.setDate(d.getDate() - d.getDay() + 1); // Monday
+                from = fmt(d);
+            } else if (range === 'month') {
+                from = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-01';
+            } else if (range === 'year') {
+                from = today.getFullYear() + '-01-01';
+            }
+            document.getElementById('date_from').value = from;
+            document.getElementById('date_to').value   = to;
+            document.getElementById('filterForm').submit();
+        });
+    });
+
+    // A4 print
+    window.printA4 = function () { window.print(); };
+})();
+</script>
 
 <?php require_once __DIR__ . '/../../includes/footer.php'; ?>
