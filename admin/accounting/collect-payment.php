@@ -1197,6 +1197,8 @@ require_once __DIR__ . '/../includes/header.php';
     const AUTO_STUDENT_SID = <?= json_encode($auto_student_sid) ?>;
     const RECEIVED_INTO_MAP = <?= json_encode($received_into_map) ?>;
     const CASH_ACCOUNT_LABELS = <?= json_encode($cash_account_labels_by_id) ?>;
+    const STUDENT_FORM_FEE = <?= json_encode((float)acc_student_form_fee_amount()) ?>;
+    const STUDENT_ID_CARD_FEE = <?= json_encode((float)acc_student_id_card_fee_amount()) ?>;
 
     // Income account map injected by AJAX response
     let incomeAccountsMap = {};
@@ -1213,7 +1215,7 @@ require_once __DIR__ . '/../includes/header.php';
 
     function feeTypeLabel(type) {
         const map = {
-            admission:        'Admission Fee',
+            admission:        'Admission + Form & ID Card Fee',
             registration:     'Registration Fees',
             semester_tuition: 'Semester Tuition',
             fixed_fee:        'Fixed Institutional Fee',
@@ -1221,6 +1223,13 @@ require_once __DIR__ . '/../includes/header.php';
             other:            'Other',
         };
         return map[type] || type;
+    }
+
+    function admissionFeeLabelFromSummary() {
+        const breakdown = currentSummary?.totals?.admission_breakdown || {};
+        const formFee = Number(breakdown.form_fee ?? STUDENT_FORM_FEE);
+        const idFee = Number(breakdown.id_card_fee ?? STUDENT_ID_CARD_FEE);
+        return 'Admission Fee + Form Fee (' + fmt(formFee) + ') + ID Card Fee (' + fmt(idFee) + ')';
     }
 
     function openAccordionSection(collapseId) {
@@ -1356,7 +1365,7 @@ require_once __DIR__ . '/../includes/header.php';
                 semester_number:   null,
                 month_number:      null,
                 out:               t.admission.out,
-                label:             'Admission Fee',
+                label:             admissionFeeLabelFromSummary(),
                 income_account_id: incomeAccountsMap['admission'] ?? 0,
                 cal_month:         null, cal_year: null,
             });
@@ -1840,7 +1849,7 @@ require_once __DIR__ . '/../includes/header.php';
 
         // ── Admission Fee ────────────────────────────────────────────────────
         addSectionRow('Admission');
-        addRow('Admission Fee', t.admission.due, t.admission.paid, t.admission.out,
+        addRow(admissionFeeLabelFromSummary(), t.admission.due, t.admission.paid, t.admission.out,
                'admission', null, null, null, null, null);
 
         // ── Per-semester: Registration + Monthly overall fees ────────────────

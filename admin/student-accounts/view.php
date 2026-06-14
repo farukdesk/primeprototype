@@ -24,10 +24,12 @@ $all_scholarships = sfp_get_all_semester_scholarships($id);
 $sem_fixed_portion   = sfp_semester_fixed_portion($pkg);
 $sem_english_portion = sfp_semester_english_portion($pkg);
 
-// Use snapshotted registration and form fees from the package (not global cf_settings)
+// Use snapshotted registration fee from the package (not global cf_settings)
 // This ensures displayed fees match the student's actual obligations
 $reg_fee_per_sem     = (float)($pkg['reg_fee_per_semester'] ?? 0.0);
-$form_id_fee         = (float)($pkg['form_id_fee'] ?? 0.0);
+$form_fee_one_time   = 500.0;
+$id_card_fee_one_time = 500.0;
+$form_id_fee         = $form_fee_one_time + $id_card_fee_one_time;
 
 // Also fetch current global values for comparison (optional display)
 $cf_settings_global  = db()->query('SELECT reg_fee_per_semester, form_id_fee, start_month FROM cf_settings WHERE id = 1')->fetch();
@@ -63,7 +65,7 @@ foreach ($semester_fees as $sf) {
 }
 $total_fixed_all   = max(0.0, (float)$pkg['fixed_institutional_fees'] - $total_fixed_discounts);
 $total_english_all = max(0.0, (float)$pkg['english_course_fee']       - $total_english_discounts);
-$total_cost = $total_tuition_payable + $total_fixed_all + $total_english_all + $total_reg_fees + $admission_fee;
+$total_cost = $total_tuition_payable + $total_fixed_all + $total_english_all + $total_reg_fees + $admission_fee + $form_id_fee;
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -169,7 +171,8 @@ require_once __DIR__ . '/../includes/header.php';
                     'Base Tuition / Semester'    => sfp_money((float)$pkg['tuition_per_semester']),
                     'Registration Fee / Semester' => sfp_money($reg_fee_per_sem),
                     'Admission Fee (one-time)'        => sfp_money((float)($pkg['admission_fees'] ?? 0)),
-                    'Form & ID Fee (one-time)'   => sfp_money($form_id_fee),
+                    'Form Fee (one-time)'        => sfp_money($form_fee_one_time),
+                    'ID Card Fee (one-time)'     => sfp_money($id_card_fee_one_time),
                     'Fixed Institutional Fees'   => sfp_money((float)$pkg['fixed_institutional_fees']),
                     'English Course Fee'         => sfp_money((float)$pkg['english_course_fee']),
                 ];
@@ -413,9 +416,17 @@ require_once __DIR__ . '/../includes/header.php';
                         <td colspan="8" class="text-end">Admission Fee (one-time) →</td>
                         <td class="text-end text-warning-emphasis fs-6"><?= sfp_money($admission_fee) ?></td>
                     </tr>
+                    <tr class="table-warning">
+                        <td colspan="8" class="text-end">Form Fee (one-time) →</td>
+                        <td class="text-end text-warning-emphasis fs-6"><?= sfp_money($form_fee_one_time) ?></td>
+                    </tr>
+                    <tr class="table-warning">
+                        <td colspan="8" class="text-end">ID Card Fee (one-time) →</td>
+                        <td class="text-end text-warning-emphasis fs-6"><?= sfp_money($id_card_fee_one_time) ?></td>
+                    </tr>
                     <tr class="table-success">
-                        <td colspan="8" class="text-end fw-bold">Grand Total (incl. Admission Fee) →</td>
-                        <td class="text-end fw-bold text-success fs-5"><?= sfp_money($grand_total + $admission_fee) ?></td>
+                        <td colspan="8" class="text-end fw-bold">Grand Total (incl. Admission, Form & ID Card Fees) →</td>
+                        <td class="text-end fw-bold text-success fs-5"><?= sfp_money($grand_total + $admission_fee + $form_id_fee) ?></td>
                     </tr>
                 </tfoot>
             </table>
