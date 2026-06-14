@@ -1652,16 +1652,57 @@ function acc_send_fee_invoice_email(array $student, array $payment_info, array $
  */
 function acc_get_applicant_by_appnumber(string $app_number): ?array
 {
-    $stmt = db()->prepare(
-        'SELECT a.id, a.app_number, a.student_name, a.present_contact, a.present_email,
-                a.dept_id, a.program_id, a.status, a.office_student_id,
+    static $sid_column_support = null;
+    if ($sid_column_support === null) {
+        $sid_column_support = ['assigned' => false, 'office' => false];
+        $col_stmt = db()->query(
+            "SHOW COLUMNS FROM admissions_applications WHERE Field IN ('assigned_student_id', 'office_student_id')"
+        );
+        foreach ($col_stmt->fetchAll() as $col) {
+            $field = (string)($col['Field'] ?? '');
+            if ($field === 'assigned_student_id') $sid_column_support['assigned'] = true;
+            if ($field === 'office_student_id')   $sid_column_support['office'] = true;
+        }
+    }
+    if ($sid_column_support['assigned'] && $sid_column_support['office']) {
+        $sql = 'SELECT a.id, a.app_number, a.student_name, a.present_contact, a.present_email,
+                a.dept_id, a.program_id, a.status, a.assigned_student_id, a.office_student_id,
                 d.name AS dept_name, p.program_name
          FROM admissions_applications a
          LEFT JOIN dept_departments d        ON d.id = a.dept_id
          LEFT JOIN dept_academic_programs p  ON p.id = a.program_id
          WHERE a.app_number = ?
-         LIMIT 1'
-    );
+         LIMIT 1';
+    } elseif ($sid_column_support['assigned']) {
+        $sql = 'SELECT a.id, a.app_number, a.student_name, a.present_contact, a.present_email,
+                a.dept_id, a.program_id, a.status, a.assigned_student_id, NULL AS office_student_id,
+                d.name AS dept_name, p.program_name
+         FROM admissions_applications a
+         LEFT JOIN dept_departments d        ON d.id = a.dept_id
+         LEFT JOIN dept_academic_programs p  ON p.id = a.program_id
+         WHERE a.app_number = ?
+         LIMIT 1';
+    } elseif ($sid_column_support['office']) {
+        $sql = 'SELECT a.id, a.app_number, a.student_name, a.present_contact, a.present_email,
+                a.dept_id, a.program_id, a.status, NULL AS assigned_student_id, a.office_student_id,
+                d.name AS dept_name, p.program_name
+         FROM admissions_applications a
+         LEFT JOIN dept_departments d        ON d.id = a.dept_id
+         LEFT JOIN dept_academic_programs p  ON p.id = a.program_id
+         WHERE a.app_number = ?
+         LIMIT 1';
+    } else {
+        $sql = 'SELECT a.id, a.app_number, a.student_name, a.present_contact, a.present_email,
+                a.dept_id, a.program_id, a.status, NULL AS assigned_student_id, NULL AS office_student_id,
+                d.name AS dept_name, p.program_name
+         FROM admissions_applications a
+         LEFT JOIN dept_departments d        ON d.id = a.dept_id
+         LEFT JOIN dept_academic_programs p  ON p.id = a.program_id
+         WHERE a.app_number = ?
+         LIMIT 1';
+    }
+
+    $stmt = db()->prepare($sql);
     $stmt->execute([trim($app_number)]);
     return $stmt->fetch() ?: null;
 }
