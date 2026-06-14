@@ -159,7 +159,7 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
     <div class="d-flex gap-2">
         <a href="<?= APP_URL ?>/student-accounts/bulk-import.php" class="btn btn-outline-success btn-sm">
-            <i class="fas fa-file-import me-1"></i> Bulk PDF Import
+            <i class="fas fa-file-import me-1"></i> Bulk PDF / CSV Import
         </a>
         <a href="<?= APP_URL ?>/student-accounts/index.php" class="btn btn-outline-secondary btn-sm">
             <i class="fas fa-arrow-left me-1"></i> Back

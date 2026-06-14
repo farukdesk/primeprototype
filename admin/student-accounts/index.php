@@ -71,7 +71,7 @@ require_once __DIR__ . '/../includes/header.php';
             <i class="fas fa-plus me-1"></i> Assign Package
         </a>
         <a href="<?= APP_URL ?>/student-accounts/bulk-import.php" class="btn btn-outline-success btn-sm">
-            <i class="fas fa-file-import me-1"></i> Bulk PDF Import
+            <i class="fas fa-file-import me-1"></i> Bulk PDF / CSV Import
         </a>
     </div>
     <?php endif; ?>
