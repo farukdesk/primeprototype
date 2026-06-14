@@ -956,6 +956,23 @@ function acc_package_form_id_fee(array $pkg): float
     return $snapshot > 0 ? $snapshot : acc_student_form_id_total_fee();
 }
 
+function acc_split_form_id_fee(float $total_fee): array
+{
+    $default_total = acc_student_form_id_total_fee();
+    if (abs($total_fee - $default_total) < 0.01) {
+        return [
+            'form_fee'    => acc_student_form_fee_amount(),
+            'id_card_fee' => acc_student_id_card_fee_amount(),
+        ];
+    }
+
+    $form_fee = round($total_fee / 2, 2);
+    return [
+        'form_fee'    => $form_fee,
+        'id_card_fee' => round($total_fee - $form_fee, 2),
+    ];
+}
+
 function acc_package_payment_start(array $pkg, array $semester_fees = []): array
 {
     $note = (string)($pkg['note'] ?? '');
@@ -995,14 +1012,9 @@ function acc_student_fee_summary(int $student_id): ?array
     // Form fee and ID card fee are fixed accounting constants (500 + 500)
     $reg_fee     = (float)($pkg['reg_fee_per_semester'] ?? 0.0);
     $form_id_total_fee = acc_package_form_id_fee($pkg);
-    $default_form_id_total = acc_student_form_id_total_fee();
-    if (abs($form_id_total_fee - $default_form_id_total) < 0.01) {
-        $form_fee_due    = acc_student_form_fee_amount();
-        $id_card_fee_due = acc_student_id_card_fee_amount();
-    } else {
-        $form_fee_due    = round($form_id_total_fee / 2, 2);
-        $id_card_fee_due = round($form_id_total_fee - $form_fee_due, 2);
-    }
+    $split_form_id_fee = acc_split_form_id_fee($form_id_total_fee);
+    $form_fee_due      = (float)$split_form_id_fee['form_fee'];
+    $id_card_fee_due   = (float)$split_form_id_fee['id_card_fee'];
 
     // Semester fee rows
     $sf_stmt = $db->prepare(

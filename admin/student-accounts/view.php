@@ -29,14 +29,9 @@ $sem_english_portion = sfp_semester_english_portion($pkg);
 // Form fee and ID card fee prefer the snapshotted package total, then fall back to shared defaults.
 $reg_fee_per_sem     = (float)($pkg['reg_fee_per_semester'] ?? 0.0);
 $form_id_fee         = acc_package_form_id_fee($pkg);
-$default_form_id_fee = acc_student_form_id_total_fee();
-if (abs($form_id_fee - $default_form_id_fee) < 0.01) {
-    $form_fee_one_time    = acc_student_form_fee_amount();
-    $id_card_fee_one_time = acc_student_id_card_fee_amount();
-} else {
-    $form_fee_one_time    = round($form_id_fee / 2, 2);
-    $id_card_fee_one_time = round($form_id_fee - $form_fee_one_time, 2);
-}
+$split_form_id_fee   = acc_split_form_id_fee($form_id_fee);
+$form_fee_one_time   = (float)$split_form_id_fee['form_fee'];
+$id_card_fee_one_time = (float)$split_form_id_fee['id_card_fee'];
 
 // Also fetch current global values for comparison (optional display)
 $cf_settings_global  = db()->query('SELECT reg_fee_per_semester, form_id_fee, start_month FROM cf_settings WHERE id = 1')->fetch();

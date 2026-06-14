@@ -94,9 +94,9 @@ $total_payable_first_sem = $first_sem_tuition_payable + $first_sem_fixed_payable
 // Payment made at admission
 $admission_payment_admission = $admission_fee;
 $admission_payment_reg       = $reg_fee_1st_sem;
-// form + ID card are bundled in form_id_fee; split evenly for display
-$admission_form_fee = (int)floor($form_id_fee / 2);
-$admission_id_fee   = $form_id_fee - $admission_form_fee;
+$split_form_id_fee = acc_split_form_id_fee($form_id_fee);
+$admission_form_fee = (float)$split_form_id_fee['form_fee'];
+$admission_id_fee   = (float)$split_form_id_fee['id_card_fee'];
 $total_paid_at_admission = $admission_payment_admission + $admission_payment_reg + $form_id_fee;
 
 // Duration of payment
