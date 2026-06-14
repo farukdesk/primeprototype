@@ -157,9 +157,14 @@ require_once __DIR__ . '/../includes/header.php';
             <li class="breadcrumb-item active">Assign</li>
         </ol></nav>
     </div>
-    <a href="<?= APP_URL ?>/student-accounts/index.php" class="btn btn-outline-secondary btn-sm">
-        <i class="fas fa-arrow-left me-1"></i> Back
-    </a>
+    <div class="d-flex gap-2">
+        <a href="<?= APP_URL ?>/student-accounts/bulk-import.php" class="btn btn-outline-success btn-sm">
+            <i class="fas fa-file-import me-1"></i> Bulk PDF Import
+        </a>
+        <a href="<?= APP_URL ?>/student-accounts/index.php" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-arrow-left me-1"></i> Back
+        </a>
+    </div>
 </div>
 
 <?= flash_show() ?>
