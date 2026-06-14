@@ -400,21 +400,21 @@ function bip_find_student(PDO $db, string $sid): array|false
     // Strategy 2: strip leading zeros from the supplied ID
     $sid_stripped = ltrim($sid, '0');
     if ($sid_stripped !== '' && $sid_stripped !== $sid) {
-        $stmt->execute([$sid_stripped]);
-        $student = $stmt->fetch();
+        $stmt2 = $db->prepare('SELECT * FROM students WHERE student_id = ? LIMIT 1');
+        $stmt2->execute([$sid_stripped]);
+        $student = $stmt2->fetch();
         if ($student !== false) {
             return $student;
         }
     }
 
     // Strategy 3: compare numeric values via SQL TRIM (handles DB IDs with leading zeros)
-    $numeric = $sid_stripped !== '' ? $sid_stripped : ltrim($sid, '0');
-    if ($numeric !== '') {
-        $stmt2 = $db->prepare(
+    if ($sid_stripped !== '') {
+        $stmt3 = $db->prepare(
             "SELECT * FROM students WHERE TRIM(LEADING '0' FROM student_id) = ? LIMIT 1"
         );
-        $stmt2->execute([$numeric]);
-        $student = $stmt2->fetch();
+        $stmt3->execute([$sid_stripped]);
+        $student = $stmt3->fetch();
         if ($student !== false) {
             return $student;
         }
