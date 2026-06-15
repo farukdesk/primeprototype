@@ -6,6 +6,7 @@ require_once __DIR__ . '/../helpers.php';
 $page_title = 'Student Due Report';
 $currency   = acc_currency();
 $db         = db();
+$focus_payment_limit = 500;
 
 // ── Filters ───────────────────────────────────────────────────────────────────
 $f_dept      = (int)($_GET['dept_id']  ?? 0);
@@ -216,7 +217,6 @@ if (!$focus_row && count($rows) === 1) {
 $focus_summary = null;
 $focus_metrics = null;
 $focus_payments = [];
-$focus_payment_limit = 500;
 if ($focus_row) {
     $focus_summary = acc_student_fee_summary((int)$focus_row['student_id']);
     if ($focus_summary) {
@@ -286,7 +286,7 @@ if ($focus_row) {
            AND v.is_deleted = 0
            AND v.voucher_date < DATE_ADD(?, INTERVAL 1 DAY)
          ORDER BY v.voucher_date DESC, v.id DESC
-         LIMIT $focus_payment_limit"
+         LIMIT 500"
     );
     $pay_stmt->execute([(int)$focus_row['package_id'], $f_as_of_date]);
     $focus_payments = $pay_stmt->fetchAll();
@@ -480,7 +480,7 @@ require_once __DIR__ . '/../../includes/header.php';
 <ul class="nav nav-tabs mb-0 no-print" id="dueTabs" role="tablist">
     <?php
     $tabs = [
-        'overview'  => ['<i class="fas fa-chart-line me-1"></i>360° Overview', $focus_row ? 1 : 0],
+        'overview'  => ['<i class="fas fa-chart-line me-1"></i>360° Overview', null],
         'students'  => ['<i class="fas fa-users me-1"></i>By Student',     count($rows)],
         'batch'     => ['<i class="fas fa-layer-group me-1"></i>By Batch',  count($by_batch)],
         'program'   => ['<i class="fas fa-graduation-cap me-1"></i>By Program', count($by_program)],
@@ -496,7 +496,9 @@ require_once __DIR__ . '/../../includes/header.php';
                 type="button" role="tab"
                 onclick="updateTabParam('<?= $tid ?>')">
             <?= $label ?>
-            <span class="badge bg-secondary bg-opacity-25 text-dark ms-1"><?= $cnt ?></span>
+                <?php if ($cnt !== null): ?>
+                <span class="badge bg-secondary bg-opacity-25 text-dark ms-1"><?= $cnt ?></span>
+                <?php endif; ?>
         </button>
     </li>
     <?php endforeach; ?>
@@ -663,8 +665,7 @@ require_once __DIR__ . '/../../includes/header.php';
                         <tr>
                             <td><?= h(date('d M Y', strtotime($pay['voucher_date']))) ?></td>
                             <td><?= h($pay['voucher_number'] ?: '-') ?></td>
-                            <?php $fee_type_fallback = ucwords(str_replace('_', ' ', (string)$pay['fee_type'])); ?>
-                            <td><?= h($fee_labels[$pay['fee_type']] ?? $fee_type_fallback) ?></td>
+                            <td><?= h($fee_labels[$pay['fee_type']] ?? ucwords(str_replace('_', ' ', (string)$pay['fee_type']))) ?></td>
                             <td>
                                 <?= $pay['semester_number'] ? 'Sem ' . (int)$pay['semester_number'] : '-' ?>
                                 <?= $pay['month_number'] ? ' / M' . (int)$pay['month_number'] : '' ?>
