@@ -67,9 +67,9 @@ try {
 
 $vc_name_display       = $vc_settings['vc_name'] ?? 'Vice Chancellor';
 $vc_title_display      = $vc_settings['vc_title'] ?? 'Vice Chancellor';
-$vc_sig_file           = $vc_settings['vc_photo'] ?? '';
-if (!empty($vc_settings['vc_signature'])) {
-    $vc_sig_file = $vc_settings['vc_signature'];
+$vc_sig_file           = $vc_settings['vc_signature'] ?? '';
+if ($vc_sig_file === '') {
+    $vc_sig_file = $vc_settings['vc_photo'] ?? '';
 }
 $vc_sig_url            = $vc_sig_file ? (UPLOAD_URL . '/office-of-vc/' . $vc_sig_file) : '';
 $vc_approved_at_display = !empty($vc_approval_info['reviewed_at'])
