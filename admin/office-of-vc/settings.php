@@ -92,6 +92,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
+        // Handle signature upload
+        $vc_signature = $s['vc_signature'] ?? '';
+        if (!empty($_FILES['vc_signature']['name'])) {
+            $result = vc_upload_photo($_FILES['vc_signature']);
+            if ($result === false) {
+                $errors[] = 'Signature: invalid file. Allowed: JPG, PNG, GIF, WebP.';
+            } else {
+                if ($vc_signature) {
+                    $old = UPLOAD_DIR . '/office-of-vc/' . $vc_signature;
+                    if (is_file($old)) @unlink($old);
+                }
+                $vc_signature = $result;
+            }
+        }
+
         if (empty($errors)) {
             vc_save('vc_name',       $vc_name);
             vc_save('vc_title',      $vc_title);
@@ -101,6 +116,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             vc_save('vc_scholar_url', $vc_scholar_url);
             vc_save('vc_bio',        $vc_bio);
             vc_save('vc_photo',      $vc_photo);
+            vc_save('vc_signature',  $vc_signature);
             flash_set('success', 'VC profile saved.');
             redirect(APP_URL . '/office-of-vc/settings.php?tab=vc');
         }
@@ -299,6 +315,28 @@ require_once __DIR__ . '/../includes/header.php';
                                accept="image/jpeg,image/png,image/gif,image/webp"
                                style="max-width:280px;">
                         <div class="form-text">JPG, PNG, GIF, WebP. Recommended: square, min 300×300px.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Signature -->
+            <div class="mb-4">
+                <label class="form-label fw-medium">Approval Signature <span class="text-muted fw-normal">(used on financial statements)</span></label>
+                <div class="d-flex align-items-center gap-3 mb-2">
+                    <?php if (!empty($s['vc_signature'])): ?>
+                    <img src="<?= UPLOAD_URL ?>/office-of-vc/<?= h($s['vc_signature']) ?>"
+                         id="vc-sig-preview"
+                         style="max-height:60px;max-width:180px;object-fit:contain;border:1px solid #e2e8f0;border-radius:4px;padding:4px;background:#fff;" alt="Current Signature">
+                    <?php else: ?>
+                    <div style="height:60px;width:180px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;border:2px dashed #cbd5e1;border-radius:4px;">
+                        <span style="font-size:11px;color:#94a3b8;">No signature yet</span>
+                    </div>
+                    <?php endif; ?>
+                    <div>
+                        <input type="file" name="vc_signature" id="vc_signature" class="form-control"
+                               accept="image/jpeg,image/png,image/gif,image/webp"
+                               style="max-width:280px;">
+                        <div class="form-text">JPG, PNG, GIF, WebP. Use a transparent-background PNG for best results.</div>
                     </div>
                 </div>
             </div>

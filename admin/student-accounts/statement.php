@@ -839,8 +839,8 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
                     <?php foreach ($vc_additional_scholarships as $vcs):
                         $vcs_type = $vcs['discount_type'] ?? 'percentage';
                         $vcs_value = $vcs_type === 'fixed'
-                            ? 'BDT ' . number_format((float)($vcs['fixed_amount'] ?? 0), 2)
-                            : number_format((float)($vcs['discount_pct'] ?? 0), 2) . '%';
+                            ? 'BDT ' . number_format((float)($vcs['fixed_amount'] ?? 0), 2) . ' on remaining tuition fees'
+                            : number_format((float)($vcs['discount_pct'] ?? 0), 2) . '% on remaining tuition fees';
                     ?>
                     <li><?= h($vcs['label'] ?: 'Additional Scholarship') ?> (<?= h($vcs_value) ?>)</li>
                     <?php endforeach; ?>
@@ -852,13 +852,12 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
                 <?php if ($vc_approval_info): ?>
                 <div class="vc-note-sign">
                     <?php if ($vc_sig_url): ?>
-                    <img src="<?= h($vc_sig_url) ?>" alt="<?= h('Signature of ' . $vc_name_display . ', ' . $vc_title_display) ?>"
+                    <img src="<?= h($vc_sig_url) ?>" alt="<?= h('Signature of ' . $vc_name_display) ?>"
                          onerror="this.style.display='none'">
                     <?php endif; ?>
                     <div class="vc-note-meta">
                         <strong>Approved by Vice Chancellor</strong><br>
-                        <?= h($vc_name_display) ?><br>
-                        <?= h($vc_title_display) ?>
+                        <?= h($vc_name_display) ?>
                         <?php if ($vc_approved_at_display): ?>
                             <br>Signed on <?= h($vc_approved_at_display) ?>
                         <?php endif; ?>
