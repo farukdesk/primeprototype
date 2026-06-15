@@ -56,8 +56,7 @@ if ($scholarship_amount > 0 && $scholarship_type === 'percentage' && $scholarshi
     $sc_english_disc = $scholarship_applies_english ? round(min($english_per_sem, $english_per_sem * $scholarship_pct / 100), 2) : 0.0;
 } else {
     // Fixed amount: all goes against tuition per semester
-    $fixed_tuition_discount = min($tuition_sem, max(0.0, $scholarship_amount));
-    $sc_tuition_disc = $fixed_tuition_discount;
+    $sc_tuition_disc = min($tuition_sem, max(0.0, $scholarship_amount));
     $sc_fixed_disc   = 0.0;
     $sc_english_disc = 0.0;
 }

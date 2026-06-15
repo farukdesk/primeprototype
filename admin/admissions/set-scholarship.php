@@ -97,7 +97,7 @@ if (empty($errors)) {
 
     $scope_desc = $scope === 'all_semesters' ? 'all semesters' : 'first semester';
 
-    $desc = $type === 'percentage'
+    $log_description = $type === 'percentage'
         ? $label . ' – ' . number_format($pct, 4) . '% (BDT ' . number_format($amount, 2) . ' per semester) for ' . $scope_desc
         : $label . ' – BDT ' . number_format($amount, 2) . ' for ' . $scope_desc;
 
@@ -106,8 +106,8 @@ if (empty($errors)) {
         'Scholarship',
         'scholarship_set',
         null,
-        $desc,
-        'Scholarship "' . $label . '" (' . $desc . ') set for application #' . $id
+        $log_description,
+        'Scholarship "' . $label . '" (' . $log_description . ') set for application #' . $id
     );
 
     flash_set('success', 'Scholarship <strong>' . h($label) . '</strong> saved for ' . h($scope_desc) . '.');
