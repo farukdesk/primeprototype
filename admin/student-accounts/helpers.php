@@ -50,8 +50,8 @@ function sfp_get_package(int $id): array|false
                 s.admitted_semester,
                 s.status          AS student_status,
                 u.full_name       AS assigned_by_name,
-                cp.bi_semester_start_month,
-                cp.tri_semester_start_month
+                cp.bi_semester_start_month  AS linked_bi_semester_start_month,
+                cp.tri_semester_start_month AS linked_tri_semester_start_month
          FROM sfp_packages p
          JOIN students s   ON s.id = p.student_id
          LEFT JOIN users u ON u.id = p.assigned_by

@@ -96,6 +96,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (empty($errors)) {
         $db->prepare(
+            'UPDATE sfp_packages
+             SET bi_semester_start_month = COALESCE(NULLIF(bi_semester_start_month, 0), ?),
+                 tri_semester_start_month = COALESCE(NULLIF(tri_semester_start_month, 0), ?)
+             WHERE cf_program_id = ?'
+        )->execute([
+            ($prog['bi_semester_start_month'] ?? null) !== null ? (int)$prog['bi_semester_start_month'] : null,
+            ($prog['tri_semester_start_month'] ?? null) !== null ? (int)$prog['tri_semester_start_month'] : null,
+            $id,
+        ]);
+
+        $db->prepare(
             'UPDATE cf_programs SET
              degree_type_id=?, program_slug=?, program_name=?, sort_order=?, is_active=?,
              admission_fee_base=?, reg_fee_per_semester=?, reg_fee_total=?, form_id_fee=?,
@@ -174,6 +185,9 @@ require_once __DIR__ . '/../includes/header.php';
             <p class="mb-2">
                 Changes to this program's fee structure will <strong>only apply to newly enrolled students</strong>. 
                 Existing students retain their original fee package and will <strong>not be affected</strong> by these changes.
+            </p>
+            <p class="mb-2">
+                Start-month changes are snapshotted to already assigned student packages before saving, so existing accounting schedules remain locked.
             </p>
             <?php if ($students_using_program > 0): ?>
             <div class="alert alert-info mb-0 mt-3 py-2">
