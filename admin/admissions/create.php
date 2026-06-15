@@ -321,30 +321,109 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'UPDATE admissions_applications SET assigned_student_id = ? WHERE id = ?'
             )->execute([$assigned_student_id, $app_id]);
 
-            // Pre-create student with "Not Admitted Yet" – activated upon payment
+            // Pre-create student with "Not Admitted Yet" – activated upon payment.
             // Use INSERT IGNORE so a duplicate student_id (unique constraint) is silently skipped.
             $adm_sem_val = is_array($semesters_raw)
                 ? trim($semesters_raw[0] ?? '')
                 : (trim($semesters_raw) ?: null);
+            $join_lines = static function (array $parts): ?string {
+                $lines = [];
+                foreach ($parts as $part) {
+                    $part = trim((string)$part);
+                    if ($part !== '') {
+                        $lines[] = $part;
+                    }
+                }
+                return $lines ? implode("\n", $lines) : null;
+            };
+            $present_address = $join_lines([
+                $present_address_1,
+                $present_address_2,
+                $present_area,
+                $present_post_code ? 'Post Code: ' . $present_post_code : '',
+            ]);
+            $permanent_address = $join_lines([
+                $permanent_address_1,
+                $permanent_address_2,
+                $permanent_area,
+                $permanent_post_code ? 'Post Code: ' . $permanent_post_code : '',
+            ]);
+            $guardian_address = $join_lines([$guardian_address_1, $guardian_address_2]);
+            $reference_address = $join_lines([$reference_address_1, $reference_address_2, $reference_address_3]);
+            $local_guardian_address = $join_lines([$local_guardian_address_1, $local_guardian_address_2, $local_guardian_address_3]);
+
             db()->prepare(
                 'INSERT IGNORE INTO students
-                     (student_id, dept_id, program_id, admitted_semester,
-                      full_name, email, phone, sex, dob,
+                     (student_id, dept_id, program_id, admitted_semester, batch, shift,
+                      full_name, father_name, mother_name,
+                      present_address, permanent_address, district_id, thana_id,
+                      nationality, email, phone, dob, blood_group, nid, place_of_birth, sex, religion, photo,
+                      guardian_name, guardian_profession, guardian_address, guardian_phone, guardian_relationship,
+                      reference_name, reference_address, reference_contact,
+                      local_guardian_name, local_guardian_contact, local_guardian_address,
                       status, created_by)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?)'
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
             )->execute([
                 $assigned_student_id,
                 $dept_id     ?: null,
                 $program_id  ?: null,
                 $adm_sem_val ?: null,
+                $office_dept_batch ?: $office_university_batch ?: null,
+                $office_shift ?: null,
                 $student_name,
-                $present_email   ?: null,
+                $father_name ?: null,
+                $mother_name ?: null,
+                $present_address,
+                $permanent_address,
+                $present_district_id ?: null,
+                $present_thana_id ?: null,
+                $nationality ?: null,
+                $present_email ?: null,
                 $present_contact ?: null,
-                $sex             ?: null,
-                $date_of_birth   ?: null,
+                $date_of_birth ?: null,
+                $blood_group ?: null,
+                $nid_birth_cert ?: null,
+                $place_of_birth ?: null,
+                $sex ?: null,
+                $religion ?: null,
+                $photo ?: null,
+                $guardian_name ?: null,
+                $guardian_profession ?: null,
+                $guardian_address,
+                $guardian_phone ?: null,
+                $guardian_relationship ?: null,
+                $reference_name ?: null,
+                $reference_address,
+                $reference_contact ?: null,
+                $local_guardian_name ?: null,
+                $local_guardian_contact ?: null,
+                $local_guardian_address,
                 'Not Admitted Yet',
                 $user['id'],
             ]);
+
+            $student_pk = (int)db()->lastInsertId();
+            if ($student_pk > 0 && $acad_rows) {
+                $qual_ins = db()->prepare(
+                    'INSERT INTO student_academic_qualifications
+                        (student_id, exam_name, session, group_name, board_university,
+                         passing_year, division_class_grade, obtained_marks_gpa, sort_order)
+                     VALUES (?,?,?,?,?,?,?,?,?)'
+                );
+                foreach ($acad_rows as $row) {
+                    $qual_ins->execute([
+                        $student_pk,
+                        $row['exam_name'] ?: null,
+                        $row['session'] ?: null,
+                        $row['group_name'] ?: null,
+                        $row['board_university'] ?: null,
+                        $row['year_of_passing'] ?: null,
+                        $row['division_grade'] ?: null,
+                        $row['total_marks_cgpa'] ?: null,
+                        (int)($row['sort_order'] ?? 0),
+                    ]);
+                }
+            }
         }
 
         flash_set('success', 'Application ' . $app_number . ' created successfully.'
