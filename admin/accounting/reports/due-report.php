@@ -631,14 +631,14 @@ require_once __DIR__ . '/../../includes/header.php';
                 </div>
 
                 <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
-                    <h6 class="mb-0">Payment Timeline (Posted vouchers · latest <?= number_format($payment_timeline_limit) ?>)</h6>
+                    <h6 class="mb-0">Payment Timeline (Posted Vouchers · latest <?= number_format($payment_timeline_limit) ?>)</h6>
                     <a href="<?= APP_URL ?>/student-accounts/statement.php?id=<?= (int)$focus_row['package_id'] ?>" target="_blank" class="btn btn-outline-primary btn-sm no-print">
                         <i class="fas fa-file-invoice-dollar me-1"></i>Open Financial Statement
                     </a>
                 </div>
 
                 <?php if (empty($focus_payments)): ?>
-                <div class="alert alert-light border small mb-0">No posted payment found up to selected as-of date.</div>
+                <div class="alert alert-light border small mb-0">No posted payments found up to the selected as-of date.</div>
                 <?php else: ?>
                 <?php
                 $fee_labels = [
