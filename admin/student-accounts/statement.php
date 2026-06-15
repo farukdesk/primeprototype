@@ -843,9 +843,9 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
                     <li><strong>Payments are non-refundable.</strong></li>
                 </ul>
             </div>
+            <?php if (!empty($vc_additional_scholarships)): ?>
             <div class="note-side">
                 <div class="note-side-title">Additional Scholarship (on remaining tuition fees)</div>
-                <?php if (!empty($vc_additional_scholarships)): ?>
                 <ul class="additional-scholarship-list">
                     <?php foreach ($vc_additional_scholarships as $vcs):
                         $vcs_type = $vcs['discount_type'] ?? 'percentage';
@@ -856,9 +856,6 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
                     <li><?= h($vcs['label'] ?: 'Additional Scholarship') ?> (<?= h($vcs_value) ?>)</li>
                     <?php endforeach; ?>
                 </ul>
-                <?php else: ?>
-                <div class="vc-note-meta">No additional scholarships approved.</div>
-                <?php endif; ?>
 
                 <?php if ($vc_approval_info): ?>
                 <div class="vc-note-sign">
@@ -876,6 +873,7 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
                 </div>
                 <?php endif; ?>
             </div>
+            <?php endif; ?>
         </div>
     </div>
 
