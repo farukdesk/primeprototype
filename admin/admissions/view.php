@@ -124,10 +124,10 @@ require_once __DIR__ . '/../includes/header.php';
                             if ($sc_applies_english) $scope[] = 'English Language Fee';
                             ?>
                             on <?= implode(' + ', $scope) ?>
-                            — BDT <?= number_format($sc_amount, 2) ?> off <?= $sc_scope === 'all_semesters' ? 'per semester for all semesters' : 'first semester' ?>
+                            — BDT <?= number_format($sc_amount, 2) ?> off <?= $sc_scope === 'all_semesters' ? 'per semester across all semesters' : 'first semester' ?>
                         </div>
                         <?php else: ?>
-                        <div class="text-success fw-semibold">BDT <?= number_format($sc_amount, 2) ?> fixed discount <?= $sc_scope === 'all_semesters' ? 'per semester for all semesters' : 'on first semester' ?></div>
+                        <div class="text-success fw-semibold">BDT <?= number_format($sc_amount, 2) ?> fixed discount <?= $sc_scope === 'all_semesters' ? 'per semester across all semesters' : 'on first semester' ?></div>
                         <?php endif; ?>
                         <div class="text-muted small text-uppercase mt-1">Scope: <?= h($sc_scope_label) ?></div>
                     </div>
