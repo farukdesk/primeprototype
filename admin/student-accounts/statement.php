@@ -87,6 +87,20 @@ if (!empty($vc_approval_info)) {
     }
 }
 
+$vc_additional_scholarships = [];
+try {
+    $vca_all_stmt = db()->prepare(
+        "SELECT label, discount_type, discount_pct, fixed_amount
+         FROM vc_scholarship_approvals
+         WHERE package_id = ? AND status = 'approved'
+         ORDER BY reviewed_at ASC, id ASC"
+    );
+    $vca_all_stmt->execute([$id]);
+    $vc_additional_scholarships = $vca_all_stmt->fetchAll() ?: [];
+} catch (Throwable $e) {
+    $vc_additional_scholarships = [];
+}
+
 // ── Fetch first-semester fee row & scholarships ───────────────────────────────
 $sf_stmt = db()->prepare(
     'SELECT sf.*
@@ -355,6 +369,49 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
             line-height: 1.35;
         }
         .note-box strong { color: #1e3a5f; }
+        .note-columns {
+            display: flex;
+            gap: 10px;
+            align-items: flex-start;
+        }
+        .note-main { flex: 0 0 60%; max-width: 60%; }
+        .note-side {
+            flex: 0 0 40%;
+            max-width: 40%;
+            border-left: 1px solid #d1d5db;
+            padding-left: 8px;
+            min-height: 100%;
+        }
+        .note-side-title {
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            color: #1e3a5f;
+            font-weight: 700;
+            margin-bottom: 3px;
+        }
+        .additional-scholarship-list {
+            margin: 0;
+            padding-left: 14px;
+        }
+        .additional-scholarship-list li {
+            margin: 0 0 2px;
+        }
+        .vc-note-sign {
+            margin-top: 4px;
+        }
+        .vc-note-sign img {
+            display: block;
+            max-height: 44px;
+            max-width: 120px;
+            object-fit: contain;
+            margin-bottom: 2px;
+        }
+        .vc-note-meta {
+            font-size: 8.8px;
+            color: #4b5563;
+            line-height: 1.35;
+        }
 
         /* ── Signature section ── */
         .sig-section {
@@ -368,57 +425,6 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
             font-size: 9.5px; color: #374151; font-weight: 600;
         }
         .sig-subtitle { font-size: 9px; color: #6b7280; margin-top: 2px; }
-        .vc-sig-block {
-            position: relative;
-            text-align: center;
-            flex: 1;
-        }
-        .vc-sig-img {
-            display: block;
-            max-height: 52px;
-            max-width: 120px;
-            margin: 0 auto 2px;
-            object-fit: contain;
-        }
-        .approval-seal {
-            display: inline-block;
-            border: 2.5px solid #8b0000;
-            border-radius: 50%;
-            color: #8b0000;
-            font-weight: 800;
-            font-size: 9.5px;
-            letter-spacing: .12em;
-            text-transform: uppercase;
-            padding: 5px 8px;
-            line-height: 1.1;
-            text-align: center;
-            position: absolute;
-            top: 0;
-            right: 2px;
-            transform: rotate(-18deg);
-            opacity: 0.82;
-            min-width: 52px;
-        }
-        .approval-seal-inner {
-            display: block;
-            border: 1.2px solid #8b0000;
-            border-radius: 50%;
-            padding: 3px 4px;
-        }
-        .vc-approval-label {
-            font-size: 8.5px;
-            font-weight: 700;
-            color: #8b0000;
-            margin-top: 2px;
-            text-transform: uppercase;
-            letter-spacing: .05em;
-        }
-        .vc-approved-date {
-            font-size: 8.5px;
-            color: #555;
-            margin-top: 1px;
-        }
-
         .date-issued-top {
             text-align: right; font-size: 10px; color: #444; font-weight: 600;
             margin-bottom: 4px;
@@ -736,21 +742,6 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
                 <td class="indent" colspan="2">Total Scholarship (First Semester)</td>
                 <td class="amt neg">− <?= number_format($total_discount_first_sem, 2) ?></td>
             </tr>
-            <?php if ($vc_approval_info): ?>
-            <tr>
-                <td></td>
-                <td colspan="2">
-                    <div style="margin:3px 0 0 14px; padding:5px 8px; font-size:9px; line-height:1.35; color:#7c2d12; background:rgba(234,88,12,.08); border:1px solid rgba(234,88,12,.32); border-radius:4px;">
-                        <strong>Approved by Vice Chancellor:</strong>
-                        <?= h($vc_approval_info['label'] ?: 'Additional Scholarship') ?> (<?= h($vc_approval_scholarship_display) ?>)
-                        <?php if ($vc_approved_at_display): ?>
-                            — Signed by <?= h($vc_name_display) ?> on <?= h($vc_approved_at_display) ?>.
-                        <?php endif; ?>
-                    </div>
-                </td>
-            </tr>
-            <?php endif; ?>
-
             <!-- Post-scholarship breakdown for first semester -->
             <tr>
                 <td class="indent" colspan="2">Total Payable Tuition Fees (After All Scholarship)</td>
@@ -823,21 +814,59 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
 
     <!-- ── Notes ── -->
     <div class="note-box">
-        <strong>Note:</strong>
-        <ul style="margin: 4px 0 0 16px; padding: 0;">
-            <li>Monthly payment must be made on or before the <strong>10th of each month</strong>.</li>
-            <li>Registration fees for each semester must be paid before registering for the semester.</li>
-            <li>Duration of payment:
-                <?php
-                // Programs are classified as bi-semester or trimester based on total semesters
-                if ($total_semesters <= SFP_MAX_BI_SEMESTER_COUNT): ?>
-                <strong><?= $total_semesters ?> semesters (Bi-Semester)</strong>, <?= $payment_months ?> months total.
+        <div class="note-columns">
+            <div class="note-main">
+                <strong>Note:</strong>
+                <ul style="margin: 4px 0 0 16px; padding: 0;">
+                    <li>Monthly payment must be made on or before the <strong>10th of each month</strong>.</li>
+                    <li>Registration fees for each semester must be paid before registering for the semester.</li>
+                    <li>Duration of payment:
+                        <?php
+                        // Programs are classified as bi-semester or trimester based on total semesters
+                        if ($total_semesters <= SFP_MAX_BI_SEMESTER_COUNT): ?>
+                        <strong><?= $total_semesters ?> semesters (Bi-Semester)</strong>, <?= $payment_months ?> months total.
+                        <?php else: ?>
+                        <strong><?= $total_semesters ?> semesters (Trimester)</strong>, <?= $payment_months ?> months total.
+                        <?php endif; ?>
+                    </li>
+                    <li><strong>Payments are non-refundable.</strong></li>
+                </ul>
+            </div>
+            <div class="note-side">
+                <div class="note-side-title">Additional Scholarship</div>
+                <?php if (!empty($vc_additional_scholarships)): ?>
+                <ul class="additional-scholarship-list">
+                    <?php foreach ($vc_additional_scholarships as $vcs):
+                        $vcs_type = $vcs['discount_type'] ?? 'percentage';
+                        $vcs_value = $vcs_type === 'fixed'
+                            ? 'BDT ' . number_format((float)($vcs['fixed_amount'] ?? 0), 2)
+                            : number_format((float)($vcs['discount_pct'] ?? 0), 2) . '%';
+                    ?>
+                    <li><?= h($vcs['label'] ?: 'Additional Scholarship') ?> (<?= h($vcs_value) ?>)</li>
+                    <?php endforeach; ?>
+                </ul>
                 <?php else: ?>
-                <strong><?= $total_semesters ?> semesters (Trimester)</strong>, <?= $payment_months ?> months total.
+                <div class="vc-note-meta">No additional scholarships approved.</div>
                 <?php endif; ?>
-            </li>
-            <li><strong>Payments are non-refundable.</strong></li>
-        </ul>
+
+                <?php if ($vc_approval_info): ?>
+                <div class="vc-note-sign">
+                    <?php if ($vc_sig_url): ?>
+                    <img src="<?= h($vc_sig_url) ?>" alt="<?= h('Signature of ' . $vc_name_display . ', ' . $vc_title_display) ?>"
+                         onerror="this.style.display='none'">
+                    <?php endif; ?>
+                    <div class="vc-note-meta">
+                        <strong>Approved by Vice Chancellor</strong><br>
+                        <?= h($vc_name_display) ?><br>
+                        <?= h($vc_title_display) ?>
+                        <?php if ($vc_approved_at_display): ?>
+                            <br>Signed on <?= h($vc_approved_at_display) ?>
+                        <?php endif; ?>
+                    </div>
+                </div>
+                <?php endif; ?>
+            </div>
+        </div>
     </div>
 
     <!-- ── Signatures ── -->
@@ -854,39 +883,11 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
             <div class="sig-line">Admission Office (In Charge)</div>
             <div class="sig-subtitle">Admission Office</div>
         </div>
-        <?php if ($vc_approval_info): ?>
-        <div class="sig-block vc-sig-block">
-            <?php if ($vc_sig_url): ?>
-            <img src="<?= h($vc_sig_url) ?>" alt="<?= h('Signature of ' . $vc_name_display . ', ' . $vc_title_display) ?>" class="vc-sig-img"
-                 onerror="this.style.display='none'">
-            <?php else: ?>
-            <div style="height:52px;"></div>
-            <?php endif; ?>
-            <div class="approval-seal">
-                <span class="approval-seal-inner">Approved</span>
-            </div>
-            <div class="vc-approval-label">Approved by Vice Chancellor</div>
-            <div class="sig-line"><?= h($vc_name_display) ?></div>
-            <div class="sig-subtitle"><?= h($vc_title_display) ?></div>
-            <?php if ($vc_approved_at_display): ?>
-            <div class="vc-approved-date"><?= h($vc_approved_at_display) ?></div>
-            <?php endif; ?>
-        </div>
-        <?php else: ?>
-        <div class="sig-block">
-            <div class="sig-line">Registrar</div>
-            <div class="sig-subtitle">Office of the Registrar</div>
-        </div>
-        <?php endif; ?>
-    </div>
-    <?php if ($vc_approval_info): ?>
-    <div class="sig-section" style="margin-top:6px;">
         <div class="sig-block">
             <div class="sig-line">Registrar</div>
             <div class="sig-subtitle">Office of the Registrar</div>
         </div>
     </div>
-    <?php endif; ?>
 
 </div>
 </div>
