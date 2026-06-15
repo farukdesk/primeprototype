@@ -18,7 +18,7 @@ $status_labels  = [
     'ready_for_admission' => 'Ready for Admission',
     'draft'               => 'Draft',
     'cancelled'           => 'Cancelled',
-    'admission_complete'  => 'Admission Complete',
+    'admission_complete'  => 'Admitted',
 ];
 
 $where  = [];

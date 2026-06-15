@@ -261,7 +261,7 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                                     'ready_for_admission' => 'Ready for Admission',
                                     'draft'               => 'Draft',
                                     'cancelled'           => 'Cancelled',
-                                    'admission_complete'  => 'Admission Complete',
+                                    'admission_complete'  => 'Admitted',
                                 ] as $sv => $sl): ?>
                                 <option value="<?= $sv ?>" <?= ($app['status'] === $sv) ? 'selected' : '' ?>><?= h($sl) ?></option>
                                 <?php endforeach; ?>
