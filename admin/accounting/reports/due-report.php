@@ -216,6 +216,7 @@ if (!$focus_row && count($rows) === 1) {
 $focus_summary = null;
 $focus_metrics = null;
 $focus_payments = [];
+$focus_payment_limit = 500;
 if ($focus_row) {
     $focus_summary = acc_student_fee_summary((int)$focus_row['student_id']);
     if ($focus_summary) {
@@ -285,7 +286,7 @@ if ($focus_row) {
            AND v.is_deleted = 0
            AND v.voucher_date < DATE_ADD(?, INTERVAL 1 DAY)
          ORDER BY v.voucher_date DESC, v.id DESC
-         LIMIT 200"
+         LIMIT $focus_payment_limit"
     );
     $pay_stmt->execute([(int)$focus_row['package_id'], $f_as_of_date]);
     $focus_payments = $pay_stmt->fetchAll();
@@ -625,7 +626,7 @@ require_once __DIR__ . '/../../includes/header.php';
                 </div>
 
                 <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
-                    <h6 class="mb-0">Payment Timeline (Posted vouchers)</h6>
+                    <h6 class="mb-0">Payment Timeline (Posted vouchers · latest <?= number_format($focus_payment_limit) ?>)</h6>
                     <a href="<?= APP_URL ?>/student-accounts/statement.php?id=<?= (int)$focus_row['package_id'] ?>" target="_blank" class="btn btn-outline-primary btn-sm no-print">
                         <i class="fas fa-file-invoice-dollar me-1"></i>Open Financial Statement
                     </a>
@@ -662,7 +663,8 @@ require_once __DIR__ . '/../../includes/header.php';
                         <tr>
                             <td><?= h(date('d M Y', strtotime($pay['voucher_date']))) ?></td>
                             <td><?= h($pay['voucher_number'] ?: '-') ?></td>
-                            <td><?= h($fee_labels[$pay['fee_type']] ?? ucfirst((string)$pay['fee_type'])) ?></td>
+                            <?php $fee_type_fallback = ucwords(str_replace('_', ' ', (string)$pay['fee_type'])); ?>
+                            <td><?= h($fee_labels[$pay['fee_type']] ?? $fee_type_fallback) ?></td>
                             <td>
                                 <?= $pay['semester_number'] ? 'Sem ' . (int)$pay['semester_number'] : '-' ?>
                                 <?= $pay['month_number'] ? ' / M' . (int)$pay['month_number'] : '' ?>
@@ -757,9 +759,14 @@ require_once __DIR__ . '/../../includes/header.php';
                         </td>
                         <td class="no-print text-end">
                             <?php
-                            $focus_url = $_GET;
-                            $focus_url['focus_package_id'] = (int)$r['package_id'];
-                            $focus_url['tab'] = 'overview';
+                            $focus_url = ['tab' => 'overview', 'focus_package_id' => (int)$r['package_id']];
+                            if ($f_student_q !== '') $focus_url['student_q'] = $f_student_q;
+                            if ($f_dept > 0) $focus_url['dept_id'] = $f_dept;
+                            if ($f_program !== '') $focus_url['program'] = $f_program;
+                            if ($f_batch !== '') $focus_url['batch'] = $f_batch;
+                            if ($f_status !== '') $focus_url['status'] = $f_status;
+                            if ($f_min_due > 0) $focus_url['min_due'] = $f_min_due;
+                            $focus_url['as_of_date'] = $f_as_of_date;
                             ?>
                             <a href="?<?= h(http_build_query($focus_url)) ?>"
                                class="btn btn-outline-warning btn-sm" title="360° Overview">
