@@ -352,7 +352,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $reference_address = $join_lines([$reference_address_1, $reference_address_2, $reference_address_3]);
             $local_guardian_address = $join_lines([$local_guardian_address_1, $local_guardian_address_2, $local_guardian_address_3]);
 
-            db()->prepare(
+            $student_insert = db()->prepare(
                 'INSERT IGNORE INTO students
                      (student_id, dept_id, program_id, admitted_semester, batch, shift,
                       full_name, father_name, mother_name,
@@ -363,7 +363,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                       local_guardian_name, local_guardian_contact, local_guardian_address,
                       status, created_by)
                  VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
-            )->execute([
+            );
+            $student_insert->execute([
                 $assigned_student_id,
                 $dept_id     ?: null,
                 $program_id  ?: null,
@@ -402,7 +403,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $user['id'],
             ]);
 
-            $student_pk = (int)db()->lastInsertId();
+            $student_pk = 0;
+            if ($student_insert->rowCount() > 0) {
+                $student_pk = (int)db()->lastInsertId();
+            }
             if ($student_pk > 0 && $acad_rows) {
                 $qual_ins = db()->prepare(
                     'INSERT INTO student_academic_qualifications
