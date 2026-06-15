@@ -380,7 +380,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'admissi
 
             // Use student ID already assigned at form-creation time; fall back to legacy
             // office_student_id or generate a new one if neither is set.
-            $assigned_sid = $applicant['assigned_student_id'] ?? $applicant['office_student_id'] ?? '';
+            $assigned_sid = trim((string)($applicant['assigned_student_id'] ?? $applicant['office_student_id'] ?? ''));
             if ($assigned_sid === '' && !empty($applicant['program_id'])) {
                 $new_sid = adm_sid_generate((int)$applicant['program_id']);
                 if ($new_sid !== '') {
@@ -436,7 +436,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'admissi
                 ' collected for <strong>' . h($applicant['student_name']) . '</strong>. ' .
                 '<a href="' . APP_URL . '/accounting/voucher-view.php?id=' . $vid .
                 '" class="alert-link">View Voucher #' . h($voucher_number) . '</a>' .
-                ' — Status set to <strong>Admission Complete</strong>.';
+                ' — Status set to <strong>Admitted</strong>.';
 
             if ($assigned_sid !== '') {
                 $success_msg .= ' Student ID: <strong>' . h($assigned_sid) . '</strong>.';
@@ -1011,7 +1011,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <i class="fas fa-info-circle me-1 text-primary"></i>
                 Use this tab to collect the <strong>admission fee, ID card &amp; form fees</strong> for applicants who have
                 submitted an application form. Upon payment the applicant's status will be set to
-                <strong>Admission Complete</strong>, a Student&nbsp;ID will be generated, and the student will be
+                <strong>Admitted</strong>, a Student&nbsp;ID will be generated, and the student will be
                 created in the Student module.
             </p>
             <div class="row g-3 align-items-end">
@@ -1064,7 +1064,7 @@ require_once __DIR__ . '/../includes/header.php';
             <i class="fas fa-check-circle fa-2x text-success"></i>
             <div>
                 <div class="fw-semibold">Admission Fee Already Collected</div>
-                <div class="small">This applicant's admission fee has been collected and their status is <strong>Admission Complete</strong>.
+                <div class="small">This applicant's admission fee has been collected and their status is <strong>Admitted</strong>.
                     Their student record has been created in the Student module.</div>
             </div>
         </div>
@@ -1157,7 +1157,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <strong>What happens on submit:</strong>
                         <ul class="mb-0 mt-1">
                             <li><span class="text-success">Debit</span> the received-into account &amp; <span class="text-danger">Credit</span> <span id="admIncomeLabel">the Admission Fees income account</span>.</li>
-                            <li>Application status set to <strong>Admission Complete</strong>.</li>
+                            <li>Application status set to <strong>Admitted</strong>.</li>
                             <li>Student ID generated &amp; student record created in the Student module.</li>
                             <li><?= h($adm_notification_note) ?></li>
                         </ul>
