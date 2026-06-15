@@ -32,6 +32,41 @@ $student_stmt = db()->prepare(
 $student_stmt->execute([$pkg['student_id']]);
 $student = $student_stmt->fetch();
 
+// ── Fetch VC approval info (if any approved scholarship) ─────────────────────
+$vc_approval_info = null;
+try {
+    $vca_stmt = db()->prepare(
+        "SELECT vca.reviewed_at, u.full_name AS reviewer_name
+         FROM vc_scholarship_approvals vca
+         JOIN users u ON u.id = vca.reviewed_by
+         WHERE vca.package_id = ? AND vca.status = 'approved'
+         ORDER BY vca.reviewed_at DESC
+         LIMIT 1"
+    );
+    $vca_stmt->execute([$id]);
+    $vc_approval_info = $vca_stmt->fetch() ?: null;
+} catch (Throwable $e) {
+    $vc_approval_info = null;
+}
+
+// ── Load VC profile settings ──────────────────────────────────────────────────
+$vc_settings = [];
+try {
+    $vs_rows = db()->query('SELECT setting_key, setting_val FROM vc_settings')->fetchAll();
+    foreach ($vs_rows as $vsr) {
+        $vc_settings[$vsr['setting_key']] = $vsr['setting_val'];
+    }
+} catch (Throwable $e) {
+}
+
+$vc_name_display       = $vc_settings['vc_name'] ?? 'Vice Chancellor';
+$vc_title_display      = $vc_settings['vc_title'] ?? 'Vice Chancellor';
+$vc_sig_file           = !empty($vc_settings['vc_signature']) ? $vc_settings['vc_signature'] : ($vc_settings['vc_photo'] ?? '');
+$vc_sig_url            = $vc_sig_file ? (UPLOAD_URL . '/office-of-vc/' . $vc_sig_file) : '';
+$vc_approved_at_display = !empty($vc_approval_info['reviewed_at'])
+    ? date('d M Y, h:i A', strtotime($vc_approval_info['reviewed_at']))
+    : '';
+
 // ── Fetch first-semester fee row & scholarships ───────────────────────────────
 $sf_stmt = db()->prepare(
     'SELECT sf.*
@@ -233,6 +268,56 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
             font-size: 9.5px; color: #374151; font-weight: 600;
         }
         .sig-subtitle { font-size: 9px; color: #6b7280; margin-top: 2px; }
+        .vc-sig-block {
+            position: relative;
+            text-align: center;
+            flex: 1;
+        }
+        .vc-sig-img {
+            display: block;
+            max-height: 52px;
+            max-width: 120px;
+            margin: 0 auto 2px;
+            object-fit: contain;
+        }
+        .approval-seal {
+            display: inline-block;
+            border: 2.5px solid #8b0000;
+            border-radius: 50%;
+            color: #8b0000;
+            font-weight: 800;
+            font-size: 9.5px;
+            letter-spacing: .12em;
+            text-transform: uppercase;
+            padding: 5px 8px;
+            line-height: 1.1;
+            text-align: center;
+            position: absolute;
+            top: 0;
+            right: 2px;
+            transform: rotate(-18deg);
+            opacity: 0.82;
+            min-width: 52px;
+        }
+        .approval-seal-inner {
+            display: block;
+            border: 1.2px solid #8b0000;
+            border-radius: 50%;
+            padding: 3px 4px;
+        }
+        .vc-approval-label {
+            font-size: 8.5px;
+            font-weight: 700;
+            color: #8b0000;
+            margin-top: 2px;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+        }
+        .vc-approved-date {
+            font-size: 8.5px;
+            color: #555;
+            margin-top: 1px;
+        }
 
         .date-issued-top {
             text-align: right; font-size: 10px; color: #444; font-weight: 600;
@@ -636,11 +721,39 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
             <div class="sig-line">Admission Office (In Charge)</div>
             <div class="sig-subtitle">Admission Office</div>
         </div>
+        <?php if ($vc_approval_info): ?>
+        <div class="sig-block vc-sig-block">
+            <?php if ($vc_sig_url): ?>
+            <img src="<?= h($vc_sig_url) ?>" alt="VC Signature" class="vc-sig-img"
+                 onerror="this.style.display='none'">
+            <?php else: ?>
+            <div style="height:52px;"></div>
+            <?php endif; ?>
+            <div class="approval-seal">
+                <span class="approval-seal-inner">Approved</span>
+            </div>
+            <div class="vc-approval-label">Approved by Vice Chancellor</div>
+            <div class="sig-line"><?= h($vc_name_display) ?></div>
+            <div class="sig-subtitle"><?= h($vc_title_display) ?></div>
+            <?php if ($vc_approved_at_display): ?>
+            <div class="vc-approved-date"><?= h($vc_approved_at_display) ?></div>
+            <?php endif; ?>
+        </div>
+        <?php else: ?>
+        <div class="sig-block">
+            <div class="sig-line">Registrar</div>
+            <div class="sig-subtitle">Office of the Registrar</div>
+        </div>
+        <?php endif; ?>
+    </div>
+    <?php if ($vc_approval_info): ?>
+    <div class="sig-section" style="margin-top:6px;">
         <div class="sig-block">
             <div class="sig-line">Registrar</div>
             <div class="sig-subtitle">Office of the Registrar</div>
         </div>
     </div>
+    <?php endif; ?>
 
 </div>
 </div>
