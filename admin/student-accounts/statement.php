@@ -588,12 +588,15 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
                 <td class="amt"><?= number_format($fixed_per_sem_gross, 2) ?></td>
             </tr>
             <?php foreach ($sc_calc as $i => $step):
-                if (!$step['applies_fixed'] || !isset($step['f_disc'])) continue; ?>
+                if (!$step['applies_fixed'] || !isset($step['f_disc'])) continue;
+                $badge_label = $step['type'] === 'fixed'
+                    ? 'BDT ' . number_format($step['fixed_amount'], 2)
+                    : number_format($step['pct'], 1) . '%'; ?>
             <tr>
                 <td></td>
                 <td class="indent" style="padding-left:22px;">
                     <span class="neg">−</span>
-                    <span class="sc-badge"><?= h($step['sc']['label']) ?> (<?= number_format($step['pct'], 1) ?>%)</span>
+                    <span class="sc-badge"><?= h($step['sc']['label']) ?> (<?= h($badge_label) ?>)</span>
                     <?php if ($step['is_pending']): ?>
                         <span class="status-badge pending">Pending VC Approval</span>
                     <?php endif; ?>
@@ -611,12 +614,15 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
                 <td class="amt"><?= number_format($english_per_sem_gross, 2) ?></td>
             </tr>
             <?php foreach ($sc_calc as $i => $step):
-                if (!$step['applies_english'] || !isset($step['e_disc'])) continue; ?>
+                if (!$step['applies_english'] || !isset($step['e_disc'])) continue;
+                $badge_label = $step['type'] === 'fixed'
+                    ? 'BDT ' . number_format($step['fixed_amount'], 2)
+                    : number_format($step['pct'], 1) . '%'; ?>
             <tr>
                 <td></td>
                 <td class="indent" style="padding-left:22px;">
                     <span class="neg">−</span>
-                    <span class="sc-badge"><?= h($step['sc']['label']) ?> (<?= number_format($step['pct'], 1) ?>%)</span>
+                    <span class="sc-badge"><?= h($step['sc']['label']) ?> (<?= h($badge_label) ?>)</span>
                     <?php if ($step['is_pending']): ?>
                         <span class="status-badge pending">Pending VC Approval</span>
                     <?php endif; ?>
