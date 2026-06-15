@@ -33,6 +33,8 @@ foreach ($cf_programs as $prog) {
         // Per-program fee constants (moved from global settings)
         'reg_fee_per_semester'     => (int)($prog['reg_fee_per_semester'] ?? 0),
         'form_id_fee'              => (int)($prog['form_id_fee'] ?? 0),
+        'bi_semester_start_month'  => (int)($prog['bi_semester_start_month'] ?? 0),
+        'tri_semester_start_month' => (int)($prog['tri_semester_start_month'] ?? 0),
     ];
 }
 
@@ -61,6 +63,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Snapshot registration and form fees from POST (populated from program data via JS)
     $reg_fee_per_semester  = (float)($_POST['reg_fee_per_semester'] ?? 0);
     $form_id_fee           = (float)($_POST['form_id_fee']          ?? 0);
+    $bi_start_month        = (int)($_POST['bi_semester_start_month'] ?? 0);
+    $tri_start_month       = (int)($_POST['tri_semester_start_month'] ?? 0);
 
     // Validate
     if ($student_id <= 0)      $errors[] = 'Please select a valid student.';
@@ -98,6 +102,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'INSERT INTO sfp_packages
                (student_id, cf_program_id, program_name,
                 total_semesters, total_months, months_per_semester,
+                bi_semester_start_month, tri_semester_start_month,
                 standard_tuition_full, tuition_per_semester, admission_fees,
                 fixed_institutional_fees, english_course_fee,
                 reg_fee_per_semester, form_id_fee,
@@ -105,7 +110,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 attendance_requirement, safety_net_gpa_threshold,
                 monthly_fixed_fee, monthly_english_fee,
                 note, assigned_by)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
         )->execute([
             $student_id,
             $cf_program_id > 0 ? $cf_program_id : null,
@@ -113,6 +118,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $total_semesters,
             $total_months,
             $months_per_semester,
+            $bi_start_month > 0 ? $bi_start_month : null,
+            $tri_start_month > 0 ? $tri_start_month : null,
             $standard_tuition_full,
             $tuition_per_semester,
             $admission_fees,
@@ -310,6 +317,8 @@ require_once __DIR__ . '/../includes/header.php';
                     <div class="form-text">Auto-filled from course fee structure</div>
                 </div>
                 <input type="hidden" name="form_id_fee" id="f-form-id-fee" value="<?= h(old('form_id_fee', '0')) ?>">
+                <input type="hidden" name="bi_semester_start_month" id="f-bi-start-month" value="<?= h(old('bi_semester_start_month', '0')) ?>">
+                <input type="hidden" name="tri_semester_start_month" id="f-tri-start-month" value="<?= h(old('tri_semester_start_month', '0')) ?>">
             </div>
 
             <hr class="my-3">
@@ -489,6 +498,8 @@ document.getElementById('cf-program-select').addEventListener('change', function
     document.getElementById('f-admission').value                  = p.admission_fees || p.admission_fee_m || 0;
     document.getElementById('f-reg-fee').value                    = p.reg_fee_per_semester || 0;
     document.getElementById('f-form-id-fee').value                = p.form_id_fee || 0;
+    document.getElementById('f-bi-start-month').value             = p.bi_semester_start_month || 0;
+    document.getElementById('f-tri-start-month').value            = p.tri_semester_start_month || 0;
     document.getElementById('f-fixed-inst').value                 = p.fixed_institutional_fees;
     document.getElementById('f-english').value                    = p.english_course_fee;
     document.getElementById('f-snc').value                        = p.safety_net_cap;

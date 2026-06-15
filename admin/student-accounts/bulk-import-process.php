@@ -863,6 +863,7 @@ function bip_import_student(
         'INSERT INTO sfp_packages
            (student_id, cf_program_id, program_name,
             total_semesters, total_months, months_per_semester,
+            bi_semester_start_month, tri_semester_start_month,
             standard_tuition_full, tuition_per_semester, admission_fees,
             fixed_institutional_fees, english_course_fee,
             reg_fee_per_semester, form_id_fee,
@@ -870,7 +871,7 @@ function bip_import_student(
             attendance_requirement, safety_net_gpa_threshold,
             monthly_fixed_fee, monthly_english_fee,
             note, assigned_by)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
     )->execute([
         $student_db_id,
         $cf_program_id,
@@ -878,6 +879,8 @@ function bip_import_student(
         $total_semesters,
         $total_months,
         $months_per_semester,
+        (int)($cf_program['bi_semester_start_month'] ?? 0) ?: null,
+        (int)($cf_program['tri_semester_start_month'] ?? 0) ?: null,
         (int)$tuition_full,
         $tuition_per_semester,
         (int)$admission_fee,

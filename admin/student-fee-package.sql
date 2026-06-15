@@ -22,6 +22,10 @@ CREATE TABLE IF NOT EXISTS `sfp_packages` (
   `total_months`             SMALLINT UNSIGNED NOT NULL,
   `months_per_semester`      DECIMAL(6,2)     NOT NULL
                              COMMENT 'total_months / total_semesters',
+  `bi_semester_start_month`  TINYINT UNSIGNED DEFAULT NULL
+                             COMMENT 'Snapshotted bi-semester start month from cf_programs',
+  `tri_semester_start_month` TINYINT UNSIGNED DEFAULT NULL
+                             COMMENT 'Snapshotted tri-semester start month from cf_programs',
 
   -- Snapshot of fee constants
   `standard_tuition_full`    INT UNSIGNED     NOT NULL DEFAULT 0,

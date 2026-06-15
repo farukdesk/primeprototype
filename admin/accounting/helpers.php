@@ -1024,7 +1024,9 @@ function acc_student_fee_summary(int $student_id): ?array
     // Load package
     $pkg_stmt = $db->prepare(
         'SELECT p.*, s.full_name AS student_name, s.student_id AS student_sid, s.admitted_semester,
-                cp.bi_semester_start_month, cp.tri_semester_start_month
+                s.status AS student_status,
+                cp.bi_semester_start_month  AS linked_bi_semester_start_month,
+                cp.tri_semester_start_month AS linked_tri_semester_start_month
          FROM sfp_packages p
          JOIN students s ON s.id = p.student_id
          LEFT JOIN cf_programs cp ON cp.id = p.cf_program_id
@@ -2120,6 +2122,11 @@ function acc_package_start_month(array $pkg): int
     $start = $is_bi
         ? (int)($pkg['bi_semester_start_month'] ?? 0)
         : (int)($pkg['tri_semester_start_month'] ?? 0);
+    if ($start < 1 || $start > 12) {
+        $start = $is_bi
+            ? (int)($pkg['linked_bi_semester_start_month'] ?? 0)
+            : (int)($pkg['linked_tri_semester_start_month'] ?? 0);
+    }
     return ($start >= 1 && $start <= 12) ? $start : 1;
 }
 
