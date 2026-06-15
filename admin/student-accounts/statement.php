@@ -38,13 +38,14 @@ try {
     $vca_stmt = db()->prepare(
         "SELECT vca.reviewed_at,
                 u.full_name AS reviewer_name,
+                u.signature_file AS reviewer_signature,
                 vca.label,
                 vca.discount_type,
                 vca.discount_pct,
                 vca.fixed_amount
          FROM vc_scholarship_approvals vca
          JOIN users u ON u.id = vca.reviewed_by
-         WHERE vca.package_id = ? AND vca.status = 'approved'
+         WHERE vca.package_id = ? AND vca.status = 'approved' AND vca.is_from_policy = 0
          ORDER BY vca.reviewed_at DESC
          LIMIT 1"
     );
@@ -74,6 +75,10 @@ $vc_name_display       = $vc_settings['vc_name'] ?? 'Vice Chancellor';
 $vc_title_display      = $vc_settings['vc_title'] ?? 'Vice Chancellor';
 $vc_sig_file           = $vc_settings['vc_signature'] ?? '';
 $vc_sig_url            = $vc_sig_file ? (UPLOAD_URL . '/office-of-vc/' . $vc_sig_file) : '';
+// If no vc_settings signature, fall back to the reviewer's personal signature
+if (!$vc_sig_url && !empty($vc_approval_info['reviewer_signature'])) {
+    $vc_sig_url = UPLOAD_URL . '/signatures/' . $vc_approval_info['reviewer_signature'];
+}
 $vc_approved_at_display = !empty($vc_approval_info['reviewed_at'])
     ? date('d M Y, h:i A', strtotime($vc_approval_info['reviewed_at']))
     : '';
@@ -92,7 +97,7 @@ try {
     $vca_all_stmt = db()->prepare(
         "SELECT label, discount_type, discount_pct, fixed_amount
          FROM vc_scholarship_approvals
-         WHERE package_id = ? AND status = 'approved'
+         WHERE package_id = ? AND status = 'approved' AND is_from_policy = 0
          ORDER BY reviewed_at ASC, id ASC"
     );
     $vca_all_stmt->execute([$id]);
@@ -833,14 +838,14 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
                 </ul>
             </div>
             <div class="note-side">
-                <div class="note-side-title">Additional Scholarship</div>
+                <div class="note-side-title">Additional Scholarship (on remaining tuition fees)</div>
                 <?php if (!empty($vc_additional_scholarships)): ?>
                 <ul class="additional-scholarship-list">
                     <?php foreach ($vc_additional_scholarships as $vcs):
                         $vcs_type = $vcs['discount_type'] ?? 'percentage';
                         $vcs_value = $vcs_type === 'fixed'
-                            ? 'BDT ' . number_format((float)($vcs['fixed_amount'] ?? 0), 2) . ' on remaining tuition fees'
-                            : number_format((float)($vcs['discount_pct'] ?? 0), 2) . '% on remaining tuition fees';
+                            ? 'BDT ' . number_format((float)($vcs['fixed_amount'] ?? 0), 2)
+                            : number_format((float)($vcs['discount_pct'] ?? 0), 2) . '%';
                     ?>
                     <li><?= h($vcs['label'] ?: 'Additional Scholarship') ?> (<?= h($vcs_value) ?>)</li>
                     <?php endforeach; ?>

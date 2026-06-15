@@ -103,51 +103,114 @@ if (empty($errors)) {
     }
 
     if (empty($errors)) {
-        // ── Create a pending VC approval request ─────────────────────────────
-        db()->prepare(
-            'INSERT INTO vc_scholarship_approvals
-               (package_id, student_id, sf_id, apply_to_all,
-                label, discount_type, discount_pct, fixed_amount, sc_note,
-                is_from_policy, applies_to_fixed, applies_to_english,
-                support_doc_id, status, requested_by)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, \'pending\', ?)'
-        )->execute([
-            $package_id,
-            $student_id,
-            $apply_to_all ? null : $sf_id,
-            $apply_to_all ? 1 : 0,
-            $label,
-            $discount_type,
-            round($discount_pct, 2),
-            $fixed_amount,
-            $sc_note ?: null,
-            $is_from_policy,
-            $applies_to_fixed,
-            $applies_to_english,
-            $support_doc_id,
-            $user['id'],
-        ]);
+        if ($is_from_policy) {
+            // ── Policy scholarship: apply directly without VC approval ────────
+            $insert_sc = db()->prepare(
+                'INSERT INTO sfp_semester_scholarships
+                   (sf_id, label, discount_pct, discount_type, fixed_amount, amount, note,
+                    is_from_policy, applies_to_fixed, applies_to_english,
+                    support_doc_id, created_by)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            );
 
-        $sc_display = ($discount_type === 'fixed')
-            ? 'BDT ' . number_format((float)$fixed_amount, 2)
-            : number_format($discount_pct, 2) . '%';
+            if ($apply_to_all) {
+                $sf_rows = sfp_get_semester_fees($package_id);
+                foreach ($sf_rows as $sf_row) {
+                    $row_id          = (int)$sf_row['id'];
+                    $tuition_payable = (float)$sf_row['tuition_payable'];
+                    $amount = ($discount_type === 'fixed')
+                        ? round(min((float)$fixed_amount, $tuition_payable), 2)
+                        : round($tuition_payable * $discount_pct / 100, 2);
 
-        $scope_txt = $apply_to_all ? 'all semesters' : 'Semester #' . $sf_id;
+                    $insert_sc->execute([
+                        $row_id, $label, round($discount_pct, 2), $discount_type,
+                        $fixed_amount, $amount, $sc_note ?: null,
+                        $is_from_policy, $applies_to_fixed, $applies_to_english,
+                        $support_doc_id, $user['id'],
+                    ]);
+                    sfp_recalculate_semester($row_id, $user['id']);
+                }
+            } else {
+                $sf_stmt2 = db()->prepare('SELECT tuition_payable FROM sfp_semester_fees WHERE id = ? AND package_id = ?');
+                $sf_stmt2->execute([$sf_id, $package_id]);
+                $sf_row = $sf_stmt2->fetch();
+                if (!$sf_row) {
+                    $errors[] = 'Semester fee record not found.';
+                } else {
+                    $tuition_payable = (float)$sf_row['tuition_payable'];
+                    $amount = ($discount_type === 'fixed')
+                        ? round(min((float)$fixed_amount, $tuition_payable), 2)
+                        : round($tuition_payable * $discount_pct / 100, 2);
 
-        log_change(
-            'student-accounts', 'UPDATE', $package_id,
-            $apply_to_all ? 'All Semesters' : 'Semester #' . $sf_id,
-            'scholarship_pending_vc',
-            null,
-            $label . ' (' . $sc_display . ')',
-            'Scholarship "' . $label . '" (' . $sc_display . ') submitted for VC approval – ' . $scope_txt
-        );
+                    $insert_sc->execute([
+                        $sf_id, $label, round($discount_pct, 2), $discount_type,
+                        $fixed_amount, $amount, $sc_note ?: null,
+                        $is_from_policy, $applies_to_fixed, $applies_to_english,
+                        $support_doc_id, $user['id'],
+                    ]);
+                    sfp_recalculate_semester($sf_id, $user['id']);
+                }
+            }
 
-        flash_set('success',
-            'Scholarship <strong>' . h($label) . '</strong> ('
-            . $sc_display . ') has been submitted for <strong>VC Approval</strong>. '
-            . 'It will be applied to the student\'s account once the Vice Chancellor approves it.'
-        );
+            if (empty($errors)) {
+                $sc_display = ($discount_type === 'fixed')
+                    ? 'BDT ' . number_format((float)$fixed_amount, 2)
+                    : number_format($discount_pct, 2) . '%';
+
+                log_change(
+                    'student-accounts', 'UPDATE', $package_id,
+                    $apply_to_all ? 'All Semesters' : 'Semester #' . $sf_id,
+                    'scholarship_applied',
+                    null,
+                    $label . ' (' . $sc_display . ')',
+                    'Policy scholarship "' . $label . '" (' . $sc_display . ') applied directly – '
+                        . ($apply_to_all ? 'all semesters' : 'Semester #' . $sf_id)
+                );
+
+                flash_set('success',
+                    'Scholarship <strong>' . h($label) . '</strong> ('
+                    . $sc_display . ') applied successfully.'
+                );
+            }
+        } else {
+            // ── Non-policy scholarship: route through VC approval ─────────────
+            db()->prepare(
+                'INSERT INTO vc_scholarship_approvals
+                   (package_id, student_id, sf_id, apply_to_all,
+                    label, discount_type, discount_pct, fixed_amount, sc_note,
+                    is_from_policy, applies_to_fixed, applies_to_english,
+                    support_doc_id, status, requested_by)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, \'pending\', ?)'
+            )->execute([
+                $package_id, $student_id,
+                $apply_to_all ? null : $sf_id,
+                $apply_to_all ? 1 : 0,
+                $label, $discount_type,
+                round($discount_pct, 2), $fixed_amount, $sc_note ?: null,
+                0, $applies_to_fixed, $applies_to_english,
+                $support_doc_id, $user['id'],
+            ]);
+
+            $sc_display = ($discount_type === 'fixed')
+                ? 'BDT ' . number_format((float)$fixed_amount, 2)
+                : number_format($discount_pct, 2) . '%';
+
+            log_change(
+                'student-accounts', 'UPDATE', $package_id,
+                $apply_to_all ? 'All Semesters' : 'Semester #' . $sf_id,
+                'scholarship_pending_vc',
+                null,
+                $label . ' (' . $sc_display . ')',
+                'Scholarship "' . $label . '" (' . $sc_display . ') submitted for VC approval – '
+                    . ($apply_to_all ? 'all semesters' : 'Semester #' . $sf_id)
+            );
+
+            flash_set('success',
+                'Scholarship <strong>' . h($label) . '</strong> ('
+                . $sc_display . ') has been submitted for <strong>VC Approval</strong>. '
+                . 'It will be applied to the student\'s account once the Vice Chancellor approves it.'
+            );
+        }
     }
 }
 
