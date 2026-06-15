@@ -682,7 +682,7 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
                         — <?= $scope_on ?>
                     <?php endif; ?>
                 </td>
-                <td class="amt neg"><?= $is_pending ? '' : '− ' . number_format($step['t_disc'], 2) ?></td>
+                <td class="amt neg">− <?= number_format($step['t_disc'], 2) ?></td>
             </tr>
             <?php if (!$is_pending && $i < count($sc_calc) - 1): ?>
             <tr>

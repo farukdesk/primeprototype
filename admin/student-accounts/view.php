@@ -54,6 +54,91 @@ $split_form_id_fee   = acc_split_form_id_fee($form_id_fee);
 $form_fee_one_time   = (float)$split_form_id_fee['form_fee'];
 $id_card_fee_one_time = (float)$split_form_id_fee['id_card_fee'];
 
+$pending_requests_by_id          = [];
+$pending_projection_by_sem       = [];
+$pending_projection_by_request   = [];
+foreach ($pending_vc_approvals as $pva) {
+    $pending_requests_by_id[(int)$pva['id']] = $pva;
+}
+
+if (!empty($pending_vc_approvals) && !empty($semester_fees)) {
+    $pending_sorted = $pending_vc_approvals;
+    usort($pending_sorted, static function ($a, $b): int {
+        $ta = strtotime((string)($a['created_at'] ?? '')) ?: 0;
+        $tb = strtotime((string)($b['created_at'] ?? '')) ?: 0;
+        if ($ta === $tb) {
+            return ((int)($a['id'] ?? 0)) <=> ((int)($b['id'] ?? 0));
+        }
+        return $ta <=> $tb;
+    });
+
+    foreach ($semester_fees as $sf_row) {
+        $sf_id = (int)$sf_row['id'];
+        $run_tuition = (float)($sf_row['tuition_payable'] ?? 0);
+        $run_fixed   = max(0.0, $sem_fixed_portion - (float)($sf_row['fixed_discount_amount'] ?? 0));
+        $run_english = max(0.0, $sem_english_portion - (float)($sf_row['english_discount_amount'] ?? 0));
+        $sem_request_ids = [];
+
+        foreach ($pending_sorted as $pva) {
+            $apply_to_all = (int)($pva['apply_to_all'] ?? 0) === 1;
+            $target_sf_id = (int)($pva['sf_id'] ?? 0);
+            if (!$apply_to_all && $target_sf_id !== $sf_id) {
+                continue;
+            }
+
+            $request_id = (int)$pva['id'];
+            $sem_request_ids[$request_id] = true;
+
+            $type = $pva['discount_type'] ?? 'percentage';
+            $pct  = (float)($pva['discount_pct'] ?? 0);
+            $fixed_amount = (float)($pva['fixed_amount'] ?? 0);
+
+            $tuition_disc = $type === 'fixed'
+                ? round(min($run_tuition, $fixed_amount), 2)
+                : round(min($run_tuition, $run_tuition * $pct / 100), 2);
+            $run_tuition = max(0.0, $run_tuition - $tuition_disc);
+
+            $fixed_disc = 0.0;
+            if ($type === 'percentage' && !empty($pva['applies_to_fixed']) && $run_fixed > 0) {
+                $fixed_disc = round(min($run_fixed, $run_fixed * $pct / 100), 2);
+                $run_fixed = max(0.0, $run_fixed - $fixed_disc);
+            }
+
+            $english_disc = 0.0;
+            if ($type === 'percentage' && !empty($pva['applies_to_english']) && $run_english > 0) {
+                $english_disc = round(min($run_english, $run_english * $pct / 100), 2);
+                $run_english = max(0.0, $run_english - $english_disc);
+            }
+
+            if (!isset($pending_projection_by_request[$request_id])) {
+                $pending_projection_by_request[$request_id] = [
+                    'tuition' => 0.0,
+                    'fixed' => 0.0,
+                    'english' => 0.0,
+                    'total' => 0.0,
+                    'by_sem' => [],
+                ];
+            }
+            if (!isset($pending_projection_by_request[$request_id]['by_sem'][$sf_id])) {
+                $pending_projection_by_request[$request_id]['by_sem'][$sf_id] = 0.0;
+            }
+            $this_request_total = ($tuition_disc + $fixed_disc + $english_disc);
+            $pending_projection_by_request[$request_id]['tuition'] += $tuition_disc;
+            $pending_projection_by_request[$request_id]['fixed'] += $fixed_disc;
+            $pending_projection_by_request[$request_id]['english'] += $english_disc;
+            $pending_projection_by_request[$request_id]['total'] += $this_request_total;
+            $pending_projection_by_request[$request_id]['by_sem'][$sf_id] += $this_request_total;
+        }
+
+        $pending_projection_by_sem[$sf_id] = [
+            'tuition_payable' => $run_tuition,
+            'fixed_payable' => $run_fixed,
+            'english_payable' => $run_english,
+            'request_ids' => array_keys($sem_request_ids),
+        ];
+    }
+}
+
 // Also fetch current global values for comparison (optional display)
 $cf_settings_global  = db()->query('SELECT reg_fee_per_semester, form_id_fee, start_month FROM cf_settings WHERE id = 1')->fetch();
 
@@ -71,17 +156,23 @@ $total_reg_fees      = $reg_fee_per_sem * count($semester_fees);
 // Admission Day Payment = base admission fee only (reg fee and form/ID card fee are counted separately)
 $admission_fee       = (float)($pkg['admission_fees'] ?? 0);
 
-// Totals
-$total_tuition_payable   = 0.0;
-$total_fixed_discounts   = 0.0;
-$total_english_discounts = 0.0;
+// Totals (including pending VC scholarship projections)
+$total_tuition_payable = 0.0;
+$total_fixed_all       = 0.0;
+$total_english_all     = 0.0;
 foreach ($semester_fees as $sf) {
-    $total_tuition_payable   += (float)$sf['tuition_payable'];
-    $total_fixed_discounts   += (float)($sf['fixed_discount_amount']   ?? 0);
-    $total_english_discounts += (float)($sf['english_discount_amount'] ?? 0);
+    $sf_id = (int)$sf['id'];
+    $proj = $pending_projection_by_sem[$sf_id] ?? null;
+    $total_tuition_payable += $proj
+        ? (float)$proj['tuition_payable']
+        : (float)$sf['tuition_payable'];
+    $total_fixed_all += $proj
+        ? (float)$proj['fixed_payable']
+        : max(0.0, $sem_fixed_portion - (float)($sf['fixed_discount_amount'] ?? 0));
+    $total_english_all += $proj
+        ? (float)$proj['english_payable']
+        : max(0.0, $sem_english_portion - (float)($sf['english_discount_amount'] ?? 0));
 }
-$total_fixed_all   = max(0.0, (float)$pkg['fixed_institutional_fees'] - $total_fixed_discounts);
-$total_english_all = max(0.0, (float)$pkg['english_course_fee']       - $total_english_discounts);
 $total_cost = $total_tuition_payable + $total_fixed_all + $total_english_all + $total_reg_fees + $admission_fee + $form_id_fee;
 
 require_once __DIR__ . '/../includes/header.php';
@@ -279,9 +370,16 @@ require_once __DIR__ . '/../includes/header.php';
                 foreach ($semester_fees as $sf):
                     $sf_id_row       = (int)$sf['id'];
                     $tuition_fee_row = (float)$sf['tuition_fee'];
-                    $tuition_payable = (float)$sf['tuition_payable'];
-                    $fixed_amt       = max(0.0, $sem_fixed_portion  - (float)($sf['fixed_discount_amount']   ?? 0));
-                    $english_amt     = max(0.0, $sem_english_portion - (float)($sf['english_discount_amount'] ?? 0));
+                    $projection      = $pending_projection_by_sem[$sf_id_row] ?? null;
+                    $tuition_payable = $projection
+                        ? (float)$projection['tuition_payable']
+                        : (float)$sf['tuition_payable'];
+                    $fixed_amt       = $projection
+                        ? (float)$projection['fixed_payable']
+                        : max(0.0, $sem_fixed_portion  - (float)($sf['fixed_discount_amount']   ?? 0));
+                    $english_amt     = $projection
+                        ? (float)$projection['english_payable']
+                        : max(0.0, $sem_english_portion - (float)($sf['english_discount_amount'] ?? 0));
                     // Registration fee is shown for all semesters
                     $sem_reg         = $reg_fee_per_sem;
                     $total_sem       = $tuition_payable + $fixed_amt + $english_amt + $sem_reg;
@@ -290,6 +388,7 @@ require_once __DIR__ . '/../includes/header.php';
                     $grand_english         += $english_amt;
                     $grand_total           += $total_sem;
                     $sem_scholarships = $all_scholarships[$sf_id_row] ?? [];
+                    $pending_sem_request_ids = $projection['request_ids'] ?? [];
                 ?>
                 <tr>
                     <td class="fw-semibold text-muted"><?= (int)$sf['semester_number'] ?></td>
@@ -365,6 +464,17 @@ require_once __DIR__ . '/../includes/header.php';
                                 <?php endif; ?>
                             </span>
                             <?php endforeach; ?>
+                            <?php foreach ($pending_sem_request_ids as $pending_id):
+                                $pending_sc = $pending_requests_by_id[$pending_id] ?? null;
+                                if (!$pending_sc) continue;
+                                $pending_total = (float)($pending_projection_by_request[$pending_id]['by_sem'][$sf_id_row] ?? 0);
+                            ?>
+                            <span class="badge rounded-pill bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25"
+                                  style="font-size:.72rem;font-weight:500;">
+                                <?= h($pending_sc['label']) ?>&nbsp;(Pending)
+                                <span class="ms-1">−<?= number_format($pending_total, 2) ?></span>
+                            </span>
+                            <?php endforeach; ?>
                             <?php if (sfp_can_edit()): ?>
                             <button type="button"
                                     class="btn btn-outline-warning btn-sm add-sc-btn"
@@ -391,7 +501,23 @@ require_once __DIR__ . '/../includes/header.php';
                             <?php endif; ?>
                         </div>
                         <?php else: ?>
+                        <?php if (!empty($pending_sem_request_ids)): ?>
+                        <div class="d-flex flex-wrap gap-1 align-items-center">
+                            <?php foreach ($pending_sem_request_ids as $pending_id):
+                                $pending_sc = $pending_requests_by_id[$pending_id] ?? null;
+                                if (!$pending_sc) continue;
+                                $pending_total = (float)($pending_projection_by_request[$pending_id]['by_sem'][$sf_id_row] ?? 0);
+                            ?>
+                            <span class="badge rounded-pill bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25"
+                                  style="font-size:.72rem;font-weight:500;">
+                                <?= h($pending_sc['label']) ?>&nbsp;(Pending)
+                                <span class="ms-1">−<?= number_format($pending_total, 2) ?></span>
+                            </span>
+                            <?php endforeach; ?>
+                        </div>
+                        <?php else: ?>
                         <span class="text-muted">—</span>
+                        <?php endif; ?>
                         <?php if (sfp_can_edit()): ?>
                         <button type="button"
                                 class="btn btn-outline-warning btn-sm add-sc-btn ms-1"
@@ -471,7 +597,7 @@ require_once __DIR__ . '/../includes/header.php';
         <div class="alert alert-warning mb-3 py-2" style="font-size:.85rem;">
             <i class="fas fa-info-circle me-1"></i>
             The scholarships below are <strong>awaiting Vice Chancellor approval</strong>.
-            They are <strong>not yet deducted</strong> from the student's statement until the VC approves them.
+            Estimated deduction amounts are calculated and reflected in the displayed totals above. Final deductions are applied after VC approval.
         </div>
         <div class="table-responsive">
             <table class="table table-sm mb-0" style="font-size:.85rem;">
@@ -480,6 +606,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <th>Label</th>
                         <th>Discount</th>
                         <th>Scope</th>
+                        <th class="text-end">Estimated Deduction</th>
                         <th>Note</th>
                         <th>Document</th>
                         <th>Requested By</th>
@@ -513,6 +640,13 @@ require_once __DIR__ . '/../includes/header.php';
                         <?php if ($pva['applies_to_english']): ?>
                         <span class="badge bg-info text-dark ms-1" style="font-size:.6rem;">+ENG</span>
                         <?php endif; ?>
+                    </td>
+                    <td class="text-end text-danger fw-semibold">
+                        <?php
+                        $pending_row_id = (int)$pva['id'];
+                        $pending_estimated = (float)($pending_projection_by_request[$pending_row_id]['total'] ?? 0.0);
+                        ?>
+                        <?= $pending_estimated > 0 ? ('− ' . number_format($pending_estimated, 2)) : '—' ?>
                     </td>
                     <td class="text-muted"><?= $pva['sc_note'] ? h($pva['sc_note']) : '—' ?></td>
                     <td>
