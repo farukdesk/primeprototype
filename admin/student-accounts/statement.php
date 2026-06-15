@@ -54,6 +54,45 @@ if ($sf1) {
     $scholarships_1st = $sc_stmt->fetchAll();
 }
 
+$pending_scholarships_1st = [];
+try {
+    if ($sf1) {
+        $pending_stmt = db()->prepare(
+            "SELECT r.*,
+                    'pending' AS approval_status
+             FROM vc_scholarship_approvals r
+             WHERE r.package_id = ?
+               AND r.status = 'pending'
+               AND (r.apply_to_all = 1 OR r.sf_id = ?)
+             ORDER BY r.created_at ASC, r.id ASC"
+        );
+        $pending_stmt->execute([$id, $sf1['id']]);
+    } else {
+        $pending_stmt = db()->prepare(
+            "SELECT r.*,
+                    'pending' AS approval_status
+             FROM vc_scholarship_approvals r
+             WHERE r.package_id = ?
+               AND r.status = 'pending'
+               AND r.apply_to_all = 1
+             ORDER BY r.created_at ASC, r.id ASC"
+        );
+        $pending_stmt->execute([$id]);
+    }
+    $pending_scholarships_1st = $pending_stmt->fetchAll();
+} catch (Throwable $e) {
+    $pending_scholarships_1st = [];
+}
+
+$first_sem_scholarships = [];
+foreach ($scholarships_1st as $row) {
+    $row['approval_status'] = 'approved';
+    $first_sem_scholarships[] = $row;
+}
+foreach ($pending_scholarships_1st as $row) {
+    $first_sem_scholarships[] = $row;
+}
+
 // ── Fee calculations ──────────────────────────────────────────────────────────
 
 // Fees breakdown (totals for the whole programme)
@@ -77,17 +116,52 @@ $english_per_sem_gross = ($months > 0) ? round($english_fee_total / $months * $m
 // Regular semester payable per semester (all four components)
 $regular_payable_per_sem = (float)$pkg['tuition_per_semester'] + $fixed_per_sem_gross + $english_per_sem_gross + $reg_fee_1st_sem;
 
-// First-semester scholarship & discount
-$first_sem_scholarship_pct    = $sf1 ? (float)$sf1['scholarship_discount_pct'] : 0.0;
-$first_sem_scholarship_amount = $sf1 ? (float)$sf1['scholarship_amount']       : 0.0;
-$first_sem_fixed_discount     = $sf1 ? (float)($sf1['fixed_discount_amount']   ?? 0) : 0.0;
-$first_sem_english_discount   = $sf1 ? (float)($sf1['english_discount_amount'] ?? 0) : 0.0;
+// First-semester scholarship & discount (approved + pending VC approval)
+$first_sem_tuition_base       = $sf1 ? (float)($sf1['tuition_fee'] ?? $sf1['tuition_payable'] ?? $pkg['tuition_per_semester']) : (float)$pkg['tuition_per_semester'];
+$first_sem_scholarship_pct    = 0.0;
+$first_sem_scholarship_amount = 0.0;
+$first_sem_fixed_discount     = 0.0;
+$first_sem_english_discount   = 0.0;
+$has_pending_first_sem        = false;
 
-$total_discount_first_sem     = $first_sem_scholarship_amount + $first_sem_fixed_discount + $first_sem_english_discount;
-$first_sem_tuition_payable    = $sf1 ? (float)$sf1['tuition_payable'] : (float)$pkg['tuition_per_semester'];
+$first_sem_tuition_payable = $first_sem_tuition_base;
+$first_sem_fixed_payable   = $fixed_per_sem_gross;
+$first_sem_english_payable = $english_per_sem_gross;
 
-$first_sem_fixed_payable   = max(0.0, $fixed_per_sem_gross   - $first_sem_fixed_discount);
-$first_sem_english_payable = max(0.0, $english_per_sem_gross - $first_sem_english_discount);
+foreach ($first_sem_scholarships as $sc) {
+    $type         = $sc['discount_type'] ?? 'percentage';
+    $pct          = (float)($sc['discount_pct'] ?? 0);
+    $fixed_amount = (float)($sc['fixed_amount'] ?? 0);
+    $is_pending   = ($sc['approval_status'] ?? 'approved') === 'pending';
+
+    if ($is_pending) {
+        $has_pending_first_sem = true;
+    }
+
+    if ($type === 'fixed') {
+        $tuition_discount = round(min($first_sem_tuition_payable, $fixed_amount), 2);
+    } else {
+        $tuition_discount = round(min($first_sem_tuition_payable, $first_sem_tuition_payable * $pct / 100), 2);
+        $first_sem_scholarship_pct += $pct;
+    }
+
+    $first_sem_tuition_payable = max(0.0, $first_sem_tuition_payable - $tuition_discount);
+    $first_sem_scholarship_amount += $tuition_discount;
+
+    if ($type === 'percentage' && !empty($sc['applies_to_fixed']) && $first_sem_fixed_payable > 0) {
+        $fixed_discount = round(min($first_sem_fixed_payable, $first_sem_fixed_payable * $pct / 100), 2);
+        $first_sem_fixed_payable = max(0.0, $first_sem_fixed_payable - $fixed_discount);
+        $first_sem_fixed_discount += $fixed_discount;
+    }
+
+    if ($type === 'percentage' && !empty($sc['applies_to_english']) && $first_sem_english_payable > 0) {
+        $english_discount = round(min($first_sem_english_payable, $first_sem_english_payable * $pct / 100), 2);
+        $first_sem_english_payable = max(0.0, $first_sem_english_payable - $english_discount);
+        $first_sem_english_discount += $english_discount;
+    }
+}
+
+$total_discount_first_sem = $first_sem_scholarship_amount + $first_sem_fixed_discount + $first_sem_english_discount;
 
 $total_payable_first_sem = $first_sem_tuition_payable + $first_sem_fixed_payable + $first_sem_english_payable + $reg_fee_1st_sem;
 
@@ -210,6 +284,13 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
             display: inline-block; background: #fef2f2; color: #dc2626;
             border: 1px solid #fca5a5; border-radius: 3px;
             padding: 1px 4px; font-size: 9px; font-weight: 600;
+        }
+        .fee-table .status-badge {
+            display: inline-block; margin-left: 4px; border-radius: 3px;
+            padding: 1px 4px; font-size: 9px; font-weight: 600;
+        }
+        .fee-table .status-badge.pending {
+            background: #fef3c7; color: #92400e; border: 1px solid #fcd34d;
         }
         .neg { color: #dc2626; }
 
@@ -402,26 +483,33 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
             $sc_calc         = [];
             $has_fixed_sc    = false;
             $has_english_sc  = false;
-            if (!empty($scholarships_1st)) {
-                $run_t = (float)$pkg['tuition_per_semester'];
+            if (!empty($first_sem_scholarships)) {
+                $run_t = $first_sem_tuition_base;
                 $run_f = $fixed_per_sem_gross;
                 $run_e = $english_per_sem_gross;
-                foreach ($scholarships_1st as $sc) {
+                foreach ($first_sem_scholarships as $sc) {
                     $pct  = (float)$sc['discount_pct'];
+                    $type = $sc['discount_type'] ?? 'percentage';
+                    $fixed_amount = (float)($sc['fixed_amount'] ?? 0);
                     $step = [
                         'sc'              => $sc,
                         'pct'             => $pct,
+                        'type'            => $type,
+                        'fixed_amount'    => $fixed_amount,
                         'applies_fixed'   => (int)$sc['applies_to_fixed'],
                         'applies_english' => (int)$sc['applies_to_english'],
+                        'is_pending'      => ($sc['approval_status'] ?? 'approved') === 'pending',
                     ];
                     // Tuition
-                    $t_disc          = round(min($run_t, $run_t * $pct / 100), 2);
+                    $t_disc          = ($type === 'fixed')
+                        ? round(min($run_t, $fixed_amount), 2)
+                        : round(min($run_t, $run_t * $pct / 100), 2);
                     $step['t_before'] = $run_t;
                     $step['t_disc']   = $t_disc;
                     $run_t           -= $t_disc;
                     $step['t_after']  = $run_t;
                     // Fixed institutional fee
-                    if ($step['applies_fixed'] && $run_f > 0) {
+                    if ($type === 'percentage' && $step['applies_fixed'] && $run_f > 0) {
                         $f_disc          = round(min($run_f, $run_f * $pct / 100), 2);
                         $step['f_before'] = $run_f;
                         $step['f_disc']   = $f_disc;
@@ -430,7 +518,7 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
                         $has_fixed_sc     = true;
                     }
                     // English course fee
-                    if ($step['applies_english'] && $run_e > 0) {
+                    if ($type === 'percentage' && $step['applies_english'] && $run_e > 0) {
                         $e_disc          = round(min($run_e, $run_e * $pct / 100), 2);
                         $step['e_before'] = $run_e;
                         $step['e_disc']   = $e_disc;
@@ -451,22 +539,32 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
             <tr>
                 <td></td>
                 <td class="indent" style="padding-left:22px;">Tuition Fee (1st Semester)</td>
-                <td class="amt"><?= number_format((float)$pkg['tuition_per_semester'], 2) ?></td>
+                <td class="amt"><?= number_format($first_sem_tuition_base, 2) ?></td>
             </tr>
             <?php foreach ($sc_calc as $i => $step):
                 // Build scope label
                 $scope_parts = ['Tuition Fee'];
-                if ($step['applies_fixed'])   $scope_parts[] = 'Institutional &amp; Dev. Fee';
-                if ($step['applies_english'])  $scope_parts[] = 'English Language Fee';
-                $scope_on = count($scope_parts) > 1
-                    ? 'on Overall Cost (' . implode(' + ', $scope_parts) . ')'
-                    : 'on Tuition Fee only';
+                if ($step['type'] === 'percentage') {
+                    if ($step['applies_fixed'])   $scope_parts[] = 'Institutional &amp; Dev. Fee';
+                    if ($step['applies_english']) $scope_parts[] = 'English Language Fee';
+                }
+                $scope_on = $step['type'] === 'fixed'
+                    ? 'fixed amount on Tuition Fee only'
+                    : (count($scope_parts) > 1
+                        ? 'on Overall Cost (' . implode(' + ', $scope_parts) . ')'
+                        : 'on Tuition Fee only');
+                $badge_label = $step['type'] === 'fixed'
+                    ? 'BDT ' . number_format($step['fixed_amount'], 2)
+                    : number_format($step['pct'], 1) . '%';
             ?>
             <tr>
                 <td></td>
                 <td class="indent" style="padding-left:22px;">
                     <span class="neg">−</span>
-                    <span class="sc-badge"><?= h($step['sc']['label']) ?> (<?= number_format($step['pct'], 1) ?>%)</span>
+                    <span class="sc-badge"><?= h($step['sc']['label']) ?> (<?= h($badge_label) ?>)</span>
+                    <?php if ($step['is_pending']): ?>
+                        <span class="status-badge pending">Pending VC Approval</span>
+                    <?php endif; ?>
                     — <?= $scope_on ?>
                 </td>
                 <td class="amt neg">− <?= number_format($step['t_disc'], 2) ?></td>
@@ -496,6 +594,9 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
                 <td class="indent" style="padding-left:22px;">
                     <span class="neg">−</span>
                     <span class="sc-badge"><?= h($step['sc']['label']) ?> (<?= number_format($step['pct'], 1) ?>%)</span>
+                    <?php if ($step['is_pending']): ?>
+                        <span class="status-badge pending">Pending VC Approval</span>
+                    <?php endif; ?>
                 </td>
                 <td class="amt neg">− <?= number_format($step['f_disc'], 2) ?></td>
             </tr>
@@ -516,6 +617,9 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
                 <td class="indent" style="padding-left:22px;">
                     <span class="neg">−</span>
                     <span class="sc-badge"><?= h($step['sc']['label']) ?> (<?= number_format($step['pct'], 1) ?>%)</span>
+                    <?php if ($step['is_pending']): ?>
+                        <span class="status-badge pending">Pending VC Approval</span>
+                    <?php endif; ?>
                 </td>
                 <td class="amt neg">− <?= number_format($step['e_disc'], 2) ?></td>
             </tr>
@@ -607,6 +711,9 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
     <div class="note-box">
         <strong>Note:</strong>
         <ul style="margin: 4px 0 0 16px; padding: 0;">
+            <?php if ($has_pending_first_sem): ?>
+            <li>Pending VC approval scholarships are already reflected in this statement and remain subject to final approval.</li>
+            <?php endif; ?>
             <li>Monthly payment must be made on or before the <strong>10th of each month</strong>.</li>
             <li>Registration fees for each semester must be paid before registering for the semester.</li>
             <li>Duration of payment:
