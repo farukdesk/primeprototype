@@ -18,6 +18,7 @@ if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $f_as_of_date)) {
     $f_as_of_date = date('Y-m-d');
 }
 $f_min_due   = max(0.0, (float)($_GET['min_due'] ?? 0));
+$f_focus_package_id = (int)($_GET['focus_package_id'] ?? 0);
 $active_tab  = trim($_GET['tab']       ?? 'students');
 
 // ── Load filter options (departments, programs, batches) ──────────────────────
@@ -200,6 +201,96 @@ foreach ($rows as $r) {
 }
 usort($by_dept, fn($a, $b) => $b['outstanding'] <=> $a['outstanding']);
 
+// ── 360° student financial statement (focused student) ────────────────────────
+$focus_row = null;
+foreach ($rows as $row) {
+    if ($f_focus_package_id > 0 && (int)$row['package_id'] === $f_focus_package_id) {
+        $focus_row = $row;
+        break;
+    }
+}
+if (!$focus_row && count($rows) === 1) {
+    $focus_row = $rows[0];
+}
+
+$focus_summary = null;
+$focus_metrics = null;
+$focus_payments = [];
+if ($focus_row) {
+    $focus_summary = acc_student_fee_summary((int)$focus_row['student_id']);
+    if ($focus_summary) {
+        $as_of_month_start = strtotime(date('Y-m-01', strtotime($f_as_of_date)));
+        $admission_due = (float)($focus_summary['totals']['admission']['due'] ?? 0);
+        $registration_due_total = (float)($focus_summary['totals']['registration']['due'] ?? 0);
+        $tuition_due_total = (float)($focus_summary['totals']['tuition']['due'] ?? 0);
+        $total_obligation = $admission_due + $registration_due_total + $tuition_due_total;
+        $total_paid = (float)$focus_row['total_paid'];
+
+        $current_registration_due = 0.0;
+        $current_tuition_due = 0.0;
+        foreach (($focus_summary['semesters'] ?? []) as $sem) {
+            $month_rows = $sem['monthly_rows'] ?? [];
+            if (!empty($month_rows)) {
+                $first_month = $month_rows[0];
+                $sem_start_ts = strtotime(sprintf('%04d-%02d-01', (int)$first_month['cal_year'], (int)$first_month['cal_month']));
+                if ($sem_start_ts <= $as_of_month_start) {
+                    $current_registration_due += (float)($sem['reg_fee'] ?? 0);
+                }
+            }
+
+            foreach ($month_rows as $mr) {
+                $month_ts = strtotime(sprintf('%04d-%02d-01', (int)$mr['cal_year'], (int)$mr['cal_month']));
+                if ($month_ts <= $as_of_month_start) {
+                    $current_tuition_due += (float)$mr['due'];
+                }
+            }
+        }
+
+        $current_obligation = $admission_due + $current_registration_due + $current_tuition_due;
+        $current_due = max(0.0, $current_obligation - $total_paid);
+        $overall_outstanding = max(0.0, $total_obligation - $total_paid);
+        $future_obligation = max(0.0, $total_obligation - $current_obligation);
+        $current_paid_coverage = min($total_paid, $current_obligation);
+        $current_coverage_pct = $current_obligation > 0
+            ? min(100, round($current_paid_coverage / $current_obligation * 100))
+            : 100;
+        $overall_coverage_pct = $total_obligation > 0
+            ? min(100, round($total_paid / $total_obligation * 100))
+            : 100;
+
+        $focus_metrics = [
+            'admission_due'          => round($admission_due, 2),
+            'registration_due_total' => round($registration_due_total, 2),
+            'tuition_due_total'      => round($tuition_due_total, 2),
+            'current_registration_due' => round($current_registration_due, 2),
+            'current_tuition_due'      => round($current_tuition_due, 2),
+            'total_obligation'       => round($total_obligation, 2),
+            'total_paid'             => round($total_paid, 2),
+            'current_obligation'     => round($current_obligation, 2),
+            'current_due'            => round($current_due, 2),
+            'future_obligation'      => round($future_obligation, 2),
+            'overall_outstanding'    => round($overall_outstanding, 2),
+            'current_coverage_pct'   => $current_coverage_pct,
+            'overall_coverage_pct'   => $overall_coverage_pct,
+        ];
+    }
+
+    $pay_stmt = $db->prepare(
+        "SELECT v.voucher_date, v.voucher_number, p.fee_type, p.semester_number, p.month_number,
+                p.amount, p.payment_method, p.mobile_banking_provider, p.transaction_number, p.note
+         FROM sfp_payments p
+         JOIN acc_vouchers v ON v.id = p.voucher_id
+         WHERE p.package_id = ?
+           AND v.status = 'posted'
+           AND v.is_deleted = 0
+           AND v.voucher_date < DATE_ADD(?, INTERVAL 1 DAY)
+         ORDER BY v.voucher_date DESC, v.id DESC
+         LIMIT 200"
+    );
+    $pay_stmt->execute([(int)$focus_row['package_id'], $f_as_of_date]);
+    $focus_payments = $pay_stmt->fetchAll();
+}
+
 require_once __DIR__ . '/../../includes/header.php';
 ?>
 
@@ -225,6 +316,9 @@ require_once __DIR__ . '/../../includes/header.php';
     <div class="card-body p-3">
         <form method="get" class="row g-2 align-items-end">
             <input type="hidden" name="tab" value="<?= h($active_tab) ?>">
+            <?php if ($f_focus_package_id > 0): ?>
+            <input type="hidden" name="focus_package_id" value="<?= (int)$f_focus_package_id ?>">
+            <?php endif; ?>
 
             <div class="col-md">
                 <label class="form-label small fw-semibold mb-1">Student Name / ID</label>
@@ -385,6 +479,7 @@ require_once __DIR__ . '/../../includes/header.php';
 <ul class="nav nav-tabs mb-0 no-print" id="dueTabs" role="tablist">
     <?php
     $tabs = [
+        'overview'  => ['<i class="fas fa-chart-line me-1"></i>360° Overview', $focus_row ? 1 : 0],
         'students'  => ['<i class="fas fa-users me-1"></i>By Student',     count($rows)],
         'batch'     => ['<i class="fas fa-layer-group me-1"></i>By Batch',  count($by_batch)],
         'program'   => ['<i class="fas fa-graduation-cap me-1"></i>By Program', count($by_program)],
@@ -407,6 +502,189 @@ require_once __DIR__ . '/../../includes/header.php';
 </ul>
 
 <div class="tab-content">
+
+    <!-- ── TAB: 360° Overview ── -->
+    <div class="tab-pane fade <?= $active_tab === 'overview' ? 'show active' : '' ?>" id="pane-overview" role="tabpanel">
+        <div class="card border-0 shadow-sm border-top-0 rounded-0 rounded-bottom">
+            <div class="card-header py-2 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <strong class="small">Student Financial Statement (As of <?= h(date('d M Y', strtotime($f_as_of_date))) ?>)</strong>
+                <?php if ($focus_row): ?>
+                <span class="badge bg-primary-subtle text-primary-emphasis border">
+                    <?= h($focus_row['student_sid']) ?> · <?= h($focus_row['full_name']) ?>
+                </span>
+                <?php endif; ?>
+            </div>
+            <?php if (!$focus_row || !$focus_metrics): ?>
+            <div class="card-body text-center py-5 text-muted">
+                <i class="fas fa-user-check fa-3x mb-3 opacity-50"></i>
+                <p class="mb-1 fw-semibold">Choose a student from “By Student” tab to view 360° financial statement.</p>
+                <p class="mb-0 small">Tip: search by Student ID for quick access to one student profile.</p>
+            </div>
+            <?php else: ?>
+            <div class="card-body">
+                <div class="row g-3 mb-3">
+                    <div class="col-6 col-md-4 col-xl-2">
+                        <div class="border rounded p-2 h-100">
+                            <div class="text-muted small">Total Obligation</div>
+                            <div class="fw-bold"><?= $currency ?> <?= number_format($focus_metrics['total_obligation'], 2) ?></div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4 col-xl-2">
+                        <div class="border rounded p-2 h-100">
+                            <div class="text-muted small">Total Paid</div>
+                            <div class="fw-bold text-success"><?= $currency ?> <?= number_format($focus_metrics['total_paid'], 2) ?></div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4 col-xl-2">
+                        <div class="border rounded p-2 h-100">
+                            <div class="text-muted small">Current Obligation</div>
+                            <div class="fw-bold"><?= $currency ?> <?= number_format($focus_metrics['current_obligation'], 2) ?></div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4 col-xl-2">
+                        <div class="border rounded p-2 h-100 border-danger">
+                            <div class="text-muted small">Current Due</div>
+                            <div class="fw-bold text-danger"><?= $currency ?> <?= number_format($focus_metrics['current_due'], 2) ?></div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4 col-xl-2">
+                        <div class="border rounded p-2 h-100">
+                            <div class="text-muted small">Future Obligation</div>
+                            <div class="fw-bold text-warning-emphasis"><?= $currency ?> <?= number_format($focus_metrics['future_obligation'], 2) ?></div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4 col-xl-2">
+                        <div class="border rounded p-2 h-100 border-danger-subtle">
+                            <div class="text-muted small">Overall Outstanding</div>
+                            <div class="fw-bold text-danger"><?= $currency ?> <?= number_format($focus_metrics['overall_outstanding'], 2) ?></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <div class="card h-100 border-0 bg-light">
+                            <div class="card-body">
+                                <div class="small fw-semibold mb-2">Current Coverage</div>
+                                <div class="progress" style="height:8px">
+                                    <div class="progress-bar <?= $focus_metrics['current_coverage_pct'] >= 100 ? 'bg-success' : ($focus_metrics['current_coverage_pct'] >= 50 ? 'bg-warning' : 'bg-danger') ?>"
+                                         style="width:<?= $focus_metrics['current_coverage_pct'] ?>%"></div>
+                                </div>
+                                <div class="small text-muted mt-1"><?= $focus_metrics['current_coverage_pct'] ?>% covered against current obligation</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card h-100 border-0 bg-light">
+                            <div class="card-body">
+                                <div class="small fw-semibold mb-2">Overall Coverage</div>
+                                <div class="progress" style="height:8px">
+                                    <div class="progress-bar <?= $focus_metrics['overall_coverage_pct'] >= 100 ? 'bg-success' : ($focus_metrics['overall_coverage_pct'] >= 50 ? 'bg-warning' : 'bg-danger') ?>"
+                                         style="width:<?= $focus_metrics['overall_coverage_pct'] ?>%"></div>
+                                </div>
+                                <div class="small text-muted mt-1"><?= $focus_metrics['overall_coverage_pct'] ?>% covered against full programme obligation</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="table-responsive mb-3">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead class="table-light">
+                        <tr>
+                            <th>Fee Head</th>
+                            <th class="text-end">Total Obligation (<?= h($currency) ?>)</th>
+                            <th class="text-end">Current Obligation (<?= h($currency) ?>)</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr>
+                            <td>Admission + Form/ID</td>
+                            <td class="text-end"><?= number_format($focus_metrics['admission_due'], 2) ?></td>
+                            <td class="text-end"><?= number_format($focus_metrics['admission_due'], 2) ?></td>
+                        </tr>
+                        <tr>
+                            <td>Registration Fees</td>
+                            <td class="text-end"><?= number_format($focus_metrics['registration_due_total'], 2) ?></td>
+                            <td class="text-end"><?= number_format($focus_metrics['current_registration_due'], 2) ?></td>
+                        </tr>
+                        <tr>
+                            <td>Tuition + Fixed + English</td>
+                            <td class="text-end"><?= number_format($focus_metrics['tuition_due_total'], 2) ?></td>
+                            <td class="text-end"><?= number_format($focus_metrics['current_tuition_due'], 2) ?></td>
+                        </tr>
+                        </tbody>
+                        <tfoot class="table-light fw-bold">
+                        <tr>
+                            <td>Total</td>
+                            <td class="text-end"><?= number_format($focus_metrics['total_obligation'], 2) ?></td>
+                            <td class="text-end"><?= number_format($focus_metrics['current_obligation'], 2) ?></td>
+                        </tr>
+                        </tfoot>
+                    </table>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                    <h6 class="mb-0">Payment Timeline (Posted vouchers)</h6>
+                    <a href="<?= APP_URL ?>/student-accounts/statement.php?id=<?= (int)$focus_row['package_id'] ?>" target="_blank" class="btn btn-outline-primary btn-sm no-print">
+                        <i class="fas fa-file-invoice-dollar me-1"></i>Open Financial Statement
+                    </a>
+                </div>
+
+                <?php if (empty($focus_payments)): ?>
+                <div class="alert alert-light border small mb-0">No posted payment found up to selected as-of date.</div>
+                <?php else: ?>
+                <?php
+                $fee_labels = [
+                    'admission' => 'Admission',
+                    'registration' => 'Registration',
+                    'semester_tuition' => 'Tuition',
+                    'fixed_fee' => 'Fixed Fee',
+                    'english_fee' => 'English Fee',
+                    'other' => 'Other',
+                ];
+                ?>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover align-middle mb-0">
+                        <thead class="table-light">
+                        <tr>
+                            <th>Date</th>
+                            <th>Voucher</th>
+                            <th>Head</th>
+                            <th>Slot</th>
+                            <th>Method</th>
+                            <th>Reference</th>
+                            <th class="text-end">Amount (<?= h($currency) ?>)</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <?php foreach ($focus_payments as $pay): ?>
+                        <tr>
+                            <td><?= h(date('d M Y', strtotime($pay['voucher_date']))) ?></td>
+                            <td><?= h($pay['voucher_number'] ?: '-') ?></td>
+                            <td><?= h($fee_labels[$pay['fee_type']] ?? ucfirst((string)$pay['fee_type'])) ?></td>
+                            <td>
+                                <?= $pay['semester_number'] ? 'Sem ' . (int)$pay['semester_number'] : '-' ?>
+                                <?= $pay['month_number'] ? ' / M' . (int)$pay['month_number'] : '' ?>
+                            </td>
+                            <td>
+                                <?= h(ucfirst(str_replace('_', ' ', (string)$pay['payment_method']))) ?>
+                                <?php if (!empty($pay['mobile_banking_provider'])): ?>
+                                    <small class="text-muted">(<?= h(ucfirst((string)$pay['mobile_banking_provider'])) ?>)</small>
+                                <?php endif; ?>
+                            </td>
+                            <td><?= h($pay['transaction_number'] ?: '-') ?></td>
+                            <td class="text-end fw-semibold"><?= number_format((float)$pay['amount'], 2) ?></td>
+                        </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+                <?php endif; ?>
+            </div>
+            <?php endif; ?>
+        </div>
+    </div><!-- /pane-overview -->
 
     <!-- ── TAB: By Student ── -->
     <div class="tab-pane fade <?= $active_tab === 'students' ? 'show active' : '' ?>" id="pane-students" role="tabpanel">
@@ -478,6 +756,15 @@ require_once __DIR__ . '/../../includes/header.php';
                             <div class="text-muted" style="font-size:.68rem"><?= $r['paid_percentage'] ?>%</div>
                         </td>
                         <td class="no-print text-end">
+                            <?php
+                            $focus_url = $_GET;
+                            $focus_url['focus_package_id'] = (int)$r['package_id'];
+                            $focus_url['tab'] = 'overview';
+                            ?>
+                            <a href="?<?= h(http_build_query($focus_url)) ?>"
+                               class="btn btn-outline-warning btn-sm" title="360° Overview">
+                                <i class="fas fa-chart-line me-1"></i>360°
+                            </a>
                             <a href="<?= APP_URL ?>/student-accounts/statement.php?id=<?= (int)$r['package_id'] ?>"
                                class="btn btn-outline-primary btn-sm" target="_blank" title="Financial Statement">
                                 <i class="fas fa-file-invoice-dollar me-1"></i>Financial Statement
