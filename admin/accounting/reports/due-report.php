@@ -286,7 +286,7 @@ if ($focus_row) {
            AND v.is_deleted = 0
            AND v.voucher_date < DATE_ADD(?, INTERVAL 1 DAY)
          ORDER BY v.voucher_date DESC, v.id DESC
-         LIMIT 500"
+         LIMIT " . (int)$focus_payment_limit
     );
     $pay_stmt->execute([(int)$focus_row['package_id'], $f_as_of_date]);
     $focus_payments = $pay_stmt->fetchAll();
