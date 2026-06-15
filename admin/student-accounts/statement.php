@@ -846,7 +846,7 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
                     <?php endforeach; ?>
                 </ul>
                 <?php else: ?>
-                <div class="vc-note-meta">No additional scholarship approved.</div>
+                <div class="vc-note-meta">No additional scholarships approved.</div>
                 <?php endif; ?>
 
                 <?php if ($vc_approval_info): ?>
