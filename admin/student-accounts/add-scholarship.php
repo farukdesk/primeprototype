@@ -125,13 +125,13 @@ if (empty($errors)) {
                     $insert_sc->execute([
                         $row_id, $label, round($discount_pct, 2), $discount_type,
                         $fixed_amount, $amount, $sc_note ?: null,
-                        1, $applies_to_fixed, $applies_to_english,
+                        $is_from_policy, $applies_to_fixed, $applies_to_english,
                         $support_doc_id, $user['id'],
                     ]);
                     sfp_recalculate_semester($row_id, $user['id']);
                 }
             } else {
-                $sf_stmt2 = db()->prepare('SELECT * FROM sfp_semester_fees WHERE id = ? AND package_id = ?');
+                $sf_stmt2 = db()->prepare('SELECT tuition_payable FROM sfp_semester_fees WHERE id = ? AND package_id = ?');
                 $sf_stmt2->execute([$sf_id, $package_id]);
                 $sf_row = $sf_stmt2->fetch();
                 if (!$sf_row) {
@@ -145,7 +145,7 @@ if (empty($errors)) {
                     $insert_sc->execute([
                         $sf_id, $label, round($discount_pct, 2), $discount_type,
                         $fixed_amount, $amount, $sc_note ?: null,
-                        1, $applies_to_fixed, $applies_to_english,
+                        $is_from_policy, $applies_to_fixed, $applies_to_english,
                         $support_doc_id, $user['id'],
                     ]);
                     sfp_recalculate_semester($sf_id, $user['id']);
