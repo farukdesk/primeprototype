@@ -320,7 +320,7 @@ if (is_portal_student()) {
     $is_seo_active      = strpos($current_path, '/seo/') !== false;
     $is_accounting_active = strpos($current_path, '/accounting/') !== false;
     $is_scholarship_active = strpos($current_path, '/scholarship/') !== false;
-    $is_fee_package_active = strpos($current_path, '/student-accounts/') !== false;
+    $is_vc_approval_active = strpos($current_path, '/vc-approval/') !== false;
     $is_medical_active = strpos($current_path, '/medical-center/') !== false;
     $is_student_portal_active = strpos($current_path, '/accounting/student-portal') !== false;
     ?>
@@ -1455,6 +1455,30 @@ if (is_portal_student()) {
             <?php endif; ?>
         </ul>
     </div>
+    <?php endif; ?>
+
+    <!-- ── VC Approval ── -->
+    <?php
+    // Count pending VC approvals for badge display
+    $_vc_pending = 0;
+    try {
+        $_vc_pending = (int)db()->query(
+            "SELECT COUNT(*) FROM vc_scholarship_approvals WHERE status = 'pending'"
+        )->fetchColumn();
+    } catch (Throwable $_vce) { $_vc_pending = 0; }
+    ?>
+    <?php if (is_super_admin() || can_access('vc-approval')): ?>
+    <ul class="nav flex-column mt-2">
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/vc-approval/index.php"
+               class="<?= $is_vc_approval_active ? 'active' : '' ?>">
+                <i class="fas fa-user-check me-2" style="color:#10b981"></i>VC Approval
+                <?php if ($_vc_pending > 0): ?>
+                <span class="badge bg-warning text-dark ms-auto" style="font-size:.65rem;"><?= $_vc_pending ?></span>
+                <?php endif; ?>
+            </a>
+        </li>
+    </ul>
     <?php endif; ?>
 
     <!-- ── Medical Center ── -->

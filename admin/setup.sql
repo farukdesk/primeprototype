@@ -53,7 +53,8 @@ INSERT IGNORE INTO `modules` (`name`, `slug`, `icon`, `sort_order`, `is_active`)
 ('Change Log',           'change-log',      'fas fa-history',      65, 1),
 ('Tabulation Checker',   'tabulation-checker', 'fas fa-check-double', 66, 1),
 ('Alumni',               'alumni',          'fas fa-user-graduate', 67, 1),
-('Accounts',            'student-accounts-portal', 'fas fa-file-invoice-dollar', 61, 1);
+('Accounts',            'student-accounts-portal', 'fas fa-file-invoice-dollar', 61, 1),
+('VC Approval',         'vc-approval',     'fas fa-user-check',   57, 1);
 
 -- ──────────────────────────────────────────────────────────
 -- DEFAULT HOMEPAGE STATS (only if table is empty)

@@ -3,6 +3,7 @@ require_once __DIR__ . '/../includes/auth.php';
 require_access('student-accounts');
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/../accounting/helpers.php';
+require_once __DIR__ . '/../vc-approval/helpers.php';
 
 $id  = (int)($_GET['id'] ?? 0);
 $pkg = sfp_get_package($id);
@@ -20,6 +21,26 @@ $sc_policies = sfp_get_active_sc_policies_with_tiers();
 
 // All individual scholarships for this package, keyed by sf_id
 $all_scholarships = sfp_get_all_semester_scholarships($id);
+
+// Pending VC approval requests for this package (not yet applied)
+$pending_vc_approvals = [];
+try {
+    $pva_stmt = db()->prepare(
+        "SELECT r.*, req.full_name AS requested_by_name,
+                stf.stored_name AS doc_stored_name, stf.original_name AS doc_original_name,
+                sf.semester_number, sf.semester_label
+         FROM vc_scholarship_approvals r
+         JOIN users req ON req.id = r.requested_by
+         LEFT JOIN sfp_semester_fees sf ON sf.id = r.sf_id
+         LEFT JOIN student_files stf ON stf.id = r.support_doc_id
+         WHERE r.package_id = ? AND r.status = 'pending'
+         ORDER BY r.created_at ASC"
+    );
+    $pva_stmt->execute([$id]);
+    $pending_vc_approvals = $pva_stmt->fetchAll();
+} catch (Throwable $e) {
+    // Table may not exist yet; silently ignore
+}
 
 // Per-semester fixed / English portions (for display in semester table)
 $sem_fixed_portion   = sfp_semester_fixed_portion($pkg);
@@ -429,6 +450,90 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
     </div>
 </div>
+
+<!-- ══════════════════════════════════════════════════════════
+     PENDING VC APPROVAL SCHOLARSHIPS
+═══════════════════════════════════════════════════════════ -->
+<?php if (!empty($pending_vc_approvals)): ?>
+<div class="card mt-4 border-warning">
+    <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2 bg-warning bg-opacity-10">
+        <h6 class="mb-0 fw-semibold text-warning-emphasis">
+            <i class="fas fa-clock me-2"></i>Pending VC Scholarship Approvals
+            <span class="badge bg-warning text-dark ms-2" style="font-size:.7rem;"><?= count($pending_vc_approvals) ?> pending</span>
+        </h6>
+        <?php if (can_access('vc-approval')): ?>
+        <a href="<?= APP_URL ?>/vc-approval/index.php?tab=pending" class="btn btn-warning btn-sm" style="font-size:.8rem;">
+            <i class="fas fa-user-check me-1"></i>Review in VC Approval
+        </a>
+        <?php endif; ?>
+    </div>
+    <div class="card-body px-4 py-3">
+        <div class="alert alert-warning mb-3 py-2" style="font-size:.85rem;">
+            <i class="fas fa-info-circle me-1"></i>
+            The scholarships below are <strong>awaiting Vice Chancellor approval</strong>.
+            They are <strong>not yet deducted</strong> from the student's statement until the VC approves them.
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm mb-0" style="font-size:.85rem;">
+                <thead class="table-light">
+                    <tr>
+                        <th>Label</th>
+                        <th>Discount</th>
+                        <th>Scope</th>
+                        <th>Note</th>
+                        <th>Document</th>
+                        <th>Requested By</th>
+                        <th>Date</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($pending_vc_approvals as $pva): ?>
+                <tr>
+                    <td class="fw-semibold"><?= h($pva['label']) ?></td>
+                    <td>
+                        <?php if ($pva['discount_type'] === 'fixed'): ?>
+                            <span class="text-danger">BDT <?= number_format((float)$pva['fixed_amount'], 2) ?></span>
+                        <?php else: ?>
+                            <span class="text-danger"><?= number_format((float)$pva['discount_pct'], 2) ?>%</span>
+                        <?php endif; ?>
+                    </td>
+                    <td>
+                        <?php if ($pva['apply_to_all']): ?>
+                            <span class="badge bg-primary">All Semesters</span>
+                        <?php else: ?>
+                            Sem #<?= (int)$pva['semester_number'] ?>
+                            <?php if ($pva['semester_label']): ?>
+                            <span class="text-muted" style="font-size:.75rem;"> – <?= h($pva['semester_label']) ?></span>
+                            <?php endif; ?>
+                        <?php endif; ?>
+                        <?php if ($pva['applies_to_fixed']): ?>
+                        <span class="badge bg-warning text-dark ms-1" style="font-size:.6rem;">+Fixed</span>
+                        <?php endif; ?>
+                        <?php if ($pva['applies_to_english']): ?>
+                        <span class="badge bg-info text-dark ms-1" style="font-size:.6rem;">+ENG</span>
+                        <?php endif; ?>
+                    </td>
+                    <td class="text-muted"><?= $pva['sc_note'] ? h($pva['sc_note']) : '—' ?></td>
+                    <td>
+                        <?php if ($pva['doc_stored_name']): ?>
+                        <a href="<?= UPLOAD_URL ?>/students/files/<?= rawurlencode($pva['doc_stored_name']) ?>"
+                           target="_blank" class="text-secondary" title="<?= h($pva['doc_original_name'] ?? '') ?>">
+                            <i class="fas fa-paperclip"></i>
+                        </a>
+                        <?php else: ?>—<?php endif; ?>
+                    </td>
+                    <td><?= h($pva['requested_by_name']) ?></td>
+                    <td><?= date('d M Y', strtotime($pva['created_at'])) ?></td>
+                    <td><?= vca_status_badge($pva['status']) ?></td>
+                </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 
 <!-- ══════════════════════════════════════════════════════════
      MONTHLY BREAKDOWN – SEMESTER 1 (ACTIVE SEMESTER)
