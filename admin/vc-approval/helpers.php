@@ -66,10 +66,9 @@ function vca_list(string $status = 'pending', int $limit = 200): array
     $allowed = ['pending', 'approved', 'rejected', 'revoked', 'all'];
     if (!in_array($status, $allowed, true)) $status = 'pending';
 
-    $where = ($status === 'all') ? '1=1' : "r.status = '$status'";
+    $where_clause = ($status === 'all') ? '' : "WHERE r.status = ?";
 
-    $stmt = db()->prepare(
-        "SELECT r.*,
+    $sql = "SELECT r.*,
                 s.full_name  AS student_name,
                 s.student_id AS student_sid,
                 p.program_name,
@@ -86,10 +85,17 @@ function vca_list(string $status = 'pending', int $limit = 200): array
          JOIN users req           ON req.id  = r.requested_by
          LEFT JOIN users rev      ON rev.id  = r.reviewed_by
          LEFT JOIN student_files stf ON stf.id = r.support_doc_id
-         WHERE $where
+         $where_clause
          ORDER BY r.created_at DESC
-         LIMIT $limit"
-    );
+         LIMIT ?";
+
+    $stmt = db()->prepare($sql);
+    if ($status === 'all') {
+        $stmt->bindValue(1, $limit, PDO::PARAM_INT);
+    } else {
+        $stmt->bindValue(1, $status, PDO::PARAM_STR);
+        $stmt->bindValue(2, $limit, PDO::PARAM_INT);
+    }
     $stmt->execute();
     return $stmt->fetchAll();
 }

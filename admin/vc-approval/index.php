@@ -167,8 +167,8 @@ require_once __DIR__ . '/../includes/header.php';
                                 data-bs-toggle="modal"
                                 data-bs-target="#approveModal"
                                 data-id="<?= (int)$r['id'] ?>"
-                                data-label="<?= h(addslashes($r['label'])) ?>"
-                                data-student="<?= h(addslashes($r['student_name'])) ?>">
+                                data-label="<?= h($r['label']) ?>"
+                                data-student="<?= h($r['student_name']) ?>">
                             <i class="fas fa-check me-1"></i>Approve
                         </button>
                         <!-- Reject button -->
@@ -178,8 +178,8 @@ require_once __DIR__ . '/../includes/header.php';
                                 data-bs-toggle="modal"
                                 data-bs-target="#rejectModal"
                                 data-id="<?= (int)$r['id'] ?>"
-                                data-label="<?= h(addslashes($r['label'])) ?>"
-                                data-student="<?= h(addslashes($r['student_name'])) ?>">
+                                data-label="<?= h($r['label']) ?>"
+                                data-student="<?= h($r['student_name']) ?>">
                             <i class="fas fa-times me-1"></i>Reject
                         </button>
                         <?php elseif ($r['status'] === 'approved' && vca_can_revoke()): ?>
@@ -189,8 +189,8 @@ require_once __DIR__ . '/../includes/header.php';
                                 data-bs-toggle="modal"
                                 data-bs-target="#revokeModal"
                                 data-id="<?= (int)$r['id'] ?>"
-                                data-label="<?= h(addslashes($r['label'])) ?>"
-                                data-student="<?= h(addslashes($r['student_name'])) ?>">
+                                data-label="<?= h($r['label']) ?>"
+                                data-student="<?= h($r['student_name']) ?>">
                             <i class="fas fa-undo me-1"></i>Revoke
                         </button>
                         <?php else: ?>
