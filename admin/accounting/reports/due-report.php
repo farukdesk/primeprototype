@@ -12,6 +12,11 @@ $f_dept      = (int)($_GET['dept_id']  ?? 0);
 $f_program   = trim($_GET['program']   ?? '');
 $f_batch     = trim($_GET['batch']     ?? '');
 $f_status    = trim($_GET['status']    ?? '');
+$f_student_q = trim($_GET['student_q'] ?? '');
+$f_as_of_date = trim($_GET['as_of_date'] ?? date('Y-m-d'));
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $f_as_of_date)) {
+    $f_as_of_date = date('Y-m-d');
+}
 $f_min_due   = max(0.0, (float)($_GET['min_due'] ?? 0));
 $active_tab  = trim($_GET['tab']       ?? 'students');
 
@@ -52,6 +57,12 @@ if ($f_status !== '') {
     $where[]  = 's.status = ?';
     $params[] = $f_status;
 }
+if ($f_student_q !== '') {
+    $where[] = '(s.full_name LIKE ? OR s.student_id LIKE ?)';
+    $student_like = '%' . $f_student_q . '%';
+    $params[] = $student_like;
+    $params[] = $student_like;
+}
 
 $where_sql = implode(' AND ', $where);
 
@@ -87,14 +98,18 @@ $stmt = $db->prepare(
          GROUP BY package_id
      ) sf_agg ON sf_agg.package_id = p.id
      LEFT JOIN (
-         SELECT package_id, COALESCE(SUM(amount), 0) AS total_paid
-         FROM sfp_payments
-         GROUP BY package_id
+        SELECT p.package_id, COALESCE(SUM(p.amount), 0) AS total_paid
+        FROM sfp_payments p
+        JOIN acc_vouchers v ON v.id = p.voucher_id
+        WHERE v.status = 'posted'
+          AND v.is_deleted = 0
+          AND DATE(v.voucher_date) <= ?
+        GROUP BY p.package_id
      ) pay_agg ON pay_agg.package_id = p.id
      WHERE $where_sql
      ORDER BY d.name, p.program_name, s.admitted_semester DESC, s.full_name"
 );
-$stmt->execute($params);
+$stmt->execute(array_merge([$f_as_of_date], $params));
 $raw_rows = $stmt->fetchAll();
 
 // ── Compute outstanding balance per row ───────────────────────────────────────
@@ -211,7 +226,13 @@ require_once __DIR__ . '/../../includes/header.php';
         <form method="get" class="row g-2 align-items-end">
             <input type="hidden" name="tab" value="<?= h($active_tab) ?>">
 
-            <div class="col-md-3">
+            <div class="col-md-2">
+                <label class="form-label small fw-semibold mb-1">Student Name / ID</label>
+                <input type="text" name="student_q" class="form-control form-control-sm"
+                       value="<?= h($f_student_q) ?>" placeholder="e.g. 22345 or Rahim">
+            </div>
+
+            <div class="col-md-2">
                 <label class="form-label small fw-semibold mb-1">Department</label>
                 <select name="dept_id" class="form-select form-select-sm">
                     <option value="">All Departments</option>
@@ -261,6 +282,11 @@ require_once __DIR__ . '/../../includes/header.php';
                 <label class="form-label small fw-semibold mb-1">Min Due (<?= h($currency) ?>)</label>
                 <input type="number" name="min_due" class="form-control form-control-sm"
                        value="<?= $f_min_due > 0 ? h($f_min_due) : '' ?>" min="0" step="1" placeholder="0">
+            </div>
+
+            <div class="col-md-2">
+                <label class="form-label small fw-semibold mb-1">As of Date</label>
+                <input type="date" name="as_of_date" class="form-control form-control-sm" value="<?= h($f_as_of_date) ?>">
             </div>
 
             <div class="col-auto">
@@ -331,10 +357,11 @@ require_once __DIR__ . '/../../includes/header.php';
         <?php endif; ?>
         <strong style="font-size:14pt">Student Due Report</strong><br>
         <span style="font-size:9pt;color:#555"><?= h(acc_university_address()) ?></span><br>
-        <span style="font-size:8pt;color:#888">Generated: <?= date('d M Y, h:i A') ?></span>
-        <?php if ($f_dept || $f_program !== '' || $f_batch !== '' || $f_status !== ''): ?>
+        <span style="font-size:8pt;color:#888">Generated: <?= date('d M Y, h:i A') ?> | Due As of: <?= h(date('d M Y', strtotime($f_as_of_date))) ?></span>
+        <?php if ($f_dept || $f_program !== '' || $f_batch !== '' || $f_status !== '' || $f_student_q !== ''): ?>
         <div style="font-size:8pt;color:#666;margin-top:4px">
             Filters:
+            <?php if ($f_student_q):  echo h("Student: $f_student_q"); echo " &nbsp;"; endif; ?>
             <?php if ($f_dept):      $dn = array_column($depts, 'name', 'id')[$f_dept] ?? ''; echo h("Dept: $dn"); echo " &nbsp;"; endif; ?>
             <?php if ($f_program):   echo h("Program: $f_program"); echo " &nbsp;"; endif; ?>
             <?php if ($f_batch):     echo h("Batch: $f_batch"); echo " &nbsp;"; endif; ?>
@@ -385,7 +412,7 @@ require_once __DIR__ . '/../../includes/header.php';
     <div class="tab-pane fade <?= $active_tab === 'students' ? 'show active' : '' ?>" id="pane-students" role="tabpanel">
         <div class="card border-0 shadow-sm border-top-0 rounded-0 rounded-bottom">
             <div class="card-header py-2 px-3 d-flex justify-content-between align-items-center no-print">
-                <strong class="small"><?= number_format(count($rows)) ?> student(s) with due ≥ <?= $currency ?> <?= number_format($f_min_due, 0) ?></strong>
+                <strong class="small"><?= number_format(count($rows)) ?> student(s) with due ≥ <?= $currency ?> <?= number_format($f_min_due, 0) ?> · As of <?= h(date('d M Y', strtotime($f_as_of_date))) ?></strong>
                 <span class="text-danger fw-bold small">Outstanding: <?= $currency ?> <?= number_format($kpi_total_out, 2) ?></span>
             </div>
             <?php if (empty($rows)): ?>
@@ -452,8 +479,8 @@ require_once __DIR__ . '/../../includes/header.php';
                         </td>
                         <td class="no-print text-end">
                             <a href="<?= APP_URL ?>/student-accounts/statement.php?id=<?= (int)$r['package_id'] ?>"
-                               class="btn btn-outline-primary btn-sm" target="_blank" title="Statement">
-                                <i class="fas fa-file-invoice"></i>
+                               class="btn btn-outline-primary btn-sm" target="_blank" title="Financial Statement">
+                                <i class="fas fa-file-invoice-dollar me-1"></i>Financial Statement
                             </a>
                             <a href="<?= APP_URL ?>/students/view.php?id=<?= (int)$r['student_id'] ?>"
                                class="btn btn-outline-secondary btn-sm" title="View Student">
