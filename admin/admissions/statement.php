@@ -37,17 +37,26 @@ $scholarship_amount       = (float)($app['scholarship_amount']             ?? 0)
 $scholarship_label        = (string)($app['scholarship_label']              ?? '');
 $scholarship_type         = (string)($app['scholarship_discount_type']      ?? 'fixed');
 $scholarship_pct          = (float)($app['scholarship_discount_pct']        ?? 0);
+$scholarship_scope        = (string)($app['scholarship_scope']              ?? 'first_semester');
 $scholarship_applies_fixed   = (int)($app['scholarship_applies_to_fixed']   ?? 0);
 $scholarship_applies_english = (int)($app['scholarship_applies_to_english'] ?? 0);
+$scholarship_scope_label     = $scholarship_scope === 'all_semesters' ? 'All Semesters' : 'First Semester';
+$scholarship_scope_semesters = $scholarship_scope === 'all_semesters' ? max(1, $total_semesters) : 1;
+$payable_total_label         = $scholarship_scope === 'all_semesters'
+    ? 'Total Payable Per Semester After Scholarship'
+    : 'Total First Semester Payable Amount';
+$monthly_payment_label       = $scholarship_scope === 'all_semesters'
+    ? 'Monthly Payment Per Semester'
+    : 'First Semester Monthly Payment';
 
-// Per-component discounts for first semester
+// Per-component discounts per semester
 if ($scholarship_amount > 0 && $scholarship_type === 'percentage' && $scholarship_pct > 0) {
     $sc_tuition_disc = round(min($tuition_sem,   $tuition_sem   * $scholarship_pct / 100), 2);
     $sc_fixed_disc   = $scholarship_applies_fixed   ? round(min($fixed_per_sem,   $fixed_per_sem   * $scholarship_pct / 100), 2) : 0.0;
     $sc_english_disc = $scholarship_applies_english ? round(min($english_per_sem, $english_per_sem * $scholarship_pct / 100), 2) : 0.0;
 } else {
-    // Fixed amount: all goes against tuition
-    $sc_tuition_disc = $scholarship_amount;
+    // Fixed amount: all goes against tuition per semester
+    $sc_tuition_disc = round(min($tuition_sem, $scholarship_amount), 2);
     $sc_fixed_disc   = 0.0;
     $sc_english_disc = 0.0;
 }
@@ -56,6 +65,7 @@ $first_sem_tuition_payable = max(0.0, $tuition_sem   - $sc_tuition_disc);
 $first_sem_fixed_payable   = max(0.0, $fixed_per_sem  - $sc_fixed_disc);
 $first_sem_english_payable = max(0.0, $english_per_sem - $sc_english_disc);
 $total_discount_first_sem  = $sc_tuition_disc + $sc_fixed_disc + $sc_english_disc;
+$total_discount_selected_scope = $total_discount_first_sem * $scholarship_scope_semesters;
 $total_payable_first_sem   = $first_sem_tuition_payable + $first_sem_fixed_payable + $first_sem_english_payable + $reg_fee_sem;
 
 // Monthly installment based on first-semester actuals
@@ -219,6 +229,7 @@ $page_title         = 'Statement of Payment – ' . ($app['student_name'] ?? 'Ad
             data-type="<?= h($scholarship_type) ?>"
             data-pct="<?= h(number_format($scholarship_pct, 4)) ?>"
             data-amount="<?= ($scholarship_amount > 0) ? h(number_format($scholarship_amount, 2)) : '' ?>"
+            data-scope="<?= h($scholarship_scope) ?>"
             data-applies-fixed="<?= $scholarship_applies_fixed ?>"
             data-applies-english="<?= $scholarship_applies_english ?>">
         <i class="fas fa-<?= $scholarship_amount > 0 ? 'edit' : 'plus' ?>"></i>
@@ -346,7 +357,7 @@ if ($_flash_html): ?>
         </tbody>
     </table>
 
-    <div class="sec-heading">Regular Semester &amp; First Semester Payment Details</div>
+    <div class="sec-heading">Semester Payment Details</div>
     <table class="fee-table">
         <thead>
             <tr>
@@ -381,18 +392,18 @@ if ($_flash_html): ?>
                 <td class="amt"><strong><?= number_format($regular_sem_pay, 2) ?></strong></td>
             </tr>
 
-            <!-- Scholarship applied in first semester -->
+            <!-- Scholarship applied per selected scope -->
             <tr class="visual-sep"><td colspan="3"></td></tr>
             <?php if ($scholarship_amount > 0 && $scholarship_label !== ''): ?>
             <tr>
-                <td class="indent" colspan="2"><strong>Scholarship Applied in First Semester</strong></td>
+                <td class="indent" colspan="2"><strong>Scholarship Applied — <?= h($scholarship_scope_label) ?></strong></td>
                 <td class="amt"></td>
             </tr>
 
             <!-- Tuition fee line -->
             <tr>
                 <td></td>
-                <td class="indent" style="padding-left:22px;">Tuition Fee (1st Semester)</td>
+                <td class="indent" style="padding-left:22px;">Tuition Fee (Per Semester)</td>
                 <td class="amt"><?= number_format($tuition_sem, 2) ?></td>
             </tr>
             <?php if ($scholarship_type === 'percentage' && $scholarship_pct > 0): ?>
@@ -427,7 +438,7 @@ if ($_flash_html): ?>
             <?php if ($sc_fixed_disc > 0): ?>
             <tr>
                 <td></td>
-                <td class="indent" style="padding-left:22px;">Institutional &amp; Dev. Fee (1st Semester)</td>
+                <td class="indent" style="padding-left:22px;">Institutional &amp; Dev. Fee (Per Semester)</td>
                 <td class="amt"><?= number_format($fixed_per_sem, 2) ?></td>
             </tr>
             <tr>
@@ -443,7 +454,7 @@ if ($_flash_html): ?>
             <?php if ($sc_english_disc > 0): ?>
             <tr>
                 <td></td>
-                <td class="indent" style="padding-left:22px;">English Language Fee (1st Semester)</td>
+                <td class="indent" style="padding-left:22px;">English Language Fee (Per Semester)</td>
                 <td class="amt"><?= number_format($english_per_sem, 2) ?></td>
             </tr>
             <tr>
@@ -458,19 +469,25 @@ if ($_flash_html): ?>
 
             <?php else: ?>
             <tr>
-                <td class="indent" colspan="2">Scholarship(s) Applied in First Semester</td>
+                <td class="indent" colspan="2">Scholarship(s) Applied — <?= h($scholarship_scope_label) ?></td>
                 <td class="amt">—</td>
             </tr>
             <?php endif; ?>
 
             <tr>
-                <td class="indent" colspan="2">Total Scholarship (First Semester)</td>
+                <td class="indent" colspan="2">Total Scholarship (Per Semester)</td>
                 <td class="amt neg">− <?= number_format($total_discount_first_sem, 2) ?></td>
             </tr>
-
-            <!-- Post-scholarship breakdown for first semester -->
+            <?php if ($scholarship_scope === 'all_semesters' && $scholarship_amount > 0 && $scholarship_label !== ''): ?>
             <tr>
-                <td class="indent" colspan="2">Total Payable Tuition Fees (After All Scholarship)</td>
+                <td class="indent" colspan="2">Total Scholarship (All Semesters)</td>
+                <td class="amt neg">− <?= number_format($total_discount_selected_scope, 2) ?></td>
+            </tr>
+            <?php endif; ?>
+
+            <!-- Post-scholarship breakdown -->
+            <tr>
+                <td class="indent" colspan="2">Tuition Fee After Scholarship</td>
                 <td class="amt"><?= number_format($first_sem_tuition_payable, 2) ?></td>
             </tr>
             <tr>
@@ -487,14 +504,14 @@ if ($_flash_html): ?>
             </tr>
 
             <tr class="subtotal">
-                <td colspan="2"><strong>Total First Semester Payable Amount</strong></td>
+                <td colspan="2"><strong><?= h($payable_total_label) ?></strong></td>
                 <td class="amt"><strong><?= number_format($total_payable_first_sem, 2) ?></strong></td>
             </tr>
 
             <!-- Monthly installment -->
             <tr class="visual-sep"><td colspan="3"></td></tr>
             <tr class="highlight">
-                <td colspan="2"><strong>First Semester Monthly Payment</strong>
+                <td colspan="2"><strong><?= h($monthly_payment_label) ?></strong>
                     <span style="font-size:9.5px; color:#92400e; font-weight:400;">
                         (<?= number_format($first_sem_tuition_payable, 2) ?> Tuition
                         + <?= number_format($first_sem_fixed_payable, 2) ?> Institutional &amp; Dev. Fee
@@ -589,11 +606,11 @@ if ($_flash_html): ?>
                 </div>
                 <div class="modal-body">
                     <p class="text-muted small mb-3">
-                        The scholarship will be shown as a discount on the first semester in the payment statement.
+                        Choose whether the scholarship applies to the first semester only or to every semester.
                     </p>
 
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Tuition Fee (First Semester)</label>
+                        <label class="form-label fw-semibold">Tuition Fee Base (Per Semester)</label>
                         <input type="text" id="sc-tuition-display" class="form-control bg-light" readonly
                                value="<?= number_format($tuition_sem, 2) ?>">
                     </div>
@@ -624,6 +641,23 @@ if ($_flash_html): ?>
                         </div>
                     </div>
 
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Apply Scholarship To <span class="text-danger">*</span></label>
+                        <div class="d-flex gap-4 flex-wrap">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="scholarship_scope" value="first_semester"
+                                       id="sc-scope-first" checked>
+                                <label class="form-check-label" for="sc-scope-first">First Semester</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="scholarship_scope" value="all_semesters"
+                                       id="sc-scope-all">
+                                <label class="form-check-label" for="sc-scope-all">All Semesters</label>
+                            </div>
+                        </div>
+                        <div class="form-text">For all-semester scholarships, the discount amount is applied once per semester.</div>
+                    </div>
+
                     <div class="mb-3" id="sc-pct-wrap">
                         <label class="form-label fw-semibold">Discount % <span class="text-danger">*</span></label>
                         <div class="input-group">
@@ -643,7 +677,7 @@ if ($_flash_html): ?>
                     </div>
 
                     <div class="mb-3" id="sc-calc-wrap">
-                        <label class="form-label fw-semibold">Scholarship Amount (auto-calculated)</label>
+                        <label class="form-label fw-semibold">Scholarship Amount (auto-calculated per semester)</label>
                         <div class="input-group">
                             <input type="text" id="sc-calc-amount" class="form-control bg-light" readonly>
                             <span class="input-group-text">BDT</span>
@@ -741,10 +775,13 @@ if ($_flash_html): ?>
         var type            = btn ? (btn.dataset.type           || 'fixed') : 'fixed';
         var pct             = btn ? (btn.dataset.pct            || '') : '';
         var amount          = btn ? (btn.dataset.amount         || '') : '';
+        var scope           = btn ? (btn.dataset.scope          || 'first_semester') : 'first_semester';
         var appliesFixed    = btn ? (btn.dataset.appliesFixed   === '1') : false;
         var appliesEnglish  = btn ? (btn.dataset.appliesEnglish === '1') : false;
 
         document.getElementById('sc-label').value = label;
+        document.getElementById('sc-scope-first').checked = (scope !== 'all_semesters');
+        document.getElementById('sc-scope-all').checked   = (scope === 'all_semesters');
         document.getElementById('sc-applies-fixed').checked   = appliesFixed;
         document.getElementById('sc-applies-english').checked = appliesEnglish;
 
