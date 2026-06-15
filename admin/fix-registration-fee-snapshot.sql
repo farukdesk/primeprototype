@@ -14,17 +14,48 @@
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
--- ── Add reg_fee_per_semester column to sfp_packages ─────────────────────────
-ALTER TABLE `sfp_packages`
-    ADD COLUMN `reg_fee_per_semester` DECIMAL(10,2) NOT NULL DEFAULT 0.00
-                                      COMMENT 'Per-semester registration fee (snapshotted from cf_settings)'
-                                      AFTER `english_course_fee`;
+SET @dbname = DATABASE();
+SET @tablename = 'sfp_packages';
 
--- ── Add form_id_fee column to sfp_packages ──────────────────────────────────
-ALTER TABLE `sfp_packages`
-    ADD COLUMN `form_id_fee` DECIMAL(10,2) NOT NULL DEFAULT 0.00
-                             COMMENT 'One-time form & ID card fee (snapshotted from cf_settings)'
-                             AFTER `reg_fee_per_semester`;
+-- ── Add reg_fee_per_semester column to sfp_packages (idempotent) ─────────────
+SET @columnname = 'reg_fee_per_semester';
+SET @preparedStatement = (SELECT IF(
+  (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE (table_name = @tablename)
+      AND (table_schema = @dbname)
+      AND (column_name = @columnname)
+  ) > 0,
+  "SELECT 'reg_fee_per_semester column already exists' AS status",
+  CONCAT(
+    "ALTER TABLE ", @tablename,
+    " ADD COLUMN ", @columnname,
+    " DECIMAL(10,2) NOT NULL DEFAULT 0.00 COMMENT 'Per-semester registration fee (snapshotted from cf_settings)' AFTER `english_course_fee`"
+  )
+));
+PREPARE alterIfNotExists FROM @preparedStatement;
+EXECUTE alterIfNotExists;
+DEALLOCATE PREPARE alterIfNotExists;
+
+-- ── Add form_id_fee column to sfp_packages (idempotent) ──────────────────────
+SET @columnname = 'form_id_fee';
+SET @preparedStatement = (SELECT IF(
+  (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE (table_name = @tablename)
+      AND (table_schema = @dbname)
+      AND (column_name = @columnname)
+  ) > 0,
+  "SELECT 'form_id_fee column already exists' AS status",
+  CONCAT(
+    "ALTER TABLE ", @tablename,
+    " ADD COLUMN ", @columnname,
+    " DECIMAL(10,2) NOT NULL DEFAULT 0.00 COMMENT 'One-time form & ID card fee (snapshotted from cf_settings)' AFTER `reg_fee_per_semester`"
+  )
+));
+PREPARE alterIfNotExists FROM @preparedStatement;
+EXECUTE alterIfNotExists;
+DEALLOCATE PREPARE alterIfNotExists;
 
 -- ── Backfill existing packages with current cf_settings values ──────────────
 UPDATE `sfp_packages`

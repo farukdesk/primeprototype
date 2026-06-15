@@ -34,6 +34,10 @@ CREATE TABLE IF NOT EXISTS `sfp_packages` (
                              COMMENT 'One-time admission day cost; already paid separately – stored for reference',
   `fixed_institutional_fees` INT UNSIGNED     NOT NULL DEFAULT 0,
   `english_course_fee`       INT UNSIGNED     NOT NULL DEFAULT 0,
+  `reg_fee_per_semester`     DECIMAL(10,2)    NOT NULL DEFAULT 0.00
+                             COMMENT 'Per-semester registration fee (snapshotted from cf_settings)',
+  `form_id_fee`              DECIMAL(10,2)    NOT NULL DEFAULT 0.00
+                             COMMENT 'One-time form & ID card fee (snapshotted from cf_settings)',
 
   -- Safety-net constants (snapshot)
   `safety_net_cap`           INT UNSIGNED     DEFAULT NULL,
