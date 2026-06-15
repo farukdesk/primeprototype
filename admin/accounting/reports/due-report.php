@@ -103,7 +103,7 @@ $stmt = $db->prepare(
         JOIN acc_vouchers v ON v.id = p.voucher_id
         WHERE v.status = 'posted'
           AND v.is_deleted = 0
-          AND DATE(v.voucher_date) <= ?
+          AND v.voucher_date < DATE_ADD(?, INTERVAL 1 DAY)
         GROUP BY p.package_id
      ) pay_agg ON pay_agg.package_id = p.id
      WHERE $where_sql
