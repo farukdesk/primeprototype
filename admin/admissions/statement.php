@@ -42,6 +42,12 @@ $scholarship_applies_fixed   = (int)($app['scholarship_applies_to_fixed']   ?? 0
 $scholarship_applies_english = (int)($app['scholarship_applies_to_english'] ?? 0);
 $scholarship_scope_label     = $scholarship_scope === 'all_semesters' ? 'All Semesters' : 'First Semester';
 $scholarship_scope_semesters = $scholarship_scope === 'all_semesters' ? max(1, $total_semesters) : 1;
+$payable_total_label         = $scholarship_scope === 'all_semesters'
+    ? 'Total Payable Per Semester After Scholarship'
+    : 'Total First Semester Payable Amount';
+$monthly_payment_label       = $scholarship_scope === 'all_semesters'
+    ? 'Monthly Payment Per Semester'
+    : 'First Semester Monthly Payment';
 
 // Per-component discounts per semester
 if ($scholarship_amount > 0 && $scholarship_type === 'percentage' && $scholarship_pct > 0) {
@@ -50,7 +56,8 @@ if ($scholarship_amount > 0 && $scholarship_type === 'percentage' && $scholarshi
     $sc_english_disc = $scholarship_applies_english ? round(min($english_per_sem, $english_per_sem * $scholarship_pct / 100), 2) : 0.0;
 } else {
     // Fixed amount: all goes against tuition per semester
-    $sc_tuition_disc = min($tuition_sem, $scholarship_amount);
+    $fixed_tuition_discount = min($tuition_sem, max(0.0, $scholarship_amount));
+    $sc_tuition_disc = $fixed_tuition_discount;
     $sc_fixed_disc   = 0.0;
     $sc_english_disc = 0.0;
 }
@@ -498,14 +505,14 @@ if ($_flash_html): ?>
             </tr>
 
             <tr class="subtotal">
-                <td colspan="2"><strong><?= $scholarship_scope === 'all_semesters' ? 'Total Payable Per Semester After Scholarship' : 'Total First Semester Payable Amount' ?></strong></td>
+                <td colspan="2"><strong><?= h($payable_total_label) ?></strong></td>
                 <td class="amt"><strong><?= number_format($total_payable_first_sem, 2) ?></strong></td>
             </tr>
 
             <!-- Monthly installment -->
             <tr class="visual-sep"><td colspan="3"></td></tr>
             <tr class="highlight">
-                <td colspan="2"><strong><?= $scholarship_scope === 'all_semesters' ? 'Monthly Payment Per Semester' : 'First Semester Monthly Payment' ?></strong>
+                <td colspan="2"><strong><?= h($monthly_payment_label) ?></strong>
                     <span style="font-size:9.5px; color:#92400e; font-weight:400;">
                         (<?= number_format($first_sem_tuition_payable, 2) ?> Tuition
                         + <?= number_format($first_sem_fixed_payable, 2) ?> Institutional &amp; Dev. Fee
