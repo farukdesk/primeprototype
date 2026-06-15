@@ -6,7 +6,8 @@ require_once __DIR__ . '/../helpers.php';
 $page_title = 'Student Due Report';
 $currency   = acc_currency();
 $db         = db();
-$focus_payment_limit = 500;
+$payment_timeline_limit = 500;
+$format_enum_label = static fn(string $value): string => ucwords(str_replace('_', ' ', $value));
 
 // ── Filters ───────────────────────────────────────────────────────────────────
 $f_dept      = (int)($_GET['dept_id']  ?? 0);
@@ -281,14 +282,17 @@ if ($focus_row) {
                 p.amount, p.payment_method, p.mobile_banking_provider, p.transaction_number, p.note
          FROM sfp_payments p
          JOIN acc_vouchers v ON v.id = p.voucher_id
-         WHERE p.package_id = ?
+         WHERE p.package_id = :package_id
            AND v.status = 'posted'
            AND v.is_deleted = 0
-           AND v.voucher_date < DATE_ADD(?, INTERVAL 1 DAY)
+           AND v.voucher_date < DATE_ADD(:as_of_date, INTERVAL 1 DAY)
          ORDER BY v.voucher_date DESC, v.id DESC
-         LIMIT " . (int)$focus_payment_limit
+         LIMIT :timeline_limit"
     );
-    $pay_stmt->execute([(int)$focus_row['package_id'], $f_as_of_date]);
+    $pay_stmt->bindValue(':package_id', (int)$focus_row['package_id'], PDO::PARAM_INT);
+    $pay_stmt->bindValue(':as_of_date', $f_as_of_date, PDO::PARAM_STR);
+    $pay_stmt->bindValue(':timeline_limit', (int)$payment_timeline_limit, PDO::PARAM_INT);
+    $pay_stmt->execute();
     $focus_payments = $pay_stmt->fetchAll();
 }
 
@@ -520,7 +524,7 @@ require_once __DIR__ . '/../../includes/header.php';
             <?php if (!$focus_row || !$focus_metrics): ?>
             <div class="card-body text-center py-5 text-muted">
                 <i class="fas fa-user-check fa-3x mb-3 opacity-50"></i>
-                <p class="mb-1 fw-semibold">Choose a student from “By Student” tab to view 360° financial statement.</p>
+                <p class="mb-1 fw-semibold">Choose a student from “By Student” tab to view 360° overview.</p>
                 <p class="mb-0 small">Tip: search by Student ID for quick access to one student profile.</p>
             </div>
             <?php else: ?>
@@ -585,7 +589,7 @@ require_once __DIR__ . '/../../includes/header.php';
                                     <div class="progress-bar <?= $focus_metrics['overall_coverage_pct'] >= 100 ? 'bg-success' : ($focus_metrics['overall_coverage_pct'] >= 50 ? 'bg-warning' : 'bg-danger') ?>"
                                          style="width:<?= $focus_metrics['overall_coverage_pct'] ?>%"></div>
                                 </div>
-                                <div class="small text-muted mt-1"><?= $focus_metrics['overall_coverage_pct'] ?>% covered against full programme obligation</div>
+                                <div class="small text-muted mt-1"><?= $focus_metrics['overall_coverage_pct'] ?>% covered against full program obligation</div>
                             </div>
                         </div>
                     </div>
@@ -628,7 +632,7 @@ require_once __DIR__ . '/../../includes/header.php';
                 </div>
 
                 <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
-                    <h6 class="mb-0">Payment Timeline (Posted vouchers · latest <?= number_format($focus_payment_limit) ?>)</h6>
+                    <h6 class="mb-0">Payment Timeline (Posted vouchers · latest <?= number_format($payment_timeline_limit) ?>)</h6>
                     <a href="<?= APP_URL ?>/student-accounts/statement.php?id=<?= (int)$focus_row['package_id'] ?>" target="_blank" class="btn btn-outline-primary btn-sm no-print">
                         <i class="fas fa-file-invoice-dollar me-1"></i>Open Financial Statement
                     </a>
@@ -665,13 +669,13 @@ require_once __DIR__ . '/../../includes/header.php';
                         <tr>
                             <td><?= h(date('d M Y', strtotime($pay['voucher_date']))) ?></td>
                             <td><?= h($pay['voucher_number'] ?: '-') ?></td>
-                            <td><?= h($fee_labels[$pay['fee_type']] ?? ucwords(str_replace('_', ' ', (string)$pay['fee_type']))) ?></td>
+                            <td><?= h($fee_labels[$pay['fee_type']] ?? $format_enum_label((string)$pay['fee_type'])) ?></td>
                             <td>
                                 <?= $pay['semester_number'] ? 'Sem ' . (int)$pay['semester_number'] : '-' ?>
                                 <?= $pay['month_number'] ? ' / M' . (int)$pay['month_number'] : '' ?>
                             </td>
                             <td>
-                                <?= h(ucfirst(str_replace('_', ' ', (string)$pay['payment_method']))) ?>
+                                <?= h($format_enum_label((string)$pay['payment_method'])) ?>
                                 <?php if (!empty($pay['mobile_banking_provider'])): ?>
                                     <small class="text-muted">(<?= h(ucfirst((string)$pay['mobile_banking_provider'])) ?>)</small>
                                 <?php endif; ?>
