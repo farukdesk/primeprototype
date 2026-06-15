@@ -23,6 +23,7 @@ if ($id > 0) {
                 scholarship_amount             = 0.00,
                 scholarship_discount_type      = NULL,
                 scholarship_discount_pct       = 0.0000,
+                scholarship_scope              = "first_semester",
                 scholarship_applies_to_fixed   = 0,
                 scholarship_applies_to_english = 0
           WHERE id = ?'

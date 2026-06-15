@@ -5,8 +5,8 @@
  * Supports both percentage-based and fixed-amount discount types.
  *
  * POST params: id, scholarship_label, discount_type, discount_pct (pct),
- *              scholarship_amount (fixed), applies_to_fixed, applies_to_english,
- *              redirect_to
+ *              scholarship_amount (fixed), scholarship_scope,
+ *              applies_to_fixed, applies_to_english, redirect_to
  */
 require_once __DIR__ . '/../includes/auth.php';
 require_access('admissions', 'can_edit');
@@ -25,6 +25,9 @@ $type         = in_array($_POST['discount_type'] ?? '', ['percentage', 'fixed'],
                 : 'fixed';
 $pct          = (float)($_POST['discount_pct']       ?? 0);
 $fixed_input  = (float)($_POST['scholarship_amount'] ?? 0);
+$scope        = in_array($_POST['scholarship_scope'] ?? '', ['first_semester', 'all_semesters'], true)
+                ? $_POST['scholarship_scope']
+                : 'first_semester';
 $applies_fixed   = isset($_POST['applies_to_fixed'])   ? 1 : 0;
 $applies_english = isset($_POST['applies_to_english']) ? 1 : 0;
 $redirect_to  = trim($_POST['redirect_to'] ?? '');
@@ -86,14 +89,17 @@ if (empty($errors)) {
                 scholarship_amount            = ?,
                 scholarship_discount_type     = ?,
                 scholarship_discount_pct      = ?,
+                scholarship_scope             = ?,
                 scholarship_applies_to_fixed  = ?,
                 scholarship_applies_to_english = ?
           WHERE id = ?'
-    )->execute([$label, $amount, $type, $pct, $applies_fixed, $applies_english, $id]);
+    )->execute([$label, $amount, $type, $pct, $scope, $applies_fixed, $applies_english, $id]);
+
+    $scope_desc = $scope === 'all_semesters' ? 'all semesters' : 'first semester';
 
     $desc = $type === 'percentage'
-        ? $label . ' – ' . number_format($pct, 4) . '% (BDT ' . number_format($amount, 2) . ')'
-        : $label . ' – BDT ' . number_format($amount, 2);
+        ? $label . ' – ' . number_format($pct, 4) . '% (BDT ' . number_format($amount, 2) . ' per semester) for ' . $scope_desc
+        : $label . ' – BDT ' . number_format($amount, 2) . ' for ' . $scope_desc;
 
     log_change(
         'admissions', 'UPDATE', $id,
@@ -104,7 +110,7 @@ if (empty($errors)) {
         'Scholarship "' . $label . '" (' . $desc . ') set for application #' . $id
     );
 
-    flash_set('success', 'Scholarship <strong>' . h($label) . '</strong> (BDT ' . number_format($amount, 2) . ') saved.');
+    flash_set('success', 'Scholarship <strong>' . h($label) . '</strong> saved for ' . h($scope_desc) . '.');
 } else {
     flash_set('error', implode(' ', $errors));
 }

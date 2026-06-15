@@ -88,9 +88,11 @@ require_once __DIR__ . '/../includes/header.php';
         $sc_label           = (string)($app['scholarship_label']              ?? '');
         $sc_type            = (string)($app['scholarship_discount_type']      ?? 'fixed');
         $sc_pct             = (float)($app['scholarship_discount_pct']        ?? 0);
+        $sc_scope           = (string)($app['scholarship_scope']              ?? 'first_semester');
         $sc_applies_fixed   = (int)($app['scholarship_applies_to_fixed']      ?? 0);
         $sc_applies_english = (int)($app['scholarship_applies_to_english']    ?? 0);
         $sc_tuition         = (float)($app['financial_tuition_per_semester']  ?? 0);
+        $sc_scope_label     = $sc_scope === 'all_semesters' ? 'all semesters' : 'first semester';
         ?>
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-header bg-white d-flex justify-content-between align-items-center">
@@ -101,6 +103,7 @@ require_once __DIR__ . '/../includes/header.php';
                         data-type="<?= h($sc_type) ?>"
                         data-pct="<?= h(number_format($sc_pct, 4)) ?>"
                         data-amount="<?= h(number_format($sc_amount, 2)) ?>"
+                        data-scope="<?= h($sc_scope) ?>"
                         data-applies-fixed="<?= $sc_applies_fixed ?>"
                         data-applies-english="<?= $sc_applies_english ?>">
                     <i class="fas fa-<?= $sc_amount > 0 ? 'edit' : 'plus' ?> me-1"></i>
@@ -121,11 +124,12 @@ require_once __DIR__ . '/../includes/header.php';
                             if ($sc_applies_english) $scope[] = 'English Language Fee';
                             ?>
                             on <?= implode(' + ', $scope) ?>
-                            — BDT <?= number_format($sc_amount, 2) ?> off first semester
+                            — BDT <?= number_format($sc_amount, 2) ?> off <?= $sc_scope === 'all_semesters' ? 'per semester for all semesters' : 'first semester' ?>
                         </div>
                         <?php else: ?>
-                        <div class="text-success fw-semibold">BDT <?= number_format($sc_amount, 2) ?> fixed discount on first semester</div>
+                        <div class="text-success fw-semibold">BDT <?= number_format($sc_amount, 2) ?> fixed discount <?= $sc_scope === 'all_semesters' ? 'per semester for all semesters' : 'on first semester' ?></div>
                         <?php endif; ?>
+                        <div class="text-muted small text-uppercase mt-1">Scope: <?= h($sc_scope_label) ?></div>
                     </div>
                     <form method="post" action="<?= APP_URL ?>/admissions/remove-scholarship.php"
                           onsubmit="return confirm('Remove scholarship from this application?');">
@@ -363,11 +367,11 @@ function confirmDelete(id, label) {
                 </div>
                 <div class="modal-body">
                     <p class="text-muted small mb-3">
-                        The scholarship will be shown as a discount on the first semester in the payment statement.
+                        Choose whether the scholarship applies to the first semester only or to every semester.
                     </p>
 
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Tuition Fee (First Semester)</label>
+                        <label class="form-label fw-semibold">Tuition Fee Base (Per Semester)</label>
                         <input type="text" id="sc-tuition-display" class="form-control bg-light" readonly
                                value="<?= number_format($sc_tuition, 2) ?>">
                     </div>
@@ -398,6 +402,23 @@ function confirmDelete(id, label) {
                         </div>
                     </div>
 
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Apply Scholarship To <span class="text-danger">*</span></label>
+                        <div class="d-flex gap-4 flex-wrap">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="scholarship_scope" value="first_semester"
+                                       id="sc-scope-first" checked>
+                                <label class="form-check-label" for="sc-scope-first">First Semester</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="scholarship_scope" value="all_semesters"
+                                       id="sc-scope-all">
+                                <label class="form-check-label" for="sc-scope-all">All Semesters</label>
+                            </div>
+                        </div>
+                        <div class="form-text">For all-semester scholarships, the discount amount is applied once per semester.</div>
+                    </div>
+
                     <div class="mb-3" id="sc-pct-wrap">
                         <label class="form-label fw-semibold">Discount % <span class="text-danger">*</span></label>
                         <div class="input-group">
@@ -417,7 +438,7 @@ function confirmDelete(id, label) {
                     </div>
 
                     <div class="mb-3" id="sc-calc-wrap">
-                        <label class="form-label fw-semibold">Scholarship Amount (auto-calculated)</label>
+                        <label class="form-label fw-semibold">Scholarship Amount (auto-calculated per semester)</label>
                         <div class="input-group">
                             <input type="text" id="sc-calc-amount" class="form-control bg-light" readonly>
                             <span class="input-group-text">BDT</span>
@@ -515,10 +536,13 @@ function confirmDelete(id, label) {
         var type            = btn ? (btn.dataset.type           || 'fixed') : 'fixed';
         var pct             = btn ? (btn.dataset.pct            || '') : '';
         var amount          = btn ? (btn.dataset.amount         || '') : '';
+        var scope           = btn ? (btn.dataset.scope          || 'first_semester') : 'first_semester';
         var appliesFixed    = btn ? (btn.dataset.appliesFixed   === '1') : false;
         var appliesEnglish  = btn ? (btn.dataset.appliesEnglish === '1') : false;
 
         document.getElementById('sc-label').value = label;
+        document.getElementById('sc-scope-first').checked = (scope !== 'all_semesters');
+        document.getElementById('sc-scope-all').checked   = (scope === 'all_semesters');
         document.getElementById('sc-applies-fixed').checked   = appliesFixed;
         document.getElementById('sc-applies-english').checked = appliesEnglish;
 
