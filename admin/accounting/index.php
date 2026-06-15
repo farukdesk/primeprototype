@@ -212,6 +212,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <a href="<?= APP_URL ?>/accounting/reports/balance-sheet.php"        class="btn btn-outline-secondary btn-sm"><i class="fas fa-building me-1"></i> Balance Sheet</a>
                     <a href="<?= APP_URL ?>/accounting/reports/student-collection.php"   class="btn btn-outline-primary btn-sm"><i class="fas fa-file-invoice-dollar me-1"></i> Student Collection</a>
                     <a href="<?= APP_URL ?>/accounting/reports/staff-collection.php"     class="btn btn-outline-info btn-sm"><i class="fas fa-users me-1"></i> Staff Collection</a>
+                    <a href="<?= APP_URL ?>/accounting/reports/due-report.php"           class="btn btn-outline-danger btn-sm"><i class="fas fa-exclamation-circle me-1"></i> Due Report</a>
                 </div>
                 <?php endif; ?>
             </div>
