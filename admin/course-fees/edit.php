@@ -101,8 +101,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                  tri_semester_start_month = COALESCE(NULLIF(tri_semester_start_month, 0), ?)
              WHERE cf_program_id = ?'
         )->execute([
-            ($prog['bi_semester_start_month'] ?? null) !== null ? (int)$prog['bi_semester_start_month'] : null,
-            ($prog['tri_semester_start_month'] ?? null) !== null ? (int)$prog['tri_semester_start_month'] : null,
+            isset($prog['bi_semester_start_month']) ? (int)$prog['bi_semester_start_month'] : null,
+            isset($prog['tri_semester_start_month']) ? (int)$prog['tri_semester_start_month'] : null,
             $id,
         ]);
 
