@@ -7,7 +7,6 @@ $page_title = 'Student Due Report';
 $currency   = acc_currency();
 $db         = db();
 $payment_timeline_limit = 500;
-$format_enum_label = static fn(string $value): string => ucwords(str_replace('_', ' ', $value));
 
 // ── Filters ───────────────────────────────────────────────────────────────────
 $f_dept      = (int)($_GET['dept_id']  ?? 0);
@@ -285,7 +284,7 @@ if ($focus_row) {
          WHERE p.package_id = :package_id
            AND v.status = 'posted'
            AND v.is_deleted = 0
-           AND v.voucher_date < DATE_ADD(:as_of_date, INTERVAL 1 DAY)
+           AND v.voucher_date <= :as_of_date
          ORDER BY v.voucher_date DESC, v.id DESC
          LIMIT :timeline_limit"
     );
@@ -650,6 +649,11 @@ require_once __DIR__ . '/../../includes/header.php';
                     'english_fee' => 'English Fee',
                     'other' => 'Other',
                 ];
+                $payment_method_labels = [
+                    'cash' => 'Cash',
+                    'bank' => 'Bank',
+                    'mobile_banking' => 'Mobile Banking',
+                ];
                 ?>
                 <div class="table-responsive">
                     <table class="table table-sm table-hover align-middle mb-0">
@@ -669,13 +673,13 @@ require_once __DIR__ . '/../../includes/header.php';
                         <tr>
                             <td><?= h(date('d M Y', strtotime($pay['voucher_date']))) ?></td>
                             <td><?= h($pay['voucher_number'] ?: '-') ?></td>
-                            <td><?= h($fee_labels[$pay['fee_type']] ?? $format_enum_label((string)$pay['fee_type'])) ?></td>
+                            <td><?= h($fee_labels[$pay['fee_type']] ?? 'Other') ?></td>
                             <td>
                                 <?= $pay['semester_number'] ? 'Sem ' . (int)$pay['semester_number'] : '-' ?>
                                 <?= $pay['month_number'] ? ' / M' . (int)$pay['month_number'] : '' ?>
                             </td>
                             <td>
-                                <?= h($format_enum_label((string)$pay['payment_method'])) ?>
+                                <?= h($payment_method_labels[$pay['payment_method']] ?? 'Unknown') ?>
                                 <?php if (!empty($pay['mobile_banking_provider'])): ?>
                                     <small class="text-muted">(<?= h(ucfirst((string)$pay['mobile_banking_provider'])) ?>)</small>
                                 <?php endif; ?>
