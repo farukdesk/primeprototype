@@ -53,6 +53,7 @@ $rows = db()->prepare(
          p.fee_type,
          p.payment_method,
          p.mobile_banking_provider,
+         v.id                                      AS voucher_id,
          v.voucher_number                          AS invoice_no,
          p.amount,
          DATE(v.voucher_date)                      AS collection_date
@@ -304,14 +305,13 @@ require_once __DIR__ . '/../../includes/header.php';
                 <thead style="background:#f0f4ff">
                     <tr>
                         <th class="text-center" style="width:38px">#</th>
-                        <th>Student Name</th>
-                        <th>ID</th>
-                        <th>Program</th>
-                        <th>Batch</th>
-                        <th>Collected By</th>
+                        <th style="width:82px">Date</th>
+                        <th>Student</th>
+                        <th>Program / Batch</th>
+                        <th>Staff</th>
                         <th>Fee Type</th>
                         <th>Method</th>
-                        <th>Invoice No</th>
+                        <th>Invoice</th>
                         <th class="text-end">Amount (<?= h($currency) ?>)</th>
                     </tr>
                 </thead>
@@ -337,12 +337,15 @@ require_once __DIR__ . '/../../includes/header.php';
                     ?>
                     <tr class="data-row" data-page="<?= floor($i / 10) + 1 ?>">
                         <td class="text-center text-muted small"><?= $i + 1 ?></td>
-                        <td class="fw-semibold"><?= h($r['student_name']) ?></td>
+                        <td class="text-muted small text-nowrap"><?= date('d M Y', strtotime($r['collection_date'])) ?></td>
                         <td>
-                            <span class="badge bg-secondary bg-opacity-10 text-dark border" style="font-size:.78rem"><?= h($r['sid']) ?></span>
+                            <div class="fw-semibold"><?= h($r['student_name']) ?></div>
+                            <span class="badge bg-secondary bg-opacity-10 text-dark border" style="font-size:.72rem"><?= h($r['sid']) ?></span>
                         </td>
-                        <td class="text-muted"><?= h($r['program']) ?></td>
-                        <td class="text-muted"><?= h($r['batch']) ?></td>
+                        <td>
+                            <div class="small text-muted"><?= h($r['program']) ?></div>
+                            <span class="badge bg-light text-secondary border" style="font-size:.7rem"><?= h($r['batch']) ?></span>
+                        </td>
                         <td>
                             <span class="d-flex align-items-center gap-1">
                                 <span class="rounded-circle bg-info bg-opacity-10 text-info d-inline-flex align-items-center justify-content-center" style="width:22px;height:22px;font-size:.65rem;flex-shrink:0"><i class="fas fa-user"></i></span>
@@ -359,7 +362,13 @@ require_once __DIR__ . '/../../includes/header.php';
                             <?= h(acc_payment_method_label($r['payment_method'], $r['mobile_banking_provider'])) ?>
                         </td>
                         <td>
-                            <span class="badge bg-light text-dark border" style="font-family:monospace;font-size:.78rem"><?= h($r['invoice_no']) ?></span>
+                            <a href="<?= APP_URL ?>/accounting/fee-invoice.php?voucher_id=<?= (int)$r['voucher_id'] ?>"
+                               target="_blank"
+                               class="badge bg-light text-primary border text-decoration-none inv-link"
+                               style="font-family:monospace;font-size:.78rem"
+                               title="Open invoice">
+                                <?= h($r['invoice_no']) ?>&nbsp;<i class="fas fa-external-link-alt" style="font-size:.6rem"></i>
+                            </a>
                         </td>
                         <td class="text-end fw-bold text-success"><?= number_format((float)$r['amount'], 2) ?></td>
                     </tr>
@@ -367,7 +376,7 @@ require_once __DIR__ . '/../../includes/header.php';
                 </tbody>
                 <tfoot style="background:#e8f0fe">
                     <tr>
-                        <td colspan="9" class="text-end fw-bold" style="font-size:.85rem">
+                        <td colspan="8" class="text-end fw-bold" style="font-size:.85rem">
                             <i class="fas fa-calculator me-1 text-primary"></i> Grand Total
                         </td>
                         <td class="text-end fw-bold text-primary" style="font-size:.9rem">
@@ -454,6 +463,10 @@ require_once __DIR__ . '/../../includes/header.php';
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
     }
+
+    /* Hide external-link icon in print */
+    .inv-link .fa-external-link-alt { display: none !important; }
+    .inv-link { color: #000 !important; text-decoration: none !important; }
 
     /* Show ALL rows when printing */
     .data-row { display: table-row !important; }
