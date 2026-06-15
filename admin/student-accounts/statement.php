@@ -52,7 +52,13 @@ try {
 // ── Load VC profile settings ──────────────────────────────────────────────────
 $vc_settings = [];
 try {
-    $vs_rows = db()->query('SELECT setting_key, setting_val FROM vc_settings')->fetchAll();
+    $vs_stmt = db()->prepare(
+        "SELECT setting_key, setting_val
+         FROM vc_settings
+         WHERE setting_key IN ('vc_name', 'vc_title', 'vc_signature', 'vc_photo')"
+    );
+    $vs_stmt->execute();
+    $vs_rows = $vs_stmt->fetchAll();
     foreach ($vs_rows as $vsr) {
         $vc_settings[$vsr['setting_key']] = $vsr['setting_val'];
     }
@@ -61,7 +67,10 @@ try {
 
 $vc_name_display       = $vc_settings['vc_name'] ?? 'Vice Chancellor';
 $vc_title_display      = $vc_settings['vc_title'] ?? 'Vice Chancellor';
-$vc_sig_file           = !empty($vc_settings['vc_signature']) ? $vc_settings['vc_signature'] : ($vc_settings['vc_photo'] ?? '');
+$vc_sig_file           = $vc_settings['vc_photo'] ?? '';
+if (!empty($vc_settings['vc_signature'])) {
+    $vc_sig_file = $vc_settings['vc_signature'];
+}
 $vc_sig_url            = $vc_sig_file ? (UPLOAD_URL . '/office-of-vc/' . $vc_sig_file) : '';
 $vc_approved_at_display = !empty($vc_approval_info['reviewed_at'])
     ? date('d M Y, h:i A', strtotime($vc_approval_info['reviewed_at']))
@@ -724,7 +733,7 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
         <?php if ($vc_approval_info): ?>
         <div class="sig-block vc-sig-block">
             <?php if ($vc_sig_url): ?>
-            <img src="<?= h($vc_sig_url) ?>" alt="VC Signature" class="vc-sig-img"
+            <img src="<?= h($vc_sig_url) ?>" alt="<?= h('Signature of ' . $vc_name_display . ', ' . $vc_title_display) ?>" class="vc-sig-img"
                  onerror="this.style.display='none'">
             <?php else: ?>
             <div style="height:52px;"></div>
