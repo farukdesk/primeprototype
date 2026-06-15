@@ -36,7 +36,12 @@ $student = $student_stmt->fetch();
 $vc_approval_info = null;
 try {
     $vca_stmt = db()->prepare(
-        "SELECT vca.reviewed_at, u.full_name AS reviewer_name
+        "SELECT vca.reviewed_at,
+                u.full_name AS reviewer_name,
+                vca.label,
+                vca.discount_type,
+                vca.discount_pct,
+                vca.fixed_amount
          FROM vc_scholarship_approvals vca
          JOIN users u ON u.id = vca.reviewed_by
          WHERE vca.package_id = ? AND vca.status = 'approved'
@@ -55,7 +60,7 @@ try {
     $vs_stmt = db()->prepare(
         "SELECT setting_key, setting_val
          FROM vc_settings
-         WHERE setting_key IN ('vc_name', 'vc_title', 'vc_signature', 'vc_photo')"
+         WHERE setting_key IN ('vc_name', 'vc_title', 'vc_signature')"
     );
     $vs_stmt->execute();
     $vs_rows = $vs_stmt->fetchAll();
@@ -68,13 +73,19 @@ try {
 $vc_name_display       = $vc_settings['vc_name'] ?? 'Vice Chancellor';
 $vc_title_display      = $vc_settings['vc_title'] ?? 'Vice Chancellor';
 $vc_sig_file           = $vc_settings['vc_signature'] ?? '';
-if ($vc_sig_file === '') {
-    $vc_sig_file = $vc_settings['vc_photo'] ?? '';
-}
 $vc_sig_url            = $vc_sig_file ? (UPLOAD_URL . '/office-of-vc/' . $vc_sig_file) : '';
 $vc_approved_at_display = !empty($vc_approval_info['reviewed_at'])
     ? date('d M Y, h:i A', strtotime($vc_approval_info['reviewed_at']))
     : '';
+$vc_approval_scholarship_display = '';
+if (!empty($vc_approval_info)) {
+    $vc_type = $vc_approval_info['discount_type'] ?? 'percentage';
+    if ($vc_type === 'fixed') {
+        $vc_approval_scholarship_display = 'BDT ' . number_format((float)($vc_approval_info['fixed_amount'] ?? 0), 2) . ' on tuition fee';
+    } else {
+        $vc_approval_scholarship_display = number_format((float)($vc_approval_info['discount_pct'] ?? 0), 2) . '% on tuition fee';
+    }
+}
 
 // ── Fetch first-semester fee row & scholarships ───────────────────────────────
 $sf_stmt = db()->prepare(
@@ -136,6 +147,12 @@ foreach ($scholarships_1st as $row) {
 foreach ($pending_scholarships_1st as $row) {
     $first_sem_scholarships[] = $row;
 }
+$first_sem_scholarships_display = array_values(array_filter(
+    $first_sem_scholarships,
+    static function ($row) {
+        return ($row['approval_status'] ?? 'approved') !== 'pending';
+    }
+));
 
 // ── Fee calculations ──────────────────────────────────────────────────────────
 
@@ -166,7 +183,6 @@ $first_sem_scholarship_pct    = 0.0;
 $first_sem_scholarship_amount = 0.0;
 $first_sem_fixed_discount     = 0.0;
 $first_sem_english_discount   = 0.0;
-$has_pending_first_sem        = false;
 
 $first_sem_tuition_payable = $first_sem_tuition_base;
 $first_sem_fixed_payable   = $fixed_per_sem_gross;
@@ -176,12 +192,6 @@ foreach ($first_sem_scholarships as $sc) {
     $type         = $sc['discount_type'] ?? 'percentage';
     $pct          = (float)($sc['discount_pct'] ?? 0);
     $fixed_amount = (float)($sc['fixed_amount'] ?? 0);
-    $is_pending   = ($sc['approval_status'] ?? 'approved') === 'pending';
-
-    if ($is_pending) {
-        $has_pending_first_sem = true;
-    }
-
     if ($type === 'fixed') {
         $tuition_discount = round(min($first_sem_tuition_payable, $fixed_amount), 2);
     } else {
@@ -577,11 +587,11 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
             $sc_calc         = [];
             $has_fixed_sc    = false;
             $has_english_sc  = false;
-            if (!empty($first_sem_scholarships)) {
+            if (!empty($first_sem_scholarships_display)) {
                 $run_t = $first_sem_tuition_base;
                 $run_f = $fixed_per_sem_gross;
                 $run_e = $english_per_sem_gross;
-                foreach ($first_sem_scholarships as $sc) {
+                foreach ($first_sem_scholarships_display as $sc) {
                     $pct  = (float)$sc['discount_pct'];
                     $type = $sc['discount_type'] ?? 'percentage';
                     $fixed_amount = (float)($sc['fixed_amount'] ?? 0);
@@ -592,7 +602,6 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
                         'fixed_amount'    => $fixed_amount,
                         'applies_fixed'   => (int)$sc['applies_to_fixed'],
                         'applies_english' => (int)$sc['applies_to_english'],
-                        'is_pending'      => ($sc['approval_status'] ?? 'approved') === 'pending',
                     ];
                     // Tuition
                     $t_disc          = ($type === 'fixed')
@@ -656,9 +665,6 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
                 <td class="indent" style="padding-left:22px;">
                     <span class="neg">−</span>
                     <span class="sc-badge"><?= h($step['sc']['label']) ?> (<?= h($badge_label) ?>)</span>
-                    <?php if ($step['is_pending']): ?>
-                        <span class="status-badge pending">Pending VC Approval</span>
-                    <?php endif; ?>
                     — <?= $scope_on ?>
                 </td>
                 <td class="amt neg">− <?= number_format($step['t_disc'], 2) ?></td>
@@ -691,9 +697,6 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
                 <td class="indent" style="padding-left:22px;">
                     <span class="neg">−</span>
                     <span class="sc-badge"><?= h($step['sc']['label']) ?> (<?= h($badge_label) ?>)</span>
-                    <?php if ($step['is_pending']): ?>
-                        <span class="status-badge pending">Pending VC Approval</span>
-                    <?php endif; ?>
                 </td>
                 <td class="amt neg">− <?= number_format($step['f_disc'], 2) ?></td>
             </tr>
@@ -717,9 +720,6 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
                 <td class="indent" style="padding-left:22px;">
                     <span class="neg">−</span>
                     <span class="sc-badge"><?= h($step['sc']['label']) ?> (<?= h($badge_label) ?>)</span>
-                    <?php if ($step['is_pending']): ?>
-                        <span class="status-badge pending">Pending VC Approval</span>
-                    <?php endif; ?>
                 </td>
                 <td class="amt neg">− <?= number_format($step['e_disc'], 2) ?></td>
             </tr>
@@ -736,6 +736,20 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
                 <td class="indent" colspan="2">Total Scholarship (First Semester)</td>
                 <td class="amt neg">− <?= number_format($total_discount_first_sem, 2) ?></td>
             </tr>
+            <?php if ($vc_approval_info): ?>
+            <tr>
+                <td></td>
+                <td colspan="2">
+                    <div style="margin:3px 0 0 14px; padding:5px 8px; font-size:9px; line-height:1.35; color:#7c2d12; background:rgba(234,88,12,.08); border:1px solid rgba(234,88,12,.32); border-radius:4px;">
+                        <strong>Approved by Vice Chancellor:</strong>
+                        <?= h($vc_approval_info['label'] ?: 'Additional Scholarship') ?> (<?= h($vc_approval_scholarship_display) ?>)
+                        <?php if ($vc_approved_at_display): ?>
+                            — Signed by <?= h($vc_name_display) ?> on <?= h($vc_approved_at_display) ?>.
+                        <?php endif; ?>
+                    </div>
+                </td>
+            </tr>
+            <?php endif; ?>
 
             <!-- Post-scholarship breakdown for first semester -->
             <tr>
@@ -811,9 +825,6 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
     <div class="note-box">
         <strong>Note:</strong>
         <ul style="margin: 4px 0 0 16px; padding: 0;">
-            <?php if ($has_pending_first_sem): ?>
-            <li>Pending VC approval scholarships are already reflected in this statement and remain subject to final approval.</li>
-            <?php endif; ?>
             <li>Monthly payment must be made on or before the <strong>10th of each month</strong>.</li>
             <li>Registration fees for each semester must be paid before registering for the semester.</li>
             <li>Duration of payment:
