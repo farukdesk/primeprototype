@@ -93,6 +93,8 @@ require_once __DIR__ . '/../includes/header.php';
         $sc_applies_english = (int)($app['scholarship_applies_to_english']    ?? 0);
         $sc_tuition         = (float)($app['financial_tuition_per_semester']  ?? 0);
         $sc_scope_label     = $sc_scope === 'all_semesters' ? 'all semesters' : 'first semester';
+        $sc_scope_summary_text = $sc_scope === 'all_semesters' ? 'per semester across all semesters' : 'first semester';
+        $sc_fixed_scope_summary_text = $sc_scope === 'all_semesters' ? $sc_scope_summary_text : 'on ' . $sc_scope_summary_text;
         ?>
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-header bg-white d-flex justify-content-between align-items-center">
@@ -124,10 +126,10 @@ require_once __DIR__ . '/../includes/header.php';
                             if ($sc_applies_english) $scope[] = 'English Language Fee';
                             ?>
                             on <?= implode(' + ', $scope) ?>
-                            — BDT <?= number_format($sc_amount, 2) ?> off <?= $sc_scope === 'all_semesters' ? 'per semester across all semesters' : 'first semester' ?>
+                            — BDT <?= number_format($sc_amount, 2) ?> off <?= h($sc_scope_summary_text) ?>
                         </div>
                         <?php else: ?>
-                        <div class="text-success fw-semibold">BDT <?= number_format($sc_amount, 2) ?> fixed discount <?= $sc_scope === 'all_semesters' ? 'per semester across all semesters' : 'on first semester' ?></div>
+                        <div class="text-success fw-semibold">BDT <?= number_format($sc_amount, 2) ?> fixed discount <?= h($sc_fixed_scope_summary_text) ?></div>
                         <?php endif; ?>
                         <div class="text-muted small text-uppercase mt-1">Scope: <?= h($sc_scope_label) ?></div>
                     </div>
