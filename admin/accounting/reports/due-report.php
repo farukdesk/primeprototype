@@ -140,7 +140,7 @@ $kpi_total_students  = count($rows);
 $kpi_total_due       = array_sum(array_column($rows, 'total_due'));
 $kpi_total_paid      = array_sum(array_column($rows, 'total_paid'));
 $kpi_total_out       = array_sum(array_column($rows, 'outstanding'));
-$kpi_students_clear  = count(array_filter($rows, fn($r) => $r['outstanding'] == 0));
+$kpi_students_clear  = count(array_filter($rows, fn($r) => abs($r['outstanding']) < 0.01));
 $kpi_students_due    = $kpi_total_students - $kpi_students_clear;
 
 // ── Group by batch ────────────────────────────────────────────────────────────
@@ -414,7 +414,7 @@ require_once __DIR__ . '/../../includes/header.php';
                     </thead>
                     <tbody>
                     <?php foreach ($rows as $i => $r): ?>
-                    <tr class="<?= $r['outstanding'] > 0 ? '' : 'table-success' ?>">
+                    <tr class="<?= $r['outstanding'] >= 0.01 ? '' : 'table-success' ?>">
                         <td class="text-muted"><?= $i + 1 ?></td>
                         <td class="fw-semibold"><?= h($r['student_sid']) ?></td>
                         <td>
@@ -440,7 +440,7 @@ require_once __DIR__ . '/../../includes/header.php';
                         </td>
                         <td class="text-end"><?= number_format($r['total_due'], 2) ?></td>
                         <td class="text-end text-success fw-semibold"><?= number_format($r['total_paid'], 2) ?></td>
-                        <td class="text-end <?= $r['outstanding'] > 0 ? 'text-danger fw-bold' : 'text-success' ?>">
+                        <td class="text-end <?= $r['outstanding'] >= 0.01 ? 'text-danger fw-bold' : 'text-success' ?>">
                             <?= number_format($r['outstanding'], 2) ?>
                         </td>
                         <td class="no-print" style="min-width:100px">
@@ -517,7 +517,7 @@ require_once __DIR__ . '/../../includes/header.php';
                         <td class="text-center"><?= number_format($b['students']) ?></td>
                         <td class="text-end"><?= number_format($b['total_due'], 2) ?></td>
                         <td class="text-end text-success"><?= number_format($b['total_paid'], 2) ?></td>
-                        <td class="text-end <?= $b['outstanding'] > 0 ? 'text-danger fw-bold' : 'text-success' ?>">
+                        <td class="text-end <?= $b['outstanding'] >= 0.01 ? 'text-danger fw-bold' : 'text-success' ?>">
                             <?= number_format($b['outstanding'], 2) ?>
                         </td>
                         <td class="no-print" style="min-width:120px">
@@ -585,7 +585,7 @@ require_once __DIR__ . '/../../includes/header.php';
                         <td class="text-center"><?= number_format($bp['students']) ?></td>
                         <td class="text-end"><?= number_format($bp['total_due'], 2) ?></td>
                         <td class="text-end text-success"><?= number_format($bp['total_paid'], 2) ?></td>
-                        <td class="text-end <?= $bp['outstanding'] > 0 ? 'text-danger fw-bold' : 'text-success' ?>">
+                        <td class="text-end <?= $bp['outstanding'] >= 0.01 ? 'text-danger fw-bold' : 'text-success' ?>">
                             <?= number_format($bp['outstanding'], 2) ?>
                         </td>
                         <td class="no-print" style="min-width:120px">
@@ -653,7 +653,7 @@ require_once __DIR__ . '/../../includes/header.php';
                         <td class="text-center"><?= number_format($bd['students']) ?></td>
                         <td class="text-end"><?= number_format($bd['total_due'], 2) ?></td>
                         <td class="text-end text-success"><?= number_format($bd['total_paid'], 2) ?></td>
-                        <td class="text-end <?= $bd['outstanding'] > 0 ? 'text-danger fw-bold' : 'text-success' ?>">
+                        <td class="text-end <?= $bd['outstanding'] >= 0.01 ? 'text-danger fw-bold' : 'text-success' ?>">
                             <?= number_format($bd['outstanding'], 2) ?>
                         </td>
                         <td class="no-print" style="min-width:120px">
