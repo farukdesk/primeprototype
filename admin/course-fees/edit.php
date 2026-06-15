@@ -95,16 +95,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (empty($errors)) {
-        $db->prepare(
-            'UPDATE sfp_packages
-             SET bi_semester_start_month = COALESCE(NULLIF(bi_semester_start_month, 0), ?),
-                 tri_semester_start_month = COALESCE(NULLIF(tri_semester_start_month, 0), ?)
-             WHERE cf_program_id = ?'
-        )->execute([
-            isset($prog['bi_semester_start_month']) ? (int)$prog['bi_semester_start_month'] : null,
-            isset($prog['tri_semester_start_month']) ? (int)$prog['tri_semester_start_month'] : null,
-            $id,
-        ]);
+        $sfp_start_cols = $db
+            ->query("SHOW COLUMNS FROM sfp_packages WHERE Field IN ('bi_semester_start_month','tri_semester_start_month')")
+            ->fetchAll(PDO::FETCH_COLUMN);
+        $has_bi_start_col  = in_array('bi_semester_start_month', $sfp_start_cols, true);
+        $has_tri_start_col = in_array('tri_semester_start_month', $sfp_start_cols, true);
+
+        if ($has_bi_start_col || $has_tri_start_col) {
+            $set_parts = [];
+            $params    = [];
+
+            if ($has_bi_start_col) {
+                $set_parts[] = 'bi_semester_start_month = COALESCE(NULLIF(bi_semester_start_month, 0), ?)';
+                $params[]    = isset($prog['bi_semester_start_month']) ? (int)$prog['bi_semester_start_month'] : null;
+            }
+            if ($has_tri_start_col) {
+                $set_parts[] = 'tri_semester_start_month = COALESCE(NULLIF(tri_semester_start_month, 0), ?)';
+                $params[]    = isset($prog['tri_semester_start_month']) ? (int)$prog['tri_semester_start_month'] : null;
+            }
+
+            $params[] = $id;
+
+            $db->prepare(
+                'UPDATE sfp_packages
+                 SET ' . implode(', ', $set_parts) . '
+                 WHERE cf_program_id = ?'
+            )->execute($params);
+        }
 
         $db->prepare(
             'UPDATE cf_programs SET
