@@ -166,12 +166,7 @@ foreach ($scholarships_1st as $row) {
 foreach ($pending_scholarships_1st as $row) {
     $first_sem_scholarships[] = $row;
 }
-$first_sem_scholarships_display = array_values(array_filter(
-    $first_sem_scholarships,
-    static function ($row) {
-        return ($row['approval_status'] ?? 'approved') !== 'pending';
-    }
-));
+$first_sem_scholarships_display = array_values($first_sem_scholarships);
 
 // ── Fee calculations ──────────────────────────────────────────────────────────
 
@@ -629,7 +624,9 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
                         $step['f_disc']   = $f_disc;
                         $run_f           -= $f_disc;
                         $step['f_after']  = $run_f;
-                        $has_fixed_sc     = true;
+                        if (($sc['approval_status'] ?? 'approved') !== 'pending') {
+                            $has_fixed_sc = true;
+                        }
                     }
                     // English course fee
                     if ($type === 'percentage' && $step['applies_english'] && $run_e > 0) {
@@ -638,7 +635,9 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
                         $step['e_disc']   = $e_disc;
                         $run_e           -= $e_disc;
                         $step['e_after']  = $run_e;
-                        $has_english_sc   = true;
+                        if (($sc['approval_status'] ?? 'approved') !== 'pending') {
+                            $has_english_sc = true;
+                        }
                     }
                     $sc_calc[] = $step;
                 }
@@ -671,16 +670,21 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
                     ? 'BDT ' . number_format($step['fixed_amount'], 2)
                     : number_format($step['pct'], 1) . '%';
             ?>
+            <?php $is_pending = ($step['sc']['approval_status'] ?? 'approved') === 'pending'; ?>
             <tr>
                 <td></td>
                 <td class="indent" style="padding-left:22px;">
-                    <span class="neg">−</span>
+                    <?php if (!$is_pending): ?><span class="neg">−</span><?php endif; ?>
                     <span class="sc-badge"><?= h($step['sc']['label']) ?> (<?= h($badge_label) ?>)</span>
-                    — <?= $scope_on ?>
+                    <?php if ($is_pending): ?>
+                        <span style="color:#b45309; font-style:italic; font-weight:600;">— Pending</span>
+                    <?php else: ?>
+                        — <?= $scope_on ?>
+                    <?php endif; ?>
                 </td>
-                <td class="amt neg">− <?= number_format($step['t_disc'], 2) ?></td>
+                <td class="amt neg"><?= $is_pending ? '' : '− ' . number_format($step['t_disc'], 2) ?></td>
             </tr>
-            <?php if ($i < count($sc_calc) - 1): ?>
+            <?php if (!$is_pending && $i < count($sc_calc) - 1): ?>
             <tr>
                 <td></td>
                 <td class="indent" style="padding-left:22px; color:#6b7280; font-style:italic;">
@@ -700,6 +704,7 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
             </tr>
             <?php foreach ($sc_calc as $i => $step):
                 if (!$step['applies_fixed'] || !isset($step['f_disc'])) continue;
+                if (($step['sc']['approval_status'] ?? 'approved') === 'pending') continue;
                 $badge_label = $step['type'] === 'fixed'
                     ? 'BDT ' . number_format($step['fixed_amount'], 2)
                     : number_format($step['pct'], 1) . '%'; ?>
@@ -723,6 +728,7 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
             </tr>
             <?php foreach ($sc_calc as $i => $step):
                 if (!$step['applies_english'] || !isset($step['e_disc'])) continue;
+                if (($step['sc']['approval_status'] ?? 'approved') === 'pending') continue;
                 $badge_label = $step['type'] === 'fixed'
                     ? 'BDT ' . number_format($step['fixed_amount'], 2)
                     : number_format($step['pct'], 1) . '%'; ?>
