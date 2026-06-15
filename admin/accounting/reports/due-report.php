@@ -226,13 +226,13 @@ require_once __DIR__ . '/../../includes/header.php';
         <form method="get" class="row g-2 align-items-end">
             <input type="hidden" name="tab" value="<?= h($active_tab) ?>">
 
-            <div class="col-md-2">
+            <div class="col-md">
                 <label class="form-label small fw-semibold mb-1">Student Name / ID</label>
                 <input type="text" name="student_q" class="form-control form-control-sm"
                        value="<?= h($f_student_q) ?>" placeholder="e.g. 22345 or Rahim">
             </div>
 
-            <div class="col-md-2">
+            <div class="col-md">
                 <label class="form-label small fw-semibold mb-1">Department</label>
                 <select name="dept_id" class="form-select form-select-sm">
                     <option value="">All Departments</option>
@@ -244,7 +244,7 @@ require_once __DIR__ . '/../../includes/header.php';
                 </select>
             </div>
 
-            <div class="col-md-3">
+            <div class="col-md">
                 <label class="form-label small fw-semibold mb-1">Program</label>
                 <select name="program" class="form-select form-select-sm">
                     <option value="">All Programs</option>
@@ -256,7 +256,7 @@ require_once __DIR__ . '/../../includes/header.php';
                 </select>
             </div>
 
-            <div class="col-md-2">
+            <div class="col-md">
                 <label class="form-label small fw-semibold mb-1">Batch (Semester)</label>
                 <select name="batch" class="form-select form-select-sm">
                     <option value="">All Batches</option>
@@ -268,7 +268,7 @@ require_once __DIR__ . '/../../includes/header.php';
                 </select>
             </div>
 
-            <div class="col-md-2">
+            <div class="col-md">
                 <label class="form-label small fw-semibold mb-1">Student Status</label>
                 <select name="status" class="form-select form-select-sm">
                     <option value="">All Statuses</option>
@@ -278,7 +278,7 @@ require_once __DIR__ . '/../../includes/header.php';
                 </select>
             </div>
 
-            <div class="col-md-1">
+            <div class="col-md-2">
                 <label class="form-label small fw-semibold mb-1">Min Due (<?= h($currency) ?>)</label>
                 <input type="number" name="min_due" class="form-control form-control-sm"
                        value="<?= $f_min_due > 0 ? h($f_min_due) : '' ?>" min="0" step="1" placeholder="0">
@@ -361,7 +361,7 @@ require_once __DIR__ . '/../../includes/header.php';
         <?php if ($f_dept || $f_program !== '' || $f_batch !== '' || $f_status !== '' || $f_student_q !== ''): ?>
         <div style="font-size:8pt;color:#666;margin-top:4px">
             Filters:
-            <?php if ($f_student_q):  echo h("Student: $f_student_q"); echo " &nbsp;"; endif; ?>
+            <?php if ($f_student_q): echo h("Student: $f_student_q"); echo " &nbsp;"; endif; ?>
             <?php if ($f_dept):      $dn = array_column($depts, 'name', 'id')[$f_dept] ?? ''; echo h("Dept: $dn"); echo " &nbsp;"; endif; ?>
             <?php if ($f_program):   echo h("Program: $f_program"); echo " &nbsp;"; endif; ?>
             <?php if ($f_batch):     echo h("Batch: $f_batch"); echo " &nbsp;"; endif; ?>
