@@ -159,6 +159,8 @@ require_once __DIR__ . '/../includes/header.php';
                         <th>Name</th>
                         <th>Department</th>
                         <th>Designation</th>
+                        <th>Gender</th>
+                        <th>Signature</th>
                         <th>Weekend</th>
                         <th>Contact</th>
                         <th>Active</th>
@@ -167,7 +169,7 @@ require_once __DIR__ . '/../includes/header.php';
                 </thead>
                 <tbody>
                 <?php if (empty($rows)): ?>
-                    <tr><td colspan="8" class="text-center text-muted py-4">No faculty found.</td></tr>
+                    <tr><td colspan="10" class="text-center text-muted py-4">No faculty found.</td></tr>
                 <?php else: ?>
                     <?php foreach ($rows as $i => $f): ?>
                     <?php
@@ -182,6 +184,23 @@ require_once __DIR__ . '/../includes/header.php';
                         <td class="fw-medium"><?= h($f['name']) ?></td>
                         <td><span class="badge bg-primary bg-opacity-10 text-primary"><?= h($f['dept_name']) ?></span></td>
                         <td><?= $f['designation'] ? h($f['designation']) : '<span class="text-muted">—</span>' ?></td>
+                        <td>
+                            <?php if (!empty($f['gender'])): ?>
+                            <span class="badge" style="background:<?= $f['gender'] === 'Female' ? '#e83e8c' : '#0dcaf0' ?>;color:#fff;">
+                                <?= h($f['gender']) ?>
+                            </span>
+                            <?php else: ?>
+                            <span class="text-muted">—</span>
+                            <?php endif; ?>
+                        </td>
+                        <td>
+                            <?php if (!empty($f['signature'])): ?>
+                            <img src="<?= UPLOAD_URL ?>/exam-invigilation/signatures/<?= h($f['signature']) ?>"
+                                 alt="Signature" style="max-height:36px;max-width:90px;border:1px solid #dee2e6;border-radius:4px;padding:2px;">
+                            <?php else: ?>
+                            <span class="text-muted">—</span>
+                            <?php endif; ?>
+                        </td>
                         <td>
                             <?php if (!empty($weekend_days)): ?>
                                 <?php foreach ($weekend_days as $d): ?>

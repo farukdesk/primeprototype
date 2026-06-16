@@ -160,6 +160,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
         $partial_count  = 0;
         $failed_count   = 0;
 
+        // Track how many times each faculty has been assigned in this run (for workload balancing)
+        $workload = [];
+        foreach ($all_faculty as $f) {
+            $workload[(int)$f['id']] = 0;
+        }
+
+        // Helper: sort a pool of faculty by workload (fewest assignments first), shuffle ties
+        $sort_by_workload = static function (array $pool) use (&$workload): array {
+            usort($pool, static function ($a, $b) use ($workload) {
+                $wa = $workload[(int)$a['id']] ?? 0;
+                $wb = $workload[(int)$b['id']] ?? 0;
+                if ($wa !== $wb) return $wa <=> $wb;
+                return random_int(0, 1) ? -1 : 1; // shuffle within same workload tier
+            });
+            return $pool;
+        };
+
         foreach ($slots as $slot) {
             $slot_date       = $slot['slot_date'];
             $time_slot       = $slot['time_slot'];
@@ -183,37 +200,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
             foreach ($eligible as $f) {
                 $by_dept[(int)$f['dept_id']][] = $f;
             }
+            // Sort each department pool by workload
+            foreach ($by_dept as $did => $pool) {
+                $by_dept[$did] = $sort_by_workload($pool);
+            }
 
             $f1 = null;
             $f2 = null;
 
             if ($slot_pref_dept > 0 && isset($by_dept[$slot_pref_dept])) {
-                // Preferred dept set on the slot: f1 from that dept, f2 from any other dept
+                // Preferred dept set on the slot: f1 from that dept (least-loaded), f2 from any other dept
                 $f1 = $by_dept[$slot_pref_dept][0];
+                // Pick f2 from the other dept with the globally least-loaded available person
+                $other_eligible = [];
                 foreach ($by_dept as $did => $pool) {
                     if ($did !== $slot_pref_dept) {
-                        $f2 = $pool[0];
-                        break;
+                        $other_eligible[] = $pool[0];
                     }
                 }
-                // If no other dept available, fall back to same dept (second person)
+                if (!empty($other_eligible)) {
+                    $other_eligible = $sort_by_workload($other_eligible);
+                    $f2 = $other_eligible[0];
+                }
+                // If no other dept available, fall back to same dept (second least-loaded person)
                 if ($f2 === null && isset($by_dept[$slot_pref_dept][1])) {
                     $f2 = $by_dept[$slot_pref_dept][1];
                 }
             } else {
-                $dept_ids = array_keys($by_dept);
-
-                if (count($dept_ids) >= 2) {
-                    // Pick first faculty from dept_ids[0], second from dept_ids[1]
-                    $f1 = $by_dept[$dept_ids[0]][0];
-                    $f2 = $by_dept[$dept_ids[1]][0];
-                } elseif (count($dept_ids) === 1) {
-                    // Only one department – pick up to 2 from it
-                    $pool = $by_dept[$dept_ids[0]];
-                    $f1   = $pool[0] ?? null;
-                    $f2   = $pool[1] ?? null;
+                // No preferred dept: pick two least-loaded faculty from different depts if possible
+                // Build a single sorted list of all eligible, then pick two from different depts
+                $all_eligible_sorted = $sort_by_workload($eligible);
+                foreach ($all_eligible_sorted as $candidate) {
+                    if ($f1 === null) {
+                        $f1 = $candidate;
+                    } elseif ((int)$candidate['dept_id'] !== (int)$f1['dept_id']) {
+                        $f2 = $candidate;
+                        break;
+                    }
                 }
-                // else: no eligible faculty → both remain null
+                // If we couldn't find two from different depts, take same dept
+                if ($f1 !== null && $f2 === null) {
+                    foreach ($all_eligible_sorted as $candidate) {
+                        if ((int)$candidate['id'] !== (int)$f1['id']) {
+                            $f2 = $candidate;
+                            break;
+                        }
+                    }
+                }
             }
 
             if ($f1 === null && $f2 === null) {
@@ -231,8 +264,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
             ]);
 
             // Mark these faculty as busy for subsequent slots in the same run
-            if ($f1) $busy_map[$key][(int)$f1['id']] = true;
-            if ($f2) $busy_map[$key][(int)$f2['id']] = true;
+            if ($f1) {
+                $busy_map[$key][(int)$f1['id']] = true;
+                $workload[(int)$f1['id']] = ($workload[(int)$f1['id']] ?? 0) + 1;
+            }
+            if ($f2) {
+                $busy_map[$key][(int)$f2['id']] = true;
+                $workload[(int)$f2['id']] = ($workload[(int)$f2['id']] ?? 0) + 1;
+            }
 
             if ($f1 && $f2) {
                 $assigned_count++;

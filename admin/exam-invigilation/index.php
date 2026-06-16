@@ -54,6 +54,18 @@ $st = db()->prepare(
 $st->execute($params);
 $rows = $st->fetchAll();
 
+// ── Faculty availability stats ────────────────────────────────────────────────
+$total_active_faculty = (int)db()->query('SELECT COUNT(*) FROM ei_faculty WHERE is_active = 1')->fetchColumn();
+// Faculty already assigned in at least one slot across all active exams
+$assigned_faculty_count = (int)db()->query(
+    'SELECT COUNT(DISTINCT fid) FROM (
+        SELECT faculty1_id AS fid FROM ei_slots s JOIN ei_exams e ON e.id = s.exam_id WHERE e.is_active = 1 AND s.faculty1_id IS NOT NULL
+        UNION
+        SELECT faculty2_id FROM ei_slots s JOIN ei_exams e ON e.id = s.exam_id WHERE e.is_active = 1 AND s.faculty2_id IS NOT NULL
+    ) t'
+)->fetchColumn();
+$available_backup_faculty = $total_active_faculty - $assigned_faculty_count;
+
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
@@ -77,6 +89,33 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <?php flash_show(); ?>
+
+<!-- Faculty Availability / Backup Panel -->
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card text-center py-3" style="border-left:4px solid #27ae60;">
+            <div style="font-size:1.8rem;font-weight:700;color:#27ae60;"><?= $total_active_faculty ?></div>
+            <div class="text-muted" style="font-size:.8rem;">Total Active Faculty</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card text-center py-3" style="border-left:4px solid #f39c12;">
+            <div style="font-size:1.8rem;font-weight:700;color:#f39c12;"><?= $assigned_faculty_count ?></div>
+            <div class="text-muted" style="font-size:.8rem;">Already Assigned (Active Exams)</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card text-center py-3" style="border-left:4px solid #4f8ef7;">
+            <div style="font-size:1.8rem;font-weight:700;color:#4f8ef7;"><?= max(0, $available_backup_faculty) ?></div>
+            <div class="text-muted" style="font-size:.8rem;">Available for Backup / Extra Slots</div>
+        </div>
+    </div>
+</div>
+<div class="alert alert-info py-2 px-3 mb-3 d-flex align-items-center gap-2" style="font-size:.85rem;">
+    <i class="fas fa-info-circle"></i>
+    <span><strong><?= max(0, $available_backup_faculty) ?> faculty</strong> have not yet been assigned any invigilator duty in active exams and are available as backup if someone is absent or an extra slot is needed.</span>
+    <a href="<?= APP_URL ?>/exam-invigilation/faculty.php" class="ms-auto btn btn-sm btn-outline-info" style="border-radius:8px;white-space:nowrap;">View Faculty Pool</a>
+</div>
 
 <!-- Search -->
 <div class="card mb-3">
