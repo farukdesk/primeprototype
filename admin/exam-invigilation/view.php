@@ -124,9 +124,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
         $failed_count   = 0;
 
         foreach ($slots as $slot) {
-            $slot_date  = $slot['slot_date'];
-            $time_slot  = $slot['time_slot'];
-            $key        = $slot_date . '|' . $time_slot;
+            $slot_date       = $slot['slot_date'];
+            $time_slot       = $slot['time_slot'];
+            $key             = $slot_date . '|' . $time_slot;
+            $slot_pref_dept  = isset($slot['dept_id']) ? (int)$slot['dept_id'] : 0;
 
             $day_of_week  = (int)date('w', strtotime($slot_date));
 
@@ -149,19 +150,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
             $f1 = null;
             $f2 = null;
 
-            $dept_ids = array_keys($by_dept);
+            if ($slot_pref_dept > 0 && isset($by_dept[$slot_pref_dept])) {
+                // Preferred dept set on the slot: f1 from that dept, f2 from any other dept
+                $f1 = $by_dept[$slot_pref_dept][0];
+                foreach ($by_dept as $did => $pool) {
+                    if ($did !== $slot_pref_dept) {
+                        $f2 = $pool[0];
+                        break;
+                    }
+                }
+                // If no other dept available, fall back to same dept (second person)
+                if ($f2 === null && isset($by_dept[$slot_pref_dept][1])) {
+                    $f2 = $by_dept[$slot_pref_dept][1];
+                }
+            } else {
+                $dept_ids = array_keys($by_dept);
 
-            if (count($dept_ids) >= 2) {
-                // Pick first faculty from dept_ids[0], second from dept_ids[1]
-                $f1 = $by_dept[$dept_ids[0]][0];
-                $f2 = $by_dept[$dept_ids[1]][0];
-            } elseif (count($dept_ids) === 1) {
-                // Only one department – pick up to 2 from it
-                $pool = $by_dept[$dept_ids[0]];
-                $f1   = $pool[0] ?? null;
-                $f2   = $pool[1] ?? null;
+                if (count($dept_ids) >= 2) {
+                    // Pick first faculty from dept_ids[0], second from dept_ids[1]
+                    $f1 = $by_dept[$dept_ids[0]][0];
+                    $f2 = $by_dept[$dept_ids[1]][0];
+                } elseif (count($dept_ids) === 1) {
+                    // Only one department – pick up to 2 from it
+                    $pool = $by_dept[$dept_ids[0]];
+                    $f1   = $pool[0] ?? null;
+                    $f2   = $pool[1] ?? null;
+                }
+                // else: no eligible faculty → both remain null
             }
-            // else: no eligible faculty → both remain null
 
             if ($f1 === null && $f2 === null) {
                 $failed_count++;
@@ -203,12 +219,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
 $slots_st = db()->prepare(
     "SELECT s.*,
             f1.name AS f1_name, f1.designation AS f1_desig, d1.name AS f1_dept,
-            f2.name AS f2_name, f2.designation AS f2_desig, d2.name AS f2_dept
+            f2.name AS f2_name, f2.designation AS f2_desig, d2.name AS f2_dept,
+            dp.name AS pref_dept_name
      FROM ei_slots s
      LEFT JOIN ei_faculty f1 ON f1.id = s.faculty1_id
      LEFT JOIN dept_departments d1 ON d1.id = f1.dept_id
      LEFT JOIN ei_faculty f2 ON f2.id = s.faculty2_id
      LEFT JOIN dept_departments d2 ON d2.id = f2.dept_id
+     LEFT JOIN dept_departments dp ON dp.id = s.dept_id
      WHERE s.exam_id = ?
      ORDER BY s.slot_date ASC, s.time_slot ASC, s.room_number ASC"
 );
@@ -367,7 +385,14 @@ require_once __DIR__ . '/../includes/header.php';
                 $partly_assigned = ($s['faculty1_id'] || $s['faculty2_id']) && !$fully_assigned;
                 ?>
                 <tr class="<?= $fully_assigned ? '' : ($partly_assigned ? 'table-warning' : 'table-danger bg-opacity-10') ?>">
-                    <td class="px-4 fw-medium"><?= h($s['room_number']) ?></td>
+                    <td class="px-4 fw-medium">
+                        <?= h($s['room_number']) ?>
+                        <?php if (!empty($s['pref_dept_name'])): ?>
+                        <div><small class="text-muted" title="Preferred dept for Invigilator 1">
+                            <i class="fas fa-tag me-1"></i><?= h($s['pref_dept_name']) ?>
+                        </small></div>
+                        <?php endif; ?>
+                    </td>
                     <td><?= h($s['time_slot']) ?></td>
                     <td>
                         <?php if ($s['f1_name']): ?>

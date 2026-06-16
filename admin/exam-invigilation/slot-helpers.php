@@ -1,5 +1,38 @@
 <?php
 
+function ei_get_departments(): array
+{
+    return db()->query(
+        "SELECT d.id, d.name
+         FROM dept_departments d
+         WHERE EXISTS (
+             SELECT 1 FROM ei_faculty f WHERE f.dept_id = d.id AND f.is_active = 1
+         )
+         ORDER BY d.name ASC"
+    )->fetchAll();
+}
+
+/**
+ * Check whether a faculty member is already assigned to another slot at the
+ * same date + time_slot, optionally excluding $exclude_slot_id (for edits).
+ */
+function ei_faculty_has_overlap(int $faculty_id, string $slot_date, string $time_slot, ?int $exclude_slot_id = null): bool
+{
+    if ($faculty_id <= 0) return false;
+    $sql = 'SELECT id FROM ei_slots
+            WHERE slot_date = ? AND time_slot = ?
+              AND (faculty1_id = ? OR faculty2_id = ?)';
+    $params = [$slot_date, $time_slot, $faculty_id, $faculty_id];
+    if ($exclude_slot_id !== null) {
+        $sql .= ' AND id != ?';
+        $params[] = $exclude_slot_id;
+    }
+    $sql .= ' LIMIT 1';
+    $st = db()->prepare($sql);
+    $st->execute($params);
+    return (bool)$st->fetchColumn();
+}
+
 function ei_get_faculty_list(): array
 {
     return db()->query(
