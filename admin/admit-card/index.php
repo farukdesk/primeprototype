@@ -23,19 +23,6 @@ if ($f_search !== '') {
     $params = array_merge($params, [$like, $like, $like, $like]);
 }
 
-$total = (int)$db->prepare(
-    "SELECT COUNT(*) FROM ac_admit_cards ac
-     JOIN dept_departments d ON d.id = ac.dept_id
-     JOIN dept_academic_programs p ON p.id = ac.program_id
-     WHERE $where"
-)->execute($params) ? $db->query(
-    "SELECT COUNT(*) FROM ac_admit_cards ac
-     JOIN dept_departments d ON d.id = ac.dept_id
-     JOIN dept_academic_programs p ON p.id = ac.program_id
-     WHERE $where" . (empty($params) ? '' : '')
-)->fetchColumn() : 0;
-
-// Re-run properly
 $cnt_stmt = $db->prepare(
     "SELECT COUNT(*) FROM ac_admit_cards ac
      JOIN dept_departments d ON d.id = ac.dept_id

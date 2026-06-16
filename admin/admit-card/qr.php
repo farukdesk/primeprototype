@@ -4,6 +4,7 @@
  * Outputs a PNG QR code for the given URL parameter.
  * Used for on-screen display in the student portal.
  */
+require_once dirname(__DIR__) . '/includes/config.php';
 require_once __DIR__ . '/phpqrcode.php';
 
 $url = trim($_GET['url'] ?? '');
@@ -13,9 +14,9 @@ if ($url === '' || !filter_var($url, FILTER_VALIDATE_URL)) {
 }
 
 // Allow only our own domain to prevent abuse
-$parsed = parse_url($url);
-$allowed_host = parse_url(defined('SITE_URL') ? SITE_URL : '', PHP_URL_HOST);
-if ($allowed_host && ($parsed['host'] ?? '') !== $allowed_host) {
+$parsed       = parse_url($url);
+$allowed_host = defined('SITE_URL') ? parse_url(SITE_URL, PHP_URL_HOST) : '';
+if ($allowed_host !== '' && ($parsed['host'] ?? '') !== $allowed_host) {
     http_response_code(403);
     exit;
 }
