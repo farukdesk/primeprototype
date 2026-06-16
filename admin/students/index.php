@@ -154,6 +154,12 @@ require_once __DIR__ . '/../includes/header.php';
         <a href="<?= APP_URL ?>/students/csv-import.php" class="btn btn-outline-success" style="border-radius:10px;font-size:.875rem;">
             <i class="fas fa-file-csv me-1"></i> Bulk CSV Import
         </a>
+        <a href="<?= APP_URL ?>/students/portal-bulk-create.php<?= http_build_query(array_filter($_GET, fn($v) => $v !== '')) ? '?' . h(http_build_query(array_filter($_GET, fn($v) => $v !== ''))) : '' ?>" class="btn btn-outline-secondary" style="border-radius:10px;font-size:.875rem;">
+            <i class="fas fa-user-plus me-1"></i> Bulk Portal Accounts
+        </a>
+        <a href="<?= APP_URL ?>/students/portal-login-report.php" class="btn btn-outline-dark" style="border-radius:10px;font-size:.875rem;">
+            <i class="fas fa-sign-in-alt me-1"></i> Login Report
+        </a>
         <?php if (sm_can_delete()): ?>
         <a href="<?= APP_URL ?>/students/merge-duplicates.php" class="btn btn-outline-danger" style="border-radius:10px;font-size:.875rem;">
             <i class="fas fa-compress-arrows-alt me-1"></i> Merge Duplicates

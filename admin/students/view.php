@@ -120,7 +120,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $username = $base_username . '_' . $id;
         }
 
-        $plain_password = sp_generate_password(12);
+        $plain_password = '12345678';
         $hash           = password_hash($plain_password, PASSWORD_BCRYPT, ['cost' => BCRYPT_COST]);
 
         $db = db();
@@ -174,7 +174,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // Send welcome SMS
         if (sp_get_setting('sms_enabled', '0') === '1' && !empty($student['phone'])) {
-            $sms_sent = (int)sp_send_welcome_sms($student);
+            $sms_sent = (int)sp_send_welcome_sms($student, $username, $plain_password);
         }
 
         // Record in portal log
@@ -231,7 +231,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $sms_sent = 0;
         if (sp_get_setting('sms_enabled', '0') === '1' && !empty($student['phone'])) {
-            $sms_sent = (int)sp_send_welcome_sms($student);
+            $sms_sent = (int)sp_send_welcome_sms($student, $portal_user['username'], $plain_password);
         }
 
         db()->prepare(
