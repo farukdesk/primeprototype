@@ -325,6 +325,8 @@ if (is_portal_student()) {
     $is_student_portal_active = strpos($current_path, '/accounting/student-portal') !== false;
     $is_exam_invigilation_active = strpos($current_path, '/exam-invigilation/') !== false;
     $is_portal_global_notice_active = strpos($current_path, '/students/portal-global-notice') !== false;
+    $is_admit_card_active = strpos($current_path, '/admit-card/') !== false
+                         || strpos($current_path, '/students/my-admit-card') !== false;
     ?>
 
     <!-- ── Student Portal: show ONLY My Profile and My Finances for student users ── -->
@@ -346,6 +348,12 @@ if (is_portal_student()) {
             <a href="<?= APP_URL ?>/students/my-notices.php"
                class="<?= strpos($current_path, '/students/my-notices') !== false ? 'active' : '' ?>">
                 <i class="fas fa-bell"></i> My Notices
+            </a>
+        </li>
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/students/my-admit-card.php"
+               class="<?= strpos($current_path, '/students/my-admit-card') !== false ? 'active' : '' ?>">
+                <i class="fas fa-id-card"></i> My Admit Card
             </a>
         </li>
     </ul>
@@ -1006,6 +1014,35 @@ if (is_portal_student()) {
                     <i class="fas fa-users"></i> Faculty Pool
                 </a>
             </li>
+        </ul>
+    </div>
+    <?php endif; ?>
+
+    <!-- ── Admit Card ── -->
+    <?php if (is_super_admin() || can_access('admit-card')): ?>
+    <button class="nav-group-toggle <?= $is_admit_card_active ? '' : 'collapsed' ?>"
+            data-bs-toggle="collapse" data-bs-target="#grp-admit-card"
+            aria-expanded="<?= $is_admit_card_active ? 'true' : 'false' ?>">
+        <i class="fas fa-id-card grp-icon" style="color:#06b6d4"></i>
+        Admit Card
+        <i class="fas fa-chevron-down toggle-icon"></i>
+    </button>
+    <div class="collapse <?= $is_admit_card_active ? 'show' : '' ?>" id="grp-admit-card">
+        <ul class="nav flex-column grp-items">
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/admit-card/index.php"
+                   class="<?= ($is_admit_card_active && strpos($current_path, '/create') === false) ? 'active' : '' ?>">
+                    <i class="fas fa-list"></i> All Admit Cards
+                </a>
+            </li>
+            <?php if (is_super_admin() || can_access('admit-card', 'can_create')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/admit-card/create.php"
+                   class="<?= strpos($current_path, '/admit-card/create') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-plus"></i> New Admit Card
+                </a>
+            </li>
+            <?php endif; ?>
         </ul>
     </div>
     <?php endif; ?>
