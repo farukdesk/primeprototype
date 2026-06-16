@@ -36,15 +36,27 @@ function ei_report_filename_part(string $value): string
         return '';
     }
 
-    $value = preg_replace('/[^\pL\pN\s-]+/u', ' ', $value) ?? '';
-    $value = preg_replace('/\s+/u', ' ', trim($value)) ?? '';
+    $value = preg_replace('/[^\pL\pN\s-]+/u', ' ', $value);
+    if ($value === null) {
+        return '';
+    }
+
+    $value = preg_replace('/\s+/u', ' ', trim($value));
+    if ($value === null) {
+        return '';
+    }
 
     return $value;
 }
 
 function ei_report_designation_short(string $designation): string
 {
-    $normalized = strtolower(trim(preg_replace('/[^a-z0-9]+/i', ' ', $designation) ?? ''));
+    $normalized = preg_replace('/[^a-z0-9]+/i', ' ', $designation);
+    if ($normalized === null) {
+        return '';
+    }
+
+    $normalized = strtolower(trim($normalized));
     if ($normalized === '') {
         return '';
     }
@@ -621,7 +633,7 @@ if ($report_export === 'pdf') {
         ei_report_filename_part($report_filename_faculty),
         ei_report_filename_part($report_filename_dept_code),
         ei_report_filename_part(ei_report_designation_short($report_filename_designation)),
-    ], static fn(string $value): bool => $value !== '');
+    ], static fn($value): bool => $value !== '');
 
     if (!empty($filename_parts)) {
         $filename_suffix = implode('_', $filename_parts);
