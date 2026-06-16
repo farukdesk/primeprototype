@@ -4,6 +4,7 @@ require_once __DIR__ . '/slot-helpers.php';
 require_access('exam-invigilation');
 
 $page_title = 'Exam Invigilation';
+const EI_REPORT_MAX_DESIGNATION_WORD_LENGTH = 12;
 
 function ei_index_time_order_expr(string $column = 'time_slot'): string
 {
@@ -81,8 +82,7 @@ function ei_report_designation_short(string $designation): string
 
     $parts = preg_split('/\s+/', $normalized) ?: [];
     if (count($parts) === 1) {
-        $max_single_word_length = 12;
-        return ucfirst(substr($parts[0], 0, $max_single_word_length));
+        return ucfirst(substr($parts[0], 0, EI_REPORT_MAX_DESIGNATION_WORD_LENGTH));
     }
 
     $short = '';
