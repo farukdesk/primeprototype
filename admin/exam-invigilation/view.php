@@ -172,7 +172,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
                 $wa = $workload[(int)$a['id']] ?? 0;
                 $wb = $workload[(int)$b['id']] ?? 0;
                 if ($wa !== $wb) return $wa <=> $wb;
-                return random_int(-1, 1); // shuffle within same workload tier
+                return random_int(0, 1) ? -1 : 1; // shuffle within same workload tier
             });
             return $pool;
         };

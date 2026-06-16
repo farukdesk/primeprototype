@@ -45,9 +45,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = 'Signature must be a JPG, PNG, GIF, or WebP image.';
         } else {
             $sig_dir = UPLOAD_DIR . '/exam-invigilation/signatures';
-            if (!is_dir($sig_dir)) mkdir($sig_dir, 0755, true);
             $sig_name = bin2hex(random_bytes(12)) . '.' . $ext;
-            if (!move_uploaded_file($_FILES['signature']['tmp_name'], $sig_dir . '/' . $sig_name)) {
+            if (!is_dir($sig_dir) && !mkdir($sig_dir, 0755, true)) {
+                $errors[] = 'Failed to create signature upload directory.';
+            } elseif (!move_uploaded_file($_FILES['signature']['tmp_name'], $sig_dir . '/' . $sig_name)) {
                 $errors[] = 'Failed to upload signature image.';
             } else {
                 $signature = $sig_name;

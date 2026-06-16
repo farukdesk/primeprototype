@@ -186,8 +186,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <td><?= $f['designation'] ? h($f['designation']) : '<span class="text-muted">—</span>' ?></td>
                         <td>
                             <?php if (!empty($f['gender'])): ?>
-                            <span class="badge <?= $f['gender'] === 'Female' ? 'bg-pink text-white' : 'bg-info bg-opacity-75 text-white' ?>"
-                                  style="<?= $f['gender'] === 'Female' ? 'background:#e83e8c!important;' : '' ?>">
+                            <span class="badge" style="background:<?= $f['gender'] === 'Female' ? '#e83e8c' : '#0dcaf0' ?>;color:#fff;">
                                 <?= h($f['gender']) ?>
                             </span>
                             <?php else: ?>
