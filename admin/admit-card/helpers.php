@@ -128,7 +128,7 @@ function ac_check_access(int $admit_card_id, int $student_id): array
 
     $due = 0.0;
     if ($pkg_row) {
-        $due = acc_total_outstanding((int)$pkg_row['id']);
+        $due = acc_outstanding_through_current_month((int)$pkg_row['id']);
     }
 
     if ($due > AC_DUE_THRESHOLD) {
