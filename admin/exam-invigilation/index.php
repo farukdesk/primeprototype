@@ -23,6 +23,12 @@ function ei_report_escape(string $value): string
     return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
 }
 
+function ei_report_format_date(string $value, string $format = 'd M Y'): string
+{
+    $date = \DateTimeImmutable::createFromFormat('!Y-m-d', $value);
+    return $date ? $date->format($format) : $value;
+}
+
 // ── Handle inline actions ────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
     csrf_check();
@@ -404,11 +410,11 @@ if ($report_faculty_id > 0 && isset($report_faculty_map[$report_faculty_id])) {
     $report_filter_parts[] = 'Faculty: ' . $report_faculty_map[$report_faculty_id]['name'];
 }
 if ($report_date_from !== '' && $report_date_to !== '') {
-    $report_filter_parts[] = 'Duty Dates: ' . date('d M Y', strtotime($report_date_from)) . ' to ' . date('d M Y', strtotime($report_date_to));
+    $report_filter_parts[] = 'Duty Dates: ' . ei_report_format_date($report_date_from) . ' to ' . ei_report_format_date($report_date_to);
 } elseif ($report_date_from !== '') {
-    $report_filter_parts[] = 'Duty Dates: From ' . date('d M Y', strtotime($report_date_from));
+    $report_filter_parts[] = 'Duty Dates: From ' . ei_report_format_date($report_date_from);
 } elseif ($report_date_to !== '') {
-    $report_filter_parts[] = 'Duty Dates: Up to ' . date('d M Y', strtotime($report_date_to));
+    $report_filter_parts[] = 'Duty Dates: Up to ' . ei_report_format_date($report_date_to);
 }
 $report_filter_summary = implode(' | ', $report_filter_parts);
 $report_date_summary_label = 'Duty Date' . ($report_date_count === 1 ? '' : 's');
@@ -450,7 +456,7 @@ if ($report_export === 'pdf') {
                 . '<td style="padding:8px 10px;border:1px solid #d7deea;color:#334155;">' . ei_report_escape((string)($report_row['designation'] ?: '—')) . '</td>'
                 . '<td style="padding:8px 10px;border:1px solid #d7deea;color:#1d4ed8;">' . ei_report_escape((string)$report_row['dept_name']) . '</td>'
                 . '<td style="padding:8px 10px;border:1px solid #d7deea;">'
-                    . '<div style="font-weight:700;color:#0f172a;">' . date('d F Y', strtotime((string)$report_row['slot_date'])) . '</div>'
+                    . '<div style="font-weight:700;color:#0f172a;">' . ei_report_escape(ei_report_format_date((string)$report_row['slot_date'], 'd F Y')) . '</div>'
                     . $exam_note
                 . '</td>'
                 . '<td style="padding:8px 10px;border:1px solid #d7deea;color:#0f172a;">' . ei_report_escape((string)$report_row['time_slot']) . '</td>'
@@ -684,7 +690,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <td><?= $report_row['designation'] ? h($report_row['designation']) : '<span class="text-muted">—</span>' ?></td>
                         <td><span class="badge bg-primary bg-opacity-10 text-primary"><?= h($report_row['dept_name']) ?></span></td>
                         <td>
-                            <div class="fw-semibold"><?= date('d F Y', strtotime($report_row['slot_date'])) ?></div>
+                            <div class="fw-semibold"><?= h(ei_report_format_date((string)$report_row['slot_date'], 'd F Y')) ?></div>
                             <?php if ($report_exam_id === 0): ?>
                             <small class="text-muted"><?= h($report_row['exam_name']) ?> (<?= h($report_row['exam_year']) ?>)</small>
                             <?php endif; ?>
