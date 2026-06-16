@@ -48,7 +48,8 @@ if ($f_invigilator > 0) $filter_query['invigilator'] = $f_invigilator;
 
 $view_url  = APP_URL . '/exam-invigilation/view.php?' . http_build_query(array_merge(['id' => $id], $filter_query));
 $print_url = APP_URL . '/exam-invigilation/view.php?' . http_build_query(array_merge(['id' => $id], $filter_query, ['print' => 1]));
-$auto_assign_max_slots = ei_get_auto_assign_max_slots();
+$auto_assign_max_slots         = ei_get_auto_assign_max_slots();
+$auto_assign_max_slots_per_day = ei_get_auto_assign_max_slots_per_day();
 
 // ── Handle POST actions ───────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
@@ -163,6 +164,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
             $workload[(int)$f['id']] = 0;
         }
 
+        // Track per-day assignments: [faculty_id][date] => count
+        $daily_workload = [];
+
         $assignment_params = [];
         $assignment_scope_sql = '';
         if ($scope === 'all') {
@@ -189,6 +193,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
         $assignment_count_st->execute($assignment_params);
         foreach ($assignment_count_st->fetchAll() as $row) {
             $workload[(int)$row['faculty_id']] = (int)$row['slot_count'];
+        }
+
+        // Build daily workload map from existing assignments
+        $daily_count_scope_sql = $assignment_scope_sql;
+        $daily_count_st = db()->prepare(
+            "SELECT faculty_id, slot_date, COUNT(*) AS c
+             FROM (
+                 SELECT s.faculty1_id AS faculty_id, s.slot_date
+                 FROM ei_slots s
+                 JOIN ei_exams e ON e.id = s.exam_id
+                 WHERE e.is_active = 1
+                   AND s.faculty1_id IS NOT NULL{$daily_count_scope_sql}
+                 UNION ALL
+                 SELECT s.faculty2_id, s.slot_date
+                 FROM ei_slots s
+                 JOIN ei_exams e ON e.id = s.exam_id
+                 WHERE e.is_active = 1
+                   AND s.faculty2_id IS NOT NULL{$daily_count_scope_sql}
+             ) t
+             GROUP BY faculty_id, slot_date"
+        );
+        $daily_count_st->execute($assignment_params);
+        foreach ($daily_count_st->fetchAll() as $row) {
+            $daily_workload[(int)$row['faculty_id']][(string)$row['slot_date']] = (int)$row['c'];
         }
 
         // Helper: sort a pool of faculty by workload (fewest assignments first), shuffle ties
@@ -219,8 +247,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
                 if (in_array($day_of_week, $faculty_weekend_days, true)) continue;
                 // Skip if already busy in this date+time_slot
                 if (isset($busy_map[$key][(int)$f['id']])) continue;
-                // Skip if the faculty has already reached the configured limit
+                // Skip if the faculty has already reached the configured total limit
                 if (($workload[(int)$f['id']] ?? 0) >= $auto_assign_max_slots) continue;
+                // Skip if the faculty has reached the per-day limit for this slot's date
+                if (($daily_workload[(int)$f['id']][$slot_date] ?? 0) >= $auto_assign_max_slots_per_day) continue;
                 // Female faculty are not assigned to slots starting at or after 6 PM
                 if ($slot_starts_after_6pm && !empty($f['gender']) && $f['gender'] === 'Female') continue;
                 $eligible[] = $f;
@@ -298,10 +328,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
             if ($f1) {
                 $busy_map[$key][(int)$f1['id']] = true;
                 $workload[(int)$f1['id']] = ($workload[(int)$f1['id']] ?? 0) + 1;
+                $daily_workload[(int)$f1['id']][$slot_date] = ($daily_workload[(int)$f1['id']][$slot_date] ?? 0) + 1;
             }
             if ($f2) {
                 $busy_map[$key][(int)$f2['id']] = true;
                 $workload[(int)$f2['id']] = ($workload[(int)$f2['id']] ?? 0) + 1;
+                $daily_workload[(int)$f2['id']][$slot_date] = ($daily_workload[(int)$f2['id']][$slot_date] ?? 0) + 1;
             }
 
             if ($f1 && $f2) {
@@ -313,7 +345,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
 
         $msg = "Auto-assign complete: {$assigned_count} slot(s) fully assigned";
         if ($partial_count > 0) $msg .= ", {$partial_count} partially assigned";
-        if ($failed_count  > 0) $msg .= ", {$failed_count} could not be assigned (insufficient eligible faculty within the current availability rules and {$auto_assign_max_slots}-slot cap)";
+        if ($failed_count  > 0) $msg .= ", {$failed_count} could not be assigned (insufficient eligible faculty within the current availability rules, {$auto_assign_max_slots}-slot total cap, and {$auto_assign_max_slots_per_day}-slot daily cap)";
         $msg .= '.';
         flash_set($failed_count > 0 ? 'warning' : 'success', $msg);
         redirect($view_url);

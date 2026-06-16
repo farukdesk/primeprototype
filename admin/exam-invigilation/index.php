@@ -15,10 +15,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
         flash_set('success', 'Status updated.');
     } elseif ($_POST['_action'] === 'save_settings') {
         require_access('exam-invigilation', 'can_edit');
-        $auto_assign_max_slots = max(1, min(100, (int)($_POST['auto_assign_max_slots'] ?? 12)));
-        ei_save_setting('auto_assign_max_slots', (string)$auto_assign_max_slots);
-        flash_set('success', 'Auto-assign slot cap updated.');
-    } elseif ($_POST['_action'] === 'delete') {
+        $auto_assign_max_slots         = max(1, min(100, (int)($_POST['auto_assign_max_slots'] ?? 12)));
+        $auto_assign_max_slots_per_day = max(1, min(50,  (int)($_POST['auto_assign_max_slots_per_day'] ?? 3)));
+        ei_save_setting('auto_assign_max_slots',         (string)$auto_assign_max_slots);
+        ei_save_setting('auto_assign_max_slots_per_day', (string)$auto_assign_max_slots_per_day);
+        flash_set('success', 'Auto-assign slot caps updated.');    } elseif ($_POST['_action'] === 'delete') {
         require_access('exam-invigilation', 'can_delete');
         db()->prepare('DELETE FROM ei_exams WHERE id = ?')->execute([$eid]);
         flash_set('success', 'Exam deleted.');
@@ -71,7 +72,8 @@ $assigned_faculty_count = (int)db()->query(
     ) t'
 )->fetchColumn();
 $available_backup_faculty = $total_active_faculty - $assigned_faculty_count;
-$auto_assign_max_slots = ei_get_auto_assign_max_slots();
+$auto_assign_max_slots         = ei_get_auto_assign_max_slots();
+$auto_assign_max_slots_per_day = ei_get_auto_assign_max_slots_per_day();
 
 // Fetch the actual list of available/backup faculty (not yet assigned in any active exam)
 $backup_faculty_rows = db()->query(
@@ -132,6 +134,108 @@ if (!empty($backup_faculty_rows)) {
     }
 }
 
+// ── Vacant Slots Report ───────────────────────────────────────────────────────
+// Slots in active exams that still have an empty invigilator seat, with
+// a list of all faculty eligible to fill them (respects total & daily caps).
+$vacant_slot_report = [];
+{
+    $time_slot_start_sql = "TRIM(SUBSTRING_INDEX(REPLACE(s.time_slot, '-', '–'), '–', 1))";
+    $vsr_time_order = "COALESCE(
+        STR_TO_DATE({$time_slot_start_sql}, '%h:%i %p'),
+        STR_TO_DATE({$time_slot_start_sql}, '%H:%i')
+    )";
+
+    // All slots with at least one empty invigilator seat in active exams
+    $vacant_slots = db()->query(
+        "SELECT s.id, s.slot_date, s.time_slot, s.room_number, s.faculty1_id, s.faculty2_id, e.exam_name, e.id AS exam_id
+         FROM ei_slots s
+         JOIN ei_exams e ON e.id = s.exam_id
+         WHERE e.is_active = 1
+           AND (s.faculty1_id IS NULL OR s.faculty2_id IS NULL)
+         ORDER BY s.slot_date ASC, {$vsr_time_order} ASC, s.time_slot ASC, s.room_number ASC"
+    )->fetchAll();
+
+    if (!empty($vacant_slots)) {
+        // All active faculty
+        $all_fac_rows = db()->query(
+            "SELECT f.id, f.name, f.designation, f.gender, f.weekend_days, f.weekend_available, d.name AS dept_name, f.dept_id
+             FROM ei_faculty f
+             JOIN dept_departments d ON d.id = f.dept_id
+             WHERE f.is_active = 1
+             ORDER BY d.name ASC, f.name ASC"
+        )->fetchAll();
+
+        // busy map: date|time_slot → [faculty_id => true]
+        $vsr_busy = [];
+        foreach (db()->query(
+            "SELECT slot_date, time_slot, faculty1_id, faculty2_id FROM ei_slots
+             WHERE faculty1_id IS NOT NULL OR faculty2_id IS NOT NULL"
+        )->fetchAll() as $r) {
+            $k = $r['slot_date'] . '|' . $r['time_slot'];
+            if ($r['faculty1_id']) $vsr_busy[$k][(int)$r['faculty1_id']] = true;
+            if ($r['faculty2_id']) $vsr_busy[$k][(int)$r['faculty2_id']] = true;
+        }
+
+        // total slot count per faculty across all active exams
+        $vsr_total_count = [];
+        foreach (db()->query(
+            "SELECT faculty_id, COUNT(*) AS c FROM (
+                SELECT faculty1_id AS faculty_id FROM ei_slots s JOIN ei_exams e ON e.id=s.exam_id
+                 WHERE e.is_active=1 AND s.faculty1_id IS NOT NULL
+                UNION ALL
+                SELECT faculty2_id FROM ei_slots s JOIN ei_exams e ON e.id=s.exam_id
+                 WHERE e.is_active=1 AND s.faculty2_id IS NOT NULL
+             ) t GROUP BY faculty_id"
+        )->fetchAll() as $r) {
+            $vsr_total_count[(int)$r['faculty_id']] = (int)$r['c'];
+        }
+
+        // per-day slot count per faculty across all active exams
+        $vsr_day_count = [];
+        foreach (db()->query(
+            "SELECT faculty_id, slot_date, COUNT(*) AS c FROM (
+                SELECT faculty1_id AS faculty_id, s.slot_date FROM ei_slots s JOIN ei_exams e ON e.id=s.exam_id
+                 WHERE e.is_active=1 AND s.faculty1_id IS NOT NULL
+                UNION ALL
+                SELECT faculty2_id, s.slot_date FROM ei_slots s JOIN ei_exams e ON e.id=s.exam_id
+                 WHERE e.is_active=1 AND s.faculty2_id IS NOT NULL
+             ) t GROUP BY faculty_id, slot_date"
+        )->fetchAll() as $r) {
+            $vsr_day_count[(int)$r['faculty_id']][(string)$r['slot_date']] = (int)$r['c'];
+        }
+
+        foreach ($vacant_slots as $vs) {
+            $eligible = [];
+            $already_assigned_ids = array_filter([
+                (int)$vs['faculty1_id'],
+                (int)$vs['faculty2_id'],
+            ]);
+            foreach ($all_fac_rows as $f) {
+                $fid = (int)$f['id'];
+                // Skip if already assigned to this slot
+                if (in_array($fid, $already_assigned_ids, true)) continue;
+                // Weekend check
+                $dow = (int)date('w', strtotime((string)$vs['slot_date']));
+                if (in_array($dow, ei_get_faculty_weekend_days($f), true)) continue;
+                // Overlap check (same date+time_slot)
+                $bk = $vs['slot_date'] . '|' . $vs['time_slot'];
+                if (isset($vsr_busy[$bk][$fid])) continue;
+                // Late-slot female restriction
+                if (ei_slot_starts_after_6pm((string)$vs['time_slot']) && ($f['gender'] ?? '') === 'Female') continue;
+                // Total cap
+                if (($vsr_total_count[$fid] ?? 0) >= $auto_assign_max_slots) continue;
+                // Daily cap
+                if (($vsr_day_count[$fid][$vs['slot_date']] ?? 0) >= $auto_assign_max_slots_per_day) continue;
+                $eligible[] = $f;
+            }
+            $vacant_slot_report[] = [
+                'slot'     => $vs,
+                'teachers' => $eligible,
+            ];
+        }
+    }
+}
+
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
@@ -161,15 +265,25 @@ require_once __DIR__ . '/../includes/header.php';
     <div class="card-body py-3 px-4">
         <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
             <div>
-                <h6 class="mb-1 fw-semibold"><i class="fas fa-sliders-h me-2 text-primary"></i>Auto-Assign Slot Cap</h6>
-                <p class="mb-0 text-muted" style="font-size:.85rem;">Each teacher can receive up to <?= $auto_assign_max_slots ?> auto-assigned slot<?= $auto_assign_max_slots === 1 ? '' : 's' ?>. You can change this anytime.</p>
+                <h6 class="mb-1 fw-semibold"><i class="fas fa-sliders-h me-2 text-primary"></i>Auto-Assign Slot Caps</h6>
+                <p class="mb-0 text-muted" style="font-size:.85rem;">
+                    Each teacher can receive up to <strong><?= $auto_assign_max_slots ?></strong> slots total
+                    and up to <strong><?= $auto_assign_max_slots_per_day ?></strong> slot<?= $auto_assign_max_slots_per_day === 1 ? '' : 's' ?> per day during auto-assign.
+                </p>
             </div>
-            <form method="POST" class="d-flex align-items-center gap-2">
+            <form method="POST" class="d-flex align-items-center gap-3 flex-wrap">
                 <?= csrf_field() ?>
                 <input type="hidden" name="_action" value="save_settings">
-                <label for="autoAssignMaxSlots" class="small text-muted mb-0">Max slots per teacher</label>
-                <input type="number" min="1" max="100" name="auto_assign_max_slots" id="autoAssignMaxSlots"
-                       value="<?= $auto_assign_max_slots ?>" class="form-control form-control-sm" style="width:90px;">
+                <div class="d-flex align-items-center gap-2">
+                    <label for="autoAssignMaxSlots" class="small text-muted mb-0 text-nowrap">Max slots (total)</label>
+                    <input type="number" min="1" max="100" name="auto_assign_max_slots" id="autoAssignMaxSlots"
+                           value="<?= $auto_assign_max_slots ?>" class="form-control form-control-sm" style="width:80px;">
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <label for="autoAssignMaxSlotsPerDay" class="small text-muted mb-0 text-nowrap">Max slots per day</label>
+                    <input type="number" min="1" max="50" name="auto_assign_max_slots_per_day" id="autoAssignMaxSlotsPerDay"
+                           value="<?= $auto_assign_max_slots_per_day ?>" class="form-control form-control-sm" style="width:80px;">
+                </div>
                 <button class="btn btn-sm btn-primary" style="border-radius:8px;">Save</button>
             </form>
         </div>
@@ -200,7 +314,7 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 <div class="alert alert-info py-2 px-3 mb-3 d-flex align-items-center gap-2" style="font-size:.85rem;">
     <i class="fas fa-info-circle"></i>
-    <span><strong><?= max(0, $available_backup_faculty) ?> faculty</strong> have not yet been assigned any invigilator duty in active exams and are available as backup if someone is absent or an extra slot is needed. Auto-assign also respects the current <?= $auto_assign_max_slots ?>-slot cap per teacher.</span>
+    <span><strong><?= max(0, $available_backup_faculty) ?> faculty</strong> have not yet been assigned any invigilator duty in active exams and are available as backup if someone is absent or an extra slot is needed. Auto-assign respects the <?= $auto_assign_max_slots ?>-slot total cap and <?= $auto_assign_max_slots_per_day ?>-slot daily cap per teacher.</span>
     <?php if (!empty($backup_faculty_rows)): ?>
     <button class="ms-auto btn btn-sm btn-outline-info" style="border-radius:8px;white-space:nowrap;"
             type="button" data-bs-toggle="collapse" data-bs-target="#backupFacultyList" aria-expanded="false">
@@ -297,6 +411,71 @@ require_once __DIR__ . '/../includes/header.php';
                 <?php endforeach; ?>
                 </tbody>
             </table>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
+
+<?php if (!empty($vacant_slot_report)): ?>
+<div class="card mb-4">
+    <div class="card-header py-2 px-4 d-flex align-items-center justify-content-between">
+        <h6 class="mb-0 fw-semibold"><i class="fas fa-exclamation-circle me-2 text-warning"></i>Vacant Slots — Available Teachers (incl. if faculty absent)</h6>
+        <button class="btn btn-sm btn-outline-warning" style="border-radius:8px;white-space:nowrap;"
+                type="button" data-bs-toggle="collapse" data-bs-target="#vacantSlotReport" aria-expanded="false">
+            <i class="fas fa-list me-1"></i> <?= count($vacant_slot_report) ?> slot<?= count($vacant_slot_report) === 1 ? '' : 's' ?> with vacancy
+        </button>
+    </div>
+    <div class="collapse" id="vacantSlotReport">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="px-4">Date</th>
+                            <th>Time Slot</th>
+                            <th>Room</th>
+                            <th>Exam</th>
+                            <th>Vacant Seat</th>
+                            <th>Eligible Teachers (within caps)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <?php foreach ($vacant_slot_report as $entry): ?>
+                    <?php $vs = $entry['slot']; ?>
+                    <tr>
+                        <td class="px-4"><?= date('d M Y', strtotime($vs['slot_date'])) ?></td>
+                        <td><?= h($vs['time_slot']) ?></td>
+                        <td class="fw-medium"><?= h($vs['room_number']) ?></td>
+                        <td><a href="<?= APP_URL ?>/exam-invigilation/view.php?id=<?= (int)$vs['exam_id'] ?>" class="text-decoration-none"><?= h($vs['exam_name']) ?></a></td>
+                        <td>
+                            <?php if ($vs['faculty1_id'] === null): ?>
+                            <span class="badge bg-danger bg-opacity-15 text-danger">Invigilator 1 &amp; 2 missing</span>
+                            <?php elseif ($vs['faculty2_id'] === null): ?>
+                            <span class="badge bg-warning bg-opacity-15 text-warning">Invigilator 2 missing</span>
+                            <?php endif; ?>
+                        </td>
+                        <td>
+                            <?php if (!empty($entry['teachers'])): ?>
+                            <div class="d-flex flex-wrap gap-1">
+                                <?php foreach ($entry['teachers'] as $t): ?>
+                                <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle" title="<?= h($t['dept_name'] ?? '') ?>">
+                                    <?= h($t['name']) ?><?php if (!empty($t['dept_name'])): ?> · <?= h($t['dept_name']) ?><?php endif; ?>
+                                </span>
+                                <?php endforeach; ?>
+                            </div>
+                            <?php else: ?>
+                            <span class="text-muted small">No eligible teacher available (caps reached or weekend)</span>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+            <div class="px-4 py-2 text-muted" style="font-size:.78rem;">
+                <i class="fas fa-info-circle me-1"></i>
+                Eligible teachers respect the <?= $auto_assign_max_slots ?>-slot total cap, <?= $auto_assign_max_slots_per_day ?>-slot daily cap, weekend rules, and the after-6 PM female restriction.
+            </div>
         </div>
     </div>
 </div>

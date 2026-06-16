@@ -151,6 +151,15 @@ function ei_get_auto_assign_max_slots(): int
     return $value;
 }
 
+function ei_get_auto_assign_max_slots_per_day(): int
+{
+    $value = (int)ei_get_setting('auto_assign_max_slots_per_day', '3');
+    if ($value < 1) {
+        $value = 1;
+    }
+    return $value;
+}
+
 function ei_get_faculty_weekend_days(array $faculty): array
 {
     if (!empty($faculty['weekend_days'])) {
