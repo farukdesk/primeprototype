@@ -442,26 +442,52 @@ if ($report_export === 'pdf') {
         }
     }
 
+    $report_header_exam = $report_scope_label;
+    $report_header_department = 'All Departments';
+    if ($report_dept_id > 0 && isset($report_department_map[$report_dept_id])) {
+        $report_header_department = $report_department_map[$report_dept_id];
+    } elseif ($report_total_rows > 0) {
+        $report_header_department = (string)$faculty_duty_rows[0]['dept_name'];
+    }
+
+    $report_header_faculty = 'All Faculty';
+    $report_header_designation = '—';
+    if ($report_faculty_id > 0 && isset($report_faculty_map[$report_faculty_id])) {
+        $report_header_faculty = (string)$report_faculty_map[$report_faculty_id]['name'];
+        $report_header_designation = trim((string)($report_faculty_map[$report_faculty_id]['designation'] ?? '')) ?: '—';
+    } elseif ($report_total_rows > 0 && $report_faculty_count === 1) {
+        $report_header_faculty = (string)$faculty_duty_rows[0]['faculty_name'];
+        $report_header_designation = trim((string)($faculty_duty_rows[0]['designation'] ?? '')) ?: '—';
+    } elseif ($report_faculty_count > 1) {
+        $report_header_faculty = 'Multiple Faculty (' . $report_faculty_count . ')';
+    }
+
     $report_rows_html = '';
     if (empty($faculty_duty_rows)) {
-        $report_rows_html = '<tr><td colspan="7" style="padding:28px 14px;text-align:center;color:#6b7280;">No invigilation duty found for the selected filters.</td></tr>';
+        $report_rows_html = '<tr><td colspan="3" style="padding:30px 14px;text-align:center;color:#6b7280;">No invigilation schedule found for the selected filters.</td></tr>';
     } else {
-        foreach ($faculty_duty_rows as $report_index => $report_row) {
-            $exam_note = $report_exam_id > 0
-                ? ''
-                : '<div style="font-size:8pt;color:#6b7280;margin-top:3px;">' . ei_report_escape((string)$report_row['exam_name']) . ' (' . ei_report_escape((string)$report_row['exam_year']) . ')</div>';
-            $report_rows_html .= '<tr>'
-                . '<td style="padding:8px 10px;border:1px solid #d7deea;text-align:center;">' . ($report_index + 1) . '</td>'
-                . '<td style="padding:8px 10px;border:1px solid #d7deea;font-weight:700;color:#0f172a;">' . ei_report_escape((string)$report_row['faculty_name']) . '</td>'
-                . '<td style="padding:8px 10px;border:1px solid #d7deea;color:#334155;">' . ei_report_escape((string)($report_row['designation'] ?: '—')) . '</td>'
-                . '<td style="padding:8px 10px;border:1px solid #d7deea;color:#1d4ed8;">' . ei_report_escape((string)$report_row['dept_name']) . '</td>'
-                . '<td style="padding:8px 10px;border:1px solid #d7deea;">'
-                    . '<div style="font-weight:700;color:#0f172a;">' . ei_report_escape(ei_report_format_date((string)$report_row['slot_date'], 'd F Y')) . '</div>'
-                    . $exam_note
-                . '</td>'
-                . '<td style="padding:8px 10px;border:1px solid #d7deea;color:#0f172a;">' . ei_report_escape((string)$report_row['time_slot']) . '</td>'
-                . '<td style="padding:8px 10px;border:1px solid #d7deea;color:#0f172a;">' . ei_report_escape((string)$report_row['room_number']) . '</td>'
-                . '</tr>';
+        $report_row_total = count($faculty_duty_rows);
+        $row_index = 0;
+        while ($row_index < $report_row_total) {
+            $slot_date = (string)$faculty_duty_rows[$row_index]['slot_date'];
+            $run_start = $row_index;
+            while ($row_index < $report_row_total && (string)$faculty_duty_rows[$row_index]['slot_date'] === $slot_date) {
+                $row_index++;
+            }
+            $rowspan = $row_index - $run_start;
+
+            for ($i = $run_start; $i < $row_index; $i++) {
+                $report_row = $faculty_duty_rows[$i];
+                $report_rows_html .= '<tr>';
+                if ($i === $run_start) {
+                    $report_rows_html .= '<td rowspan="' . $rowspan . '" style="padding:10px 12px;border:1px solid #d7deea;vertical-align:middle;font-weight:700;color:#0f172a;background:#f8fafc;">'
+                        . ei_report_escape(ei_report_format_date((string)$report_row['slot_date'], 'd F Y'))
+                        . '</td>';
+                }
+                $report_rows_html .= '<td style="padding:10px 12px;border:1px solid #d7deea;color:#0f172a;">' . ei_report_escape((string)$report_row['time_slot']) . '</td>'
+                    . '<td style="padding:10px 12px;border:1px solid #d7deea;color:#0f172a;">' . ei_report_escape((string)$report_row['room_number']) . '</td>'
+                    . '</tr>';
+            }
         }
     }
 
@@ -469,61 +495,59 @@ if ($report_export === 'pdf') {
         ? '<img src="' . $logo_data_uri . '" alt="Prime University" style="height:56px;width:auto;">'
         : '';
 
-    $pdf_html = '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Faculty Invigilation Duty Report</title></head>'
+    $pdf_html = '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Faculty Invigilation Duty Schedule</title></head>'
         . '<body style="font-family:DejaVu Sans, Arial, sans-serif;background:#eef3f8;margin:0;padding:18px;">'
         . '<div style="background:#ffffff;border:1px solid #d7deea;border-radius:16px;overflow:hidden;">'
-        . '<div style="padding:18px 24px;border-bottom:1px solid #d7deea;">'
+        . '<div style="padding:18px 24px 14px;border-bottom:1px solid #d7deea;">'
         . '<table style="width:100%;border-collapse:collapse;"><tr>'
-        . '<td style="width:72px;vertical-align:top;">' . $logo_html . '</td>'
+        . '<td style="width:90px;vertical-align:top;">' . $logo_html . '</td>'
         . '<td style="vertical-align:top;">'
-        . '<div style="font-size:18pt;font-weight:800;color:#0f172a;">Faculty Invigilation Duty Report</div>'
-        . '<div style="font-size:10pt;color:#475569;margin-top:4px;">Prime University Bangladesh</div>'
-        . '<div style="font-size:9pt;color:#64748b;margin-top:6px;">' . ei_report_escape($report_filter_summary) . '</div>'
-        . '</td>'
-        . '<td style="text-align:right;vertical-align:top;">'
-        . '<div style="display:inline-block;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:999px;padding:6px 12px;font-size:8.5pt;font-weight:700;">Generated ' . date('d M Y, h:i A T') . '</div>'
+        . '<div style="font-size:18pt;font-weight:800;color:#0f172a;">Faculty Invigilation Duty Schedule</div>'
+        . '<div style="font-size:9pt;color:#64748b;margin-top:5px;">Generated ' . date('d M Y, h:i A') . '</div>'
         . '</td>'
         . '</tr></table>'
-        . '</div>'
-        . '<div style="padding:16px 24px 8px;">'
-        . '<table style="width:100%;border-collapse:collapse;margin-bottom:14px;">'
+        . '<table style="width:100%;border-collapse:collapse;margin-top:12px;font-size:9.5pt;">'
         . '<tr>'
-        . '<td style="width:33.33%;padding:10px 12px;background:#f8fafc;border:1px solid #e2e8f0;">'
-            . '<div style="font-size:8pt;color:#64748b;text-transform:uppercase;letter-spacing:.08em;">Duty Entries</div>'
-            . '<div style="font-size:16pt;font-weight:800;color:#0f172a;margin-top:2px;">' . $report_total_rows . '</div>'
-        . '</td>'
-        . '<td style="width:33.33%;padding:10px 12px;background:#f8fafc;border:1px solid #e2e8f0;">'
-            . '<div style="font-size:8pt;color:#64748b;text-transform:uppercase;letter-spacing:.08em;">Faculty Covered</div>'
-            . '<div style="font-size:16pt;font-weight:800;color:#0f172a;margin-top:2px;">' . $report_faculty_count . '</div>'
-        . '</td>'
-        . '<td style="width:33.33%;padding:10px 12px;background:#f8fafc;border:1px solid #e2e8f0;">'
-            . '<div style="font-size:8pt;color:#64748b;text-transform:uppercase;letter-spacing:.08em;">Duty Dates</div>'
-            . '<div style="font-size:16pt;font-weight:800;color:#0f172a;margin-top:2px;">' . $report_date_count . '</div>'
-        . '</td>'
+            . '<td style="width:24%;padding:6px 0;color:#475569;font-weight:700;">Exam Title</td>'
+            . '<td style="width:76%;padding:6px 0;color:#0f172a;">: ' . ei_report_escape($report_header_exam) . '</td>'
+        . '</tr>'
+        . '<tr>'
+            . '<td style="padding:6px 0;color:#475569;font-weight:700;">Department Name</td>'
+            . '<td style="padding:6px 0;color:#0f172a;">: ' . ei_report_escape($report_header_department) . '</td>'
+        . '</tr>'
+        . '<tr>'
+            . '<td style="padding:6px 0;color:#475569;font-weight:700;">Faculty Name</td>'
+            . '<td style="padding:6px 0;color:#0f172a;">: ' . ei_report_escape($report_header_faculty) . '</td>'
+        . '</tr>'
+        . '<tr>'
+            . '<td style="padding:6px 0;color:#475569;font-weight:700;">Faculty Designation</td>'
+            . '<td style="padding:6px 0;color:#0f172a;">: ' . ei_report_escape($report_header_designation) . '</td>'
+        . '</tr>'
+        . '<tr>'
+            . '<td style="padding:6px 0;color:#475569;font-weight:700;">Assigned Slots</td>'
+            . '<td style="padding:6px 0;color:#0f172a;">: ' . $report_total_rows . '</td>'
         . '</tr>'
         . '</table>'
+        . '</div>'
+        . '<div style="padding:14px 24px 14px;">'
         . '<table style="width:100%;border-collapse:collapse;font-size:9pt;">'
         . '<thead>'
         . '<tr style="background:#0f172a;color:#ffffff;">'
-        . '<th style="padding:9px 10px;border:1px solid #0f172a;width:34px;">#</th>'
-        . '<th style="padding:9px 10px;border:1px solid #0f172a;text-align:left;">Faculty Name</th>'
-        . '<th style="padding:9px 10px;border:1px solid #0f172a;text-align:left;">Designation</th>'
-        . '<th style="padding:9px 10px;border:1px solid #0f172a;text-align:left;">Department</th>'
-        . '<th style="padding:9px 10px;border:1px solid #0f172a;text-align:left;">Invigilation Duty</th>'
+        . '<th style="padding:9px 10px;border:1px solid #0f172a;text-align:left;width:34%;">Date</th>'
         . '<th style="padding:9px 10px;border:1px solid #0f172a;text-align:left;">Duty Time</th>'
         . '<th style="padding:9px 10px;border:1px solid #0f172a;text-align:left;">Room Number</th>'
         . '</tr>'
         . '</thead>'
         . '<tbody>' . $report_rows_html . '</tbody>'
         . '</table>'
-        . '<div style="margin:18px 0 6px;font-size:8.5pt;color:#64748b;text-align:right;">Prepared for print handover to faculty members.</div>'
+        . '<div style="margin:14px 0 0;font-size:8.5pt;color:#64748b;text-align:center;">This is a software-generated schedule. If you have any issues, please contact the Controller of Examinations.</div>'
         . '</div>'
         . '</div>'
         . '</body></html>';
 
     $dompdf = new \Dompdf\Dompdf(['isRemoteEnabled' => false]);
     $dompdf->loadHtml($pdf_html, 'UTF-8');
-    $dompdf->setPaper('A4', 'landscape');
+    $dompdf->setPaper('A4', 'portrait');
     $dompdf->render();
 
     $filename_suffix = $report_exam_id > 0 && isset($report_exam_map[$report_exam_id])
