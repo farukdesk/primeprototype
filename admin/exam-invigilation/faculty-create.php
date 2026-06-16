@@ -30,21 +30,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     sort($weekend_days_arr);
     $weekend_days = implode(',', $weekend_days_arr);
     $weekend_available = (in_array(0, $weekend_days_arr, true) || in_array(6, $weekend_days_arr, true)) ? 0 : 1;
+    $gender           = in_array($_POST['gender'] ?? '', ['Male','Female'], true) ? $_POST['gender'] : null;
     $contact_number   = trim($_POST['contact_number'] ?? '');
     $is_active        = isset($_POST['is_active']) ? 1 : 0;
+
+    // Handle signature upload
+    $signature = null;
+    if (!empty($_FILES['signature']['name']) && $_FILES['signature']['error'] === UPLOAD_ERR_OK) {
+        $allowed_exts  = ['jpg','jpeg','png','gif','webp'];
+        $allowed_mimes = ['image/jpeg','image/png','image/gif','image/webp'];
+        $ext  = strtolower(pathinfo($_FILES['signature']['name'], PATHINFO_EXTENSION));
+        $mime = (new finfo(FILEINFO_MIME_TYPE))->file($_FILES['signature']['tmp_name']);
+        if (!in_array($ext, $allowed_exts, true) || !in_array($mime, $allowed_mimes, true)) {
+            $errors[] = 'Signature must be a JPG, PNG, GIF, or WebP image.';
+        } else {
+            $sig_dir = UPLOAD_DIR . '/exam-invigilation/signatures';
+            if (!is_dir($sig_dir)) mkdir($sig_dir, 0755, true);
+            $sig_name = bin2hex(random_bytes(12)) . '.' . $ext;
+            if (!move_uploaded_file($_FILES['signature']['tmp_name'], $sig_dir . '/' . $sig_name)) {
+                $errors[] = 'Failed to upload signature image.';
+            } else {
+                $signature = $sig_name;
+            }
+        }
+    }
 
     if (!$dept_id)    $errors[] = 'Department is required.';
     if ($name === '') $errors[] = 'Name is required.';
 
     if (empty($errors)) {
         db()->prepare(
-            'INSERT INTO ei_faculty (dept_id, name, designation, weekend_available, weekend_days, contact_number, is_active)
-             VALUES (?,?,?,?,?,?,?)'
-        )->execute([$dept_id, $name, $designation ?: null, $weekend_available, $weekend_days, $contact_number ?: null, $is_active]);
+            'INSERT INTO ei_faculty (dept_id, name, designation, gender, weekend_available, weekend_days, contact_number, signature, is_active)
+             VALUES (?,?,?,?,?,?,?,?,?)'
+        )->execute([$dept_id, $name, $designation ?: null, $gender, $weekend_available, $weekend_days, $contact_number ?: null, $signature, $is_active]);
         flash_set('success', 'Faculty <strong>' . h($name) . '</strong> added to pool.');
         redirect(APP_URL . '/exam-invigilation/faculty.php');
     }
-    save_old(compact('dept_id','name','designation','weekend_days_raw','contact_number','is_active'));
+    save_old(compact('dept_id','name','designation','gender','weekend_days_raw','contact_number','is_active'));
 }
 
 require_once __DIR__ . '/../includes/header.php';
@@ -77,7 +99,7 @@ require_once __DIR__ . '/../includes/header.php';
         <h6 class="mb-0 fw-semibold"><i class="fas fa-user-plus me-2 text-muted"></i>Add Faculty to Pool</h6>
     </div>
     <div class="card-body p-4">
-        <form method="POST" novalidate>
+        <form method="POST" enctype="multipart/form-data" novalidate>
             <?= csrf_field() ?>
             <div class="row g-3">
                 <div class="col-12">
@@ -102,10 +124,24 @@ require_once __DIR__ . '/../includes/header.php';
                            placeholder="e.g. Associate Professor">
                 </div>
                 <div class="col-md-6">
+                    <label class="form-label fw-medium">Gender</label>
+                    <select name="gender" class="form-select" style="border-radius:10px;">
+                        <option value="">— Select Gender —</option>
+                        <option value="Male" <?= old('gender') === 'Male' ? 'selected' : '' ?>>Male</option>
+                        <option value="Female" <?= old('gender') === 'Female' ? 'selected' : '' ?>>Female</option>
+                    </select>
+                </div>
+                <div class="col-md-6">
                     <label class="form-label fw-medium">Contact Number</label>
                     <input type="text" name="contact_number" class="form-control" style="border-radius:10px;"
                            value="<?= old('contact_number') ?>" maxlength="50"
                            placeholder="e.g. 01700-000000">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-medium">Signature Image</label>
+                    <input type="file" name="signature" class="form-control" style="border-radius:10px;"
+                           accept="image/jpeg,image/png,image/gif,image/webp">
+                    <small class="text-muted">JPG, PNG, GIF or WebP. Used on printed duty sheets.</small>
                 </div>
                 <div class="col-12">
                     <label class="form-label fw-medium mb-2">Weekly Weekend Day(s)</label>
