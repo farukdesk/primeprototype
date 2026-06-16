@@ -613,15 +613,23 @@ function sp_send_sms(string $mobile, string $message): bool
 
 /**
  * Send the portal welcome SMS to a student using the configured template.
+ *
+ * @param  array  $student   Student row.
+ * @param  string $username  Portal username (optional, used for {{username}}).
+ * @param  string $password  Plain-text password (optional, used for {{password}}).
  */
-function sp_send_welcome_sms(array $student): bool
+function sp_send_welcome_sms(array $student, string $username = '', string $password = ''): bool
 {
     $template = sp_get_setting(
         'sms_template',
-        'Dear {{student_name}}, your Student Portal is ready. Please check your email for the login URL, username and password. Thank you.'
+        'Dear {{student_name}}, your Student Portal account is ready. Username: {{username}} Password: {{password}} Login: {{login_url}}'
     );
-    $message = str_replace('{{student_name}}', $student['full_name'], $template);
-    $phone   = trim($student['phone'] ?? '');
+    $message = str_replace(
+        ['{{student_name}}', '{{username}}', '{{password}}', '{{login_url}}'],
+        [$student['full_name'], $username, $password, APP_URL . '/login.php'],
+        $template
+    );
+    $phone = trim($student['phone'] ?? '');
     if ($phone === '') {
         return false;
     }

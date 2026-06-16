@@ -172,8 +172,8 @@ require_once __DIR__ . '/../includes/header.php';
                 <label class="form-label fw-medium">SMS Template</label>
                 <textarea name="sms_template" class="form-control" rows="4" maxlength="500"
                           style="resize:vertical;font-size:.875rem;"><?= h(sp_get('sms_template',
-                    'Dear {{student_name}}, your Student Portal is ready. Please check your email for the login URL, username and password. Thank you.')) ?></textarea>
-                <small class="text-muted">Variables: <code>{{student_name}}</code></small>
+                    'Dear {{student_name}}, your Student Portal account is ready. Username: {{username}} Password: {{password}} Login: {{login_url}}')) ?></textarea>
+                <small class="text-muted">Variables: <code>{{student_name}}</code> &nbsp; <code>{{username}}</code> &nbsp; <code>{{password}}</code> &nbsp; <code>{{login_url}}</code></small>
             </div>
             <!-- Test SMS -->
             <div class="col-12">
