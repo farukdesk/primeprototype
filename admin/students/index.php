@@ -154,6 +154,9 @@ require_once __DIR__ . '/../includes/header.php';
         <a href="<?= APP_URL ?>/students/csv-import.php" class="btn btn-outline-success" style="border-radius:10px;font-size:.875rem;">
             <i class="fas fa-file-csv me-1"></i> Bulk CSV Import
         </a>
+        <a href="<?= APP_URL ?>/students/verify-list.php<?= $f_batch || $f_dept || $f_program || $f_status || $f_sem || $f_sem_type ? '?' . http_build_query(array_filter(['dept'=>$f_dept,'program'=>$f_program,'batch'=>$f_batch,'status'=>$f_status,'semester'=>$f_sem,'sem_type'=>$f_sem_type])) : '' ?>" class="btn btn-outline-warning" style="border-radius:10px;font-size:.875rem;">
+            <i class="fas fa-tasks me-1"></i> Verify List
+        </a>
         <a href="<?= APP_URL ?>/students/portal-bulk-create.php<?= http_build_query(array_filter($_GET, fn($v) => $v !== '')) ? '?' . h(http_build_query(array_filter($_GET, fn($v) => $v !== ''))) : '' ?>" class="btn btn-outline-secondary" style="border-radius:10px;font-size:.875rem;">
             <i class="fas fa-user-plus me-1"></i> Bulk Portal Accounts
         </a>
