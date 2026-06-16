@@ -208,3 +208,63 @@ function ei_is_faculty_eligible_for_slot(array $faculty, array $slot, array $bus
 
     return true;
 }
+
+// ── Version-control helpers ────────────────────────────────────────────────────
+
+/**
+ * Save a full snapshot of all current slot assignments for the given exam.
+ *
+ * This is called AFTER each operation that modifies assignments so that every
+ * saved version reflects a real, usable state the user can revert to.
+ *
+ * @param  int    $exam_id
+ * @param  string $change_type    One of: auto_assign, manual_edit, clear_slot, revert
+ * @param  string $summary        Human-readable description of what was changed
+ * @return int    The new snapshot ID
+ */
+function ei_save_assignment_snapshot(int $exam_id, string $change_type, string $summary): int
+{
+    $user      = auth_user();
+    $user_id   = $user ? (int)$user['id'] : null;
+    $user_name = $user ? trim((string)($user['full_name'] ?? '')) : '';
+    if ($user_name === '') {
+        $user_name = 'System';
+    }
+
+    // Next sequential version number for this exam
+    $ver_st = db()->prepare(
+        'SELECT COALESCE(MAX(version_number), 0) + 1 FROM ei_assignment_snapshots WHERE exam_id = ?'
+    );
+    $ver_st->execute([$exam_id]);
+    $version_number = (int)$ver_st->fetchColumn();
+
+    // Insert snapshot header
+    $ins = db()->prepare(
+        'INSERT INTO ei_assignment_snapshots
+             (exam_id, version_number, change_type, change_summary, changed_by_id, changed_by_name, slots_count)
+         VALUES (?, ?, ?, ?, ?, ?, 0)'
+    );
+    $ins->execute([$exam_id, $version_number, $change_type, $summary, $user_id, $user_name]);
+    $snapshot_id = (int)db()->lastInsertId();
+
+    // Copy current slot states into the snapshot
+    $slots_st = db()->prepare(
+        'SELECT id, faculty1_id, faculty2_id FROM ei_slots WHERE exam_id = ?'
+    );
+    $slots_st->execute([$exam_id]);
+    $slot_rows = $slots_st->fetchAll();
+
+    if (!empty($slot_rows)) {
+        $ins_slot = db()->prepare(
+            'INSERT INTO ei_assignment_snapshot_slots (snapshot_id, slot_id, faculty1_id, faculty2_id)
+             VALUES (?, ?, ?, ?)'
+        );
+        foreach ($slot_rows as $row) {
+            $ins_slot->execute([$snapshot_id, (int)$row['id'], $row['faculty1_id'], $row['faculty2_id']]);
+        }
+        db()->prepare('UPDATE ei_assignment_snapshots SET slots_count = ? WHERE id = ?')
+            ->execute([count($slot_rows), $snapshot_id]);
+    }
+
+    return $snapshot_id;
+}

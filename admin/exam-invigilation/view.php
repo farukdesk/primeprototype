@@ -68,9 +68,67 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
     if ($_POST['_action'] === 'clear_slot') {
         require_access('exam-invigilation', 'can_edit');
         $sid = (int)($_POST['slot_id'] ?? 0);
+        $slot_row = db()->prepare('SELECT room_number, slot_date FROM ei_slots WHERE id = ? AND exam_id = ?');
+        $slot_row->execute([$sid, $id]);
+        $slot_info = $slot_row->fetch();
         db()->prepare('UPDATE ei_slots SET faculty1_id=NULL, faculty2_id=NULL WHERE id = ? AND exam_id = ?')
            ->execute([$sid, $id]);
+        if ($slot_info) {
+            $room_label = $slot_info['room_number'] . ' (' . date('d M Y', strtotime($slot_info['slot_date'])) . ')';
+            ei_save_assignment_snapshot($id, 'clear_slot', "Cleared assignment – Room {$room_label}");
+        }
         flash_set('success', 'Assignment cleared.');
+        redirect($view_url);
+    }
+
+    // ── Revert to a saved version ──
+    if ($_POST['_action'] === 'revert_version') {
+        require_access('exam-invigilation', 'can_edit');
+        $snap_id = (int)($_POST['snapshot_id'] ?? 0);
+        if ($snap_id <= 0) {
+            flash_set('error', 'Invalid version selected.');
+            redirect($view_url);
+        }
+
+        // Verify the snapshot belongs to this exam
+        $snap_st = db()->prepare(
+            'SELECT s.*, COUNT(ss.id) AS slot_cnt
+             FROM ei_assignment_snapshots s
+             LEFT JOIN ei_assignment_snapshot_slots ss ON ss.snapshot_id = s.id
+             WHERE s.id = ? AND s.exam_id = ?
+             GROUP BY s.id'
+        );
+        $snap_st->execute([$snap_id, $id]);
+        $snap = $snap_st->fetch();
+        if (!$snap) {
+            flash_set('error', 'Version not found.');
+            redirect($view_url);
+        }
+
+        // Load the snapshot's slot data
+        $snap_slots_st = db()->prepare(
+            'SELECT slot_id, faculty1_id, faculty2_id FROM ei_assignment_snapshot_slots WHERE snapshot_id = ?'
+        );
+        $snap_slots_st->execute([$snap_id]);
+        $snap_slots = $snap_slots_st->fetchAll();
+
+        if (empty($snap_slots)) {
+            flash_set('warning', 'Version has no slot data to restore.');
+            redirect(APP_URL . '/exam-invigilation/versions.php?id=' . $id);
+        }
+
+        // Apply each slot's saved state
+        $upd = db()->prepare(
+            'UPDATE ei_slots SET faculty1_id=?, faculty2_id=? WHERE id=? AND exam_id=?'
+        );
+        foreach ($snap_slots as $ss) {
+            $upd->execute([$ss['faculty1_id'], $ss['faculty2_id'], (int)$ss['slot_id'], $id]);
+        }
+
+        // Save a new snapshot recording this revert
+        ei_save_assignment_snapshot($id, 'revert', "Reverted to V{$snap['version_number']} (saved " . date('d M Y h:i A', strtotime($snap['created_at'])) . ")");
+
+        flash_set('success', "Successfully reverted to Version {$snap['version_number']}.");
         redirect($view_url);
     }
 
@@ -348,6 +406,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
         if ($failed_count  > 0) $msg .= ", {$failed_count} could not be assigned (insufficient eligible faculty within the current availability rules, {$auto_assign_max_slots}-slot total cap, and {$auto_assign_max_slots_per_day}-slot daily cap)";
         $msg .= '.';
         flash_set($failed_count > 0 ? 'warning' : 'success', $msg);
+
+        // Save a version snapshot after the auto-assign operation
+        $scope_label = ($scope === 'all') ? 'Re-assign all' : 'Assign unassigned';
+        ei_save_assignment_snapshot($id, 'auto_assign', "{$scope_label} – {$assigned_count} fully, {$partial_count} partially, {$failed_count} failed");
+
         redirect($view_url);
     }
 
@@ -436,6 +499,10 @@ require_once __DIR__ . '/../includes/header.php';
     </nav>
     <div class="d-flex gap-2 flex-wrap">
         <?php if (!$print_mode): ?>
+        <a href="<?= APP_URL ?>/exam-invigilation/versions.php?id=<?= $id ?>"
+           class="btn btn-outline-secondary btn-sm" style="border-radius:10px;" title="View version history">
+            <i class="fas fa-history me-1"></i> Version History
+        </a>
         <a href="<?= h($print_url) ?>" target="_blank" class="btn btn-outline-dark btn-sm" style="border-radius:10px;">
             <i class="fas fa-file-pdf me-1"></i> A4 PDF Print
         </a>
@@ -567,20 +634,58 @@ require_once __DIR__ . '/../includes/header.php';
                 <h6 class="mb-1 fw-semibold"><i class="fas fa-magic me-2 text-primary"></i>Auto-Assign Invigilators</h6>
                 <p class="mb-0 text-muted" style="font-size:.85rem;">
                     Automatically assigns 2 faculty per room slot — one from each department — without overlapping time slots and without crossing the current <?= $auto_assign_max_slots ?>-slot per teacher limit.
+                    All changes are version-controlled and can be reverted at any time.
                 </p>
             </div>
-            <form method="POST" class="d-flex gap-2 align-items-center">
-                <?= csrf_field() ?>
-                <input type="hidden" name="_action" value="auto_assign">
-                <div class="form-check me-2">
-                    <input class="form-check-input" type="checkbox" name="reassign" id="reassignAll" value="1">
-                    <label class="form-check-label" for="reassignAll" style="font-size:.85rem;">Re-assign all (clear existing)</label>
-                </div>
-                <button type="submit" class="btn btn-primary btn-sm" style="border-radius:10px;"
-                        onclick="return confirm('Run auto-assignment? This will fill unassigned slots (or all slots if \'Re-assign all\' is checked).');">
-                    <i class="fas fa-magic me-1"></i> Auto-Assign
+            <div class="d-flex gap-2 flex-wrap">
+                <!-- Assign unassigned only (safe, single confirm) -->
+                <form method="POST" id="formAutoAssignUnassigned">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="_action" value="auto_assign">
+                    <button type="button" class="btn btn-primary btn-sm" style="border-radius:10px;"
+                            onclick="if(confirm('Fill only unassigned slots with auto-assignment? Existing assignments will not be changed.')) document.getElementById('formAutoAssignUnassigned').submit();">
+                        <i class="fas fa-magic me-1"></i> Auto-Assign Empty Slots
+                    </button>
+                </form>
+                <!-- Re-assign ALL (destructive — protected modal) -->
+                <button type="button" class="btn btn-danger btn-sm" style="border-radius:10px;"
+                        data-bs-toggle="modal" data-bs-target="#modalReassignAll">
+                    <i class="fas fa-redo me-1"></i> Re-assign All
                 </button>
-            </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Re-assign All confirmation modal -->
+<div class="modal fade" id="modalReassignAll" tabindex="-1" aria-labelledby="modalReassignAllLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-danger">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="modalReassignAllLabel"><i class="fas fa-exclamation-triangle me-2"></i>Re-assign All Invigilators</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-danger py-2 mb-3">
+                    <strong>This will clear ALL existing assignments</strong> for this exam and re-run the auto-assignment algorithm from scratch.
+                    Any manual adjustments you have made will be lost.
+                </div>
+                <p class="mb-1" style="font-size:.9rem;">A version snapshot will be saved automatically so you can <strong>revert</strong> if needed.</p>
+                <p class="mb-2 mt-3" style="font-size:.9rem;">To confirm, type <strong>REASSIGN ALL</strong> in the box below:</p>
+                <input type="text" id="reassignConfirmText" class="form-control" placeholder="Type REASSIGN ALL to confirm"
+                       oninput="document.getElementById('btnConfirmReassign').disabled = this.value.trim() !== 'REASSIGN ALL';">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form method="POST" id="formReassignAll" style="display:inline;">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="_action" value="auto_assign">
+                    <input type="hidden" name="reassign" value="1">
+                    <button type="submit" id="btnConfirmReassign" class="btn btn-danger" disabled>
+                        <i class="fas fa-redo me-1"></i> Yes, Re-assign All
+                    </button>
+                </form>
+            </div>
         </div>
     </div>
 </div>
