@@ -524,7 +524,7 @@ if ($report_export === 'pdf') {
             . '<td style="padding:6px 0;color:#0f172a;">: ' . ei_report_escape($report_header_designation) . '</td>'
         . '</tr>'
         . '<tr>'
-            . '<td style="padding:6px 0;color:#475569;font-weight:700;">Assinged Slots</td>'
+            . '<td style="padding:6px 0;color:#475569;font-weight:700;">Assigned Slots</td>'
             . '<td style="padding:6px 0;color:#0f172a;">: ' . $report_total_rows . '</td>'
         . '</tr>'
         . '</table>'
