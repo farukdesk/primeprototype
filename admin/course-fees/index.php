@@ -80,6 +80,10 @@ try {
            AND column_name IN ('bi_semester_start_month','tri_semester_start_month')"
     )->fetchColumn();
 
+    // Threshold that separates bi-semester (≤) from tri-semester (>) programmes.
+    // Mirrors SFP_MAX_BI_SEMESTER_COUNT defined in student-accounts/helpers.php.
+    $sfp_max_bi = 8;
+
     if ((int)$col_check === 2) {
         // Both columns exist — count packages whose relevant snapshot is not set
         $unsnapped_count = (int)$db->query(
@@ -87,8 +91,8 @@ try {
              FROM sfp_packages p
              INNER JOIN cf_programs cp ON cp.id = p.cf_program_id
              WHERE (
-                   (p.total_semesters <= 8 AND (p.bi_semester_start_month  IS NULL OR p.bi_semester_start_month  = 0))
-                OR (p.total_semesters > 8  AND (p.tri_semester_start_month IS NULL OR p.tri_semester_start_month = 0))
+                   (p.total_semesters <= {$sfp_max_bi} AND (p.bi_semester_start_month  IS NULL OR p.bi_semester_start_month  = 0))
+                OR (p.total_semesters > {$sfp_max_bi}  AND (p.tri_semester_start_month IS NULL OR p.tri_semester_start_month = 0))
              )
              AND p.cf_program_id IS NOT NULL"
         )->fetchColumn();
@@ -96,8 +100,9 @@ try {
         // Columns missing entirely — every package is affected
         $unsnapped_count = (int)$db->query("SELECT COUNT(*) FROM sfp_packages WHERE cf_program_id IS NOT NULL")->fetchColumn();
     }
-} catch (Throwable) {
-    // Silently ignore (table may not exist yet)
+} catch (PDOException $e) {
+    // Silently ignore — sfp_packages table may not exist yet in fresh installs
+    error_log('course-fees/index.php start-month check: ' . $e->getMessage());
 }
 
 // ── Build pagination URL ──────────────────────────────────────────────────────

@@ -306,8 +306,8 @@ require_once __DIR__ . '/../includes/header.php';
                     5=>'May',6=>'June',7=>'July',8=>'August',
                     9=>'September',10=>'October',11=>'November',12=>'December',
                 ];
-                $is_bi_pkg = (int)($pkg['total_semesters'] ?? 0) <= SFP_MAX_BI_SEMESTER_COUNT
-                             && (int)($pkg['total_semesters'] ?? 0) > 0;
+                $pkg_total_semesters = (int)($pkg['total_semesters'] ?? 0);
+                $is_bi_pkg = $pkg_total_semesters > 0 && $pkg_total_semesters <= SFP_MAX_BI_SEMESTER_COUNT;
                 $snap_month = $is_bi_pkg
                     ? (int)($pkg['bi_semester_start_month']  ?? 0)
                     : (int)($pkg['tri_semester_start_month'] ?? 0);
@@ -316,9 +316,8 @@ require_once __DIR__ . '/../includes/header.php';
                     $snap_month  = $start_month; // resolved via acc_package_payment_start
                     $snap_source = 'live programme';
                 }
-                $snap_label = ($snap_month >= 1 && $snap_month <= 12)
-                    ? $month_names[$snap_month]
-                    : '—';
+                // $snap_month is guaranteed valid (1-12) from acc_package_payment_start fallback
+                $snap_label = isset($month_names[$snap_month]) ? $month_names[$snap_month] : '—';
                 ?>
                 <div class="d-flex mb-2 gap-2 align-items-start">
                     <div style="min-width:210px;font-size:.8rem;color:#6b7280;font-weight:600;">Payment Start Month</div>
