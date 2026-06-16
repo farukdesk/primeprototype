@@ -185,6 +185,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
 
             $day_of_week  = (int)date('w', strtotime($slot_date));
 
+            // Determine if the slot starts after 6 PM (for Female faculty restriction)
+            $slot_starts_after_6pm = false;
+            if (preg_match('/^\s*(.+?)\s*[–-]/u', $time_slot, $tm)) {
+                $slot_start_str = trim($tm[1]);
+                $parsed_start = DateTimeImmutable::createFromFormat('h:i A', $slot_start_str)
+                             ?: DateTimeImmutable::createFromFormat('g:i A', $slot_start_str)
+                             ?: DateTimeImmutable::createFromFormat('H:i', $slot_start_str)
+                             ?: DateTimeImmutable::createFromFormat('G:i', $slot_start_str);
+                if ($parsed_start) {
+                    $slot_starts_after_6pm = (int)$parsed_start->format('H') >= 18;
+                }
+            }
+
             // Filter eligible faculty
             $eligible = [];
             foreach ($all_faculty as $f) {
@@ -192,6 +205,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
                 if (in_array($day_of_week, $faculty_weekend_days, true)) continue;
                 // Skip if already busy in this date+time_slot
                 if (isset($busy_map[$key][(int)$f['id']])) continue;
+                // Female faculty are not assigned to slots starting at or after 6 PM
+                if ($slot_starts_after_6pm && !empty($f['gender']) && $f['gender'] === 'Female') continue;
                 $eligible[] = $f;
             }
 
