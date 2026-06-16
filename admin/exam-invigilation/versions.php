@@ -84,10 +84,13 @@ function ei_snapshot_diff(array $cur_map, array $prev_map, array $slot_meta): ar
             ];
         }
     }
-    // Sort by date → time → room
+    // Sort by date → time → room (multi-field comparison for correct ordering)
     usort($changes, static function ($a, $b) {
-        return ($a['slot_date'] . $a['time_slot'] . $a['room_number'])
-             <=> ($b['slot_date'] . $b['time_slot'] . $b['room_number']);
+        $cmp = strcmp((string)$a['slot_date'], (string)$b['slot_date']);
+        if ($cmp !== 0) return $cmp;
+        $cmp = strcmp((string)$a['time_slot'], (string)$b['time_slot']);
+        if ($cmp !== 0) return $cmp;
+        return strnatcmp((string)$a['room_number'], (string)$b['room_number']);
     });
     return $changes;
 }

@@ -126,7 +126,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
         }
 
         // Save a new snapshot recording this revert
-        ei_save_assignment_snapshot($id, 'revert', "Reverted to V{$snap['version_number']} (saved " . date('d M Y H:i', strtotime($snap['created_at'])) . ")");
+        ei_save_assignment_snapshot($id, 'revert', "Reverted to V{$snap['version_number']} (saved " . date('d M Y h:i A', strtotime($snap['created_at'])) . ")");
 
         flash_set('success', "Successfully reverted to Version {$snap['version_number']}.");
         redirect($view_url);
