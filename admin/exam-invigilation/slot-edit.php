@@ -22,7 +22,8 @@ $page_title = 'Edit Slot';
 $errors     = [];
 clear_old();
 
-$faculty_list = ei_get_faculty_list();
+$faculty_list  = ei_get_faculty_list();
+$dept_list     = ei_get_departments();
 [$slot_start_time, $slot_end_time] = ei_parse_time_slot_range((string)($slot['time_slot'] ?? ''));
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -32,6 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $start_time  = trim($_POST['start_time']  ?? '');
     $end_time    = trim($_POST['end_time']    ?? '');
     $room_number = trim($_POST['room_number'] ?? '');
+    $dept_id     = (int)($_POST['dept_id']    ?? 0) ?: null;
     $faculty1_id = (int)($_POST['faculty1_id'] ?? 0) ?: null;
     $faculty2_id = (int)($_POST['faculty2_id'] ?? 0) ?: null;
     $time_slot   = ei_normalize_time_slot_range($start_time, $end_time);
@@ -42,15 +44,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($room_number === '') $errors[] = 'Room number is required.';
     if ($faculty1_id && $faculty2_id && $faculty1_id === $faculty2_id)
         $errors[] = 'Invigilator 1 and Invigilator 2 must be different people.';
+    // Overlap check: ensure neither invigilator is already assigned at the same date+time (excluding this slot)
+    if ($faculty1_id && $time_slot && ei_faculty_has_overlap($faculty1_id, $slot_date, $time_slot, $sid)) {
+        $errors[] = 'Invigilator 1 is already assigned to another room at this date and time.';
+    }
+    if ($faculty2_id && $time_slot && ei_faculty_has_overlap($faculty2_id, $slot_date, $time_slot, $sid)) {
+        $errors[] = 'Invigilator 2 is already assigned to another room at this date and time.';
+    }
 
     if (empty($errors)) {
         db()->prepare(
-            'UPDATE ei_slots SET slot_date=?, time_slot=?, room_number=?, faculty1_id=?, faculty2_id=? WHERE id=?'
-        )->execute([$slot_date, $time_slot, $room_number, $faculty1_id, $faculty2_id, $sid]);
+            'UPDATE ei_slots SET slot_date=?, time_slot=?, room_number=?, dept_id=?, faculty1_id=?, faculty2_id=? WHERE id=?'
+        )->execute([$slot_date, $time_slot, $room_number, $dept_id, $faculty1_id, $faculty2_id, $sid]);
         flash_set('success', 'Slot updated.');
         redirect(APP_URL . '/exam-invigilation/view.php?id=' . $exam_id);
     }
-    save_old(compact('slot_date','start_time','end_time','room_number','faculty1_id','faculty2_id'));
+    save_old(compact('slot_date','start_time','end_time','room_number','dept_id','faculty1_id','faculty2_id'));
 }
 
 require_once __DIR__ . '/../includes/header.php';
@@ -105,8 +114,18 @@ require_once __DIR__ . '/../includes/header.php';
                     <input type="text" name="room_number" class="form-control" style="border-radius:10px;"
                            value="<?= old('room_number', $slot['room_number']) ?>" required maxlength="50">
                 </div>
-                <div class="col-12">
-                    <small class="text-muted">Saved format: <code>09:00 AM – 12:00 PM</code></small>
+                <div class="col-md-8">
+                    <label class="form-label fw-medium">Preferred Department <span class="text-muted">(for Invigilator 1 in auto-assign)</span></label>
+                    <select name="dept_id" class="form-select" style="border-radius:10px;">
+                        <option value="0">— Any department —</option>
+                        <?php
+                        $sel_dept = (int)(old('dept_id') ?: ($slot['dept_id'] ?? 0));
+                        foreach ($dept_list as $dept): ?>
+                        <option value="<?= $dept['id'] ?>" <?= $sel_dept == $dept['id'] ? 'selected' : '' ?>>
+                            <?= h($dept['name']) ?>
+                        </option>
+                        <?php endforeach; ?>
+                    </select>
                 </div>
 
                 <div class="col-12"><hr class="my-1"></div>
