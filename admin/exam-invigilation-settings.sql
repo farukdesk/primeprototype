@@ -10,6 +10,5 @@ CREATE TABLE IF NOT EXISTS `ei_settings` (
   PRIMARY KEY (`setting_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO `ei_settings` (`setting_key`, `setting_val`)
-VALUES ('auto_assign_max_slots', '12')
-ON DUPLICATE KEY UPDATE `setting_val` = '12';
+INSERT IGNORE INTO `ei_settings` (`setting_key`, `setting_val`)
+VALUES ('auto_assign_max_slots', '12');
