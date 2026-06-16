@@ -2180,6 +2180,115 @@ function acc_month_year_for_slot(int $start_month, int $start_year, int $offset)
 }
 
 /**
+ * Compute outstanding balance limited to fees due through the current calendar month.
+ *
+ * Unlike acc_total_outstanding (which counts every future semester), this function
+ * only charges:
+ *   - Admission + form/ID fees (always due in full – one-time on admission)
+ *   - Registration fee for each semester whose first month ≤ today
+ *   - Monthly tuition / fixed / English fees for months that are ≤ today
+ *
+ * Used by the admit-card access check so students are not blocked by dues that
+ * have not yet fallen due.
+ */
+function acc_outstanding_through_current_month(int $package_id): float
+{
+    $db = db();
+
+    $pkg_stmt = $db->prepare(
+        'SELECT p.*,
+                cp.bi_semester_start_month  AS linked_bi_semester_start_month,
+                cp.tri_semester_start_month AS linked_tri_semester_start_month
+         FROM sfp_packages p
+         LEFT JOIN cf_programs cp ON cp.id = p.cf_program_id
+         WHERE p.id = ?'
+    );
+    $pkg_stmt->execute([$package_id]);
+    $pkg = $pkg_stmt->fetch();
+    if (!$pkg) return 0.0;
+
+    $sf_stmt = $db->prepare(
+        'SELECT * FROM sfp_semester_fees WHERE package_id = ? ORDER BY semester_number ASC'
+    );
+    $sf_stmt->execute([$package_id]);
+    $semester_fees = $sf_stmt->fetchAll();
+    $num_semesters = count($semester_fees);
+
+    $payment_start = acc_package_payment_start($pkg, $semester_fees);
+    $start_month   = (int)$payment_start['month'];
+    $start_year    = (int)$payment_start['year'];
+
+    $now_month = (int)date('n');
+    $now_year  = (int)date('Y');
+
+    $months     = (float)($pkg['total_months']       ?? 0);
+    $mps        = (float)($pkg['months_per_semester'] ?? 0);
+    $months_int = max(1, (int)round($mps));
+    $reg_fee    = (float)($pkg['reg_fee_per_semester'] ?? 0.0);
+
+    // Admission and form/ID fees are always due immediately
+    $total_due = (float)$pkg['admission_fees'] + acc_package_form_id_fee($pkg);
+
+    foreach ($semester_fees as $sf) {
+        $sem_num = (int)$sf['semester_number'];
+
+        // Offset of the first month of this semester
+        $first_offset    = ($sem_num - 1) * $months_int;
+        $first_month_info = acc_month_year_for_slot($start_month, $start_year, $first_offset);
+
+        // Has this semester started yet?
+        $sem_started = ($first_month_info['year'] < $now_year)
+            || ($first_month_info['year'] === $now_year && $first_month_info['month'] <= $now_month);
+
+        if (!$sem_started) {
+            continue;
+        }
+
+        // Registration is due at the start of each semester
+        $total_due += $reg_fee;
+
+        // Per-semester portions of fixed institutional + English fees (after discounts)
+        $fixed_per_sem   = ($months > 0 && $mps > 0)
+            ? round((float)$pkg['fixed_institutional_fees'] / $months * $mps, 2) : 0.0;
+        $english_per_sem = ($months > 0 && $mps > 0)
+            ? round((float)$pkg['english_course_fee'] / $months * $mps, 2) : 0.0;
+        $fixed_per_sem   = max(0.0, $fixed_per_sem   - (float)($sf['fixed_discount_amount']   ?? 0));
+        $english_per_sem = max(0.0, $english_per_sem - (float)($sf['english_discount_amount'] ?? 0));
+
+        $sem_total_due = (float)$sf['tuition_payable'] + $fixed_per_sem + $english_per_sem;
+        $monthly_fee   = $months_int > 1 ? round($sem_total_due / $months_int, 2) : $sem_total_due;
+
+        // Only add months that have already fallen due (≤ current calendar month)
+        for ($m = 1; $m <= $months_int; $m++) {
+            $month_info = acc_month_year_for_slot($start_month, $start_year, $first_offset + ($m - 1));
+
+            $month_due = ($month_info['year'] < $now_year)
+                || ($month_info['year'] === $now_year && $month_info['month'] <= $now_month);
+
+            if (!$month_due) {
+                // Months within a semester are sequential; once one is in the future
+                // all remaining months in this semester are also in the future.
+                break;
+            }
+
+            // Last month absorbs any rounding remainder
+            $total_due += ($m < $months_int)
+                ? $monthly_fee
+                : max(0.0, $sem_total_due - $monthly_fee * ($months_int - 1));
+        }
+    }
+
+    // Total actually paid (real payments + legacy ERP virtual credits)
+    $paid_stmt = $db->prepare('SELECT COALESCE(SUM(amount),0) FROM sfp_payments WHERE package_id = ?');
+    $paid_stmt->execute([$package_id]);
+    $total_paid = (float)$paid_stmt->fetchColumn();
+    $old_erp    = acc_old_erp_virtual_credits($pkg, $num_semesters);
+    $total_paid += (float)$old_erp['admission'] + (float)$old_erp['registration'];
+
+    return max(0.0, $total_due - $total_paid);
+}
+
+/**
  * Compute total outstanding balance across ALL fee types for a student's package.
  * Used by the invoice email so the student can see remaining balance.
  */
