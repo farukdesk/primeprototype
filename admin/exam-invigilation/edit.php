@@ -77,7 +77,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="col-md-6 d-flex align-items-end pb-1">
                     <div class="form-check form-switch">
                         <input class="form-check-input" type="checkbox" id="is_active" name="is_active" value="1"
-                               <?= (old('is_active', (string)$exam['is_active']) ? 'checked' : '') ?>>
+                               <?= (array_key_exists('is_active', $_SESSION['old'] ?? []) ? $_SESSION['old']['is_active'] : $exam['is_active']) ? 'checked' : '' ?>>
                         <label class="form-check-label" for="is_active">Active</label>
                     </div>
                 </div>

@@ -126,7 +126,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
             $eligible = [];
             foreach ($all_faculty as $f) {
                 // Skip if not available on weekends when slot is on weekend
-                if ($is_weekend && !(int)$f['weekend_available']) continue;
+                if ($is_weekend && (int)$f['weekend_available'] === 0) continue;
                 // Skip if already busy in this date+time_slot
                 if (isset($busy_map[$key][(int)$f['id']])) continue;
                 $eligible[] = $f;

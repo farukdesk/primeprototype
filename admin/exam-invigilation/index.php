@@ -35,9 +35,6 @@ if ($search !== '') {
 
 $sql_where = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
-$total = (int)db()->prepare("SELECT COUNT(*) FROM ei_exams e $sql_where")->execute($params) ?
-         db()->prepare("SELECT COUNT(*) FROM ei_exams e $sql_where") : null;
-
 $cnt_st = db()->prepare("SELECT COUNT(*) FROM ei_exams e $sql_where");
 $cnt_st->execute($params);
 $total = (int)$cnt_st->fetchColumn();
