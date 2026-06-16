@@ -324,6 +324,7 @@ if (is_portal_student()) {
     $is_medical_active = strpos($current_path, '/medical-center/') !== false;
     $is_student_portal_active = strpos($current_path, '/accounting/student-portal') !== false;
     $is_exam_invigilation_active = strpos($current_path, '/exam-invigilation/') !== false;
+    $is_portal_global_notice_active = strpos($current_path, '/students/portal-global-notice') !== false;
     ?>
 
     <!-- ── Student Portal: show ONLY My Profile and My Finances for student users ── -->
@@ -737,8 +738,24 @@ if (is_portal_student()) {
             <?php if (is_super_admin() || can_access('students')): ?>
             <li class="nav-item">
                 <a href="<?= APP_URL ?>/students/index.php"
-                   class="<?= strpos($current_path, '/students/') !== false ? 'active' : '' ?>">
+                   class="<?= (strpos($current_path, '/students/') !== false && !$is_portal_global_notice_active) ? 'active' : '' ?>">
                     <i class="fas fa-user-graduate"></i> Students
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin()): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/students/portal-global-notice.php"
+                   class="<?= $is_portal_global_notice_active ? 'active' : '' ?>">
+                    <i class="fas fa-bullhorn"></i> Portal Global Notice
+                    <?php
+                    try {
+                        $_pgn_active = (int)db()->query('SELECT is_active FROM portal_global_notice WHERE id = 1')->fetchColumn();
+                        if ($_pgn_active): ?>
+                    <span class="badge bg-warning text-dark ms-auto" style="font-size:.65rem;">ON</span>
+                    <?php endif;
+                    } catch (Throwable $_e) {}
+                    ?>
                 </a>
             </li>
             <?php endif; ?>
@@ -1835,6 +1852,49 @@ if (is_portal_student()) {
     </div>
     <?php endif; endforeach; ?>
     </div>
+
+    <!-- Global Notice Banner (portal students only) -->
+    <?php if (is_portal_student()): ?>
+    <?php
+    $_pgn = null;
+    try {
+        $_pgn_stmt = db()->prepare('SELECT * FROM portal_global_notice WHERE id = 1 AND is_active = 1 LIMIT 1');
+        $_pgn_stmt->execute();
+        $_pgn = $_pgn_stmt->fetch() ?: null;
+    } catch (Throwable $_pgn_ex) {}
+    if ($_pgn && trim($_pgn['message'] ?? '') !== ''):
+        $_pgn_styles = [
+            'info'    => ['bg' => '#dbeafe', 'border' => '#3b82f6', 'icon' => 'fa-circle-info',        'text' => '#1e40af'],
+            'warning' => ['bg' => '#fef9c3', 'border' => '#f59e0b', 'icon' => 'fa-triangle-exclamation','text' => '#78350f'],
+            'danger'  => ['bg' => '#fee2e2', 'border' => '#ef4444', 'icon' => 'fa-circle-exclamation',  'text' => '#991b1b'],
+            'success' => ['bg' => '#d1fae5', 'border' => '#10b981', 'icon' => 'fa-circle-check',        'text' => '#065f46'],
+        ];
+        $_pgn_s = $_pgn_styles[$_pgn['notice_type']] ?? $_pgn_styles['warning'];
+    ?>
+    <div id="portal-global-notice"
+         style="margin:16px 28px 0;background:<?= $_pgn_s['bg'] ?>;border-left:5px solid <?= $_pgn_s['border'] ?>;border-radius:0 12px 12px 0;padding:14px 18px 14px 18px;display:flex;align-items:flex-start;gap:14px;box-shadow:0 2px 8px rgba(0,0,0,.07);"
+         role="alert">
+        <i class="fas <?= $_pgn_s['icon'] ?>"
+           style="color:<?= $_pgn_s['border'] ?>;font-size:1.3rem;margin-top:2px;flex-shrink:0;"></i>
+        <div style="flex:1;min-width:0;">
+            <?php if (!empty($_pgn['title'])): ?>
+            <div style="font-weight:700;font-size:.95rem;color:<?= $_pgn_s['text'] ?>;margin-bottom:3px;">
+                <?= h($_pgn['title']) ?>
+            </div>
+            <?php endif; ?>
+            <div style="font-size:.88rem;color:<?= $_pgn_s['text'] ?>;line-height:1.6;">
+                <?= nl2br(h($_pgn['message'])) ?>
+            </div>
+        </div>
+        <button type="button"
+                onclick="document.getElementById('portal-global-notice').style.display='none';"
+                style="background:none;border:none;padding:0 4px;cursor:pointer;color:<?= $_pgn_s['text'] ?>;opacity:.6;font-size:1rem;flex-shrink:0;line-height:1;"
+                aria-label="Dismiss notice">
+            <i class="fas fa-xmark"></i>
+        </button>
+    </div>
+    <?php endif; ?>
+    <?php endif; ?>
 
     <!-- Content starts here -->
     <main id="content">
