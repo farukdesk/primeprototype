@@ -103,9 +103,9 @@ if ($f_date !== '') {
         $slot_ids = array_column($slots, 'id');
         $placeholders = implode(',', array_fill(0, count($slot_ids), '?'));
         $att_st = db()->prepare(
-            "SELECT slot_id, faculty_id, attended, notes FROM ei_slot_attendance WHERE slot_id IN ($placeholders)"
+            "SELECT slot_id, faculty_id, attended, notes FROM ei_slot_attendance WHERE exam_id = ? AND slot_id IN ($placeholders)"
         );
-        $att_st->execute($slot_ids);
+        $att_st->execute(array_merge([$id], $slot_ids));
         foreach ($att_st->fetchAll() as $row) {
             $attendance_map[$row['slot_id'] . '_' . $row['faculty_id']] = $row;
         }

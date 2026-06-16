@@ -15,7 +15,7 @@ $page_title = h($exam['exam_name']) . ' – Remuneration Bill';
 $print_mode = isset($_GET['print']) && $_GET['print'] === '1';
 
 // ── Aggregate: per faculty, count attended slots, list rooms & time-slots ─────
-$bill_st = db()->query(
+$bill_st = db()->prepare(
     "SELECT
          f.id AS faculty_id,
          f.name AS faculty_name,
@@ -31,27 +31,29 @@ $bill_st = db()->query(
          ) AS duty_details
      FROM ei_faculty f
      JOIN dept_departments d ON d.id = f.dept_id
-     JOIN ei_slot_attendance a ON a.faculty_id = f.id AND a.exam_id = {$id} AND a.attended = 1
+     JOIN ei_slot_attendance a ON a.faculty_id = f.id AND a.exam_id = ? AND a.attended = 1
      JOIN ei_slots s ON s.id = a.slot_id
      WHERE f.is_active = 1
      GROUP BY f.id, f.name, f.designation, f.remuneration_per_slot, d.name
      ORDER BY d.name ASC, f.name ASC"
 );
+$bill_st->execute([$id]);
 $bill_rows = $bill_st->fetchAll();
 
 $grand_total = array_sum(array_column($bill_rows, 'total_remuneration'));
 $grand_slots = array_sum(array_column($bill_rows, 'attended_slots'));
 
 // Faculty with duty but no attendance marked yet (assigned but no record)
-$untracked_st = db()->query(
+$untracked_st = db()->prepare(
     "SELECT DISTINCT f.id, f.name, f.designation, f.remuneration_per_slot AS rate, d.name AS dept_name
      FROM ei_slots s
      JOIN ei_faculty f ON f.id = s.faculty1_id OR f.id = s.faculty2_id
      JOIN dept_departments d ON d.id = f.dept_id
-     WHERE s.exam_id = {$id}
-       AND f.id NOT IN (SELECT faculty_id FROM ei_slot_attendance WHERE exam_id = {$id})
+     WHERE s.exam_id = ?
+       AND f.id NOT IN (SELECT faculty_id FROM ei_slot_attendance WHERE exam_id = ?)
      ORDER BY d.name ASC, f.name ASC"
 );
+$untracked_st->execute([$id, $id]);
 $untracked_rows = $untracked_st->fetchAll();
 
 require_once __DIR__ . '/../includes/header.php';
