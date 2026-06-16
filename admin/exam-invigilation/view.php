@@ -12,10 +12,20 @@ if (!$exam) {
 }
 
 $page_title = h($exam['exam_name']) . ' – Invigilation';
-$time_order_sql = "COALESCE(
-    STR_TO_DATE(TRIM(SUBSTRING_INDEX(REPLACE(time_slot, '-', '–'), '–', 1)), '%h:%i %p'),
-    STR_TO_DATE(TRIM(SUBSTRING_INDEX(REPLACE(time_slot, '-', '–'), '–', 1)), '%H:%i')
-)";
+function ei_time_order_expr(string $column = 'time_slot'): string
+{
+    $allowed = ['time_slot', 's.time_slot'];
+    if (!in_array($column, $allowed, true)) {
+        $column = 'time_slot';
+    }
+
+    return "COALESCE(
+        STR_TO_DATE(TRIM(SUBSTRING_INDEX(REPLACE({$column}, '-', '–'), '–', 1)), '%h:%i %p'),
+        STR_TO_DATE(TRIM(SUBSTRING_INDEX(REPLACE({$column}, '-', '–'), '–', 1)), '%H:%i')
+    )";
+}
+
+$time_order_sql = ei_time_order_expr('time_slot');
 
 $f_date       = trim((string)($_GET['slot_date'] ?? ''));
 $f_dept       = (int)($_GET['dept'] ?? 0);
@@ -76,9 +86,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
             );
         } else {
             $slots_st = db()->prepare(
-                'SELECT * FROM ei_slots WHERE exam_id = ?
+                "SELECT * FROM ei_slots WHERE exam_id = ?
                  AND (faculty1_id IS NULL OR faculty2_id IS NULL)
-                 ORDER BY slot_date ASC, ' . $time_order_sql . ' ASC, time_slot ASC, room_number ASC'
+                 ORDER BY slot_date ASC, {$time_order_sql} ASC, time_slot ASC, room_number ASC"
             );
         }
         $slots_st->execute([$id]);
@@ -290,10 +300,7 @@ $slots_st = db()->prepare(
      LEFT JOIN dept_departments dp ON dp.id = s.dept_id
      $sql_where
      ORDER BY s.slot_date ASC,
-              COALESCE(
-                  STR_TO_DATE(TRIM(SUBSTRING_INDEX(REPLACE(s.time_slot, '-', '–'), '–', 1)), '%h:%i %p'),
-                  STR_TO_DATE(TRIM(SUBSTRING_INDEX(REPLACE(s.time_slot, '-', '–'), '–', 1)), '%H:%i')
-              ) ASC,
+              " . ei_time_order_expr('s.time_slot') . " ASC,
               s.time_slot ASC, s.room_number ASC"
 );
 $slots_st->execute($params);
@@ -359,9 +366,6 @@ require_once __DIR__ . '/../includes/header.php';
 <?php flash_show(); ?>
 
 <?php if ($print_mode): ?>
-<script>
-window.addEventListener('load', function () { window.print(); });
-</script>
 <style>
 @media print {
     @page { size: A4; margin: 10mm; }
