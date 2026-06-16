@@ -36,14 +36,14 @@ function ei_report_filename_part(string $value): string
         return '';
     }
 
-    $value = preg_replace('/[^\pL\pN\s-]+/u', ' ', $value);
-    if ($value === null) {
-        return '';
+    $cleaned_value = preg_replace('/[^\pL\pN\s-]+/u', ' ', $value);
+    if ($cleaned_value !== null) {
+        $value = $cleaned_value;
     }
 
-    $value = preg_replace('/\s+/u', ' ', trim($value));
-    if ($value === null) {
-        return '';
+    $collapsed_value = preg_replace('/\s+/u', ' ', trim($value));
+    if ($collapsed_value !== null) {
+        $value = $collapsed_value;
     }
 
     return $value;
@@ -53,9 +53,8 @@ function ei_report_designation_short(string $designation): string
 {
     $normalized = preg_replace('/[^a-z0-9]+/i', ' ', $designation);
     if ($normalized === null) {
-        return '';
+        $normalized = '';
     }
-
     $normalized = strtolower(trim($normalized));
     if ($normalized === '') {
         return '';
@@ -82,7 +81,8 @@ function ei_report_designation_short(string $designation): string
 
     $parts = preg_split('/\s+/', $normalized) ?: [];
     if (count($parts) === 1) {
-        return ucfirst(substr($parts[0], 0, 12));
+        $max_single_word_length = 12;
+        return ucfirst(substr($parts[0], 0, $max_single_word_length));
     }
 
     $short = '';
