@@ -243,6 +243,10 @@ require_once __DIR__ . '/../includes/header.php';
     </nav>
     <div class="d-flex gap-2 flex-wrap">
         <?php if (is_super_admin() || can_access('exam-invigilation', 'can_create')): ?>
+        <a href="<?= APP_URL ?>/exam-invigilation/slot-create.php?exam_id=<?= $id ?>#csv-upload"
+           class="btn btn-outline-primary btn-sm" style="border-radius:10px;">
+            <i class="fas fa-file-csv me-1"></i> Bulk Upload CSV
+        </a>
         <a href="<?= APP_URL ?>/exam-invigilation/slot-create.php?exam_id=<?= $id ?>"
            class="btn btn-success btn-sm" style="border-radius:10px;">
             <i class="fas fa-plus me-1"></i> Add Slot
