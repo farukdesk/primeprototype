@@ -7,6 +7,15 @@ $errors     = [];
 clear_old();
 
 $departments = db()->query('SELECT id, name FROM dept_departments WHERE is_active=1 ORDER BY name ASC')->fetchAll();
+$weekday_labels = [
+    0 => 'Sunday',
+    1 => 'Monday',
+    2 => 'Tuesday',
+    3 => 'Wednesday',
+    4 => 'Thursday',
+    5 => 'Friday',
+    6 => 'Saturday',
+];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
@@ -14,7 +23,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $dept_id          = (int)($_POST['dept_id'] ?? 0);
     $name             = trim($_POST['name'] ?? '');
     $designation      = trim($_POST['designation'] ?? '');
-    $weekend_available = isset($_POST['weekend_available']) ? 1 : 0;
+    $weekend_days_raw = $_POST['weekend_days'] ?? [0, 6];
+    if (!is_array($weekend_days_raw)) $weekend_days_raw = [];
+    $weekend_days_arr = array_values(array_unique(array_map('intval', $weekend_days_raw)));
+    $weekend_days_arr = array_values(array_filter($weekend_days_arr, static fn ($d) => $d >= 0 && $d <= 6));
+    sort($weekend_days_arr);
+    $weekend_days = implode(',', $weekend_days_arr);
+    $weekend_available = (in_array(0, $weekend_days_arr, true) || in_array(6, $weekend_days_arr, true)) ? 0 : 1;
     $contact_number   = trim($_POST['contact_number'] ?? '');
     $is_active        = isset($_POST['is_active']) ? 1 : 0;
 
@@ -23,19 +38,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (empty($errors)) {
         db()->prepare(
-            'INSERT INTO ei_faculty (dept_id, name, designation, weekend_available, contact_number, is_active)
-             VALUES (?,?,?,?,?,?)'
-        )->execute([$dept_id, $name, $designation ?: null, $weekend_available, $contact_number ?: null, $is_active]);
+            'INSERT INTO ei_faculty (dept_id, name, designation, weekend_available, weekend_days, contact_number, is_active)
+             VALUES (?,?,?,?,?,?,?)'
+        )->execute([$dept_id, $name, $designation ?: null, $weekend_available, $weekend_days, $contact_number ?: null, $is_active]);
         flash_set('success', 'Faculty <strong>' . h($name) . '</strong> added to pool.');
         redirect(APP_URL . '/exam-invigilation/faculty.php');
     }
-    save_old(compact('dept_id','name','designation','weekend_available','contact_number','is_active'));
+    save_old(compact('dept_id','name','designation','weekend_days_raw','contact_number','is_active'));
 }
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb mb-0">
             <li class="breadcrumb-item"><a href="<?= APP_URL ?>/index.php">Dashboard</a></li>
@@ -44,6 +59,9 @@ require_once __DIR__ . '/../includes/header.php';
             <li class="breadcrumb-item active">Add Faculty</li>
         </ol>
     </nav>
+    <a href="<?= APP_URL ?>/exam-invigilation/faculty-import.php" class="btn btn-outline-primary btn-sm" style="border-radius:10px;">
+        <i class="fas fa-file-csv me-1"></i> Bulk Import CSV
+    </a>
 </div>
 
 <?php if ($errors): ?>
@@ -89,13 +107,23 @@ require_once __DIR__ . '/../includes/header.php';
                            value="<?= old('contact_number') ?>" maxlength="50"
                            placeholder="e.g. 01700-000000">
                 </div>
-                <div class="col-md-3 d-flex align-items-end pb-1">
-                    <div class="form-check form-switch">
-                        <input class="form-check-input" type="checkbox" id="weekend_available"
-                               name="weekend_available" value="1"
-                               <?= old('weekend_available') ? 'checked' : '' ?>>
-                        <label class="form-check-label" for="weekend_available">Weekend Available</label>
+                <div class="col-12">
+                    <label class="form-label fw-medium mb-2">Weekly Weekend Day(s)</label>
+                    <?php
+                    $old_weekend_days = old('weekend_days_raw');
+                    $selected_weekend_days = is_array($old_weekend_days) ? array_map('intval', $old_weekend_days) : [0, 6];
+                    ?>
+                    <div class="d-flex flex-wrap gap-3">
+                        <?php foreach ($weekday_labels as $day_no => $day_name): ?>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="weekend_day_<?= $day_no ?>"
+                                   name="weekend_days[]" value="<?= $day_no ?>"
+                                   <?= in_array($day_no, $selected_weekend_days, true) ? 'checked' : '' ?>>
+                            <label class="form-check-label" for="weekend_day_<?= $day_no ?>"><?= h($day_name) ?></label>
+                        </div>
+                        <?php endforeach; ?>
                     </div>
+                    <small class="text-muted">Selected days are treated as this faculty member's weekly weekend/off days.</small>
                 </div>
                 <div class="col-md-3 d-flex align-items-end pb-1">
                     <div class="form-check form-switch">

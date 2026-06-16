@@ -3,6 +3,15 @@ require_once __DIR__ . '/../includes/auth.php';
 require_access('exam-invigilation');
 
 $page_title = 'Faculty Availability Pool';
+$weekday_labels = [
+    0 => 'Sun',
+    1 => 'Mon',
+    2 => 'Tue',
+    3 => 'Wed',
+    4 => 'Thu',
+    5 => 'Fri',
+    6 => 'Sat',
+];
 
 // ── Inline actions ────────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
@@ -73,9 +82,14 @@ require_once __DIR__ . '/../includes/header.php';
         </ol>
     </nav>
     <?php if (is_super_admin() || can_access('exam-invigilation', 'can_create')): ?>
-    <a href="<?= APP_URL ?>/exam-invigilation/faculty-create.php" class="btn btn-primary btn-sm" style="border-radius:10px;">
-        <i class="fas fa-plus me-1"></i> Add Faculty
-    </a>
+    <div class="d-flex gap-2">
+        <a href="<?= APP_URL ?>/exam-invigilation/faculty-import.php" class="btn btn-outline-primary btn-sm" style="border-radius:10px;">
+            <i class="fas fa-file-csv me-1"></i> Bulk Import CSV
+        </a>
+        <a href="<?= APP_URL ?>/exam-invigilation/faculty-create.php" class="btn btn-primary btn-sm" style="border-radius:10px;">
+            <i class="fas fa-plus me-1"></i> Add Faculty
+        </a>
+    </div>
     <?php endif; ?>
 </div>
 
@@ -129,16 +143,25 @@ require_once __DIR__ . '/../includes/header.php';
                     <tr><td colspan="8" class="text-center text-muted py-4">No faculty found.</td></tr>
                 <?php else: ?>
                     <?php foreach ($rows as $i => $f): ?>
+                    <?php
+                    if (!empty($f['weekend_days'])) {
+                        $weekend_days = array_values(array_filter(array_map('intval', explode(',', (string)$f['weekend_days'])), static fn ($d) => $d >= 0 && $d <= 6));
+                    } else {
+                        $weekend_days = ((int)$f['weekend_available'] === 1) ? [] : [0, 6];
+                    }
+                    ?>
                     <tr>
                         <td class="px-4"><?= $offset + $i + 1 ?></td>
                         <td class="fw-medium"><?= h($f['name']) ?></td>
                         <td><span class="badge bg-primary bg-opacity-10 text-primary"><?= h($f['dept_name']) ?></span></td>
                         <td><?= $f['designation'] ? h($f['designation']) : '<span class="text-muted">—</span>' ?></td>
                         <td>
-                            <?php if ($f['weekend_available']): ?>
-                            <span class="badge bg-success"><i class="fas fa-check me-1"></i>Yes</span>
+                            <?php if (!empty($weekend_days)): ?>
+                                <?php foreach ($weekend_days as $d): ?>
+                                <span class="badge bg-secondary"><?= h($weekday_labels[$d] ?? (string)$d) ?></span>
+                                <?php endforeach; ?>
                             <?php else: ?>
-                            <span class="badge bg-secondary">No</span>
+                            <span class="text-muted">None</span>
                             <?php endif; ?>
                         </td>
                         <td><?= $f['contact_number'] ? h($f['contact_number']) : '<span class="text-muted">—</span>' ?></td>
