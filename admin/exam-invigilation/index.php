@@ -388,6 +388,14 @@ require_once __DIR__ . '/../includes/header.php';
                                    class="btn btn-sm btn-outline-secondary" style="border-radius:7px;" title="View">
                                     <i class="fas fa-eye"></i>
                                 </a>
+                                <a href="<?= APP_URL ?>/exam-invigilation/attendance.php?id=<?= $e['id'] ?>"
+                                   class="btn btn-sm btn-outline-info" style="border-radius:7px;" title="Attendance">
+                                    <i class="fas fa-calendar-check"></i>
+                                </a>
+                                <a href="<?= APP_URL ?>/exam-invigilation/remuneration-bill.php?id=<?= $e['id'] ?>"
+                                   class="btn btn-sm btn-outline-success" style="border-radius:7px;" title="Remuneration Bill">
+                                    <i class="fas fa-file-invoice-dollar"></i>
+                                </a>
                                 <?php if (is_super_admin() || can_access('exam-invigilation', 'can_edit')): ?>
                                 <a href="<?= APP_URL ?>/exam-invigilation/edit.php?id=<?= $e['id'] ?>"
                                    class="btn btn-sm btn-outline-primary" style="border-radius:7px;" title="Edit">
