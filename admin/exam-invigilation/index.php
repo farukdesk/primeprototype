@@ -66,6 +66,22 @@ $assigned_faculty_count = (int)db()->query(
 )->fetchColumn();
 $available_backup_faculty = $total_active_faculty - $assigned_faculty_count;
 
+// Fetch the actual list of available/backup faculty (not yet assigned in any active exam)
+$backup_faculty_rows = db()->query(
+    "SELECT f.id, f.name, f.designation, f.gender, f.contact_number, d.name AS dept_name
+     FROM ei_faculty f
+     JOIN dept_departments d ON d.id = f.dept_id
+     WHERE f.is_active = 1
+       AND f.id NOT IN (
+           SELECT DISTINCT fid FROM (
+               SELECT faculty1_id AS fid FROM ei_slots s JOIN ei_exams e ON e.id = s.exam_id WHERE e.is_active = 1 AND s.faculty1_id IS NOT NULL
+               UNION
+               SELECT faculty2_id FROM ei_slots s JOIN ei_exams e ON e.id = s.exam_id WHERE e.is_active = 1 AND s.faculty2_id IS NOT NULL
+           ) t
+       )
+     ORDER BY d.name ASC, f.name ASC"
+)->fetchAll();
+
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
@@ -114,8 +130,62 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="alert alert-info py-2 px-3 mb-3 d-flex align-items-center gap-2" style="font-size:.85rem;">
     <i class="fas fa-info-circle"></i>
     <span><strong><?= max(0, $available_backup_faculty) ?> faculty</strong> have not yet been assigned any invigilator duty in active exams and are available as backup if someone is absent or an extra slot is needed.</span>
+    <?php if (!empty($backup_faculty_rows)): ?>
+    <button class="ms-auto btn btn-sm btn-outline-info" style="border-radius:8px;white-space:nowrap;"
+            type="button" data-bs-toggle="collapse" data-bs-target="#backupFacultyList" aria-expanded="false">
+        <i class="fas fa-list me-1"></i> View List
+    </button>
+    <?php else: ?>
     <a href="<?= APP_URL ?>/exam-invigilation/faculty.php" class="ms-auto btn btn-sm btn-outline-info" style="border-radius:8px;white-space:nowrap;">View Faculty Pool</a>
+    <?php endif; ?>
 </div>
+
+<?php if (!empty($backup_faculty_rows)): ?>
+<div class="collapse mb-3" id="backupFacultyList">
+    <div class="card">
+        <div class="card-header py-2 px-4 d-flex align-items-center justify-content-between">
+            <h6 class="mb-0 fw-semibold"><i class="fas fa-user-clock me-2 text-muted"></i>Available for Backup / Extra Slots</h6>
+            <span class="badge bg-info bg-opacity-15 text-info"><?= count($backup_faculty_rows) ?> faculty</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="px-4" style="width:40px;">#</th>
+                            <th>Name</th>
+                            <th>Department</th>
+                            <th>Designation</th>
+                            <th>Gender</th>
+                            <th>Contact</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <?php foreach ($backup_faculty_rows as $bi => $bf): ?>
+                    <tr>
+                        <td class="px-4"><?= $bi + 1 ?></td>
+                        <td class="fw-medium"><?= h($bf['name']) ?></td>
+                        <td><span class="badge bg-primary bg-opacity-10 text-primary"><?= h($bf['dept_name']) ?></span></td>
+                        <td><?= $bf['designation'] ? h($bf['designation']) : '<span class="text-muted">—</span>' ?></td>
+                        <td>
+                            <?php if (!empty($bf['gender'])): ?>
+                            <span class="badge" style="background:<?= $bf['gender'] === 'Female' ? '#e83e8c' : '#0dcaf0' ?>;color:#fff;">
+                                <?= h($bf['gender']) ?>
+                            </span>
+                            <?php else: ?>
+                            <span class="text-muted">—</span>
+                            <?php endif; ?>
+                        </td>
+                        <td><?= $bf['contact_number'] ? h($bf['contact_number']) : '<span class="text-muted">—</span>' ?></td>
+                    </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 
 <!-- Search -->
 <div class="card mb-3">
@@ -146,6 +216,8 @@ require_once __DIR__ . '/../includes/header.php';
                         <th class="px-4" style="width:40px;">#</th>
                         <th>Exam Name</th>
                         <th>Year</th>
+                        <th>Start Date</th>
+                        <th>End Date</th>
                         <th>Slots</th>
                         <th>Assigned</th>
                         <th>Active</th>
@@ -154,7 +226,7 @@ require_once __DIR__ . '/../includes/header.php';
                 </thead>
                 <tbody>
                 <?php if (empty($rows)): ?>
-                    <tr><td colspan="7" class="text-center text-muted py-4">No exams found.</td></tr>
+                    <tr><td colspan="9" class="text-center text-muted py-4">No exams found.</td></tr>
                 <?php else: ?>
                     <?php foreach ($rows as $i => $e): ?>
                     <tr>
@@ -165,6 +237,8 @@ require_once __DIR__ . '/../includes/header.php';
                             </a>
                         </td>
                         <td><?= h($e['exam_year']) ?></td>
+                        <td><?= $e['start_date'] ? date('d M Y', strtotime($e['start_date'])) : '<span class="text-muted">—</span>' ?></td>
+                        <td><?= $e['end_date']   ? date('d M Y', strtotime($e['end_date']))   : '<span class="text-muted">—</span>' ?></td>
                         <td>
                             <span class="badge bg-secondary bg-opacity-15 text-secondary"><?= $e['slot_count'] ?> slots</span>
                         </td>

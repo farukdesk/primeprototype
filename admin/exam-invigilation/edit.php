@@ -18,20 +18,25 @@ clear_old();
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
-    $exam_name = trim($_POST['exam_name'] ?? '');
-    $exam_year = (int)($_POST['exam_year'] ?? 0);
-    $is_active = isset($_POST['is_active']) ? 1 : 0;
+    $exam_name  = trim($_POST['exam_name'] ?? '');
+    $exam_year  = (int)($_POST['exam_year'] ?? 0);
+    $start_date = trim($_POST['start_date'] ?? '');
+    $end_date   = trim($_POST['end_date'] ?? '');
+    $is_active  = isset($_POST['is_active']) ? 1 : 0;
 
     if ($exam_name === '') $errors[] = 'Exam name is required.';
     if ($exam_year < 2000 || $exam_year > 2100) $errors[] = 'Please enter a valid year (2000–2100).';
+    if ($start_date !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $start_date)) $errors[] = 'Invalid start date.';
+    if ($end_date   !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $end_date))   $errors[] = 'Invalid end date.';
+    if ($start_date !== '' && $end_date !== '' && $end_date < $start_date) $errors[] = 'End date must be on or after start date.';
 
     if (empty($errors)) {
-        db()->prepare('UPDATE ei_exams SET exam_name=?, exam_year=?, is_active=? WHERE id=?')
-           ->execute([$exam_name, $exam_year, $is_active, $id]);
+        db()->prepare('UPDATE ei_exams SET exam_name=?, exam_year=?, start_date=?, end_date=?, is_active=? WHERE id=?')
+           ->execute([$exam_name, $exam_year, $start_date ?: null, $end_date ?: null, $is_active, $id]);
         flash_set('success', 'Exam updated.');
         redirect(APP_URL . '/exam-invigilation/view.php?id=' . $id);
     }
-    save_old(compact('exam_name','exam_year','is_active'));
+    save_old(compact('exam_name','exam_year','start_date','end_date','is_active'));
 }
 
 require_once __DIR__ . '/../includes/header.php';
@@ -80,6 +85,16 @@ require_once __DIR__ . '/../includes/header.php';
                                <?= (array_key_exists('is_active', $_SESSION['old'] ?? []) ? $_SESSION['old']['is_active'] : $exam['is_active']) ? 'checked' : '' ?>>
                         <label class="form-check-label" for="is_active">Active</label>
                     </div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-medium">Start Date</label>
+                    <input type="date" name="start_date" class="form-control" style="border-radius:10px;"
+                           value="<?= old('start_date', $exam['start_date'] ?? '') ?>">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-medium">End Date</label>
+                    <input type="date" name="end_date" class="form-control" style="border-radius:10px;"
+                           value="<?= old('end_date', $exam['end_date'] ?? '') ?>">
                 </div>
             </div>
             <div class="d-flex gap-2 mt-4">
