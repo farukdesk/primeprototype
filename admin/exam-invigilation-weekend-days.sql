@@ -9,5 +9,4 @@ UPDATE `ei_faculty`
 SET `weekend_days` = CASE
     WHEN `weekend_available` = 1 THEN ''
     ELSE '0,6'
-END
-WHERE `weekend_days` IS NULL OR `weekend_days` = '';
+END;
