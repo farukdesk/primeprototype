@@ -68,6 +68,43 @@ $stats = $db->query(
 $degree_types = cf_get_degree_types();
 $settings     = cf_get_settings();
 
+// ── Check for student packages that still have unset start-month snapshots ───
+// Detect whether the sfp_packages table has the snapshot columns and, if so,
+// how many packages still have NULL/0 (i.e. the migration needs to be run).
+$unsnapped_count = 0;
+try {
+    $col_check = $db->query(
+        "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE table_schema = DATABASE()
+           AND table_name   = 'sfp_packages'
+           AND column_name IN ('bi_semester_start_month','tri_semester_start_month')"
+    )->fetchColumn();
+
+    // Threshold that separates bi-semester (≤) from tri-semester (>) programmes.
+    // Mirrors SFP_MAX_BI_SEMESTER_COUNT defined in student-accounts/helpers.php.
+    $sfp_max_bi = 8;
+
+    if ((int)$col_check === 2) {
+        // Both columns exist — count packages whose relevant snapshot is not set
+        $unsnapped_count = (int)$db->query(
+            "SELECT COUNT(*)
+             FROM sfp_packages p
+             INNER JOIN cf_programs cp ON cp.id = p.cf_program_id
+             WHERE (
+                   (p.total_semesters <= {$sfp_max_bi} AND (p.bi_semester_start_month  IS NULL OR p.bi_semester_start_month  = 0))
+                OR (p.total_semesters > {$sfp_max_bi}  AND (p.tri_semester_start_month IS NULL OR p.tri_semester_start_month = 0))
+             )
+             AND p.cf_program_id IS NOT NULL"
+        )->fetchColumn();
+    } elseif ((int)$col_check < 2) {
+        // Columns missing entirely — every package is affected
+        $unsnapped_count = (int)$db->query("SELECT COUNT(*) FROM sfp_packages WHERE cf_program_id IS NOT NULL")->fetchColumn();
+    }
+} catch (PDOException $e) {
+    // Silently ignore — sfp_packages table may not exist yet in fresh installs
+    error_log('course-fees/index.php start-month check: ' . $e->getMessage());
+}
+
 // ── Build pagination URL ──────────────────────────────────────────────────────
 function cf_paginate_url(int $p): string {
     $q = $_GET;
@@ -130,6 +167,33 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
     </div>
 </div>
+
+<?php if ($unsnapped_count > 0): ?>
+<!-- Start-month snapshot notice -->
+<div class="alert alert-warning border-start border-warning border-4 shadow-sm mb-4" role="alert">
+    <div class="d-flex align-items-start gap-3">
+        <div class="flex-shrink-0" style="font-size:1.75rem;">
+            <i class="fas fa-exclamation-triangle text-warning"></i>
+        </div>
+        <div class="flex-grow-1">
+            <h6 class="alert-heading mb-1">
+                Action required: <strong><?= number_format($unsnapped_count) ?></strong>
+                student package<?= $unsnapped_count !== 1 ? 's' : '' ?> lack a snapshotted payment start month
+            </h6>
+            <p class="mb-2" style="font-size:.875rem;">
+                These packages will use the <em>live</em> programme start month, meaning any future edit to a
+                programme's start month will retroactively shift their payment schedule.
+            </p>
+            <p class="mb-0" style="font-size:.875rem;">
+                <strong>To fix:</strong> run the SQL migration
+                <code>admin/student-package-start-month-v2.sql</code>
+                on your database <em>before</em> making any start-month changes.
+                Packages that already have a locked start month are not affected.
+            </p>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 
 <!-- Global Settings Summary -->
 <div class="card border-0 shadow-sm mb-4">

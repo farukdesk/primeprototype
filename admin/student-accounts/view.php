@@ -297,6 +297,40 @@ require_once __DIR__ . '/../includes/header.php';
                     <div style="font-size:.875rem;"><?= h((string)$val) ?></div>
                 </div>
                 <?php endforeach; ?>
+
+                <!-- Payment Start Month (snapshotted) -->
+                <hr class="my-2">
+                <?php
+                $month_names = [
+                    1=>'January',2=>'February',3=>'March',4=>'April',
+                    5=>'May',6=>'June',7=>'July',8=>'August',
+                    9=>'September',10=>'October',11=>'November',12=>'December',
+                ];
+                $pkg_total_semesters = (int)($pkg['total_semesters'] ?? 0);
+                $is_bi_pkg = $pkg_total_semesters > 0 && $pkg_total_semesters <= SFP_MAX_BI_SEMESTER_COUNT;
+                $snap_month = $is_bi_pkg
+                    ? (int)($pkg['bi_semester_start_month']  ?? 0)
+                    : (int)($pkg['tri_semester_start_month'] ?? 0);
+                $snap_source = 'snapshotted';
+                if ($snap_month < 1 || $snap_month > 12) {
+                    $snap_month  = $start_month; // resolved via acc_package_payment_start
+                    $snap_source = 'live programme';
+                }
+                // $snap_month is guaranteed valid (1-12) from acc_package_payment_start fallback
+                $snap_label = isset($month_names[$snap_month]) ? $month_names[$snap_month] : '—';
+                ?>
+                <div class="d-flex mb-2 gap-2 align-items-start">
+                    <div style="min-width:210px;font-size:.8rem;color:#6b7280;font-weight:600;">Payment Start Month</div>
+                    <div style="font-size:.875rem;">
+                        <?= h($snap_label) ?>
+                        <?php if ($snap_source === 'live programme'): ?>
+                        <span class="badge bg-warning text-dark ms-1" title="No start month is snapshotted on this package — using the current programme value. Run student-package-start-month-v2.sql to backfill.">live</span>
+                        <?php else: ?>
+                        <span class="badge bg-success ms-1" title="Start month is snapshotted and will not change when the course fee is edited.">locked</span>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
                 <?php if ($pkg['note']): ?>
                 <hr class="my-2">
                 <div class="text-muted" style="font-size:.8rem;"><strong>Note:</strong> <?= h($pkg['note']) ?></div>
