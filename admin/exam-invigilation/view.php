@@ -78,7 +78,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
         require_access('exam-invigilation', 'can_edit');
 
         $scope = isset($_POST['reassign']) ? 'all' : 'unassigned';
-        $auto_assign_max_slots = ei_get_auto_assign_max_slots();
 
         // Fetch all slots for this exam (optionally only unassigned)
         if ($scope === 'all') {

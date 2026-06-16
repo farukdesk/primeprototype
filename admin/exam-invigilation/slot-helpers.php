@@ -142,7 +142,7 @@ function ei_save_setting(string $key, string $value): void
 
 function ei_get_auto_assign_max_slots(): int
 {
-    $value = (int)(ei_get_setting('auto_assign_max_slots', '12') ?? 12);
+    $value = (int)ei_get_setting('auto_assign_max_slots', '12');
     if ($value < 1) {
         $value = 1;
     }
