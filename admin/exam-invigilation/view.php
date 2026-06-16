@@ -77,6 +77,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
             redirect(APP_URL . '/exam-invigilation/view.php?id=' . $id);
         }
 
+        $faculty_weekend_map = [];
+        foreach ($all_faculty as $f) {
+            if (!empty($f['weekend_days'])) {
+                $weekend_days = array_values(array_filter(array_map('intval', explode(',', (string)$f['weekend_days'])), static fn ($d) => $d >= 0 && $d <= 6));
+            } else {
+                $weekend_days = ((int)$f['weekend_available'] === 1) ? [] : [0, 6];
+            }
+            $faculty_weekend_map[(int)$f['id']] = $weekend_days;
+        }
+
         // Build a map: date+time_slot → array of already-assigned faculty_ids
         // (this includes OTHER exams too, to avoid cross-exam conflicts)
         $busy_st = db()->query(
@@ -118,15 +128,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
             $time_slot  = $slot['time_slot'];
             $key        = $slot_date . '|' . $time_slot;
 
-            // Determine if this date is a weekend (Sat=6, Sun=0 in PHP date('w'))
             $day_of_week  = (int)date('w', strtotime($slot_date));
-            $is_weekend   = ($day_of_week === 0 || $day_of_week === 6);
 
             // Filter eligible faculty
             $eligible = [];
             foreach ($all_faculty as $f) {
-                // Skip if not available on weekends when slot is on weekend
-                if ($is_weekend && (int)$f['weekend_available'] === 0) continue;
+                $faculty_weekend_days = $faculty_weekend_map[(int)$f['id']] ?? [];
+                if (in_array($day_of_week, $faculty_weekend_days, true)) continue;
                 // Skip if already busy in this date+time_slot
                 if (isset($busy_map[$key][(int)$f['id']])) continue;
                 $eligible[] = $f;

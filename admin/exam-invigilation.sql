@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS `ei_faculty` (
   `designation`       varchar(200)     DEFAULT NULL,
   `weekend_available` tinyint(1)       NOT NULL DEFAULT 0
                       COMMENT '1 = available on Saturday/Sunday',
+  `weekend_days`      varchar(50)      NOT NULL DEFAULT '0,6'
+                      COMMENT 'Faculty weekly weekend/off days; date(w) values (0=Sun..6=Sat)',
   `contact_number`    varchar(50)      DEFAULT NULL,
   `is_active`         tinyint(1)       NOT NULL DEFAULT 1,
   `created_at`        datetime         NOT NULL DEFAULT current_timestamp(),
