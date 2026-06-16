@@ -374,7 +374,7 @@ $report_query = "
              duty.room_number ASC
 ";
 $report_st = db()->prepare($report_query);
-$report_query_params = array_merge($report_params, $report_params); // Same WHERE placeholders are used in both UNION branches.
+$report_query_params = array_merge($report_params, $report_params); // Duplicate params because each UNION branch repeats the same filtered placeholders.
 $report_st->execute($report_query_params);
 $faculty_duty_rows = $report_st->fetchAll();
 
@@ -482,7 +482,7 @@ if ($report_export === 'pdf') {
         . '<div style="padding:16px 24px 8px;">'
         . '<table style="width:100%;border-collapse:collapse;margin-bottom:14px;">'
         . '<tr>'
-        . '<td style="width:33.33%;padding:10px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;">'
+        . '<td style="width:33.33%;padding:10px 12px;background:#f8fafc;border:1px solid #e2e8f0;">'
             . '<div style="font-size:8pt;color:#64748b;text-transform:uppercase;letter-spacing:.08em;">Duty Entries</div>'
             . '<div style="font-size:16pt;font-weight:800;color:#0f172a;margin-top:2px;">' . $report_total_rows . '</div>'
         . '</td>'
@@ -526,7 +526,7 @@ if ($report_export === 'pdf') {
     $filename_suffix = preg_replace('/[^A-Za-z0-9\-]+/', '-', strtolower((string)$filename_suffix));
     $filename_suffix = trim($filename_suffix, '-');
     if ($filename_suffix === '') {
-        $filename_suffix = 'report';
+        $filename_suffix = 'report-' . date('Ymd-His');
     }
     $dompdf->stream('faculty-duty-report-' . $filename_suffix . '.pdf', ['Attachment' => true]);
     exit;
