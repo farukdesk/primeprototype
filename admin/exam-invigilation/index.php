@@ -29,6 +29,60 @@ function ei_report_format_date(string $value, string $format = 'd M Y'): string
     return $date ? $date->format($format) : $value;
 }
 
+function ei_report_filename_part(string $value): string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return '';
+    }
+
+    $value = preg_replace('/[^\pL\pN\s-]+/u', ' ', $value) ?? '';
+    $value = preg_replace('/\s+/u', ' ', trim($value)) ?? '';
+
+    return $value;
+}
+
+function ei_report_designation_short(string $designation): string
+{
+    $normalized = strtolower(trim(preg_replace('/[^a-z0-9]+/i', ' ', $designation) ?? ''));
+    if ($normalized === '') {
+        return '';
+    }
+
+    $map = [
+        'professor' => 'Prof',
+        'associate professor' => 'AssocProf',
+        'assistant professor' => 'AsstProf',
+        'senior lecturer' => 'SrLect',
+        'assistant lecturer' => 'AsstLect',
+        'lecturer' => 'Lect',
+        'adjunct professor' => 'AdjProf',
+        'adjunct faculty' => 'AdjFaculty',
+        'chairman' => 'Chairman',
+        'dean' => 'Dean',
+        'head' => 'Head',
+        'coordinator' => 'Coord',
+    ];
+
+    if (isset($map[$normalized])) {
+        return $map[$normalized];
+    }
+
+    $parts = preg_split('/\s+/', $normalized) ?: [];
+    if (count($parts) === 1) {
+        return ucfirst(substr($parts[0], 0, 12));
+    }
+
+    $short = '';
+    foreach ($parts as $part) {
+        if ($part !== '') {
+            $short .= strtoupper(substr($part, 0, 1));
+        }
+    }
+
+    return $short;
+}
+
 // ── Handle inline actions ────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
     csrf_check();
@@ -296,7 +350,7 @@ foreach ($report_departments as $report_department_row) {
 }
 
 $report_faculty_options = db()->query(
-    'SELECT f.id, f.name, f.designation, d.name AS dept_name
+    'SELECT f.id, f.name, f.designation, d.name AS dept_name, d.code AS dept_code
      FROM ei_faculty f
      JOIN dept_departments d ON d.id = f.dept_id
      WHERE f.is_active = 1
@@ -347,7 +401,8 @@ $report_query = "
             f.id AS faculty_id,
             f.name AS faculty_name,
             f.designation,
-            d.name AS dept_name
+            d.name AS dept_name,
+            d.code AS dept_code
         FROM ei_slots s
         JOIN ei_exams e ON e.id = s.exam_id
         JOIN ei_faculty f ON f.id = s.faculty1_id
@@ -366,7 +421,8 @@ $report_query = "
             f.id AS faculty_id,
             f.name AS faculty_name,
             f.designation,
-            d.name AS dept_name
+            d.name AS dept_name,
+            d.code AS dept_code
         FROM ei_slots s
         JOIN ei_exams e ON e.id = s.exam_id
         JOIN ei_faculty f ON f.id = s.faculty2_id
@@ -432,6 +488,7 @@ $report_pdf_url = APP_URL . '/exam-invigilation/index.php?' . http_build_query(a
 
 if ($report_export === 'pdf') {
     require_once __DIR__ . '/../../vendor/autoload.php';
+    $generated_at_label = date('d M Y, h:i A');
 
     $logo_path = dirname(dirname(__DIR__)) . '/assets/img/logo/logo-black.png';
     $logo_data_uri = '';
@@ -452,12 +509,21 @@ if ($report_export === 'pdf') {
 
     $report_header_faculty = 'All Faculty';
     $report_header_designation = '—';
+    $report_filename_faculty = '';
+    $report_filename_dept_code = '';
+    $report_filename_designation = '';
     if ($report_faculty_id > 0 && isset($report_faculty_map[$report_faculty_id])) {
         $report_header_faculty = (string)$report_faculty_map[$report_faculty_id]['name'];
         $report_header_designation = trim((string)($report_faculty_map[$report_faculty_id]['designation'] ?? '')) ?: '—';
+        $report_filename_faculty = (string)$report_faculty_map[$report_faculty_id]['name'];
+        $report_filename_dept_code = trim((string)($report_faculty_map[$report_faculty_id]['dept_code'] ?? ''));
+        $report_filename_designation = trim((string)($report_faculty_map[$report_faculty_id]['designation'] ?? ''));
     } elseif ($report_total_rows > 0 && $report_faculty_count === 1) {
         $report_header_faculty = (string)$faculty_duty_rows[0]['faculty_name'];
         $report_header_designation = trim((string)($faculty_duty_rows[0]['designation'] ?? '')) ?: '—';
+        $report_filename_faculty = (string)$faculty_duty_rows[0]['faculty_name'];
+        $report_filename_dept_code = trim((string)($faculty_duty_rows[0]['dept_code'] ?? ''));
+        $report_filename_designation = trim((string)($faculty_duty_rows[0]['designation'] ?? ''));
     } elseif ($report_faculty_count > 1) {
         $report_header_faculty = 'Multiple Faculty (' . $report_faculty_count . ')';
     }
@@ -500,11 +566,11 @@ if ($report_export === 'pdf') {
         . '<div style="background:#ffffff;border:1px solid #d7deea;border-radius:16px;overflow:hidden;">'
         . '<div style="padding:18px 24px 14px;border-bottom:1px solid #d7deea;">'
         . '<table style="width:100%;border-collapse:collapse;"><tr>'
-        . '<td style="width:90px;vertical-align:top;">' . $logo_html . '</td>'
-        . '<td style="vertical-align:top;">'
-        . '<div style="font-size:18pt;font-weight:800;color:#0f172a;">Faculty Invigilation Duty Schedule</div>'
-        . '<div style="font-size:9pt;color:#64748b;margin-top:5px;">Generated ' . date('d M Y, h:i A') . '</div>'
+        . '<td style="width:90px;vertical-align:middle;">' . $logo_html . '</td>'
+        . '<td style="vertical-align:middle;text-align:center;">'
+        . '<div style="font-size:16pt;font-weight:800;color:#0f172a;line-height:1.2;">Faculty Invigilation Duty Schedule</div>'
         . '</td>'
+        . '<td style="width:90px;"></td>'
         . '</tr></table>'
         . '<table style="width:100%;border-collapse:collapse;margin-top:12px;font-size:9.5pt;">'
         . '<tr>'
@@ -541,6 +607,7 @@ if ($report_export === 'pdf') {
         . '<tbody>' . $report_rows_html . '</tbody>'
         . '</table>'
         . '<div style="margin:14px 0 0;font-size:8.5pt;color:#64748b;text-align:center;">This is a software-generated schedule. If you have any issues, please contact the Controller of Examinations.</div>'
+        . '<div style="margin:4px 0 0;font-size:8.5pt;color:#64748b;text-align:center;">Generated ' . ei_report_escape($generated_at_label) . '</div>'
         . '</div>'
         . '</div>'
         . '</body></html>';
@@ -550,15 +617,28 @@ if ($report_export === 'pdf') {
     $dompdf->setPaper('A4', 'portrait');
     $dompdf->render();
 
-    $filename_suffix = $report_exam_id > 0 && isset($report_exam_map[$report_exam_id])
-        ? $report_exam_map[$report_exam_id]['exam_name']
-        : 'active-exams';
-    $filename_suffix = preg_replace('/[^A-Za-z0-9\-]+/', '-', strtolower((string)$filename_suffix));
-    $filename_suffix = trim($filename_suffix, '-');
+    $filename_parts = array_filter([
+        ei_report_filename_part($report_filename_faculty),
+        ei_report_filename_part($report_filename_dept_code),
+        ei_report_filename_part(ei_report_designation_short($report_filename_designation)),
+    ], static fn(string $value): bool => $value !== '');
+
+    if (!empty($filename_parts)) {
+        $filename_suffix = implode('_', $filename_parts);
+    } else {
+        $filename_suffix = $report_exam_id > 0 && isset($report_exam_map[$report_exam_id])
+            ? (string)$report_exam_map[$report_exam_id]['exam_name']
+            : 'active-exams';
+        $filename_suffix = preg_replace('/[^A-Za-z0-9\-]+/', '-', strtolower((string)$filename_suffix));
+        $filename_suffix = trim($filename_suffix, '-');
+    }
     if ($filename_suffix === '') {
         $filename_suffix = 'report-' . date('Ymd-His');
     }
-    $dompdf->stream('faculty-duty-report-' . $filename_suffix . '.pdf', ['Attachment' => true]);
+    $download_filename = !empty($filename_parts)
+        ? $filename_suffix . '.pdf'
+        : 'faculty-duty-report-' . $filename_suffix . '.pdf';
+    $dompdf->stream($download_filename, ['Attachment' => true]);
     exit;
 }
 
