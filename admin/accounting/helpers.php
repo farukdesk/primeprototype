@@ -2266,6 +2266,8 @@ function acc_outstanding_through_current_month(int $package_id): float
                 || ($month_info['year'] === $now_year && $month_info['month'] <= $now_month);
 
             if (!$month_due) {
+                // Months within a semester are sequential; once one is in the future
+                // all remaining months in this semester are also in the future.
                 break;
             }
 
