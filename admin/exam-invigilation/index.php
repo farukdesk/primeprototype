@@ -258,6 +258,7 @@ $report_faculty_id = max(0, (int)($_GET['report_faculty_id'] ?? 0));
 $report_date_from = trim((string)($_GET['report_date_from'] ?? ''));
 $report_date_to   = trim((string)($_GET['report_date_to'] ?? ''));
 $report_export    = trim((string)($_GET['report_export'] ?? ''));
+$report_date_range_note = '';
 
 if ($report_date_from !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $report_date_from)) {
     $report_date_from = '';
@@ -267,6 +268,7 @@ if ($report_date_to !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $report_date_
 }
 if ($report_date_from !== '' && $report_date_to !== '' && $report_date_from > $report_date_to) {
     [$report_date_from, $report_date_to] = [$report_date_to, $report_date_from];
+    $report_date_range_note = 'Report dates were reordered because the start date was later than the end date.';
 }
 
 $report_exam_options = db()->query(
@@ -473,7 +475,7 @@ if ($report_export === 'pdf') {
         . '<div style="font-size:9pt;color:#64748b;margin-top:6px;">' . ei_report_escape($report_filter_summary) . '</div>'
         . '</td>'
         . '<td style="text-align:right;vertical-align:top;">'
-        . '<div style="display:inline-block;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:999px;padding:6px 12px;font-size:8.5pt;font-weight:700;">Generated ' . date('d M Y, h:i A') . '</div>'
+        . '<div style="display:inline-block;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:999px;padding:6px 12px;font-size:8.5pt;font-weight:700;">Generated ' . date('d M Y, h:i A T') . '</div>'
         . '</td>'
         . '</tr></table>'
         . '</div>'
@@ -626,6 +628,11 @@ require_once __DIR__ . '/../includes/header.php';
             <span class="text-muted"><?= h($report_filter_summary) ?></span>
             <span class="ms-auto text-muted">Defaults to active exams when no specific exam is selected.</span>
         </div>
+        <?php if ($report_date_range_note !== ''): ?>
+        <div class="alert alert-warning py-2 px-3 mb-4" style="font-size:.85rem;">
+            <i class="fas fa-exclamation-triangle me-1"></i><?= h($report_date_range_note) ?>
+        </div>
+        <?php endif; ?>
 
         <div class="row g-3 mb-4">
             <div class="col-md-4">
