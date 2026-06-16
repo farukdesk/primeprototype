@@ -89,7 +89,7 @@ require_once __DIR__ . '/../includes/header.php';
 <?php
 $_type_map = [
     'info'    => ['bg' => '#dbeafe', 'border' => '#3b82f6', 'icon' => 'fa-circle-info',       'text' => '#1e40af'],
-    'warning' => ['bg' => '#fef9c3', 'border' => '#f59e0b', 'icon' => 'fa-triangle-exclamation','text' => '#92400e'],
+    'warning' => ['bg' => '#fef9c3', 'border' => '#f59e0b', 'icon' => 'fa-triangle-exclamation','text' => '#78350f'],
     'danger'  => ['bg' => '#fee2e2', 'border' => '#ef4444', 'icon' => 'fa-circle-exclamation', 'text' => '#991b1b'],
     'success' => ['bg' => '#d1fae5', 'border' => '#10b981', 'icon' => 'fa-circle-check',       'text' => '#065f46'],
 ];
@@ -188,19 +188,24 @@ $_s = $_type_map[$notice['notice_type']] ?? $_type_map['warning'];
                     Cancel
                 </a>
                 <?php if ($notice['is_active'] && $notice['message'] !== ''): ?>
-                <form method="POST" class="ms-auto" onsubmit="return confirm('Deactivate the global notice?');">
-                    <?= csrf_field() ?>
-                    <input type="hidden" name="is_active"   value="0">
-                    <input type="hidden" name="notice_type" value="<?= h($notice['notice_type']) ?>">
-                    <input type="hidden" name="title"       value="<?= h($notice['title'] ?? '') ?>">
-                    <input type="hidden" name="message"     value="<?= h($notice['message']) ?>">
-                    <button type="submit" class="btn btn-outline-secondary" style="border-radius:10px;">
-                        <i class="fas fa-eye-slash me-1"></i> Deactivate
-                    </button>
-                </form>
+                <button type="button" class="btn btn-outline-secondary ms-auto" style="border-radius:10px;"
+                        onclick="deactivateNotice()">
+                    <i class="fas fa-eye-slash me-1"></i> Deactivate
+                </button>
                 <?php endif; ?>
             </div>
         </form>
+
+        <?php if ($notice['is_active'] && $notice['message'] !== ''): ?>
+        <!-- Deactivate form lives outside the main form to comply with HTML spec -->
+        <form id="deactivate-form" method="POST" style="display:none;">
+            <?= csrf_field() ?>
+            <input type="hidden" name="is_active"   value="0">
+            <input type="hidden" name="notice_type" value="<?= h($notice['notice_type']) ?>">
+            <input type="hidden" name="title"       value="<?= h($notice['title'] ?? '') ?>">
+            <input type="hidden" name="message"     value="<?= h($notice['message']) ?>">
+        </form>
+        <?php endif; ?>
     </div>
 </div>
 
@@ -224,6 +229,10 @@ $_s = $_type_map[$notice['notice_type']] ?? $_type_map['warning'];
 .type-option:hover { border-color: #9ca3af !important; }
 </style>
 <script>
+function deactivateNotice() {
+    if (!confirm('Deactivate the global notice? Students will no longer see it.')) return;
+    document.getElementById('deactivate-form').submit();
+}
 document.querySelectorAll('.type-radio').forEach(function(radio) {
     radio.addEventListener('change', function() {
         document.querySelectorAll('.type-option').forEach(function(label) {
