@@ -409,6 +409,10 @@ if ($report_date_from !== '' && $report_date_to !== '') {
     $report_filter_parts[] = 'Duty Dates: Up to ' . date('d M Y', strtotime($report_date_to));
 }
 $report_filter_summary = implode(' | ', $report_filter_parts);
+$report_date_summary_label = 'Duty Date' . ($report_date_count === 1 ? '' : 's');
+if ($report_exam_count > 1) {
+    $report_date_summary_label .= ' • ' . $report_exam_count . ' exams';
+}
 
 $report_filter_query = [];
 if ($report_exam_id > 0) $report_filter_query['report_exam_id'] = $report_exam_id;
@@ -517,7 +521,7 @@ if ($report_export === 'pdf') {
     $filename_suffix = $report_exam_id > 0 && isset($report_exam_map[$report_exam_id])
         ? $report_exam_map[$report_exam_id]['exam_name']
         : 'active-exams';
-    $filename_suffix = preg_replace('/[^A-Za-z0-9\-]+/', '-', strtolower((string)$filename_suffix)) ?? '';
+    $filename_suffix = preg_replace('/[^A-Za-z0-9\-]+/', '-', strtolower((string)$filename_suffix));
     $filename_suffix = trim($filename_suffix, '-');
     if ($filename_suffix === '') {
         $filename_suffix = 'report';
@@ -639,7 +643,7 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="col-md-4">
                 <div class="card text-center py-3 h-100" style="border-left:4px solid #fd7e14;">
                     <div style="font-size:1.8rem;font-weight:700;color:#fd7e14;"><?= $report_date_count ?></div>
-                    <div class="text-muted" style="font-size:.8rem;">Duty Date<?= $report_date_count === 1 ? '' : 's' ?><?= $report_exam_count > 1 ? ' • ' . $report_exam_count . ' exam' . ($report_exam_count === 1 ? '' : 's') : '' ?></div>
+                    <div class="text-muted" style="font-size:.8rem;"><?= h($report_date_summary_label) ?></div>
                 </div>
             </div>
         </div>
