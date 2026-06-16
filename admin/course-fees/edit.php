@@ -105,13 +105,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $set_parts = [];
             $params    = [];
 
+            // Only use old programme start month as fallback when it was a valid month (1–12).
+            // Treat 0 the same as NULL (programme had no start month configured).
+            $old_bi  = (int)($prog['bi_semester_start_month']  ?? 0);
+            $old_tri = (int)($prog['tri_semester_start_month'] ?? 0);
+
             if ($has_bi_start_col) {
+                // Preserve an already-snapshotted value; fill NULL/0 packages with the old
+                // programme value only if that old value was a real month (not unset).
                 $set_parts[] = 'bi_semester_start_month = COALESCE(NULLIF(bi_semester_start_month, 0), ?)';
-                $params[]    = isset($prog['bi_semester_start_month']) ? (int)$prog['bi_semester_start_month'] : null;
+                $params[]    = ($old_bi >= 1 && $old_bi <= 12) ? $old_bi : null;
             }
             if ($has_tri_start_col) {
                 $set_parts[] = 'tri_semester_start_month = COALESCE(NULLIF(tri_semester_start_month, 0), ?)';
-                $params[]    = isset($prog['tri_semester_start_month']) ? (int)$prog['tri_semester_start_month'] : null;
+                $params[]    = ($old_tri >= 1 && $old_tri <= 12) ? $old_tri : null;
             }
 
             $params[] = $id;

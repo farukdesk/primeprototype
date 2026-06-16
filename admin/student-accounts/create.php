@@ -317,8 +317,52 @@ require_once __DIR__ . '/../includes/header.php';
                     <div class="form-text">Auto-filled from course fee structure</div>
                 </div>
                 <input type="hidden" name="form_id_fee" id="f-form-id-fee" value="<?= h(old('form_id_fee', '0')) ?>">
-                <input type="hidden" name="bi_semester_start_month" id="f-bi-start-month" value="<?= h(old('bi_semester_start_month', '0')) ?>">
-                <input type="hidden" name="tri_semester_start_month" id="f-tri-start-month" value="<?= h(old('tri_semester_start_month', '0')) ?>">
+            </div>
+
+            <hr class="my-3">
+            <h6 class="fw-semibold text-muted mb-3" style="font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;">
+                Payment Schedule Start Month
+            </h6>
+            <div class="alert alert-info py-2 mb-3" style="font-size:.85rem;">
+                <i class="fas fa-info-circle me-1"></i>
+                The start month controls <strong>when the first monthly payment is due</strong>.
+                It is snapshotted onto this student's account and will <strong>not change</strong> if the course fee is later edited.
+                Override only if this student's programme began in a different month from the programme default.
+            </div>
+            <div class="row g-3">
+                <?php
+                $months_list = [
+                    1=>'January',2=>'February',3=>'March',4=>'April',
+                    5=>'May',6=>'June',7=>'July',8=>'August',
+                    9=>'September',10=>'October',11=>'November',12=>'December',
+                ];
+                ?>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">
+                        Bi-Semester Start Month
+                        <small class="text-muted fw-normal">(programmes ≤ 8 semesters)</small>
+                    </label>
+                    <select name="bi_semester_start_month" id="f-bi-start-month" class="form-select">
+                        <option value="0">— Not set (use programme default) —</option>
+                        <?php foreach ($months_list as $num => $name): ?>
+                        <option value="<?= $num ?>" <?= (int)old('bi_semester_start_month', '0') === $num ? 'selected' : '' ?>><?= $name ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <div class="form-text">Auto-filled from the selected programme. Override if needed.</div>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">
+                        Tri-Semester Start Month
+                        <small class="text-muted fw-normal">(programmes &gt; 8 semesters)</small>
+                    </label>
+                    <select name="tri_semester_start_month" id="f-tri-start-month" class="form-select">
+                        <option value="0">— Not set (use programme default) —</option>
+                        <?php foreach ($months_list as $num => $name): ?>
+                        <option value="<?= $num ?>" <?= (int)old('tri_semester_start_month', '0') === $num ? 'selected' : '' ?>><?= $name ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <div class="form-text">Auto-filled from the selected programme. Override if needed.</div>
+                </div>
             </div>
 
             <hr class="my-3">
