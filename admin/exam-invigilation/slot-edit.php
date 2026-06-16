@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/slot-helpers.php';
 require_access('exam-invigilation', 'can_edit');
 
 $sid     = (int)($_GET['id'] ?? 0);
@@ -21,25 +22,23 @@ $page_title = 'Edit Slot';
 $errors     = [];
 clear_old();
 
-$faculty_list = db()->query(
-    "SELECT f.*, d.name AS dept_name
-     FROM ei_faculty f
-     JOIN dept_departments d ON d.id = f.dept_id
-     WHERE f.is_active = 1
-     ORDER BY d.name ASC, f.name ASC"
-)->fetchAll();
+$faculty_list = ei_get_faculty_list();
+[$slot_start_time, $slot_end_time] = ei_parse_time_slot_range((string)($slot['time_slot'] ?? ''));
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
     $slot_date   = trim($_POST['slot_date']   ?? '');
-    $time_slot   = trim($_POST['time_slot']   ?? '');
+    $start_time  = trim($_POST['start_time']  ?? '');
+    $end_time    = trim($_POST['end_time']    ?? '');
     $room_number = trim($_POST['room_number'] ?? '');
     $faculty1_id = (int)($_POST['faculty1_id'] ?? 0) ?: null;
     $faculty2_id = (int)($_POST['faculty2_id'] ?? 0) ?: null;
+    $time_slot   = ei_normalize_time_slot_range($start_time, $end_time);
 
     if ($slot_date === '')   $errors[] = 'Date is required.';
-    if ($time_slot === '')   $errors[] = 'Time slot is required.';
+    if ($start_time === '' || $end_time === '') $errors[] = 'Start time and end time are required.';
+    elseif (!$time_slot)     $errors[] = 'Enter a valid time range with end time after start time.';
     if ($room_number === '') $errors[] = 'Room number is required.';
     if ($faculty1_id && $faculty2_id && $faculty1_id === $faculty2_id)
         $errors[] = 'Invigilator 1 and Invigilator 2 must be different people.';
@@ -51,7 +50,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash_set('success', 'Slot updated.');
         redirect(APP_URL . '/exam-invigilation/view.php?id=' . $exam_id);
     }
-    save_old(compact('slot_date','time_slot','room_number','faculty1_id','faculty2_id'));
+    save_old(compact('slot_date','start_time','end_time','room_number','faculty1_id','faculty2_id'));
 }
 
 require_once __DIR__ . '/../includes/header.php';
@@ -92,14 +91,22 @@ require_once __DIR__ . '/../includes/header.php';
                            value="<?= old('slot_date', $slot['slot_date']) ?>" required>
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label fw-medium">Time Slot <span class="text-danger">*</span></label>
-                    <input type="text" name="time_slot" class="form-control" style="border-radius:10px;"
-                           value="<?= old('time_slot', $slot['time_slot']) ?>" required maxlength="100">
+                    <label class="form-label fw-medium">Start Time <span class="text-danger">*</span></label>
+                    <input type="time" name="start_time" class="form-control" style="border-radius:10px;"
+                           value="<?= old('start_time', $slot_start_time) ?>" required>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-medium">End Time <span class="text-danger">*</span></label>
+                    <input type="time" name="end_time" class="form-control" style="border-radius:10px;"
+                           value="<?= old('end_time', $slot_end_time) ?>" required>
                 </div>
                 <div class="col-md-4">
                     <label class="form-label fw-medium">Room Number <span class="text-danger">*</span></label>
                     <input type="text" name="room_number" class="form-control" style="border-radius:10px;"
                            value="<?= old('room_number', $slot['room_number']) ?>" required maxlength="50">
+                </div>
+                <div class="col-12">
+                    <small class="text-muted">Saved format: <code>09:00 AM – 12:00 PM</code></small>
                 </div>
 
                 <div class="col-12"><hr class="my-1"></div>
@@ -119,7 +126,7 @@ require_once __DIR__ . '/../includes/header.php';
                             endif;
                         ?>
                         <option value="<?= $f['id'] ?>" <?= $sel1 == $f['id'] ? 'selected' : '' ?>>
-                            <?= h($f['name']) ?><?= $f['designation'] ? ' (' . h($f['designation']) . ')' : '' ?>
+                            <?= h(ei_format_faculty_option_label($f)) ?>
                         </option>
                         <?php endforeach; ?>
                         <?php if ($last_dept !== '') echo '</optgroup>'; ?>
@@ -140,7 +147,7 @@ require_once __DIR__ . '/../includes/header.php';
                             endif;
                         ?>
                         <option value="<?= $f['id'] ?>" <?= $sel2 == $f['id'] ? 'selected' : '' ?>>
-                            <?= h($f['name']) ?><?= $f['designation'] ? ' (' . h($f['designation']) . ')' : '' ?>
+                            <?= h(ei_format_faculty_option_label($f)) ?>
                         </option>
                         <?php endforeach; ?>
                         <?php if ($last_dept !== '') echo '</optgroup>'; ?>
