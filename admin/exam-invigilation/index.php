@@ -19,7 +19,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
         $auto_assign_max_slots_per_day = max(1, min(50,  (int)($_POST['auto_assign_max_slots_per_day'] ?? 3)));
         ei_save_setting('auto_assign_max_slots',         (string)$auto_assign_max_slots);
         ei_save_setting('auto_assign_max_slots_per_day', (string)$auto_assign_max_slots_per_day);
-        flash_set('success', 'Auto-assign slot caps updated.');    } elseif ($_POST['_action'] === 'delete') {
+        flash_set('success', 'Auto-assign slot caps updated.');
+    } elseif ($_POST['_action'] === 'delete') {
         require_access('exam-invigilation', 'can_delete');
         db()->prepare('DELETE FROM ei_exams WHERE id = ?')->execute([$eid]);
         flash_set('success', 'Exam deleted.');
