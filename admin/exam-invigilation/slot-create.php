@@ -58,6 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $time_slot_idx = $find_column($header_map, ['time_slot', 'time']);
                     $start_idx     = $find_column($header_map, ['start_time', 'start']);
                     $end_idx       = $find_column($header_map, ['end_time', 'end']);
+                    $dept_idx      = $find_column($header_map, ['dept_id', 'department', 'dept', 'department_id']);
 
                     if ($date_idx === null) $errors[] = 'Missing required column: slot_date (or date).';
                     if ($room_idx === null) $errors[] = 'Missing required column: room_number (or room).';
@@ -66,9 +67,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
 
                     if (empty($errors)) {
+                        // Build a name→id map for departments so CSV can supply a name string
+                        $dept_name_map = [];
+                        foreach ($dept_list as $d) {
+                            $dept_name_map[strtolower(trim((string)$d['name']))] = (int)$d['id'];
+                        }
+
                         $insert_st = db()->prepare(
-                            'INSERT INTO ei_slots (exam_id, slot_date, time_slot, room_number, faculty1_id, faculty2_id)
-                             VALUES (?,?,?,?,NULL,NULL)'
+                            'INSERT INTO ei_slots (exam_id, slot_date, time_slot, room_number, dept_id, faculty1_id, faculty2_id)
+                             VALUES (?,?,?,?,?,NULL,NULL)'
                         );
                         $exists_st = db()->prepare(
                             'SELECT id FROM ei_slots WHERE exam_id = ? AND slot_date = ? AND time_slot = ? AND room_number = ? LIMIT 1'
@@ -87,6 +94,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $time_slot_raw = $time_slot_idx !== null ? trim((string)($row[$time_slot_idx] ?? '')) : '';
                             $start_time = $start_idx !== null ? trim((string)($row[$start_idx] ?? '')) : '';
                             $end_time = $end_idx !== null ? trim((string)($row[$end_idx] ?? '')) : '';
+                            $dept_raw = $dept_idx !== null ? trim((string)($row[$dept_idx] ?? '')) : '';
 
                             if ($date_raw === '' && $room_number === '' && $time_slot_raw === '' && $start_time === '' && $end_time === '') {
                                 continue;
@@ -127,7 +135,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 continue;
                             }
 
-                            $insert_st->execute([$exam_id, $slot_date, $time_slot, $room_number]);
+                            // Resolve dept_id: accept numeric ID or department name
+                            $csv_dept_id = null;
+                            if ($dept_raw !== '') {
+                                if (ctype_digit($dept_raw) && isset($dept_name_map[strtolower($dept_raw)]) === false) {
+                                    $csv_dept_id = (int)$dept_raw ?: null;
+                                } else {
+                                    $csv_dept_id = $dept_name_map[strtolower($dept_raw)] ?? null;
+                                }
+                            }
+
+                            $insert_st->execute([$exam_id, $slot_date, $time_slot, $room_number, $csv_dept_id]);
                             $created++;
                         }
 
@@ -349,12 +367,13 @@ require_once __DIR__ . '/../includes/header.php';
             </form>
             <hr>
             <p class="mb-2">Required columns: <code>slot_date</code>, <code>room_number</code>, and either <code>time_slot</code> or both <code>start_time</code> + <code>end_time</code>.</p>
+            <p class="mb-2">Optional column: <code>dept_id</code> (or <code>department</code>) — preferred department for Invigilator 1 auto-assign; accepts a numeric ID or department name.</p>
             <p class="mb-2">Accepted date format: <code>YYYY-MM-DD</code>.</p>
             <p class="mb-0">Accepted time formats: <code>09:00</code>, <code>9:00 AM</code>, or full range like <code>09:00 AM – 12:00 PM</code>.</p>
             <hr>
-            <pre class="mb-0" style="font-size:.78rem;white-space:pre-wrap;">slot_date,start_time,end_time,room_number
-    2026-06-20,09:00,12:00,Room 301
-    2026-06-20,13:00,16:00,Room 302</pre>
+            <pre class="mb-0" style="font-size:.78rem;white-space:pre-wrap;">slot_date,start_time,end_time,room_number,department
+2026-06-20,09:00,12:00,Room 301,Computer Science
+2026-06-20,13:00,16:00,Room 302,</pre>
         </div>
     </div>
     </div>
