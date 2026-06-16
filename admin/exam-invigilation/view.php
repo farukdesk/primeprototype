@@ -391,6 +391,14 @@ require_once __DIR__ . '/../includes/header.php';
         <a href="<?= h($print_url) ?>" target="_blank" class="btn btn-outline-dark btn-sm" style="border-radius:10px;">
             <i class="fas fa-file-pdf me-1"></i> A4 PDF Print
         </a>
+        <a href="<?= APP_URL ?>/exam-invigilation/attendance.php?id=<?= $id ?>"
+           class="btn btn-outline-info btn-sm" style="border-radius:10px;">
+            <i class="fas fa-calendar-check me-1"></i> Attendance
+        </a>
+        <a href="<?= APP_URL ?>/exam-invigilation/remuneration-bill.php?id=<?= $id ?>"
+           class="btn btn-outline-success btn-sm" style="border-radius:10px;">
+            <i class="fas fa-file-invoice-dollar me-1"></i> Bill
+        </a>
         <?php else: ?>
         <a href="<?= h($view_url) ?>" class="btn btn-outline-secondary btn-sm" style="border-radius:10px;">
             <i class="fas fa-arrow-left me-1"></i> Back to Interactive View

@@ -30,9 +30,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     sort($weekend_days_arr);
     $weekend_days = implode(',', $weekend_days_arr);
     $weekend_available = (in_array(0, $weekend_days_arr, true) || in_array(6, $weekend_days_arr, true)) ? 0 : 1;
-    $gender           = in_array($_POST['gender'] ?? '', ['Male','Female'], true) ? $_POST['gender'] : null;
-    $contact_number   = trim($_POST['contact_number'] ?? '');
-    $is_active        = isset($_POST['is_active']) ? 1 : 0;
+    $gender                = in_array($_POST['gender'] ?? '', ['Male','Female'], true) ? $_POST['gender'] : null;
+    $contact_number        = trim($_POST['contact_number'] ?? '');
+    $remuneration_per_slot = max(0, (float)($_POST['remuneration_per_slot'] ?? 0));
+    $is_active             = isset($_POST['is_active']) ? 1 : 0;
 
     // Handle signature upload
     $signature = null;
@@ -61,13 +62,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (empty($errors)) {
         db()->prepare(
-            'INSERT INTO ei_faculty (dept_id, name, designation, gender, weekend_available, weekend_days, contact_number, signature, is_active)
-             VALUES (?,?,?,?,?,?,?,?,?)'
-        )->execute([$dept_id, $name, $designation ?: null, $gender, $weekend_available, $weekend_days, $contact_number ?: null, $signature, $is_active]);
+            'INSERT INTO ei_faculty (dept_id, name, designation, gender, weekend_available, weekend_days, contact_number, remuneration_per_slot, signature, is_active)
+             VALUES (?,?,?,?,?,?,?,?,?,?)'
+        )->execute([$dept_id, $name, $designation ?: null, $gender, $weekend_available, $weekend_days, $contact_number ?: null, $remuneration_per_slot, $signature, $is_active]);
         flash_set('success', 'Faculty <strong>' . h($name) . '</strong> added to pool.');
         redirect(APP_URL . '/exam-invigilation/faculty.php');
     }
-    save_old(compact('dept_id','name','designation','gender','weekend_days_raw','contact_number','is_active'));
+    save_old(compact('dept_id','name','designation','gender','weekend_days_raw','contact_number','remuneration_per_slot','is_active'));
 }
 
 require_once __DIR__ . '/../includes/header.php';
@@ -137,6 +138,16 @@ require_once __DIR__ . '/../includes/header.php';
                     <input type="text" name="contact_number" class="form-control" style="border-radius:10px;"
                            value="<?= old('contact_number') ?>" maxlength="50"
                            placeholder="e.g. 01700-000000">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-medium">Exam Remuneration <small class="text-muted fw-normal">(per slot, BDT)</small></label>
+                    <div class="input-group">
+                        <span class="input-group-text" style="border-radius:10px 0 0 10px;">৳</span>
+                        <input type="number" name="remuneration_per_slot" class="form-control" style="border-radius:0 10px 10px 0;"
+                               value="<?= number_format((float)old('remuneration_per_slot', 0), 2, '.', '') ?>"
+                               min="0" step="0.01" placeholder="0.00">
+                    </div>
+                    <small class="text-muted">Amount paid to this faculty per attended invigilation slot.</small>
                 </div>
                 <div class="col-md-6">
                     <label class="form-label fw-medium">Signature Image</label>
