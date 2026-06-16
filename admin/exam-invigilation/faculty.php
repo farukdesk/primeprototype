@@ -225,7 +225,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <td class="text-end pe-4">
                             <div class="d-flex gap-1 justify-content-end">
                                 <?php if (is_super_admin() || can_access('exam-invigilation', 'can_edit')): ?>
-                                <a href="<?= APP_URL ?>/exam-invigilation/faculty-edit.php?id=<?= $f['id'] ?>"
+                                <a href="<?= APP_URL ?>/exam-invigilation/faculty-edit.php?id=<?= $f['id'] ?>&page=<?= $page ?>&dept=<?= $f_dept ?>&q=<?= urlencode($search) ?>&active=<?= urlencode($f_active) ?>&designation=<?= urlencode($f_designation) ?>"
                                    class="btn btn-sm btn-outline-primary" style="border-radius:7px;" title="Edit">
                                     <i class="fas fa-edit"></i>
                                 </a>

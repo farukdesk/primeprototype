@@ -11,6 +11,16 @@ if (!$fac) {
     redirect(APP_URL . '/exam-invigilation/faculty.php');
 }
 
+// Build return URL preserving page and filters from the list view
+$_return_params = array_filter([
+    'page'        => (int)($_GET['page'] ?? 1) > 1 ? (int)$_GET['page'] : null,
+    'dept'        => (int)($_GET['dept'] ?? 0) ?: null,
+    'q'           => trim($_GET['q'] ?? '') ?: null,
+    'active'      => isset($_GET['active']) && $_GET['active'] !== '' ? $_GET['active'] : null,
+    'designation' => trim($_GET['designation'] ?? '') ?: null,
+], static fn($v) => $v !== null);
+$_return_url = APP_URL . '/exam-invigilation/faculty.php' . ($_return_params ? '?' . http_build_query($_return_params) : '');
+
 $page_title = 'Edit Faculty';
 $errors     = [];
 clear_old();
@@ -85,7 +95,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'UPDATE ei_faculty SET dept_id=?, name=?, designation=?, gender=?, weekend_available=?, weekend_days=?, contact_number=?, remuneration_per_slot=?, signature=?, is_active=? WHERE id=?'
         )->execute([$dept_id, $name, $designation ?: null, $gender, $weekend_available, $weekend_days, $contact_number ?: null, $remuneration_per_slot, $signature, $is_active, $fid]);
         flash_set('success', 'Faculty updated.');
-        redirect(APP_URL . '/exam-invigilation/faculty.php');
+        redirect($_return_url);
     }
     save_old(compact('dept_id','name','designation','gender','weekend_days_raw','contact_number','remuneration_per_slot','is_active'));
 }
@@ -98,7 +108,7 @@ require_once __DIR__ . '/../includes/header.php';
         <ol class="breadcrumb mb-0">
             <li class="breadcrumb-item"><a href="<?= APP_URL ?>/index.php">Dashboard</a></li>
             <li class="breadcrumb-item"><a href="<?= APP_URL ?>/exam-invigilation/index.php">Exam Invigilation</a></li>
-            <li class="breadcrumb-item"><a href="<?= APP_URL ?>/exam-invigilation/faculty.php">Faculty Pool</a></li>
+            <li class="breadcrumb-item"><a href="<?= h($_return_url) ?>">Faculty Pool</a></li>
             <li class="breadcrumb-item active">Edit</li>
         </ol>
     </nav>
@@ -224,7 +234,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <button type="submit" class="btn btn-primary" style="border-radius:10px;">
                     <i class="fas fa-save me-1"></i> Update Faculty
                 </button>
-                <a href="<?= APP_URL ?>/exam-invigilation/faculty.php" class="btn btn-light" style="border-radius:10px;">Cancel</a>
+                <a href="<?= h($_return_url) ?>" class="btn btn-light" style="border-radius:10px;">Cancel</a>
             </div>
         </form>
     </div>
