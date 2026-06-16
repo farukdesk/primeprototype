@@ -65,7 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$fh) {
             $errors[] = 'Unable to read uploaded CSV file.';
         } else {
-            $headers = fgetcsv($fh);
+            $headers = fgetcsv($fh, 0, ',', '"', '');
             if ($headers === false || empty($headers)) {
                 $errors[] = 'CSV header row is missing.';
             } else {
@@ -99,7 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $row_no = 1;
                     $row_errors = [];
 
-                    while (($row = fgetcsv($fh)) !== false) {
+                    while (($row = fgetcsv($fh, 0, ',', '"', '')) !== false) {
                         $row_no++;
                         $dept_raw = trim((string)($row[$header_map['dept']] ?? ''));
                         $name = trim((string)($row[$header_map['name']] ?? ''));
