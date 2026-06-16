@@ -537,9 +537,17 @@ if ($step === 'apply_updates') {
     $applied = 0;
     $skipped = 0;
 
+    // Explicit mapping to avoid any dynamic identifier interpolation risks
     $allowed_fields = [
-        'full_name', 'dept_id', 'program_id', 'batch_id',
-        'status', 'admitted_semester', 'phone', 'email', 'sex',
+        'full_name'         => 'full_name',
+        'dept_id'           => 'dept_id',
+        'program_id'        => 'program_id',
+        'batch_id'          => 'batch_id',
+        'status'            => 'status',
+        'admitted_semester' => 'admitted_semester',
+        'phone'             => 'phone',
+        'email'             => 'email',
+        'sex'               => 'sex',
     ];
 
     foreach ($updates_requested as $student_pk => $fields) {
@@ -550,10 +558,11 @@ if ($step === 'apply_updates') {
         $set_params = [];
 
         foreach ($fields as $field => $on) {
-            if (!in_array($field, $allowed_fields, true)) continue;
-            $new_val = $update_vals[$student_pk][$field] ?? null;
+            if (!isset($allowed_fields[$field])) continue;
+            $safe_col = $allowed_fields[$field]; // known-safe column name
+            $new_val  = $update_vals[$student_pk][$field] ?? null;
             if ($new_val === null) continue;
-            $set_parts[]  = "`$field` = ?";
+            $set_parts[]  = "$safe_col = ?";
             $set_params[] = ($new_val === '') ? null : $new_val;
         }
 
@@ -1089,7 +1098,7 @@ elseif ($step === 'verify' && $results !== null):
                     <td rowspan="<?= count($diffs) ?>"><?= h($db['full_name']) ?></td>
                     <?php endif; ?>
                     <td><?= h($label) ?></td>
-                    <td class="text-muted"><?= h((string)$db_display) ?: '<em class="text-muted">empty</em>' ?></td>
+                    <td class="text-muted"><?php $db_disp_str = h((string)$db_display); echo $db_disp_str !== '' ? $db_disp_str : '<em class="text-muted">empty</em>'; ?></td>
                     <td class="fw-semibold text-primary"><?= h((string)$csv_display) ?></td>
                     <?php if (sm_is_staff()): ?>
                     <td class="text-center">
