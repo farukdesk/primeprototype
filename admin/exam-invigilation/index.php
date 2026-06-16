@@ -372,7 +372,8 @@ $report_query = "
              duty.room_number ASC
 ";
 $report_st = db()->prepare($report_query);
-$report_st->execute(array_merge($report_params, $report_params));
+$report_query_params = array_merge($report_params, $report_params); // Same WHERE placeholders are used in both UNION branches.
+$report_st->execute($report_query_params);
 $faculty_duty_rows = $report_st->fetchAll();
 
 $report_total_rows = count($faculty_duty_rows);
@@ -423,7 +424,10 @@ if ($report_export === 'pdf') {
     $logo_path = dirname(dirname(__DIR__)) . '/assets/img/logo/logo-black.png';
     $logo_data_uri = '';
     if (is_file($logo_path) && is_readable($logo_path)) {
-        $logo_data_uri = 'data:image/png;base64,' . base64_encode((string)file_get_contents($logo_path));
+        $logo_binary = file_get_contents($logo_path);
+        if ($logo_binary !== false) {
+            $logo_data_uri = 'data:image/png;base64,' . base64_encode($logo_binary);
+        }
     }
 
     $report_rows_html = '';
@@ -513,7 +517,11 @@ if ($report_export === 'pdf') {
     $filename_suffix = $report_exam_id > 0 && isset($report_exam_map[$report_exam_id])
         ? $report_exam_map[$report_exam_id]['exam_name']
         : 'active-exams';
-    $filename_suffix = preg_replace('/[^A-Za-z0-9\-]+/', '-', strtolower((string)$filename_suffix)) ?: 'report';
+    $filename_suffix = preg_replace('/[^A-Za-z0-9\-]+/', '-', strtolower((string)$filename_suffix)) ?? '';
+    $filename_suffix = trim($filename_suffix, '-');
+    if ($filename_suffix === '') {
+        $filename_suffix = 'report';
+    }
     $dompdf->stream('faculty-duty-report-' . $filename_suffix . '.pdf', ['Attachment' => true]);
     exit;
 }
