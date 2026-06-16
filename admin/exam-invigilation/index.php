@@ -540,7 +540,7 @@ if ($report_export === 'pdf') {
         . '</thead>'
         . '<tbody>' . $report_rows_html . '</tbody>'
         . '</table>'
-        . '<div style="margin:14px 0 0;font-size:8.5pt;color:#64748b;text-align:right;">Prepared for faculty invigilation schedule handover.</div>'
+        . '<div style="margin:14px 0 0;font-size:8.5pt;color:#64748b;text-align:center;">This is a software-generated schedule. If you have any issues, please contact the Controller of Examinations.</div>'
         . '</div>'
         . '</div>'
         . '</body></html>';
