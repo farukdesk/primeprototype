@@ -26,12 +26,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
         db()->prepare('DELETE FROM ei_faculty WHERE id = ?')->execute([$fid]);
         flash_set('success', 'Faculty removed.');
     }
-    redirect(APP_URL . '/exam-invigilation/faculty.php?' . http_build_query(array_intersect_key($_GET, array_flip(['dept','q','page']))));
+    redirect(APP_URL . '/exam-invigilation/faculty.php?' . http_build_query(array_intersect_key($_GET, array_flip(['dept','q','active','designation','page']))));
 }
 
 // ── Filters ───────────────────────────────────────────────────────────────────
 $f_dept = (int)($_GET['dept'] ?? 0);
 $search = trim($_GET['q'] ?? '');
+$f_active = isset($_GET['active']) ? (string)$_GET['active'] : '';
+$f_designation = trim((string)($_GET['designation'] ?? ''));
 $page   = max(1, (int)($_GET['page'] ?? 1));
 $per    = 25;
 
@@ -45,6 +47,14 @@ if ($search !== '') {
     $where[]  = '(f.name LIKE ? OR f.designation LIKE ? OR f.contact_number LIKE ?)';
     $s = '%' . $search . '%';
     $params = array_merge($params, [$s, $s, $s]);
+}
+if ($f_active === '1' || $f_active === '0') {
+    $where[] = 'f.is_active = ?';
+    $params[] = (int)$f_active;
+}
+if ($f_designation !== '') {
+    $where[] = 'f.designation = ?';
+    $params[] = $f_designation;
 }
 
 $sql_where = $where ? 'WHERE ' . implode(' AND ', $where) : '';
@@ -69,6 +79,8 @@ $data_st->execute($params);
 $rows = $data_st->fetchAll();
 
 $departments = db()->query('SELECT id, name FROM dept_departments WHERE is_active=1 ORDER BY name ASC')->fetchAll();
+$designation_rows = db()->query("SELECT DISTINCT designation FROM ei_faculty WHERE designation IS NOT NULL AND designation <> '' ORDER BY designation ASC")->fetchAll();
+$designations = array_map(static fn($r) => (string)$r['designation'], $designation_rows);
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -107,6 +119,21 @@ require_once __DIR__ . '/../includes/header.php';
                     <option value="0">All Departments</option>
                     <?php foreach ($departments as $d): ?>
                     <option value="<?= $d['id'] ?>" <?= $f_dept == $d['id'] ? 'selected' : '' ?>><?= h($d['name']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-12 col-md-2">
+                <select name="active" class="form-select form-select-sm" style="border-radius:8px;">
+                    <option value="">Active: All</option>
+                    <option value="1" <?= $f_active === '1' ? 'selected' : '' ?>>On</option>
+                    <option value="0" <?= $f_active === '0' ? 'selected' : '' ?>>Off</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-2">
+                <select name="designation" class="form-select form-select-sm" style="border-radius:8px;">
+                    <option value="">All Designations</option>
+                    <?php foreach ($designations as $designation): ?>
+                    <option value="<?= h($designation) ?>" <?= $f_designation === $designation ? 'selected' : '' ?>><?= h($designation) ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
@@ -210,7 +237,7 @@ require_once __DIR__ . '/../includes/header.php';
         <nav><ul class="pagination pagination-sm mb-0">
             <?php for ($p = 1; $p <= $pages; $p++): ?>
             <li class="page-item <?= $p === $page ? 'active' : '' ?>">
-                <a class="page-link" href="?dept=<?= $f_dept ?>&q=<?= urlencode($search) ?>&page=<?= $p ?>"><?= $p ?></a>
+                <a class="page-link" href="?dept=<?= $f_dept ?>&q=<?= urlencode($search) ?>&active=<?= urlencode($f_active) ?>&designation=<?= urlencode($f_designation) ?>&page=<?= $p ?>"><?= $p ?></a>
             </li>
             <?php endfor; ?>
         </ul></nav>

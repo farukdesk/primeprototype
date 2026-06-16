@@ -12,6 +12,31 @@ if (!$exam) {
 }
 
 $page_title = h($exam['exam_name']) . ' – Invigilation';
+$time_order_sql = "COALESCE(
+    STR_TO_DATE(TRIM(SUBSTRING_INDEX(REPLACE(time_slot, '-', '–'), '–', 1)), '%h:%i %p'),
+    STR_TO_DATE(TRIM(SUBSTRING_INDEX(REPLACE(time_slot, '-', '–'), '–', 1)), '%H:%i')
+)";
+
+$f_date       = trim((string)($_GET['slot_date'] ?? ''));
+$f_dept       = (int)($_GET['dept'] ?? 0);
+$f_room       = trim((string)($_GET['room'] ?? ''));
+$f_time_slot  = trim((string)($_GET['time_slot'] ?? ''));
+$f_invigilator = (int)($_GET['invigilator'] ?? 0);
+$print_mode   = isset($_GET['print']) && $_GET['print'] === '1';
+
+if ($f_date !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $f_date)) {
+    $f_date = '';
+}
+
+$filter_query = [];
+if ($f_date !== '') $filter_query['slot_date'] = $f_date;
+if ($f_dept > 0) $filter_query['dept'] = $f_dept;
+if ($f_room !== '') $filter_query['room'] = $f_room;
+if ($f_time_slot !== '') $filter_query['time_slot'] = $f_time_slot;
+if ($f_invigilator > 0) $filter_query['invigilator'] = $f_invigilator;
+
+$view_url  = APP_URL . '/exam-invigilation/view.php?' . http_build_query(array_merge(['id' => $id], $filter_query));
+$print_url = APP_URL . '/exam-invigilation/view.php?' . http_build_query(array_merge(['id' => $id], $filter_query, ['print' => 1]));
 
 // ── Handle POST actions ───────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
@@ -23,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
         $sid = (int)($_POST['slot_id'] ?? 0);
         db()->prepare('DELETE FROM ei_slots WHERE id = ? AND exam_id = ?')->execute([$sid, $id]);
         flash_set('success', 'Slot deleted.');
-        redirect(APP_URL . '/exam-invigilation/view.php?id=' . $id);
+        redirect($view_url);
     }
 
     // ── Clear assignment for one slot ──
@@ -33,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
         db()->prepare('UPDATE ei_slots SET faculty1_id=NULL, faculty2_id=NULL WHERE id = ? AND exam_id = ?')
            ->execute([$sid, $id]);
         flash_set('success', 'Assignment cleared.');
-        redirect(APP_URL . '/exam-invigilation/view.php?id=' . $id);
+        redirect($view_url);
     }
 
     // ── Auto-assign faculty ───────────────────────────────────────────────────
@@ -45,13 +70,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
         // Fetch all slots for this exam (optionally only unassigned)
         if ($scope === 'all') {
             $slots_st = db()->prepare(
-                'SELECT * FROM ei_slots WHERE exam_id = ? ORDER BY slot_date ASC, time_slot ASC'
+                "SELECT * FROM ei_slots
+                 WHERE exam_id = ?
+                 ORDER BY slot_date ASC, {$time_order_sql} ASC, time_slot ASC, room_number ASC"
             );
         } else {
             $slots_st = db()->prepare(
                 'SELECT * FROM ei_slots WHERE exam_id = ?
                  AND (faculty1_id IS NULL OR faculty2_id IS NULL)
-                 ORDER BY slot_date ASC, time_slot ASC'
+                 ORDER BY slot_date ASC, ' . $time_order_sql . ' ASC, time_slot ASC, room_number ASC'
             );
         }
         $slots_st->execute([$id]);
@@ -59,7 +86,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
 
         if (empty($slots)) {
             flash_set('info', 'No slots to assign.');
-            redirect(APP_URL . '/exam-invigilation/view.php?id=' . $id);
+            redirect($view_url);
         }
 
         // Load all active faculty grouped by dept
@@ -74,7 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
 
         if (empty($all_faculty)) {
             flash_set('error', 'No active faculty in the pool. Please add faculty first.');
-            redirect(APP_URL . '/exam-invigilation/view.php?id=' . $id);
+            redirect($view_url);
         }
 
         $faculty_weekend_map = [];
@@ -209,13 +236,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
         if ($failed_count  > 0) $msg .= ", {$failed_count} could not be assigned (no available faculty)";
         $msg .= '.';
         flash_set($failed_count > 0 ? 'warning' : 'success', $msg);
-        redirect(APP_URL . '/exam-invigilation/view.php?id=' . $id);
+        redirect($view_url);
     }
 
-    redirect(APP_URL . '/exam-invigilation/view.php?id=' . $id);
+    redirect($view_url);
 }
 
+// ── Filter option data ────────────────────────────────────────────────────────
+$departments = db()->query('SELECT id, name FROM dept_departments WHERE is_active=1 ORDER BY name ASC')->fetchAll();
+$time_slots_st = db()->prepare('SELECT DISTINCT time_slot FROM ei_slots WHERE exam_id = ? ORDER BY ' . $time_order_sql . ' ASC, time_slot ASC');
+$time_slots_st->execute([$id]);
+$time_slots = array_values(array_filter(array_map(static fn ($r) => (string)$r['time_slot'], $time_slots_st->fetchAll()), static fn ($v) => trim($v) !== ''));
+$invigilators = db()->query('SELECT id, name, designation FROM ei_faculty WHERE is_active = 1 ORDER BY name ASC')->fetchAll();
+
 // ── Load slots ────────────────────────────────────────────────────────────────
+$where = ['s.exam_id = ?'];
+$params = [$id];
+if ($f_date !== '') {
+    $where[] = 's.slot_date = ?';
+    $params[] = $f_date;
+}
+if ($f_dept > 0) {
+    $where[] = '(s.dept_id = ? OR f1.dept_id = ? OR f2.dept_id = ?)';
+    $params[] = $f_dept;
+    $params[] = $f_dept;
+    $params[] = $f_dept;
+}
+if ($f_room !== '') {
+    $where[] = 's.room_number LIKE ?';
+    $params[] = '%' . $f_room . '%';
+}
+if ($f_time_slot !== '') {
+    $where[] = 's.time_slot = ?';
+    $params[] = $f_time_slot;
+}
+if ($f_invigilator > 0) {
+    $where[] = '(s.faculty1_id = ? OR s.faculty2_id = ?)';
+    $params[] = $f_invigilator;
+    $params[] = $f_invigilator;
+}
+$sql_where = 'WHERE ' . implode(' AND ', $where);
+
 $slots_st = db()->prepare(
     "SELECT s.*,
             f1.name AS f1_name, f1.designation AS f1_desig, d1.name AS f1_dept,
@@ -227,10 +288,15 @@ $slots_st = db()->prepare(
      LEFT JOIN ei_faculty f2 ON f2.id = s.faculty2_id
      LEFT JOIN dept_departments d2 ON d2.id = f2.dept_id
      LEFT JOIN dept_departments dp ON dp.id = s.dept_id
-     WHERE s.exam_id = ?
-     ORDER BY s.slot_date ASC, s.time_slot ASC, s.room_number ASC"
+     $sql_where
+     ORDER BY s.slot_date ASC,
+              COALESCE(
+                  STR_TO_DATE(TRIM(SUBSTRING_INDEX(REPLACE(s.time_slot, '-', '–'), '–', 1)), '%h:%i %p'),
+                  STR_TO_DATE(TRIM(SUBSTRING_INDEX(REPLACE(s.time_slot, '-', '–'), '–', 1)), '%H:%i')
+              ) ASC,
+              s.time_slot ASC, s.room_number ASC"
 );
-$slots_st->execute([$id]);
+$slots_st->execute($params);
 $slots = $slots_st->fetchAll();
 
 $total_slots    = count($slots);
@@ -260,6 +326,16 @@ require_once __DIR__ . '/../includes/header.php';
         </ol>
     </nav>
     <div class="d-flex gap-2 flex-wrap">
+        <?php if (!$print_mode): ?>
+        <a href="<?= h($print_url) ?>" target="_blank" class="btn btn-outline-dark btn-sm" style="border-radius:10px;">
+            <i class="fas fa-file-pdf me-1"></i> A4 PDF Print
+        </a>
+        <?php else: ?>
+        <a href="<?= h($view_url) ?>" class="btn btn-outline-secondary btn-sm" style="border-radius:10px;">
+            <i class="fas fa-arrow-left me-1"></i> Back to Interactive View
+        </a>
+        <?php endif; ?>
+        <?php if (!$print_mode): ?>
         <?php if (is_super_admin() || can_access('exam-invigilation', 'can_create')): ?>
         <a href="<?= APP_URL ?>/exam-invigilation/slot-create.php?exam_id=<?= $id ?>#csv-upload"
            class="btn btn-outline-primary btn-sm" style="border-radius:10px;">
@@ -276,10 +352,69 @@ require_once __DIR__ . '/../includes/header.php';
             <i class="fas fa-edit me-1"></i> Edit Exam
         </a>
         <?php endif; ?>
+        <?php endif; ?>
     </div>
 </div>
 
 <?php flash_show(); ?>
+
+<?php if ($print_mode): ?>
+<script>
+window.addEventListener('load', function () { window.print(); });
+</script>
+<style>
+@media print {
+    @page { size: A4; margin: 10mm; }
+    .navbar, .breadcrumb, .btn, form, .card-footer, .no-print, .main-sidebar, .main-header, footer { display: none !important; }
+    .content-wrapper, .content { margin: 0 !important; padding: 0 !important; }
+    .card { border: 0 !important; box-shadow: none !important; }
+}
+</style>
+<?php endif; ?>
+
+<div class="card mb-3 no-print">
+    <div class="card-body py-2 px-3">
+        <form method="GET" class="row g-2 align-items-center">
+            <input type="hidden" name="id" value="<?= $id ?>">
+            <div class="col-12 col-md-2">
+                <input type="date" name="slot_date" class="form-control form-control-sm" value="<?= h($f_date) ?>">
+            </div>
+            <div class="col-12 col-md-2">
+                <select name="dept" class="form-select form-select-sm">
+                    <option value="0">All Departments</option>
+                    <?php foreach ($departments as $d): ?>
+                    <option value="<?= $d['id'] ?>" <?= $f_dept === (int)$d['id'] ? 'selected' : '' ?>><?= h($d['name']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-12 col-md-2">
+                <input type="text" name="room" class="form-control form-control-sm" placeholder="Room" value="<?= h($f_room) ?>">
+            </div>
+            <div class="col-12 col-md-2">
+                <select name="time_slot" class="form-select form-select-sm">
+                    <option value="">All Time Slots</option>
+                    <?php foreach ($time_slots as $ts): ?>
+                    <option value="<?= h($ts) ?>" <?= $f_time_slot === $ts ? 'selected' : '' ?>><?= h($ts) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-12 col-md-2">
+                <select name="invigilator" class="form-select form-select-sm">
+                    <option value="0">All Invigilators</option>
+                    <?php foreach ($invigilators as $inv): ?>
+                    <option value="<?= $inv['id'] ?>" <?= $f_invigilator === (int)$inv['id'] ? 'selected' : '' ?>>
+                        <?= h($inv['name']) ?><?= $inv['designation'] ? ' (' . h($inv['designation']) . ')' : '' ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-auto d-flex gap-2">
+                <button class="btn btn-sm btn-primary">Filter</button>
+                <a href="<?= APP_URL ?>/exam-invigilation/view.php?id=<?= $id ?>" class="btn btn-sm btn-outline-secondary">Reset</a>
+            </div>
+        </form>
+    </div>
+</div>
 
 <!-- Exam summary card -->
 <div class="row g-3 mb-4">
@@ -310,7 +445,7 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <!-- Auto-assign panel -->
-<?php if (is_super_admin() || can_access('exam-invigilation', 'can_edit')): ?>
+<?php if (!$print_mode && (is_super_admin() || can_access('exam-invigilation', 'can_edit'))): ?>
 <div class="card mb-4" style="border-left:4px solid #4f8ef7;">
     <div class="card-body py-3 px-4">
         <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
@@ -373,7 +508,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <th>Invigilator 1</th>
                         <th>Invigilator 2</th>
                         <th>Status</th>
-                        <?php if (is_super_admin() || can_access('exam-invigilation', 'can_edit') || can_access('exam-invigilation', 'can_delete')): ?>
+                        <?php if (!$print_mode && (is_super_admin() || can_access('exam-invigilation', 'can_edit') || can_access('exam-invigilation', 'can_delete'))): ?>
                         <th class="text-end pe-4">Actions</th>
                         <?php endif; ?>
                     </tr>
@@ -421,7 +556,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <span class="badge bg-danger">Unassigned</span>
                         <?php endif; ?>
                     </td>
-                    <?php if (is_super_admin() || can_access('exam-invigilation', 'can_edit') || can_access('exam-invigilation', 'can_delete')): ?>
+                    <?php if (!$print_mode && (is_super_admin() || can_access('exam-invigilation', 'can_edit') || can_access('exam-invigilation', 'can_delete'))): ?>
                     <td class="text-end pe-4">
                         <div class="d-flex gap-1 justify-content-end">
                             <?php if (is_super_admin() || can_access('exam-invigilation', 'can_edit')): ?>
