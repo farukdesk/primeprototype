@@ -126,6 +126,8 @@ function ei_get_setting(string $key, ?string $default = null): ?string
                 $settings[(string)$row['setting_key']] = $row['setting_val'];
             }
         } catch (Throwable $e) {
+            // Fall back to hard-coded defaults so the module still works before the
+            // settings migration is applied on older deployments.
         }
     }
 

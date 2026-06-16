@@ -103,9 +103,10 @@ if (!empty($backup_faculty_rows)) {
         if ($r['faculty2_id']) $busy_map[$key][(int)$r['faculty2_id']] = true;
     }
 
+    $time_slot_start_sql = "TRIM(SUBSTRING_INDEX(REPLACE(s.time_slot, '-', '–'), '–', 1))";
     $time_order_sql = "COALESCE(
-        STR_TO_DATE(TRIM(SUBSTRING_INDEX(REPLACE(s.time_slot, '-', '–'), '–', 1)), '%h:%i %p'),
-        STR_TO_DATE(TRIM(SUBSTRING_INDEX(REPLACE(s.time_slot, '-', '–'), '–', 1)), '%H:%i')
+        STR_TO_DATE({$time_slot_start_sql}, '%h:%i %p'),
+        STR_TO_DATE({$time_slot_start_sql}, '%H:%i')
     )";
     $backup_slot_rows = db()->query(
         "SELECT s.id, s.slot_date, s.time_slot, s.room_number, e.exam_name
