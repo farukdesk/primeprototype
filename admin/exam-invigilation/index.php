@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/slot-helpers.php';
 require_access('exam-invigilation');
 
 $page_title = 'Exam Invigilation';
@@ -12,6 +13,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
     if ($_POST['_action'] === 'toggle') {
         db()->prepare('UPDATE ei_exams SET is_active = 1 - is_active WHERE id = ?')->execute([$eid]);
         flash_set('success', 'Status updated.');
+    } elseif ($_POST['_action'] === 'save_settings') {
+        require_access('exam-invigilation', 'can_edit');
+        $auto_assign_max_slots = max(1, min(100, (int)($_POST['auto_assign_max_slots'] ?? 12)));
+        ei_save_setting('auto_assign_max_slots', (string)$auto_assign_max_slots);
+        flash_set('success', 'Auto-assign slot cap updated.');
     } elseif ($_POST['_action'] === 'delete') {
         require_access('exam-invigilation', 'can_delete');
         db()->prepare('DELETE FROM ei_exams WHERE id = ?')->execute([$eid]);
@@ -65,10 +71,11 @@ $assigned_faculty_count = (int)db()->query(
     ) t'
 )->fetchColumn();
 $available_backup_faculty = $total_active_faculty - $assigned_faculty_count;
+$auto_assign_max_slots = ei_get_auto_assign_max_slots();
 
 // Fetch the actual list of available/backup faculty (not yet assigned in any active exam)
 $backup_faculty_rows = db()->query(
-    "SELECT f.id, f.name, f.designation, f.gender, f.contact_number, d.name AS dept_name
+    "SELECT f.id, f.name, f.designation, f.gender, f.weekend_days, f.weekend_available, f.contact_number, d.name AS dept_name
      FROM ei_faculty f
      JOIN dept_departments d ON d.id = f.dept_id
      WHERE f.is_active = 1
@@ -81,6 +88,48 @@ $backup_faculty_rows = db()->query(
        )
      ORDER BY d.name ASC, f.name ASC"
 )->fetchAll();
+
+$backup_opportunities = [];
+if (!empty($backup_faculty_rows)) {
+    $busy_st = db()->query(
+        "SELECT slot_date, time_slot, faculty1_id, faculty2_id
+         FROM ei_slots
+         WHERE faculty1_id IS NOT NULL OR faculty2_id IS NOT NULL"
+    );
+    $busy_map = [];
+    foreach ($busy_st->fetchAll() as $r) {
+        $key = $r['slot_date'] . '|' . $r['time_slot'];
+        if ($r['faculty1_id']) $busy_map[$key][(int)$r['faculty1_id']] = true;
+        if ($r['faculty2_id']) $busy_map[$key][(int)$r['faculty2_id']] = true;
+    }
+
+    $time_order_sql = "COALESCE(
+        STR_TO_DATE(TRIM(SUBSTRING_INDEX(REPLACE(s.time_slot, '-', '–'), '–', 1)), '%h:%i %p'),
+        STR_TO_DATE(TRIM(SUBSTRING_INDEX(REPLACE(s.time_slot, '-', '–'), '–', 1)), '%H:%i')
+    )";
+    $backup_slot_rows = db()->query(
+        "SELECT s.id, s.slot_date, s.time_slot, s.room_number, e.exam_name
+         FROM ei_slots s
+         JOIN ei_exams e ON e.id = s.exam_id
+         WHERE e.is_active = 1
+         ORDER BY s.slot_date ASC, {$time_order_sql} ASC, s.time_slot ASC, s.room_number ASC"
+    )->fetchAll();
+
+    foreach ($backup_slot_rows as $slot) {
+        $eligible_teachers = [];
+        foreach ($backup_faculty_rows as $faculty) {
+            if (ei_is_faculty_eligible_for_slot($faculty, $slot, $busy_map)) {
+                $eligible_teachers[] = $faculty;
+            }
+        }
+        if (!empty($eligible_teachers)) {
+            $backup_opportunities[] = [
+                'slot' => $slot,
+                'teachers' => $eligible_teachers,
+            ];
+        }
+    }
+}
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -106,6 +155,27 @@ require_once __DIR__ . '/../includes/header.php';
 
 <?php flash_show(); ?>
 
+<?php if (is_super_admin() || can_access('exam-invigilation', 'can_edit')): ?>
+<div class="card mb-3" style="border-left:4px solid #4f8ef7;">
+    <div class="card-body py-3 px-4">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+            <div>
+                <h6 class="mb-1 fw-semibold"><i class="fas fa-sliders-h me-2 text-primary"></i>Auto-Assign Slot Cap</h6>
+                <p class="mb-0 text-muted" style="font-size:.85rem;">Each teacher can receive up to <?= $auto_assign_max_slots ?> auto-assigned slot<?= $auto_assign_max_slots === 1 ? '' : 's' ?>. You can change this anytime.</p>
+            </div>
+            <form method="POST" class="d-flex align-items-center gap-2">
+                <?= csrf_field() ?>
+                <input type="hidden" name="_action" value="save_settings">
+                <label for="autoAssignMaxSlots" class="small text-muted mb-0">Max slots per teacher</label>
+                <input type="number" min="1" max="100" name="auto_assign_max_slots" id="autoAssignMaxSlots"
+                       value="<?= $auto_assign_max_slots ?>" class="form-control form-control-sm" style="width:90px;">
+                <button class="btn btn-sm btn-primary" style="border-radius:8px;">Save</button>
+            </form>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
+
 <!-- Faculty Availability / Backup Panel -->
 <div class="row g-3 mb-4">
     <div class="col-md-4">
@@ -129,7 +199,7 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 <div class="alert alert-info py-2 px-3 mb-3 d-flex align-items-center gap-2" style="font-size:.85rem;">
     <i class="fas fa-info-circle"></i>
-    <span><strong><?= max(0, $available_backup_faculty) ?> faculty</strong> have not yet been assigned any invigilator duty in active exams and are available as backup if someone is absent or an extra slot is needed.</span>
+    <span><strong><?= max(0, $available_backup_faculty) ?> faculty</strong> have not yet been assigned any invigilator duty in active exams and are available as backup if someone is absent or an extra slot is needed. Auto-assign also respects the current <?= $auto_assign_max_slots ?>-slot cap per teacher.</span>
     <?php if (!empty($backup_faculty_rows)): ?>
     <button class="ms-auto btn btn-sm btn-outline-info" style="border-radius:8px;white-space:nowrap;"
             type="button" data-bs-toggle="collapse" data-bs-target="#backupFacultyList" aria-expanded="false">
@@ -182,6 +252,50 @@ require_once __DIR__ . '/../includes/header.php';
                     </tbody>
                 </table>
             </div>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
+
+<?php if (!empty($backup_opportunities)): ?>
+<div class="card mb-4">
+    <div class="card-header py-2 px-4 d-flex align-items-center justify-content-between">
+        <h6 class="mb-0 fw-semibold"><i class="fas fa-user-shield me-2 text-muted"></i>Backup Coverage by Date / Time / Room</h6>
+        <span class="badge bg-primary bg-opacity-10 text-primary"><?= count($backup_opportunities) ?> slot<?= count($backup_opportunities) === 1 ? '' : 's' ?></span>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="px-4">Date</th>
+                        <th>Time Slot</th>
+                        <th>Room</th>
+                        <th>Exam</th>
+                        <th>Eligible Backup Teachers</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($backup_opportunities as $entry): ?>
+                <?php $slot = $entry['slot']; ?>
+                <tr>
+                    <td class="px-4"><?= date('d M Y', strtotime($slot['slot_date'])) ?></td>
+                    <td><?= h($slot['time_slot']) ?></td>
+                    <td class="fw-medium"><?= h($slot['room_number']) ?></td>
+                    <td><?= h($slot['exam_name']) ?></td>
+                    <td>
+                        <div class="d-flex flex-wrap gap-1">
+                            <?php foreach ($entry['teachers'] as $teacher): ?>
+                            <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle">
+                                <?= h($teacher['name']) ?><?php if (!empty($teacher['dept_name'])): ?> · <?= h($teacher['dept_name']) ?><?php endif; ?>
+                            </span>
+                            <?php endforeach; ?>
+                        </div>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
         </div>
     </div>
 </div>
