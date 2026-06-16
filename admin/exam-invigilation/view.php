@@ -313,7 +313,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
 
         $msg = "Auto-assign complete: {$assigned_count} slot(s) fully assigned";
         if ($partial_count > 0) $msg .= ", {$partial_count} partially assigned";
-        if ($failed_count  > 0) $msg .= ", {$failed_count} could not be assigned (no available faculty within the {$auto_assign_max_slots}-slot cap)";
+        if ($failed_count  > 0) $msg .= ", {$failed_count} could not be assigned (insufficient eligible faculty within current rules and the {$auto_assign_max_slots}-slot cap)";
         $msg .= '.';
         flash_set($failed_count > 0 ? 'warning' : 'success', $msg);
         redirect($view_url);

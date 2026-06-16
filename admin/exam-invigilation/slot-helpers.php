@@ -136,8 +136,8 @@ function ei_save_setting(string $key, string $value): void
 {
     db()->prepare(
         'INSERT INTO ei_settings (setting_key, setting_val) VALUES (?, ?)
-         ON DUPLICATE KEY UPDATE setting_val = VALUES(setting_val)'
-    )->execute([$key, $value]);
+         ON DUPLICATE KEY UPDATE setting_val = ?'
+    )->execute([$key, $value, $value]);
 }
 
 function ei_get_auto_assign_max_slots(): int

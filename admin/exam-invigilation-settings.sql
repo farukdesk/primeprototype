@@ -12,4 +12,4 @@ CREATE TABLE IF NOT EXISTS `ei_settings` (
 
 INSERT INTO `ei_settings` (`setting_key`, `setting_val`)
 VALUES ('auto_assign_max_slots', '12')
-ON DUPLICATE KEY UPDATE `setting_val` = VALUES(`setting_val`);
+ON DUPLICATE KEY UPDATE `setting_val` = '12';
