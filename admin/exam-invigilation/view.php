@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/slot-helpers.php';
 require_access('exam-invigilation');
 
 $id = (int)($_GET['id'] ?? 0);
@@ -47,6 +48,7 @@ if ($f_invigilator > 0) $filter_query['invigilator'] = $f_invigilator;
 
 $view_url  = APP_URL . '/exam-invigilation/view.php?' . http_build_query(array_merge(['id' => $id], $filter_query));
 $print_url = APP_URL . '/exam-invigilation/view.php?' . http_build_query(array_merge(['id' => $id], $filter_query, ['print' => 1]));
+$auto_assign_max_slots = ei_get_auto_assign_max_slots();
 
 // ── Handle POST actions ───────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
@@ -116,12 +118,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
 
         $faculty_weekend_map = [];
         foreach ($all_faculty as $f) {
-            if (!empty($f['weekend_days'])) {
-                $weekend_days = array_values(array_filter(array_map('intval', explode(',', (string)$f['weekend_days'])), static fn ($d) => $d >= 0 && $d <= 6));
-            } else {
-                $weekend_days = ((int)$f['weekend_available'] === 1) ? [] : [0, 6];
-            }
-            $faculty_weekend_map[(int)$f['id']] = $weekend_days;
+            $faculty_weekend_map[(int)$f['id']] = ei_get_faculty_weekend_days($f);
         }
 
         // Build a map: date+time_slot → array of already-assigned faculty_ids
@@ -166,6 +163,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
             $workload[(int)$f['id']] = 0;
         }
 
+        $assignment_params = [];
+        $assignment_scope_sql = '';
+        if ($scope === 'all') {
+            $assignment_scope_sql = ' AND s.exam_id != ?';
+            $assignment_params = [$id, $id];
+        }
+        $assignment_count_st = db()->prepare(
+            "SELECT faculty_id, COUNT(*) AS slot_count
+             FROM (
+                 SELECT s.faculty1_id AS faculty_id
+                 FROM ei_slots s
+                 JOIN ei_exams e ON e.id = s.exam_id
+                 WHERE e.is_active = 1
+                   AND s.faculty1_id IS NOT NULL{$assignment_scope_sql}
+                 UNION ALL
+                 SELECT s.faculty2_id AS faculty_id
+                 FROM ei_slots s
+                 JOIN ei_exams e ON e.id = s.exam_id
+                 WHERE e.is_active = 1
+                   AND s.faculty2_id IS NOT NULL{$assignment_scope_sql}
+             ) assigned
+             GROUP BY faculty_id"
+        );
+        $assignment_count_st->execute($assignment_params);
+        foreach ($assignment_count_st->fetchAll() as $row) {
+            $workload[(int)$row['faculty_id']] = (int)$row['slot_count'];
+        }
+
         // Helper: sort a pool of faculty by workload (fewest assignments first), shuffle ties
         $sort_by_workload = static function (array $pool) use (&$workload): array {
             usort($pool, static function ($a, $b) use ($workload) {
@@ -185,18 +210,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
 
             $day_of_week  = (int)date('w', strtotime($slot_date));
 
-            // Determine if the slot starts after 6 PM (for Female faculty restriction)
-            $slot_starts_after_6pm = false;
-            if (preg_match('/^\s*(.+?)\s*[–-]/u', $time_slot, $tm)) {
-                $slot_start_str = trim($tm[1]);
-                $parsed_start = DateTimeImmutable::createFromFormat('h:i A', $slot_start_str)
-                             ?: DateTimeImmutable::createFromFormat('g:i A', $slot_start_str)
-                             ?: DateTimeImmutable::createFromFormat('H:i', $slot_start_str)
-                             ?: DateTimeImmutable::createFromFormat('G:i', $slot_start_str);
-                if ($parsed_start) {
-                    $slot_starts_after_6pm = (int)$parsed_start->format('H') >= 18;
-                }
-            }
+            $slot_starts_after_6pm = ei_slot_starts_after_6pm($time_slot);
 
             // Filter eligible faculty
             $eligible = [];
@@ -205,6 +219,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
                 if (in_array($day_of_week, $faculty_weekend_days, true)) continue;
                 // Skip if already busy in this date+time_slot
                 if (isset($busy_map[$key][(int)$f['id']])) continue;
+                // Skip if the faculty has already reached the configured limit
+                if (($workload[(int)$f['id']] ?? 0) >= $auto_assign_max_slots) continue;
                 // Female faculty are not assigned to slots starting at or after 6 PM
                 if ($slot_starts_after_6pm && !empty($f['gender']) && $f['gender'] === 'Female') continue;
                 $eligible[] = $f;
@@ -297,7 +313,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
 
         $msg = "Auto-assign complete: {$assigned_count} slot(s) fully assigned";
         if ($partial_count > 0) $msg .= ", {$partial_count} partially assigned";
-        if ($failed_count  > 0) $msg .= ", {$failed_count} could not be assigned (no available faculty)";
+        if ($failed_count  > 0) $msg .= ", {$failed_count} could not be assigned (insufficient eligible faculty within the current availability rules and {$auto_assign_max_slots}-slot cap)";
         $msg .= '.';
         flash_set($failed_count > 0 ? 'warning' : 'success', $msg);
         redirect($view_url);
@@ -510,7 +526,7 @@ require_once __DIR__ . '/../includes/header.php';
             <div>
                 <h6 class="mb-1 fw-semibold"><i class="fas fa-magic me-2 text-primary"></i>Auto-Assign Invigilators</h6>
                 <p class="mb-0 text-muted" style="font-size:.85rem;">
-                    Automatically assigns 2 faculty per room slot — one from each department — without overlapping time slots.
+                    Automatically assigns 2 faculty per room slot — one from each department — without overlapping time slots and without crossing the current <?= $auto_assign_max_slots ?>-slot per teacher limit.
                 </p>
             </div>
             <form method="POST" class="d-flex gap-2 align-items-center">

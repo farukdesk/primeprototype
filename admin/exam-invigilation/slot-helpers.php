@@ -113,3 +113,89 @@ function ei_normalize_slot_date(string $value): ?string
 
     return null;
 }
+
+function ei_get_setting(string $key, ?string $default = null): ?string
+{
+    static $settings = null;
+
+    if ($settings === null) {
+        $settings = [];
+        try {
+            $rows = db()->query('SELECT setting_key, setting_val FROM ei_settings')->fetchAll();
+            foreach ($rows as $row) {
+                $settings[(string)$row['setting_key']] = $row['setting_val'];
+            }
+        } catch (Throwable $e) {
+            // Fall back to hard-coded defaults so the module still works before the
+            // settings migration is applied on older deployments.
+        }
+    }
+
+    return array_key_exists($key, $settings) ? $settings[$key] : $default;
+}
+
+function ei_save_setting(string $key, string $value): void
+{
+    db()->prepare(
+        'INSERT INTO ei_settings (setting_key, setting_val) VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE setting_val = ?'
+    )->execute([$key, $value, $value]);
+}
+
+function ei_get_auto_assign_max_slots(): int
+{
+    $value = (int)ei_get_setting('auto_assign_max_slots', '12');
+    if ($value < 1) {
+        $value = 1;
+    }
+    return $value;
+}
+
+function ei_get_faculty_weekend_days(array $faculty): array
+{
+    if (!empty($faculty['weekend_days'])) {
+        return array_values(array_filter(
+            array_map('intval', explode(',', (string)$faculty['weekend_days'])),
+            static fn ($day) => $day >= 0 && $day <= 6
+        ));
+    }
+
+    return ((int)($faculty['weekend_available'] ?? 0) === 1) ? [] : [0, 6];
+}
+
+function ei_slot_starts_after_6pm(string $time_slot): bool
+{
+    if (!preg_match('/^\s*(.+?)\s*[–-]/u', $time_slot, $matches)) {
+        return false;
+    }
+
+    $parsed_start = ei_parse_time_value(trim($matches[1]));
+    return $parsed_start ? ((int)$parsed_start->format('H') >= 18) : false;
+}
+
+function ei_is_faculty_eligible_for_slot(array $faculty, array $slot, array $busy_map = []): bool
+{
+    $slot_date = (string)($slot['slot_date'] ?? '');
+    $time_slot = (string)($slot['time_slot'] ?? '');
+    $faculty_id = (int)($faculty['id'] ?? 0);
+
+    if ($faculty_id <= 0 || $slot_date === '' || $time_slot === '') {
+        return false;
+    }
+
+    $day_of_week = (int)date('w', strtotime($slot_date));
+    if (in_array($day_of_week, ei_get_faculty_weekend_days($faculty), true)) {
+        return false;
+    }
+
+    $busy_key = $slot_date . '|' . $time_slot;
+    if (isset($busy_map[$busy_key][$faculty_id])) {
+        return false;
+    }
+
+    if (ei_slot_starts_after_6pm($time_slot) && (($faculty['gender'] ?? '') === 'Female')) {
+        return false;
+    }
+
+    return true;
+}
