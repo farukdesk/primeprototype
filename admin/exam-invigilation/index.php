@@ -1,0 +1,206 @@
+<?php
+require_once __DIR__ . '/../includes/auth.php';
+require_access('exam-invigilation');
+
+$page_title = 'Exam Invigilation';
+
+// ── Handle inline actions ────────────────────────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
+    csrf_check();
+    $eid = (int)($_POST['id'] ?? 0);
+
+    if ($_POST['_action'] === 'toggle') {
+        db()->prepare('UPDATE ei_exams SET is_active = 1 - is_active WHERE id = ?')->execute([$eid]);
+        flash_set('success', 'Status updated.');
+    } elseif ($_POST['_action'] === 'delete') {
+        require_access('exam-invigilation', 'can_delete');
+        db()->prepare('DELETE FROM ei_exams WHERE id = ?')->execute([$eid]);
+        flash_set('success', 'Exam deleted.');
+    }
+    redirect(APP_URL . '/exam-invigilation/index.php');
+}
+
+// ── Filters ──────────────────────────────────────────────────────────────────
+$search = trim($_GET['q'] ?? '');
+$page   = max(1, (int)($_GET['page'] ?? 1));
+$per    = 20;
+
+$where  = [];
+$params = [];
+if ($search !== '') {
+    $where[]  = '(e.exam_name LIKE ? OR e.exam_year LIKE ?)';
+    $s        = '%' . $search . '%';
+    $params   = [$s, $s];
+}
+
+$sql_where = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+
+$total = (int)db()->prepare("SELECT COUNT(*) FROM ei_exams e $sql_where")->execute($params) ?
+         db()->prepare("SELECT COUNT(*) FROM ei_exams e $sql_where") : null;
+
+$cnt_st = db()->prepare("SELECT COUNT(*) FROM ei_exams e $sql_where");
+$cnt_st->execute($params);
+$total = (int)$cnt_st->fetchColumn();
+
+$pages  = max(1, (int)ceil($total / $per));
+$page   = min($page, $pages);
+$offset = ($page - 1) * $per;
+
+$st = db()->prepare(
+    "SELECT e.*,
+            (SELECT COUNT(*) FROM ei_slots s WHERE s.exam_id = e.id) AS slot_count,
+            (SELECT COUNT(*) FROM ei_slots s WHERE s.exam_id = e.id AND s.faculty1_id IS NOT NULL AND s.faculty2_id IS NOT NULL) AS assigned_count
+     FROM ei_exams e $sql_where
+     ORDER BY e.exam_year DESC, e.exam_name ASC
+     LIMIT $per OFFSET $offset"
+);
+$st->execute($params);
+$rows = $st->fetchAll();
+
+require_once __DIR__ . '/../includes/header.php';
+?>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb mb-0">
+            <li class="breadcrumb-item"><a href="<?= APP_URL ?>/index.php">Dashboard</a></li>
+            <li class="breadcrumb-item active">Exam Invigilation</li>
+        </ol>
+    </nav>
+    <div class="d-flex gap-2">
+        <?php if (is_super_admin() || can_access('exam-invigilation', 'can_create')): ?>
+        <a href="<?= APP_URL ?>/exam-invigilation/faculty.php" class="btn btn-outline-secondary btn-sm" style="border-radius:10px;">
+            <i class="fas fa-users me-1"></i> Faculty Pool
+        </a>
+        <a href="<?= APP_URL ?>/exam-invigilation/create.php" class="btn btn-primary btn-sm" style="border-radius:10px;">
+            <i class="fas fa-plus me-1"></i> New Exam
+        </a>
+        <?php endif; ?>
+    </div>
+</div>
+
+<?php flash_show(); ?>
+
+<!-- Search -->
+<div class="card mb-3">
+    <div class="card-body py-2 px-3">
+        <form method="GET" class="row g-2 align-items-center">
+            <div class="col-12 col-md-6">
+                <input type="text" name="q" class="form-control form-control-sm" style="border-radius:8px;"
+                       placeholder="Search exam name or year…" value="<?= h($search) ?>">
+            </div>
+            <div class="col-auto d-flex gap-2">
+                <button class="btn btn-sm btn-primary" style="border-radius:8px;">Filter</button>
+                <a href="?" class="btn btn-sm btn-outline-secondary" style="border-radius:8px;">Reset</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between">
+        <h6 class="mb-0 fw-semibold"><i class="fas fa-user-check me-2 text-muted"></i>Exams</h6>
+        <span class="badge bg-primary bg-opacity-10 text-primary"><?= $total ?> total</span>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="px-4" style="width:40px;">#</th>
+                        <th>Exam Name</th>
+                        <th>Year</th>
+                        <th>Slots</th>
+                        <th>Assigned</th>
+                        <th>Active</th>
+                        <th class="text-end pe-4">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php if (empty($rows)): ?>
+                    <tr><td colspan="7" class="text-center text-muted py-4">No exams found.</td></tr>
+                <?php else: ?>
+                    <?php foreach ($rows as $i => $e): ?>
+                    <tr>
+                        <td class="px-4"><?= $offset + $i + 1 ?></td>
+                        <td>
+                            <a href="<?= APP_URL ?>/exam-invigilation/view.php?id=<?= $e['id'] ?>" class="fw-medium text-decoration-none">
+                                <?= h($e['exam_name']) ?>
+                            </a>
+                        </td>
+                        <td><?= h($e['exam_year']) ?></td>
+                        <td>
+                            <span class="badge bg-secondary bg-opacity-15 text-secondary"><?= $e['slot_count'] ?> slots</span>
+                        </td>
+                        <td>
+                            <?php if ($e['slot_count'] > 0): ?>
+                            <?php $pct = round($e['assigned_count'] / $e['slot_count'] * 100); ?>
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="progress flex-grow-1" style="height:6px;min-width:60px;">
+                                    <div class="progress-bar <?= $pct === 100 ? 'bg-success' : 'bg-warning' ?>"
+                                         style="width:<?= $pct ?>%"></div>
+                                </div>
+                                <small class="text-muted"><?= $e['assigned_count'] ?>/<?= $e['slot_count'] ?></small>
+                            </div>
+                            <?php else: ?>
+                            <span class="text-muted">—</span>
+                            <?php endif; ?>
+                        </td>
+                        <td>
+                            <form method="POST" style="display:inline;">
+                                <?= csrf_field() ?>
+                                <input type="hidden" name="_action" value="toggle">
+                                <input type="hidden" name="id" value="<?= $e['id'] ?>">
+                                <button class="btn btn-sm <?= $e['is_active'] ? 'btn-success' : 'btn-secondary' ?>"
+                                        style="border-radius:6px;font-size:.75rem;padding:2px 8px;">
+                                    <?= $e['is_active'] ? 'On' : 'Off' ?>
+                                </button>
+                            </form>
+                        </td>
+                        <td class="text-end pe-4">
+                            <div class="d-flex gap-1 justify-content-end">
+                                <a href="<?= APP_URL ?>/exam-invigilation/view.php?id=<?= $e['id'] ?>"
+                                   class="btn btn-sm btn-outline-secondary" style="border-radius:7px;" title="View">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                                <?php if (is_super_admin() || can_access('exam-invigilation', 'can_edit')): ?>
+                                <a href="<?= APP_URL ?>/exam-invigilation/edit.php?id=<?= $e['id'] ?>"
+                                   class="btn btn-sm btn-outline-primary" style="border-radius:7px;" title="Edit">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                <?php endif; ?>
+                                <?php if (is_super_admin() || can_access('exam-invigilation', 'can_delete')): ?>
+                                <form method="POST" style="display:inline;"
+                                      onsubmit="return confirm('Delete exam &quot;<?= h(addslashes($e['exam_name'])) ?>&quot;? All slots and assignments will be removed.');">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="_action" value="delete">
+                                    <input type="hidden" name="id" value="<?= $e['id'] ?>">
+                                    <button class="btn btn-sm btn-outline-danger" style="border-radius:7px;" title="Delete">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </form>
+                                <?php endif; ?>
+                            </div>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <?php if ($pages > 1): ?>
+    <div class="card-footer d-flex justify-content-between align-items-center py-2 px-4">
+        <small class="text-muted">Showing <?= $offset+1 ?>–<?= min($offset+$per,$total) ?> of <?= $total ?></small>
+        <nav><ul class="pagination pagination-sm mb-0">
+            <?php for ($p = 1; $p <= $pages; $p++): ?>
+            <li class="page-item <?= $p === $page ? 'active' : '' ?>">
+                <a class="page-link" href="?q=<?= urlencode($search) ?>&page=<?= $p ?>"><?= $p ?></a>
+            </li>
+            <?php endfor; ?>
+        </ul></nav>
+    </div>
+    <?php endif; ?>
+</div>
+
+<?php require_once __DIR__ . '/../includes/footer.php'; ?>

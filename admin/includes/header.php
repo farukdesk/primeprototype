@@ -323,6 +323,7 @@ if (is_portal_student()) {
     $is_vc_approval_active = strpos($current_path, '/vc-approval/') !== false;
     $is_medical_active = strpos($current_path, '/medical-center/') !== false;
     $is_student_portal_active = strpos($current_path, '/accounting/student-portal') !== false;
+    $is_exam_invigilation_active = strpos($current_path, '/exam-invigilation/') !== false;
     ?>
 
     <!-- ── Student Portal: show ONLY My Profile and My Finances for student users ── -->
@@ -953,6 +954,41 @@ if (is_portal_student()) {
                 </a>
             </li>
             <?php endif; ?>
+        </ul>
+    </div>
+    <?php endif; ?>
+
+    <!-- ── Exam Invigilation ── -->
+    <?php if (is_super_admin() || can_access('exam-invigilation')): ?>
+    <button class="nav-group-toggle <?= $is_exam_invigilation_active ? '' : 'collapsed' ?>"
+            data-bs-toggle="collapse" data-bs-target="#grp-exam-invigilation"
+            aria-expanded="<?= $is_exam_invigilation_active ? 'true' : 'false' ?>">
+        <i class="fas fa-user-check grp-icon" style="color:#8e44ad"></i>
+        Exam Invigilation
+        <i class="fas fa-chevron-down toggle-icon"></i>
+    </button>
+    <div class="collapse <?= $is_exam_invigilation_active ? 'show' : '' ?>" id="grp-exam-invigilation">
+        <ul class="nav flex-column grp-items">
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/exam-invigilation/index.php"
+                   class="<?= ($is_exam_invigilation_active && strpos($current_path, '/faculty') === false && strpos($current_path, '/create') === false) ? 'active' : '' ?>">
+                    <i class="fas fa-list"></i> Exams
+                </a>
+            </li>
+            <?php if (is_super_admin() || can_access('exam-invigilation', 'can_create')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/exam-invigilation/create.php"
+                   class="<?= strpos($current_path, '/exam-invigilation/create') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-plus"></i> New Exam
+                </a>
+            </li>
+            <?php endif; ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/exam-invigilation/faculty.php"
+                   class="<?= strpos($current_path, '/exam-invigilation/faculty') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-users"></i> Faculty Pool
+                </a>
+            </li>
         </ul>
     </div>
     <?php endif; ?>
