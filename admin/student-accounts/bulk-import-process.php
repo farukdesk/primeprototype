@@ -1161,7 +1161,7 @@ function bip_manifest_from_csv(string $csv_path): array
     }
 
     try {
-        $headers = fgetcsv($handle);
+        $headers = fgetcsv($handle, 0, ',', '"', '');
         if ($headers === false) {
             throw new RuntimeException('The uploaded CSV file is empty.');
         }
@@ -1179,7 +1179,7 @@ function bip_manifest_from_csv(string $csv_path): array
         }
 
         $manifest = [];
-        while (($values = fgetcsv($handle)) !== false) {
+        while (($values = fgetcsv($handle, 0, ',', '"', '')) !== false) {
             if ($values === [null] || $values === []) {
                 continue;
             }
