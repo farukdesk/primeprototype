@@ -64,9 +64,14 @@ require_once __DIR__ . '/../includes/header.php';
         </ol></nav>
     </div>
     <?php if (ac_can_create()): ?>
-    <a href="<?= APP_URL ?>/admit-card/create.php" class="btn btn-primary" style="border-radius:10px;">
-        <i class="fas fa-plus me-1"></i> New Admit Card
-    </a>
+    <div class="d-flex gap-2 flex-wrap">
+        <a href="<?= APP_URL ?>/admit-card/bulk-import.php" class="btn btn-outline-primary" style="border-radius:10px;">
+            <i class="fas fa-file-csv me-1"></i> Bulk Import CSV
+        </a>
+        <a href="<?= APP_URL ?>/admit-card/create.php" class="btn btn-primary" style="border-radius:10px;">
+            <i class="fas fa-plus me-1"></i> New Admit Card
+        </a>
+    </div>
     <?php endif; ?>
 </div>
 
