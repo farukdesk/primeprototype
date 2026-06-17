@@ -145,15 +145,47 @@ function ac_check_access(int $admit_card_id, int $student_id): array
     return ['allowed' => true];
 }
 
-// ── Generate QR code PNG as base64 data URI ───────────────────────────────────
+// ── Generate QR code as base64 data URI ──────────────────────────────────────
+// Uses a temp file to avoid the Header() side-effect that phpqrcode emits
+// when writing directly to stdout, which would corrupt PDF Content-Type headers.
 
 function ac_qr_data_uri(string $url): string
 {
     require_once __DIR__ . '/phpqrcode.php';
-    ob_start();
-    QRcode::png($url, false, QR_ECLEVEL_M, 4, 4);
-    $png = ob_get_clean();
-    return 'data:image/png;base64,' . base64_encode($png);
+
+    // ── PNG via temp file (preferred – no header() side-effect) ──────────────
+    $tmp   = tempnam(sys_get_temp_dir(), 'qr_');
+    $png_f = $tmp . '.png';
+    @unlink($tmp); // remove the empty placeholder created by tempnam
+    try {
+        QRcode::png($url, $png_f, QR_ECLEVEL_M, 4, 4);
+        if (is_file($png_f) && filesize($png_f) > 0) {
+            $data = file_get_contents($png_f);
+            @unlink($png_f);
+            return 'data:image/png;base64,' . base64_encode($data);
+        }
+    } catch (Throwable $e) {
+        // fall through to SVG fallback
+    }
+    @unlink($png_f);
+
+    // ── SVG fallback (no GD required) ────────────────────────────────────────
+    $tmp2  = tempnam(sys_get_temp_dir(), 'qr_');
+    $svg_f = $tmp2 . '.svg';
+    @unlink($tmp2);
+    try {
+        QRcode::svg($url, $svg_f, QR_ECLEVEL_M, 4, 4);
+        if (is_file($svg_f) && filesize($svg_f) > 0) {
+            $data = file_get_contents($svg_f);
+            @unlink($svg_f);
+            return 'data:image/svg+xml;base64,' . base64_encode($data);
+        }
+    } catch (Throwable $e) {
+        // ignore
+    }
+    @unlink($svg_f);
+
+    return ''; // nothing worked – caller should handle empty URI gracefully
 }
 
 // ── Verification URL for a token ─────────────────────────────────────────────
