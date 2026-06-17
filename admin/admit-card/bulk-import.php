@@ -44,6 +44,41 @@ function ac_bi_is_bad_row(array $row): bool
     return false;
 }
 
+/** Normalise student IDs so lookups can match with or without leading zeros. */
+function ac_bi_normalize_student_id(string $student_id): string
+{
+    $student_id = trim($student_id);
+    if ($student_id === '') return '';
+    $normalized = ltrim($student_id, '0');
+    return $normalized === '' ? '0' : $normalized;
+}
+
+/** Find a student by exact ID first, then by the same ID without leading zeros. */
+function ac_bi_find_student(PDO $db, string $student_id): ?array
+{
+    $student_id = trim($student_id);
+    if ($student_id === '') return null;
+
+    $normalized = ac_bi_normalize_student_id($student_id);
+    $stmt = $db->prepare(
+        "SELECT s.id, s.full_name, s.dept_id, s.program_id,
+                d.name AS dept_name, p.program_name
+           FROM students s
+           LEFT JOIN dept_departments d ON d.id = s.dept_id
+           LEFT JOIN dept_academic_programs p ON p.id = s.program_id
+          WHERE s.student_id = ?
+             OR COALESCE(NULLIF(TRIM(LEADING '0' FROM s.student_id), ''), '0') = ?
+          ORDER BY (s.student_id = ?) DESC,
+                   EXISTS(SELECT 1 FROM sfp_packages pkg WHERE pkg.student_id = s.id) DESC,
+                   (CASE WHEN LEFT(s.student_id, 1) = '0' THEN 1 ELSE 0 END) DESC,
+                   s.id ASC
+          LIMIT 1"
+    );
+    $stmt->execute([$student_id, $normalized, $student_id]);
+    $found = $stmt->fetch();
+    return $found ?: null;
+}
+
 /**
  * Parse an uploaded CSV file into an array of normalised row maps.
  * Expects headers: Student Name, ID No, Batch, Semester, Course Code, Course Title, Date, Time Slot, Section
@@ -143,16 +178,7 @@ function ac_bi_group_rows(array $rows, PDO $db): array
     foreach ($groups as &$g) {
         foreach ($g['students'] as &$stu) {
             if ($stu['csv_id'] !== '') {
-                $s = $db->prepare(
-                    'SELECT s.id, s.full_name, s.dept_id, s.program_id,
-                            d.name AS dept_name, p.program_name
-                     FROM students s
-                     LEFT JOIN dept_departments d ON d.id = s.dept_id
-                     LEFT JOIN dept_academic_programs p ON p.id = s.program_id
-                     WHERE s.student_id = ? LIMIT 1'
-                );
-                $s->execute([$stu['csv_id']]);
-                $found = $s->fetch();
+                $found = ac_bi_find_student($db, $stu['csv_id']);
                 if ($found) {
                     $stu['db_id']      = (int)$found['id'];
                     $stu['db_name']    = $found['full_name'];
