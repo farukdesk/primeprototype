@@ -74,13 +74,7 @@ $token      = ac_get_or_create_token($card_id, $student_id);
 $verify_url = ac_verify_url($token);
 $qr_uri     = ac_qr_data_uri($verify_url);
 
-// Total outstanding for display on card
-$pkg_stmt = db()->prepare('SELECT id FROM sfp_packages WHERE student_id = ? ORDER BY id DESC LIMIT 1');
-$pkg_stmt->execute([$student_id]);
-$pkg_row = $pkg_stmt->fetch();
-$total_due = $pkg_row ? acc_total_outstanding((int)$pkg_row['id']) : 0.0;
-
-$html = ac_build_html($card, $student, $courses, $qr_uri, $total_due);
+$html = ac_build_html($card, $student, $courses, $qr_uri);
 
 // Generate PDF
 $dompdf = new \Dompdf\Dompdf(['isRemoteEnabled' => false]);

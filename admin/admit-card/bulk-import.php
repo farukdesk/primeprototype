@@ -367,6 +367,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
             }
 
+            // Pre-seed tokens for matched students so each student only sees their
+            // own section's admit card on the portal (not all cards for the program).
+            $token_stmt = $db->prepare(
+                'INSERT IGNORE INTO ac_student_tokens (admit_card_id, student_id, token)
+                 VALUES (?, ?, ?)'
+            );
+            foreach ($g['students'] as $stu) {
+                if ($stu['matched'] && !empty($stu['db_id'])) {
+                    $token_stmt->execute([
+                        $card_id,
+                        (int)$stu['db_id'],
+                        bin2hex(random_bytes(32)),
+                    ]);
+                }
+            }
+
             $matched = count(array_filter($g['students'], fn($s) => $s['matched']));
             $created[] = [
                 'id'           => $card_id,

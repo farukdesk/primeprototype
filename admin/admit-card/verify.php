@@ -44,7 +44,7 @@ $total_due = null;
 if ($data && $data['pkg_id']) {
     try {
         require_once __DIR__ . '/../accounting/helpers.php';
-        $total_due = acc_total_outstanding((int)$data['pkg_id']);
+        $total_due = acc_outstanding_through_current_month((int)$data['pkg_id']);
     } catch (Throwable $e) {
         // Silently ignore
     }
@@ -149,7 +149,7 @@ $valid = $data && (int)$data['is_active'] === 1;
                     </tr>
                     <?php if ($total_due !== null): ?>
                     <tr>
-                        <th class="text-muted fw-normal">Total Dues</th>
+                        <th class="text-muted fw-normal">Current Dues</th>
                         <td>
                             <?php if ($total_due > 0): ?>
                                 <span class="text-danger fw-semibold">৳<?= number_format($total_due, 2) ?></span>

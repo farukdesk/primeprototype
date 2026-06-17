@@ -41,7 +41,10 @@ if (!$student) {
 $student_id = (int)$student['id'];
 $page_title = 'My Admit Card';
 
-// Find active admit cards for this student's dept+program
+// Find active admit cards for this student's dept+program.
+// If any tokens are pre-seeded for a card (e.g. from bulk import) only show cards
+// where this student has a token. Cards with no tokens at all (manually created)
+// remain visible to all matching students.
 $cards_stmt = $db->prepare(
     'SELECT ac.*,
             d.name AS dept_name,
@@ -53,9 +56,13 @@ $cards_stmt = $db->prepare(
      WHERE ac.is_active = 1
        AND ac.dept_id    = ?
        AND ac.program_id = ?
+       AND (
+           NOT EXISTS (SELECT 1 FROM ac_student_tokens t WHERE t.admit_card_id = ac.id)
+           OR EXISTS  (SELECT 1 FROM ac_student_tokens t WHERE t.admit_card_id = ac.id AND t.student_id = ?)
+       )
      ORDER BY ac.created_at DESC'
 );
-$cards_stmt->execute([$student['dept_id'], $student['program_id']]);
+$cards_stmt->execute([$student['dept_id'], $student['program_id'], $student_id]);
 $cards = $cards_stmt->fetchAll();
 
 require_once __DIR__ . '/../includes/header.php';
@@ -210,8 +217,6 @@ require_once __DIR__ . '/../includes/header.php';
             <!-- Footer with QR -->
             <div style="margin-top:16px;display:flex;justify-content:space-between;align-items:flex-end;">
                 <div style="font-size:11px;color:#555;max-width:420px;line-height:1.5;">
-                    <strong>Controller of Examinations</strong><br>Prime University
-                    <br><br>
                     <em style="color:#444;">This is a digitally generated admit card. You can authenticate it by scanning the QR code.</em>
                 </div>
                 <div style="text-align:center;">
