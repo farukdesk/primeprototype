@@ -39,12 +39,12 @@ if ($token !== '' && ctype_xdigit($token) && strlen($token) === 64) {
     }
 }
 
-// Compute total dues if we have a package
-$total_due = null;
+// Compute current dues (through current month) if we have a package
+$current_due = null;
 if ($data && $data['pkg_id']) {
     try {
         require_once __DIR__ . '/../accounting/helpers.php';
-        $total_due = acc_total_outstanding((int)$data['pkg_id']);
+        $current_due = acc_outstanding_through_current_month((int)$data['pkg_id']);
     } catch (Throwable $e) {
         // Silently ignore
     }
@@ -147,12 +147,12 @@ $valid = $data && (int)$data['is_active'] === 1;
                         <th class="text-muted fw-normal">Semester</th>
                         <td><?= htmlspecialchars($data['semester']) ?></td>
                     </tr>
-                    <?php if ($total_due !== null): ?>
+                    <?php if ($current_due !== null): ?>
                     <tr>
-                        <th class="text-muted fw-normal">Total Dues</th>
+                        <th class="text-muted fw-normal">Current Dues</th>
                         <td>
-                            <?php if ($total_due > 0): ?>
-                                <span class="text-danger fw-semibold">৳<?= number_format($total_due, 2) ?></span>
+                            <?php if ($current_due > 0): ?>
+                                <span class="text-danger fw-semibold">৳<?= number_format($current_due, 2) ?></span>
                             <?php else: ?>
                                 <span class="text-success fw-semibold">No outstanding dues</span>
                             <?php endif; ?>

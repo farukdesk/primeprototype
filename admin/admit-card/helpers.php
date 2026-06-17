@@ -193,7 +193,7 @@ function ac_verify_url(string $token): string
 
 // ── Build admit card HTML (used for both on-page preview and PDF) ─────────────
 
-function ac_build_html(array $card, array $student, array $courses, string $qr_data_uri, float $total_due): string
+function ac_build_html(array $card, array $student, array $courses, string $qr_data_uri): string
 {
     $logo_uri = acc_logo_data_uri();
     $dept_label = h($card['dept_faculty_label'] ?? $card['dept_name']);
@@ -242,15 +242,6 @@ function ac_build_html(array $card, array $student, array $courses, string $qr_d
         $course_rows = '<tr><td colspan="5" style="border:1px solid #000;padding:8px;text-align:center;color:#777;">No courses listed</td></tr>';
     }
 
-    // Due info line for the card (if any)
-    $due_note = '';
-    if ($total_due > 0) {
-        $due_note = '<div style="margin:8px 0;padding:4px 8px;background:#fff3cd;border:1px solid #ffc107;
-                                  font-size:12px;color:#856404;border-radius:4px;">
-                        Total outstanding dues: ৳' . number_format($total_due, 2) . '
-                    </div>';
-    }
-
     $logo_img = $logo_uri
         ? '<img src="' . $logo_uri . '" style="width:80px;height:auto;max-height:100px;" alt="Prime University">'
         : '<div style="width:80px;height:100px;border:1px solid #ccc;display:flex;align-items:center;
@@ -280,8 +271,6 @@ function ac_build_html(array $card, array $student, array $courses, string $qr_d
     <span style="font-size:21px;font-weight:bold;border:3px solid #000;padding:2px 22px;display:inline-block;">Admit Card</span>
   </div>
 
-  ' . $due_note . '
-
   <!-- Student info + course table -->
   <table style="width:100%;border-collapse:collapse;text-align:center;font-size:14px;">
     <tbody>
@@ -310,9 +299,6 @@ function ac_build_html(array $card, array $student, array $courses, string $qr_d
   <!-- Footer with QR -->
   <div style="margin-top:20px;display:flex;justify-content:space-between;align-items:flex-end;">
     <div style="font-size:11px;color:#555;max-width:500px;line-height:1.5;">
-      <p style="margin:0 0 4px 0;">
-        <strong>Controller of Examinations</strong><br>Prime University
-      </p>
       <p style="margin:8px 0 0 0;font-style:italic;color:#444;">
         This is a digitally generated admit card. You can authenticate it by scanning the QR code.
       </p>
