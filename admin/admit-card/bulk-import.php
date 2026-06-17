@@ -60,6 +60,8 @@ function ac_bi_find_student(PDO $db, string $student_id): ?array
     if ($student_id === '') return null;
 
     $normalized = ac_bi_normalize_student_id($student_id);
+    // When duplicate raw IDs exist, prefer the exact match first, then the
+    // record already tied to billing data, then the canonical leading-zero ID.
     $stmt = $db->prepare(
         "SELECT s.id, s.full_name, s.dept_id, s.program_id,
                 d.name AS dept_name, p.program_name
