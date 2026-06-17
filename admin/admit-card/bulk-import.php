@@ -60,7 +60,7 @@ function ac_bi_parse_csv(string $filepath): array
     $bom = fread($handle, 3);
     if ($bom !== "\xEF\xBB\xBF") rewind($handle);
 
-    $header = fgetcsv($handle, 4096, ',');
+    $header = fgetcsv($handle, 4096, ',', '"', '');
     if (!$header) { fclose($handle); return $rows; }
 
     // Normalise header names → snake_case
@@ -78,7 +78,7 @@ function ac_bi_parse_csv(string $filepath): array
         $idx[$key] = ($pos !== false) ? (int)$pos : -1;
     }
 
-    while (($line = fgetcsv($handle, 4096, ',')) !== false) {
+    while (($line = fgetcsv($handle, 4096, ',', '"', '')) !== false) {
         if (count($line) < 2) continue;
         $get = fn($k) => ($idx[$k] >= 0 && isset($line[$idx[$k]])) ? trim($line[$idx[$k]]) : '';
         $row = [
