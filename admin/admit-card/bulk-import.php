@@ -2,8 +2,10 @@
 /**
  * Admit Card – Bulk CSV Import
  *
- * Step 1 (GET)      – Upload form: CSV file, Exam Name, Dept, Program
+ * Step 1 (GET)      – Upload form: CSV file, Exam Name
  * Step 2 (preview)  – Field-mapping summary + per-group course & student preview
+ *                     Department / Program are auto-detected from each matched student's
+ *                     existing DB record (majority vote per group).
  * Step 3 (import)   – Creates ac_admit_cards + ac_admit_card_courses records
  */
 require_once __DIR__ . '/../includes/auth.php';
@@ -12,10 +14,6 @@ require_once __DIR__ . '/helpers.php';
 
 $page_title = 'Bulk Import Admit Cards';
 $db = db();
-
-$depts = $db->query(
-    "SELECT id, name FROM dept_departments WHERE is_active = 1 ORDER BY name ASC"
-)->fetchAll();
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -141,26 +139,77 @@ function ac_bi_group_rows(array $rows, PDO $db): array
         }
     }
 
-    // Look up each student in the DB
+    // Look up each student in the DB; also collect dept/program for auto-detection
     foreach ($groups as &$g) {
         foreach ($g['students'] as &$stu) {
             if ($stu['csv_id'] !== '') {
                 $s = $db->prepare(
-                    'SELECT id, full_name FROM students WHERE student_id = ? LIMIT 1'
+                    'SELECT s.id, s.full_name, s.dept_id, s.program_id,
+                            d.name AS dept_name, p.program_name
+                     FROM students s
+                     LEFT JOIN dept_departments d ON d.id = s.dept_id
+                     LEFT JOIN dept_academic_programs p ON p.id = s.program_id
+                     WHERE s.student_id = ? LIMIT 1'
                 );
                 $s->execute([$stu['csv_id']]);
                 $found = $s->fetch();
                 if ($found) {
-                    $stu['db_id']   = (int)$found['id'];
-                    $stu['db_name'] = $found['full_name'];
-                    $stu['matched'] = true;
+                    $stu['db_id']      = (int)$found['id'];
+                    $stu['db_name']    = $found['full_name'];
+                    $stu['db_dept_id'] = (int)$found['dept_id'];
+                    $stu['db_prog_id'] = (int)($found['program_id'] ?? 0);
+                    $stu['matched']    = true;
                 }
             }
         }
         unset($stu);
+
+        // Auto-detect dept and program from matched students (majority vote)
+        $dept_votes = [];
+        $prog_votes = [];
+        foreach ($g['students'] as $stu) {
+            if ($stu['matched']) {
+                $did = $stu['db_dept_id'];
+                $pid = $stu['db_prog_id'];
+                $dept_votes[$did] = ($dept_votes[$did] ?? 0) + 1;
+                if ($pid > 0) {
+                    $prog_votes[$pid] = ($prog_votes[$pid] ?? 0) + 1;
+                }
+            }
+        }
+        arsort($dept_votes);
+        arsort($prog_votes);
+        $g['dept_id']    = $dept_votes ? (int)array_key_first($dept_votes) : 0;
+        $g['program_id'] = $prog_votes ? (int)array_key_first($prog_votes) : 0;
+        $g['dept_name']    = '';
+        $g['program_name'] = '';
+
         // Flatten to indexed arrays
         $g['courses']  = array_values($g['courses']);
         $g['students'] = array_values($g['students']);
+    }
+    unset($g);
+
+    // ── Batch-fetch dept/program names for all groups in two queries ──────────
+    $all_dept_ids = array_unique(array_filter(array_column($groups, 'dept_id')));
+    $all_prog_ids = array_unique(array_filter(array_column($groups, 'program_id')));
+    $dept_names   = [];
+    $prog_names   = [];
+    if ($all_dept_ids) {
+        $phs  = implode(',', array_fill(0, count($all_dept_ids), '?'));
+        $rows = $db->prepare("SELECT id, name FROM dept_departments WHERE id IN ($phs)");
+        $rows->execute(array_values($all_dept_ids));
+        foreach ($rows->fetchAll() as $r) $dept_names[(int)$r['id']] = $r['name'];
+    }
+    if ($all_prog_ids) {
+        $phs  = implode(',', array_fill(0, count($all_prog_ids), '?'));
+        $rows = $db->prepare("SELECT id, program_name FROM dept_academic_programs WHERE id IN ($phs)");
+        $rows->execute(array_values($all_prog_ids));
+        foreach ($rows->fetchAll() as $r) $prog_names[(int)$r['id']] = $r['program_name'];
+    }
+    foreach ($groups as &$g) {
+        $g['dept_name']    = $dept_names[$g['dept_id']]    ?? '';
+        $g['program_name'] = $prog_names[$g['program_id']] ?? '';
     }
     unset($g);
 
@@ -181,13 +230,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // ── Step 2: Preview ───────────────────────────────────────────────────────
     if ($action === 'preview') {
         $exam_name  = trim($_POST['exam_name']  ?? '');
-        $dept_id    = (int)($_POST['dept_id']   ?? 0);
-        $program_id = (int)($_POST['program_id'] ?? 0);
         $is_active  = isset($_POST['is_active']) ? 1 : 0;
 
         if ($exam_name === '') $errors[] = 'Exam name is required.';
-        if ($dept_id   <= 0)  $errors[] = 'Please select a department.';
-        if ($program_id <= 0) $errors[] = 'Please select a program.';
 
         $file = $_FILES['csv_file'] ?? null;
         if (!$file || $file['error'] !== UPLOAD_ERR_OK) {
@@ -212,8 +257,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $_SESSION['ac_bulk_import'] = [
                         'tmp_csv'    => $tmp,
                         'exam_name'  => $exam_name,
-                        'dept_id'    => $dept_id,
-                        'program_id' => $program_id,
                         'is_active'  => $is_active,
                         'groups'     => $groups,
                     ];
@@ -232,8 +275,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $exam_name  = $sess['exam_name'];
-        $dept_id    = $sess['dept_id'];
-        $program_id = $sess['program_id'];
         $is_active  = $sess['is_active'];
         $groups     = $sess['groups'];
 
@@ -273,8 +314,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             )->execute([
                 $full_name,
                 $g['semester'],
-                $dept_id,
-                $program_id,
+                $g['dept_id'],
+                $g['program_id'],
                 $batch_id,
                 $g['batch_label'] ?: null,
                 $is_active,
@@ -319,17 +360,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// ── Determine dept name & program name for preview header ─────────────────────
-$dept_name_preview    = '';
-$program_name_preview = '';
-if ($step === 'preview' && isset($_SESSION['ac_bulk_import'])) {
-    $d = $db->prepare('SELECT name FROM dept_departments WHERE id = ? LIMIT 1');
-    $d->execute([$_SESSION['ac_bulk_import']['dept_id']]);
-    $dept_name_preview = $d->fetchColumn() ?: '';
-    $p = $db->prepare('SELECT program_name FROM dept_academic_programs WHERE id = ? LIMIT 1');
-    $p->execute([$_SESSION['ac_bulk_import']['program_id']]);
-    $program_name_preview = $p->fetchColumn() ?: '';
-}
+// (dept_name and program_name are now stored per-group inside $_SESSION['ac_bulk_import']['groups'])
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -409,26 +440,6 @@ require_once __DIR__ . '/../includes/header.php';
                         </div>
                     </div>
 
-                    <div class="row g-3 mb-3">
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold">Department <span class="text-danger">*</span></label>
-                            <select name="dept_id" id="dept_id" class="form-select" required>
-                                <option value="">— Select Department —</option>
-                                <?php foreach ($depts as $d): ?>
-                                <option value="<?= $d['id'] ?>" <?= (int)($_POST['dept_id'] ?? 0) === (int)$d['id'] ? 'selected' : '' ?>>
-                                    <?= h($d['name']) ?>
-                                </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold">Program <span class="text-danger">*</span></label>
-                            <select name="program_id" id="program_id" class="form-select" required>
-                                <option value="">— Select Program —</option>
-                            </select>
-                        </div>
-                    </div>
-
                     <div class="mb-4 form-check">
                         <input type="checkbox" name="is_active" id="is_active" class="form-check-input" value="1"
                                <?= isset($_POST['is_active']) || !isset($_POST['action']) ? 'checked' : '' ?>>
@@ -468,6 +479,11 @@ require_once __DIR__ . '/../includes/header.php';
                 <p class="mb-1">Each row = one student × one course.
                    The importer groups rows by <strong>Semester + Batch + Section</strong>
                    and creates one admit card per group.</p>
+                <p class="mb-1"><i class="fas fa-magic text-primary me-1"></i>
+                   <strong>Department &amp; Program</strong> are auto-detected per group
+                   using a majority vote across all matched students in that group. If no
+                   students match (all are new), department will show as "not detected"
+                   and can be set manually after import.</p>
                 <p class="mb-0 text-muted">Corrupted or duplicate rows are automatically skipped.</p>
             </div>
         </div>
@@ -525,11 +541,9 @@ require_once __DIR__ . '/../includes/header.php';
         <div class="mt-3 row g-2 small text-muted">
             <div class="col-auto"><strong>Exam Name:</strong> <?= h($sess['exam_name']) ?></div>
             <div class="col-auto">|</div>
-            <div class="col-auto"><strong>Department:</strong> <?= h($dept_name_preview) ?></div>
-            <div class="col-auto">|</div>
-            <div class="col-auto"><strong>Program:</strong> <?= h($program_name_preview) ?></div>
-            <div class="col-auto">|</div>
             <div class="col-auto"><strong>Status:</strong> <?= $sess['is_active'] ? '<span class="badge bg-success">Active</span>' : '<span class="badge bg-secondary">Inactive</span>' ?></div>
+            <div class="col-auto">|</div>
+            <div class="col-auto"><i class="fas fa-magic text-primary me-1"></i>Department &amp; Program are auto-detected per group via majority vote across matched student records. Groups where no students are found in DB will show a warning.</div>
         </div>
     </div>
 </div>
@@ -545,7 +559,7 @@ require_once __DIR__ . '/../includes/header.php';
         $total_cnt   = count($g['students']);
         $unmatch_cnt = $total_cnt - $matched_cnt;
     ?>
-    <div class="card mb-3">
+    <div class="card mb-3 <?= ($g['dept_id'] === 0) ? 'border-warning' : '' ?>">
         <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
             <div class="d-flex align-items-center gap-3">
                 <input type="hidden" name="<?= h($safe_key) ?>" value="1">
@@ -554,13 +568,23 @@ require_once __DIR__ . '/../includes/header.php';
                     <?php if ($g['section'] !== ''): ?>
                         <span class="badge bg-info-subtle text-info border ms-2"><?= h($g['section']) ?></span>
                     <?php endif; ?>
+                    <div class="small text-muted mt-1">
+                        <?php if ($g['dept_id'] > 0): ?>
+                            <i class="fas fa-building me-1"></i><?= h($g['dept_name']) ?>
+                            <?php if ($g['program_name'] !== ''): ?>
+                                &nbsp;·&nbsp;<i class="fas fa-graduation-cap me-1"></i><?= h($g['program_name']) ?>
+                            <?php endif; ?>
+                        <?php else: ?>
+                            <span class="text-warning"><i class="fas fa-exclamation-triangle me-1"></i>Department not detected (no matched students)</span>
+                        <?php endif; ?>
+                    </div>
                 </div>
             </div>
             <div class="d-flex gap-3 small">
                 <span><i class="fas fa-book text-success me-1"></i><?= count($g['courses']) ?> courses</span>
                 <span><i class="fas fa-users text-primary me-1"></i><?= $total_cnt ?> students
-                    (<span class="text-success"><?= $matched_cnt ?> matched</span><?php if ($unmatch_cnt > 0): ?>,
-                    <span class="text-danger"><?= $unmatch_cnt ?> unmatched</span><?php endif; ?>)
+                    (<span class="text-success"><?= $matched_cnt ?> in DB</span><?php if ($unmatch_cnt > 0): ?>,
+                    <span class="text-danger fw-semibold"><?= $unmatch_cnt ?> not in DB</span><?php endif; ?>)
                 </span>
             </div>
         </div>
@@ -592,24 +616,27 @@ require_once __DIR__ . '/../includes/header.php';
 
                 <!-- Students -->
                 <div class="col-md-6">
-                    <h6 class="text-muted fw-semibold small mb-2">STUDENTS</h6>
+                    <h6 class="text-muted fw-semibold small mb-2">STUDENTS
+                        <?php if ($unmatch_cnt > 0): ?>
+                            <span class="badge bg-danger ms-1"><?= $unmatch_cnt ?> not in DB</span>
+                        <?php endif; ?>
+                    </h6>
                     <div class="table-responsive" style="max-height:220px;overflow-y:auto;">
                         <table class="table table-sm mb-0">
                             <thead class="table-light sticky-top">
-                                <tr><th>CSV ID</th><th>CSV Name</th><th>Match</th></tr>
+                                <tr><th>CSV ID</th><th>CSV Name</th><th>DB Status</th></tr>
                             </thead>
                             <tbody>
                             <?php foreach ($g['students'] as $s): ?>
-                            <tr>
+                            <tr <?= !$s['matched'] ? 'class="table-danger"' : '' ?>>
                                 <td><code class="small"><?= h($s['csv_id']) ?></code></td>
                                 <td class="small"><?= h($s['csv_name']) ?></td>
                                 <td>
                                     <?php if ($s['matched']): ?>
-                                        <span class="badge bg-success"><i class="fas fa-check"></i></span>
+                                        <span class="badge bg-success"><i class="fas fa-check"></i> Found</span>
                                         <small class="text-muted ms-1"><?= h($s['db_name']) ?></small>
                                     <?php else: ?>
-                                        <span class="badge bg-danger"><i class="fas fa-times"></i></span>
-                                        <small class="text-danger ms-1">Not found</small>
+                                        <span class="badge bg-danger"><i class="fas fa-times"></i> Not in DB</span>
                                     <?php endif; ?>
                                 </td>
                             </tr>
@@ -697,28 +724,5 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <?php endif; ?>
-
-<script>
-// Dynamic program dropdown (same as create.php)
-const deptSel = document.getElementById('dept_id');
-if (deptSel) {
-    deptSel.addEventListener('change', function () {
-        const programSel = document.getElementById('program_id');
-        programSel.innerHTML = '<option value="">Loading…</option>';
-        if (!this.value) { programSel.innerHTML = '<option value="">— Select Program —</option>'; return; }
-        fetch('<?= APP_URL ?>/course-offer/get-programs.php?dept_id=' + this.value)
-            .then(r => r.json())
-            .then(data => {
-                programSel.innerHTML = '<option value="">— Select Program —</option>';
-                data.forEach(p => {
-                    const opt = document.createElement('option');
-                    opt.value = p.id;
-                    opt.textContent = p.program_name;
-                    programSel.appendChild(opt);
-                });
-            });
-    });
-}
-</script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
