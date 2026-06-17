@@ -17,14 +17,6 @@ $depts = $db->query(
     "SELECT id, name FROM dept_departments WHERE is_active = 1 ORDER BY name ASC"
 )->fetchAll();
 
-$year = (int)date('Y');
-$semester_opts = [];
-foreach ([$year - 1, $year, $year + 1] as $y) {
-    $semester_opts[] = "Spring $y";
-    $semester_opts[] = "Summer $y";
-    $semester_opts[] = "Fall $y";
-}
-
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Convert a date string from the CSV (e.g. 29-06-2026) → YYYY-MM-DD or null */
@@ -205,7 +197,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if (empty($errors)) {
-            $tmp = sys_get_temp_dir() . '/ac_bulk_' . bin2hex(random_bytes(8)) . '.csv';
+            $tmp = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'ac_bulk_' . bin2hex(random_bytes(8)) . '.csv';
             if (!move_uploaded_file($file['tmp_name'], $tmp)) {
                 $errors[] = 'Could not save the uploaded file.';
             } else {
@@ -588,7 +580,7 @@ require_once __DIR__ . '/../includes/header.php';
                                 <td><code><?= h($c['course_code']) ?></code></td>
                                 <td class="small"><?= h($c['course_title']) ?></td>
                                 <td class="small text-nowrap">
-                                    <?= $c['exam_date'] ? date('d-m-Y', strtotime($c['exam_date'])) : '<span class="text-warning">?</span>' ?>
+                                    <?= $c['exam_date'] ? h(date('d-m-Y', strtotime($c['exam_date']))) : '<span class="text-warning">?</span>' ?>
                                 </td>
                                 <td class="small text-nowrap"><?= h($c['time_slot'] ?? '—') ?></td>
                             </tr>

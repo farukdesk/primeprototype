@@ -27,9 +27,7 @@ if (!$is_allowed) {
 }
 
 // Generate to temp file to avoid header() conflicts
-$tmp   = tempnam(sys_get_temp_dir(), 'qr_');
-$png_f = $tmp . '.png';
-@unlink($tmp);
+$png_f = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'qr_' . uniqid('', true) . '.png';
 
 try {
     QRcode::png($url, $png_f, QR_ECLEVEL_M, 4, 4);
@@ -47,9 +45,7 @@ try {
 @unlink($png_f);
 
 // SVG fallback
-$tmp2  = tempnam(sys_get_temp_dir(), 'qr_');
-$svg_f = $tmp2 . '.svg';
-@unlink($tmp2);
+$svg_f = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'qr_' . uniqid('', true) . '.svg';
 try {
     QRcode::svg($url, $svg_f, QR_ECLEVEL_M, 4, 4);
     if (is_file($svg_f) && filesize($svg_f) > 0) {

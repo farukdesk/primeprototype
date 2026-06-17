@@ -154,9 +154,7 @@ function ac_qr_data_uri(string $url): string
     require_once __DIR__ . '/phpqrcode.php';
 
     // ── PNG via temp file (preferred – no header() side-effect) ──────────────
-    $tmp   = tempnam(sys_get_temp_dir(), 'qr_');
-    $png_f = $tmp . '.png';
-    @unlink($tmp); // remove the empty placeholder created by tempnam
+    $png_f = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'qr_' . uniqid('', true) . '.png';
     try {
         QRcode::png($url, $png_f, QR_ECLEVEL_M, 4, 4);
         if (is_file($png_f) && filesize($png_f) > 0) {
@@ -170,9 +168,7 @@ function ac_qr_data_uri(string $url): string
     @unlink($png_f);
 
     // ── SVG fallback (no GD required) ────────────────────────────────────────
-    $tmp2  = tempnam(sys_get_temp_dir(), 'qr_');
-    $svg_f = $tmp2 . '.svg';
-    @unlink($tmp2);
+    $svg_f = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'qr_' . uniqid('', true) . '.svg';
     try {
         QRcode::svg($url, $svg_f, QR_ECLEVEL_M, 4, 4);
         if (is_file($svg_f) && filesize($svg_f) > 0) {
