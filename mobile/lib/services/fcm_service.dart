@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/foundation.dart';
@@ -115,6 +117,7 @@ class FcmService {
           importance: Importance.high,
           priority: Priority.high,
           icon: smallIcon,
+          color: const Color(0xFF1B3A6B),
         ),
       ),
       payload: message.data['type'],
