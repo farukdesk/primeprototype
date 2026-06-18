@@ -33,8 +33,8 @@ android {
         applicationId "bd.ac.primeuniversity.studentportal"
         minSdkVersion 23
         targetSdkVersion flutter.targetSdkVersion
-        versionCode    flutterVersionCode.toInteger()
-        versionName    flutterVersionName
+        versionCode    flutter.versionCode
+        versionName    flutter.versionName
         multiDexEnabled true
     }
 
