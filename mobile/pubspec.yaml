@@ -10,6 +10,9 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # Icons
+  cupertino_icons: ^1.0.8
+
   # HTTP & API
   http: ^1.2.1
   dio: ^5.4.3+1
