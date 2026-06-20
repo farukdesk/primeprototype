@@ -26,9 +26,9 @@
 --
 -- HOW TO RUN
 --   Run the sections IN ORDER, inspecting output before moving on.
---   This script targets students whose ID starts with "02826" (LIKE '02826%').
+--   This script targets students whose ID starts with "028262" (LIKE '028262%').
 --   To target ONE specific student instead, replace every occurrence of
---       s.student_id LIKE '02826%'
+--       s.student_id LIKE '028262%'
 --   with
 --       s.student_id = '02826...'   -- the exact full student id
 -- ---------------------------------------------------------------------------
@@ -53,7 +53,7 @@
 -- 1a. Confirm the student set.
 SELECT id, student_id, full_name
 FROM students
-WHERE student_id LIKE '02826%';
+WHERE student_id LIKE '028262%';
 
 -- 1b. Preview the two target fee transactions.
 --     Verify the row count and amounts match your expectation BEFORE continuing.
@@ -67,7 +67,7 @@ FROM sfp_payments sp
 JOIN students s                ON s.id  = sp.student_id
 JOIN acc_vouchers v            ON v.id  = sp.voucher_id
 LEFT JOIN sfp_semester_fees sf ON sf.id = sp.semester_fee_id
-WHERE s.student_id LIKE '02826%'
+WHERE s.student_id LIKE '028262%'
   AND ( sp.fee_type = 'admission'
      OR (sp.fee_type = 'registration' AND sf.semester_label = 'Summer 2026') );
 
@@ -80,7 +80,7 @@ WHERE rv.reversal_of IN (
     FROM sfp_payments sp
     JOIN students s                ON s.id  = sp.student_id
     LEFT JOIN sfp_semester_fees sf ON sf.id = sp.semester_fee_id
-    WHERE s.student_id LIKE '02826%'
+    WHERE s.student_id LIKE '028262%'
       AND ( sp.fee_type = 'admission'
          OR (sp.fee_type = 'registration' AND sf.semester_label = 'Summer 2026') )
 );
@@ -98,7 +98,7 @@ SELECT sp.id AS payment_id, sp.voucher_id
 FROM sfp_payments sp
 JOIN students s                ON s.id  = sp.student_id
 LEFT JOIN sfp_semester_fees sf ON sf.id = sp.semester_fee_id
-WHERE s.student_id LIKE '02826%'
+WHERE s.student_id LIKE '028262%'
   AND ( sp.fee_type = 'admission'
      OR (sp.fee_type = 'registration' AND sf.semester_label = 'Summer 2026') );
 
@@ -159,7 +159,7 @@ FROM sfp_payments sp
 JOIN students s                ON s.id  = sp.student_id
 JOIN acc_vouchers v            ON v.id  = sp.voucher_id
 LEFT JOIN sfp_semester_fees sf ON sf.id = sp.semester_fee_id
-WHERE s.student_id LIKE '02826%'
+WHERE s.student_id LIKE '028262%'
   AND ( sp.fee_type = 'admission'
      OR (sp.fee_type = 'registration' AND sf.semester_label = 'Summer 2026') );
 
