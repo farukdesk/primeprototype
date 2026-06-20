@@ -789,7 +789,7 @@ require_once __DIR__ . '/../includes/header.php';
                                 </select>
                             </div>
                             <div class="col-md-4" id="payTxnWrap" style="display:none;">
-                                <label class="form-label fw-semibold" id="payTxnLabel">Transaction Number <span class="text-danger">*</span></label>
+                                <label class="form-label fw-semibold" id="payTxnLabel"><span id="payTxnLabelText">Transaction Number</span> <span class="text-danger">*</span></label>
                                 <input type="text" name="transaction_number" id="payTxnNumber" class="form-control"
                                        placeholder="Enter transaction number">
                             </div>
@@ -1154,7 +1154,7 @@ require_once __DIR__ . '/../includes/header.php';
                             </select>
                         </div>
                         <div class="col-md-4" id="admTxnWrap" style="display:none;">
-                            <label class="form-label fw-semibold" id="admTxnLabel">Transaction Number <span class="text-danger">*</span></label>
+                            <label class="form-label fw-semibold" id="admTxnLabel"><span id="admTxnLabelText">Transaction Number</span> <span class="text-danger">*</span></label>
                             <input type="text" name="transaction_number" id="admTxnNumber" class="form-control"
                                    placeholder="Enter transaction number">
                         </div>
@@ -1282,7 +1282,7 @@ require_once __DIR__ . '/../includes/header.php';
         const provider = document.getElementById('payMobileProvider');
         const txnWrap = document.getElementById('payTxnWrap');
         const txnInput = document.getElementById('payTxnNumber');
-        const txnLabel = document.getElementById('payTxnLabel');
+        const txnLabel = document.getElementById('payTxnLabelText');
         const isMobile = method === 'mobile_banking';
         const isOldErp = method === 'old_erp';
         const needsTxn = method !== 'cash';
@@ -1292,7 +1292,7 @@ require_once __DIR__ . '/../includes/header.php';
         provider.required = isMobile;
         txnInput.required = needsTxn;
         if (txnLabel) {
-            txnLabel.innerHTML = (isOldErp ? 'Receipt No' : 'Transaction Number') + ' <span class="text-danger">*</span>';
+            txnLabel.textContent = isOldErp ? 'Receipt No' : 'Transaction Number';
         }
         txnInput.placeholder = isOldErp ? 'Old ERP receipt number' : 'Enter transaction number';
         if (!isMobile) provider.value = '';
@@ -1306,7 +1306,7 @@ require_once __DIR__ . '/../includes/header.php';
         const provider = document.getElementById('admMobileProvider');
         const txnWrap = document.getElementById('admTxnWrap');
         const txnInput = document.getElementById('admTxnNumber');
-        const txnLabel = document.getElementById('admTxnLabel');
+        const txnLabel = document.getElementById('admTxnLabelText');
         const isMobile = method === 'mobile_banking';
         const isOldErp = method === 'old_erp';
         const needsTxn = method !== 'cash';
@@ -1316,7 +1316,7 @@ require_once __DIR__ . '/../includes/header.php';
         provider.required = isMobile;
         txnInput.required = needsTxn;
         if (txnLabel) {
-            txnLabel.innerHTML = (isOldErp ? 'Receipt No' : 'Transaction Number') + ' <span class="text-danger">*</span>';
+            txnLabel.textContent = isOldErp ? 'Receipt No' : 'Transaction Number';
         }
         txnInput.placeholder = isOldErp ? 'Old ERP receipt number' : 'Enter transaction number';
         if (!isMobile) provider.value = '';
