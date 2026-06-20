@@ -116,12 +116,10 @@ $raw_rows = $stmt->fetchAll();
 
 // ── Compute outstanding balance per row ───────────────────────────────────────
 $default_form_id_fee = acc_student_form_id_total_fee(); // 1000 BDT
-$erp_marker          = OLD_ERP_SETTLEMENT_MARKER;
 
 $rows = [];
 foreach ($raw_rows as $r) {
     $form_id_fee = ((float)$r['form_id_fee'] > 0) ? (float)$r['form_id_fee'] : $default_form_id_fee;
-    $has_old_erp = stripos((string)$r['note'], $erp_marker) !== false;
 
     $num_sems = (int)$r['num_sems'];
     $total_due = (float)$r['admission_fees']
@@ -131,12 +129,7 @@ foreach ($raw_rows as $r) {
                + (float)$r['english_course_fee']
                + (float)$r['tuition_total'];
 
-    $erp_admission_credit  = $has_old_erp ? ((float)$r['admission_fees'] + $form_id_fee) : 0.0;
-    $erp_reg_credit        = ($has_old_erp && $num_sems > 0)
-                             ? (float)$r['reg_fee_per_semester']
-                             : 0.0;
-
-    $total_paid      = (float)$r['total_paid'] + $erp_admission_credit + $erp_reg_credit;
+    $total_paid      = (float)$r['total_paid'];
     $outstanding     = max(0.0, $total_due - $total_paid);
     $paid_percentage = $total_due > 0 ? min(100, round($total_paid / $total_due * 100)) : 100;
 
