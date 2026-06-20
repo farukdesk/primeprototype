@@ -14,6 +14,15 @@ $items    = acc_get_voucher_items($id);
 $currency = acc_currency();
 $page_title = 'Voucher: ' . $voucher['voucher_number'];
 
+// Payment-method details (surfaces Old ERP receipt numbers on the voucher)
+$payment_info = acc_get_voucher_payment_info($id);
+$payment_method     = $payment_info['payment_method'] ?? '';
+$payment_method_lbl = $payment_info
+    ? acc_payment_method_label($payment_method, $payment_info['mobile_banking_provider'] ?? null)
+    : '';
+$payment_txn_number = $payment_info['transaction_number'] ?? '';
+$payment_txn_label  = $payment_method === 'old_erp' ? 'Old ERP Receipt No' : 'Transaction No';
+
 // Original voucher link (if this is a reversal)
 $original = null;
 if ($voucher['reversal_of']) {
@@ -86,6 +95,23 @@ require_once __DIR__ . '/../includes/header.php';
                                 <td class="text-muted small fw-semibold">Reference</td>
                                 <td><?= h($voucher['reference'] ?? '–') ?></td>
                             </tr>
+                            <?php if ($payment_method_lbl !== ''): ?>
+                            <tr>
+                                <td class="text-muted small fw-semibold">Payment Method</td>
+                                <td>
+                                    <?= h($payment_method_lbl) ?>
+                                    <?php if ($payment_method === 'old_erp'): ?>
+                                    <span class="badge bg-secondary ms-1">Old ERP</span>
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                            <?php endif; ?>
+                            <?php if ($payment_txn_number !== ''): ?>
+                            <tr>
+                                <td class="text-muted small fw-semibold"><?= h($payment_txn_label) ?></td>
+                                <td class="fw-semibold"><?= h($payment_txn_number) ?></td>
+                            </tr>
+                            <?php endif; ?>
                             <tr>
                                 <td class="text-muted small fw-semibold">Created By</td>
                                 <td><?= h($voucher['created_by_name'] ?? '–') ?></td>
