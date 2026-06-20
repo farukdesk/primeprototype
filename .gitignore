@@ -4,3 +4,8 @@ upload_spic/
 *.sql
 *.zip
 *.csv
+admin/uploads/
+upload_spic/
+*.sql
+*.zip
+*.csv
