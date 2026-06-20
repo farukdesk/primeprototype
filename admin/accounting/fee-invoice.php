@@ -105,6 +105,7 @@ $payer_phone  = '';
 $payer_email  = '';
 $payment_method_lbl = 'Cash';
 $transaction_number = '';
+$payment_method_raw = 'cash';
 
 foreach ($voucher_ids as $vid) {
     $v   = $vouchers[$vid] ?? null;
@@ -154,8 +155,9 @@ foreach ($voucher_ids as $vid) {
             }
         }
         if (!$is_multi) {
+            $payment_method_raw = (string)($sfp['payment_method'] ?? 'cash');
             $payment_method_lbl = acc_payment_method_label(
-                (string)($sfp['payment_method'] ?? 'cash'),
+                $payment_method_raw,
                 $sfp['mobile_banking_provider'] ?? null
             );
             $transaction_number = (string)($sfp['transaction_number'] ?? '');
@@ -171,8 +173,9 @@ foreach ($voucher_ids as $vid) {
         }
         $row_fee_lbl = 'Admission Fee';
         if (!$is_multi) {
+            $payment_method_raw = (string)($adm['payment_method'] ?? 'cash');
             $payment_method_lbl = acc_payment_method_label(
-                (string)($adm['payment_method'] ?? 'cash'),
+                $payment_method_raw,
                 $adm['mobile_banking_provider'] ?? null
             );
             $transaction_number = (string)($adm['transaction_number'] ?? '');
@@ -520,7 +523,8 @@ function render_copy(
     string $university_logo_url,
     string $university_address,
     string $university_website,
-    array  $fee_rows
+    array  $fee_rows,
+    string $payment_method_raw = 'cash'
 ): void {
     $is_multi = count($fee_rows) > 1;
 ?>
@@ -567,7 +571,7 @@ function render_copy(
                 </div>
                 <?php if ($transaction_number): ?>
                 <div class="meta-line">
-                    <span class="meta-label">Transaction #</span>
+                    <span class="meta-label"><?= $payment_method_raw === 'old_erp' ? 'Old ERP Receipt No' : 'Transaction #' ?></span>
                     <span class="meta-value"><?= h($transaction_number) ?></span>
                 </div>
                 <?php endif; ?>
@@ -663,7 +667,7 @@ function render_copy(
     $payer_name, $payer_sid, $payer_dept, $payer_prog, $payer_phone, $payer_email,
     $payment_method_lbl, $transaction_number,
     $invoice_signature_name, 'Office Copy', $university_logo_url, $university_address, $university_website,
-    $fee_rows
+    $fee_rows, $payment_method_raw
 ); ?>
 
 <div class="cut-line">— Cut Here —</div>
@@ -674,7 +678,7 @@ function render_copy(
     $payer_name, $payer_sid, $payer_dept, $payer_prog, $payer_phone, $payer_email,
     $payment_method_lbl, $transaction_number,
     $invoice_signature_name, 'Student Copy', $university_logo_url, $university_address, $university_website,
-    $fee_rows
+    $fee_rows, $payment_method_raw
 ); ?>
 
 </div><!-- /print-wrapper -->

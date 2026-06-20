@@ -98,6 +98,7 @@ $payer_phone = '';
 $payer_email = '';
 $payment_method_lbl = 'Cash';
 $transaction_number = '';
+$payment_method_raw = 'cash';
 $fee_rows = [];
 
 $row_fee_lbl = 'Fee Payment';
@@ -114,8 +115,9 @@ if ($sfp) {
     $payer_phone = $sfp['phone']        ?? '';
     $payer_email = $sfp['email']        ?? '';
     $row_fee_lbl = acc_fee_type_label($sfp['fee_type']);
+    $payment_method_raw = (string)($sfp['payment_method'] ?? 'cash');
     $payment_method_lbl = acc_payment_method_label(
-        (string)($sfp['payment_method'] ?? 'cash'),
+        $payment_method_raw,
         $sfp['mobile_banking_provider'] ?? null
     );
     $transaction_number = (string)($sfp['transaction_number'] ?? '');
@@ -151,8 +153,9 @@ if ($sfp) {
     $payer_phone = $adm['phone']        ?? '';
     $payer_email = $adm['email']        ?? '';
     $row_fee_lbl = 'Admission Fee';
+    $payment_method_raw = (string)($adm['payment_method'] ?? 'cash');
     $payment_method_lbl = acc_payment_method_label(
-        (string)($adm['payment_method'] ?? 'cash'),
+        $payment_method_raw,
         $adm['mobile_banking_provider'] ?? null
     );
     $transaction_number = (string)($adm['transaction_number'] ?? '');
@@ -353,7 +356,7 @@ $done_url = APP_URL . '/accounting/student-portal.php';
                 </div>
                 <?php if ($transaction_number): ?>
                 <div class="meta-line">
-                    <span class="meta-label">Transaction #</span>
+                    <span class="meta-label"><?= $payment_method_raw === 'old_erp' ? 'Old ERP Receipt No' : 'Transaction #' ?></span>
                     <span class="meta-value"><?= h($transaction_number) ?></span>
                 </div>
                 <?php endif; ?>

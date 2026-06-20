@@ -1285,6 +1285,48 @@ function acc_get_student_payments(int $package_id): array
 }
 
 /**
+ * Fetch the payment-method details recorded for a voucher.
+ *
+ * Looks in sfp_payments first, then adm_admission_fee_payments. Returns null
+ * when no payment row is linked (e.g. journal / expense / transfer vouchers).
+ *
+ * @return array{payment_method:string,mobile_banking_provider:?string,transaction_number:?string}|null
+ */
+function acc_get_voucher_payment_info(int $voucher_id): ?array
+{
+    if ($voucher_id <= 0) {
+        return null;
+    }
+    $db = db();
+
+    $stmt = $db->prepare(
+        'SELECT payment_method, mobile_banking_provider, transaction_number
+         FROM sfp_payments WHERE voucher_id = ? ORDER BY id DESC LIMIT 1'
+    );
+    $stmt->execute([$voucher_id]);
+    $row = $stmt->fetch() ?: null;
+
+    if (!$row) {
+        $stmt = $db->prepare(
+            'SELECT payment_method, mobile_banking_provider, transaction_number
+             FROM adm_admission_fee_payments WHERE voucher_id = ? ORDER BY id DESC LIMIT 1'
+        );
+        $stmt->execute([$voucher_id]);
+        $row = $stmt->fetch() ?: null;
+    }
+
+    if (!$row) {
+        return null;
+    }
+
+    return [
+        'payment_method'          => (string)($row['payment_method'] ?? 'cash'),
+        'mobile_banking_provider' => $row['mobile_banking_provider'] ?? null,
+        'transaction_number'      => $row['transaction_number'] ?? null,
+    ];
+}
+
+/**
  * Look up an income account by its COA code.
  * Returns the account id or 0 if not found.
  */
