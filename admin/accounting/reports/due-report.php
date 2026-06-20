@@ -653,6 +653,7 @@ require_once __DIR__ . '/../../includes/header.php';
                     'cash' => 'Cash',
                     'bank' => 'Bank',
                     'mobile_banking' => 'Mobile Banking',
+                    'old_erp' => 'Old ERP',
                 ];
                 ?>
                 <div class="table-responsive">

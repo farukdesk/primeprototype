@@ -73,17 +73,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
     if (!$student_id)                          $errors[] = 'Invalid student.';
     if (!$package_id)                          $errors[] = 'Student has no fee package.';
     if (!$date)                                $errors[] = 'Date is required.';
-    if (!in_array($payment_method, ['cash', 'bank', 'mobile_banking'], true)) {
+    if (!in_array($payment_method, ['cash', 'bank', 'mobile_banking', 'old_erp'], true)) {
         $errors[] = 'Invalid payment method selected.';
     }
     if ($payment_method === 'mobile_banking' && !in_array($mobile_banking_provider, ['bkash', 'nagad', 'rocket'], true)) {
         $errors[] = 'Please select a mobile banking provider.';
     }
     if ($payment_method !== 'cash' && $transaction_number === '') {
-        $errors[] = 'Transaction number is required for non-cash payments.';
+        $errors[] = $payment_method === 'old_erp'
+            ? 'Receipt number is required for old ERP payments.'
+            : 'Transaction number is required for non-cash payments.';
     }
     if ($payment_method !== 'cash' && $transaction_number !== '' && acc_transaction_number_exists($transaction_number)) {
-        $errors[] = 'Transaction number "' . htmlspecialchars($transaction_number, ENT_QUOTES) . '" has already been used. Each payment must have a unique transaction number.';
+        $dup_label = $payment_method === 'old_erp' ? 'Receipt number' : 'Transaction number';
+        $errors[] = $dup_label . ' "' . htmlspecialchars($transaction_number, ENT_QUOTES) . '" has already been used. Each payment must have a unique ' . strtolower($dup_label) . '.';
     }
     if ($received_into_account_id <= 0) {
         $errors[] = $received_into_mapping_error($payment_method);
@@ -333,17 +336,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'admissi
     if ($amount <= 0)        $errors[] = 'Amount must be greater than zero.';
     if (!$income_account_id) $errors[] = 'Please select the income account.';
     if (!$date)              $errors[] = 'Date is required.';
-    if (!in_array($payment_method, ['cash', 'bank', 'mobile_banking'], true)) {
+    if (!in_array($payment_method, ['cash', 'bank', 'mobile_banking', 'old_erp'], true)) {
         $errors[] = 'Invalid payment method selected.';
     }
     if ($payment_method === 'mobile_banking' && !in_array($mobile_banking_provider, ['bkash', 'nagad', 'rocket'], true)) {
         $errors[] = 'Please select a mobile banking provider.';
     }
     if ($payment_method !== 'cash' && $transaction_number === '') {
-        $errors[] = 'Transaction number is required for non-cash payments.';
+        $errors[] = $payment_method === 'old_erp'
+            ? 'Receipt number is required for old ERP payments.'
+            : 'Transaction number is required for non-cash payments.';
     }
     if ($payment_method !== 'cash' && $transaction_number !== '' && acc_transaction_number_exists($transaction_number)) {
-        $errors[] = 'Transaction number "' . htmlspecialchars($transaction_number, ENT_QUOTES) . '" has already been used. Each payment must have a unique transaction number.';
+        $dup_label = $payment_method === 'old_erp' ? 'Receipt number' : 'Transaction number';
+        $errors[] = $dup_label . ' "' . htmlspecialchars($transaction_number, ENT_QUOTES) . '" has already been used. Each payment must have a unique ' . strtolower($dup_label) . '.';
     }
     if ($received_into_account_id <= 0) {
         $errors[] = $received_into_mapping_error($payment_method);
@@ -770,6 +776,7 @@ require_once __DIR__ . '/../includes/header.php';
                                     <option value="cash">Cash</option>
                                     <option value="bank">Bank</option>
                                     <option value="mobile_banking">Mobile Banking</option>
+                                    <option value="old_erp">Old ERP (Previously Collected)</option>
                                 </select>
                             </div>
                             <div class="col-md-4" id="payMobileProviderWrap" style="display:none;">
@@ -782,7 +789,7 @@ require_once __DIR__ . '/../includes/header.php';
                                 </select>
                             </div>
                             <div class="col-md-4" id="payTxnWrap" style="display:none;">
-                                <label class="form-label fw-semibold">Transaction Number <span class="text-danger">*</span></label>
+                                <label class="form-label fw-semibold" id="payTxnLabel">Transaction Number <span class="text-danger">*</span></label>
                                 <input type="text" name="transaction_number" id="payTxnNumber" class="form-control"
                                        placeholder="Enter transaction number">
                             </div>
@@ -1134,6 +1141,7 @@ require_once __DIR__ . '/../includes/header.php';
                                 <option value="cash">Cash</option>
                                 <option value="bank">Bank</option>
                                 <option value="mobile_banking">Mobile Banking</option>
+                                <option value="old_erp">Old ERP (Previously Collected)</option>
                             </select>
                         </div>
                         <div class="col-md-4" id="admProviderWrap" style="display:none;">
@@ -1146,7 +1154,7 @@ require_once __DIR__ . '/../includes/header.php';
                             </select>
                         </div>
                         <div class="col-md-4" id="admTxnWrap" style="display:none;">
-                            <label class="form-label fw-semibold">Transaction Number <span class="text-danger">*</span></label>
+                            <label class="form-label fw-semibold" id="admTxnLabel">Transaction Number <span class="text-danger">*</span></label>
                             <input type="text" name="transaction_number" id="admTxnNumber" class="form-control"
                                    placeholder="Enter transaction number">
                         </div>
@@ -1274,13 +1282,19 @@ require_once __DIR__ . '/../includes/header.php';
         const provider = document.getElementById('payMobileProvider');
         const txnWrap = document.getElementById('payTxnWrap');
         const txnInput = document.getElementById('payTxnNumber');
+        const txnLabel = document.getElementById('payTxnLabel');
         const isMobile = method === 'mobile_banking';
+        const isOldErp = method === 'old_erp';
         const needsTxn = method !== 'cash';
 
         providerWrap.style.display = isMobile ? '' : 'none';
         txnWrap.style.display = needsTxn ? '' : 'none';
         provider.required = isMobile;
         txnInput.required = needsTxn;
+        if (txnLabel) {
+            txnLabel.innerHTML = (isOldErp ? 'Receipt No' : 'Transaction Number') + ' <span class="text-danger">*</span>';
+        }
+        txnInput.placeholder = isOldErp ? 'Old ERP receipt number' : 'Enter transaction number';
         if (!isMobile) provider.value = '';
         if (!needsTxn) txnInput.value = '';
         syncStudentReceivedIntoAccount();
@@ -1292,13 +1306,19 @@ require_once __DIR__ . '/../includes/header.php';
         const provider = document.getElementById('admMobileProvider');
         const txnWrap = document.getElementById('admTxnWrap');
         const txnInput = document.getElementById('admTxnNumber');
+        const txnLabel = document.getElementById('admTxnLabel');
         const isMobile = method === 'mobile_banking';
+        const isOldErp = method === 'old_erp';
         const needsTxn = method !== 'cash';
 
         providerWrap.style.display = isMobile ? '' : 'none';
         txnWrap.style.display = needsTxn ? '' : 'none';
         provider.required = isMobile;
         txnInput.required = needsTxn;
+        if (txnLabel) {
+            txnLabel.innerHTML = (isOldErp ? 'Receipt No' : 'Transaction Number') + ' <span class="text-danger">*</span>';
+        }
+        txnInput.placeholder = isOldErp ? 'Old ERP receipt number' : 'Enter transaction number';
         if (!isMobile) provider.value = '';
         if (!needsTxn) txnInput.value = '';
         syncAdmissionReceivedIntoAccount();
