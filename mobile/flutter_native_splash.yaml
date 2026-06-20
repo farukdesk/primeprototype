@@ -1,0 +1,18 @@
+# Native Splash Screen Configuration
+# Run: flutter pub run flutter_native_splash:create
+# To remove: flutter pub run flutter_native_splash:remove
+
+flutter_native_splash:
+  color: "#1a1f36"
+  image: assets/images/splash_logo.png
+  color_dark: "#1a1f36"
+  image_dark: assets/images/splash_logo.png
+
+  android: true
+  ios: false   # iOS not required per project scope
+
+  android_12:
+    image: assets/images/splash_logo.png
+    icon_background_color: "#1a1f36"
+    image_dark: assets/images/splash_logo.png
+    icon_background_color_dark: "#1a1f36"

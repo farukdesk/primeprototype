@@ -1,0 +1,46 @@
+@use '../utils' as *;
+
+/*----------------------------------------*/
+/*  41. video css start
+/*----------------------------------------*/
+.it-video {
+    &-right {
+        margin-left: 45px;
+        @media #{$xl,$lg,$md,$xs}{
+            margin-left: 0;
+        }
+        &.it-about-4-content .it-about-list-box ul li span {
+            font-size: 22px;
+            @media #{$xl,$lg,$md}{
+                font-size: 18px;
+            }
+            @media #{$xs}{
+                font-size: 16px;
+            }
+        }
+        & .it-about-4-content p {
+            margin-right: 0;
+        }
+    }
+    &-thumb {
+        @media #{$xl,$lg}{
+            margin-right: 25px;
+        }
+        &.thumb-overlay {
+            &::after {
+                border-radius: 30px;
+                background-color: rgba($color: #1F2432, $alpha: .5);
+            }
+        }
+        & .it-about-thumb-icon {
+            height: 100px;
+            width: 100px;
+            line-height: 100px;
+            & svg {
+                width: 24px;
+                height: 20px;
+                color: var(--it-theme-4);
+            }
+        }
+    }
+}

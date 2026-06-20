@@ -1,0 +1,67 @@
+@use '../utils' as *;
+
+/*----------------------------------------*/
+/*  17. error css start
+/*----------------------------------------*/
+.it-error {
+    &-thumb {
+        @media #{$lg} {
+            margin-bottom: 90px;
+        }
+        @media #{$md,$xs} {
+            margin-bottom: 50px;
+        }
+    }
+
+    &-title {
+        font-size: 60px;
+        font-family: var(--it-ff-spartan-semibold);
+        @media #{$xl}{
+            font-size: 40px;
+        }
+        @media #{$lg}{
+            font-size: 44px;
+        }
+        @media #{$md}{
+            font-size: 45px;
+        }
+        @media #{$xs}{
+            font-size: 26px;
+            margin-bottom: 20px !important;
+        }
+        @media #{$sm}{
+            font-size: 37px;
+        }
+    }
+    &-content {
+        & p {
+            font-size: 24px;
+            font-family: var(--it-ff-spartan-semibold);
+            @media #{$xl,$lg,$md}{
+                font-size: 18px;
+            }
+            @media #{$xs}{
+                font-size: 16px;
+            }
+        }
+        & .it-btn-yellow.theme-bg {
+            & i {
+                margin-left: 0;
+                margin-right: 9px;
+            }
+        }
+    }
+    &-shape-1 {
+        position: absolute;
+        z-index: -1;
+        top: 33%;
+        left: 8%;
+        @media #{$xl,$lg,$md}{
+            transform: scale(.6);
+            left: 2%;
+        }  
+        @media #{$xs}{
+            display: none;
+        }  
+    }
+}

@@ -1,0 +1,116 @@
+@use '../utils' as *;
+
+/*----------------------------------------*/
+/*  40. tuition css start
+/*----------------------------------------*/
+
+.it-tuition {
+    &-area {
+        background-size: cover;
+        background-repeat: no-repeat;
+        @media #{$md,$xs}{
+            background-color: var(--it-gray-1);
+        }
+    }
+    &-shape {
+        &-1 {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: -1;
+        }
+        &-2 {
+            position: absolute;
+            top: -12%;
+            right: 15%;
+            z-index: -1;
+            @media #{$xl}{
+                right: 25%;
+            }
+            @media #{$lg}{
+                right: 33%;
+            }
+            @media #{$md}{
+                top: -7%;
+                right: 33%;
+            }
+        }
+    }
+    &-text {
+        & p {
+            margin-right: 35px;
+            margin-bottom: 40px;
+            @media #{$xl,$lg}{
+                font-size: 14px;
+            }
+            @media #{$md,$xs}{
+                font-size: 14px;
+                margin-right: 0;
+            }
+        }
+    }
+    &-list-box {
+        & ul {
+            & li {
+                list-style-type: none;
+                &:not(:last-child){
+                    margin-bottom: 13px;
+                }
+                & span {
+                    padding-left: 30px;
+                    position: relative;
+                    display: block;
+                    @media #{$xl,$lg,$md,$xs}{
+                        font-size: 14px;
+                    }
+                    & svg,i {
+                        position: absolute;
+                        top: 2px;
+                        left: 0;
+                        color: var(--it-theme-1);
+                    }
+                }
+            }
+        }
+        & > span {
+            font-size: 18px;
+            line-height: 1.6;
+            text-decoration: underline;
+            color: var(--it-common-black);
+            display: block;
+            margin-bottom: 20px;
+            font-family: var(--it-ff-spartan-semibold);
+            @media #{$xl,$lg,$md,$xs}{
+                font-size: 14px;
+            }
+        }
+    }
+    &-title-sm {
+        margin-bottom: 45px;
+    }
+    &-item {
+        padding: 64px 40px;
+        border-radius: 30px;
+        border: 1px solid rgba(26, 182, 157, 0.4);
+        @media #{$xl,$lg,$md,$xs}{
+            padding: 40px 25px;
+        }
+        &.active {
+            background-color: var(--it-theme-1);
+            & .it-tuition-title-sm {
+                color: var(--it-common-white);
+            }
+            & .it-tuition-list-box {
+                & span {
+                    color: var(--it-common-white);
+                }
+                & svg,i {
+                    color: var(--it-common-white);
+                }
+            }
+        }
+    }
+}

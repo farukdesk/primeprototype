@@ -1,0 +1,421 @@
+@use '../utils' as *;
+
+/*----------------------------------------*/
+/*  14. contact css start
+/*----------------------------------------*/
+
+.it-contact {
+    &-wrap {
+        padding: 95px 50px;
+        padding-bottom: 65px;
+        border-radius: 50px;
+        background-color: var(--it-theme-1);
+        @media #{$xs}{
+            padding: 45px 20px;
+        }
+        & .postbox__select .nice-select{
+            position: relative;
+            height: 70px;
+            line-height: 70px;
+            border-radius: 10px;
+            padding-left: 30px;
+            padding-right: 70px;
+            background-color: var(--it-common-white);
+            @media #{$md,$xs}{
+                height: 50px;
+                line-height: 50px;
+                font-size: 14px;
+            }
+            &::after {
+                content: '';
+                display: block;
+                height: 9px;
+                pointer-events: none;
+                position: absolute;
+                right: 30px;
+                top: 55%;
+                width: 15px;
+                border-bottom: 0;
+                border-radius: 3px;
+                border-left: 9px solid transparent;
+                border-right: 9px solid transparent;
+                border-top: 9px solid var(--it-text-body);
+                -webkit-transform: rotate(0deg) translateY(-50%);
+                -ms-transform: rotate(0deg translateY(-50%));
+                transform: rotate(0deg) translateY(-50%);
+                -webkit-transition: all 0.15s ease-in-out;
+                transition: all 0.15s ease-in-out;
+                @media #{$md,$xs}{
+                    top: 60%;
+                }
+            }
+        }
+    }
+    &-input-box {
+        position: relative;
+        & input {
+            height: 70px;
+            line-height: 70px;
+            border-radius: 10px;
+            padding-left: 30px;
+            padding-right: 70px;
+            background-color: var(--it-common-white);
+            @media #{$md,$xs}{
+                height: 50px;
+                line-height: 50px;
+                font-size: 14px;
+            }
+        }
+    }
+    &-btn {
+        & .it-btn-yellow {
+            padding: 24.5px 29px;
+            @media #{$md,$xs}{
+                height: 50px;
+                line-height: 50px;
+            }
+        }
+    }
+    &-info-box {
+        & span {
+            display: block;
+            font-size: 24px;
+            color: var(--it-common-white);
+            font-family: var(--it-ff-spartan-semibold);
+            @media #{$xl,$lg,$md}{
+                font-size: 18px;
+            }
+            @media #{$xs}{
+                font-size: 16px;
+            }
+            &:not(:last-child){
+                margin-bottom: 15px;
+            }
+            & a {
+                font-family: var(--it-ff-spartan-regular);
+            }
+            & i {
+                font-style: normal;
+                width: 130px;
+                display: inline-block;
+                @media #{$xs}{
+                    width: 100px;
+                }
+            }
+        }
+    }
+    &-thumb {
+       @media #{$md,$xs}{
+            margin-bottom: 70px;
+        } 
+    }
+    &-3 {
+        &-left {
+            padding: 20px;
+            padding-bottom: 55px;
+            margin-right: 75px;
+            border-radius: 20px;
+            height: 100%;
+            background-color: var(--it-gray-1);
+            @media #{$lg}{
+                margin-right: 0;
+            }
+            @media #{$md}{
+                margin-right: 0;
+                margin-top: 70px;
+            }
+            @media #{$xs}{
+                height: auto;
+                margin-right: 0;
+                margin-top: 70px;
+            }
+            & .it-details-title {
+                @media #{$xs}{
+                    font-size: 22px;
+                }
+            }
+        }
+        &-right {
+            margin-left: -30px;
+            position: relative;
+            padding-bottom: 10px;
+            @media #{$lg,$md,$xs}{
+                margin-left: 0;
+            }
+            &::after {
+                content: '';
+                position: absolute;
+                bottom: 0;
+                right: -10px;
+                height: 100%;
+                width: 100%;
+                border-radius: 20px;
+                z-index: -1;
+                background-color: var(--it-theme-1);
+                @media #{$xs}{
+                    right: -5px;
+                    bottom: 5px;
+                }
+            }
+        }
+        &-form-box {
+            padding: 55px 50px;
+            padding-bottom: 60px;
+            border-radius: 20px;
+            border: 1px solid #e9ebf1;
+            background-color: var(--it-common-white);
+            box-shadow: 0 16px 32px -2px rgba(32, 33, 36, 0.1), 0 8px 16px -2px rgba(32, 33, 36, 0.06);
+            & .it-section-title {
+                margin-bottom: 45px;
+            }
+            @media #{$lg,$xs}{
+                padding: 35px 20px;
+                padding-bottom: 40px;
+            }
+        }
+        &-area {
+            & .it-contact-list {
+                & ul {
+                    & li {
+                        list-style-type: none;
+                        padding-left: 45px;
+                        position: relative;
+                        @media #{$xs}{
+                            padding-left: 30px;
+                        }
+                        &:not(:last-child){
+                            margin-bottom: 28px;
+                        }
+                        & a {
+                            font-size: 20px;
+                            list-style-type: none;
+                            display: inline-block;
+                            font-family: var(--it-ff-spartan-semibold);
+                            @media #{$xs}{
+                                font-size: 14px;
+                            }
+                            @media #{$sm}{
+                                font-size: 17px;
+                            }
+                            &:hover {
+                                color: var(--it-theme-1);
+                            }
+                        }
+                        & span {
+                            position: absolute;
+                            top: -2px;
+                            left: 0;
+                            & svg {
+                                @media #{$xs}{
+                                    height: 20px;
+                                    width: 20px;
+                                }
+                            }
+                        }
+        
+                    }
+                }
+            }
+            & .it-contact-social {
+                & a {
+                    & svg {
+                        @media #{$xs}{
+                            height: 20px;
+                            width: 20px;
+                        }
+                        @media #{$sm}{
+                            height: 30px;
+                            width: 30px;
+                        }
+                    }
+                    &:not(:last-child){
+                        margin-right: 35px;
+                    }
+                    &:hover {
+                        color: var(--it-theme-1);
+                    }
+                }
+            }            
+            & .it-contact-2-form-title {
+                color: var(--it-common-black);
+            }
+            & .contact__select .nice-select {
+                width: 100%;
+                position: relative;
+                height: 50px;
+                line-height: 50px;
+                padding: 0 30px;
+                font-size: 16px;
+                border-radius: 5px;
+                background-color: var(--it-gray-1);           
+                border: 1px solid rgba(9, 31, 46, 0.1);
+            }
+            & .it-signup-input {
+                & textarea {
+                    border-radius: 5px;
+                    height: 290px;
+                    background-color: var(--it-gray-1);
+                    border: 1px solid rgba(9, 31, 46, 0.1);
+                    @media #{$xs}{
+                        height: 150px;
+                    }
+                    &:focus {
+                        border: 1px solid var(--it-theme-1);
+                    }
+                }
+            }
+        }
+        &-style-2 {
+            & .it-contact-3-left {
+                background-color: var(--it-common-white);
+                @media #{$md,$xs}{
+                   padding: 0;
+                }
+                & span {
+                    font-size: 28px;
+                    display: block;
+                    margin-bottom: 20px;
+                    color: var(--it-common-black);
+                    font-family: var(--it-ff-spartan-semibold);
+                }
+            }
+            & .it-contact-list ul li {
+                padding-left: 0;
+                display: flex;
+                align-items: center;
+                & a {
+                    padding-left: 0;
+                }
+                & span {
+                    border-radius: 20px;
+                    width: 68px;
+                    height: 68px;
+                    line-height: 65px;
+                    text-align: center;
+                    z-index: 1;
+                    position: relative;
+                    margin-right: 20px;
+                    display: inline-block;
+                    margin-bottom: 0;
+                    background-color: var(--it-gray-1);
+                    border: 1px solid rgba(31, 36, 50, 0.1);
+                    @media #{$xs}{
+                        width: 60px;
+                        height: 60px;
+                        line-height: 58px;
+                    }
+                    &::before {
+                        content: '';
+                        position: absolute;
+                        top: 0;
+                        left: 0;
+                        height: 100%;
+                        width: 100%;
+                        z-index: -1;
+                        border-radius: 20px;
+                        background-color: var(--it-gray-1);
+                    }
+                    &::after {
+                        content: '';
+                        position: absolute;
+                        bottom: -2px;
+                        right: -2px;
+                        height: 100%;
+                        width: 100%;
+                        z-index: -2;
+                        border-radius: 20px;
+                        background-color: var(--it-theme-1);
+                    }
+                }
+            }
+        }
+    }
+}
+.it-contact-2 {
+    &-area {
+        & .it-section-title {
+            @media #{$lg,$md,$xs}{
+                & br {
+                    display: none;
+                }
+            }
+        }
+        & .it-contact-thumb {
+            margin-right: 84px;
+             @media #{$lg,$md,$xs}{
+                margin-right: 0;
+            }
+        }
+    }
+    &-form {
+        &-box{
+            padding: 40px 30px;
+            padding-top: 36px;
+            border-radius: 10px;
+            background-color: #06786A;
+            & .it-btn-yellow {
+                border-radius: 5px;
+            }
+        }
+        &-title {
+            font-size: 30px;
+            text-align: center;
+            margin-bottom: 25px;
+            color: var(--it-common-white);
+            @media #{$xs}{
+                font-size: 24px;
+            }
+        }
+    }
+    &-input {
+        &-wrap{
+            margin-bottom: 27px;
+            & label {
+                font-weight: 600;
+                margin-bottom: 11px;
+                color: var(--it-common-white);
+            }
+        }
+        &-box{
+            position: relative;            
+            & input {
+                height: 50px;
+                line-height: 50px;
+                border-radius: 5px;
+                font-size: 14px;
+                padding-left: 20px;
+                padding-right: 50px;
+                color: var(--it-common-black);
+                background-color: var(--it-common-white);
+                &::placeholder {
+                    font-size: 14px;
+                }
+            }
+            & textarea {
+                height: 150px;
+                border-radius: 5px;
+                font-size: 14px;
+                padding-left: 20px;
+                color: var(--it-common-black);
+                background-color: var(--it-common-white);
+                &::placeholder {
+                    font-size: 14px;
+                }
+            }
+            & .icon {
+                position: absolute;
+                top: 48%;
+                right: 23px;
+                transform: translateY(-50%);
+            }
+        }
+    }
+    &-shape {
+        &-1 {
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            z-index: -1;
+        }
+    }
+}

@@ -1,0 +1,493 @@
+@use '../utils' as *;
+
+/*----------------------------------------*/
+/*  22. funfact css start
+/*----------------------------------------*/
+.it-funfact {
+    &-icon {
+        & span {
+            z-index: 1;
+            position: relative;
+            display: inline-block;
+            margin-right: 17px;
+            padding-left: 12px;            
+            &::after {
+                position: absolute;
+                content: '';
+                top: -10px;
+                left: 0;
+                display: inline-block;
+                height: 41px;
+                width: 41px;
+                line-height: 41px;
+                text-align: center;
+                border-radius: 50%;
+                z-index: -1;
+                background-color: rgba($color: #FFFFFF, $alpha: .15);
+            }
+            & svg {
+                -webkit-transition: all 300ms ease;
+                transition: all 300ms ease;
+            }
+        }
+    }
+    &-content {
+        text-align: start;
+        & span {
+            color: var(--it-common-white);
+            @media #{$xl}{
+                font-size: 14px;
+            }
+        }
+    }
+    &-number {
+        font-size: 28px;
+        line-height: 1;
+        margin-bottom: 10px;
+        color: var(--it-common-white);
+        & i {
+            font-style: normal;
+        }
+    }
+    &-item {
+        padding: 71px 0;
+        position: relative;
+        @media #{$xl,$lg,$md,$xs}{
+            text-align: center;
+            padding: 0;
+            padding-bottom: 50px;
+        }
+        &::before {
+            position: absolute;
+            top: 0;
+            content: '';
+            width: 1px;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.15);
+            @media #{$xl,$lg,$md,$xs}{
+                display: none;
+            }
+        }
+        &:hover {
+            & .it-funfact-icon svg {
+                -webkit-transform: scaleX(-1);
+                transform: scaleX(-1);
+            }
+        }
+    }
+    &-area {
+        @media #{$xl,$lg,$md,$xs}{
+            padding-top: 70px;
+            padding-bottom: 20px;
+        }
+        & .row {
+            [class*=col-]:first-child{
+                & .it-funfact-item {
+                    &::before {
+                        display: none;
+                    }
+                }
+            }
+            [class*=col-]:nth-child(2){
+                & .it-funfact-item {
+                    padding-left: 20px;
+                    @media #{$xl,$lg,$md,$xs}{
+                        padding-left: 0;
+                    }
+                    &::before {
+                        left: -13.5%;
+                    }                    
+                }
+            }
+            [class*=col-]:nth-child(3){
+                & .it-funfact-item {
+                    padding-left: 25px;
+                    @media #{$xl,$lg,$md,$xs}{
+                        padding-left: 0;
+                    }
+
+                    &::before {
+                        left: -13.5%;
+                    }                    
+                }
+            }
+            [class*=col-]:nth-child(4){
+                & .it-funfact-item {                    
+                    padding-left: 50px;
+                    @media #{$xl,$lg,$md,$xs}{
+                        padding-left: 0;
+                    }
+                    @media #{$sm}{
+                        padding-bottom: 0;
+                    }
+                    &::before {
+                        left: -4%;
+                    }
+                }
+            }
+        }
+    }
+    &-wrap {
+        margin-top: -185px;
+        padding: 0 80px;
+        border-radius: 100px;
+        @media #{$xl}{
+           padding: 0 35px;
+        }
+        @media #{$lg,$md}{
+           padding: 60px 35px;
+        }
+        @media #{$xs}{
+           padding: 60px 25px;
+           border-radius: 30px;
+        }
+        &::after {
+            position: absolute;
+            content: '';
+            bottom: -7px;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -2;
+            border-radius: 100px;
+            background-color: var(--it-theme-2);
+            @media #{$xs}{
+                border-radius: 30px;
+            }
+        }
+        &::before {
+            position: absolute;
+            content: '';
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            border-radius: 100px;
+            background-color: var(--it-theme-1);
+            @media #{$xs}{
+                border-radius: 30px;
+            }
+        }
+        & .it-funfact-item {
+            @media #{$xl}{
+                padding: 71px 0;
+            }
+            @media #{$lg,$md}{
+                padding-bottom: 0;
+            }
+            @media #{$xs}{
+                padding-bottom: 0;                
+            }
+            &::before {
+                display: none;
+            }
+        }
+        & .it-funfact-icon {
+            & svg {
+                color: var(--it-theme-2);
+            }
+        }
+        & .row {
+            [class*=col-]:nth-child(2){
+                & .it-funfact-item {
+                    padding-left: 20px;  
+                    @media #{$xs}{
+                        padding-left: 0;             
+                    }                
+                }
+            }
+            [class*=col-]:nth-child(3){
+                & .it-funfact-item {
+                    padding-left: 15px;   
+                    @media #{$xs}{
+                        padding-left: 0;               
+                    }                
+                }
+            }
+            [class*=col-]:nth-child(4){
+                & .it-funfact-item {                    
+                    padding-left: 0;
+                }
+            }
+            [class*=col-]:not(:last-child){
+                & .it-funfact-item {                    
+                    @media #{$lg,$md,$xs}{
+                        margin-bottom: 50px;
+                    }
+                }
+            }
+            [class*=col-]:nth-last-child(2){
+                & .it-funfact-item {                    
+                    @media #{$md}{
+                        margin-bottom: 0;
+                    }
+                    @media #{$sm}{
+                        margin-bottom: 0;
+                    }
+                }
+            }
+            
+        }
+    }
+    &-shape {
+        &-1 {
+            position: absolute;
+            top: -56%;
+            left: 1.5%;
+            z-index: 1;
+            animation: itswing 2s forwards infinite alternate;
+            transform-origin: bottom center;
+             @media #{$xl}{
+                top: -54%;
+            }  
+            @media #{$lg,$md,$xs}{
+                display: none;
+            }
+            & img {
+                @media #{$xxl}{
+                    transform: scale(.7);
+                }
+                @media #{$xl}{
+                    transform: scale(.7);
+                }                
+            }
+        }
+        &-2 {
+            position: absolute;
+            bottom: -15%;
+            right: 1.5%;
+            z-index: 1;
+            animation: itswing 2.5s forwards infinite alternate;
+            transform-origin: bottom center;
+            @media #{$xxl}{
+                bottom: -28%;
+            }
+            @media #{$xl}{
+                bottom: -30%;
+            }
+            @media #{$lg,$md,$xs}{
+                display: none;
+            }
+            & img {
+                @media #{$xxl}{
+                    transform: scale(.7);
+                }
+                @media #{$xl}{
+                    transform: scale(.7);
+                }
+            }
+        }
+        &-3 {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            z-index: -1;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        &-4 {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            width: 100%;
+            object-fit: cover;
+        }
+    }
+    &-style-2 {
+        background-color: var(--it-common-black);
+        clip-path: path('M0 0C159.993 0 323.993 25.8668 484 25.8668C644 25.8668 800 0 960 0C1120 0 1284 25.8668 1444 25.8668C1603.99 25.8668 1759.99 0 1919.99 0C1920 73.3809 1920 146.762 1920 220.143C1759.99 220.143 1603.99 246.006 1444 246C1284 246.006 1120 220.139 960 220.133C800 220.139 644 246.006 484 246C324 246.006 160 220.143 0 220.143C0 146.762 0 73.3809 0 0Z');
+        @media #{$lg,$md,$xs}{
+            clip-path: none;
+            padding: 70px 0;
+        }
+        & .it-funfact-item {
+            padding: 94px 0;
+            position: relative;
+            height: 100%;
+            @media #{$lg,$md,$xs}{
+                padding: 0;
+                margin-bottom: 50px;
+            }
+            &.style-4 {
+                @media #{$lg,$md,$xs}{
+                    margin-bottom: 0;
+                }
+            }
+        }
+    }
+    &-style-3 {
+        @include background;
+        & .it-funfact-item {
+            padding: 75px 0;
+            @media #{$lg,$md,$xs}{
+                padding: 0 0 50px 0;
+            }
+        }
+        &.it-funfact-area {
+            @media #{$xl}{
+                padding: 0;
+            }
+            @media #{$lg,$md}{
+                padding: 70px 0;
+            }
+            @media #{$xs}{
+                padding: 100px 0;
+                background-image: none !important;
+                background-color: var(--it-theme-1);
+            }
+        }
+        &.it-funfact-area .row [class*="col-"]:nth-child(4) .it-funfact-item {
+            @media #{$md}{
+                padding-bottom: 0;
+            }
+        }
+        &.it-funfact-area .row [class*="col-"]:nth-child(3) .it-funfact-item {
+            @media #{$md}{
+                padding-bottom: 0;
+            }
+        }
+    }
+    &-style-4 {
+        &.it-funfact-area {
+            @media #{$sm}{
+                padding: 90px 0;
+            }
+        }
+        & .it-funfact-content span {
+            @media #{$lg}{
+                font-size: 13px;
+            }
+        }
+        & .it-funfact-number {
+            @media #{$lg}{
+                font-size: 24px;
+            }
+        }
+    }
+    &-style-5 {
+        & .it-funfact-number {
+            font-family: var(--it-ff-cinzel-decorative);
+        }    
+        &.it-funfact-area .row [class*="col-"] .it-funfact-item {
+            @media #{$sm}{
+                padding-bottom: 50px;
+            }
+        }    
+    }
+    &-style-6 {
+        margin-top: -15px;
+        @media #{$lg,$md,$xs}{
+            margin-top: -30px;
+        }
+        @media #{$xs}{
+            margin-top: 0;
+            padding-bottom: 71px;
+            background-color: var(--it-common-black);
+        }
+        & .it-funfact-icon span::after {
+            background-color: var(--it-theme-5);
+        }
+        & .it-funfact-bg {
+            position: absolute;
+            z-index: -1;
+            top: 0;
+            left: 0;
+            height: 100%;
+            width: 100%;
+            @media #{$xs}{
+                display: none;
+            }
+        }
+        & .it-funfact-item::before {
+            top: auto;
+            bottom: 0;
+            width: 2px;
+            height: 94%;
+        }
+        & .row {
+            [class*=col-]:nth-child(3){
+                & .it-funfact-item {  
+                    @media #{$sm}{
+                       padding-bottom: 0;             
+                    }                
+                }
+            }            
+        }
+    }
+    &-style-7 {
+        margin-top: -20px;
+        & .it-funfact-icon span::after {
+            background-color: rgba($color: #FFFFFF, $alpha: .15);
+        }
+    }
+    &-2 {
+        &-area {
+            & .row {
+                [class*=col-]:first-child{
+                    & .it-funfact-item {
+                        &::before {
+                            display: none;
+                        }
+                    }
+                }
+                [class*=col-]:nth-child(2){
+                    & .it-funfact-item {
+                        padding-left: 20px;
+                        @media #{$xl,$lg,$md,$xs}{
+                            padding-left: 0;
+                        }
+                        &::before {
+                            left: -13.5%;
+                        }                    
+                    }
+                }
+                [class*=col-]:nth-child(3){
+                    & .it-funfact-item {
+                        padding-left: 25px;
+                        @media #{$xl,$lg,$md,$xs}{
+                            padding-left: 0;
+                        }
+                        @media #{$sm}{
+                            padding-bottom: 0;
+                        }
+                        &::before {
+                            left: -13.5%;
+                        }                    
+                    }
+                }
+                [class*=col-]:nth-child(4){
+                    & .it-funfact-item {                    
+                        padding-left: 50px;
+                        @media #{$xl,$lg,$md,$xs}{
+                            padding-left: 0;
+                        }
+                        @media #{$sm}{
+                            padding-bottom: 0;
+                        }
+                        &::before {
+                            left: -4%;
+                        }
+                    }
+                }
+                
+            }
+            &.it-funfact-2-area .row [class*="col-"]:nth-child(4) .it-funfact-item {                
+                @media #{$md}{
+                    margin-bottom: 0;
+                    padding-bottom: 0;
+                }
+            }
+            &.it-funfact-2-area .row [class*="col-"]:nth-child(3) .it-funfact-item {
+                @media #{$md}{
+                    margin-bottom: 0;
+                    padding-bottom: 0;
+                }
+            }            
+        }
+    }
+}
+
+

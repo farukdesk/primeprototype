@@ -1,0 +1,805 @@
+<?php
+require_once __DIR__ . '/includes/config.php';
+require_once __DIR__ . '/includes/seo.php';
+
+/* ── Data fetching ─────────────────────────────────────────────────────────── */
+$_stats        = [];
+$_latest_news  = [];
+$_testimonials = [];
+$_departments  = [];
+$_faculty      = [];
+$_features     = [];
+$_about        = [];
+$_admission    = [];
+$_contact_cfg  = [];
+$_campus_items = [];
+$_alumni       = [];
+$_notices      = [];
+$_apply_now_url = 'https://primeuniversity.ac.bd/apply-now';
+
+$db = null;
+try { $db = front_db(); } catch (Throwable $e) {}
+
+if ($db) {
+    try {
+        $_stats = $db->query(
+            'SELECT icon, value, label, suffix FROM homepage_stats
+             WHERE is_active = 1 ORDER BY sort_order, id'
+        )->fetchAll();
+    } catch (Throwable $e) {}
+
+    try {
+        $_latest_news = $db->query(
+            'SELECT id, title, slug, featured_image, content, published_at
+             FROM cms_news WHERE is_published = 1
+             ORDER BY published_at DESC, created_at DESC LIMIT 3'
+        )->fetchAll();
+    } catch (Throwable $e) {}
+
+    try {
+        $_testimonials = $db->query(
+            'SELECT name, designation, quote, photo, rating FROM homepage_testimonials
+             WHERE is_active = 1 ORDER BY sort_order, id LIMIT 8'
+        )->fetchAll();
+    } catch (Throwable $e) {}
+
+    try {
+        $_departments = $db->query(
+            'SELECT id, name, slug, code, hero_icon, hero_subtitle
+             FROM dept_departments WHERE is_active = 1
+             ORDER BY name LIMIT 6'
+        )->fetchAll();
+    } catch (Throwable $e) {}
+
+    try {
+        $_faculty = $db->query(
+            "SELECT fp.photo, fp.designation, u.name
+             FROM faculty_profiles fp
+             JOIN users u ON u.id = fp.user_id
+             WHERE fp.photo IS NOT NULL AND fp.photo != ''
+             ORDER BY RAND() LIMIT 8"
+        )->fetchAll();
+    } catch (Throwable $e) {}
+
+    // Why Choose Us features
+    try {
+        $_features = $db->query(
+            'SELECT icon, title, description FROM cms_features
+             WHERE is_active = 1 ORDER BY sort_order, id LIMIT 12'
+        )->fetchAll();
+    } catch (Throwable $e) {}
+
+    // About settings
+    try {
+        $_about_rows = $db->query('SELECT setting_key, setting_value FROM cms_about_settings')->fetchAll();
+        foreach ($_about_rows as $_r) $_about[$_r['setting_key']] = $_r['setting_value'];
+    } catch (Throwable $e) {}
+
+    // Admission settings
+    try {
+        $_adm_rows = $db->query('SELECT setting_key, setting_value FROM cms_admission_settings')->fetchAll();
+        foreach ($_adm_rows as $_r) $_admission[$_r['setting_key']] = $_r['setting_value'];
+    } catch (Throwable $e) {}
+
+    // Contact settings
+    try {
+        $_con_rows = $db->query('SELECT setting_key, setting_value FROM cms_contact_settings')->fetchAll();
+        foreach ($_con_rows as $_r) $_contact_cfg[$_r['setting_key']] = $_r['setting_value'];
+    } catch (Throwable $e) {}
+
+    // Campus gallery (cms_campus_items)
+    try {
+        $_campus_items = $db->query(
+            'SELECT title, image, link_url FROM cms_campus_items
+             WHERE is_active = 1 ORDER BY sort_order, id LIMIT 9'
+        )->fetchAll();
+    } catch (Throwable $e) {}
+
+    // Notable alumni
+    try {
+        $_alumni = $db->query(
+            'SELECT name, designation, organization, photo FROM cms_alumni
+             WHERE is_active = 1 ORDER BY sort_order, id LIMIT 8'
+        )->fetchAll();
+    } catch (Throwable $e) {}
+
+    // Latest notices
+    try {
+        $_notices = $db->query(
+            'SELECT id, title, slug, content, published_at FROM cms_notices
+             WHERE is_published = 1 AND is_approved = 1 ORDER BY published_at DESC, created_at DESC LIMIT 6'
+        )->fetchAll();
+    } catch (Throwable $e) {}
+}
+
+if (empty($_stats)) {
+    $_stats = [
+        ['icon' => 'fas fa-user-graduate',      'value' => '15000', 'suffix' => '+', 'label' => 'Students Enrolled'],
+        ['icon' => 'fas fa-chalkboard-teacher', 'value' => '250',   'suffix' => '+', 'label' => 'Expert Faculty'],
+        ['icon' => 'fas fa-book-open',           'value' => '35',    'suffix' => '+', 'label' => 'Academic Programs'],
+        ['icon' => 'fas fa-award',               'value' => '32',    'suffix' => '+', 'label' => 'Years of Excellence'],
+    ];
+}
+
+if (empty($_departments)) {
+    $_departments = [
+        ['id'=>0,'name'=>'Computer Science & Engineering','slug'=>'bsc-cse',  'hero_icon'=>'fas fa-laptop-code',    'hero_subtitle'=>'AI, Software Engineering & Data Science'],
+        ['id'=>0,'name'=>'Business Administration',        'slug'=>'',         'hero_icon'=>'fas fa-briefcase',      'hero_subtitle'=>'BBA & MBA programs with industry focus'],
+        ['id'=>0,'name'=>'Law',                            'slug'=>'',         'hero_icon'=>'fas fa-balance-scale',  'hero_subtitle'=>'LLB & LLM with moot court practice'],
+        ['id'=>0,'name'=>'Pharmacy',                       'slug'=>'',         'hero_icon'=>'fas fa-pills',          'hero_subtitle'=>'State-of-the-art labs & research centres'],
+        ['id'=>0,'name'=>'Architecture',                   'slug'=>'',         'hero_icon'=>'fas fa-drafting-compass','hero_subtitle'=>'Creative design with industry mentors'],
+        ['id'=>0,'name'=>'English',                        'slug'=>'',         'hero_icon'=>'fas fa-language',       'hero_subtitle'=>'Language & Literature for global careers'],
+    ];
+}
+
+if (empty($_features)) {
+    $_features = [
+        ['icon'=>'fas fa-graduation-cap', 'title'=>'Bachelor Programs',  'description'=>'Comprehensive undergraduate degrees in Engineering, Business, Law, Pharmacy, Architecture and more.'],
+        ['icon'=>'fas fa-user-tie',        'title'=>'Masters Degrees',    'description'=>'Advance your expertise with research-driven postgraduate programmes taught by internationally qualified faculty.'],
+        ['icon'=>'fas fa-flask',           'title'=>'Research Excellence','description'=>'State-of-the-art laboratories and dedicated research centres producing innovation that matters.'],
+        ['icon'=>'fas fa-handshake',       'title'=>'Industry Placement', 'description'=>'Strong industry ties and a dedicated career office help graduates secure top positions.'],
+        ['icon'=>'fas fa-globe-asia',      'title'=>'Global Network',     'description'=>'International affiliations and exchange programmes connect our students worldwide.'],
+        ['icon'=>'fas fa-shield-alt',      'title'=>'Accredited Quality', 'description'=>'UGC-approved and internationally benchmarked — our degrees are recognised by employers worldwide.'],
+    ];
+}
+?>
+<!doctype html>
+<html class="no-js" lang="en">
+<head>
+   <meta charset="utf-8">
+   <meta http-equiv="x-ua-compatible" content="ie=edge">
+   <meta name="viewport" content="width=device-width, initial-scale=1">
+   <link rel="shortcut icon" type="image/x-icon" href="/assets/img/logo/favicon.png">
+<?php render_seo_meta('/index.php', 'Home', 'Prime University Bangladesh – Quality higher education with expert faculty, modern facilities and industry-focused programs.'); ?>
+   <link rel="stylesheet" href="/assets/css/bootstrap.min.css">
+   <link rel="stylesheet" href="/assets/css/font-awesome-pro.css">
+   <link rel="stylesheet" href="/assets/css/swiper-bundle.min.css">
+   <link rel="stylesheet" href="/assets/css/slick.css">
+   <link rel="stylesheet" href="/assets/css/magnific-popup.css">
+   <link rel="stylesheet" href="/assets/css/nice-select.css">
+   <link rel="stylesheet" href="/assets/css/custom-animation.css">
+   <link rel="stylesheet" href="/assets/css/spacing.css">
+   <link rel="stylesheet" href="/assets/css/main.css">
+   <link rel="stylesheet" href="/assets/css/prime-home.css">
+<?php include __DIR__ . '/includes/meta-pixel.php'; ?>
+</head>
+<body id="body" class="it-magic-cursor">
+
+
+<div id="preloader"><div class="preloader"><span></span><span></span></div></div>
+<div id="magic-cursor"><div id="ball"></div></div>
+<button class="scroll-top scroll-to-target" data-target="html"><i class="far fa-angle-double-up"></i></button>
+
+<!-- search popup -->
+<div class="search-popup">
+   <button class="close-search"><span class="flaticon-multiply"><i class="fal fa-times"></i></span></button>
+   <form method="post" action="#"><div class="form-group">
+      <input type="search" name="search-field" value="" placeholder="Search programs, news, faculty…" required="">
+      <button type="submit"><i class="fal fa-search"></i></button>
+   </div></form>
+</div>
+<?php include __DIR__ . '/includes/offcanvas.php'; ?>
+<header class="it-header-height">
+   <?php include __DIR__ . '/includes/header-top.php'; ?>
+   <?php include __DIR__ . '/includes/nav-menu.php'; ?>
+</header>
+
+<?php include __DIR__ . '/includes/news-ticker.php'; ?>
+<?php include __DIR__ . '/includes/slider.php'; ?>
+
+<!-- STATS COUNTER BAR -->
+<section class="pu-stats-section" id="pu-stats">
+   <div class="container-fluid px-0">
+      <div class="pu-stats-inner">
+         <?php foreach ($_stats as $i => $stat): ?>
+         <div class="pu-stat-item wow itfadeUp" data-wow-duration=".7s" data-wow-delay="<?= .1 * $i ?>s">
+            <div class="pu-stat-icon"><i class="<?= fh($stat['icon']) ?>"></i></div>
+            <div class="pu-stat-number">
+               <span class="purecounter" data-purecounter-start="0"
+                     data-purecounter-end="<?= (int)preg_replace('/\D/', '', $stat['value']) ?>"
+                     data-purecounter-duration="2"><?= (int)preg_replace('/\D/', '', $stat['value']) ?></span><span class="suffix"><?= fh($stat['suffix']) ?></span>
+            </div>
+            <div class="pu-stat-label"><?= fh($stat['label']) ?></div>
+         </div>
+         <?php endforeach; ?>
+      </div>
+   </div>
+</section>
+
+<!-- FEATURE CARDS -->
+<section class="pu-features-section pu-section" id="pu-features">
+   <div class="container">
+      <div class="row justify-content-center mb-60">
+         <div class="col-xl-7 col-lg-9 text-center">
+            <div class="pu-label wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".1s">Why Choose Us</div>
+            <h2 class="pu-section-title wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".2s">A University Built for <span class="accent">Your Success</span></h2>
+            <p class="pu-section-sub mx-auto mt-3 wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".3s">Prime University offers a world-class learning environment with expert faculty, state-of-the-art facilities and an industry-connected curriculum designed to launch your career.</p>
+         </div>
+      </div>
+      <div class="row g-4">
+         <?php
+         $icon_classes = ['pu-feature-icon-1','pu-feature-icon-2','pu-feature-icon-3','pu-feature-icon-4','pu-feature-icon-5','pu-feature-icon-6'];
+         foreach ($_features as $i => $f):
+         ?>
+         <div class="col-xl-4 col-lg-4 col-md-6 wow itfadeUp" data-wow-duration=".7s" data-wow-delay="<?= .1 + .1 * $i ?>s">
+            <div class="pu-feature-card">
+               <div class="pu-feature-icon <?= $icon_classes[$i % count($icon_classes)] ?>"><i class="<?= fh($f['icon']) ?>"></i></div>
+               <h5><?= fh($f['title']) ?></h5>
+               <p><?= fh($f['description']) ?></p>
+            </div>
+         </div>
+         <?php endforeach; ?>
+      </div>
+   </div>
+</section>
+
+<!-- ABOUT SECTION -->
+<section class="pu-about-section pu-section" id="pu-about">
+   <div class="container">
+      <div class="row align-items-center g-5">
+         <div class="col-lg-6 wow itfadeLeft" data-wow-duration=".9s" data-wow-delay=".2s">
+            <div class="pu-about-img-wrap">
+               <img class="pu-about-img-main" src="<?= !empty($_about['main_image']) ? fh(ADMIN_UPLOAD_URL . '/about/' . basename($_about['main_image'])) : 'assets/img/about/about-1-1.jpg' ?>" alt="Prime University Campus">
+               <div class="pu-about-img-badge">
+                  <span class="number"><?= fh($_about['badge_number'] ?? '24+') ?></span>
+                  <span class="text"><?= nl2br(fh($_about['badge_text'] ?? "Years of" . "\n" . "Excellence")) ?></span>
+               </div>
+            </div>
+         </div>
+         <div class="col-lg-6 wow itfadeRight" data-wow-duration=".9s" data-wow-delay=".3s">
+            <div class="pu-about-content">
+               <div class="pu-label"><?= fh($_about['about_section_subtitle'] ?? 'About the University') ?></div>
+               <h2 class="pu-section-title mb-3"><?= fh($_about['about_section_title'] ?? 'Shaping Leaders Since') ?> <span class="accent"><?= fh($_about['about_section_title_accent'] ?? '2002') ?></span></h2>
+               <p class="pu-section-sub mb-4"><?= fh($_about['description'] ?? 'Prime University is a premier private university in Bangladesh, committed to quality higher education through academic rigour, research innovation and industry relevance.') ?></p>
+               <?php
+               $list_items = [];
+               for ($li = 1; $li <= 5; $li++) {
+                   $val = $_about['list_item_' . $li] ?? '';
+                   if ($val !== '') $list_items[] = $val;
+               }
+               if (empty($list_items)) {
+                   $list_items = [
+                       'UGC-approved with internationally recognised degree programs',
+                       '100+ highly qualified and research-active faculty members',
+                       'Modern libraries, labs and digital learning infrastructure',
+                       'Dedicated career centre with industry placement programmes',
+                       'Active student clubs, sports and cultural programmes',
+                   ];
+               }
+               ?>
+               <ul class="pu-about-list mb-4">
+                  <?php foreach ($list_items as $li_text): ?>
+                  <li><div class="check"><i class="fas fa-check"></i></div><?= fh($li_text) ?></li>
+                  <?php endforeach; ?>
+               </ul>
+               <div class="d-flex flex-wrap gap-3">
+                  <a href="<?= fh($_apply_now_url) ?>" class="pu-btn pu-btn-primary"><i class="fas fa-paper-plane"></i> Apply Now</a>
+                  <a href="<?= fh($_about['contact_url'] ?? 'contact') ?>" class="pu-btn pu-btn-outline"><i class="fas fa-phone-alt"></i> Contact Us</a>
+               </div>
+            </div>
+         </div>
+      </div>
+   </div>
+</section>
+
+<!-- ACADEMIC PROGRAMS GRID -->
+<section class="pu-programs-section pu-section" id="pu-programs">
+   <div class="container">
+      <div class="row justify-content-between align-items-end mb-50">
+         <div class="col-lg-7">
+            <div class="pu-label wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".1s">Our Departments</div>
+            <h2 class="pu-section-title wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".2s">Explore Our <span class="accent">Academic Programs</span></h2>
+         </div>
+         <div class="col-lg-auto wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".3s">
+            <a href="department.php" class="pu-view-all">View All Departments <i class="fas fa-arrow-right"></i></a>
+         </div>
+      </div>
+      <?php
+      $dept_bg_images = [
+         'assets/img/about/about-5-1.jpg',
+         'assets/img/about/about-10-1.jpg',
+         'assets/img/about/about-12-1.jpg',
+         'assets/img/about/about-2-1.jpg',
+         'assets/img/about/about-4-1.jpg',
+         'assets/img/about/about-13-1.jpg',
+      ];
+      ?>
+      <div class="row g-3">
+         <?php foreach ($_departments as $idx => $dept):
+            $dept_url  = $dept['slug'] ? SITE_URL . '/department/' . urlencode($dept['slug']) : SITE_URL . '/department';
+            $dept_img  = !empty($dept['image'])
+                ? ADMIN_UPLOAD_URL . '/departments/' . $dept['image']
+                : $dept_bg_images[$idx % count($dept_bg_images)];
+            $dept_icon = $dept['hero_icon'] ?: 'fas fa-graduation-cap';
+            $dept_sub  = $dept['hero_subtitle'] ?? '';
+         ?>
+         <div class="col-xl-4 col-lg-4 col-md-6 wow itfadeUp" data-wow-duration=".7s" data-wow-delay="<?= .1 + .1 * $idx ?>s">
+            <a href="<?= fh($dept_url) ?>" class="pu-program-card">
+               <div class="pu-program-bg"><img src="<?= fh($dept_img) ?>" alt="<?= fh($dept['name']) ?>"></div>
+               <div class="pu-program-content">
+                  <div class="pu-program-icon"><i class="<?= fh($dept_icon) ?>"></i></div>
+                  <h5><?= fh($dept['name']) ?></h5>
+                  <?php if ($dept_sub): ?><p><?= fh($dept_sub) ?></p><?php endif; ?>
+               </div>
+               <div class="pu-program-arrow"><i class="fas fa-arrow-right"></i></div>
+            </a>
+         </div>
+         <?php endforeach; ?>
+      </div>
+   </div>
+</section>
+
+<!-- ADMISSION CTA BANNER -->
+<section class="pu-admission-section pu-section-sm" id="pu-admission">
+   <div class="container">
+      <div class="row align-items-center g-4">
+         <div class="col-lg-7 wow itfadeLeft" data-wow-duration=".9s" data-wow-delay=".2s">
+            <div class="pu-admission-badge"><span class="dot"></span> <?= fh($_admission['badge_text'] ?? 'Admissions Open') ?></div>
+            <h2 class="pu-admission-title"><?= fh($_admission['title'] ?? 'Begin Your Journey at') ?><br><span class="gold"><?= fh($_admission['title_accent'] ?? 'Prime University') ?></span></h2>
+            <p class="pu-admission-text"><?= fh($_admission['description'] ?? 'Applications are now open. Secure your place in one of our prestigious programmes.') ?></p>
+            <div class="d-flex flex-wrap gap-3">
+               <a href="<?= fh($_apply_now_url) ?>" class="pu-btn pu-btn-primary"><i class="fas fa-paper-plane"></i> <?= fh($_admission['btn1_text'] ?? 'Apply Now') ?></a>
+               <a href="<?= fh($_admission['btn2_url'] ?? 'scholarships-waivers') ?>" class="pu-btn pu-btn-outline-white"><i class="fas fa-award"></i> <?= fh($_admission['btn2_text'] ?? 'Scholarships') ?></a>
+            </div>
+         </div>
+         <div class="col-lg-5 wow itfadeRight" data-wow-duration=".9s" data-wow-delay=".3s">
+            <div class="d-flex flex-column gap-3">
+               <?php for ($ii = 1; $ii <= 3; $ii++): 
+                   $i_icon  = $_admission['info_' . $ii . '_icon']  ?? '';
+                   $i_title = $_admission['info_' . $ii . '_title'] ?? '';
+                   $i_text  = $_admission['info_' . $ii . '_text']  ?? '';
+                   if ($i_title === '') continue;
+               ?>
+               <div class="pu-admission-deadline">
+                  <?php if ($i_icon): ?><i class="<?= fh($i_icon) ?>"></i><?php endif; ?>
+                  <div>
+                     <div style="font-weight:700;font-size:.95rem;"><?= fh($i_title) ?></div>
+                     <div style="font-size:.85rem;opacity:.75;"><?= fh($i_text) ?></div>
+                  </div>
+               </div>
+               <?php endfor; ?>
+            </div>
+         </div>
+      </div>
+   </div>
+</section>
+
+<!-- LATEST NEWS & EVENTS -->
+<section class="pu-news-section pu-section" id="pu-news">
+   <div class="container">
+      <div class="row justify-content-between align-items-end mb-50">
+         <div class="col-lg-7">
+            <div class="pu-label wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".1s">What's Happening</div>
+            <h2 class="pu-section-title wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".2s">Latest <span class="accent">News & Events</span></h2>
+         </div>
+         <div class="col-lg-auto wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".3s">
+            <a href="news-detail.php" class="pu-view-all">All News <i class="fas fa-arrow-right"></i></a>
+         </div>
+      </div>
+      <div class="row g-4">
+         <?php if (!empty($_latest_news)): ?>
+            <?php foreach ($_latest_news as $ni => $news): ?>
+            <div class="col-lg-4 col-md-6 wow itfadeUp" data-wow-duration=".7s" data-wow-delay="<?= .1 + .1 * $ni ?>s">
+               <article class="pu-news-card">
+                  <div class="pu-news-img-wrap">
+                     <?php if ($news['featured_image']): ?>
+                     <img class="pu-news-img" src="<?= fh(ADMIN_UPLOAD_URL . '/news/' . basename($news['featured_image'])) ?>" alt="<?= fh($news['title']) ?>">
+                     <?php else: ?>
+                     <div class="pu-news-placeholder"><i class="fas fa-newspaper"></i></div>
+                     <?php endif; ?>
+                     <span class="pu-news-category">News</span>
+                  </div>
+                  <div class="pu-news-body">
+                     <div class="pu-news-date"><i class="fas fa-calendar-alt"></i> <?= $news['published_at'] ? date('d M Y', strtotime($news['published_at'])) : '' ?></div>
+                     <a href="<?= SITE_URL ?>/news/<?= urlencode($news['slug'] ?? '') ?>" class="pu-news-title"><?= fh($news['title']) ?></a>
+                     <?php
+                     $excerpt = strip_tags($news['content'] ?? '');
+                     $excerpt = mb_strlen($excerpt) > 100 ? mb_substr($excerpt, 0, 100) . '…' : $excerpt;
+                     if ($excerpt): ?><p class="pu-news-excerpt"><?= fh($excerpt) ?></p><?php endif; ?>
+                     <a href="<?= SITE_URL ?>/news/<?= urlencode($news['slug'] ?? '') ?>" class="pu-news-link">Read More <i class="fas fa-arrow-right"></i></a>
+                  </div>
+               </article>
+            </div>
+            <?php endforeach; ?>
+         <?php else: ?>
+            <?php
+            $placeholder_news = [
+               ['title'=>'Prime University Hosts Annual Research Symposium 2026', 'date'=>'March 2026', 'cat'=>'Research'],
+               ['title'=>'New Computer Science Lab Inaugurated with State-of-the-Art Equipment', 'date'=>'February 2026', 'cat'=>'Facilities'],
+               ['title'=>'Prime University Students Win National Moot Court Competition', 'date'=>'January 2026', 'cat'=>'Achievement'],
+            ];
+            foreach ($placeholder_news as $pi => $pn):
+            ?>
+            <div class="col-lg-4 col-md-6 wow itfadeUp" data-wow-duration=".7s" data-wow-delay="<?= .1 + .1 * $pi ?>s">
+               <article class="pu-news-card">
+                  <div class="pu-news-img-wrap">
+                     <div class="pu-news-placeholder"><i class="fas fa-newspaper"></i></div>
+                     <span class="pu-news-category"><?= $pn['cat'] ?></span>
+                  </div>
+                  <div class="pu-news-body">
+                     <div class="pu-news-date"><i class="fas fa-calendar-alt"></i> <?= $pn['date'] ?></div>
+                     <span class="pu-news-title d-block"><?= $pn['title'] ?></span>
+                     <a href="#" class="pu-news-link">Read More <i class="fas fa-arrow-right"></i></a>
+                  </div>
+               </article>
+            </div>
+            <?php endforeach; ?>
+         <?php endif; ?>
+      </div>
+   </div>
+</section>
+
+<!-- NOTICE BOARD -->
+<section class="pu-notices-section pu-section" id="pu-notices">
+   <div class="pu-notices-bg-shape"></div>
+   <div class="container position-relative">
+      <div class="row justify-content-between align-items-end mb-50">
+         <div class="col-lg-7">
+            <div class="pu-label wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".1s">Announcements</div>
+            <h2 class="pu-section-title wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".2s">Notice <span class="accent">Board</span></h2>
+            <p class="pu-section-sub wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".25s">Stay informed with the latest institutional announcements and updates.</p>
+         </div>
+         <div class="col-lg-auto wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".3s">
+            <a href="notice-board" class="pu-view-all">All Notices <i class="fas fa-arrow-right"></i></a>
+         </div>
+      </div>
+      <?php
+      // Use real notices when available, otherwise show placeholder data
+      $_nb_notices = !empty($_notices) ? $_notices : [];
+      $nb_featured = !empty($_nb_notices) ? $_nb_notices[0] : null;
+      $nb_rest     = !empty($_nb_notices) ? array_slice($_nb_notices, 1) : [];
+
+      // Placeholder featured notice
+      $nb_ph_featured = [
+         'title'        => 'Spring Semester 2026 Admission Open for All Programs',
+         'slug'         => '',
+         'published_at' => '2026-04-04',
+         'content'      => 'Applications are now being accepted for Spring Semester 2026 for all undergraduate and postgraduate programs. Eligible candidates are encouraged to apply before the deadline of April 30, 2026.',
+      ];
+      // Placeholder list notices
+      $nb_ph_list = [
+         ['title' => 'Exam Schedule: Mid-Term Examinations Spring 2026',        'slug' => '', 'published_at' => '2026-04-01'],
+         ['title' => 'Class Suspension – University Annual Sports Day',          'slug' => '', 'published_at' => '2026-03-30'],
+         ['title' => 'Scholarship Application Deadline Extended to April 15',   'slug' => '', 'published_at' => '2026-03-28'],
+         ['title' => 'Library Closed on March 29 (Public Holiday)',             'slug' => '', 'published_at' => '2026-03-25'],
+         ['title' => 'Workshop on Research Methodology – Registration Open',    'slug' => '', 'published_at' => '2026-03-20'],
+      ];
+      if (!$nb_featured) { $nb_featured = $nb_ph_featured; $nb_rest = $nb_ph_list; }
+      if (empty($nb_rest)) { $nb_rest = array_slice($nb_ph_list, 0, 5); }
+      ?>
+      <div class="row g-4 align-items-start">
+
+         <!-- Featured Notice -->
+         <div class="col-lg-5 wow itfadeUp" data-wow-duration=".8s" data-wow-delay=".1s">
+            <div class="pu-notice-featured">
+               <div class="pu-notice-featured-top">
+                  <span class="pu-notice-badge pu-notice-badge--new"><i class="fas fa-circle-dot"></i> Latest</span>
+                  <div class="pu-notice-featured-icon"><i class="fas fa-bullhorn"></i></div>
+               </div>
+               <?php if (!empty($nb_featured['published_at'])): ?>
+               <div class="pu-notice-date"><i class="fas fa-calendar-alt"></i> <?= date('d M Y', strtotime($nb_featured['published_at'])) ?></div>
+               <?php endif; ?>
+               <?php if (!empty($nb_featured['slug'])): ?>
+               <a href="<?= SITE_URL ?>/notice/<?= urlencode($nb_featured['slug']) ?>" class="pu-notice-featured-title"><?= fh($nb_featured['title']) ?></a>
+               <?php else: ?>
+               <span class="pu-notice-featured-title"><?= fh($nb_featured['title']) ?></span>
+               <?php endif; ?>
+               <?php
+               $nf_excerpt = strip_tags($nb_featured['content'] ?? '');
+               $nf_excerpt = mb_strlen($nf_excerpt) > 160 ? mb_substr($nf_excerpt, 0, 160) . '…' : $nf_excerpt;
+               if ($nf_excerpt): ?>
+               <p class="pu-notice-featured-excerpt"><?= fh($nf_excerpt) ?></p>
+               <?php endif; ?>
+               <a href="<?= !empty($nb_featured['slug']) ? SITE_URL . '/notice/' . urlencode($nb_featured['slug']) : 'notice-board' ?>" class="pu-notice-readmore">
+                  Read Full Notice <i class="fas fa-arrow-right"></i>
+               </a>
+            </div>
+         </div>
+
+         <!-- Notice List -->
+         <div class="col-lg-7 wow itfadeUp" data-wow-duration=".8s" data-wow-delay=".2s">
+            <div class="pu-notice-list">
+               <?php foreach ($nb_rest as $ni => $notice): ?>
+               <div class="pu-notice-item">
+                  <div class="pu-notice-num"><?= str_pad($ni + 2, 2, '0', STR_PAD_LEFT) ?></div>
+                  <div class="pu-notice-item-body">
+                     <?php if (!empty($notice['published_at'])): ?>
+                     <div class="pu-notice-date"><i class="fas fa-calendar-alt"></i> <?= date('d M Y', strtotime($notice['published_at'])) ?></div>
+                     <?php endif; ?>
+                     <?php if (!empty($notice['slug'])): ?>
+                     <a href="<?= SITE_URL ?>/notice/<?= urlencode($notice['slug']) ?>" class="pu-notice-item-title"><?= fh($notice['title']) ?></a>
+                     <?php else: ?>
+                     <span class="pu-notice-item-title"><?= fh($notice['title']) ?></span>
+                     <?php endif; ?>
+                  </div>
+                  <?php if (!empty($notice['slug'])): ?>
+                  <a href="<?= SITE_URL ?>/notice/<?= urlencode($notice['slug']) ?>" class="pu-notice-item-arrow" aria-label="Read notice"><i class="fas fa-chevron-right"></i></a>
+                  <?php else: ?>
+                  <span class="pu-notice-item-arrow"><i class="fas fa-chevron-right"></i></span>
+                  <?php endif; ?>
+               </div>
+               <?php endforeach; ?>
+            </div>
+         </div>
+
+      </div>
+   </div>
+</section>
+
+<!-- FACULTY SPOTLIGHT -->
+<?php if (!empty($_faculty)): ?>
+<section class="pu-faculty-section pu-section" id="pu-faculty">
+   <div class="container">
+      <div class="row justify-content-between align-items-end mb-50">
+         <div class="col-lg-7">
+            <div class="pu-label wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".1s">Our Team</div>
+            <h2 class="pu-section-title wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".2s">Meet Our <span class="accent">Expert Faculty</span></h2>
+         </div>
+         <div class="col-lg-auto wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".3s">
+            <a href="faculty-profile.php" class="pu-view-all">All Faculty <i class="fas fa-arrow-right"></i></a>
+         </div>
+      </div>
+      <div class="swiper pu-faculty-swiper wow itfadeUp" data-wow-duration=".9s" data-wow-delay=".2s">
+         <div class="swiper-wrapper">
+            <?php foreach ($_faculty as $fac): ?>
+            <div class="swiper-slide">
+               <div class="pu-faculty-card">
+                  <div class="pu-faculty-img-wrap">
+                     <img class="pu-faculty-img"
+                          src="<?= fh(ADMIN_UPLOAD_URL . '/faculty-profiles/photos/' . basename($fac['photo'])) ?>"
+                          alt="<?= fh($fac['name']) ?>"
+                          onerror="this.style.display='none'">
+                     <div class="pu-faculty-overlay">
+                        <div class="pu-faculty-social"><a href="faculty-profile.php"><i class="fas fa-user"></i></a></div>
+                     </div>
+                  </div>
+                  <div class="pu-faculty-info">
+                     <div class="pu-faculty-name"><?= fh($fac['name']) ?></div>
+                     <?php if ($fac['designation']): ?>
+                     <div class="pu-faculty-dept"><?= fh($fac['designation']) ?></div>
+                     <?php endif; ?>
+                  </div>
+               </div>
+            </div>
+            <?php endforeach; ?>
+         </div>
+      </div>
+      <div class="pu-swiper-nav mt-4 wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".4s">
+         <button class="pu-swiper-btn pu-faculty-prev"><i class="fas fa-arrow-left"></i></button>
+         <button class="pu-swiper-btn pu-faculty-next"><i class="fas fa-arrow-right"></i></button>
+      </div>
+   </div>
+</section>
+<?php endif; ?>
+
+<!-- TESTIMONIALS -->
+<section class="pu-testimonials-section pu-section" id="pu-testimonials">
+   <div class="container">
+      <div class="row justify-content-center mb-50">
+         <div class="col-xl-7 col-lg-9 text-center">
+            <div class="pu-label wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".1s">Student Voices</div>
+            <h2 class="pu-section-title wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".2s">What Our <span class="accent">Students Say</span></h2>
+         </div>
+      </div>
+      <div class="swiper pu-testimonials-swiper wow itfadeUp" data-wow-duration=".9s" data-wow-delay=".3s">
+         <div class="swiper-wrapper">
+            <?php foreach ($_testimonials as $t): ?>
+            <div class="swiper-slide">
+               <div class="pu-testimonial-card">
+                  <div class="pu-testimonial-quote"><i class="fas fa-quote-left"></i></div>
+                  <div class="pu-testimonial-stars">
+                     <?php for ($s = 1; $s <= 5; $s++): ?>
+                     <i class="<?= $s <= (int)$t['rating'] ? 'fas' : 'far' ?> fa-star <?= $s > (int)$t['rating'] ? 'empty' : '' ?>"></i>
+                     <?php endfor; ?>
+                  </div>
+                  <p class="pu-testimonial-text">"<?= fh($t['quote']) ?>"</p>
+                  <div class="pu-testimonial-author">
+                     <?php if ($t['photo']): ?>
+                     <img class="pu-testimonial-avatar"
+                          src="<?= fh(SITE_URL . '/admin/uploads/homepage/' . basename($t['photo'])) ?>"
+                          alt="<?= fh($t['name']) ?>">
+                     <?php else: ?>
+                     <div class="pu-testimonial-avatar-placeholder"><i class="fas fa-user"></i></div>
+                     <?php endif; ?>
+                     <div>
+                        <div class="pu-testimonial-name"><?= fh($t['name']) ?></div>
+                        <?php if ($t['designation']): ?>
+                        <div class="pu-testimonial-designation"><?= fh($t['designation']) ?></div>
+                        <?php endif; ?>
+                     </div>
+                  </div>
+               </div>
+            </div>
+            <?php endforeach; ?>
+         </div>
+      </div>
+      <div class="pu-swiper-nav mt-4 wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".4s">
+         <button class="pu-swiper-btn pu-testimonials-prev"><i class="fas fa-arrow-left"></i></button>
+         <button class="pu-swiper-btn pu-testimonials-next"><i class="fas fa-arrow-right"></i></button>
+      </div>
+   </div>
+</section>
+
+<!-- CAMPUS GALLERY -->
+<section class="pu-gallery-section pu-section" id="pu-gallery">
+   <div class="container">
+      <div class="row justify-content-center mb-50">
+         <div class="col-xl-7 text-center">
+            <div class="pu-label wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".1s">Campus Life</div>
+            <h2 class="pu-section-title wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".2s">Life at <span class="accent">Prime University</span></h2>
+         </div>
+      </div>
+      <div class="pu-gallery-grid wow itfadeUp" data-wow-duration=".9s" data-wow-delay=".3s">
+         <?php
+         $static_gallery = [
+             ['src'=>'assets/img/campus/campus-3-1.jpg','alt'=>'Prime University Campus'],
+             ['src'=>'assets/img/about/about-1-1.jpg',  'alt'=>'Academic Environment'],
+             ['src'=>'assets/img/about/about-5-1.jpg',  'alt'=>'Student Activities'],
+             ['src'=>'assets/img/campus/campus-3-2.jpg','alt'=>'Campus Life'],
+             ['src'=>'assets/img/about/about-10-1.jpg', 'alt'=>'Research Facilities'],
+             ['src'=>'assets/img/campus/campus-3-3.jpg','alt'=>'Modern Classrooms'],
+         ];
+         $gallery_source = !empty($_campus_items) ? $_campus_items : [];
+         if (!empty($gallery_source)):
+             foreach ($gallery_source as $ci):
+                 $img_src = !empty($ci['image'])
+                     ? (ADMIN_UPLOAD_URL . '/campus/' . basename($ci['image']))
+                     : 'assets/img/campus/campus-3-1.jpg';
+         ?>
+         <div class="pu-gallery-item">
+            <a class="popup-image" href="<?= fh($img_src) ?>">
+               <img src="<?= fh($img_src) ?>" alt="<?= fh($ci['title']) ?>" onerror="this.closest('.pu-gallery-item').style.background='#1e3a5c'">
+               <div class="pu-gallery-item-overlay"><i class="fas fa-search-plus"></i></div>
+            </a>
+         </div>
+         <?php endforeach; else:
+             foreach ($static_gallery as $gimg): ?>
+         <div class="pu-gallery-item">
+            <a class="popup-image" href="<?= fh($gimg['src']) ?>">
+               <img src="<?= fh($gimg['src']) ?>" alt="<?= fh($gimg['alt']) ?>" onerror="this.closest('.pu-gallery-item').style.background='#1e3a5c'">
+               <div class="pu-gallery-item-overlay"><i class="fas fa-search-plus"></i></div>
+            </a>
+         </div>
+         <?php endforeach; endif; ?>
+      </div>
+   </div>
+</section>
+
+<!-- NOTABLE ALUMNI -->
+<?php if (!empty($_alumni)): ?>
+<section class="pu-alumni-section pu-section" id="pu-alumni">
+   <div class="container">
+      <div class="row justify-content-center mb-50">
+         <div class="col-xl-7 col-lg-9 text-center">
+            <div class="pu-label wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".1s">Our Legacy</div>
+            <h2 class="pu-section-title wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".2s">Notable <span class="accent">Alumni</span></h2>
+            <p class="pu-section-sub mx-auto mt-3 wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".3s">Our graduates are making a difference across industries, institutions and borders — carrying the Prime University legacy forward.</p>
+         </div>
+      </div>
+      <div class="row g-4 justify-content-center">
+         <?php foreach ($_alumni as $ai => $alum): ?>
+         <div class="col-xl-3 col-lg-3 col-md-4 col-sm-6 wow itfadeUp" data-wow-duration=".7s" data-wow-delay="<?= .1 + .1 * $ai ?>s">
+            <div class="pu-alumni-card text-center">
+               <div class="pu-alumni-photo-wrap">
+                  <?php if ($alum['photo']): ?>
+                  <img class="pu-alumni-photo"
+                       src="<?= fh(ADMIN_UPLOAD_URL . '/alumni/' . basename($alum['photo'])) ?>"
+                       alt="<?= fh($alum['name']) ?>"
+                       onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                  <div class="pu-alumni-photo-placeholder" style="display:none"><i class="fas fa-user"></i></div>
+                  <?php else: ?>
+                  <div class="pu-alumni-photo-placeholder"><i class="fas fa-user"></i></div>
+                  <?php endif; ?>
+               </div>
+               <div class="pu-alumni-info mt-3">
+                  <div class="pu-alumni-name"><?= fh($alum['name']) ?></div>
+                  <?php if ($alum['designation']): ?>
+                  <div class="pu-alumni-designation"><?= fh($alum['designation']) ?></div>
+                  <?php endif; ?>
+                  <?php if ($alum['organization']): ?>
+                  <div class="pu-alumni-org"><?= fh($alum['organization']) ?></div>
+                  <?php endif; ?>
+               </div>
+            </div>
+         </div>
+         <?php endforeach; ?>
+      </div>
+   </div>
+</section>
+<?php endif; ?>
+
+<!-- CONTACT CTA -->
+<section class="pu-contact-section pu-section" id="pu-contact">
+   <div class="container">
+      <div class="row justify-content-center mb-50">
+         <div class="col-xl-7 col-lg-9 text-center">
+            <div class="pu-label wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".1s"><?= fh($_contact_cfg['section_subtitle'] ?? 'Get In Touch') ?></div>
+            <h2 class="pu-section-title wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".2s"><?= fh($_contact_cfg['section_title'] ?? "We're Here to Help You") ?></h2>
+            <p class="pu-section-sub mx-auto mt-3 wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".3s"><?= fh($_contact_cfg['section_description'] ?? 'Reach out to our admissions team or visit us on campus.') ?></p>
+         </div>
+      </div>
+      <div class="row g-4">
+         <?php for ($ci = 1; $ci <= 4; $ci++):
+            $c_icon  = $_contact_cfg['card_' . $ci . '_icon']  ?? '';
+            $c_title = $_contact_cfg['card_' . $ci . '_title'] ?? '';
+            $c_value = $_contact_cfg['card_' . $ci . '_value'] ?? '';
+            $c_href  = $_contact_cfg['card_' . $ci . '_href']  ?? '#';
+            $c_sub   = $_contact_cfg['card_' . $ci . '_sub']   ?? '';
+            if ($c_title === '' && $c_value === '') continue;
+         ?>
+         <div class="col-lg-3 col-sm-6 wow itfadeUp" data-wow-duration=".7s" data-wow-delay="<?= .1 + .1 * ($ci - 1) ?>s">
+            <div class="pu-contact-card">
+               <div class="pu-contact-card-icon"><i class="<?= fh($c_icon) ?>"></i></div>
+               <div>
+                  <div class="pu-contact-card-title"><?= fh($c_title) ?></div>
+                  <a class="pu-contact-card-value" href="<?= fh($c_href) ?>" <?= str_starts_with($c_href, 'http') ? 'target="_blank" rel="noopener"' : '' ?>><?= fh($c_value) ?></a>
+                  <div class="pu-contact-card-sub"><?= fh($c_sub) ?></div>
+               </div>
+            </div>
+         </div>
+         <?php endfor; ?>
+      </div>
+      <div class="text-center mt-5 wow itfadeUp" data-wow-duration=".7s" data-wow-delay=".5s">
+         <a href="<?= fh($_contact_cfg['btn1_url'] ?? 'contact') ?>" class="pu-btn pu-btn-primary me-3"><i class="fas fa-envelope"></i> <?= fh($_contact_cfg['btn1_text'] ?? 'Send a Message') ?></a>
+         <a href="<?= fh($_contact_cfg['btn2_url'] ?? 'admission') ?>" class="pu-btn pu-btn-outline"><i class="fas fa-paper-plane"></i> <?= fh($_contact_cfg['btn2_text'] ?? 'Apply Online') ?></a>
+      </div>
+   </div>
+</section>
+
+<?php include __DIR__ . '/includes/footer.php'; ?>
+
+<?php include __DIR__ . '/includes/scripts.php'; ?>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+
+  /* Faculty spotlight swiper */
+  var facultyEl = document.querySelector('.pu-faculty-swiper');
+  if (facultyEl) {
+    new Swiper('.pu-faculty-swiper', {
+      loop: true,
+      slidesPerView: 1,
+      spaceBetween: 20,
+      navigation: { nextEl: '.pu-faculty-next', prevEl: '.pu-faculty-prev' },
+      breakpoints: { 480: {slidesPerView:2}, 768: {slidesPerView:3}, 992: {slidesPerView:4} },
+    });
+  }
+
+  /* Testimonials swiper */
+  var testimEl = document.querySelector('.pu-testimonials-swiper');
+  if (testimEl) {
+    new Swiper('.pu-testimonials-swiper', {
+      loop: true,
+      slidesPerView: 1,
+      spaceBetween: 24,
+      autoplay: { delay: 5000, disableOnInteraction: false },
+      navigation: { nextEl: '.pu-testimonials-next', prevEl: '.pu-testimonials-prev' },
+      breakpoints: { 768: {slidesPerView:2}, 1100: {slidesPerView:3} },
+    });
+  }
+
+  /* PureCounter */
+  if (typeof PureCounter !== 'undefined') { new PureCounter(); }
+
+  /* Gallery lightbox */
+  if (typeof $.fn.magnificPopup !== 'undefined') {
+    $('.pu-gallery-section .popup-image').magnificPopup({
+      type: 'image',
+      gallery: { enabled: true },
+      image: { titleSrc: function(item){ return item.el.find('img').attr('alt'); } }
+    });
+  }
+
+  /* Smooth scroll for anchor links */
+  document.querySelectorAll('a[href^="#pu-"]').forEach(function(a) {
+    a.addEventListener('click', function(e) {
+      var target = document.querySelector(this.getAttribute('href'));
+      if (target) { e.preventDefault(); target.scrollIntoView({behavior:'smooth'}); }
+    });
+  });
+
+});
+</script>
+
+</body>
+</html>

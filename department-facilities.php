@@ -1,0 +1,170 @@
+<?php
+require_once __DIR__ . '/includes/config.php';
+
+$slug = trim($_GET['slug'] ?? '');
+if ($slug === '') {
+    header('Location: index.php');
+    exit;
+}
+
+$db         = front_db();
+$dept       = null;
+$facilities = [];
+
+if ($db) {
+    try {
+        $st = $db->prepare('SELECT * FROM dept_departments WHERE slug = ? AND is_active = 1 LIMIT 1');
+        $st->execute([$slug]);
+        $dept = $st->fetch() ?: null;
+    } catch (Throwable $e) {}
+}
+
+if (!$dept) {
+    header('Location: index.php');
+    exit;
+}
+
+if ($db) {
+    try {
+        $st = $db->prepare('SELECT * FROM dept_facilities WHERE dept_id = ? AND is_active = 1 ORDER BY sort_order ASC, id ASC');
+        $st->execute([$dept['id']]);
+        $facilities = $st->fetchAll();
+    } catch (Throwable $e) {}
+}
+
+$current_page = 'facilities';
+$base         = SITE_URL . '/department';
+$dept_name    = fh($dept['name'] ?? 'Department');
+?>
+<!doctype html>
+<html class="no-js" lang="en">
+<head>
+   <meta charset="utf-8">
+   <meta http-equiv="x-ua-compatible" content="ie=edge">
+   <title>Facilities – <?= $dept_name ?> – Prime University</title>
+   <meta name="description" content="Explore the facilities of <?= $dept_name ?> at Prime University.">
+   <meta name="viewport" content="width=device-width, initial-scale=1">
+   <link rel="shortcut icon" type="image/x-icon" href="/assets/img/logo/favicon.png">
+   <link rel="stylesheet" href="/assets/css/bootstrap.min.css">
+   <link rel="stylesheet" href="/assets/css/font-awesome-pro.css">
+   <link rel="stylesheet" href="/assets/css/swiper-bundle.min.css">
+   <link rel="stylesheet" href="/assets/css/slick.css">
+   <link rel="stylesheet" href="/assets/css/magnific-popup.css">
+   <link rel="stylesheet" href="/assets/css/nice-select.css">
+   <link rel="stylesheet" href="/assets/css/custom-animation.css">
+   <link rel="stylesheet" href="/assets/css/spacing.css">
+   <link rel="stylesheet" href="/assets/css/main.css">
+   <style>
+   .it-dept-subnav { background-color: #002147; position: sticky; top: 0; z-index: 999; border-bottom: 3px solid #D21034; }
+   .dept-subnav-inner { display: flex; overflow-x: auto; }
+   .dept-subnav-inner ul { display: flex; list-style: none; margin: 0; padding: 0; flex-wrap: nowrap; gap: 0; }
+   .dept-subnav-inner ul li a { display: block; color: #E8EEF4; text-decoration: none; padding: 14px 20px; font-size: 14px; font-weight: 500; white-space: nowrap; border-bottom: 3px solid transparent; transition: all 0.3s ease; }
+   .dept-subnav-inner ul li a:hover, .dept-subnav-inner ul li a.active { color: #FFB81C; border-bottom-color: #FFB81C; background-color: rgba(255,255,255,0.05); }
+   @media (max-width: 768px) { .dept-subnav-inner ul li a { padding: 12px 14px; font-size: 13px; } }
+   .facility-card { transition: transform 0.3s ease, box-shadow 0.3s ease; }
+   .facility-card:hover { transform: translateY(-5px); box-shadow: 0 15px 40px rgba(0,33,71,0.15) !important; }
+   </style>
+<?php include __DIR__ . '/includes/meta-pixel.php'; ?>
+</head>
+<body id="body" class="it-magic-cursor">
+
+   <div id="preloader"><div class="preloader"><span></span><span></span></div></div>
+   <div id="magic-cursor"><div id="ball"></div></div>
+   <button class="scroll-top scroll-to-target" data-target="html"><i class="far fa-angle-double-up"></i></button>
+
+   <div class="search-popup">
+      <button class="close-search"><span class="flaticon-multiply"><i class="fal fa-times"></i></span></button>
+      <form method="post" action="#">
+         <div class="form-group">
+            <input type="search" name="search-field" value="" placeholder="Search Here" required="">
+            <button type="submit"><i class="fal fa-search"></i></button>
+         </div>
+      </form>
+   </div>
+<?php include __DIR__ . '/includes/offcanvas.php'; ?>
+
+   <header class="it-header-height">
+      <?php include __DIR__ . '/includes/header-top.php'; ?>
+      <?php include __DIR__ . '/includes/nav-menu.php'; ?>
+   </header>
+
+   <main>
+
+   <!-- Banner -->
+   <div style="background: linear-gradient(135deg, #002147 0%, #003366 100%); padding: 80px 0 60px;">
+      <div class="container">
+         <div class="row">
+            <div class="col-12">
+               <nav aria-label="breadcrumb" class="mb-20">
+                  <ol class="breadcrumb" style="background:transparent; padding:0; margin:0;">
+                     <li class="breadcrumb-item"><a href="<?= fh(SITE_URL) ?>/index.php" style="color:#FFB81C;">Home</a></li>
+                     <li class="breadcrumb-item"><a href="<?= fh(SITE_URL) ?>/department/<?= urlencode($slug) ?>" style="color:#E8EEF4;"><?= $dept_name ?></a></li>
+                     <li class="breadcrumb-item active" style="color:#E8EEF4;">Facilities</li>
+                  </ol>
+               </nav>
+               <h2 style="color:#FFFFFF; font-weight:700; margin-bottom:10px;">Facilities</h2>
+               <p style="color:#E8EEF4; font-size:16px;"><?= $dept_name ?></p>
+            </div>
+         </div>
+      </div>
+   </div>
+
+   <!-- Sub-navigation -->
+   <?php include __DIR__ . '/includes/dept-subnav.php'; ?>
+
+   <!-- Facilities Grid -->
+   <section class="pt-100 pb-120" style="background-color: #FFFFFF;">
+      <div class="container">
+         <div class="row justify-content-center mb-60">
+            <div class="col-12 text-center">
+               <span class="it-section-subtitle" style="color: #D21034;"><i class="fas fa-building"></i> Infrastructure</span>
+               <h4 class="it-section-title" style="color: #002147;">Department Facilities</h4>
+            </div>
+         </div>
+
+         <?php if (!empty($facilities)): ?>
+         <div class="row g-4">
+            <?php foreach ($facilities as $fac): ?>
+            <div class="col-xl-4 col-lg-4 col-md-6 wow itfadeUp" data-wow-duration=".9s">
+               <div class="card facility-card h-100 border-0 shadow-sm" style="border-top:3px solid #FFB81C !important;">
+                  <?php if (!empty($fac['image'])): ?>
+                  <img src="<?= fh(ADMIN_UPLOAD_URL . '/departments/' . $fac['image']) ?>"
+                       alt="<?= fh($fac['title'] ?? '') ?>"
+                       class="card-img-top"
+                       style="height:200px; object-fit:cover;">
+                  <?php endif; ?>
+                  <div class="card-body p-30">
+                     <div class="d-flex align-items-center mb-20">
+                        <div class="flex-shrink-0 me-15">
+                           <div style="width:52px; height:52px; border-radius:50%; background:#002147; display:flex; align-items:center; justify-content:center;">
+                              <i class="<?= fh($fac['icon'] ?? 'fas fa-cogs') ?>" style="font-size:22px; color:#FFB81C;"></i>
+                           </div>
+                        </div>
+                        <h5 style="color:#002147; font-weight:700; margin-bottom:0;"><?= fh($fac['title'] ?? '') ?></h5>
+                     </div>
+                     <?php if (!empty($fac['description'])): ?>
+                     <p style="color:#334155; font-size:15px; line-height:1.8; margin-bottom:0;"><?= nl2br(fh($fac['description'])) ?></p>
+                     <?php endif; ?>
+                  </div>
+               </div>
+            </div>
+            <?php endforeach; ?>
+         </div>
+         <?php else: ?>
+         <div class="row">
+            <div class="col-12 text-center py-80">
+               <i class="fas fa-building" style="font-size:64px; color:#002147; opacity:0.2; display:block; margin-bottom:20px;"></i>
+               <p style="color:#334155; font-size:17px;">Facility information will be available soon.</p>
+            </div>
+         </div>
+         <?php endif; ?>
+      </div>
+   </section>
+
+   </main>
+
+<?php include __DIR__ . '/includes/footer.php'; ?>
+
+   <?php include __DIR__ . '/includes/scripts.php'; ?>
+</body>
+</html>

@@ -1,0 +1,90 @@
+@use '../utils' as *;
+
+/*----------------------------------------*/
+/*  09. career css start
+/*----------------------------------------*/
+.it-career{
+    &-details-area {
+        & .postbox-dsc {
+            & p {
+                margin-right: 0;
+                & span {
+                    color: var(--it-common-black);
+                    font-family: var(--it-ff-spartan-semibold);
+                }
+            }
+        }
+        & .it-details-list ul li {
+            & svg {
+                color: rgba($color: #1F2432, $alpha: .8);
+            }
+            & b {
+                color: var(--it-common-black);
+                font-family: var(--it-ff-spartan-semibold);
+            }
+        }
+        &.it-course-details-style-3 .it-course-sidebar-thumb {
+            margin-bottom: 50px;
+        }
+        & .it-career-details-area .it-details-list ul li svg {
+            height: 17px;
+            width: 17px;
+        }
+    }
+    &-item {
+        padding: 40px;
+        border-radius: 20px;
+        background-color: #F8F9FB;
+        border: 1px solid rgba(3, 89, 78, 0.1);
+        @media #{$xs}{
+            padding: 25px 20px;
+        }
+        @media #{$sm}{
+            padding: 40px;
+        }
+        & > span {
+            display: block;
+            margin-bottom: 30px;
+        }
+        & .title {
+            font-size: 24px;
+            margin-bottom: 15px;
+            color: var(--it-common-black);
+            font-family: var(--it-ff-spartan-semibold);
+        }
+        & .it-btn-yellow {
+            padding: 0;
+            height: 0;
+            font-family: var(--it-ff-spartan-semibold);
+        }
+    }
+    &-price {
+        font-size: 14px;
+        border-radius: 5px;
+        padding: 11px 20px;
+        display: inline-block;
+        line-height: 1;
+        color: var(--it-common-white);
+        background-color: var(--it-text-body);
+        border: 1px solid rgba(26, 182, 157, 0.3);
+        @media #{$xs}{
+            margin-bottom: 20px;
+        }
+        @media #{$sm}{
+            margin-bottom: 0;
+        }
+    }
+    &-meta {
+        margin-bottom: 75px;
+        & span {
+            line-height: 1;
+            display: inline-block;
+            &:not(:last-child){
+                padding-right: 15px;
+                margin-right: 13px;
+                font-family: var(--it-ff-spartan-medium);
+                border-right: 1px solid rgba($color: #6C757D, $alpha: .5);
+            }
+        }
+    }
+}

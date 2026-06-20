@@ -1,0 +1,31 @@
+@use '../utils' as *;
+
+/*----------------------------------------*/
+/*  04. banner css start
+/*----------------------------------------*/
+.it-banner {
+    &-item {
+        @include background;
+        padding: 40px;
+        padding-top: 35px;
+        @media #{$md,$xs}{
+            padding: 30px 20px;
+        }
+        & > span {
+            display: block;
+            font-weight: 600;
+            font-size: 15px;
+            margin-bottom: 22px;
+        }
+    }
+    &-title {
+        font-weight: 600;
+        font-size: 28px;
+        line-height: 1.29;
+        margin-bottom: 161px;
+        @media #{$lg,$md,$xs}{
+            font-size: 22px;
+            margin-bottom: 100px;
+        }
+    }
+}

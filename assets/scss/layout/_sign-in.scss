@@ -1,0 +1,258 @@
+@use '../utils' as *;
+
+/*----------------------------------------*/
+/*  33. contact css start
+/*----------------------------------------*/
+
+.it-signup {
+    &-area {
+        & .contact__select .nice-select {
+            width: 100%;
+            position: relative;
+            height: 50px;
+            line-height: 50px;
+            padding: 0 30px;
+            font-size: 16px;
+            border-radius: 5px;
+            background-color: var(--it-gray-1);           
+            border: 1px solid rgba(9, 31, 46, 0.1);
+        }
+    }
+    &-title {
+        font-size: 28px;
+        line-height: 1;
+        margin-bottom: 55px;
+        text-transform: capitalize;
+        font-family: var(--it-ff-spartan-semibold);
+        @media #{$lg,$md}{
+            font-size: 29px;
+        }
+        @media #{$xs}{
+            font-size: 25px;
+        }
+        @media #{$xs}{
+            font-size: 30px;
+        }
+    }    
+    &-continue-item {
+        padding: 12px 30px;
+        border-radius: 5px;
+        background-color: var(--it-gray-1);
+        border: 1px solid rgba(9, 31, 46, 0.1);
+        @media #{$xl,$lg}{
+            padding: 12px 15px;
+        }
+        @media #{$xs}{
+            padding: 12px 15px;
+            margin-bottom: 10px;
+        }
+        & img {
+            @media #{$xs}{
+                width: 20px;
+            }
+        }
+        & span {
+            display: inline-block;
+            padding-left: 10px;
+            @media #{$lg,$xs}{
+                font-size: 13px;
+            }
+        }
+    }
+    &-text{
+        & span{
+            @media #{$lg,$md,$xs}{
+                font-size: 15px;
+            }
+            & a{
+                color: var(--it-theme-1);
+                text-decoration: underline;
+            }
+        }
+    }
+    &-border {
+        margin-bottom: 35px;
+        position: relative;
+        & span {
+            display: block;
+            position: relative;
+            padding: 0 10px;
+            z-index: 1;
+            display: inline-block;
+            background-color:var(--it-common-white);
+        }
+        &::after{
+            position: absolute;
+            top: 50%;
+            right: 0;
+            content: '';
+            width: 100%;
+            height: 1px;
+            transform: translateY(-50%);
+            background-color: rgba($color: #6C757D, $alpha: .4);
+        }
+    }
+    &-input {
+        text-align: start;
+        & label {
+            margin-bottom: 10px;
+            font-size: 18px;
+            color: var(--it-common-black);
+            font-family: var(--it-ff-spartan-semibold);
+            @media #{$lg,$md,$xs}{
+                font-size: 15px;
+            }
+        }
+        & input {
+            height: 50px;
+            line-height: 50px;
+            padding: 0 30px;
+            font-size: 16px;
+            border-radius: 5px;
+            background-color: var(--it-gray-1);           
+            border: 1px solid rgba(9, 31, 46, 0.1);
+            &:focus {
+                border-color: var(--it-theme-1);
+            }
+        }
+        &-icon {
+            position: absolute;
+            top: 50%;
+            left: 28px;
+            transform: translateY(-50%);
+            @media #{$xs}{
+                left: 19px;
+            }
+            & svg {
+                @media #{$xs}{
+                    width: 15px;
+                }
+            }
+        }
+    }
+    &-wrap {
+        padding: 60px 50px;
+        border-radius: 20px;
+        text-align: center;
+        margin: 0 20px;
+        border: 1px solid rgba(26, 182, 157, 0.2);
+        box-shadow: 0 20px 30px 0 rgba(1, 6, 20, 0.1);
+        @media #{$xs}{
+            margin: 0;
+            padding: 60px 20px;
+        }
+        & .form-check {
+            display: flex;
+            text-align: start;
+        }
+        & .it-contact-agree .form-check-input.form-check-input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            padding: 0;
+            margin-top: 2px;
+            border-radius: 5px;
+            box-shadow: none;
+            flex: 0 0 auto;
+            border: 1px solid #797979;
+        }
+        & .it-btn::after {
+            height: 700px;
+            width: 700px;
+            transition: 0.5s;
+        }
+    }
+    &-text {
+        & span {
+            & a {
+                display: inline-block;
+                margin-left: 20px;
+                color: var(--it-theme-1);
+                font-family: var(--it-ff-spartan-semibold);
+            }
+        }
+    }
+    &-logo {
+        height: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin-right: 45px;
+        padding: 90px 20px;
+        border-radius: 30px;
+        @media #{$xl}{
+            margin-right: 20px;
+            padding: 90px 80px;
+        }
+        @media #{$lg,$md,$xs}{
+            margin-right: 0;
+            padding: 50px 40px;
+        }
+        @media #{$sm}{
+            padding: 80px 40px;
+        }
+    }
+    &-shape-1 {
+        position: absolute;
+        top: 0;
+        left: 0;
+        z-index: -1;
+    }
+    &-area {
+        & .form-check {
+            & label {
+                & span {
+                    color: var(--it-theme-1);
+                }
+            }
+        }
+    }
+
+
+
+
+    &-forget {
+        & a {
+            font-weight: 600;
+            font-size: 14px;
+            line-height: 171%;
+            letter-spacing: 0.01em;
+            color: var(--it-theme-1);
+            font-family: var(--it-ff-heading);
+        }
+    }    
+
+    &-agree{
+        & label {
+            color: var(--it-common-white);
+            @media #{$xs}{
+                font-size: 14px;
+            }
+        }
+        & .form-check-input {
+            &:checked {
+                background-color: var(--it-common-black);
+                border-color: transparent;
+            }
+            &:focus {
+                box-shadow:none;
+            }
+            &.form-check-input[type="checkbox"] {
+                border-radius: 2px;
+                margin-top: 10px;
+                height: 15px;
+                width: 15px;
+                padding: 0;
+                border-radius: 3px;
+                border: 1px solid #E2E1E1;
+            }
+        }
+    }
+    &-continue-wrap {
+        @media #{$xs}{
+            flex-wrap: wrap;
+        }
+        @media #{$xs}{
+            flex-wrap: nowrap;
+        }
+    }
+}

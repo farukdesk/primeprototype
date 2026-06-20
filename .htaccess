@@ -1,0 +1,101 @@
+Options -Indexes
+RewriteEngine On
+RewriteBase /
+
+# ── Section A: 301 Redirects – old .php?param=x URLs → clean URLs ─────────────
+# Guard: %{THE_REQUEST} holds the original browser request line and is never
+# updated during mod_rewrite internal rewrites.  Adding it as a first condition
+# on every redirect rule here ensures they fire ONLY when the browser actually
+# requested a .php URL — not during the second rewrite pass triggered by
+# Section C (which internally maps /name → name.php), preventing infinite loops.
+#
+# Clubs
+RewriteCond %{THE_REQUEST} \.php
+RewriteCond %{QUERY_STRING} (?:^|&)slug=([^&]+)
+RewriteRule ^club-detail\.php$                        /club/%1? [R=301,L]
+
+RewriteCond %{THE_REQUEST} \.php
+RewriteCond %{QUERY_STRING} (?:^|&)slug=([^&]+)
+RewriteRule ^club-event-detail\.php$                  /club-event/%1? [R=301,L]
+
+# Department sub-pages
+RewriteCond %{THE_REQUEST} \.php
+RewriteCond %{QUERY_STRING} (?:^|&)slug=([^&]+)
+RewriteRule ^department-faculty\.php$                 /department/%1/faculty? [R=301,L]
+
+RewriteCond %{THE_REQUEST} \.php
+RewriteCond %{QUERY_STRING} (?:^|&)slug=([^&]+)
+RewriteRule ^department-facilities\.php$              /department/%1/facilities? [R=301,L]
+
+RewriteCond %{THE_REQUEST} \.php
+RewriteCond %{QUERY_STRING} (?:^|&)slug=([^&]+)
+RewriteRule ^department-academic-programs\.php$       /department/%1/academic-programs? [R=301,L]
+
+RewriteCond %{THE_REQUEST} \.php
+RewriteCond %{QUERY_STRING} (?:^|&)slug=([^&]+)
+RewriteRule ^department-routine\.php$                 /department/%1/routine? [R=301,L]
+
+RewriteCond %{THE_REQUEST} \.php
+RewriteCond %{QUERY_STRING} (?:^|&)slug=([^&]+)
+RewriteRule ^department-clubs\.php$                   /department/%1/clubs? [R=301,L]
+
+RewriteCond %{THE_REQUEST} \.php
+RewriteCond %{QUERY_STRING} (?:^|&)slug=([^&]+)
+RewriteRule ^department-prime-pride\.php$             /department/%1/prime-pride? [R=301,L]
+
+RewriteCond %{THE_REQUEST} \.php
+RewriteCond %{QUERY_STRING} (?:^|&)slug=([^&]+)
+RewriteRule ^department-notice\.php$                  /department/%1/notice? [R=301,L]
+
+RewriteCond %{THE_REQUEST} \.php
+RewriteCond %{QUERY_STRING} (?:^|&)slug=([^&]+)
+RewriteRule ^department\.php$                         /department/%1? [R=301,L]
+
+# Generic: redirect any root-level name.php (no query string) to /name
+# Excludes index.php (homepage) and fb-webhook.php (external API endpoint)
+RewriteCond %{THE_REQUEST} \.php
+RewriteCond %{QUERY_STRING} ^$
+RewriteCond %{REQUEST_FILENAME} !index\.php$
+RewriteCond %{REQUEST_FILENAME} !fb-webhook\.php$
+RewriteRule ^([a-z][a-z0-9-]*)\.php$                 /$1 [R=301,L]
+
+# ── Skip rewriting for existing files and directories ─────────────────────────
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# ── Department sub-pages (must come before department overview) ───────────────
+RewriteRule ^department/([^/]+)/faculty/?$            department-faculty.php?slug=$1 [L,QSA]
+RewriteRule ^department/([^/]+)/facilities/?$         department-facilities.php?slug=$1 [L,QSA]
+RewriteRule ^department/([^/]+)/academic-programs/?$  department-academic-programs.php?slug=$1 [L,QSA]
+RewriteRule ^department/([^/]+)/routine/?$            department-routine.php?slug=$1 [L,QSA]
+RewriteRule ^department/([^/]+)/clubs/?$              department-clubs.php?slug=$1 [L,QSA]
+RewriteRule ^department/([^/]+)/prime-pride/?$        department-prime-pride.php?slug=$1 [L,QSA]
+RewriteRule ^department/([^/]+)/notice/?$             department-notice.php?slug=$1 [L,QSA]
+
+# ── Department overview ───────────────────────────────────────────────────────
+RewriteRule ^department/([^/]+)/?$                    department.php?slug=$1 [L,QSA]
+
+# ── News / Notices / Jobs ─────────────────────────────────────────────────────
+RewriteRule ^news/([^/]+)/?$                          news-detail.php?slug=$1 [L,QSA]
+RewriteRule ^notice/([^/]+)/?$                        notice-detail.php?slug=$1 [L,QSA]
+RewriteRule ^jobs/([^/]+)/?$                          job-detail.php?slug=$1 [L,QSA]
+
+# ── Pages ─────────────────────────────────────────────────────────────────────
+RewriteRule ^page/([^/]+)/?$                          page.php?slug=$1 [L,QSA]
+RewriteRule ^policy/([^/]+)/?$                        policy-page.php?slug=$1 [L,QSA]
+RewriteRule ^profile/([^/]+)/?$                       profile-page.php?slug=$1 [L,QSA]
+
+# ── Faculty profile ───────────────────────────────────────────────────────────
+RewriteRule ^faculty/([^/]+)/?$                       faculty-profile.php?id=$1 [L,QSA]
+
+# ── Section B: Clubs & Academic Programs ──────────────────────────────────────
+RewriteRule ^club/([^/]+)/?$                          club-detail.php?slug=$1 [L,QSA]
+RewriteRule ^club-event/([^/]+)/?$                    club-event-detail.php?slug=$1 [L,QSA]
+
+# Program URL with optional slug segment (slug is decorative; only id is used)
+RewriteRule ^program/([0-9]+)/([^/]+)/?$              academic-program-detail.php?id=$1 [L,QSA]
+RewriteRule ^program/([0-9]+)/?$                      academic-program-detail.php?id=$1 [L,QSA]
+
+# ── Section C: Generic fallback – /name → name.php ────────────────────────────
+RewriteRule ^([a-z][a-z0-9-]*)/?$                     $1.php [L,QSA]

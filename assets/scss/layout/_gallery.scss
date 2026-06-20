@@ -1,0 +1,125 @@
+@use '../utils' as *;
+
+/*----------------------------------------*/
+/*  23. gallery css start
+/*----------------------------------------*/
+.it-gallery {
+    &-area {
+        @include background;
+        @media #{$md,$xs}{            
+            padding: 100px 0;
+        }
+    }
+    &-thumb {
+        flex: 0 0 auto;       
+    }
+    &-thumb {
+        overflow: hidden;
+        & img {
+            max-width: inherit;
+            transition: 1.3s all ease;
+            @media #{$xl,$lg,$md}{
+                width: 100%;
+            }
+            @media #{$xs}{
+                width: 100%;
+                margin-bottom: 30px;
+            }
+        }
+        &.style-1 {
+            margin-bottom: 40px;
+            @media #{$lg}{
+                margin-bottom: 25px;
+            }
+            @media #{$md,$xs}{
+                margin-bottom: 15px;
+            }
+        }
+        &:hover {
+            & img {
+                transform: scale(1.2);
+            }
+        }
+        &-wrap {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            @media #{$xl}{
+                gap: 35px;
+            }
+            @media #{$lg}{
+                gap: 25px;
+            }
+            @media #{$md}{
+                gap: 15px;
+            }
+            @media #{$xs}{
+                flex-wrap: wrap;
+            }
+        }
+        &-box {
+            @media #{$xs}{
+                width: 100%;
+            }
+            &.box-style-4 {
+                margin-bottom: 105px;
+                @media #{$xs}{
+                    margin-bottom: 0;
+                }
+            }
+            &.box-style-5 {
+                margin-top: 50px;
+                @media #{$xs}{
+                    margin-top: 0;
+                }
+            }
+        }
+    }
+    &-shape {
+        &-1 {
+            position: absolute;
+            z-index: -1;
+            bottom: 12%;
+            left: 12.5%;
+            animation: zoomIn 5s infinite;
+            @media #{$xl,$lg,$md,$xs}{
+                display: none;
+            }
+        }
+        &-2 {
+            position: absolute;
+            z-index: -1;
+            top: 9%;
+            left: 6%;
+            animation: itrotate2 3s ease-in-out 3s infinite alternate forwards;
+            @media #{$md}{
+                transform: scale(.6);
+            }
+            @media #{$xs}{
+                display: none;
+            }
+        }
+        &-3 {
+            position: absolute;
+            z-index: -1;
+            top: 9%;
+            right: 7%;
+            animation: rotate 15s linear infinite;
+            @media #{$md}{
+                transform: scale(.6);
+            }
+            @media #{$xs}{
+                display: none;
+            }
+        }
+    }
+    &-item {
+        & img {
+            @media #{$md,$xs}{
+                width: 100%;
+            }
+        }
+    }
+}
+
+

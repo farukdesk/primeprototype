@@ -1,0 +1,153 @@
+@use '../utils' as *;
+
+/*----------------------------------------*/
+/*  35. social css start
+/*----------------------------------------*/
+.it-social {
+    &-text {
+        & a {
+            font-size: 60px;
+            margin-bottom: 35px;
+            display: inline-block;
+            color: var(--it-theme-6);
+            font-family: var(--it-ff-newyork);
+            @media #{$xxl}{
+                font-size: 50px;
+            }
+            @media #{$lg}{
+                font-size: 40px;
+            }
+            @media #{$md}{
+                font-size: 40px;
+            }
+            @media #{$xs}{
+                font-size: 30px;
+            }
+        }
+    }
+    &-box {
+        margin-top: 50px;
+        justify-content: space-evenly;
+        @media #{$xs}{
+            flex-wrap: wrap !important;
+        }
+    }
+    &-area {
+        border-top: 1px solid rgba($color: #6C757D, $alpha: 0.3);
+        & .row {
+            [class*=col-]:not(:last-child){
+                & .it-social-item {
+                    border-right: 1px solid rgba($color: #6C757D, $alpha: 0.3);
+                    @media #{$md,$xs}{
+                        border-right: none;
+                    } 
+                }
+                    
+            }
+        }
+        
+    }
+    &-item {
+        padding: 52px 100px;
+        border-right: 1px solid rgba($color: #6C757D, $alpha: 0.3);
+        @media #{$xxl,$xl}{
+            padding: 52px 50px;
+        } 
+        @media #{$lg}{
+            padding: 35px 40px;
+        } 
+        @media #{$md}{
+            padding: 35px 20px;
+            border: none;
+        } 
+        @media #{$xs}{
+            padding: 25px 20px;
+            border: none;
+        } 
+        & a {
+            display: flex;
+            align-items: end;
+            & span {
+                font-size: 24px;
+                line-height: .9;
+                display: inline-block;
+                transition: .3s;
+                font-family: var(--it-ff-spartan-medium);
+                @media #{$lg}{
+                    font-size: 20px;
+                }
+                @media #{$md,$xs}{
+                    font-size: 17px;
+                }
+            }
+            &:hover {
+                color: var(--it-theme-5);
+            }
+            & svg {
+                height: 26px;
+                display: inline-block;
+                margin-right: 10px;
+                @media #{$lg}{
+                    height: 20px;
+                }
+                @media #{$md,$xs}{
+                    height: 17px;
+                    margin-right: 5px;
+                }
+            }
+        }
+        &.style-2 {
+            & a {
+                justify-content: center;
+            }
+        }
+        &.style-3 {
+            & a {
+                justify-content: center;
+            }
+        }
+        &.style-4 {
+            border-right: none;
+            & a {
+                justify-content: end;
+                @media #{$lg,$md,$xs}{
+                    justify-content: start;
+                }
+                @media #{$xs}{
+                    justify-content: end;
+                }
+                @media #{$sm}{
+                    justify-content: start;
+                }
+            }
+        }
+    }
+    &-style-2 {
+        border-top: 1px solid rgba($color: #fff, $alpha: 0.3);
+        border-bottom: 1px solid rgba($color: #fff, $alpha: 0.3);
+        & .row {
+            [class*=col-]:not(:last-child){
+                & .it-social-item {
+                    border-right: 1px solid rgba($color: #fff, $alpha: 0.3);
+                     @media #{$md,$xs}{
+                        border: none;
+                    } 
+                }                    
+            }
+        }
+        & .it-social-item {
+            transition: .3s;
+            & a {
+                & span {
+                    color: var(--it-common-white);
+                }
+                & svg {
+                    color: var(--it-common-white);
+                }
+            }
+            &:hover {
+                background-color: rgba($color: #F8C62F, $alpha: 0.3);
+            }
+        }
+    }
+}

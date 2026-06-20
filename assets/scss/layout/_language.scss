@@ -1,0 +1,87 @@
+@use '../utils' as *;
+
+/*----------------------------------------*/
+/*  26. language css start
+/*----------------------------------------*/
+
+.it-language {
+    &-wrap {
+        padding: 80px 75px;
+        padding-top: 70px;
+        padding-right: 80px;
+        @media #{$xl,$lg,$md}{
+            padding: 55px 35px;
+        }
+        @media #{$xs}{
+            padding: 40px 20px;
+        }
+        & .it-about-text {
+            & p {
+                color: rgba(255, 255, 255, 0.8);
+            }
+        }
+        & .it-about-list-box ul li span {
+            color: var(--it-common-white);
+        }
+        & .it-section-title {
+            margin-bottom: 15px;
+        }
+        & .it-about-list-box {
+            margin-bottom: 37px;
+        }
+    }
+    &-thumb {
+        overflow: hidden;
+        transform: translateX(-13px);
+        outline: 5px solid var(--it-common-white);
+        @media #{$md,$xs}{
+            margin-top: 50px;
+            transform: translateX(0);
+        }
+        & img {
+            max-width: inherit;
+            transition: 1.3s all ease;
+            @media #{$xl,$lg,$md,$xs}{
+                width: 100%;
+            }
+        }
+        &:hover {
+            & img {
+                transform: scale(1.1);
+            }
+        }
+    }
+    &-shape {
+        &-1 {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            z-index: -1;
+        }
+        &-2 {
+            position: absolute;
+            z-index: -1;
+            top: -25%;
+            left: 0;
+        }
+        &-3 {
+            position: absolute;
+            z-index: -1;
+            bottom: 5%;
+            right: 10%;
+            animation: rotate 30s linear infinite;
+            @media #{$xs}{
+                display: none;
+            }
+        }
+        &-4 {
+            position: absolute;
+            z-index: 1;
+            top: -6%;
+            left: 1%;
+            @media #{$md,$xs}{
+                display: none;
+            }
+        }
+    }
+}
