@@ -225,15 +225,17 @@ function acc_asset_account_id_by_code(string $code): int
 function acc_received_into_account_code_for_payment_method(string $method): string
 {
     $method = strtolower(trim($method));
-    if (!in_array($method, ['cash', 'bank', 'mobile_banking'], true)) {
+    if (!in_array($method, ['cash', 'bank', 'mobile_banking', 'old_erp'], true)) {
         return '';
     }
     $fallback = ($method === 'bank' || $method === 'mobile_banking')
         ? acc_setting('default_bank_account', '1200')
         : acc_setting('default_cash_account', '1100');
 
+    // Payments previously collected in the old ERP are treated as cash already
+    // received, so they map to the same received-into account as cash.
     $setting_key = match ($method) {
-        'cash' => 'received_into_cash_account',
+        'cash', 'old_erp' => 'received_into_cash_account',
         'bank' => 'received_into_bank_account',
         'mobile_banking' => 'received_into_mobile_banking_account',
     };
@@ -253,7 +255,7 @@ function acc_received_into_account_id_for_payment_method(string $method): int
         return $cache[$method];
     }
 
-    if (!in_array($method, ['cash', 'bank', 'mobile_banking'], true)) {
+    if (!in_array($method, ['cash', 'bank', 'mobile_banking', 'old_erp'], true)) {
         return $cache[$method] = 0;
     }
 
@@ -288,7 +290,7 @@ function acc_received_into_account_id_for_payment_method(string $method): int
  */
 function acc_received_into_account_map_for_payment_methods(?array $methods = null): array
 {
-    $methods = $methods ?: ['cash', 'bank', 'mobile_banking'];
+    $methods = $methods ?: ['cash', 'bank', 'mobile_banking', 'old_erp'];
     $map = [];
     foreach ($methods as $method) {
         $map[$method] = acc_received_into_account_id_for_payment_method($method);
@@ -2041,6 +2043,7 @@ function acc_payment_method_label(string $method, ?string $provider = null): str
     return match ($method) {
         'bank' => 'Bank',
         'mobile_banking' => 'Mobile Banking' . ($provider ? ' (' . ucfirst(strtolower($provider)) . ')' : ''),
+        'old_erp' => 'Old ERP',
         default => 'Cash',
     };
 }
@@ -2053,7 +2056,7 @@ function acc_payment_method_label(string $method, ?string $provider = null): str
 function acc_normalize_payment_method_fields(string $method, ?string $provider, ?string $txn): array
 {
     $method = strtolower(trim($method));
-    if (!in_array($method, ['cash', 'bank', 'mobile_banking'], true)) {
+    if (!in_array($method, ['cash', 'bank', 'mobile_banking', 'old_erp'], true)) {
         throw new RuntimeException('Invalid payment method selected.');
     }
 
@@ -2070,6 +2073,11 @@ function acc_normalize_payment_method_fields(string $method, ?string $provider, 
 
     if ($method === 'cash') {
         $txn = null;
+    } elseif ($method === 'old_erp') {
+        // Old ERP payments must carry the original receipt number.
+        if ($txn === null || $txn === '') {
+            throw new RuntimeException('Receipt number is required for old ERP payments.');
+        }
     } else {
         if ($txn === null || $txn === '') {
             throw new RuntimeException('Transaction number is required for non-cash payments.');
