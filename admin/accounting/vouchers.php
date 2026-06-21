@@ -10,6 +10,8 @@ $currency   = acc_currency();
 $search    = trim($_GET['search']   ?? '');
 $f_type    = $_GET['type']          ?? '';
 $f_status  = $_GET['status']        ?? '';
+$f_created_by = (int)($_GET['created_by'] ?? 0);
+$f_student_sid = trim((string)($_GET['student_sid'] ?? ''));
 $f_from    = $_GET['date_from']     ?? '';
 $f_to      = $_GET['date_to']       ?? '';
 $page      = max(1, (int)($_GET['page'] ?? 1));
@@ -28,6 +30,25 @@ if ($search !== '') {
 }
 if (in_array($f_type,   $valid_types,    true)) { $where[] = 'v.voucher_type = ?'; $params[] = $f_type; }
 if (in_array($f_status, $valid_statuses, true)) { $where[] = 'v.status = ?';       $params[] = $f_status; }
+if ($f_created_by > 0) { $where[] = 'v.created_by = ?'; $params[] = $f_created_by; }
+if ($f_student_sid !== '') {
+    $sid_value = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $f_student_sid);
+    $sid_like = '%' . $sid_value . '%';
+    $where[] = "(EXISTS (
+                    SELECT 1
+                    FROM sfp_payments sp
+                    JOIN students s ON s.id = sp.student_id
+                    WHERE sp.voucher_id = v.id
+                      AND s.student_id LIKE ? ESCAPE '\\\\'
+                ) OR EXISTS (
+                    SELECT 1
+                    FROM adm_admission_fee_payments ap
+                    JOIN admissions_applications a ON a.id = ap.application_id
+                    WHERE ap.voucher_id = v.id
+                      AND a.assigned_student_id LIKE ? ESCAPE '\\\\'
+                ))";
+    array_push($params, $sid_like, $sid_like);
+}
 if ($f_from) { $where[] = 'v.voucher_date >= ?'; $params[] = $f_from; }
 if ($f_to)   { $where[] = 'v.voucher_date <= ?'; $params[] = $f_to; }
 
@@ -51,10 +72,23 @@ $stmt = db()->prepare(
 $stmt->execute($params);
 $vouchers = $stmt->fetchAll();
 
+$created_by_stmt = db()->query(
+    "SELECT u.id, u.full_name
+     FROM users u
+     WHERE EXISTS (
+         SELECT 1 FROM acc_vouchers v
+         WHERE v.created_by = u.id AND v.is_deleted = 0
+     )
+     ORDER BY u.full_name ASC"
+);
+$created_by_users = $created_by_stmt->fetchAll();
+
 $filter_qs = http_build_query(array_filter([
     'search'    => $search,
     'type'      => $f_type,
     'status'    => $f_status,
+    'created_by'=> $f_created_by ?: null,
+    'student_sid' => $f_student_sid,
     'date_from' => $f_from,
     'date_to'   => $f_to,
 ]));
@@ -90,7 +124,7 @@ require_once __DIR__ . '/../includes/header.php';
     <?php
     $tabs = ['' => 'All'] + array_combine($valid_types, ['Receipt','Payment','Transfer','Journal']);
     foreach ($tabs as $tv => $tl):
-        $q = http_build_query(array_filter(array_merge(['search'=>$search,'status'=>$f_status,'date_from'=>$f_from,'date_to'=>$f_to],['type'=>$tv])));
+        $q = http_build_query(array_filter(array_merge(['search'=>$search,'status'=>$f_status,'created_by'=>$f_created_by ?: null,'student_sid'=>$f_student_sid,'date_from'=>$f_from,'date_to'=>$f_to],['type'=>$tv])));
     ?>
     <li class="nav-item">
         <a class="nav-link <?= $f_type === $tv ? 'active' : '' ?>" href="?<?= $q ?>"><?= h($tl) ?></a>
@@ -108,11 +142,23 @@ require_once __DIR__ . '/../includes/header.php';
                        placeholder="Voucher #, narration, reference…" value="<?= h($search) ?>">
             </div>
             <div class="col-6 col-md-2">
+                <input type="text" name="student_sid" class="form-control form-control-sm"
+                       placeholder="Student ID" value="<?= h($f_student_sid) ?>">
+            </div>
+            <div class="col-6 col-md-2">
                 <select name="status" class="form-select form-select-sm">
                     <option value="">All Status</option>
                     <option value="posted"   <?= $f_status === 'posted'   ? 'selected' : '' ?>>Posted</option>
                     <option value="reversed" <?= $f_status === 'reversed' ? 'selected' : '' ?>>Reversed</option>
                     <option value="memo"     <?= $f_status === 'memo'     ? 'selected' : '' ?>>Old ERP (not counted)</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <select name="created_by" class="form-select form-select-sm">
+                    <option value="">All Creators</option>
+                    <?php foreach ($created_by_users as $cu): ?>
+                    <option value="<?= (int)$cu['id'] ?>" <?= $f_created_by === (int)$cu['id'] ? 'selected' : '' ?>><?= h($cu['full_name']) ?></option>
+                    <?php endforeach; ?>
                 </select>
             </div>
             <div class="col-6 col-md-2">

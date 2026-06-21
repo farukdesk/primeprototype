@@ -180,69 +180,155 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
             $stu_stmt->execute([$student_id]);
             $stu = $stu_stmt->fetch();
 
-            $voucher_links   = [];
             $voucher_ids_arr = [];
             $all_invoice_items = [];
             $last_voucher_id = 0;
             $total_amount    = 0.0;
             $first_voucher_number = '';
+            $provider = $mobile_banking_provider !== '' ? $mobile_banking_provider : null;
+            $txn_no = $transaction_number !== '' ? $transaction_number : null;
+            $user = auth_user();
+            $semester_label_by_id = [];
+            $resolveSemesterLabel = static function (?int $semester_fee_id) use (&$semester_label_by_id): string {
+                if (!$semester_fee_id) {
+                    return '';
+                }
+                if (array_key_exists($semester_fee_id, $semester_label_by_id)) {
+                    return $semester_label_by_id[$semester_fee_id];
+                }
+                $sf_row = db()->prepare('SELECT semester_label, semester_number FROM sfp_semester_fees WHERE id = ?');
+                $sf_row->execute([$semester_fee_id]);
+                $row = $sf_row->fetch();
+                $semester_label_by_id[$semester_fee_id] = ($row && $row['semester_label'] !== '' && $row['semester_label'] !== null)
+                    ? (string)$row['semester_label']
+                    : ($row && $row['semester_number'] ? 'Semester ' . $row['semester_number'] : '');
+                return $semester_label_by_id[$semester_fee_id];
+            };
 
-            foreach ($fee_items as $item) {
-                if (!$item['income_account_id']) {
-                    throw new RuntimeException('Income account mapping is missing for one of the selected fee items.');
+            if ($collection_mode === 'multi' && count($fee_items) > 1) {
+                $total_amount = round(array_sum(array_map(static fn(array $it): float => (float)$it['amount'], $fee_items)), 2);
+                if ($total_amount <= 0) {
+                    throw new RuntimeException('Selected payment amount is invalid.');
                 }
-                $item_narration = $narration;
-                if ($collection_mode === 'multi' && !empty($item['label'])) {
-                    $item_narration = $item['label'] . ($narration !== '' ? ' | ' . $narration : '');
+
+                $credit_by_income = [];
+                foreach ($fee_items as $item) {
+                    if (!$item['income_account_id']) {
+                        throw new RuntimeException('Income account mapping is missing for one of the selected fee items.');
+                    }
+                    $income_id = (int)$item['income_account_id'];
+                    $credit_by_income[$income_id] = ($credit_by_income[$income_id] ?? 0.0) + (float)$item['amount'];
                 }
-                $provider = $mobile_banking_provider !== '' ? $mobile_banking_provider : null;
-                $txn_no = $transaction_number !== '' ? $transaction_number : null;
-                $vid = acc_collect_student_fee(
-                    $student_id, $package_id, $item['fee_type'],
-                    $item['semester_fee_id'], $item['semester_number'], $item['month_number'],
-                    $payment_method, $provider, $txn_no,
-                    $item['amount'], $received_into_account_id, $item['income_account_id'],
-                    $date, $reference, $item_narration
+
+                $voucher_lines = [[
+                    'account_id' => $received_into_account_id,
+                    'debit'      => round($total_amount, 2),
+                    'credit'     => 0,
+                    'description'=> $narration,
+                ]];
+                foreach ($credit_by_income as $income_id => $credit_total) {
+                    $voucher_lines[] = [
+                        'account_id' => (int)$income_id,
+                        'debit'      => 0,
+                        'credit'     => round((float)$credit_total, 2),
+                        'description'=> $narration,
+                    ];
+                }
+
+                $voucher_status = $payment_method === 'old_erp' ? 'memo' : 'posted';
+                $last_voucher_id = acc_post_voucher('receipt', $date, $voucher_lines, $narration, $reference, null, $voucher_status);
+                $voucher_ids_arr[] = $last_voucher_id;
+
+                $voucher = acc_get_voucher($last_voucher_id);
+                $first_voucher_number = $voucher['voucher_number'] ?? '—';
+
+                $pay_stmt = db()->prepare(
+                    'INSERT INTO sfp_payments
+                        (student_id, package_id, semester_fee_id, fee_type, semester_number, month_number, payment_method, mobile_banking_provider, transaction_number, amount, voucher_id, note, collected_by)
+                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)'
                 );
-                $last_voucher_id = (int)$vid;
-                $total_amount += (float)$item['amount'];
-                $voucher_ids_arr[] = (int)$vid;
+                $txn_used_for_fee_type = [];
+                foreach ($fee_items as $item) {
+                    $item_narration = $narration;
+                    if (!empty($item['label'])) {
+                        $item_narration = $item['label'] . ($narration !== '' ? ' | ' . $narration : '');
+                    }
+                    $item_txn = null;
+                    if ($txn_no !== null && !isset($txn_used_for_fee_type[$item['fee_type']])) {
+                        // Legacy unique index is (transaction_number, fee_type), so a
+                        // single receipt can be repeated across different fee types
+                        // but not duplicated within the same fee type. We keep this
+                        // behavior for backward compatibility with existing data.
+                        $item_txn = $txn_no;
+                        $txn_used_for_fee_type[$item['fee_type']] = true;
+                    }
 
-                // Fetch voucher number for success message
-                $voucher        = acc_get_voucher($vid);
-                $voucher_number = $voucher['voucher_number'] ?? '—';
-                if ($first_voucher_number === '') {
-                    $first_voucher_number = $voucher_number;
+                    $pay_stmt->execute([
+                        $student_id,
+                        $package_id,
+                        $item['semester_fee_id'],
+                        $item['fee_type'],
+                        $item['semester_number'],
+                        $item['month_number'],
+                        $payment_method,
+                        $provider,
+                        $item_txn,
+                        round((float)$item['amount'], 2),
+                        $last_voucher_id,
+                        $item_narration ?: null,
+                        $user['id'] ?? null,
+                    ]);
+
+                    $sem_label = $resolveSemesterLabel($item['semester_fee_id']);
+
+                    $all_invoice_items[] = [
+                        'voucher_id'     => $last_voucher_id,
+                        'voucher_number' => $first_voucher_number,
+                        'fee_type_label' => acc_fee_type_label($item['fee_type']),
+                        'semester_label' => $sem_label,
+                        'month_label'    => $item['month_number'] ? 'Month ' . $item['month_number'] : '',
+                        'amount'         => $item['amount'],
+                        'narration'      => $item_narration,
+                    ];
                 }
+            } else {
+                foreach ($fee_items as $item) {
+                    if (!$item['income_account_id']) {
+                        throw new RuntimeException('Income account mapping is missing for one of the selected fee items.');
+                    }
+                    $item_narration = $narration;
+                    if ($collection_mode === 'multi' && !empty($item['label'])) {
+                        $item_narration = $item['label'] . ($narration !== '' ? ' | ' . $narration : '');
+                    }
+                    $vid = acc_collect_student_fee(
+                        $student_id, $package_id, $item['fee_type'],
+                        $item['semester_fee_id'], $item['semester_number'], $item['month_number'],
+                        $payment_method, $provider, $txn_no,
+                        $item['amount'], $received_into_account_id, $item['income_account_id'],
+                        $date, $reference, $item_narration
+                    );
+                    $last_voucher_id = (int)$vid;
+                    $total_amount += (float)$item['amount'];
+                    $voucher_ids_arr[] = (int)$vid;
 
-                // Semester label (if semester payment)
-                $sem_label = '';
-                if ($item['semester_fee_id']) {
-                    $sf_row = db()->prepare('SELECT semester_label, semester_number FROM sfp_semester_fees WHERE id = ?');
-                    $sf_row->execute([$item['semester_fee_id']]);
-                    $sf_row = $sf_row->fetch();
-                    $sem_label = ($sf_row && $sf_row['semester_label'] !== '' && $sf_row['semester_label'] !== null)
-                        ? (string)$sf_row['semester_label']
-                        : ($sf_row && $sf_row['semester_number'] ? 'Semester ' . $sf_row['semester_number'] : '');
+                    $voucher        = acc_get_voucher($vid);
+                    $voucher_number = $voucher['voucher_number'] ?? '—';
+                    if ($first_voucher_number === '') {
+                        $first_voucher_number = $voucher_number;
+                    }
+
+                    $sem_label = $resolveSemesterLabel($item['semester_fee_id']);
+
+                    $all_invoice_items[] = [
+                        'voucher_id'     => $vid,
+                        'voucher_number' => $voucher_number,
+                        'fee_type_label' => acc_fee_type_label($item['fee_type']),
+                        'semester_label' => $sem_label,
+                        'month_label'    => $item['month_number'] ? 'Month ' . $item['month_number'] : '',
+                        'amount'         => $item['amount'],
+                        'narration'      => $item_narration,
+                    ];
                 }
-
-                $fee_label = acc_fee_type_label($item['fee_type']);
-
-                // Build invoice item for the combined email PDF
-                $all_invoice_items[] = [
-                    'voucher_id'     => $vid,
-                    'voucher_number' => $voucher_number,
-                    'fee_type_label' => $fee_label,
-                    'semester_label' => $sem_label,
-                    'month_label'    => $item['month_number'] ? 'Month ' . $item['month_number'] : '',
-                    'amount'         => $item['amount'],
-                    'narration'      => $item_narration,
-                ];
-
-                $voucher_links[] =
-                    '<a href="' . APP_URL . '/accounting/fee-invoice.php?voucher_id=' . (int)$vid .
-                    '" target="_blank" class="alert-link fw-semibold"><i class="fas fa-print me-1"></i>' .
-                    h($voucher_number) . '</a>';
             }
 
             // ── Send ONE email and ONE SMS after all fee items are collected ──────
