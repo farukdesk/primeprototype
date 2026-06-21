@@ -53,8 +53,7 @@ function oebm_normalize_fee_type(string $raw): ?string
     return match ($s) {
         'admission', 'admission fee', 'admission fees'        => 'admission',
         'form', 'form fee', 'form fees'                       => 'form_fee',
-        'id card', 'id card fee', 'id card fees', 'idcard',
-        'id card fees fee'                                    => 'id_card_fee',
+        'id card', 'id card fee', 'id card fees', 'idcard'    => 'id_card_fee',
         default                                               => null,
     };
 }
