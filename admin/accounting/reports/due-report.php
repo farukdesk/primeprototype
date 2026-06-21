@@ -103,7 +103,7 @@ $stmt = $db->prepare(
         SELECT p.package_id, COALESCE(SUM(p.amount), 0) AS total_paid
         FROM sfp_payments p
         JOIN acc_vouchers v ON v.id = p.voucher_id
-        WHERE v.status = 'posted'
+        WHERE v.status IN ('posted','memo')
           AND v.is_deleted = 0
           AND v.voucher_date < DATE_ADD(?, INTERVAL 1 DAY)
         GROUP BY p.package_id
@@ -277,7 +277,7 @@ if ($focus_row) {
          FROM sfp_payments p
          JOIN acc_vouchers v ON v.id = p.voucher_id
          WHERE p.package_id = :package_id
-           AND v.status = 'posted'
+           AND v.status IN ('posted','memo')
            AND v.is_deleted = 0
            AND v.voucher_date <= :as_of_date
          ORDER BY v.voucher_date DESC, v.id DESC

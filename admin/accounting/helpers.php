@@ -398,8 +398,15 @@ function acc_post_voucher(
     array  $lines,
     string $narration  = '',
     string $reference  = '',
-    ?int   $reversal_of = null
+    ?int   $reversal_of = null,
+    string $status     = 'posted'
 ): int {
+    // `memo` vouchers (e.g. Old ERP receipts) are recorded so the receipt and
+    // student dues stay correct, but are intentionally excluded from the books
+    // and every collection report, all of which only count `posted` vouchers.
+    if (!in_array($status, ['posted', 'memo'], true)) {
+        $status = 'posted';
+    }
     // Validate debits == credits
     $total_debit  = 0.0;
     $total_credit = 0.0;
@@ -428,7 +435,7 @@ function acc_post_voucher(
         $db->prepare(
             'INSERT INTO acc_vouchers
                 (voucher_number, voucher_type, voucher_date, reference, narration, total_amount, status, created_by, reversal_of)
-             VALUES (?,?,?,?,?,?,\'posted\',?,?)'
+             VALUES (?,?,?,?,?,?,?,?,?)'
         )->execute([
             $voucher_num,
             $type,
@@ -436,6 +443,7 @@ function acc_post_voucher(
             $reference ?: null,
             $narration ?: null,
             $total_debit,
+            $status,
             $user['id'],
             $reversal_of,
         ]);
@@ -466,7 +474,7 @@ function acc_post_voucher(
             null,
             null,
             null,
-            ucfirst($type) . ' voucher posted: ' . $narration
+            ucfirst($type) . ' voucher ' . ($status === 'memo' ? 'recorded (memo, not counted): ' : 'posted: ') . $narration
         );
 
         return $voucher_id;
@@ -645,6 +653,7 @@ function acc_voucher_status_badge(string $status): string
     return match ($status) {
         'posted'   => '<span class="badge bg-success">Posted</span>',
         'reversed' => '<span class="badge bg-warning text-dark">Reversed</span>',
+        'memo'     => '<span class="badge bg-secondary">Old ERP (not counted)</span>',
         default    => '<span class="badge bg-secondary">' . h(ucfirst($status)) . '</span>',
     };
 }
@@ -1272,11 +1281,15 @@ function acc_collect_student_fee(
         );
     }
 
-    // Post the receipt voucher
+    // Post the receipt voucher. Payments already collected in the old ERP are
+    // recorded as `memo` vouchers: the receipt and the student's dues stay
+    // correct, but the amount is not counted again in this system's books or
+    // collection reports (it was already counted in the old ERP).
+    $voucher_status = $payment_method === 'old_erp' ? 'memo' : 'posted';
     $voucher_id = acc_post_voucher('receipt', $date, [
         ['account_id' => $cash_account_id,   'debit' => $amount, 'credit' => 0,       'description' => $narration],
         ['account_id' => $income_account_id, 'debit' => 0,       'credit' => $amount, 'description' => $narration],
-    ], $narration, $reference);
+    ], $narration, $reference, null, $voucher_status);
 
     // Record the payment in sfp_payments
     $user = auth_user();
@@ -1906,10 +1919,13 @@ function acc_collect_applicant_admission_fee(
         );
     }
 
+    // Old ERP payments are recorded as `memo` vouchers so they are not counted
+    // again in this system's books or collection reports.
+    $voucher_status = $payment_method === 'old_erp' ? 'memo' : 'posted';
     $voucher_id = acc_post_voucher('receipt', $date, [
         ['account_id' => $cash_account_id,   'debit' => $amount, 'credit' => 0,       'description' => $narration],
         ['account_id' => $income_account_id, 'debit' => 0,       'credit' => $amount, 'description' => $narration],
-    ], $narration, $reference);
+    ], $narration, $reference, null, $voucher_status);
 
     $user = auth_user();
     db()->prepare(

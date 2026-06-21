@@ -781,7 +781,7 @@ require_once __DIR__ . '/../includes/header.php';
                                     <option value="cash">Cash</option>
                                     <option value="bank">Bank</option>
                                     <option value="mobile_banking">Mobile Banking</option>
-                                    <option value="old_erp">Old ERP (Previously Collected)</option>
+                                    <option value="old_erp">Old ERP (Previously Collected, not counted in totals)</option>
                                 </select>
                             </div>
                             <div class="col-md-4" id="payMobileProviderWrap" style="display:none;">
@@ -1146,7 +1146,7 @@ require_once __DIR__ . '/../includes/header.php';
                                 <option value="cash">Cash</option>
                                 <option value="bank">Bank</option>
                                 <option value="mobile_banking">Mobile Banking</option>
-                                <option value="old_erp">Old ERP (Previously Collected)</option>
+                                <option value="old_erp">Old ERP (Previously Collected, not counted in totals)</option>
                             </select>
                         </div>
                         <div class="col-md-4" id="admProviderWrap" style="display:none;">
