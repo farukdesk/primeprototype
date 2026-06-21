@@ -47,6 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // ── Detail view ───────────────────────────────────────────────────────────────
 $detail_id = (int)($_GET['id'] ?? 0);
 $detail    = $detail_id ? acc_get_delete_request($detail_id) : null;
+$detail_purpose = $detail ? acc_get_voucher_purpose((int)$detail['voucher_id']) : null;
 
 // ── List view ─────────────────────────────────────────────────────────────────
 $f_status = $_GET['status'] ?? '';
@@ -67,6 +68,13 @@ $stmt = db()->prepare(
 );
 $stmt->execute($params);
 $requests = $stmt->fetchAll();
+$purpose_map = [];
+foreach ($requests as $r) {
+    $voucher_id = (int)($r['voucher_id'] ?? 0);
+    if ($voucher_id > 0 && !array_key_exists($voucher_id, $purpose_map)) {
+        $purpose_map[$voucher_id] = acc_get_voucher_purpose($voucher_id);
+    }
+}
 
 $can_dd        = acc_can_review_voucher_delete_dd();
 $can_treasurer = acc_can_review_voucher_delete_treasurer();
@@ -77,6 +85,37 @@ require_once __DIR__ . '/../includes/header.php';
 function vdel_attachment_url(?string $name): ?string
 {
     return $name ? (UPLOAD_URL . '/voucher-deletes/' . rawurlencode($name)) : null;
+}
+
+function vdel_purpose_text(?array $purpose): string
+{
+    if (!$purpose) {
+        return '–';
+    }
+
+    if (($purpose['kind'] ?? '') === 'student_fee') {
+        $name = trim((string)($purpose['student_name'] ?? ''));
+        $sid  = trim((string)($purpose['student_id'] ?? ''));
+        if ($name !== '' && $sid !== '') {
+            return $purpose['label'] . ' — ' . $name . ' (' . $sid . ')';
+        }
+        if ($name !== '') {
+            return $purpose['label'] . ' — ' . $name;
+        }
+    }
+
+    if (($purpose['kind'] ?? '') === 'admission_fee') {
+        $name = trim((string)($purpose['student_name'] ?? ''));
+        $app  = trim((string)($purpose['app_number'] ?? ''));
+        if ($name !== '' && $app !== '') {
+            return $purpose['label'] . ' — ' . $name . ' (' . $app . ')';
+        }
+        if ($name !== '') {
+            return $purpose['label'] . ' — ' . $name;
+        }
+    }
+
+    return (string)($purpose['label'] ?? '–');
 }
 ?>
 
@@ -112,6 +151,7 @@ function vdel_attachment_url(?string $name): ?string
                     <tr><td class="text-muted small fw-semibold" style="width:150px">Voucher</td><td class="fw-semibold"><?= h($detail['voucher_number']) ?></td></tr>
                     <tr><td class="text-muted small fw-semibold">Amount</td><td><?= $currency ?> <?= number_format($detail['total_amount'], 2) ?></td></tr>
                     <tr><td class="text-muted small fw-semibold">Requested By</td><td><?= h($detail['requested_by_name'] ?? '–') ?></td></tr>
+                    <tr><td class="text-muted small fw-semibold">Purpose</td><td><?= h(vdel_purpose_text($detail_purpose)) ?></td></tr>
                     <tr><td class="text-muted small fw-semibold">Requested At</td><td class="small text-muted"><?= date('d M Y, h:i A', strtotime($detail['requested_at'])) ?></td></tr>
                     <tr><td class="text-muted small fw-semibold">Attachment</td><td>
                         <?php if ($att_url): ?><a href="<?= h($att_url) ?>" target="_blank" rel="noopener"><i class="fas fa-paperclip me-1"></i>View attachment</a><?php else: ?><span class="text-muted">–</span><?php endif; ?>
@@ -241,6 +281,7 @@ function vdel_attachment_url(?string $name): ?string
                         <th>#</th>
                         <th>Voucher</th>
                         <th class="text-end">Amount</th>
+                        <th>Purpose</th>
                         <th>Requested By</th>
                         <th>Requested</th>
                         <th>Status</th>
@@ -253,6 +294,7 @@ function vdel_attachment_url(?string $name): ?string
                         <td class="text-muted small"><?= (int)$r['id'] ?></td>
                         <td class="fw-semibold"><?= h($r['voucher_number']) ?></td>
                         <td class="text-end"><?= $currency ?> <?= number_format($r['total_amount'], 2) ?></td>
+                        <td class="small"><?= h(vdel_purpose_text($purpose_map[(int)$r['voucher_id']] ?? null)) ?></td>
                         <td class="small"><?= h($r['requested_by_name'] ?? '–') ?></td>
                         <td class="text-muted small"><?= date('d M Y', strtotime($r['requested_at'])) ?></td>
                         <td><?= acc_voucher_delete_status_badge($r['status']) ?></td>
