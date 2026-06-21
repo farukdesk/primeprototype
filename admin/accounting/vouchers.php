@@ -188,13 +188,37 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
 
         <?php if ($total_pages > 1): ?>
-        <nav class="mt-3">
-            <ul class="pagination pagination-sm justify-content-center mb-0">
-                <?php for ($p = 1; $p <= $total_pages; $p++): ?>
+        <nav class="mt-3" aria-label="Voucher pages">
+            <ul class="pagination pagination-sm justify-content-center flex-wrap mb-0">
+                <?php
+                // Windowed pagination: first/prev, a small window around the
+                // current page, and last/next — avoids rendering ~90+ links.
+                $window  = 2;
+                $win_lo  = max(1, $page - $window);
+                $win_hi  = min($total_pages, $page + $window);
+                $pg_link = function (int $p) use ($filter_qs) {
+                    return '?' . ($filter_qs !== '' ? $filter_qs . '&' : '') . 'page=' . $p;
+                };
+                ?>
+                <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>">
+                    <a class="page-link" href="<?= $page <= 1 ? '#' : h($pg_link($page - 1)) ?>" aria-label="Previous">&laquo;</a>
+                </li>
+                <?php if ($win_lo > 1): ?>
+                <li class="page-item"><a class="page-link" href="<?= h($pg_link(1)) ?>">1</a></li>
+                <?php if ($win_lo > 2): ?><li class="page-item disabled"><span class="page-link">…</span></li><?php endif; ?>
+                <?php endif; ?>
+                <?php for ($p = $win_lo; $p <= $win_hi; $p++): ?>
                 <li class="page-item <?= $p === $page ? 'active' : '' ?>">
-                    <a class="page-link" href="?<?= $filter_qs ?>&page=<?= $p ?>"><?= $p ?></a>
+                    <a class="page-link" href="<?= h($pg_link($p)) ?>"><?= $p ?></a>
                 </li>
                 <?php endfor; ?>
+                <?php if ($win_hi < $total_pages): ?>
+                <?php if ($win_hi < $total_pages - 1): ?><li class="page-item disabled"><span class="page-link">…</span></li><?php endif; ?>
+                <li class="page-item"><a class="page-link" href="<?= h($pg_link($total_pages)) ?>"><?= $total_pages ?></a></li>
+                <?php endif; ?>
+                <li class="page-item <?= $page >= $total_pages ? 'disabled' : '' ?>">
+                    <a class="page-link" href="<?= $page >= $total_pages ? '#' : h($pg_link($page + 1)) ?>" aria-label="Next">&raquo;</a>
+                </li>
             </ul>
         </nav>
         <p class="text-center text-muted small mt-2">Showing <?= count($vouchers) ?> of <?= number_format($total_rows) ?> voucher(s)</p>
