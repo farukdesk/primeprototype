@@ -1809,6 +1809,105 @@ function acc_get_voucher_payment_info(int $voucher_id): ?array
 }
 
 /**
+ * Resolve what a voucher is actually for (its business purpose), so a voucher
+ * can show e.g. "Student Fee Payment – Semester Tuition for Md Omar Faruk".
+ *
+ * Looks up the originating record(s) that created the voucher: student fee
+ * payments (sfp_payments) or pre-admission admission-fee payments
+ * (adm_admission_fee_payments). A single receipt may cover several fee heads.
+ *
+ * @return array|null Purpose details, or null when the voucher has no linked
+ *                    student/applicant payment (e.g. expenses, transfers).
+ */
+function acc_get_voucher_purpose(int $voucher_id): ?array
+{
+    if ($voucher_id <= 0) {
+        return null;
+    }
+    $db = db();
+
+    // ── Student fee payment(s) ────────────────────────────────────────────────
+    $stmt = $db->prepare(
+        'SELECT sp.fee_type, sp.semester_number, sp.month_number, sp.amount,
+                sp.package_id,
+                sf.semester_label,
+                s.id AS student_pk, s.student_id, s.full_name AS student_name,
+                s.admitted_semester
+         FROM sfp_payments sp
+         JOIN students s ON s.id = sp.student_id
+         LEFT JOIN sfp_semester_fees sf ON sf.id = sp.semester_fee_id
+         WHERE sp.voucher_id = ?
+         ORDER BY sp.id ASC'
+    );
+    $stmt->execute([$voucher_id]);
+    $rows = $stmt->fetchAll();
+
+    if ($rows) {
+        $first = $rows[0];
+        $items = [];
+        foreach ($rows as $r) {
+            $sem = $r['semester_label'] !== null && $r['semester_label'] !== ''
+                ? $r['semester_label']
+                : ($r['semester_number'] ? 'Semester ' . (int)$r['semester_number'] : '');
+            $items[] = [
+                'fee_type'       => $r['fee_type'],
+                'fee_type_label' => acc_fee_type_label((string)$r['fee_type']),
+                'semester_label' => $sem,
+                'month_number'   => $r['month_number'] !== null ? (int)$r['month_number'] : null,
+                'amount'         => (float)$r['amount'],
+            ];
+        }
+        return [
+            'kind'              => 'student_fee',
+            'label'             => 'Student Fee Payment',
+            'student_pk'        => (int)$first['student_pk'],
+            'package_id'        => (int)$first['package_id'],
+            'student_id'        => (string)$first['student_id'],
+            'student_name'      => (string)$first['student_name'],
+            'admitted_semester' => (string)($first['admitted_semester'] ?? ''),
+            'items'             => $items,
+        ];
+    }
+
+    // ── Pre-admission admission-fee payment(s) ────────────────────────────────
+    $stmt = $db->prepare(
+        'SELECT ap.amount,
+                a.id AS application_pk, a.app_number, a.student_name, a.assigned_student_id
+         FROM adm_admission_fee_payments ap
+         JOIN admissions_applications a ON a.id = ap.application_id
+         WHERE ap.voucher_id = ?
+         ORDER BY ap.id ASC'
+    );
+    $stmt->execute([$voucher_id]);
+    $rows = $stmt->fetchAll();
+
+    if ($rows) {
+        $first = $rows[0];
+        $items = [];
+        foreach ($rows as $r) {
+            $items[] = [
+                'fee_type'       => 'admission',
+                'fee_type_label' => acc_fee_type_label('admission'),
+                'semester_label' => '',
+                'month_number'   => null,
+                'amount'         => (float)$r['amount'],
+            ];
+        }
+        return [
+            'kind'                => 'admission_fee',
+            'label'               => 'Admission Fee Payment',
+            'application_pk'      => (int)$first['application_pk'],
+            'app_number'          => (string)$first['app_number'],
+            'student_name'        => (string)$first['student_name'],
+            'assigned_student_id' => (string)($first['assigned_student_id'] ?? ''),
+            'items'               => $items,
+        ];
+    }
+
+    return null;
+}
+
+/**
  * Look up an income account by its COA code.
  * Returns the account id or 0 if not found.
  */

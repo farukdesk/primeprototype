@@ -23,6 +23,10 @@ $payment_method_lbl = $payment_info
 $payment_txn_number = $payment_info['transaction_number'] ?? '';
 $payment_txn_label  = $payment_method === 'old_erp' ? 'Old ERP Receipt No' : 'Transaction No';
 
+// What this voucher is for (student/applicant + fee heads), so staff can see
+// the kind of payment and which student at a glance.
+$purpose = acc_get_voucher_purpose($id);
+
 // Original voucher link (if this is a reversal)
 $original = null;
 if ($voucher['reversal_of']) {
@@ -176,6 +180,81 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
         </div>
     </div>
+
+    <!-- Voucher Purpose / Linked Payment -->
+    <?php if ($purpose): ?>
+    <div class="col-12">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header py-2 px-4 d-flex align-items-center justify-content-between">
+                <strong class="small"><i class="fas fa-info-circle me-1 text-primary"></i>Voucher Purpose</strong>
+                <span class="badge bg-primary"><?= h($purpose['label']) ?></span>
+            </div>
+            <div class="card-body p-4">
+                <?php if ($purpose['kind'] === 'student_fee'): ?>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <div class="text-muted small fw-semibold">Student</div>
+                        <div class="fw-semibold">
+                            <?= h($purpose['student_name']) ?>
+                            <span class="badge bg-light text-dark border ms-1"><?= h($purpose['student_id']) ?></span>
+                        </div>
+                        <?php if ($purpose['package_id']): ?>
+                        <a href="<?= APP_URL ?>/student-accounts/view.php?id=<?= (int)$purpose['package_id'] ?>"
+                           class="small text-decoration-none"><i class="fas fa-external-link-alt me-1"></i>View student account</a>
+                        <?php endif; ?>
+                    </div>
+                    <?php if ($purpose['admitted_semester'] !== ''): ?>
+                    <div class="col-md-6">
+                        <div class="text-muted small fw-semibold">Admitted Semester</div>
+                        <div><?= h($purpose['admitted_semester']) ?></div>
+                    </div>
+                    <?php endif; ?>
+                </div>
+                <?php else: /* admission_fee */ ?>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <div class="text-muted small fw-semibold">Applicant</div>
+                        <div class="fw-semibold">
+                            <?= h($purpose['student_name']) ?>
+                            <?php if ($purpose['assigned_student_id'] !== ''): ?>
+                            <span class="badge bg-light text-dark border ms-1"><?= h($purpose['assigned_student_id']) ?></span>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="text-muted small fw-semibold">Application No</div>
+                        <div><?= h($purpose['app_number']) ?></div>
+                    </div>
+                </div>
+                <?php endif; ?>
+
+                <div class="text-muted small fw-semibold mb-1">Payment For</div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-borderless align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Fee Head</th>
+                                <th>Semester</th>
+                                <th>Month</th>
+                                <th class="text-end">Amount (<?= $currency ?>)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($purpose['items'] as $it): ?>
+                            <tr>
+                                <td class="fw-semibold"><?= h($it['fee_type_label']) ?></td>
+                                <td class="small text-muted"><?= $it['semester_label'] !== '' ? h($it['semester_label']) : '–' ?></td>
+                                <td class="small text-muted"><?= $it['month_number'] !== null ? 'Month ' . (int)$it['month_number'] : '–' ?></td>
+                                <td class="text-end fw-semibold"><?= number_format($it['amount'], 2) ?></td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
 
     <!-- Voucher Line Items (Journal Entries) -->
     <div class="col-12">
