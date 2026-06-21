@@ -134,7 +134,7 @@ function oebm_read_csv(string $csv_text): array
         return ['rows' => [], 'error' => 'The CSV file is empty.'];
     }
 
-    $parsed = array_map(static fn($l) => str_getcsv($l), $lines);
+    $parsed = array_map(static fn($l) => str_getcsv($l, ',', '"', ''), $lines);
     $header = $parsed[0];
 
     $col_student = oebm_find_col($header, ['student id', 'studentid', 'student']);
