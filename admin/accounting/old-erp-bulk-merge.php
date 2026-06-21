@@ -7,7 +7,7 @@
  *
  *     Student ID, Fee Type, Date, Amount Paid, Receipt Number
  *
- * where Fee Type is one of: Admission Fee, Form Fee, ID Card Fee.
+ * where Fee Type is one of: Admission Fee, Form Fee, ID Card Fee, Registration Fee.
  *
  * The workflow is two steps:
  *   1. Upload → server validates every row and renders a colour-coded preview.
@@ -15,9 +15,12 @@
  *      row is recorded as an `old_erp` payment (a memo voucher, exactly like a
  *      single Old ERP collection on collect-payment.php).
  *
- * Rows that already exist in the current ERP (matching receipt number, or a
- * fee head that is already fully paid) are never re-inserted — they are
- * highlighted for manual correction, including any amount mismatch.
+ * Unlike a single Old ERP collection, the bulk merge intentionally ALLOWS
+ * duplicate receipt numbers: one historical receipt commonly bundles several
+ * fee heads (e.g. Admission + Form + ID Card + Registration), so the same
+ * receipt number legitimately appears on more than one row, both within the
+ * file and against receipts already stored in the current ERP. Rows are only
+ * blocked when the fee head itself is already paid, or the amount is invalid.
  */
 
 require_once __DIR__ . '/../includes/auth.php';
@@ -26,8 +29,8 @@ require_once __DIR__ . '/helpers.php';
 
 $page_title = 'Old ERP Bulk CSV Merge';
 
-// Fee heads this tool can merge (admission-day one-time fees).
-const OEBM_FEE_TYPES = ['admission', 'form_fee', 'id_card_fee'];
+// Fee heads this tool can merge (admission-day one-time fees + registration).
+const OEBM_FEE_TYPES = ['admission', 'form_fee', 'id_card_fee', 'registration'];
 
 // ── Sample CSV template download ────────────────────────────────────────────
 if (isset($_GET['sample'])) {
@@ -36,8 +39,9 @@ if (isset($_GET['sample'])) {
     $out = fopen('php://output', 'w');
     fputcsv($out, ['Student ID', 'Fee Type', 'Date', 'Amount Paid', 'Receipt Number'], ',', '"', '\\');
     fputcsv($out, ['02826105101071', 'Admission Fee', '2023-01-15', '10000', 'OLD-RCPT-1001'], ',', '"', '\\');
-    fputcsv($out, ['02826105101071', 'Form Fee', '2023-01-15', '500', 'OLD-RCPT-1002'], ',', '"', '\\');
-    fputcsv($out, ['02826105101071', 'ID Card Fee', '2023-01-15', '500', 'OLD-RCPT-1003'], ',', '"', '\\');
+    fputcsv($out, ['02826105101071', 'Form Fee', '2023-01-15', '500', 'OLD-RCPT-1001'], ',', '"', '\\');
+    fputcsv($out, ['02826105101071', 'ID Card Fee', '2023-01-15', '500', 'OLD-RCPT-1001'], ',', '"', '\\');
+    fputcsv($out, ['02826105101071', 'Registration Fee', '2023-01-15', '2000', 'OLD-RCPT-1001'], ',', '"', '\\');
     fclose($out);
     exit;
 }
@@ -54,6 +58,7 @@ function oebm_normalize_fee_type(string $raw): ?string
         'admission', 'admission fee', 'admission fees'        => 'admission',
         'form', 'form fee', 'form fees'                       => 'form_fee',
         'id card', 'id card fee', 'id card fees', 'idcard'    => 'id_card_fee',
+        'registration', 'registration fee', 'registration fees', 'reg', 'reg fee' => 'registration',
         default                                               => null,
     };
 }
@@ -186,7 +191,6 @@ function oebm_validate_rows(array $rows): array
     $counts  = ['merge' => 0, 'duplicate' => 0, 'invalid' => 0];
 
     $summary_cache = [];   // SID => fee summary (or false when not found)
-    $seen_receipts = [];   // receipt (lower) => first row number used in file
 
     foreach ($rows as $idx => $row) {
         $row_no   = $idx + 2; // +1 header, +1 to be 1-based for humans
@@ -208,6 +212,8 @@ function oebm_validate_rows(array $rows): array
             'amount'            => null,
             'receipt'           => $receipt,
             'existing_amount'   => null,
+            'semester_fee_id'   => null,
+            'semester_number'   => null,
         ];
 
         // Skip a completely blank line.
@@ -256,7 +262,7 @@ function oebm_validate_rows(array $rows): array
         $fee_type = oebm_normalize_fee_type($fee_raw);
         if ($fee_type === null) {
             if ($status !== 'invalid') $status = 'invalid';
-            $notes[] = 'Unrecognised fee type "' . $fee_raw . '". Use Admission Fee, Form Fee or ID Card Fee.';
+            $notes[] = 'Unrecognised fee type "' . $fee_raw . '". Use Admission Fee, Form Fee, ID Card Fee or Registration Fee.';
         } else {
             $resolved['fee_type']       = $fee_type;
             $resolved['fee_type_label'] = acc_fee_type_label($fee_type);
@@ -284,36 +290,26 @@ function oebm_validate_rows(array $rows): array
         }
 
         // ── Receipt number ──────────────────────────────────────────────────
+        // A receipt number is required, but duplicates are intentionally
+        // allowed in the bulk merge: one historical receipt often bundles
+        // several fee heads, so the same number may repeat across rows.
         if ($receipt === '') {
             if ($status !== 'invalid') $status = 'invalid';
             $notes[] = 'Receipt number is required for old ERP payments.';
-        } else {
-            $rkey = strtolower($receipt);
-            if (isset($seen_receipts[$rkey])) {
-                if ($status !== 'invalid') $status = 'invalid';
-                $notes[] = 'Duplicate receipt number within this file (also on row ' . $seen_receipts[$rkey] . ').';
-            } else {
-                $seen_receipts[$rkey] = $row_no;
-            }
         }
 
         // ── Existing-payment / amount-validation checks ─────────────────────
         // Only meaningful once we have a fee head, an amount and a package.
+        //
+        // Duplicate receipt numbers are allowed here, so a matching receipt in
+        // the current ERP is shown for reference but never blocks the row. The
+        // real duplicate guard is the per-fee-head "already paid" check below.
         if ($status !== 'invalid' && $fee_type !== null && $resolved['amount'] !== null) {
             $existing = $receipt !== '' ? acc_find_payment_by_transaction_number($receipt) : null;
             if ($existing) {
-                // Already recorded in the current ERP → never re-insert.
-                $status = 'duplicate';
                 $resolved['existing_amount'] = (float)$existing['amount'];
-                if (abs((float)$existing['amount'] - (float)$resolved['amount']) > 0.001) {
-                    $notes[] = 'Receipt already exists in current ERP with a DIFFERENT amount ('
-                        . acc_currency() . ' ' . number_format((float)$existing['amount'], 2)
-                        . ' vs CSV ' . acc_currency() . ' ' . number_format((float)$resolved['amount'], 2)
-                        . ') — manual correction needed.';
-                } else {
-                    $notes[] = 'Receipt already exists in current ERP — skipped.';
-                }
-            } elseif ($summary) {
+            }
+            if ($summary) {
                 $head        = $summary['totals'][$fee_type] ?? ['due' => 0, 'paid' => 0, 'out' => 0];
                 $due         = (float)($head['due'] ?? 0);
                 $paid        = (float)($head['paid'] ?? 0);
@@ -344,6 +340,17 @@ function oebm_validate_rows(array $rows): array
                         . ' exceeds the outstanding ' . $resolved['fee_type_label'] . ' of '
                         . acc_currency() . ' ' . number_format($outstanding, 2)
                         . ' (' . acc_currency() . ' ' . number_format($paid, 2) . ' already paid in current ERP).';
+                } elseif ($fee_type === 'registration') {
+                    // Registration is tracked per semester. Pin the payment to the
+                    // first semester that still has an outstanding registration fee
+                    // so sfp_payments carries a sensible semester reference.
+                    foreach (($summary['semesters'] ?? []) as $sem) {
+                        if ((float)($sem['reg_out'] ?? 0) > 0.001) {
+                            $resolved['semester_fee_id'] = (int)$sem['id'];
+                            $resolved['semester_number'] = (int)$sem['semester_number'];
+                            break;
+                        }
+                    }
                 }
             }
         }
@@ -436,8 +443,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 (int)$res['student_pk'],
                                 (int)$res['package_id'],
                                 $res['fee_type'],
-                                null,
-                                null,
+                                $res['semester_fee_id'] !== null ? (int)$res['semester_fee_id'] : null,
+                                $res['semester_number'] !== null ? (int)$res['semester_number'] : null,
                                 null,
                                 'old_erp',
                                 null,
@@ -447,7 +454,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 $income_account_id,
                                 $res['date'],
                                 'Old ERP bulk merge',
-                                'Old ERP receipt ' . $res['receipt']
+                                'Old ERP receipt ' . $res['receipt'],
+                                true // allow duplicate receipt numbers in bulk merge
                             );
                             $merged++;
                         } catch (Throwable $e) {
@@ -502,9 +510,10 @@ require_once __DIR__ . '/../includes/header.php';
             <strong>Merge historical admission-day receipts from the old ERP in bulk.</strong>
             <ol class="mb-2 mt-1 ps-3">
                 <li>Prepare a CSV with the columns <code>Student ID</code>, <code>Fee Type</code>, <code>Date</code>, <code>Amount Paid</code>, <code>Receipt Number</code>.</li>
-                <li><code>Fee Type</code> must be one of <strong>Admission Fee</strong>, <strong>Form Fee</strong> or <strong>ID Card Fee</strong>.</li>
+                <li><code>Fee Type</code> must be one of <strong>Admission Fee</strong>, <strong>Form Fee</strong>, <strong>ID Card Fee</strong> or <strong>Registration Fee</strong>.</li>
                 <li>Upload it to preview. Every row is validated and colour-coded before anything is saved.</li>
-                <li>Rows that are already recorded in the current ERP (same receipt, or a fee head already paid) are <strong>highlighted for manual correction</strong> — including any amount mismatch — and are never re-inserted.</li>
+                <li><strong>Duplicate receipt numbers are allowed</strong> — one historical receipt often covers several fee heads, so the same number may repeat across rows.</li>
+                <li>Rows whose fee head is already paid in the current ERP are <strong>highlighted for manual correction</strong> — including any amount mismatch — and are never re-inserted.</li>
                 <li>Confirm to merge only the valid rows. Each is stored as an <em>Old ERP</em> payment (a memo voucher), so dues update without double-counting income.</li>
             </ol>
             <a href="<?= APP_URL ?>/accounting/old-erp-bulk-merge.php?sample=1" class="alert-link">
