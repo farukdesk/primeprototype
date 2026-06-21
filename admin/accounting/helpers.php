@@ -1475,10 +1475,13 @@ function acc_student_fee_summary(int $student_id): ?array
 
     // Paid amounts per fee_type and per semester_fee_id
     $paid_stmt = $db->prepare(
-        'SELECT fee_type, COALESCE(semester_fee_id, 0) AS sfid, COALESCE(SUM(amount),0) AS paid
-         FROM sfp_payments
-         WHERE package_id = ?
-         GROUP BY fee_type, semester_fee_id'
+        "SELECT sp.fee_type, COALESCE(sp.semester_fee_id, 0) AS sfid, COALESCE(SUM(sp.amount),0) AS paid
+         FROM sfp_payments sp
+         JOIN acc_vouchers v ON v.id = sp.voucher_id
+         WHERE sp.package_id = ?
+           AND v.is_deleted = 0
+           AND v.status IN ('posted','memo')
+         GROUP BY sp.fee_type, sp.semester_fee_id"
     );
     $paid_stmt->execute([$package_id]);
     $paid_rows = $paid_stmt->fetchAll();
@@ -1760,6 +1763,8 @@ function acc_get_student_payments(int $package_id): array
          JOIN acc_vouchers v ON v.id = sp.voucher_id
          LEFT JOIN users u   ON u.id = sp.collected_by
          WHERE sp.package_id = ?
+           AND v.is_deleted = 0
+           AND v.status IN ("posted","memo")
          ORDER BY sp.collected_at DESC, sp.id DESC'
     );
     $stmt->execute([$package_id]);
@@ -1783,7 +1788,12 @@ function acc_get_voucher_payment_info(int $voucher_id): ?array
 
     $stmt = $db->prepare(
         'SELECT payment_method, mobile_banking_provider, transaction_number
-         FROM sfp_payments WHERE voucher_id = ? ORDER BY id DESC LIMIT 1'
+         FROM sfp_payments
+         WHERE voucher_id = ?
+         -- Prefer rows with non-empty txn/receipt numbers (false sorts before true),
+         -- then newest row as fallback when none carry a txn number.
+         ORDER BY (transaction_number IS NULL OR transaction_number = "") ASC, id DESC
+         LIMIT 1'
     );
     $stmt->execute([$voucher_id]);
     $row = $stmt->fetch() ?: null;
@@ -2943,7 +2953,14 @@ function acc_outstanding_through_current_month(int $package_id): float
     }
 
     // Total actually paid (real payments)
-    $paid_stmt = $db->prepare('SELECT COALESCE(SUM(amount),0) FROM sfp_payments WHERE package_id = ?');
+    $paid_stmt = $db->prepare(
+        "SELECT COALESCE(SUM(sp.amount),0)
+         FROM sfp_payments sp
+         JOIN acc_vouchers v ON v.id = sp.voucher_id
+         WHERE sp.package_id = ?
+           AND v.is_deleted = 0
+           AND v.status IN ('posted','memo')"
+    );
     $paid_stmt->execute([$package_id]);
     $total_paid = (float)$paid_stmt->fetchColumn();
 
@@ -2980,7 +2997,14 @@ function acc_total_outstanding(int $package_id): float
                + (float)$pkg['english_course_fee']
                + $tuition_total;
 
-    $paid_stmt = $db->prepare('SELECT COALESCE(SUM(amount),0) FROM sfp_payments WHERE package_id = ?');
+    $paid_stmt = $db->prepare(
+        "SELECT COALESCE(SUM(sp.amount),0)
+         FROM sfp_payments sp
+         JOIN acc_vouchers v ON v.id = sp.voucher_id
+         WHERE sp.package_id = ?
+           AND v.is_deleted = 0
+           AND v.status IN ('posted','memo')"
+    );
     $paid_stmt->execute([$package_id]);
     $total_paid = (float)$paid_stmt->fetchColumn();
 
