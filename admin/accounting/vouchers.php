@@ -247,9 +247,10 @@ require_once __DIR__ . '/../includes/header.php';
 <script>
 document.querySelectorAll('.js-voucher-delete').forEach(function (btn) {
     btn.addEventListener('click', function () {
-        document.getElementById('vdVoucherId').value = this.dataset.id;
+        var id = btn.dataset.id, num = btn.dataset.number;
+        document.getElementById('vdVoucherId').value = id;
         document.querySelectorAll('#voucherDeleteModal #vdVoucherNum').forEach(function (el) {
-            el.textContent = btn.dataset.number;
+            el.textContent = num;
         });
     });
 });

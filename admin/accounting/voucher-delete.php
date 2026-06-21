@@ -132,7 +132,7 @@ require_once __DIR__ . '/../includes/header.php';
                     </div>
                     <div class="d-flex gap-2">
                         <button type="submit" class="btn btn-<?= $is_super ? 'danger' : 'warning' ?>"
-                                onclick="return confirm('<?= $is_super ? 'Permanently delete voucher ' . h($voucher['voucher_number']) . '? This cannot be undone.' : 'Submit delete request for ' . h($voucher['voucher_number']) . '?' ?>')">
+                                onclick="return confirm(<?= $is_super ? "'Permanently delete this voucher? This cannot be undone.'" : "'Submit this delete request?'" ?>)">
                             <i class="fas fa-<?= $is_super ? 'trash-alt' : 'paper-plane' ?> me-1"></i>
                             <?= $is_super ? 'Delete Voucher' : 'Submit Delete Request' ?>
                         </button>
