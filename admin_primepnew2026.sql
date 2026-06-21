@@ -6672,7 +6672,7 @@ ALTER TABLE `sfp_packages`
 --
 ALTER TABLE `sfp_payments`
   ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `uq_sfpp_txn` (`transaction_number`),
+  ADD UNIQUE KEY `uq_sfpp_txn` (`transaction_number`,`fee_type`),
   ADD KEY `idx_sfpp_student` (`student_id`),
   ADD KEY `idx_sfpp_package` (`package_id`),
   ADD KEY `idx_sfpp_sem_fee` (`semester_fee_id`),
