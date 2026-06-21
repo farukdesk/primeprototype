@@ -196,7 +196,14 @@ function acc_cash_accounts(): array
 }
 
 /**
- * Look up an active current-asset account by its COA code.
+ * Look up an active asset account by its COA code.
+ *
+ * Accounting Settings lets admins map the "Received Into" account to any active
+ * asset account (current_asset, fixed_asset or other_asset), so the lookup must
+ * accept any asset sub_type — otherwise a configured bank/mobile-banking account
+ * that is not a current_asset would silently fail to resolve and fall back to a
+ * default cash account.
+ *
  * Returns account id or 0 if not found.
  */
 function acc_asset_account_id_by_code(string $code): int
@@ -212,7 +219,7 @@ function acc_asset_account_id_by_code(string $code): int
 
     $stmt = db()->prepare(
         "SELECT id FROM acc_accounts
-         WHERE code = ? AND type = 'asset' AND sub_type = 'current_asset' AND is_active = 1
+         WHERE code = ? AND type = 'asset' AND is_active = 1
          LIMIT 1"
     );
     $stmt->execute([$code]);
@@ -274,7 +281,7 @@ function acc_received_into_account_id_for_payment_method(string $method): int
 
     $stmt = db()->prepare(
         "SELECT id FROM acc_accounts
-         WHERE type = 'asset' AND sub_type = 'current_asset' AND code LIKE '1%' AND is_active = 1
+         WHERE type = 'asset' AND is_active = 1
          ORDER BY code ASC LIMIT 1"
     );
     $stmt->execute();

@@ -12,6 +12,12 @@ $cash_account_labels_by_id = [];
 foreach ($cash_accounts as $a) {
     $cash_account_labels_by_id[(int)$a['id']] = $a['code'] . ' – ' . $a['name'];
 }
+// Include every active asset account so the "Received Into" label resolves even
+// when a payment method is mapped (in Accounting Settings) to an asset account
+// that is not a current-asset cash account.
+foreach (acc_accounts_by_type('asset') as $a) {
+    $cash_account_labels_by_id[(int)$a['id']] = $a['code'] . ' – ' . $a['name'];
+}
 $errors          = [];
 $sms_enabled     = acc_setting('sms_enabled', '0') === '1';
 
