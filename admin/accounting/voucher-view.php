@@ -31,6 +31,12 @@ if ($voucher['reversal_of']) {
     $original = $stmt->fetch() ?: null;
 }
 
+// Delete-workflow state
+$delete_request   = acc_get_delete_request_for_voucher($id);
+$has_open_request = $delete_request && in_array($delete_request['status'], ['pending_dd', 'pending_treasurer'], true);
+$can_delete       = acc_can_request_voucher_delete();
+$delete_is_super  = acc_can_delete_voucher_directly();
+
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
@@ -52,12 +58,31 @@ require_once __DIR__ . '/../includes/header.php';
             <i class="fas fa-undo me-1"></i> Reverse Voucher
         </a>
         <?php endif; ?>
+        <?php if ($can_delete && !$has_open_request): ?>
+        <button type="button" class="btn btn-outline-danger btn-sm"
+                data-bs-toggle="modal" data-bs-target="#voucherDeleteModal">
+            <i class="fas fa-trash-alt me-1"></i> <?= $delete_is_super ? 'Delete Voucher' : 'Request Delete' ?>
+        </button>
+        <?php endif; ?>
+        <?php if ($delete_request && acc_can_access_voucher_delete()): ?>
+        <a href="<?= APP_URL ?>/accounting/voucher-delete-requests.php?id=<?= (int)$delete_request['id'] ?>" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-trash-restore me-1"></i> Delete Request
+        </a>
+        <?php endif; ?>
         <button onclick="window.print()" class="btn btn-outline-secondary btn-sm"><i class="fas fa-print me-1"></i> Print</button>
         <a href="<?= APP_URL ?>/accounting/vouchers.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left me-1"></i> Back</a>
     </div>
 </div>
 
 <?= flash_show() ?>
+
+<?php if ($has_open_request): ?>
+<div class="alert alert-warning">
+    <i class="fas fa-clock me-1"></i>
+    A delete request for this voucher is <strong><?= $delete_request['status'] === 'pending_dd' ? 'pending DD Accounts review' : 'pending Treasurer confirmation' ?></strong>.
+    <a href="<?= APP_URL ?>/accounting/voucher-delete-requests.php?id=<?= (int)$delete_request['id'] ?>" class="alert-link">View request</a>
+</div>
+<?php endif; ?>
 
 <div class="row g-3">
     <!-- Voucher Header -->
@@ -223,5 +248,47 @@ require_once __DIR__ . '/../includes/header.php';
     #main-wrapper { margin-left: 0 !important; }
 }
 </style>
+
+<?php if ($can_delete && !$has_open_request): ?>
+<!-- Voucher Delete Modal -->
+<div class="modal fade" id="voucherDeleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <form method="post" action="<?= APP_URL ?>/accounting/voucher-delete.php" enctype="multipart/form-data" class="modal-content">
+            <?= csrf_field() ?>
+            <input type="hidden" name="id" value="<?= $id ?>">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-trash-alt me-2 text-danger"></i><?= $delete_is_super ? 'Delete Voucher' : 'Request Voucher Deletion' ?></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-<?= $delete_is_super ? 'danger' : 'warning' ?> small">
+                    <?php if ($delete_is_super): ?>
+                    Deleting <strong><?= h($voucher['voucher_number']) ?></strong> clears the whole entry and its calculations from every report. This is logged permanently and cannot be undone.
+                    <?php else: ?>
+                    Your request for <strong><?= h($voucher['voucher_number']) ?></strong> will be pending approval by <strong>DD Accounts</strong> and then the <strong>Treasurer</strong>.
+                    <?php endif; ?>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Reason for Deletion <span class="text-danger">*</span></label>
+                    <textarea name="reason" class="form-control" rows="4" required minlength="10"
+                              placeholder="Explain in detail why this voucher must be deleted…"></textarea>
+                </div>
+                <div class="mb-1">
+                    <label class="form-label fw-semibold">Attachment <span class="text-muted small">(optional)</span></label>
+                    <input type="file" name="attachment" class="form-control" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx">
+                    <div class="form-text">Allowed: pdf, jpg, png, doc, docx, xls, xlsx (max 5 MB).</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-<?= $delete_is_super ? 'danger' : 'warning' ?>">
+                    <i class="fas fa-<?= $delete_is_super ? 'trash-alt' : 'paper-plane' ?> me-1"></i>
+                    <?= $delete_is_super ? 'Delete Voucher' : 'Submit Request' ?>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+<?php endif; ?>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
