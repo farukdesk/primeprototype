@@ -348,8 +348,8 @@ function h(mixed $val): string {
     return htmlspecialchars((string)$val, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
-function old(string $key, string $default = ''): string {
-    return h($_SESSION['old'][$key] ?? $default);
+function old(string $key, ?string $default = ''): string {
+    return h($_SESSION['old'][$key] ?? $default ?? '');
 }
 
 function old_array(string $key): array {
