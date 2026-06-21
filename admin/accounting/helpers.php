@@ -1056,10 +1056,34 @@ function acc_student_fee_summary(int $student_id): ?array
 
     // ── Obligations ────────────────────────────────────────────────────────────
 
-    // Admission-day one-time fees
-    $admission_base_due  = (float)$pkg['admission_fees'];
+    // Admission-day one-time fees — collected as three separate heads:
+    //   1. Admission Fee, 2. Form Fee, 3. ID Card Fee
+    $admission_base_due = (float)$pkg['admission_fees'];
+
+    // Legacy payments recorded under the bundled 'admission' fee_type covered all
+    // three heads at once. Allocate that paid amount sequentially across the heads
+    // (admission base → form fee → ID card fee) so historic data reports correctly,
+    // while newer payments use the dedicated 'form_fee' / 'id_card_fee' types.
+    $bundled_admission_paid = $total_paid_for('admission');
+    $form_fee_paid_direct   = $total_paid_for('form_fee');
+    $id_card_fee_paid_direct = $total_paid_for('id_card_fee');
+
+    $alloc = $bundled_admission_paid;
+    $admission_base_paid = min($alloc, $admission_base_due);
+    $alloc -= $admission_base_paid;
+    $form_fee_alloc = min($alloc, $form_fee_due);
+    $alloc -= $form_fee_alloc;
+    $id_card_fee_alloc = min($alloc, $id_card_fee_due);
+    $alloc -= $id_card_fee_alloc;
+    // Any leftover bundled payment (overpayment) stays attributed to the admission head.
+    $admission_base_paid += $alloc;
+
+    $form_fee_paid    = $form_fee_paid_direct + $form_fee_alloc;
+    $id_card_fee_paid = $id_card_fee_paid_direct + $id_card_fee_alloc;
+
+    // Retained for backwards compatibility (combined admission obligation/paid).
     $admission_due  = $admission_base_due + $form_id_total_fee;
-    $admission_paid = $total_paid_for('admission');
+    $admission_paid = $bundled_admission_paid + $form_fee_paid_direct + $id_card_fee_paid_direct;
 
     // Registration totals (per-semester distribution handled in the loop below)
     $reg_due  = $reg_fee * $num_semesters;
@@ -1161,7 +1185,13 @@ function acc_student_fee_summary(int $student_id): ?array
         'cf_settings' => ['reg_fee_per_semester' => $reg_fee, 'form_id_fee' => $form_id_total_fee],
         'semesters'   => $semesters_enriched,
         'totals'      => [
-            'admission'    => ['due' => $admission_due,     'paid' => $admission_paid,     'out' => max(0.0, $admission_due - $admission_paid)],
+            // Admission head now reflects only the base admission fee. Form fee and
+            // ID card fee are collected as their own heads below.
+            'admission'    => ['due' => $admission_base_due, 'paid' => $admission_base_paid, 'out' => max(0.0, $admission_base_due - $admission_base_paid)],
+            'form_fee'     => ['due' => $form_fee_due,       'paid' => $form_fee_paid,       'out' => max(0.0, $form_fee_due - $form_fee_paid)],
+            'id_card_fee'  => ['due' => $id_card_fee_due,    'paid' => $id_card_fee_paid,    'out' => max(0.0, $id_card_fee_due - $id_card_fee_paid)],
+            // Combined admission obligation retained for backwards compatibility.
+            'admission_combined' => ['due' => $admission_due, 'paid' => $admission_paid, 'out' => max(0.0, $admission_due - $admission_paid)],
             'admission_breakdown' => [
                 'admission_base_fee' => $admission_base_due,
                 'form_fee'      => $form_fee_due,
@@ -1304,7 +1334,7 @@ function acc_income_account_id_by_code(string $code): int
  */
 function acc_student_fee_types(): array
 {
-    return ['admission', 'registration', 'semester_tuition', 'fixed_fee', 'english_fee', 'other'];
+    return ['admission', 'form_fee', 'id_card_fee', 'registration', 'semester_tuition', 'fixed_fee', 'english_fee', 'other'];
 }
 
 /**
@@ -1316,6 +1346,8 @@ function acc_default_income_code_for_fee_type(string $fee_type): string
 {
     return match ($fee_type) {
         'admission'        => '4200', // Admission Fees
+        'form_fee'         => '4200', // Form Fee (one-time, with admission)
+        'id_card_fee'      => '4200', // ID Card Fee (one-time, with admission)
         'registration'     => '4100', // Tuition Fees (reg)
         'semester_tuition' => '4100', // Tuition Fees
         'fixed_fee'        => '4100', // Tuition Fees
@@ -1994,7 +2026,9 @@ function acc_send_admission_complete_email(array $applicant, string $student_id,
 function acc_fee_type_label(string $fee_type): string
 {
     return match ($fee_type) {
-        'admission'        => 'Admission + Form & ID Card Fee',
+        'admission'        => 'Admission Fee',
+        'form_fee'         => 'Form Fee',
+        'id_card_fee'      => 'ID Card Fee',
         'registration'     => 'Registration Fee',
         'semester_tuition' => 'Semester Tuition Fee',
         'fixed_fee'        => 'Fixed Institutional Fee',

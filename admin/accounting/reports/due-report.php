@@ -214,7 +214,9 @@ if ($focus_row) {
     $focus_summary = acc_student_fee_summary((int)$focus_row['student_id']);
     if ($focus_summary) {
         $as_of_month_start = strtotime(date('Y-m-01', strtotime($f_as_of_date)));
-        $admission_due = (float)($focus_summary['totals']['admission']['due'] ?? 0);
+        $admission_due = (float)($focus_summary['totals']['admission']['due'] ?? 0)
+            + (float)($focus_summary['totals']['form_fee']['due'] ?? 0)
+            + (float)($focus_summary['totals']['id_card_fee']['due'] ?? 0);
         $registration_due_total = (float)($focus_summary['totals']['registration']['due'] ?? 0);
         $tuition_due_total = (float)($focus_summary['totals']['tuition']['due'] ?? 0);
         $total_obligation = $admission_due + $registration_due_total + $tuition_due_total;

@@ -4160,7 +4160,7 @@ CREATE TABLE `sfp_payments` (
   `student_id` int(10) UNSIGNED NOT NULL COMMENT 'FK students.id',
   `package_id` int(10) UNSIGNED NOT NULL COMMENT 'FK sfp_packages.id',
   `semester_fee_id` int(10) UNSIGNED DEFAULT NULL COMMENT 'FK sfp_semester_fees.id – NULL for admission/registration/other',
-  `fee_type` enum('admission','registration','semester_tuition','fixed_fee','english_fee','other') NOT NULL,
+  `fee_type` enum('admission','form_fee','id_card_fee','registration','semester_tuition','fixed_fee','english_fee','other') NOT NULL,
   `semester_number` tinyint(3) UNSIGNED DEFAULT NULL COMMENT 'Semester number (1-based) – mirrors semester_fee_id.semester_number for easy filtering',
   `month_number` tinyint(3) UNSIGNED DEFAULT NULL COMMENT 'Month within the semester (1-based); NULL for non-monthly or legacy payments',
   `payment_method` enum('cash','bank','mobile_banking') NOT NULL DEFAULT 'cash' COMMENT 'How payment was received',
