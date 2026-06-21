@@ -389,6 +389,7 @@ if ($focus_row) {
 }
 
 require_once __DIR__ . '/../../includes/header.php';
+$as_of_label = date('d M Y', strtotime($f_as_of_date));
 ?>
 
 <!-- ── Page header ── -->
@@ -534,7 +535,7 @@ require_once __DIR__ . '/../../includes/header.php';
         <div class="card border-0 shadow-sm h-100 text-center border-danger">
             <div class="card-body p-3">
                 <div class="fw-bold text-danger" style="font-size:1.05rem"><?= number_format($kpi_total_out, 0) ?></div>
-                <div class="text-muted small">Due as of Today (<?= h($currency) ?>)</div>
+                <div class="text-muted small">Due as of <?= h($as_of_label) ?> (<?= h($currency) ?>)</div>
             </div>
         </div>
     </div>
@@ -566,7 +567,7 @@ require_once __DIR__ . '/../../includes/header.php';
             <td style="border:1px solid #ccc;padding:5px"><?= number_format($kpi_total_students) ?></td>
             <td style="border:1px solid #ccc;padding:5px;background:#f5f5f5;font-weight:bold">Students with Due</td>
             <td style="border:1px solid #ccc;padding:5px;color:#c00"><?= number_format($kpi_students_due) ?></td>
-            <td style="border:1px solid #ccc;padding:5px;background:#f5f5f5;font-weight:bold">Due as of Today</td>
+            <td style="border:1px solid #ccc;padding:5px;background:#f5f5f5;font-weight:bold">Due as of <?= h($as_of_label) ?></td>
             <td style="border:1px solid #ccc;padding:5px;color:#c00;font-weight:bold"><?= $currency ?> <?= number_format($kpi_total_out, 2) ?></td>
         </tr>
     </table>
@@ -796,7 +797,7 @@ require_once __DIR__ . '/../../includes/header.php';
         <div class="card border-0 shadow-sm border-top-0 rounded-0 rounded-bottom">
             <div class="card-header py-2 px-3 d-flex justify-content-between align-items-center no-print">
                 <strong class="small"><?= number_format(count($rows)) ?> student(s) with due ≥ <?= $currency ?> <?= number_format($f_min_due, 0) ?> · As of <?= h(date('d M Y', strtotime($f_as_of_date))) ?></strong>
-                <span class="text-danger fw-bold small">Due as of Today: <?= $currency ?> <?= number_format($kpi_total_out, 2) ?></span>
+                <span class="text-danger fw-bold small">Due as of <?= h($as_of_label) ?>: <?= $currency ?> <?= number_format($kpi_total_out, 2) ?></span>
             </div>
             <?php if (empty($rows)): ?>
             <div class="card-body text-center py-5 text-muted">
@@ -817,7 +818,7 @@ require_once __DIR__ . '/../../includes/header.php';
                             <th>Status</th>
                             <th class="text-end">Total Due (<?= h($currency) ?>)</th>
                             <th class="text-end">Paid (<?= h($currency) ?>)</th>
-                            <th class="text-end">Due as of Today (<?= h($currency) ?>)</th>
+                            <th class="text-end">Due as of <?= h($as_of_label) ?> (<?= h($currency) ?>)</th>
                             <th class="no-print">Progress</th>
                             <th class="no-print text-end">Actions</th>
                         </tr>
@@ -922,7 +923,7 @@ require_once __DIR__ . '/../../includes/header.php';
                             <th class="text-center">Students</th>
                             <th class="text-end">Total Due (<?= h($currency) ?>)</th>
                             <th class="text-end">Total Paid (<?= h($currency) ?>)</th>
-                            <th class="text-end">Due as of Today (<?= h($currency) ?>)</th>
+                            <th class="text-end">Due as of <?= h($as_of_label) ?> (<?= h($currency) ?>)</th>
                             <th class="no-print">Progress</th>
                         </tr>
                     </thead>
@@ -990,7 +991,7 @@ require_once __DIR__ . '/../../includes/header.php';
                             <th class="text-center">Students</th>
                             <th class="text-end">Total Due (<?= h($currency) ?>)</th>
                             <th class="text-end">Total Paid (<?= h($currency) ?>)</th>
-                            <th class="text-end">Due as of Today (<?= h($currency) ?>)</th>
+                            <th class="text-end">Due as of <?= h($as_of_label) ?> (<?= h($currency) ?>)</th>
                             <th class="no-print">Progress</th>
                         </tr>
                     </thead>
@@ -1058,7 +1059,7 @@ require_once __DIR__ . '/../../includes/header.php';
                             <th class="text-center">Students</th>
                             <th class="text-end">Total Due (<?= h($currency) ?>)</th>
                             <th class="text-end">Total Paid (<?= h($currency) ?>)</th>
-                            <th class="text-end">Due as of Today (<?= h($currency) ?>)</th>
+                            <th class="text-end">Due as of <?= h($as_of_label) ?> (<?= h($currency) ?>)</th>
                             <th class="no-print">Progress</th>
                         </tr>
                     </thead>
@@ -1119,7 +1120,7 @@ require_once __DIR__ . '/../../includes/header.php';
             <th style="border:1px solid #ccc;padding:4px;text-align:center">Students</th>
             <th style="border:1px solid #ccc;padding:4px;text-align:right">Total Due</th>
             <th style="border:1px solid #ccc;padding:4px;text-align:right">Paid</th>
-            <th style="border:1px solid #ccc;padding:4px;text-align:right">Due as of Today</th>
+            <th style="border:1px solid #ccc;padding:4px;text-align:right">Due as of <?= h($as_of_label) ?></th>
         </tr></thead>
         <tbody>
         <?php foreach ($by_dept as $i => $bd): ?>
@@ -1145,7 +1146,7 @@ require_once __DIR__ . '/../../includes/header.php';
             <th style="border:1px solid #ccc;padding:4px;text-align:center">Students</th>
             <th style="border:1px solid #ccc;padding:4px;text-align:right">Total Due</th>
             <th style="border:1px solid #ccc;padding:4px;text-align:right">Paid</th>
-            <th style="border:1px solid #ccc;padding:4px;text-align:right">Due as of Today</th>
+            <th style="border:1px solid #ccc;padding:4px;text-align:right">Due as of <?= h($as_of_label) ?></th>
         </tr></thead>
         <tbody>
         <?php foreach ($by_program as $i => $bp): ?>
@@ -1171,7 +1172,7 @@ require_once __DIR__ . '/../../includes/header.php';
             <th style="border:1px solid #ccc;padding:4px;text-align:center">Students</th>
             <th style="border:1px solid #ccc;padding:4px;text-align:right">Total Due</th>
             <th style="border:1px solid #ccc;padding:4px;text-align:right">Paid</th>
-            <th style="border:1px solid #ccc;padding:4px;text-align:right">Due as of Today</th>
+            <th style="border:1px solid #ccc;padding:4px;text-align:right">Due as of <?= h($as_of_label) ?></th>
         </tr></thead>
         <tbody>
         <?php foreach ($by_batch as $i => $b): ?>
