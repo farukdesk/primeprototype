@@ -68,16 +68,17 @@ $stmt = db()->prepare(
 );
 $stmt->execute($params);
 $requests = $stmt->fetchAll();
-$purpose_map = [];
+$deleted_voucher_ids = [];
 foreach ($requests as $r) {
     if (($r['status'] ?? '') !== 'deleted') {
         continue;
     }
     $voucher_id = (int)($r['voucher_id'] ?? 0);
-    if ($voucher_id > 0 && !array_key_exists($voucher_id, $purpose_map)) {
-        $purpose_map[$voucher_id] = acc_get_voucher_purpose($voucher_id);
+    if ($voucher_id > 0) {
+        $deleted_voucher_ids[] = $voucher_id;
     }
 }
+$purpose_map = acc_get_voucher_purposes($deleted_voucher_ids);
 
 $can_dd        = acc_can_review_voucher_delete_dd();
 $can_treasurer = acc_can_review_voucher_delete_treasurer();
@@ -111,6 +112,14 @@ function vdel_purpose_text(?array $purpose): string
     }
 
     return (string)($purpose['label'] ?? '–');
+}
+
+function vdel_request_purpose_text(array $request, array $purpose_map): string
+{
+    if (($request['status'] ?? '') !== 'deleted') {
+        return '–';
+    }
+    return vdel_purpose_text($purpose_map[(int)$request['voucher_id']] ?? null);
 }
 ?>
 
@@ -289,7 +298,7 @@ function vdel_purpose_text(?array $purpose): string
                         <td class="text-muted small"><?= (int)$r['id'] ?></td>
                         <td class="fw-semibold"><?= h($r['voucher_number']) ?></td>
                         <td class="text-end"><?= $currency ?> <?= number_format($r['total_amount'], 2) ?></td>
-                        <td class="small"><?= h(($r['status'] ?? '') === 'deleted' ? vdel_purpose_text($purpose_map[(int)$r['voucher_id']] ?? null) : '–') ?></td>
+                        <td class="small"><?= h(vdel_request_purpose_text($r, $purpose_map)) ?></td>
                         <td class="small"><?= h($r['requested_by_name'] ?? '–') ?></td>
                         <td class="text-muted small"><?= date('d M Y', strtotime($r['requested_at'])) ?></td>
                         <td><?= acc_voucher_delete_status_badge($r['status']) ?></td>
