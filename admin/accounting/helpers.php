@@ -2183,6 +2183,62 @@ function acc_transaction_number_exists(string $transaction_number): bool
 }
 
 /**
+ * Find an existing payment by its transaction / receipt number.
+ *
+ * Searches sfp_payments first, then adm_admission_fee_payments, and returns the
+ * recorded amount, fee type and student so callers can detect duplicates and
+ * amount mismatches when merging historical (old ERP) receipts in bulk.
+ *
+ * @return array{source:string,amount:float,fee_type:?string,student_id:?int,voucher_id:?int}|null
+ */
+function acc_find_payment_by_transaction_number(string $transaction_number): ?array
+{
+    $transaction_number = trim($transaction_number);
+    if ($transaction_number === '') {
+        return null;
+    }
+    $db = db();
+
+    $stmt = $db->prepare(
+        'SELECT amount, fee_type, student_id, voucher_id
+         FROM sfp_payments
+         WHERE transaction_number = ?
+         ORDER BY id DESC LIMIT 1'
+    );
+    $stmt->execute([$transaction_number]);
+    $row = $stmt->fetch();
+    if ($row) {
+        return [
+            'source'     => 'sfp_payments',
+            'amount'     => (float)$row['amount'],
+            'fee_type'   => $row['fee_type'] !== null ? (string)$row['fee_type'] : null,
+            'student_id' => $row['student_id'] !== null ? (int)$row['student_id'] : null,
+            'voucher_id' => $row['voucher_id'] !== null ? (int)$row['voucher_id'] : null,
+        ];
+    }
+
+    $stmt = $db->prepare(
+        'SELECT amount, voucher_id
+         FROM adm_admission_fee_payments
+         WHERE transaction_number = ?
+         ORDER BY id DESC LIMIT 1'
+    );
+    $stmt->execute([$transaction_number]);
+    $row = $stmt->fetch();
+    if ($row) {
+        return [
+            'source'     => 'adm_admission_fee_payments',
+            'amount'     => (float)$row['amount'],
+            'fee_type'   => 'admission',
+            'student_id' => null,
+            'voucher_id' => $row['voucher_id'] !== null ? (int)$row['voucher_id'] : null,
+        ];
+    }
+
+    return null;
+}
+
+/**
  * Determine package start month from snapshotted/linked program settings.
  */
 function acc_package_start_month(array $pkg): int

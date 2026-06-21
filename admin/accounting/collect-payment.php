@@ -536,12 +536,18 @@ require_once __DIR__ . '/../includes/header.php';
             <li class="breadcrumb-item active">Collect Payment</li>
         </ol></nav>
     </div>
-    <a href="<?= APP_URL ?>/accounting/vouchers.php" class="btn btn-outline-secondary btn-sm">
-        <i class="fas fa-list me-1"></i> All Vouchers
-    </a>
+    <div class="d-flex gap-2">
+        <a href="<?= APP_URL ?>/accounting/old-erp-bulk-merge.php" class="btn btn-outline-success btn-sm">
+            <i class="fas fa-file-csv me-1"></i> Old ERP Bulk CSV Merge
+        </a>
+        <a href="<?= APP_URL ?>/accounting/vouchers.php" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-list me-1"></i> All Vouchers
+        </a>
+    </div>
 </div>
 
 <?= flash_show() ?>
+
 
 <?php if ($errors): ?>
 <div class="alert alert-danger"><ul class="mb-0"><?php foreach ($errors as $e): ?><li><?= h($e) ?></li><?php endforeach; ?></ul></div>
