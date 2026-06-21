@@ -34,10 +34,10 @@ if (isset($_GET['sample'])) {
     header('Content-Type: text/csv; charset=utf-8');
     header('Content-Disposition: attachment; filename="old-erp-bulk-merge-sample.csv"');
     $out = fopen('php://output', 'w');
-    fputcsv($out, ['Student ID', 'Fee Type', 'Date', 'Amount Paid', 'Receipt Number']);
-    fputcsv($out, ['02826105101071', 'Admission Fee', '2023-01-15', '10000', 'OLD-RCPT-1001']);
-    fputcsv($out, ['02826105101071', 'Form Fee', '2023-01-15', '500', 'OLD-RCPT-1002']);
-    fputcsv($out, ['02826105101071', 'ID Card Fee', '2023-01-15', '500', 'OLD-RCPT-1003']);
+    fputcsv($out, ['Student ID', 'Fee Type', 'Date', 'Amount Paid', 'Receipt Number'], ',', '"', '\\');
+    fputcsv($out, ['02826105101071', 'Admission Fee', '2023-01-15', '10000', 'OLD-RCPT-1001'], ',', '"', '\\');
+    fputcsv($out, ['02826105101071', 'Form Fee', '2023-01-15', '500', 'OLD-RCPT-1002'], ',', '"', '\\');
+    fputcsv($out, ['02826105101071', 'ID Card Fee', '2023-01-15', '500', 'OLD-RCPT-1003'], ',', '"', '\\');
     fclose($out);
     exit;
 }
