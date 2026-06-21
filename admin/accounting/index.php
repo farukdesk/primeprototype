@@ -174,6 +174,11 @@ require_once __DIR__ . '/../includes/header.php';
                 <a href="<?= APP_URL ?>/accounting/vouchers.php" class="btn btn-outline-secondary btn-sm text-start">
                     <i class="fas fa-list me-2"></i> All Vouchers
                 </a>
+                <?php if (acc_can_access_voucher_delete()): ?>
+                <a href="<?= APP_URL ?>/accounting/voucher-delete-requests.php" class="btn btn-outline-danger btn-sm text-start">
+                    <i class="fas fa-trash-restore me-2"></i> Voucher Delete Requests
+                </a>
+                <?php endif; ?>
             </div>
         </div>
     </div>

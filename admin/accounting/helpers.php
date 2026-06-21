@@ -658,6 +658,431 @@ function acc_voucher_status_badge(string $status): string
     };
 }
 
+// ── Voucher Delete Workflow ───────────────────────────────────────────────────
+//
+// Flow:
+//   Super Admin    → deletes immediately.
+//   "Accounts"     → raises a delete request   (pending_dd).
+//   "DD Accounts"  → reviews with a note        (→ pending_treasurer / rejected).
+//   "Treasurer"    → confirms with a note       (→ deleted / rejected).
+//
+// Every action is also written to the immutable change_log.
+
+/**
+ * Configurable workflow group names (override via Accounting Settings keys
+ * voucher_delete_group_accounts / _dd / _treasurer).
+ */
+function acc_vdel_group_name(string $role): string
+{
+    $defaults = [
+        'accounts'  => 'Accounts',
+        'dd'        => 'DD Accounts',
+        'treasurer' => 'Treasurer',
+    ];
+    $default = $defaults[$role] ?? '';
+    return trim(acc_setting('voucher_delete_group_' . $role, $default)) ?: $default;
+}
+
+/**
+ * Whether the current user belongs to a user group with the given name.
+ */
+function acc_user_in_group_named(string $name): bool
+{
+    if ($name === '') return false;
+    $user = auth_user();
+    if (!$user) return false;
+    $group_ids = $user['group_ids'] ?? [(int)$user['group_id']];
+    if (empty($group_ids)) return false;
+
+    static $cache = null;
+    if ($cache === null) {
+        $placeholders = implode(',', array_fill(0, count($group_ids), '?'));
+        $stmt = db()->prepare(
+            "SELECT LOWER(name) FROM user_groups WHERE id IN ($placeholders) AND is_active = 1"
+        );
+        $stmt->execute($group_ids);
+        $cache = $stmt->fetchAll(PDO::FETCH_COLUMN);
+    }
+    return in_array(strtolower($name), $cache, true);
+}
+
+/** Super admins may delete a voucher outright. */
+function acc_can_delete_voucher_directly(): bool
+{
+    return is_super_admin();
+}
+
+/** Members of the "Accounts" group may raise a delete request. */
+function acc_can_request_voucher_delete(): bool
+{
+    return is_super_admin() || acc_user_in_group_named(acc_vdel_group_name('accounts'));
+}
+
+/** Members of the "DD Accounts" group review pending_dd requests. */
+function acc_can_review_voucher_delete_dd(): bool
+{
+    return is_super_admin() || acc_user_in_group_named(acc_vdel_group_name('dd'));
+}
+
+/** Members of the "Treasurer" group give final confirmation. */
+function acc_can_review_voucher_delete_treasurer(): bool
+{
+    return is_super_admin() || acc_user_in_group_named(acc_vdel_group_name('treasurer'));
+}
+
+/** Anyone who participates in the workflow can see the delete request queue. */
+function acc_can_access_voucher_delete(): bool
+{
+    return acc_can_delete_voucher_directly()
+        || acc_can_request_voucher_delete()
+        || acc_can_review_voucher_delete_dd()
+        || acc_can_review_voucher_delete_treasurer();
+}
+
+/** Status badge for a delete request. */
+function acc_voucher_delete_status_badge(string $status): string
+{
+    return match ($status) {
+        'pending_dd'        => '<span class="badge bg-warning text-dark">Pending DD Accounts</span>',
+        'pending_treasurer' => '<span class="badge bg-info text-dark">Pending Treasurer</span>',
+        'deleted'           => '<span class="badge bg-danger">Deleted</span>',
+        'rejected'          => '<span class="badge bg-secondary">Rejected</span>',
+        default             => '<span class="badge bg-secondary">' . h(ucfirst($status)) . '</span>',
+    };
+}
+
+/**
+ * Latest delete request for a voucher (any status), with actor names.
+ */
+function acc_get_delete_request_for_voucher(int $voucher_id): ?array
+{
+    $stmt = db()->prepare(
+        'SELECT r.*, ru.full_name AS requested_by_name,
+                du.full_name AS dd_user_name, tu.full_name AS treasurer_user_name,
+                xu.full_name AS rejected_by_name
+         FROM acc_voucher_delete_requests r
+         LEFT JOIN users ru ON ru.id = r.requested_by
+         LEFT JOIN users du ON du.id = r.dd_user_id
+         LEFT JOIN users tu ON tu.id = r.treasurer_user_id
+         LEFT JOIN users xu ON xu.id = r.rejected_by
+         WHERE r.voucher_id = ?
+         ORDER BY r.id DESC LIMIT 1'
+    );
+    $stmt->execute([$voucher_id]);
+    return $stmt->fetch() ?: null;
+}
+
+/**
+ * Fetch a single delete request by id (with actor names).
+ */
+function acc_get_delete_request(int $id): ?array
+{
+    $stmt = db()->prepare(
+        'SELECT r.*, ru.full_name AS requested_by_name,
+                du.full_name AS dd_user_name, tu.full_name AS treasurer_user_name,
+                xu.full_name AS rejected_by_name
+         FROM acc_voucher_delete_requests r
+         LEFT JOIN users ru ON ru.id = r.requested_by
+         LEFT JOIN users du ON du.id = r.dd_user_id
+         LEFT JOIN users tu ON tu.id = r.treasurer_user_id
+         LEFT JOIN users xu ON xu.id = r.rejected_by
+         WHERE r.id = ? LIMIT 1'
+    );
+    $stmt->execute([$id]);
+    return $stmt->fetch() ?: null;
+}
+
+/** Is there an open (not finalised) delete request for this voucher? */
+function acc_voucher_has_open_delete_request(int $voucher_id): bool
+{
+    $stmt = db()->prepare(
+        "SELECT 1 FROM acc_voucher_delete_requests
+         WHERE voucher_id = ? AND status IN ('pending_dd','pending_treasurer') LIMIT 1"
+    );
+    $stmt->execute([$voucher_id]);
+    return (bool)$stmt->fetchColumn();
+}
+
+/**
+ * Build a JSON snapshot of a voucher and its line items for permanent audit.
+ */
+function acc_voucher_snapshot(int $voucher_id): string
+{
+    $stmt = db()->prepare('SELECT * FROM acc_vouchers WHERE id = ?');
+    $stmt->execute([$voucher_id]);
+    $voucher = $stmt->fetch() ?: [];
+    $items   = acc_get_voucher_items($voucher_id);
+    return json_encode(['voucher' => $voucher, 'items' => $items], JSON_UNESCAPED_UNICODE);
+}
+
+/**
+ * Apply the soft-delete to a voucher and record it on the request + change_log.
+ * Internal: callers must have already authorised the action.
+ */
+function acc_soft_delete_voucher(int $voucher_id, string $reason, ?int $request_id = null): void
+{
+    $db      = db();
+    $user    = auth_user();
+    $voucher = acc_get_voucher($voucher_id);
+    if (!$voucher) {
+        throw new RuntimeException('Voucher not found or already deleted.');
+    }
+
+    $db->prepare(
+        'UPDATE acc_vouchers
+         SET is_deleted = 1, deleted_by = ?, deleted_at = NOW(),
+             delete_reason = ?, delete_request_id = ?
+         WHERE id = ? AND is_deleted = 0'
+    )->execute([$user['id'], $reason, $request_id, $voucher_id]);
+
+    log_change(
+        'accounting',
+        'DELETE',
+        $voucher_id,
+        $voucher['voucher_number'],
+        'is_deleted',
+        '0',
+        '1',
+        'Voucher deleted (amount ' . number_format((float)$voucher['total_amount'], 2) . '). Reason: ' . $reason
+    );
+}
+
+/**
+ * Super-admin immediate deletion. Records a finalised request row for history.
+ *
+ * @return int request id
+ */
+function acc_direct_delete_voucher(int $voucher_id, string $reason, ?string $attachment = null): int
+{
+    if (!acc_can_delete_voucher_directly()) {
+        throw new RuntimeException('You are not authorised to delete vouchers directly.');
+    }
+    $voucher = acc_get_voucher($voucher_id);
+    if (!$voucher) {
+        throw new RuntimeException('Voucher not found or already deleted.');
+    }
+    if (acc_voucher_has_open_delete_request($voucher_id)) {
+        throw new RuntimeException('This voucher already has a delete request in progress.');
+    }
+
+    $db   = db();
+    $user = auth_user();
+    $stmt = $db->prepare(
+        'INSERT INTO acc_voucher_delete_requests
+            (voucher_id, voucher_number, voucher_snapshot, total_amount, status,
+             reason, attachment, requested_by, requested_at,
+             treasurer_user_id, treasurer_note, treasurer_at)
+         VALUES (?,?,?,?, "deleted", ?,?,?, NOW(), ?, ?, NOW())'
+    );
+    $stmt->execute([
+        $voucher_id,
+        $voucher['voucher_number'],
+        acc_voucher_snapshot($voucher_id),
+        $voucher['total_amount'],
+        $reason,
+        $attachment,
+        $user['id'],
+        $user['id'],
+        'Immediate deletion by Super Administrator.',
+    ]);
+    $request_id = (int)$db->lastInsertId();
+
+    acc_soft_delete_voucher($voucher_id, $reason, $request_id);
+    return $request_id;
+}
+
+/**
+ * "Accounts" group raises a pending delete request.
+ *
+ * @return int request id
+ */
+function acc_create_delete_request(int $voucher_id, string $reason, ?string $attachment = null): int
+{
+    if (!acc_can_request_voucher_delete()) {
+        throw new RuntimeException('You are not authorised to request voucher deletion.');
+    }
+    $voucher = acc_get_voucher($voucher_id);
+    if (!$voucher) {
+        throw new RuntimeException('Voucher not found or already deleted.');
+    }
+    if (acc_voucher_has_open_delete_request($voucher_id)) {
+        throw new RuntimeException('A delete request for this voucher is already in progress.');
+    }
+
+    $db   = db();
+    $user = auth_user();
+    $stmt = $db->prepare(
+        'INSERT INTO acc_voucher_delete_requests
+            (voucher_id, voucher_number, voucher_snapshot, total_amount, status,
+             reason, attachment, requested_by, requested_at)
+         VALUES (?,?,?,?, "pending_dd", ?,?,?, NOW())'
+    );
+    $stmt->execute([
+        $voucher_id,
+        $voucher['voucher_number'],
+        acc_voucher_snapshot($voucher_id),
+        $voucher['total_amount'],
+        $reason,
+        $attachment,
+        $user['id'],
+    ]);
+    $request_id = (int)$db->lastInsertId();
+
+    log_change(
+        'accounting',
+        'UPDATE',
+        $voucher_id,
+        $voucher['voucher_number'],
+        'delete_request',
+        null,
+        'pending_dd',
+        'Voucher delete requested. Reason: ' . $reason
+    );
+    return $request_id;
+}
+
+/**
+ * DD Accounts review: approve (→ pending_treasurer) or reject.
+ */
+function acc_dd_review_delete_request(int $request_id, bool $approve, string $note): void
+{
+    if (!acc_can_review_voucher_delete_dd()) {
+        throw new RuntimeException('You are not authorised to review at the DD Accounts stage.');
+    }
+    $req = acc_get_delete_request($request_id);
+    if (!$req)                                 throw new RuntimeException('Delete request not found.');
+    if ($req['status'] !== 'pending_dd')       throw new RuntimeException('This request is not awaiting DD Accounts review.');
+    if (trim($note) === '')                    throw new RuntimeException('A note is required.');
+
+    $db   = db();
+    $user = auth_user();
+
+    if ($approve) {
+        $db->prepare(
+            "UPDATE acc_voucher_delete_requests
+             SET status = 'pending_treasurer', dd_user_id = ?, dd_note = ?, dd_at = NOW()
+             WHERE id = ?"
+        )->execute([$user['id'], $note, $request_id]);
+        $new = 'pending_treasurer';
+    } else {
+        $db->prepare(
+            "UPDATE acc_voucher_delete_requests
+             SET status = 'rejected', dd_user_id = ?, dd_note = ?, dd_at = NOW(),
+                 rejected_by = ?, reject_note = ?, rejected_at = NOW()
+             WHERE id = ?"
+        )->execute([$user['id'], $note, $user['id'], $note, $request_id]);
+        $new = 'rejected';
+    }
+
+    log_change(
+        'accounting',
+        'UPDATE',
+        (int)$req['voucher_id'],
+        $req['voucher_number'],
+        'delete_request',
+        'pending_dd',
+        $new,
+        'DD Accounts ' . ($approve ? 'approved' : 'rejected') . ' delete request. Note: ' . $note
+    );
+}
+
+/**
+ * Treasurer review: confirm (deletes the voucher) or reject.
+ */
+function acc_treasurer_review_delete_request(int $request_id, bool $confirm, string $note): void
+{
+    if (!acc_can_review_voucher_delete_treasurer()) {
+        throw new RuntimeException('You are not authorised to give final confirmation.');
+    }
+    $req = acc_get_delete_request($request_id);
+    if (!$req)                                       throw new RuntimeException('Delete request not found.');
+    if ($req['status'] !== 'pending_treasurer')      throw new RuntimeException('This request is not awaiting Treasurer confirmation.');
+    if (trim($note) === '')                          throw new RuntimeException('A note is required.');
+
+    $db   = db();
+    $user = auth_user();
+
+    if ($confirm) {
+        $db->prepare(
+            "UPDATE acc_voucher_delete_requests
+             SET status = 'deleted', treasurer_user_id = ?, treasurer_note = ?, treasurer_at = NOW()
+             WHERE id = ?"
+        )->execute([$user['id'], $note, $request_id]);
+
+        // Final irreversible (soft) delete of the voucher and all its calculations.
+        acc_soft_delete_voucher(
+            (int)$req['voucher_id'],
+            $req['reason'] . ' | Treasurer: ' . $note,
+            $request_id
+        );
+        $new = 'deleted';
+    } else {
+        $db->prepare(
+            "UPDATE acc_voucher_delete_requests
+             SET status = 'rejected', treasurer_user_id = ?, treasurer_note = ?, treasurer_at = NOW(),
+                 rejected_by = ?, reject_note = ?, rejected_at = NOW()
+             WHERE id = ?"
+        )->execute([$user['id'], $note, $user['id'], $note, $request_id]);
+        $new = 'rejected';
+    }
+
+    log_change(
+        'accounting',
+        $confirm ? 'DELETE' : 'UPDATE',
+        (int)$req['voucher_id'],
+        $req['voucher_number'],
+        'delete_request',
+        'pending_treasurer',
+        $new,
+        'Treasurer ' . ($confirm ? 'confirmed deletion' : 'rejected delete request') . '. Note: ' . $note
+    );
+}
+
+/**
+ * Validate and store an optional supporting attachment for a delete request.
+ * Returns the stored filename, or null when no file was supplied.
+ * Throws RuntimeException on an invalid upload.
+ */
+function acc_store_delete_attachment(array $file): ?string
+{
+    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) return null;
+    if ($file['error'] !== UPLOAD_ERR_OK) {
+        throw new RuntimeException('Attachment upload failed.');
+    }
+    if ($file['size'] > 5 * 1024 * 1024) {
+        throw new RuntimeException('Attachment must be 5 MB or smaller.');
+    }
+
+    $allowed_exts  = ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx', 'xls', 'xlsx'];
+    $allowed_mimes = [
+        'application/pdf', 'image/jpeg', 'image/png',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ];
+
+    $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    if (!in_array($ext, $allowed_exts, true)) {
+        throw new RuntimeException('Invalid attachment type. Allowed: ' . implode(', ', $allowed_exts) . '.');
+    }
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $mime  = $finfo->file($file['tmp_name']);
+    if (!in_array($mime, $allowed_mimes, true)) {
+        throw new RuntimeException('Attachment content type is not allowed.');
+    }
+
+    $dir = UPLOAD_DIR . '/voucher-deletes';
+    if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
+        throw new RuntimeException('Could not create the attachment directory.');
+    }
+    $name = bin2hex(random_bytes(12)) . '.' . $ext;
+    if (!move_uploaded_file($file['tmp_name'], $dir . '/' . $name)) {
+        throw new RuntimeException('Could not save the attachment.');
+    }
+    return $name;
+}
+
 // ── Report Helpers ────────────────────────────────────────────────────────────
 
 /**
