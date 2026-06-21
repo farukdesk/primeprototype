@@ -68,7 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
     $reference       = trim($_POST['reference']          ?? '');
     $narration       = trim($_POST['narration']          ?? '');
 
-    $valid_types = ['admission','registration','semester_tuition','fixed_fee','english_fee','other'];
+    $valid_types = ['admission','form_fee','id_card_fee','registration','semester_tuition','fixed_fee','english_fee','other'];
 
     if (!$student_id)                          $errors[] = 'Invalid student.';
     if (!$package_id)                          $errors[] = 'Student has no fee package.';
@@ -103,6 +103,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
                 $outstanding_lookup = [];
                 $tot = $summary['totals'] ?? [];
                 $outstanding_lookup['admission|||'] = (float)($tot['admission']['out'] ?? 0);
+                $outstanding_lookup['form_fee|||'] = (float)($tot['form_fee']['out'] ?? 0);
+                $outstanding_lookup['id_card_fee|||'] = (float)($tot['id_card_fee']['out'] ?? 0);
                 foreach (($summary['semesters'] ?? []) as $sf) {
                     $key_reg = 'registration|' . (int)$sf['id'] . '|' . (int)$sf['semester_number'] . '|';
                     $outstanding_lookup[$key_reg] = (float)($sf['reg_out'] ?? 0);
@@ -1223,7 +1225,9 @@ require_once __DIR__ . '/../includes/header.php';
 
     function feeTypeLabel(type) {
         const map = {
-            admission:        'Admission + Form & ID Card Fee',
+            admission:        'Admission Fee',
+            form_fee:         'Form Fee',
+            id_card_fee:      'ID Card Fee',
             registration:     'Registration Fees',
             semester_tuition: 'Semester Tuition',
             fixed_fee:        'Fixed Institutional Fee',
@@ -1231,13 +1235,6 @@ require_once __DIR__ . '/../includes/header.php';
             other:            'Other',
         };
         return map[type] || type;
-    }
-
-    function getAdmissionFeeLabel(summary) {
-        const breakdown = summary?.totals?.admission_breakdown || {};
-        const formFee = Number(breakdown.form_fee ?? STUDENT_FORM_FEE);
-        const idFee = Number(breakdown.id_card_fee ?? STUDENT_ID_CARD_FEE);
-        return 'Admission Fee + Form Fee (' + fmt(formFee) + ') + ID Card Fee (' + fmt(idFee) + ')';
     }
 
     function openAccordionSection(collapseId) {
@@ -1377,18 +1374,26 @@ require_once __DIR__ . '/../includes/header.php';
         const t = currentSummary.totals;
         const s = currentSummary;
 
-        // 1. Admission (one-time, highest priority)
-        if (t.admission.out > 0) {
-            items.push({
-                fee_type:          'admission',
-                semester_fee_id:   null,
-                semester_number:   null,
-                month_number:      null,
-                out:               t.admission.out,
-                label:             getAdmissionFeeLabel(currentSummary),
-                income_account_id: incomeAccountsMap['admission'] ?? 0,
-                cal_month:         null, cal_year: null,
-            });
+        // 1. Admission-day one-time fees (highest priority): Admission, Form, ID Card
+        const oneTimeHeads = [
+            {type: 'admission',   label: 'Admission Fee'},
+            {type: 'form_fee',    label: 'Form Fee'},
+            {type: 'id_card_fee', label: 'ID Card Fee'},
+        ];
+        for (const head of oneTimeHeads) {
+            const headTotal = t[head.type];
+            if (headTotal && headTotal.out > 0) {
+                items.push({
+                    fee_type:          head.type,
+                    semester_fee_id:   null,
+                    semester_number:   null,
+                    month_number:      null,
+                    out:               headTotal.out,
+                    label:             head.label,
+                    income_account_id: incomeAccountsMap[head.type] ?? 0,
+                    cal_month:         null, cal_year: null,
+                });
+            }
         }
 
         // 2. Per semester
@@ -1867,10 +1872,14 @@ require_once __DIR__ . '/../includes/header.php';
 
         const t = s.totals;
 
-        // ── Admission Fee ────────────────────────────────────────────────────
+        // ── Admission-day one-time fees ──────────────────────────────────────
         addSectionRow('Admission');
-        addRow(getAdmissionFeeLabel(s), t.admission.due, t.admission.paid, t.admission.out,
+        addRow('Admission Fee', t.admission.due, t.admission.paid, t.admission.out,
                'admission', null, null, null, null, null);
+        addRow('Form Fee', t.form_fee.due, t.form_fee.paid, t.form_fee.out,
+               'form_fee', null, null, null, null, null);
+        addRow('ID Card Fee', t.id_card_fee.due, t.id_card_fee.paid, t.id_card_fee.out,
+               'id_card_fee', null, null, null, null, null);
 
         // ── Per-semester: Registration + Monthly overall fees ────────────────
         s.semesters.forEach(sf => {
