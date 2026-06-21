@@ -106,12 +106,18 @@ $payer_email  = '';
 $payment_method_lbl = 'Cash';
 $transaction_number = '';
 $payment_method_raw = 'cash';
+$invoice_student_id = null; // numeric students.id for balance computation
 
 foreach ($voucher_ids as $vid) {
     $v   = $vouchers[$vid] ?? null;
     if (!$v) continue;
     $sfp = inv_resolve_sfp($vid);
     $adm = !$sfp ? inv_resolve_adm($vid) : null;
+
+    // Capture student id from the first resolved student-fee record
+    if ($sfp && $invoice_student_id === null) {
+        $invoice_student_id = (int)$sfp['student_id'];
+    }
 
     $row_fee_lbl  = 'Fee Payment';
     $row_sem_lbl  = '';
@@ -192,7 +198,52 @@ foreach ($voucher_ids as $vid) {
     ];
 }
 
-// ── Primary voucher display fields ────────────────────────────────────────────
+// ── Post-payment balance notice (student fees only) ──────────────────────────
+// Compute how much the student still owes as of today (past + current month +
+// one-time fees) after this payment has been recorded, so we can print a
+// "still due" or "paid in advance" notice on each invoice copy.
+$balance_notice = null;
+if ($invoice_student_id) {
+    $inv_summary = acc_student_fee_summary($invoice_student_id);
+    if ($inv_summary) {
+        $now_month = (int)date('n');
+        $now_year  = (int)date('Y');
+        $due_now   = 0.0; // owed up to and including today
+        $total_out = 0.0; // total of all outstanding (including future months)
+
+        // One-time / non-dated fees are always "due now" when outstanding
+        $due_now += (float)($inv_summary['totals']['admission']['out']   ?? 0);
+        $due_now += (float)($inv_summary['totals']['form_fee']['out']    ?? 0);
+        $due_now += (float)($inv_summary['totals']['id_card_fee']['out'] ?? 0);
+        $due_now += (float)($inv_summary['totals']['registration']['out'] ?? 0);
+        $total_out = $due_now; // seed with one-time fees
+
+        // Monthly tuition: only count months on or before today
+        foreach (($inv_summary['semesters'] ?? []) as $sem) {
+            foreach (($sem['monthly_rows'] ?? []) as $mr) {
+                $out = (float)($mr['out'] ?? 0);
+                if ($out <= 0) continue;
+                $cy = (int)($mr['cal_year']  ?? 0);
+                $cm = (int)($mr['cal_month'] ?? 0);
+                $total_out += $out;
+                if ($cy < $now_year || ($cy === $now_year && $cm <= $now_month)) {
+                    $due_now += $out;
+                }
+            }
+        }
+
+        if ($due_now > 0.01) {
+            $balance_notice = ['type' => 'due', 'amount' => round($due_now, 2)];
+        } elseif ($total_out > 0.01) {
+            // No current/past dues but future months are still outstanding → advance
+            $balance_notice = ['type' => 'advance', 'amount' => round($total_out, 2)];
+        } else {
+            $balance_notice = ['type' => 'cleared'];
+        }
+    }
+}
+
+
 $voucher_number = $primary_voucher['voucher_number'] ?? '—';
 $voucher_date   = date('d F Y', strtotime($primary_voucher['voucher_date']));
 $total_amount   = array_sum(array_column($fee_rows, 'amount'));
@@ -524,7 +575,8 @@ function render_copy(
     string $university_address,
     string $university_website,
     array  $fee_rows,
-    string $payment_method_raw = 'cash'
+    string $payment_method_raw = 'cash',
+    ?array $balance_notice = null
 ): void {
     $is_multi = count($fee_rows) > 1;
 ?>
@@ -648,6 +700,25 @@ function render_copy(
             </tfoot>
         </table>
 
+        <?php if ($balance_notice): ?>
+        <?php $bn_type = $balance_notice['type'] ?? ''; $bn_amt = (float)($balance_notice['amount'] ?? 0); ?>
+        <?php if ($bn_type === 'due'): ?>
+        <div class="outstanding-note">
+            <strong>Outstanding Dues: <?= h($currency) ?> <?= h(number_format($bn_amt, 2)) ?></strong> —
+            This student still has fees due as of today. Please clear the outstanding balance.
+        </div>
+        <?php elseif ($bn_type === 'advance'): ?>
+        <div class="outstanding-note" style="background:#e8f5e9;border-color:#a5d6a7;color:#2e7d32;">
+            <strong>Advance Payment:</strong> All fees are paid up to date.
+            <?= h($currency) ?> <?= h(number_format($bn_amt, 2)) ?> credit covers future month(s).
+        </div>
+        <?php elseif ($bn_type === 'cleared'): ?>
+        <div class="outstanding-note" style="background:#e8f5e9;border-color:#a5d6a7;color:#2e7d32;">
+            <strong>All Paid:</strong> No outstanding fees. All dues are fully cleared.
+        </div>
+        <?php endif; ?>
+        <?php endif; ?>
+
         <div class="sig-row">
             <div class="sig-box"><?= h($invoice_signature_name) ?><br><span style="font-size:9px;">Collected By</span></div>
         </div>
@@ -667,7 +738,7 @@ function render_copy(
     $payer_name, $payer_sid, $payer_dept, $payer_prog, $payer_phone, $payer_email,
     $payment_method_lbl, $transaction_number,
     $invoice_signature_name, 'Office Copy', $university_logo_url, $university_address, $university_website,
-    $fee_rows, $payment_method_raw
+    $fee_rows, $payment_method_raw, $balance_notice
 ); ?>
 
 <div class="cut-line">— Cut Here —</div>
@@ -678,7 +749,7 @@ function render_copy(
     $payer_name, $payer_sid, $payer_dept, $payer_prog, $payer_phone, $payer_email,
     $payment_method_lbl, $transaction_number,
     $invoice_signature_name, 'Student Copy', $university_logo_url, $university_address, $university_website,
-    $fee_rows, $payment_method_raw
+    $fee_rows, $payment_method_raw, $balance_notice
 ); ?>
 
 </div><!-- /print-wrapper -->
