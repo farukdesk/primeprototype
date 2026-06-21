@@ -85,6 +85,13 @@ $stmt = $db->prepare(
          p.admission_fees,
          p.fixed_institutional_fees,
          p.english_course_fee,
+         p.total_semesters,
+         p.total_months,
+         p.months_per_semester,
+         p.bi_semester_start_month,
+         p.tri_semester_start_month,
+         cp.bi_semester_start_month AS linked_bi_semester_start_month,
+         cp.tri_semester_start_month AS linked_tri_semester_start_month,
          p.note,
          COALESCE(sf_agg.num_sems,     0) AS num_sems,
          COALESCE(sf_agg.tuition_total, 0) AS tuition_total,
@@ -92,6 +99,7 @@ $stmt = $db->prepare(
      FROM sfp_packages p
      JOIN students s ON s.id = p.student_id
      LEFT JOIN dept_departments d ON d.id = s.dept_id
+     LEFT JOIN cf_programs cp ON cp.id = p.cf_program_id
      LEFT JOIN (
          SELECT package_id,
                 COUNT(*)                       AS num_sems,
@@ -114,7 +122,89 @@ $stmt = $db->prepare(
 $stmt->execute(array_merge([$f_as_of_date], $params));
 $raw_rows = $stmt->fetchAll();
 
-// ── Compute outstanding balance per row ───────────────────────────────────────
+// ── Batch-fetch semester fees for current-dues calculation ────────────────
+$pkg_ids_for_sf = array_unique(array_column($raw_rows, 'package_id'));
+$sf_by_package  = [];
+if (!empty($pkg_ids_for_sf)) {
+    $in_ph = implode(',', array_fill(0, count($pkg_ids_for_sf), '?'));
+    $sf_bulk = $db->prepare(
+        "SELECT package_id, semester_number, tuition_payable,
+                fixed_discount_amount, english_discount_amount, semester_label
+         FROM sfp_semester_fees
+         WHERE package_id IN ($in_ph)
+         ORDER BY package_id ASC, semester_number ASC"
+    );
+    $sf_bulk->execute($pkg_ids_for_sf);
+    foreach ($sf_bulk->fetchAll() as $sf_row) {
+        $sf_by_package[(int)$sf_row['package_id']][] = $sf_row;
+    }
+}
+
+/**
+ * Compute total fee obligation due up to (and including) the given as_of_date.
+ * Mirrors acc_outstanding_through_current_month() but accepts an arbitrary date.
+ */
+function due_report_current_obligation(array $pkg, array $semester_fees, string $as_of_date, float $default_form_id_fee): float
+{
+    $as_of_first = date('Y-m-01', strtotime($as_of_date));
+    $ao_year     = (int)date('Y', strtotime($as_of_first));
+    $ao_month    = (int)date('n', strtotime($as_of_first));
+
+    $form_id_fee = ((float)$pkg['form_id_fee'] > 0) ? (float)$pkg['form_id_fee'] : $default_form_id_fee;
+    $total       = (float)$pkg['admission_fees'] + $form_id_fee;
+
+    if (empty($semester_fees)) {
+        return $total;
+    }
+
+    $start_month = acc_package_start_month($pkg);
+    $start_year  = acc_package_start_year($pkg, $semester_fees);
+
+    $months     = (float)($pkg['total_months']       ?? 0);
+    $mps        = (float)($pkg['months_per_semester'] ?? 0);
+    $months_int = max(1, (int)round($mps));
+    $reg_fee    = (float)($pkg['reg_fee_per_semester'] ?? 0.0);
+
+    foreach ($semester_fees as $sf) {
+        $sem_num      = (int)$sf['semester_number'];
+        $first_offset = ($sem_num - 1) * $months_int;
+        $first_info   = acc_month_year_for_slot($start_month, $start_year, $first_offset);
+
+        $sem_started = ($first_info['year'] < $ao_year)
+            || ($first_info['year'] === $ao_year && $first_info['month'] <= $ao_month);
+        if (!$sem_started) {
+            continue;
+        }
+
+        $total += $reg_fee;
+
+        $fixed_per_sem   = ($months > 0 && $mps > 0)
+            ? round((float)$pkg['fixed_institutional_fees'] / $months * $mps, 2) : 0.0;
+        $english_per_sem = ($months > 0 && $mps > 0)
+            ? round((float)$pkg['english_course_fee']       / $months * $mps, 2) : 0.0;
+        $fixed_per_sem   = max(0.0, $fixed_per_sem   - (float)($sf['fixed_discount_amount']   ?? 0));
+        $english_per_sem = max(0.0, $english_per_sem - (float)($sf['english_discount_amount'] ?? 0));
+
+        $sem_total   = (float)$sf['tuition_payable'] + $fixed_per_sem + $english_per_sem;
+        $monthly_fee = $months_int > 1 ? round($sem_total / $months_int, 2) : $sem_total;
+
+        for ($m = 1; $m <= $months_int; $m++) {
+            $mi = acc_month_year_for_slot($start_month, $start_year, $first_offset + ($m - 1));
+            $month_passed = ($mi['year'] < $ao_year)
+                || ($mi['year'] === $ao_year && $mi['month'] <= $ao_month);
+            if (!$month_passed) {
+                break;
+            }
+            $total += ($m < $months_int)
+                ? $monthly_fee
+                : max(0.0, $sem_total - $monthly_fee * ($months_int - 1));
+        }
+    }
+
+    return $total;
+}
+
+// ── Compute due-as-of-today balance per row ───────────────────────────────
 $default_form_id_fee = acc_student_form_id_total_fee(); // 1000 BDT
 
 $rows = [];
@@ -129,8 +219,16 @@ foreach ($raw_rows as $r) {
                + (float)$r['english_course_fee']
                + (float)$r['tuition_total'];
 
-    $total_paid      = (float)$r['total_paid'];
-    $outstanding     = max(0.0, $total_due - $total_paid);
+    $total_paid = (float)$r['total_paid'];
+
+    // Current obligation: only fees that have fallen due up to $f_as_of_date
+    $current_obligation = due_report_current_obligation(
+        $r,
+        $sf_by_package[(int)$r['package_id']] ?? [],
+        $f_as_of_date,
+        $default_form_id_fee
+    );
+    $outstanding     = max(0.0, $current_obligation - $total_paid);
     $paid_percentage = $total_due > 0 ? min(100, round($total_paid / $total_due * 100)) : 100;
 
     if ($outstanding < $f_min_due) {
@@ -291,6 +389,7 @@ if ($focus_row) {
 }
 
 require_once __DIR__ . '/../../includes/header.php';
+$as_of_label = date('d M Y', strtotime($f_as_of_date));
 ?>
 
 <!-- ── Page header ── -->
@@ -436,7 +535,7 @@ require_once __DIR__ . '/../../includes/header.php';
         <div class="card border-0 shadow-sm h-100 text-center border-danger">
             <div class="card-body p-3">
                 <div class="fw-bold text-danger" style="font-size:1.05rem"><?= number_format($kpi_total_out, 0) ?></div>
-                <div class="text-muted small">Total Outstanding (<?= h($currency) ?>)</div>
+                <div class="text-muted small">Due as of <?= h($as_of_label) ?> (<?= h($currency) ?>)</div>
             </div>
         </div>
     </div>
@@ -468,7 +567,7 @@ require_once __DIR__ . '/../../includes/header.php';
             <td style="border:1px solid #ccc;padding:5px"><?= number_format($kpi_total_students) ?></td>
             <td style="border:1px solid #ccc;padding:5px;background:#f5f5f5;font-weight:bold">Students with Due</td>
             <td style="border:1px solid #ccc;padding:5px;color:#c00"><?= number_format($kpi_students_due) ?></td>
-            <td style="border:1px solid #ccc;padding:5px;background:#f5f5f5;font-weight:bold">Total Outstanding</td>
+            <td style="border:1px solid #ccc;padding:5px;background:#f5f5f5;font-weight:bold">Due as of <?= h($as_of_label) ?></td>
             <td style="border:1px solid #ccc;padding:5px;color:#c00;font-weight:bold"><?= $currency ?> <?= number_format($kpi_total_out, 2) ?></td>
         </tr>
     </table>
@@ -698,7 +797,7 @@ require_once __DIR__ . '/../../includes/header.php';
         <div class="card border-0 shadow-sm border-top-0 rounded-0 rounded-bottom">
             <div class="card-header py-2 px-3 d-flex justify-content-between align-items-center no-print">
                 <strong class="small"><?= number_format(count($rows)) ?> student(s) with due ≥ <?= $currency ?> <?= number_format($f_min_due, 0) ?> · As of <?= h(date('d M Y', strtotime($f_as_of_date))) ?></strong>
-                <span class="text-danger fw-bold small">Outstanding: <?= $currency ?> <?= number_format($kpi_total_out, 2) ?></span>
+                <span class="text-danger fw-bold small">Due as of <?= h($as_of_label) ?>: <?= $currency ?> <?= number_format($kpi_total_out, 2) ?></span>
             </div>
             <?php if (empty($rows)): ?>
             <div class="card-body text-center py-5 text-muted">
@@ -719,7 +818,7 @@ require_once __DIR__ . '/../../includes/header.php';
                             <th>Status</th>
                             <th class="text-end">Total Due (<?= h($currency) ?>)</th>
                             <th class="text-end">Paid (<?= h($currency) ?>)</th>
-                            <th class="text-end">Outstanding (<?= h($currency) ?>)</th>
+                            <th class="text-end">Due as of <?= h($as_of_label) ?> (<?= h($currency) ?>)</th>
                             <th class="no-print">Progress</th>
                             <th class="no-print text-end">Actions</th>
                         </tr>
@@ -824,7 +923,7 @@ require_once __DIR__ . '/../../includes/header.php';
                             <th class="text-center">Students</th>
                             <th class="text-end">Total Due (<?= h($currency) ?>)</th>
                             <th class="text-end">Total Paid (<?= h($currency) ?>)</th>
-                            <th class="text-end">Outstanding (<?= h($currency) ?>)</th>
+                            <th class="text-end">Due as of <?= h($as_of_label) ?> (<?= h($currency) ?>)</th>
                             <th class="no-print">Progress</th>
                         </tr>
                     </thead>
@@ -892,7 +991,7 @@ require_once __DIR__ . '/../../includes/header.php';
                             <th class="text-center">Students</th>
                             <th class="text-end">Total Due (<?= h($currency) ?>)</th>
                             <th class="text-end">Total Paid (<?= h($currency) ?>)</th>
-                            <th class="text-end">Outstanding (<?= h($currency) ?>)</th>
+                            <th class="text-end">Due as of <?= h($as_of_label) ?> (<?= h($currency) ?>)</th>
                             <th class="no-print">Progress</th>
                         </tr>
                     </thead>
@@ -960,7 +1059,7 @@ require_once __DIR__ . '/../../includes/header.php';
                             <th class="text-center">Students</th>
                             <th class="text-end">Total Due (<?= h($currency) ?>)</th>
                             <th class="text-end">Total Paid (<?= h($currency) ?>)</th>
-                            <th class="text-end">Outstanding (<?= h($currency) ?>)</th>
+                            <th class="text-end">Due as of <?= h($as_of_label) ?> (<?= h($currency) ?>)</th>
                             <th class="no-print">Progress</th>
                         </tr>
                     </thead>
@@ -1021,7 +1120,7 @@ require_once __DIR__ . '/../../includes/header.php';
             <th style="border:1px solid #ccc;padding:4px;text-align:center">Students</th>
             <th style="border:1px solid #ccc;padding:4px;text-align:right">Total Due</th>
             <th style="border:1px solid #ccc;padding:4px;text-align:right">Paid</th>
-            <th style="border:1px solid #ccc;padding:4px;text-align:right">Outstanding</th>
+            <th style="border:1px solid #ccc;padding:4px;text-align:right">Due as of <?= h($as_of_label) ?></th>
         </tr></thead>
         <tbody>
         <?php foreach ($by_dept as $i => $bd): ?>
@@ -1047,7 +1146,7 @@ require_once __DIR__ . '/../../includes/header.php';
             <th style="border:1px solid #ccc;padding:4px;text-align:center">Students</th>
             <th style="border:1px solid #ccc;padding:4px;text-align:right">Total Due</th>
             <th style="border:1px solid #ccc;padding:4px;text-align:right">Paid</th>
-            <th style="border:1px solid #ccc;padding:4px;text-align:right">Outstanding</th>
+            <th style="border:1px solid #ccc;padding:4px;text-align:right">Due as of <?= h($as_of_label) ?></th>
         </tr></thead>
         <tbody>
         <?php foreach ($by_program as $i => $bp): ?>
@@ -1073,7 +1172,7 @@ require_once __DIR__ . '/../../includes/header.php';
             <th style="border:1px solid #ccc;padding:4px;text-align:center">Students</th>
             <th style="border:1px solid #ccc;padding:4px;text-align:right">Total Due</th>
             <th style="border:1px solid #ccc;padding:4px;text-align:right">Paid</th>
-            <th style="border:1px solid #ccc;padding:4px;text-align:right">Outstanding</th>
+            <th style="border:1px solid #ccc;padding:4px;text-align:right">Due as of <?= h($as_of_label) ?></th>
         </tr></thead>
         <tbody>
         <?php foreach ($by_batch as $i => $b): ?>
