@@ -731,7 +731,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <span class="badge rounded-pill bg-info px-3 py-2 small" id="spFutureDue" style="display:none;">
                         <i class="fas fa-calendar-alt me-1"></i>Upcoming: <span id="spFutureDueAmt">—</span>
                     </span>
-                    <span class="small text-primary fw-semibold">Total: <span class="badge bg-danger px-3 py-2 fs-6" id="spTotalOut">—</span></span>
+                    <span class="small text-primary fw-semibold">Dues: <span class="badge bg-danger px-3 py-2 fs-6" id="spTotalOut">—</span></span>
                 </div>
             </div>
             <div class="card-body p-4">
@@ -1554,16 +1554,17 @@ require_once __DIR__ . '/../includes/header.php';
     /** Compute totals for past-due / current-month / future pills */
     function getSmartPayStats() {
         const items = buildOutstandingItems();
-        let past = 0, current = 0, future = 0, total = 0;
+        let past = 0, current = 0, future = 0, other = 0, total = 0;
         for (const item of items) {
             total += item.out;
             const period = itemPeriod(item);
-            if (period === 'past')    past    += item.out;
+            if (period === 'past')         past    += item.out;
             else if (period === 'current') current += item.out;
             else if (period === 'future')  future  += item.out;
-            // 'other' (admission, registration) counted in total but not in period pills
+            else                           other   += item.out; // one-time fees (admission, registration)
         }
-        return {past, current, future, total};
+        // due_now = everything owed up to today (past + current + one-time); excludes future advance months
+        return {past, current, future, other, total, due_now: past + current + other};
     }
 
     /** Render the distribution preview table */
@@ -1656,7 +1657,7 @@ require_once __DIR__ . '/../includes/header.php';
     function showSmartPayCard() {
         const stats = getSmartPayStats();
 
-        spTotalOut.textContent = fmt(stats.total);
+        spTotalOut.textContent = fmt(stats.due_now);
 
         // Past-due pill
         if (stats.past > 0) {
