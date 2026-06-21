@@ -282,7 +282,8 @@ function acc_received_into_account_id_for_payment_method(string $method): int
     $stmt = db()->prepare(
         "SELECT id FROM acc_accounts
          WHERE type = 'asset' AND is_active = 1
-         ORDER BY code ASC LIMIT 1"
+         ORDER BY (sub_type = 'current_asset') DESC, (code LIKE '1%') DESC, code ASC
+         LIMIT 1"
     );
     $stmt->execute();
     $any = $stmt->fetchColumn();

@@ -9,9 +9,6 @@ $income_accounts = acc_income_accounts();
 $default_cash    = acc_setting('default_cash_account', '1100');
 $received_into_map = acc_received_into_account_map_for_payment_methods();
 $cash_account_labels_by_id = [];
-foreach ($cash_accounts as $a) {
-    $cash_account_labels_by_id[(int)$a['id']] = $a['code'] . ' – ' . $a['name'];
-}
 // Include every active asset account so the "Received Into" label resolves even
 // when a payment method is mapped (in Accounting Settings) to an asset account
 // that is not a current-asset cash account.
