@@ -182,7 +182,7 @@ function vl_parse_csv(string $content): array {
     foreach ($lines as $i => $line) {
         $line = rtrim($line);
         if ($line === '') continue;
-        $cells = str_getcsv($line, $delim);
+        $cells = str_getcsv($line, $delim, '"', '');
         if ($i === 0 || empty($headers)) {
             // Treat first non-empty line as header
             foreach ($cells as $c) {
