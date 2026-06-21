@@ -93,22 +93,14 @@ function vdel_purpose_text(?array $purpose): string
         return '–';
     }
 
-    if (($purpose['kind'] ?? '') === 'student_fee') {
+    $kind = (string)($purpose['kind'] ?? '');
+    if ($kind === 'student_fee' || $kind === 'admission_fee') {
         $name = trim((string)($purpose['student_name'] ?? ''));
-        $sid  = trim((string)($purpose['student_id'] ?? ''));
-        if ($name !== '' && $sid !== '') {
-            return $purpose['label'] . ' — ' . $name . ' (' . $sid . ')';
-        }
-        if ($name !== '') {
-            return $purpose['label'] . ' — ' . $name;
-        }
-    }
-
-    if (($purpose['kind'] ?? '') === 'admission_fee') {
-        $name = trim((string)($purpose['student_name'] ?? ''));
-        $app  = trim((string)($purpose['app_number'] ?? ''));
-        if ($name !== '' && $app !== '') {
-            return $purpose['label'] . ' — ' . $name . ' (' . $app . ')';
+        $ref  = $kind === 'student_fee'
+            ? trim((string)($purpose['student_id'] ?? ''))
+            : trim((string)($purpose['app_number'] ?? ''));
+        if ($name !== '' && $ref !== '') {
+            return $purpose['label'] . ' — ' . $name . ' (' . $ref . ')';
         }
         if ($name !== '') {
             return $purpose['label'] . ' — ' . $name;
