@@ -1826,7 +1826,10 @@ function acc_get_voucher_payment_info(int $voucher_id): ?array
  */
 function acc_get_voucher_purposes(array $voucher_ids): array
 {
-    $voucher_ids = array_values(array_unique(array_filter(array_map('intval', $voucher_ids), static fn(int $id): bool => $id > 0)));
+    $voucher_ids = array_map('intval', $voucher_ids);
+    $voucher_ids = array_filter($voucher_ids, static fn(int $id): bool => $id > 0);
+    $voucher_ids = array_unique($voucher_ids);
+    $voucher_ids = array_values($voucher_ids);
     if (!$voucher_ids) {
         return [];
     }

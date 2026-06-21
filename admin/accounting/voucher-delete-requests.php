@@ -68,16 +68,11 @@ $stmt = db()->prepare(
 );
 $stmt->execute($params);
 $requests = $stmt->fetchAll();
-$deleted_voucher_ids = [];
-foreach ($requests as $r) {
-    if (($r['status'] ?? '') !== 'deleted') {
-        continue;
-    }
-    $voucher_id = (int)($r['voucher_id'] ?? 0);
-    if ($voucher_id > 0) {
-        $deleted_voucher_ids[] = $voucher_id;
-    }
-}
+$deleted_rows = array_filter(
+    $requests,
+    static fn(array $r): bool => (($r['status'] ?? '') === 'deleted' && (int)($r['voucher_id'] ?? 0) > 0)
+);
+$deleted_voucher_ids = array_map('intval', array_column($deleted_rows, 'voucher_id'));
 $purpose_map = acc_get_voucher_purposes($deleted_voucher_ids);
 
 $can_dd        = acc_can_review_voucher_delete_dd();
