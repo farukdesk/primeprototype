@@ -16,7 +16,7 @@ $page      = max(1, (int)($_GET['page'] ?? 1));
 $per_page  = 20;
 
 $valid_types   = ['receipt','payment','contra','journal'];
-$valid_statuses = ['posted','reversed'];
+$valid_statuses = ['posted','reversed','memo'];
 
 $where  = ['v.is_deleted = 0'];
 $params = [];
@@ -109,6 +109,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <option value="">All Status</option>
                     <option value="posted"   <?= $f_status === 'posted'   ? 'selected' : '' ?>>Posted</option>
                     <option value="reversed" <?= $f_status === 'reversed' ? 'selected' : '' ?>>Reversed</option>
+                    <option value="memo"     <?= $f_status === 'memo'     ? 'selected' : '' ?>>Old ERP (not counted)</option>
                 </select>
             </div>
             <div class="col-6 col-md-2">
