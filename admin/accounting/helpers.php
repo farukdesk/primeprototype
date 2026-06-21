@@ -1243,6 +1243,11 @@ function acc_student_fee_summary(int $student_id): ?array
  * @param  string $date              Y-m-d
  * @param  string $reference         Free-text reference
  * @param  string $narration         Voucher narration
+ * @param  bool   $allow_duplicate_transaction_number When true, the unique
+ *         transaction/receipt-number guard is skipped. Used by the Old ERP bulk
+ *         merge, where one historical receipt commonly bundles several fee heads
+ *         (e.g. Admission + Form + ID Card + Registration) and so legitimately
+ *         appears on more than one row.
  *
  * @return int  New acc_vouchers.id
  * @throws RuntimeException on over-payment or accounting failure
@@ -1262,7 +1267,8 @@ function acc_collect_student_fee(
     int    $income_account_id,
     string $date,
     string $reference  = '',
-    string $narration  = ''
+    string $narration  = '',
+    bool   $allow_duplicate_transaction_number = false
 ): int {
     if ($amount <= 0) {
         throw new RuntimeException('Payment amount must be greater than zero.');
@@ -1275,7 +1281,7 @@ function acc_collect_student_fee(
         $transaction_number
     );
 
-    if ($transaction_number !== null && acc_transaction_number_exists($transaction_number)) {
+    if (!$allow_duplicate_transaction_number && $transaction_number !== null && acc_transaction_number_exists($transaction_number)) {
         throw new RuntimeException(
             'Transaction number "' . $transaction_number . '" has already been used. Each payment must have a unique transaction number.'
         );
