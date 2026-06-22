@@ -3,12 +3,19 @@ require_once __DIR__ . '/../includes/auth.php';
 require_access('student-accounts');
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/../accounting/helpers.php';
+require_once __DIR__ . '/../students/helpers.php';  // sm_program_data(), sm_batches()
 
 $page_title = 'Student Accounts';
 $db         = db();
 
+// ── Department scope ──────────────────────────────────────────────────────────
+$dept_scope = get_dept_scope(); // null = unrestricted; int[] = allowed dept ids
+
 // ── Filters ───────────────────────────────────────────────────────────────────
-$search = trim($_GET['q'] ?? '');
+$search    = trim($_GET['q'] ?? '');
+$f_dept    = (int)($_GET['dept']    ?? 0);
+$f_program = (int)($_GET['program'] ?? 0);
+$f_batch   = (int)($_GET['batch']   ?? 0);
 
 $where  = ['1=1'];
 $params = [];
@@ -17,6 +24,29 @@ if ($search !== '') {
     $where[]  = '(s.full_name LIKE ? OR s.student_id LIKE ?)';
     $params[] = "%$search%";
     $params[] = "%$search%";
+}
+if ($f_dept > 0) {
+    $where[]  = 's.dept_id = ?';
+    $params[] = $f_dept;
+}
+if ($f_program > 0) {
+    $where[]  = 's.program_id = ?';
+    $params[] = $f_program;
+}
+if ($f_batch > 0) {
+    $where[]  = 's.batch_id = ?';
+    $params[] = $f_batch;
+}
+
+// Apply department scope restriction for non-super-admins
+if ($dept_scope !== null) {
+    if (empty($dept_scope)) {
+        $where[] = '0 = 1';
+    } else {
+        $phs     = implode(',', array_fill(0, count($dept_scope), '?'));
+        $where[] = "s.dept_id IN ($phs)";
+        array_push($params, ...$dept_scope);
+    }
 }
 
 $where_sql = implode(' AND ', $where);
@@ -64,6 +94,24 @@ $stmt = $db->prepare(
 $stmt->execute($params);
 $packages = $stmt->fetchAll();
 
+// ── Filter dropdown data ──────────────────────────────────────────────────────
+$departments = $db->query(
+    'SELECT id, name FROM dept_departments WHERE is_active = 1 ORDER BY name ASC'
+)->fetchAll();
+$all_programs = sm_program_data();
+$batches      = sm_batches();
+// Restrict dept/program dropdowns to the user's allowed departments
+if ($dept_scope !== null) {
+    $departments = array_values(array_filter(
+        $departments,
+        fn($d) => in_array((int)$d['id'], $dept_scope, true)
+    ));
+    $all_programs = array_values(array_filter(
+        $all_programs,
+        fn($p) => in_array((int)$p['dept_id'], $dept_scope, true)
+    ));
+}
+
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
@@ -86,18 +134,54 @@ require_once __DIR__ . '/../includes/header.php';
 
 <?= flash_show() ?>
 
-<!-- ── Search bar ── -->
+<!-- ── Search & Filter bar ── -->
 <div class="card mb-4">
     <div class="card-body py-3">
         <form method="get" class="row g-2 align-items-end">
-            <div class="col-md-5">
-                <input type="text" name="q" class="form-control" placeholder="Search by student name or ID…"
+            <div class="col-md-4">
+                <label class="form-label fw-semibold small mb-1">Search</label>
+                <input type="text" name="q" class="form-control form-control-sm" placeholder="Student name or ID…"
                        value="<?= h($search) ?>">
             </div>
-            <div class="col-auto">
-                <button class="btn btn-primary btn-sm" type="submit"><i class="fas fa-search me-1"></i>Search</button>
-                <?php if ($search !== ''): ?>
-                <a href="<?= APP_URL ?>/student-accounts/index.php" class="btn btn-outline-secondary btn-sm">Clear</a>
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold small mb-1">Department</label>
+                <select name="dept" id="filter_dept" class="form-select form-select-sm">
+                    <option value="">All Depts</option>
+                    <?php foreach ($departments as $d): ?>
+                    <option value="<?= $d['id'] ?>" <?= $f_dept == $d['id'] ? 'selected' : '' ?>>
+                        <?= h($d['name']) ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold small mb-1">Program</label>
+                <select name="program" id="filter_program" class="form-select form-select-sm">
+                    <option value="">All Programs</option>
+                    <?php foreach ($all_programs as $p): ?>
+                    <option value="<?= $p['id'] ?>"
+                            data-dept="<?= $p['dept_id'] ?>"
+                            <?= $f_program == $p['id'] ? 'selected' : '' ?>>
+                        <?= h($p['program_name']) ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold small mb-1">Batch</label>
+                <select name="batch" class="form-select form-select-sm">
+                    <option value="">All Batches</option>
+                    <?php foreach ($batches as $b): ?>
+                    <option value="<?= $b['id'] ?>" <?= $f_batch == $b['id'] ? 'selected' : '' ?>>
+                        <?= h($b['name']) ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-6 col-md-2 d-flex gap-2">
+                <button class="btn btn-primary btn-sm flex-fill" type="submit"><i class="fas fa-search me-1"></i>Filter</button>
+                <?php if ($search !== '' || $f_dept || $f_program || $f_batch): ?>
+                <a href="<?= APP_URL ?>/student-accounts/index.php" class="btn btn-outline-secondary btn-sm flex-fill">Clear</a>
                 <?php endif; ?>
             </div>
         </form>
@@ -223,7 +307,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <?php for ($p = 1; $p <= $pages; $p++): ?>
                     <li class="page-item <?= $p === $page ? 'active' : '' ?>">
                         <a class="page-link"
-                           href="?<?= http_build_query(['q' => $search, 'page' => $p]) ?>">
+                           href="?<?= http_build_query(['q' => $search, 'dept' => $f_dept ?: '', 'program' => $f_program ?: '', 'batch' => $f_batch ?: '', 'page' => $p]) ?>">
                             <?= $p ?>
                         </a>
                     </li>
@@ -237,3 +321,26 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
+<script>
+(function () {
+    var deptSel    = document.getElementById('filter_dept');
+    var programSel = document.getElementById('filter_program');
+    if (!deptSel || !programSel) return;
+
+    function filterPrograms() {
+        var deptId = deptSel.value;
+        var opts   = programSel.querySelectorAll('option[data-dept]');
+        opts.forEach(function (opt) {
+            var show = !deptId || opt.dataset.dept === deptId;
+            opt.hidden   = !show;
+            opt.disabled = !show;
+            if (!show && opt.selected) {
+                programSel.value = '';
+            }
+        });
+    }
+
+    deptSel.addEventListener('change', filterPrograms);
+    filterPrograms(); // run on page load to respect pre-selected dept
+}());
+</script>
