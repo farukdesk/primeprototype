@@ -1449,15 +1449,16 @@ function acc_package_is_fixed_monthly(array $pkg): bool
  * honoring fixed-monthly packages.
  *
  * Merit-based packages use the supplied merit calculation (tuition_payable +
- * fixed + English portions). Fixed packages use the flat package
- * `monthly_payment` for tuition only; that amount only ever drops when a manual
- * tuition scholarship/concession is recorded on the semester (tuition_fee vs
- * tuition_payable) and never changes automatically.
+ * fixed + English portions). Fixed packages use the same per-semester basis:
+ * the payable tuition for the semester is the Base Tuition / Semester
+ * (`tuition_payable`, already net of any manual scholarship/concession), never
+ * the flat `monthly_payment`. The Fixed Monthly Payment is a static,
+ * informational figure only and is never multiplied into any semester total.
  *
  * Neither the institutional (fixed) fees nor the English Course Fee are part of
- * the flat monthly bundle: both are charged separately, on top of the flat
- * monthly amount, so they are always counted in the semester total (and
- * therefore in collection, dues and statements).
+ * the per-semester tuition: both are charged separately, on top of the tuition,
+ * so they are always counted in the semester total (and therefore in
+ * collection, dues and statements).
  *
  * @return array{0: float, 1: float} [sem_total_due, monthly_fee]
  */
@@ -1466,24 +1467,27 @@ function acc_semester_monthly_due(array $pkg, array $sf, float $merit_sem_total_
     $months_int = max(1, $months_int);
 
     if (acc_package_is_fixed_monthly($pkg)) {
-        $fixed_monthly = (float)$pkg['monthly_payment'];
-        $scholarship   = max(0.0, (float)($sf['tuition_fee'] ?? 0) - (float)($sf['tuition_payable'] ?? 0));
+        // Payable tuition per semester is the Base Tuition / Semester. We read it
+        // from $sf['tuition_payable'], which sfp_recalculate_semester() already
+        // stores net of any manual scholarship/concession (tuition_fee minus
+        // discounts). The Fixed Monthly Payment is static and is intentionally NOT
+        // used in this calculation.
+        $tuition_per_sem = max(0.0, (float)($sf['tuition_payable'] ?? 0));
 
         $total_months    = (float)($pkg['total_months'] ?? 0);
         $mps             = (float)($pkg['months_per_semester'] ?? 0);
 
-        // English Course Fee is billed separately, on top of the flat monthly fee.
+        // English Course Fee is billed separately, on top of the tuition.
         $english_per_sem = ($total_months > 0 && $mps > 0)
             ? round((float)($pkg['english_course_fee'] ?? 0) / $total_months * $mps, 2) : 0.0;
         $english_per_sem = max(0.0, $english_per_sem - (float)($sf['english_discount_amount'] ?? 0));
 
-        // Institutional (fixed) fees are billed separately, on top of the flat
-        // monthly fee — the flat monthly amount covers tuition only.
+        // Institutional (fixed) fees are billed separately, on top of the tuition.
         $fixed_per_sem = ($total_months > 0 && $mps > 0)
             ? round((float)($pkg['fixed_institutional_fees'] ?? 0) / $total_months * $mps, 2) : 0.0;
         $fixed_per_sem = max(0.0, $fixed_per_sem - (float)($sf['fixed_discount_amount'] ?? 0));
 
-        $sem_total = max(0.0, $fixed_monthly * $months_int - $scholarship) + $english_per_sem + $fixed_per_sem;
+        $sem_total = $tuition_per_sem + $english_per_sem + $fixed_per_sem;
     } else {
         $sem_total = $merit_sem_total_due;
     }
@@ -1630,7 +1634,8 @@ function acc_student_fee_summary(int $student_id): ?array
         $merit_sem_total_due = $tuition_payable_sem + $fixed_per_sem + $english_per_sem;
 
         // Monthly fee (distribute evenly; last month absorbs any rounding remainder).
-        // Fixed-monthly packages override this with the flat package monthly fee.
+        // Fixed and merit packages share the same per-semester basis (Base Tuition /
+        // Semester); the Fixed Monthly Payment is static and never used here.
         [$sem_total_due, $monthly_fee] = acc_semester_monthly_due($pkg, $sf, $merit_sem_total_due, $months_int);
 
         // Total paid for this semester: semester_tuition + any per-sem fixed/english + legacy share
