@@ -760,7 +760,7 @@ if ($is_fixed_pkg && $first_sem) {
     [$fx_sem_total, $fx_monthly] = acc_semester_monthly_due($pkg, $first_sem, 0.0, max(1, $num_months));
     $sem1_english    = max(0.0, $sem_english_portion - (float)($first_sem['english_discount_amount'] ?? 0));
     $monthly_english = ($num_months > 0) ? round($sem1_english / $num_months, 2) : 0.0;
-    $monthly_tuition = $fx_monthly - $monthly_english;
+    $monthly_tuition = max(0.0, $fx_monthly - $monthly_english);
     $monthly_fixed   = 0.0;
     $monthly_total   = $fx_monthly;
 }
