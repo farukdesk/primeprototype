@@ -978,6 +978,21 @@ function bip_import_student(
     $monthly_fixed_fee   = $total_months > 0 ? round($fixed_fees / $total_months, 4) : 0;
     $monthly_english_fee = $total_months > 0 ? round($english_fee / $total_months, 4) : 0;
     $payment_start = bip_determine_payment_start($pdf, $student, $cf_program);
+
+    // Snapshot the payment start month resolved above (which honours the CSV
+    // "Payment Start Month") onto the package so the student-account view shows
+    // the imported value rather than the programme default. The view picks the
+    // bi- vs tri-semester field by total_semesters (<= SFP_MAX_BI_SEMESTER_COUNT
+    // ⇒ bi-semester), matching acc_package_start_month().
+    $payment_start_month = (int)$payment_start['month'];
+    $is_bi_semester_pkg  = $total_semesters > 0 && $total_semesters <= SFP_MAX_BI_SEMESTER_COUNT;
+    $bi_start_month_snapshot  = $is_bi_semester_pkg
+        ? $payment_start_month
+        : ((int)($cf_program['bi_semester_start_month'] ?? 0) ?: null);
+    $tri_start_month_snapshot = !$is_bi_semester_pkg
+        ? $payment_start_month
+        : ((int)($cf_program['tri_semester_start_month'] ?? 0) ?: null);
+
     $import_note   = 'Imported from old ERP (bulk PDF/CSV import). Payment start: ' . $payment_start['token'] . '.'
                    . ($payment_type === 'fixed'
                        ? ' Payment type: Fixed (flat monthly ' . number_format($monthly_payment, 2) . ').'
@@ -1006,8 +1021,8 @@ function bip_import_student(
         $total_semesters,
         $total_months,
         $months_per_semester,
-        (int)($cf_program['bi_semester_start_month'] ?? 0) ?: null,
-        (int)($cf_program['tri_semester_start_month'] ?? 0) ?: null,
+        $bi_start_month_snapshot,
+        $tri_start_month_snapshot,
         (int)$tuition_full,
         $tuition_per_semester,
         (int)$admission_fee,
