@@ -83,7 +83,12 @@ $offset      = ($page - 1) * $per_page;
 
 $sql = 'SELECT s.*,
                d.name AS dept_name,
-               p.program_name
+               p.program_name,
+               (SELECT COUNT(*)
+                  FROM sfp_payments sp
+                  JOIN acc_vouchers v ON v.id = sp.voucher_id
+                 WHERE sp.student_id = s.id
+                   AND v.is_deleted = 0) AS payment_count
         FROM students s
         JOIN dept_departments d ON d.id = s.dept_id
         LEFT JOIN dept_academic_programs p ON p.id = s.program_id'
@@ -376,6 +381,12 @@ require_once __DIR__ . '/../includes/header.php';
                                 </a>
                                 <?php endif; ?>
                                 <?php if (sm_can_delete()): ?>
+                                <?php if ((int)($s['payment_count'] ?? 0) > 0): ?>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" disabled
+                                        title="This student has recorded payments or vouchers and cannot be deleted." style="border-radius:7px;">
+                                    <i class="fas fa-lock"></i>
+                                </button>
+                                <?php else: ?>
                                 <form method="POST" action="<?= APP_URL ?>/students/delete.php"
                                       onsubmit="return confirm('Delete student &quot;<?= h($s['full_name']) ?>&quot;? This cannot be undone.');">
                                     <?= csrf_field() ?>
@@ -384,6 +395,7 @@ require_once __DIR__ . '/../includes/header.php';
                                         <i class="fas fa-trash"></i>
                                     </button>
                                 </form>
+                                <?php endif; ?>
                                 <?php endif; ?>
                             </div>
                         </td>

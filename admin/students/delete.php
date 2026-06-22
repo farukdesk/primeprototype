@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_access('students', 'can_delete');
 require_once __DIR__ . '/helpers.php';
+require_once __DIR__ . '/../student-accounts/helpers.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     redirect(APP_URL . '/students/index.php');
@@ -11,6 +12,13 @@ csrf_check();
 
 $id      = (int)($_POST['id'] ?? 0);
 $student = sm_get_student($id);
+
+// Guard: a student who already has recorded payments / vouchers must not be
+// deleted, so the financial record and the money received are preserved.
+if (sfp_student_payment_count($id) > 0) {
+    flash_set('error', 'This student has recorded payments or vouchers and cannot be deleted. Reverse or delete the related vouchers first.');
+    redirect(APP_URL . '/students/index.php');
+}
 
 // Remove photo
 if ($student['photo']) {

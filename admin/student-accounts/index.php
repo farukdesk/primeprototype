@@ -44,7 +44,12 @@ $stmt = $db->prepare(
             s.status       AS student_status,
             sf1.tuition_payable        AS current_tuition_payable,
             sf1.fixed_discount_amount  AS current_fixed_discount,
-            sf1.english_discount_amount AS current_english_discount
+            sf1.english_discount_amount AS current_english_discount,
+            (SELECT COUNT(*)
+               FROM sfp_payments sp
+               JOIN acc_vouchers v ON v.id = sp.voucher_id
+              WHERE sp.package_id = p.id
+                AND v.is_deleted = 0) AS payment_count
      FROM sfp_packages p
       JOIN students s ON s.id = p.student_id
       LEFT JOIN sfp_semester_fees sf1
@@ -168,6 +173,12 @@ require_once __DIR__ . '/../includes/header.php';
                             <i class="fas fa-file-invoice me-1"></i>Statement
                         </a>
                         <?php if (sfp_can_delete()): ?>
+                        <?php if ((int)($pkg['payment_count'] ?? 0) > 0): ?>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" disabled
+                                title="This account has recorded payments or vouchers and cannot be deleted.">
+                            <i class="fas fa-lock"></i>
+                        </button>
+                        <?php else: ?>
                         <form method="post" action="<?= APP_URL ?>/student-accounts/delete.php"
                               class="d-inline"
                               onsubmit="return confirm('Delete this student account? This cannot be undone.');">
@@ -177,6 +188,7 @@ require_once __DIR__ . '/../includes/header.php';
                                 <i class="fas fa-trash"></i>
                             </button>
                         </form>
+                        <?php endif; ?>
                         <?php endif; ?>
                     </td>
                 </tr>

@@ -32,6 +32,43 @@ function sfp_can_delete(): bool
     return is_super_admin() || can_access('student-accounts', 'can_delete');
 }
 
+// ── Payment / voucher guards ──────────────────────────────────────────────────
+
+/**
+ * Count live (non-deleted) fee payments / receipt vouchers tied to a package.
+ * A package that has any such payment must not be deleted, so the financial
+ * record (and the money received) is preserved.
+ */
+function sfp_package_payment_count(int $package_id): int
+{
+    $stmt = db()->prepare(
+        'SELECT COUNT(*)
+           FROM sfp_payments sp
+           JOIN acc_vouchers v ON v.id = sp.voucher_id
+          WHERE sp.package_id = ?
+            AND v.is_deleted = 0'
+    );
+    $stmt->execute([$package_id]);
+    return (int)$stmt->fetchColumn();
+}
+
+/**
+ * Count live (non-deleted) fee payments / receipt vouchers tied to a student
+ * across all of their packages.
+ */
+function sfp_student_payment_count(int $student_id): int
+{
+    $stmt = db()->prepare(
+        'SELECT COUNT(*)
+           FROM sfp_payments sp
+           JOIN acc_vouchers v ON v.id = sp.voucher_id
+          WHERE sp.student_id = ?
+            AND v.is_deleted = 0'
+    );
+    $stmt->execute([$student_id]);
+    return (int)$stmt->fetchColumn();
+}
+
 // ── Money format ──────────────────────────────────────────────────────────────
 
 function sfp_money(float $n): string
