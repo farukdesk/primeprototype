@@ -19,6 +19,13 @@ if (!$pkg) {
 
 $label = $pkg['student_name'] . ' (' . $pkg['student_sid'] . ') – ' . $pkg['program_name'];
 
+// Guard: a student account that already has recorded payments / vouchers must
+// not be deleted, so the financial record and the money received are preserved.
+if (sfp_package_payment_count($id) > 0) {
+    flash_set('error', 'This student account has recorded payments or vouchers and cannot be deleted. Reverse or delete the related vouchers first.');
+    redirect(APP_URL . '/student-accounts/index.php');
+}
+
 // Cascade delete: sfp_semester_fees rows are removed via ON DELETE CASCADE
 db()->prepare('DELETE FROM sfp_packages WHERE id = ?')->execute([$id]);
 
