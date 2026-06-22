@@ -80,6 +80,8 @@ $stmt = $db->prepare(
          d.name                     AS dept_name,
          d.code                     AS dept_code,
          p.program_name,
+         p.payment_type,
+         p.monthly_payment,
          p.reg_fee_per_semester,
          p.form_id_fee,
          p.admission_fees,
@@ -185,8 +187,8 @@ function due_report_current_obligation(array $pkg, array $semester_fees, string 
         $fixed_per_sem   = max(0.0, $fixed_per_sem   - (float)($sf['fixed_discount_amount']   ?? 0));
         $english_per_sem = max(0.0, $english_per_sem - (float)($sf['english_discount_amount'] ?? 0));
 
-        $sem_total   = (float)$sf['tuition_payable'] + $fixed_per_sem + $english_per_sem;
-        $monthly_fee = $months_int > 1 ? round($sem_total / $months_int, 2) : $sem_total;
+        $merit_sem_total = (float)$sf['tuition_payable'] + $fixed_per_sem + $english_per_sem;
+        [$sem_total, $monthly_fee] = acc_semester_monthly_due($pkg, $sf, $merit_sem_total, $months_int);
 
         for ($m = 1; $m <= $months_int; $m++) {
             $mi = acc_month_year_for_slot($start_month, $start_year, $first_offset + ($m - 1));

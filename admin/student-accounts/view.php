@@ -270,8 +270,10 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
             <div class="card-body px-4">
                 <?php
+                $is_fixed_payment = (($pkg['payment_type'] ?? 'merit') === 'fixed');
                 $constants = [
                     'Programme'                  => $pkg['program_name'],
+                    'Payment Type'               => $is_fixed_payment ? 'Fixed' : 'Merit based',
                     'Total Semesters'            => $pkg['total_semesters'],
                     'Total Months'               => $pkg['total_months'],
                     'Months / Semester'          => number_format((float)$pkg['months_per_semester'], 2),
@@ -284,6 +286,9 @@ require_once __DIR__ . '/../includes/header.php';
                     'Fixed Institutional Fees'   => sfp_money((float)$pkg['fixed_institutional_fees']),
                     'English Course Fee'         => sfp_money((float)$pkg['english_course_fee']),
                 ];
+                if ($is_fixed_payment) {
+                    $constants['Fixed Monthly Payment'] = sfp_money((float)($pkg['monthly_payment'] ?? 0));
+                }
                 if ($pkg['safety_net_cap']) {
                     $constants['Safety Net Cap']          = sfp_money((float)$pkg['safety_net_cap']);
                     $constants['Safety Net / Semester']   = sfp_money((float)$pkg['safety_net_per_semester']);

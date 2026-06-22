@@ -1434,6 +1434,44 @@ function acc_package_payment_start(array $pkg, array $semester_fees = []): array
     ];
 }
 
+/**
+ * Whether a package uses a flat (fixed) monthly fee instead of the
+ * merit-based per-semester calculation.
+ */
+function acc_package_is_fixed_monthly(array $pkg): bool
+{
+    return (($pkg['payment_type'] ?? 'merit') === 'fixed')
+        && (float)($pkg['monthly_payment'] ?? 0) > 0;
+}
+
+/**
+ * Resolve the semester total due and the per-month fee for a semester row,
+ * honoring fixed-monthly packages.
+ *
+ * Merit-based packages use the supplied merit calculation (tuition_payable +
+ * fixed + English portions). Fixed packages use the flat package
+ * `monthly_payment`; that amount only ever drops when a manual tuition
+ * scholarship/concession is recorded on the semester (tuition_fee vs
+ * tuition_payable) and never changes automatically.
+ *
+ * @return array{0: float, 1: float} [sem_total_due, monthly_fee]
+ */
+function acc_semester_monthly_due(array $pkg, array $sf, float $merit_sem_total_due, int $months_int): array
+{
+    $months_int = max(1, $months_int);
+
+    if (acc_package_is_fixed_monthly($pkg)) {
+        $fixed_monthly = (float)$pkg['monthly_payment'];
+        $scholarship   = max(0.0, (float)($sf['tuition_fee'] ?? 0) - (float)($sf['tuition_payable'] ?? 0));
+        $sem_total     = max(0.0, $fixed_monthly * $months_int - $scholarship);
+    } else {
+        $sem_total = $merit_sem_total_due;
+    }
+
+    $monthly_fee = $months_int > 1 ? round($sem_total / $months_int, 2) : $sem_total;
+    return [$sem_total, $monthly_fee];
+}
+
 function acc_student_fee_summary(int $student_id): ?array
 {
     $db = db();
@@ -1569,12 +1607,11 @@ function acc_student_fee_summary(int $student_id): ?array
 
         // Total semester "overall" amount = tuition + fixed portion + English portion
         $tuition_payable_sem = (float)$sf['tuition_payable'];
-        $sem_total_due       = $tuition_payable_sem + $fixed_per_sem + $english_per_sem;
+        $merit_sem_total_due = $tuition_payable_sem + $fixed_per_sem + $english_per_sem;
 
-        // Monthly fee (distribute evenly; last month absorbs any rounding remainder)
-        $monthly_fee = $months_int > 1
-            ? round($sem_total_due / $months_int, 2)
-            : $sem_total_due;
+        // Monthly fee (distribute evenly; last month absorbs any rounding remainder).
+        // Fixed-monthly packages override this with the flat package monthly fee.
+        [$sem_total_due, $monthly_fee] = acc_semester_monthly_due($pkg, $sf, $merit_sem_total_due, $months_int);
 
         // Total paid for this semester: semester_tuition + any per-sem fixed/english + legacy share
         $tuition_paid_sem = (float)($paid_map['semester_tuition'][$sf_id] ?? 0)
@@ -2969,8 +3006,8 @@ function acc_outstanding_through_current_month(int $package_id): float
         $fixed_per_sem   = max(0.0, $fixed_per_sem   - (float)($sf['fixed_discount_amount']   ?? 0));
         $english_per_sem = max(0.0, $english_per_sem - (float)($sf['english_discount_amount'] ?? 0));
 
-        $sem_total_due = (float)$sf['tuition_payable'] + $fixed_per_sem + $english_per_sem;
-        $monthly_fee   = $months_int > 1 ? round($sem_total_due / $months_int, 2) : $sem_total_due;
+        $merit_sem_total_due = (float)$sf['tuition_payable'] + $fixed_per_sem + $english_per_sem;
+        [$sem_total_due, $monthly_fee] = acc_semester_monthly_due($pkg, $sf, $merit_sem_total_due, $months_int);
 
         // Only add months that have already fallen due (≤ current calendar month)
         for ($m = 1; $m <= $months_int; $m++) {
