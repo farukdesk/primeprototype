@@ -46,6 +46,13 @@ try {
 $sem_fixed_portion   = sfp_semester_fixed_portion($pkg);
 $sem_english_portion = sfp_semester_english_portion($pkg);
 
+// Fixed-payment packages (payment_type='fixed') use a flat agreed monthly fee
+// that bundles tuition + institutional + English into a single amount which
+// never changes automatically. Honor that here via acc_semester_monthly_due()
+// so the student-account view matches the Collect Payment page exactly.
+$is_fixed_pkg   = acc_package_is_fixed_monthly($pkg);
+$months_int_pkg = max(1, (int)round((float)$pkg['months_per_semester']));
+
 // Registration fee remains snapshotted on the package (not global cf_settings)
 // Form fee and ID card fee prefer the snapshotted package total, then fall back to shared defaults.
 $reg_fee_per_sem     = (float)($pkg['reg_fee_per_semester'] ?? 0.0);
@@ -163,15 +170,28 @@ $total_english_all     = 0.0;
 foreach ($semester_fees as $sf) {
     $sf_id = (int)$sf['id'];
     $proj = $pending_projection_by_sem[$sf_id] ?? null;
-    $total_tuition_payable += $proj
+    $sem_tuition_payable = $proj
         ? (float)$proj['tuition_payable']
         : (float)$sf['tuition_payable'];
-    $total_fixed_all += $proj
+    $sem_fixed_payable = $proj
         ? (float)$proj['fixed_payable']
         : max(0.0, $sem_fixed_portion - (float)($sf['fixed_discount_amount'] ?? 0));
-    $total_english_all += $proj
+    $sem_english_payable = $proj
         ? (float)$proj['english_payable']
         : max(0.0, $sem_english_portion - (float)($sf['english_discount_amount'] ?? 0));
+
+    if ($is_fixed_pkg) {
+        // Flat agreed monthly fee bundles tuition + institutional + English.
+        $merit_total = $sem_tuition_payable + $sem_fixed_payable + $sem_english_payable;
+        $sf_calc     = array_merge($sf, ['tuition_payable' => $sem_tuition_payable]);
+        [$sem_total_due] = acc_semester_monthly_due($pkg, $sf_calc, $merit_total, $months_int_pkg);
+        $total_tuition_payable += $sem_total_due;
+        // Institutional & English are folded into the flat monthly figure.
+    } else {
+        $total_tuition_payable += $sem_tuition_payable;
+        $total_fixed_all       += $sem_fixed_payable;
+        $total_english_all     += $sem_english_payable;
+    }
 }
 $total_cost = $total_tuition_payable + $total_fixed_all + $total_english_all + $total_reg_fees + $admission_fee + $form_id_fee;
 
@@ -421,6 +441,15 @@ require_once __DIR__ . '/../includes/header.php';
                         : max(0.0, $sem_english_portion - (float)($sf['english_discount_amount'] ?? 0));
                     // Registration fee is shown for all semesters
                     $sem_reg         = $reg_fee_per_sem;
+                    if ($is_fixed_pkg) {
+                        // Flat agreed monthly fee bundles tuition + institutional + English.
+                        $merit_total = $tuition_payable + $fixed_amt + $english_amt;
+                        $sf_calc     = array_merge($sf, ['tuition_payable' => $tuition_payable]);
+                        [$sem_total_due] = acc_semester_monthly_due($pkg, $sf_calc, $merit_total, $months_int_pkg);
+                        $tuition_payable = $sem_total_due;
+                        $fixed_amt       = 0.0;
+                        $english_amt     = 0.0;
+                    }
                     $total_sem       = $tuition_payable + $fixed_amt + $english_amt + $sem_reg;
                     $grand_tuition_payable += $tuition_payable;
                     $grand_fixed           += $fixed_amt;
@@ -572,8 +601,8 @@ require_once __DIR__ . '/../includes/header.php';
                         <?php endif; ?>
                     </td>
                     <td class="text-end fw-semibold"><?= sfp_money($tuition_payable) ?></td>
-                    <td class="text-end"><?= sfp_money($fixed_amt) ?></td>
-                    <td class="text-end"><?= sfp_money($english_amt) ?></td>
+                    <td class="text-end"><?= $is_fixed_pkg ? '<span class="text-muted" style="font-size:.75rem;" title="Included in the flat monthly fee">Incl.</span>' : sfp_money($fixed_amt) ?></td>
+                    <td class="text-end"><?= $is_fixed_pkg ? '<span class="text-muted" style="font-size:.75rem;" title="Included in the flat monthly fee">Incl.</span>' : sfp_money($english_amt) ?></td>
                     <td class="text-end">
                         <?php if ($sem_reg > 0): ?>
                             <?= sfp_money($sem_reg) ?>
@@ -589,8 +618,8 @@ require_once __DIR__ . '/../includes/header.php';
                     <tr>
                         <td colspan="4" class="text-end">Totals →</td>
                         <td class="text-end"><?= sfp_money($grand_tuition_payable) ?></td>
-                        <td class="text-end"><?= sfp_money($grand_fixed) ?></td>
-                        <td class="text-end"><?= sfp_money($grand_english) ?></td>
+                        <td class="text-end"><?= $is_fixed_pkg ? '<span class="text-muted">Incl.</span>' : sfp_money($grand_fixed) ?></td>
+                        <td class="text-end"><?= $is_fixed_pkg ? '<span class="text-muted">Incl.</span>' : sfp_money($grand_english) ?></td>
                         <td class="text-end"><?= sfp_money($total_reg_fees) ?></td>
                         <td class="text-end text-success fs-6"><?= sfp_money($grand_total) ?></td>
                     </tr>
@@ -719,6 +748,14 @@ $monthly_tuition   = ($num_months > 0 && $first_sem) ? ((float)$first_sem['tuiti
 $monthly_fixed     = (float)$pkg['monthly_fixed_fee'];
 $monthly_english   = (float)$pkg['monthly_english_fee'];
 $monthly_total     = $monthly_tuition + $monthly_fixed + $monthly_english;
+if ($is_fixed_pkg && $first_sem) {
+    // Flat agreed monthly fee bundles tuition + institutional + English.
+    [$fx_sem_total, $fx_monthly] = acc_semester_monthly_due($pkg, $first_sem, 0.0, max(1, $num_months));
+    $monthly_tuition = $fx_monthly;
+    $monthly_fixed   = 0.0;
+    $monthly_english = 0.0;
+    $monthly_total   = $fx_monthly;
+}
 $first_sem_label   = ($first_sem && $first_sem['semester_label']) ? $first_sem['semester_label'] : 'Semester 1';
 ?>
 <div class="card mt-4">
@@ -752,8 +789,8 @@ $first_sem_label   = ($first_sem && $first_sem['semester_label']) ? $first_sem['
                     <td class="fw-semibold text-muted"><?= $m ?></td>
                     <td>Month <?= $m ?><?= $month_name ? ' (' . h($month_name) . ')' : '' ?></td>
                     <td class="text-end"><?= sfp_money($monthly_tuition) ?></td>
-                    <td class="text-end"><?= sfp_money($monthly_fixed) ?></td>
-                    <td class="text-end"><?= sfp_money($monthly_english) ?></td>
+                    <td class="text-end"><?= $is_fixed_pkg ? '<span class="text-muted" style="font-size:.75rem;" title="Included in the flat monthly fee">Incl.</span>' : sfp_money($monthly_fixed) ?></td>
+                    <td class="text-end"><?= $is_fixed_pkg ? '<span class="text-muted" style="font-size:.75rem;" title="Included in the flat monthly fee">Incl.</span>' : sfp_money($monthly_english) ?></td>
                     <td class="text-end fw-bold text-success"><?= sfp_money($monthly_total) ?></td>
                 </tr>
                 <?php endfor; ?>
@@ -762,8 +799,8 @@ $first_sem_label   = ($first_sem && $first_sem['semester_label']) ? $first_sem['
                     <tr>
                         <td colspan="2" class="text-end">Semester 1 Total →</td>
                         <td class="text-end"><?= sfp_money($monthly_tuition * $num_months) ?></td>
-                        <td class="text-end"><?= sfp_money($monthly_fixed * $num_months) ?></td>
-                        <td class="text-end"><?= sfp_money($monthly_english * $num_months) ?></td>
+                        <td class="text-end"><?= $is_fixed_pkg ? '<span class="text-muted">Incl.</span>' : sfp_money($monthly_fixed * $num_months) ?></td>
+                        <td class="text-end"><?= $is_fixed_pkg ? '<span class="text-muted">Incl.</span>' : sfp_money($monthly_english * $num_months) ?></td>
                         <td class="text-end text-success fs-6"><?= sfp_money($monthly_total * $num_months) ?></td>
                     </tr>
                 </tfoot>

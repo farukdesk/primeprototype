@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_access('student-accounts');
 require_once __DIR__ . '/helpers.php';
+require_once __DIR__ . '/../accounting/helpers.php';
 
 $page_title = 'Student Accounts';
 $db         = db();
@@ -43,6 +44,7 @@ $stmt = $db->prepare(
             s.admitted_semester,
             s.status       AS student_status,
             sf1.tuition_payable        AS current_tuition_payable,
+            sf1.tuition_fee            AS current_tuition_fee,
             sf1.fixed_discount_amount  AS current_fixed_discount,
             sf1.english_discount_amount AS current_english_discount,
             (SELECT COUNT(*)
@@ -156,6 +158,19 @@ require_once __DIR__ . '/../includes/header.php';
 
                     $current_sem_total = $tuition_current + $fixed_after_discount + $english_after_discount + $reg;
                     $current_monthly_total = ($months_per_semester > 0) ? ($current_sem_total / $months_per_semester) : 0.0;
+
+                    // Fixed-payment packages use a flat agreed monthly fee that bundles
+                    // tuition + institutional + English (matches Collect Payment / view).
+                    if (acc_package_is_fixed_monthly($pkg)) {
+                        $months_int_row = max(1, (int)round($months_per_semester));
+                        $sf_calc = [
+                            'tuition_fee'     => (float)($pkg['current_tuition_fee'] ?? $tuition_current),
+                            'tuition_payable' => $tuition_current,
+                        ];
+                        [$fixed_sem_total, $fixed_monthly] = acc_semester_monthly_due($pkg, $sf_calc, 0.0, $months_int_row);
+                        $current_sem_total     = $fixed_sem_total + $reg;
+                        $current_monthly_total = $fixed_monthly + (($months_int_row > 0) ? $reg / $months_int_row : 0.0);
+                    }
                     ?>
                     <td class="text-center"><?= (int)$pkg['total_semesters'] ?></td>
                     <td><?= sfp_money($current_sem_total) ?></td>
