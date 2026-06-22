@@ -4125,6 +4125,8 @@ CREATE TABLE `sfp_packages` (
   `student_id` int(10) UNSIGNED NOT NULL,
   `cf_program_id` int(10) UNSIGNED DEFAULT NULL COMMENT 'Source cf_programs.id for reference; nullable on program deletion',
   `program_name` varchar(200) NOT NULL,
+  `payment_type` enum('merit','fixed') NOT NULL DEFAULT 'merit' COMMENT 'merit = calculated monthly fee; fixed = flat monthly_payment that never changes automatically',
+  `monthly_payment` decimal(10,2) NOT NULL DEFAULT 0.00 COMMENT 'Flat agreed monthly fee, used only when payment_type = fixed',
   `total_semesters` tinyint(3) UNSIGNED NOT NULL,
   `total_months` smallint(5) UNSIGNED NOT NULL,
   `months_per_semester` decimal(6,2) NOT NULL COMMENT 'total_months / total_semesters',

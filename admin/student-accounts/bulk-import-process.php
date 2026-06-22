@@ -157,6 +157,23 @@ function bip_num(string $s): float
     return (float)str_replace([',', ' '], '', $s);
 }
 
+/**
+ * Normalize a CSV "Payment Type" value to either 'fixed' or 'merit'.
+ * Anything that looks like fixed/flat maps to 'fixed'; everything else
+ * (merit, merit based, blank, unknown) maps to the default 'merit'.
+ */
+function bip_normalize_payment_type(string $s): string
+{
+    $s = strtolower(trim($s));
+    if ($s === '') {
+        return 'merit';
+    }
+    if (strpos($s, 'fix') !== false || strpos($s, 'flat') !== false) {
+        return 'fixed';
+    }
+    return 'merit';
+}
+
 function bip_parse_month_year(string $s): ?array
 {
     $s = trim($s);
@@ -562,6 +579,7 @@ function bip_parse_pdf_text(string $text): array
         'fixed_institutional_fees' => 0.0,
         'concession'               => 0.0,
         'monthly_payment'          => 0.0,
+        'payment_type'             => 'merit',
         'transactions'             => [],
     ];
 
@@ -821,6 +839,7 @@ function bip_import_student(
     $reg_fee_total   = $pdf['registration_fee_total'];
     $concession      = $pdf['concession'];
     $monthly_payment = $pdf['monthly_payment'];
+    $payment_type    = ($pdf['payment_type'] ?? 'merit') === 'fixed' ? 'fixed' : 'merit';
     $program_name    = $pdf['program_name'] ?: 'Unknown Programme';
 
     $cf_program    = $program_name !== '' ? bip_find_cf_program($db, $program_name) : null;
@@ -857,11 +876,15 @@ function bip_import_student(
     $monthly_fixed_fee   = $total_months > 0 ? round($fixed_fees / $total_months, 4) : 0;
     $monthly_english_fee = $total_months > 0 ? round($english_fee / $total_months, 4) : 0;
     $payment_start = bip_determine_payment_start($pdf, $student, $cf_program);
-    $import_note   = 'Imported from old ERP (bulk PDF/CSV import). Payment start: ' . $payment_start['token'] . '.';
+    $import_note   = 'Imported from old ERP (bulk PDF/CSV import). Payment start: ' . $payment_start['token'] . '.'
+                   . ($payment_type === 'fixed'
+                       ? ' Payment type: Fixed (flat monthly ' . number_format($monthly_payment, 2) . ').'
+                       : ' Payment type: Merit based.');
 
     $db->prepare(
         'INSERT INTO sfp_packages
            (student_id, cf_program_id, program_name,
+            payment_type, monthly_payment,
             total_semesters, total_months, months_per_semester,
             bi_semester_start_month, tri_semester_start_month,
             standard_tuition_full, tuition_per_semester, admission_fees,
@@ -871,11 +894,13 @@ function bip_import_student(
             attendance_requirement, safety_net_gpa_threshold,
             monthly_fixed_fee, monthly_english_fee,
             note, assigned_by)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
     )->execute([
         $student_db_id,
         $cf_program_id,
         $program_name,
+        $payment_type,
+        $payment_type === 'fixed' ? round($monthly_payment, 2) : 0,
         $total_semesters,
         $total_months,
         $months_per_semester,
@@ -1138,7 +1163,8 @@ function bip_parse_csv_row(array $row): ?array
     return [
         'student_name'             => bip_row_value($row, ['Student Name']),
         'program_name'             => bip_row_value($row, ['Program', 'Programme']),
-        'beginning_semester'       => bip_row_value($row, ['Beginning Semester']),
+        'beginning_semester'       => bip_row_value($row, ['Beginning Semester', 'Begining Semester']),
+        'payment_type'             => bip_normalize_payment_type(bip_row_value($row, ['Payment Type', 'Payment type'])),
         'total_semesters'          => $total_semesters,
         'admission_fee'            => bip_num(bip_row_value($row, ['Admission Fee'])),
         'registration_fee_total'   => bip_num(bip_row_value($row, ['Registration Fee'])),

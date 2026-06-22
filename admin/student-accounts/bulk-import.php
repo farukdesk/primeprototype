@@ -33,9 +33,14 @@ require_once __DIR__ . '/../includes/header.php';
             <li class="breadcrumb-item active">Bulk PDF / CSV Import</li>
         </ol></nav>
     </div>
-    <a href="<?= APP_URL ?>/student-accounts/index.php" class="btn btn-outline-secondary btn-sm">
-        <i class="fas fa-arrow-left me-1"></i> Back
-    </a>
+    <div class="d-flex gap-2">
+        <a href="<?= APP_URL ?>/student-accounts/sample-csv.php" class="btn btn-outline-success btn-sm">
+            <i class="fas fa-file-csv me-1"></i> Download Sample CSV
+        </a>
+        <a href="<?= APP_URL ?>/student-accounts/index.php" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-arrow-left me-1"></i> Back
+        </a>
+    </div>
 </div>
 
 <?= flash_show() ?>
@@ -48,7 +53,8 @@ require_once __DIR__ . '/../includes/header.php';
             <strong>How it works</strong>
             <ol class="mb-0 mt-1 ps-3 small">
                 <li>For PDF import, export student payment PDFs from the old ERP and name each file with the student ID (e.g. <code>02826105101071.pdf</code>), then bundle them into a single ZIP file.</li>
-                <li>For CSV import, upload a ledger CSV that matches the old ERP export columns, including the <code>Transaction History</code> field.</li>
+                <li>For CSV import, upload a ledger CSV that matches the old ERP export columns, including the <code>Transaction History</code> field. Use the <strong>Download Sample CSV</strong> button above to get a template with every accepted column.</li>
+                <li>Set <code>Payment Type</code> to <strong>Fixed</strong> for students who pay a flat <code>Monthly Payment</code> that never changes automatically (only manual edits or a manual scholarship change it). Leave it as <strong>Merit based</strong> (default) for the calculated per-semester monthly fee.</li>
                 <li>Choose the default cash/bank account and income account that will receive these historical payments in the ledger.</li>
                 <li>Upload the ZIP or CSV. The system processes records in batches, creates each student's fee package, applies any concession as a scholarship, and records the transaction history.</li>
                 <li>Students not found in the system, or those that already have a package (when overwrite is disabled), are reported as skipped.</li>
