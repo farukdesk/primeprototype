@@ -148,6 +148,95 @@ function ci_norm(string $s): string {
     return $s;
 }
 
+/**
+ * Ordered list of system fields that an uploaded column can be mapped to.
+ *
+ * Each entry is keyed by the canonical key consumed by ci_validate_row() and
+ * carries a human label, a list of normalised header aliases (used to
+ * pre-select a column automatically) and whether the field is required.
+ */
+function ci_system_fields(): array {
+    return [
+        // ── Identity ──────────────────────────────────────────────
+        'student_id'            => ['label' => 'Student ID',            'group' => 'Identity', 'required' => false, 'aliases' => ['student_id', 'id_no', 'idno', 'studentid']],
+        'student_name'          => ['label' => 'Name',                  'group' => 'Identity', 'required' => true,  'aliases' => ['student_name', 'name', 'full_name', 'fullname', 'student']],
+        'contact_no'            => ['label' => 'Mobile / Contact No',   'group' => 'Identity', 'required' => false, 'aliases' => ['contact_no', 'mobile_number', 'mobile', 'phone', 'phone_no', 'cell']],
+        'email'                 => ['label' => 'Email',                 'group' => 'Identity', 'required' => false, 'aliases' => ['email', 'email_address', 'mail']],
+        'address'               => ['label' => 'Address',               'group' => 'Identity', 'required' => false, 'aliases' => ['address', 'present_address']],
+        'photo_url'             => ['label' => 'Photo URL',             'group' => 'Identity', 'required' => false, 'aliases' => ['photo_url', 'photo', 'image', 'image_url']],
+        'gender'                => ['label' => 'Gender',                'group' => 'Identity', 'required' => false, 'aliases' => ['gender', 'sex']],
+        'date_of_birth'         => ['label' => 'Date of Birth',         'group' => 'Identity', 'required' => false, 'aliases' => ['date_of_birth', 'dob', 'birth_date', 'birthdate']],
+        'place_of_birth'        => ['label' => 'Place of Birth',        'group' => 'Identity', 'required' => false, 'aliases' => ['place_of_birth', 'birth_place']],
+        'marital_status'        => ['label' => 'Marital Status',        'group' => 'Identity', 'required' => false, 'aliases' => ['marital_status']],
+        'nationality'           => ['label' => 'Nationality',           'group' => 'Identity', 'required' => false, 'aliases' => ['nationality']],
+        'religion'              => ['label' => 'Religion',              'group' => 'Identity', 'required' => false, 'aliases' => ['religion']],
+        'blood_group'           => ['label' => 'Blood Group',           'group' => 'Identity', 'required' => false, 'aliases' => ['blood_group', 'blood']],
+        'nidbirth_certificate'  => ['label' => 'NID / Birth Certificate', 'group' => 'Identity', 'required' => false, 'aliases' => ['nidbirth_certificate', 'nid_birth_certificate', 'nid', 'birth_certificate', 'birth_cert']],
+        'passport_no'           => ['label' => 'Passport No',           'group' => 'Identity', 'required' => false, 'aliases' => ['passport_no', 'passport']],
+
+        // ── Academic & location ───────────────────────────────────
+        'faculty'               => ['label' => 'Faculty',               'group' => 'Academic & Location', 'required' => false, 'aliases' => ['faculty']],
+        'department'            => ['label' => 'Department',            'group' => 'Academic & Location', 'required' => true,  'aliases' => ['department', 'dept']],
+        'program'               => ['label' => 'Program',               'group' => 'Academic & Location', 'required' => false, 'aliases' => ['program', 'programme']],
+        'year'                  => ['label' => 'Year',                  'group' => 'Academic & Location', 'required' => false, 'aliases' => ['year', 'admission_year', 'academic_year']],
+        'session'               => ['label' => 'Session / Semester',    'group' => 'Academic & Location', 'required' => false, 'aliases' => ['session', 'semester']],
+        'batch_name'            => ['label' => 'Batch',                 'group' => 'Academic & Location', 'required' => false, 'aliases' => ['batch_name', 'batch']],
+        'country'               => ['label' => 'Country',               'group' => 'Academic & Location', 'required' => false, 'aliases' => ['country']],
+        'district'              => ['label' => 'District',              'group' => 'Academic & Location', 'required' => false, 'aliases' => ['district']],
+        'thana'                 => ['label' => 'Thana / Upazila',       'group' => 'Academic & Location', 'required' => false, 'aliases' => ['thana', 'upazila']],
+
+        // ── Family ────────────────────────────────────────────────
+        'fathers_name'          => ['label' => "Father's Name",         'group' => 'Family', 'required' => false, 'aliases' => ['fathers_name', 'father_name', 'father']],
+        'mothers_name'          => ['label' => "Mother's Name",         'group' => 'Family', 'required' => false, 'aliases' => ['mothers_name', 'mother_name', 'mother']],
+
+        // ── Guardian ──────────────────────────────────────────────
+        'guardian_name'         => ['label' => 'Guardian Name',         'group' => 'Guardian', 'required' => false, 'aliases' => ['guardian_name']],
+        'guardian_profession'   => ['label' => 'Guardian Profession',   'group' => 'Guardian', 'required' => false, 'aliases' => ['guardian_profession']],
+        'guardian_address'      => ['label' => 'Guardian Address',      'group' => 'Guardian', 'required' => false, 'aliases' => ['guardian_address']],
+        'guardian_phone'        => ['label' => 'Guardian Phone',        'group' => 'Guardian', 'required' => false, 'aliases' => ['guardian_phone']],
+        'guardian_relationship' => ['label' => 'Guardian Relationship', 'group' => 'Guardian', 'required' => false, 'aliases' => ['guardian_relationship']],
+
+        // ── Reference ─────────────────────────────────────────────
+        'reference_name'        => ['label' => 'Reference Name',        'group' => 'Reference', 'required' => false, 'aliases' => ['reference_name']],
+        'reference_address'     => ['label' => 'Reference Address',     'group' => 'Reference', 'required' => false, 'aliases' => ['reference_address']],
+        'reference_contact_no'  => ['label' => 'Reference Contact No',  'group' => 'Reference', 'required' => false, 'aliases' => ['reference_contact_no', 'reference_contact']],
+        'reference_email'       => ['label' => 'Reference Email',       'group' => 'Reference', 'required' => false, 'aliases' => ['reference_email']],
+
+        // ── Local guardian ────────────────────────────────────────
+        'local_guardian_name'        => ['label' => 'Local Guardian Name',       'group' => 'Local Guardian', 'required' => false, 'aliases' => ['local_guardian_name']],
+        'local_guardian_contact_no'  => ['label' => 'Local Guardian Contact No', 'group' => 'Local Guardian', 'required' => false, 'aliases' => ['local_guardian_contact_no', 'local_guardian_contact']],
+        'local_guardian_address'     => ['label' => 'Local Guardian Address',    'group' => 'Local Guardian', 'required' => false, 'aliases' => ['local_guardian_address']],
+        'local_guardian_email'       => ['label' => 'Local Guardian Email',      'group' => 'Local Guardian', 'required' => false, 'aliases' => ['local_guardian_email']],
+
+        // ── Qualifications / documents ────────────────────────────
+        'academic_qualifications'   => ['label' => 'Academic Qualifications (JSON)', 'group' => 'Qualifications & Documents', 'required' => false, 'aliases' => ['academic_qualifications']],
+        'waiver_courses'            => ['label' => 'Waiver Courses (JSON)',          'group' => 'Qualifications & Documents', 'required' => false, 'aliases' => ['waiver_courses']],
+        'total_waiver_credits'      => ['label' => 'Total Waiver Credits',          'group' => 'Qualifications & Documents', 'required' => false, 'aliases' => ['total_waiver_credits']],
+        'attached_certificates_map' => ['label' => 'Attached Certificates Map (JSON)', 'group' => 'Qualifications & Documents', 'required' => false, 'aliases' => ['attached_certificates_map']],
+    ];
+}
+
+/**
+ * Auto-detect a column index for each system field from the normalised headers.
+ * Returns canonical_key => column index (only for fields that matched a column).
+ */
+function ci_auto_map(array $norm_headers, array $fields): array {
+    $map  = [];
+    $used = [];
+    foreach ($fields as $key => $def) {
+        $candidates = array_merge([$key], $def['aliases']);
+        foreach ($candidates as $alias) {
+            $idx = array_search($alias, $norm_headers, true);
+            if ($idx !== false && !isset($used[$idx])) {
+                $map[$key]  = (int)$idx;
+                $used[$idx] = true;
+                break;
+            }
+        }
+    }
+    return $map;
+}
+
 function ci_resolve_dept(string $input, array $by_name, array $by_code): ?array {
     $key = strtolower(trim($input));
     return $by_name[$key] ?? $by_code[$key] ?? null;
@@ -590,9 +679,14 @@ $import_done  = false;
 $import_stats = [];
 $step         = 'upload';
 
-// ── STEP 1 – Upload and parse ─────────────────────────────────────────────────
+// ── STEP 1 – Upload, parse and show field mapping ─────────────────────────────
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'preview') {
+$sys_fields    = ci_system_fields();
+$map_headers   = [];   // raw header labels for the mapping UI
+$auto_map      = [];   // canonical_key => column index (pre-selected)
+$map_sample    = [];   // first data row, for preview hints in the mapping UI
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'map') {
     csrf_check();
 
     $upsert_mode  = !empty($_POST['upsert_mode']);
@@ -639,94 +733,137 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'previ
                 if (empty($header_raw)) {
                     $parse_error = 'The file has no header row.';
                 } else {
-                    $header = array_map('ci_norm', $header_raw);
+                    // Drop fully-empty data rows up front.
+                    $data_rows = [];
+                    foreach ($all_rows as $raw) {
+                        if (count(array_filter(array_map('trim', $raw))) === 0) continue;
+                        $data_rows[] = array_map('strval', $raw);
+                    }
 
-                    $has_name = in_array('student_name', $header, true)
-                             || in_array('name', $header, true);
-                    $has_dept = in_array('department', $header, true);
-
-                    if (!$has_name || !$has_dept) {
-                        $missing = [];
-                        if (!$has_name) $missing[] = 'Name / Student_Name';
-                        if (!$has_dept) $missing[] = 'Department';
-                        $parse_error = 'Missing required column(s): ' . implode(', ', $missing) . '.';
+                    if (empty($data_rows)) {
+                        $parse_error = 'The file contains no data rows.';
                     } else {
-                        $pdo = db();
-                        if (!$pdo) {
-                            $parse_error = 'Database connection failed.';
-                        } else {
-                            // First pass: collect all student IDs from CSV
-                            $csv_sids  = [];
-                            $temp_rows = [];
-                            $row_num   = 1;
-                            foreach ($all_rows as $raw) {
-                                $row_num++;
-                                if (count(array_filter(array_map('trim', $raw))) === 0) continue;
-                                $assoc = [];
-                                foreach ($header as $i => $key) {
-                                    $assoc[$key] = $raw[$i] ?? '';
-                                }
-                                $temp_rows[] = ['row_num' => $row_num, 'assoc' => $assoc];
-                                $sid = trim($assoc['student_id'] ?? $assoc['id_no'] ?? '');
-                                if ($sid !== '') $csv_sids[] = $sid;
-                            }
+                        $header_norm = array_map('ci_norm', $header_raw);
+                        $auto_map    = ci_auto_map($header_norm, $sys_fields);
 
-                            // Batch-fetch existing student records by student_id
-                            $existing = []; // student_id => ['id' => pk, ...]
-                            if (!empty($csv_sids)) {
-                                foreach (array_chunk(array_unique($csv_sids), CI_STUDENT_ID_BATCH_SZ) as $chunk) {
-                                    $ph   = implode(',', array_fill(0, count($chunk), '?'));
-                                    $stmt = $pdo->prepare("SELECT id, student_id FROM students WHERE student_id IN ($ph)");
-                                    $stmt->execute($chunk);
-                                    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $er) {
-                                        $existing[$er['student_id']] = $er;
-                                    }
-                                }
-                            }
+                        // Persist the raw file content for the mapping → preview step.
+                        $_SESSION['csv_import_raw'] = [
+                            'header' => $header_raw,
+                            'rows'   => $data_rows,
+                            'upsert' => $upsert_mode,
+                        ];
 
-                            // Second pass: validate rows
-                            $preview_rows = [];
-                            $seen_ids     = [];
-                            foreach ($temp_rows as $temp) {
-                                $validated = ci_validate_row(
-                                    $temp['assoc'],
-                                    $dept_by_name, $dept_by_code,
-                                    $prog_by_name, $batch_by_name,
-                                    $district_by_name, $thana_by_did_name
-                                );
-                                $validated['row_num'] = $temp['row_num'];
-
-                                $sid = $validated['student_id'];
-                                if ($sid !== '') {
-                                    if (isset($existing[$sid])) {
-                                        if ($upsert_mode) {
-                                            $validated['warnings'][] = 'Student ID exists – missing fields will be updated.';
-                                            $validated['action'] = 'update';
-                                        } else {
-                                            $validated['errors'][] = 'Student ID "' . h($sid) . '" already exists (tick "Update existing" to fill missing fields instead).';
-                                        }
-                                    }
-                                    if (isset($seen_ids[$sid])) {
-                                        $validated['errors'][] = 'Student ID "' . h($sid) . '" appears twice in this file (first at row ' . $seen_ids[$sid] . ').';
-                                    } else {
-                                        $seen_ids[$sid] = $temp['row_num'];
-                                    }
-                                }
-
-                                $preview_rows[] = $validated;
-                            }
-
-                            if (empty($preview_rows)) {
-                                $parse_error  = 'The file contains no data rows.';
-                                $preview_rows = null;
-                            } else {
-                                $step = 'preview';
-                                $_SESSION['csv_import_rows']   = $preview_rows;
-                                $_SESSION['csv_import_upsert'] = $upsert_mode;
-                            }
-                        }
+                        $map_headers = $header_raw;
+                        $map_sample  = $data_rows[0];
+                        $step        = 'map';
                     }
                 }
+            }
+        }
+    }
+}
+
+// ── STEP 2 – Apply mapping, validate and preview ──────────────────────────────
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'preview') {
+    csrf_check();
+
+    $raw         = $_SESSION['csv_import_raw'] ?? null;
+    $upsert_mode = !empty($raw['upsert']);
+    $posted_map  = $_POST['map'] ?? [];
+
+    // Normalise the posted mapping to canonical_key => int column index.
+    $field_map = [];
+    foreach ($sys_fields as $key => $def) {
+        if (isset($posted_map[$key]) && $posted_map[$key] !== '') {
+            $field_map[$key] = (int)$posted_map[$key];
+        }
+    }
+
+    if (!$raw || empty($raw['rows'])) {
+        $parse_error = 'Your upload session has expired. Please upload the file again.';
+    } elseif (!isset($field_map['student_name']) || !isset($field_map['department'])) {
+        $missing = [];
+        if (!isset($field_map['student_name'])) $missing[] = 'Name';
+        if (!isset($field_map['department']))   $missing[] = 'Department';
+        $parse_error = 'Please map the required field(s): ' . implode(', ', $missing) . '.';
+        // Re-render the mapping form with what the user already chose.
+        $map_headers = $raw['header'];
+        $map_sample  = $raw['rows'][0];
+        $auto_map    = $field_map;
+        $step        = 'map';
+    } else {
+        $pdo = db();
+        if (!$pdo) {
+            $parse_error = 'Database connection failed.';
+        } else {
+            // First pass: build mapped associative rows and collect student IDs.
+            $csv_sids  = [];
+            $temp_rows = [];
+            $row_num   = 1;
+            foreach ($raw['rows'] as $data) {
+                $row_num++;
+                $assoc = [];
+                foreach ($field_map as $key => $idx) {
+                    $assoc[$key] = $data[$idx] ?? '';
+                }
+                $temp_rows[] = ['row_num' => $row_num, 'assoc' => $assoc];
+                $sid = trim($assoc['student_id'] ?? '');
+                if ($sid !== '') $csv_sids[] = $sid;
+            }
+
+            // Batch-fetch existing student records by student_id
+            $existing = []; // student_id => ['id' => pk, ...]
+            if (!empty($csv_sids)) {
+                foreach (array_chunk(array_unique($csv_sids), CI_STUDENT_ID_BATCH_SZ) as $chunk) {
+                    $ph   = implode(',', array_fill(0, count($chunk), '?'));
+                    $stmt = $pdo->prepare("SELECT id, student_id FROM students WHERE student_id IN ($ph)");
+                    $stmt->execute($chunk);
+                    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $er) {
+                        $existing[$er['student_id']] = $er;
+                    }
+                }
+            }
+
+            // Second pass: validate rows
+            $preview_rows = [];
+            $seen_ids     = [];
+            foreach ($temp_rows as $temp) {
+                $validated = ci_validate_row(
+                    $temp['assoc'],
+                    $dept_by_name, $dept_by_code,
+                    $prog_by_name, $batch_by_name,
+                    $district_by_name, $thana_by_did_name
+                );
+                $validated['row_num'] = $temp['row_num'];
+
+                $sid = $validated['student_id'];
+                if ($sid !== '') {
+                    if (isset($existing[$sid])) {
+                        if ($upsert_mode) {
+                            $validated['warnings'][] = 'Student ID exists – missing fields will be updated.';
+                            $validated['action'] = 'update';
+                        } else {
+                            $validated['errors'][] = 'Student ID "' . h($sid) . '" already exists (tick "Update existing" to fill missing fields instead).';
+                        }
+                    }
+                    if (isset($seen_ids[$sid])) {
+                        $validated['errors'][] = 'Student ID "' . h($sid) . '" appears twice in this file (first at row ' . $seen_ids[$sid] . ').';
+                    } else {
+                        $seen_ids[$sid] = $temp['row_num'];
+                    }
+                }
+
+                $preview_rows[] = $validated;
+            }
+
+            if (empty($preview_rows)) {
+                $parse_error  = 'The file contains no data rows.';
+                $preview_rows = null;
+            } else {
+                $step = 'preview';
+                $_SESSION['csv_import_rows']   = $preview_rows;
+                $_SESSION['csv_import_upsert'] = $upsert_mode;
             }
         }
     }
@@ -739,7 +876,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
 
     $rows_to_import = $_SESSION['csv_import_rows']   ?? [];
     $upsert_mode    = $_SESSION['csv_import_upsert'] ?? false;
-    unset($_SESSION['csv_import_rows'], $_SESSION['csv_import_upsert']);
+    unset($_SESSION['csv_import_rows'], $_SESSION['csv_import_upsert'], $_SESSION['csv_import_raw']);
 
     if (empty($rows_to_import)) {
         flash_set('error', 'No import data found. Please re-upload the file.');
@@ -1218,7 +1355,7 @@ require_once __DIR__ . '/../includes/header.php';
 
         <form method="POST" enctype="multipart/form-data">
             <?= csrf_field() ?>
-            <input type="hidden" name="action" value="preview">
+            <input type="hidden" name="action" value="map">
 
             <div class="mb-3" style="max-width:480px;">
                 <label class="form-label fw-semibold">Select File</label>
@@ -1241,11 +1378,86 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
 
             <button type="submit" class="btn btn-primary" style="border-radius:8px;">
-                <i class="fas fa-search me-1"></i> Preview Import
+                <i class="fas fa-arrow-right me-1"></i> Continue to Field Mapping
             </button>
         </form>
     </div>
 </div>
+
+<?php /* ── STEP 2: Field mapping ───────────────────────────────── */ ?>
+<?php elseif ($step === 'map'): ?>
+
+<?php
+// Group system fields for display.
+$grouped = [];
+foreach ($sys_fields as $key => $def) {
+    $grouped[$def['group']][$key] = $def;
+}
+?>
+
+<div class="alert alert-info mb-3" style="font-size:.875rem;">
+    <i class="fas fa-info-circle me-2"></i>
+    Match each <strong>system field</strong> to a column from your file. We have pre-selected likely
+    matches based on your column names – review them, adjust as needed, then continue to preview.
+    Fields marked <span class="text-danger">*</span> are required.
+</div>
+
+<form method="POST">
+    <?= csrf_field() ?>
+    <input type="hidden" name="action" value="preview">
+
+    <div class="d-flex gap-2 mb-3">
+        <button type="submit" class="btn btn-primary" style="border-radius:8px;">
+            <i class="fas fa-search me-1"></i> Preview Import
+        </button>
+        <a href="<?= APP_URL ?>/students/csv-import.php" class="btn btn-outline-secondary" style="border-radius:8px;">
+            <i class="fas fa-redo me-1"></i> Re-upload
+        </a>
+    </div>
+
+    <?php foreach ($grouped as $group_name => $fields): ?>
+    <div class="card mb-3">
+        <div class="card-header py-2 px-4">
+            <h6 class="mb-0 fw-semibold"><?= h($group_name) ?></h6>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <?php foreach ($fields as $key => $def): ?>
+                <div class="col-md-6 col-lg-4">
+                    <label class="form-label mb-1" style="font-size:.85rem;">
+                        <?= h($def['label']) ?>
+                        <?php if (!empty($def['required'])): ?><span class="text-danger">*</span><?php endif; ?>
+                    </label>
+                    <select name="map[<?= h($key) ?>]" class="form-select form-select-sm"
+                            <?= !empty($def['required']) ? 'required' : '' ?>>
+                        <option value="">— Not mapped —</option>
+                        <?php foreach ($map_headers as $i => $hdr):
+                            $label = trim((string)$hdr) !== '' ? $hdr : ('Column ' . ($i + 1));
+                            $sample = isset($map_sample[$i]) ? trim((string)$map_sample[$i]) : '';
+                            if ($sample !== '') {
+                                $sample = ' (e.g. ' . mb_strimwidth($sample, 0, 30, '…') . ')';
+                            }
+                            $selected = (isset($auto_map[$key]) && (int)$auto_map[$key] === (int)$i) ? 'selected' : '';
+                        ?>
+                        <option value="<?= (int)$i ?>" <?= $selected ?>><?= h($label . $sample) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+    </div>
+    <?php endforeach; ?>
+
+    <div class="d-flex gap-2 mb-4">
+        <button type="submit" class="btn btn-primary" style="border-radius:8px;">
+            <i class="fas fa-search me-1"></i> Preview Import
+        </button>
+        <a href="<?= APP_URL ?>/students/csv-import.php" class="btn btn-outline-secondary" style="border-radius:8px;">
+            <i class="fas fa-redo me-1"></i> Re-upload
+        </a>
+    </div>
+</form>
 
 <?php /* ── STEP 2: Preview ─────────────────────────────────────── */ ?>
 <?php elseif ($step === 'preview' && $preview_rows !== null): ?>
