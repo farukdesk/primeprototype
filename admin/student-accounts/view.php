@@ -385,13 +385,11 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
                 <?php endforeach; ?>
 
+                <?php if (!empty($old_erp_proofs)): ?>
                 <hr class="my-2">
                 <div class="d-flex mb-2 gap-2 align-items-start">
                     <div style="min-width:150px;font-size:.8rem;color:#6b7280;font-weight:600;">OLD ERP Proof</div>
                     <div style="font-size:.875rem;">
-                        <?php if (empty($old_erp_proofs)): ?>
-                            <span class="text-muted">No proof uploaded</span>
-                        <?php else: ?>
                             <div class="d-flex flex-column gap-2">
                                 <?php foreach ($old_erp_proofs as $proof):
                                     $proof_url = UPLOAD_URL . '/students/files/' . rawurlencode($proof['stored_name']);
@@ -419,9 +417,9 @@ require_once __DIR__ . '/../includes/header.php';
                                 </div>
                                 <?php endforeach; ?>
                             </div>
-                        <?php endif; ?>
                     </div>
                 </div>
+                <?php endif; ?>
             </div>
         </div>
     </div>
