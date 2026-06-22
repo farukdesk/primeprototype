@@ -34,6 +34,9 @@ require_once __DIR__ . '/../includes/header.php';
         </ol></nav>
     </div>
     <div class="d-flex gap-2">
+        <a href="<?= APP_URL ?>/student-accounts/bulk-proof-upload.php" class="btn btn-outline-success btn-sm">
+            <i class="fas fa-images me-1"></i> Upload OLD ERP Proof (ZIP)
+        </a>
         <a href="<?= APP_URL ?>/student-accounts/sample-csv.php" class="btn btn-outline-success btn-sm">
             <i class="fas fa-file-csv me-1"></i> Download Sample CSV
         </a>

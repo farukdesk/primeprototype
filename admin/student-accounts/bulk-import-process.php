@@ -896,6 +896,103 @@ function bip_find_student(PDO $db, string $sid): array|false
     return false;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// OLD ERP PROOF (image) attachment
+// ─────────────────────────────────────────────────────────────────────────────
+
+const BIP_PROOF_IMAGE_EXTS  = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+const BIP_PROOF_IMAGE_MIMES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+
+/**
+ * Store a single OLD ERP proof image (already extracted to $src_path) and link
+ * it to the student identified by $student_sid via the student_files table.
+ *
+ * The file is tagged with file_name = SFP_OLD_ERP_PROOF_LABEL so the student
+ * account view can list / download it.
+ */
+function bip_store_proof_for_student(
+    PDO    $db,
+    string $student_sid,
+    string $src_path,
+    string $original_name,
+    int    $user_id,
+    bool   $overwrite
+): array {
+    $student = bip_find_student($db, $student_sid);
+    if (!$student) {
+        return ['status' => 'failed', 'message' => 'Student not found in DB (ID: ' . $student_sid . ')'];
+    }
+    $student_db_id = (int)$student['id'];
+    $student_name  = (string)($student['full_name'] ?? '');
+
+    if (!is_file($src_path)) {
+        return ['status' => 'failed', 'message' => 'Proof image not found in temp dir', 'student_name' => $student_name];
+    }
+
+    $mime = (new finfo(FILEINFO_MIME_TYPE))->file($src_path);
+    if (!in_array($mime, BIP_PROOF_IMAGE_MIMES, true)) {
+        return ['status' => 'failed', 'message' => 'File is not a valid image (JPG/PNG/GIF/WebP)', 'student_name' => $student_name];
+    }
+    // Defense-in-depth: confirm the bytes are a real image, not just a spoofed MIME.
+    if (@getimagesize($src_path) === false) {
+        return ['status' => 'failed', 'message' => 'File is not a readable image', 'student_name' => $student_name];
+    }
+
+    $ext = strtolower(pathinfo($original_name, PATHINFO_EXTENSION));
+    if (!in_array($ext, BIP_PROOF_IMAGE_EXTS, true)) {
+        $mime_to_ext = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/gif' => 'gif', 'image/webp' => 'webp'];
+        $ext = $mime_to_ext[$mime] ?? 'jpg';
+    }
+
+    $dir = UPLOAD_DIR . '/students/files';
+    if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
+        return ['status' => 'failed', 'message' => 'Upload directory is not writable', 'student_name' => $student_name];
+    }
+
+    if ($overwrite) {
+        // Remove previously imported proofs for this student so the latest wins.
+        $old = $db->prepare('SELECT stored_name FROM student_files WHERE student_id = ? AND file_name = ?');
+        $old->execute([$student_db_id, SFP_OLD_ERP_PROOF_LABEL]);
+        foreach ($old->fetchAll(PDO::FETCH_COLUMN) as $stored_name) {
+            $old_path = $dir . '/' . $stored_name;
+            if (is_file($old_path)) {
+                @unlink($old_path);
+            }
+        }
+        $db->prepare('DELETE FROM student_files WHERE student_id = ? AND file_name = ?')
+           ->execute([$student_db_id, SFP_OLD_ERP_PROOF_LABEL]);
+    } else {
+        $chk = $db->prepare('SELECT COUNT(*) FROM student_files WHERE student_id = ? AND file_name = ?');
+        $chk->execute([$student_db_id, SFP_OLD_ERP_PROOF_LABEL]);
+        if ((int)$chk->fetchColumn() > 0) {
+            return ['status' => 'skipped', 'message' => 'Proof already exists (overwrite disabled)', 'student_name' => $student_name];
+        }
+    }
+
+    $stored = bin2hex(random_bytes(12)) . '.' . $ext;
+    if (!copy($src_path, $dir . '/' . $stored)) {
+        return ['status' => 'failed', 'message' => 'Failed to store proof image', 'student_name' => $student_name];
+    }
+    $size = is_file($dir . '/' . $stored) ? (int)filesize($dir . '/' . $stored) : null;
+
+    $db->prepare(
+        'INSERT INTO student_files
+           (student_id, file_name, description, stored_name, original_name, mime_type, file_size, uploaded_by)
+         VALUES (?,?,?,?,?,?,?,?)'
+    )->execute([
+        $student_db_id,
+        SFP_OLD_ERP_PROOF_LABEL,
+        'Old ERP data proof imported via bulk upload.',
+        $stored,
+        $original_name,
+        $mime,
+        $size,
+        $user_id,
+    ]);
+
+    return ['status' => 'created', 'message' => 'Proof attached', 'student_name' => $student_name];
+}
+
 function bip_import_student(
     string $student_sid,
     array  $pdf,
@@ -1634,6 +1731,157 @@ if ($action === 'cleanup') {
     }
     bip_session_del($session_key);
     bip_json(['success' => true]);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ACTION: proof_upload  (ZIP of OLD ERP proof images named by student ID)
+// ─────────────────────────────────────────────────────────────────────────────
+
+if ($action === 'proof_upload') {
+    if (empty($_FILES['proof_file']['name']) || ($_FILES['proof_file']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+        bip_error('No ZIP file uploaded, or upload error occurred.');
+    }
+
+    $file_ext = strtolower(pathinfo((string)$_FILES['proof_file']['name'], PATHINFO_EXTENSION));
+    if ($file_ext !== 'zip') {
+        bip_error('Only a ZIP archive of proof photos is accepted.');
+    }
+
+    if (!class_exists('ZipArchive')) {
+        bip_error('PHP ZipArchive extension is not available on this server.');
+    }
+
+    $zip_mime = (new finfo(FILEINFO_MIME_TYPE))->file($_FILES['proof_file']['tmp_name']);
+    $valid_mimes = ['application/zip', 'application/x-zip-compressed', 'application/octet-stream', 'multipart/x-zip'];
+    if (!in_array($zip_mime, $valid_mimes, true)) {
+        bip_error('The uploaded ZIP file is not valid.');
+    }
+
+    $tmp_dir = '';
+    try {
+        $zip = new ZipArchive();
+        if ($zip->open($_FILES['proof_file']['tmp_name']) !== true) {
+            bip_error('Could not open the ZIP file. It may be corrupt.');
+        }
+
+        $tmp_dir  = bip_temp_dir_create();
+        $manifest = [];
+
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            $entry = $zip->getNameIndex($i);
+            if ($entry === false || substr($entry, -1) === '/') continue;
+
+            $base = basename($entry);
+            $ext  = strtolower(pathinfo($base, PATHINFO_EXTENSION));
+            if (!in_array($ext, BIP_PROOF_IMAGE_EXTS, true)) continue;
+
+            $sid = pathinfo($base, PATHINFO_FILENAME);
+            if ($sid === '') continue;
+
+            $stream = $zip->getStream($entry);
+            if ($stream === false) continue;
+
+            $dest = $tmp_dir . DIRECTORY_SEPARATOR . 'proof_' . $i . '.' . $ext;
+            $out  = @fopen($dest, 'wb');
+            if ($out === false) { fclose($stream); continue; }
+            stream_copy_to_stream($stream, $out);
+            fclose($stream);
+            fclose($out);
+
+            if (is_file($dest)) {
+                $manifest[] = ['sid' => $sid, 'path' => $dest, 'original' => $base, 'source' => 'proof'];
+            }
+        }
+        $zip->close();
+    } catch (Throwable $e) {
+        if ($tmp_dir !== '') {
+            bip_temp_dir_remove($tmp_dir);
+        }
+        bip_error('Failed to prepare proof ZIP: ' . $e->getMessage());
+    }
+
+    if (empty($manifest)) {
+        if ($tmp_dir !== '') {
+            bip_temp_dir_remove($tmp_dir);
+        }
+        bip_error('No image files (JPG/PNG/GIF/WebP) found in the ZIP archive.');
+    }
+
+    $session_key = bin2hex(random_bytes(16));
+    bip_session_set($session_key, [
+        'tmp_dir'   => $tmp_dir,
+        'manifest'  => $manifest,
+        'kind'      => 'proof',
+        'overwrite' => !empty($_POST['overwrite']) && $_POST['overwrite'] === '1',
+    ]);
+
+    bip_json([
+        'success'     => true,
+        'session_key' => $session_key,
+        'total'       => count($manifest),
+    ]);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ACTION: proof_batch
+// ─────────────────────────────────────────────────────────────────────────────
+
+if ($action === 'proof_batch') {
+    $session_key = trim($_POST['session_key'] ?? '');
+    $offset      = max(0, (int)($_POST['offset'] ?? 0));
+    $batch_size  = max(1, min(50, (int)($_POST['batch_size'] ?? 20)));
+
+    $session = bip_session_get($session_key);
+    if (!$session || ($session['kind'] ?? '') !== 'proof') {
+        bip_error('Proof upload session not found or expired. Please re-upload the ZIP file.');
+    }
+
+    $manifest  = $session['manifest'];
+    $overwrite = (bool)$session['overwrite'];
+
+    $user    = auth_user();
+    $user_id = (int)($user['id'] ?? 0);
+    $db      = db();
+
+    $batch   = array_slice($manifest, $offset, $batch_size);
+    $rows    = [];
+    $created = 0;
+    $skipped = 0;
+    $failed  = 0;
+
+    foreach ($batch as $item) {
+        $sid = $item['sid'];
+        try {
+            $result = bip_store_proof_for_student(
+                $db,
+                $sid,
+                $item['path'] ?? '',
+                $item['original'] ?? ($sid . '.jpg'),
+                $user_id,
+                $overwrite
+            );
+        } catch (Throwable $e) {
+            $result = ['status' => 'failed', 'message' => $e->getMessage()];
+        }
+
+        $rows[] = array_merge(['sid' => $sid], $result);
+        if ($result['status'] === 'created')      $created++;
+        elseif ($result['status'] === 'skipped')  $skipped++;
+        else                                      $failed++;
+    }
+
+    $done = ($offset + $batch_size) >= count($manifest);
+
+    bip_json([
+        'success' => true,
+        'offset'  => $offset + count($batch),
+        'total'   => count($manifest),
+        'done'    => $done,
+        'created' => $created,
+        'skipped' => $skipped,
+        'failed'  => $failed,
+        'rows'    => $rows,
+    ]);
 }
 
 bip_error('Unknown action.');
