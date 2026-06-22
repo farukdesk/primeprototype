@@ -46,14 +46,6 @@ try {
 $sem_fixed_portion   = sfp_semester_fixed_portion($pkg);
 $sem_english_portion = sfp_semester_english_portion($pkg);
 
-// Fixed-payment packages (payment_type='fixed') use a flat agreed monthly fee
-// that covers tuition only and never changes automatically. Institutional
-// (fixed) fees and the English Course Fee are billed separately, on top. Honor
-// that here via acc_semester_monthly_due() so the student-account view matches
-// the Collect Payment page exactly.
-$is_fixed_pkg   = acc_package_is_fixed_monthly($pkg);
-$months_int_pkg = max(1, (int)round((float)$pkg['months_per_semester']));
-
 // Registration fee remains snapshotted on the package (not global cf_settings)
 // Form fee and ID card fee prefer the snapshotted package total, then fall back to shared defaults.
 $reg_fee_per_sem     = (float)($pkg['reg_fee_per_semester'] ?? 0.0);
@@ -181,23 +173,12 @@ foreach ($semester_fees as $sf) {
         ? (float)$proj['english_payable']
         : max(0.0, $sem_english_portion - (float)($sf['english_discount_amount'] ?? 0));
 
-    if ($is_fixed_pkg) {
-        // Flat agreed monthly fee covers tuition only. Institutional (fixed) fees
-        // and the English Course Fee are charged separately (on top) and shown on
-        // their own.
-        $merit_total = $sem_tuition_payable + $sem_fixed_payable + $sem_english_payable;
-        $sf_calc     = array_merge($sf, ['tuition_payable' => $sem_tuition_payable]);
-        [$sem_total_due] = acc_semester_monthly_due($pkg, $sf_calc, $merit_total, $months_int_pkg);
-        // $sem_total_due already includes the English and institutional portions;
-        // keep them separate for display while preserving the same grand total.
-        $total_tuition_payable += max(0.0, $sem_total_due - $sem_english_payable - $sem_fixed_payable);
-        $total_fixed_all       += $sem_fixed_payable;
-        $total_english_all     += $sem_english_payable;
-    } else {
-        $total_tuition_payable += $sem_tuition_payable;
-        $total_fixed_all       += $sem_fixed_payable;
-        $total_english_all     += $sem_english_payable;
-    }
+    // Fixed and merit packages are billed identically per semester: the payable
+    // tuition is the Base Tuition / Semester. The Fixed Monthly Payment is static
+    // and is never used in any total.
+    $total_tuition_payable += $sem_tuition_payable;
+    $total_fixed_all       += $sem_fixed_payable;
+    $total_english_all     += $sem_english_payable;
 }
 $total_cost = $total_tuition_payable + $total_fixed_all + $total_english_all + $total_reg_fees + $admission_fee + $form_id_fee;
 
@@ -447,18 +428,6 @@ require_once __DIR__ . '/../includes/header.php';
                         : max(0.0, $sem_english_portion - (float)($sf['english_discount_amount'] ?? 0));
                     // Registration fee is shown for all semesters
                     $sem_reg         = $reg_fee_per_sem;
-                    if ($is_fixed_pkg) {
-                        // Flat agreed monthly fee covers tuition only. Institutional
-                        // (fixed) fees and the English Course Fee are billed
-                        // separately (on top) and shown in their own columns.
-                        $merit_total = $tuition_payable + $fixed_amt + $english_amt;
-                        $sf_calc     = array_merge($sf, ['tuition_payable' => $tuition_payable]);
-                        [$sem_total_due] = acc_semester_monthly_due($pkg, $sf_calc, $merit_total, $months_int_pkg);
-                        // $sem_total_due includes the English and institutional
-                        // portions; keep those in their own columns and leave only
-                        // the flat monthly amount in the Tuition Payable column.
-                        $tuition_payable = max(0.0, $sem_total_due - $english_amt - $fixed_amt);
-                    }
                     $total_sem       = $tuition_payable + $fixed_amt + $english_amt + $sem_reg;
                     $grand_tuition_payable += $tuition_payable;
                     $grand_fixed           += $fixed_amt;
@@ -757,17 +726,6 @@ $monthly_tuition   = ($num_months > 0 && $first_sem) ? ((float)$first_sem['tuiti
 $monthly_fixed     = (float)$pkg['monthly_fixed_fee'];
 $monthly_english   = (float)$pkg['monthly_english_fee'];
 $monthly_total     = $monthly_tuition + $monthly_fixed + $monthly_english;
-if ($is_fixed_pkg && $first_sem) {
-    // Flat agreed monthly fee covers tuition only; institutional (fixed) fees and
-    // the English Course Fee are charged separately (on top) and shown on their own.
-    [$fx_sem_total, $fx_monthly] = acc_semester_monthly_due($pkg, $first_sem, 0.0, max(1, $num_months));
-    $sem1_english    = max(0.0, $sem_english_portion - (float)($first_sem['english_discount_amount'] ?? 0));
-    $sem1_fixed      = max(0.0, $sem_fixed_portion - (float)($first_sem['fixed_discount_amount'] ?? 0));
-    $monthly_english = ($num_months > 0) ? round($sem1_english / $num_months, 2) : 0.0;
-    $monthly_fixed   = ($num_months > 0) ? round($sem1_fixed / $num_months, 2) : 0.0;
-    $monthly_tuition = max(0.0, $fx_monthly - $monthly_english - $monthly_fixed);
-    $monthly_total   = $fx_monthly;
-}
 $first_sem_label   = ($first_sem && $first_sem['semester_label']) ? $first_sem['semester_label'] : 'Semester 1';
 ?>
 <div class="card mt-4">

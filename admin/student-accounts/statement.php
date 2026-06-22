@@ -251,31 +251,10 @@ $total_semesters = (int)$pkg['total_semesters'];
 $monthly_installment_base = $first_sem_tuition_payable + $first_sem_fixed_payable + $first_sem_english_payable;
 $monthly_installment      = ($mps > 0) ? (int)round($monthly_installment_base / $mps) : 0;
 
-// Fixed-payment packages (payment_type='fixed') use a flat agreed monthly fee
-// that covers tuition only. Institutional (fixed) fees and the English Course
-// Fee are billed separately, on top. Honor that here via
-// acc_semester_monthly_due() so the statement matches the Collect Payment page.
-$is_fixed_pkg = $sf1 ? acc_package_is_fixed_monthly($pkg) : false;
-if ($is_fixed_pkg) {
-    $months_int_pkg = max(1, (int)round($mps));
-    [$fixed_sem_total, $fixed_monthly] = acc_semester_monthly_due($pkg, $sf1, 0.0, $months_int_pkg);
-    // Institutional (fixed) fees and the English Course Fee are billed separately
-    // (on top of the flat monthly fee); acc_semester_monthly_due() already
-    // includes both in $fixed_sem_total.
-    $fixed_english_per_sem     = $english_per_sem_gross;
-    // The flat monthly fee covers tuition only; institutional and English fees
-    // stay on their own lines (post-scholarship values preserved). The semester
-    // total equals the flat monthly bundle plus those separate fees.
-    $first_sem_tuition_payable = max(0.0, $fixed_sem_total - $first_sem_english_payable - $first_sem_fixed_payable);
-    $total_payable_first_sem   = $fixed_sem_total + $reg_fee_1st_sem;
-    $monthly_installment_base  = $fixed_sem_total;
-    $monthly_installment       = (int)round($fixed_monthly);
-    // Regular (pre-scholarship) per-semester payable for a fixed package is the
-    // flat monthly fee across the semester, plus the separate institutional and
-    // English fees and the registration fee.
-    $regular_payable_per_sem   = (float)$pkg['monthly_payment'] * $months_int_pkg
-                               + $fixed_per_sem_gross + $english_per_sem_gross + $reg_fee_1st_sem;
-}
+// Fixed-payment packages (payment_type='fixed') are billed exactly like merit
+// packages on a per-semester basis: the payable tuition per semester is the
+// Base Tuition / Semester. The Fixed Monthly Payment is a static, informational
+// figure only and is never multiplied into any semester total.
 
 // Semester type label for display
 $sem_type_months_label = ($total_semesters <= SFP_MAX_BI_SEMESTER_COUNT)
@@ -587,20 +566,6 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
         </thead>
         <tbody>
             <!-- Per-semester breakdown (regular / gross) -->
-            <?php if ($is_fixed_pkg): ?>
-            <tr>
-                <td class="serial">1</td>
-                <td>Flat Agreed Monthly Fee
-                    <span style="font-size:9.5px;color:#6b7280;">(<?= number_format((float)$pkg['monthly_payment'], 2) ?> × <?= (int)round($mps) ?> months — bundles Tuition, Institutional &amp; English)</span>
-                </td>
-                <td class="amt"><?= number_format((float)$pkg['monthly_payment'] * (int)round($mps), 2) ?></td>
-            </tr>
-            <tr>
-                <td class="serial">2</td>
-                <td>Per Semester Registration Fee</td>
-                <td class="amt"><?= number_format($reg_fee_1st_sem, 2) ?></td>
-            </tr>
-            <?php else: ?>
             <tr>
                 <td class="serial">1</td>
                 <td>Per Semester Tuition Fee</td>
@@ -621,7 +586,6 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
                 <td>Per Semester Registration Fee</td>
                 <td class="amt"><?= number_format($reg_fee_1st_sem, 2) ?></td>
             </tr>
-            <?php endif; ?>
             <tr class="subtotal">
                 <td colspan="2"><strong>Total Regular Payable per Semester</strong></td>
                 <td class="amt"><strong><?= number_format($regular_payable_per_sem, 2) ?></strong></td>
@@ -795,18 +759,6 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
                 <td class="amt neg">− <?= number_format($total_discount_first_sem, 2) ?></td>
             </tr>
             <!-- Post-scholarship breakdown for first semester -->
-            <?php if ($is_fixed_pkg): ?>
-            <tr>
-                <td class="indent" colspan="2">Total Payable (After All Scholarship)
-                    <span style="font-size:9.5px;color:#6b7280;">— flat monthly fee bundles Tuition &amp; Institutional fees; English Course Fee billed separately</span>
-                </td>
-                <td class="amt"><?= number_format($first_sem_tuition_payable, 2) ?></td>
-            </tr>
-            <tr>
-                <td class="indent" colspan="2">Per Semester Registration Fee</td>
-                <td class="amt"><?= number_format($reg_fee_1st_sem, 2) ?></td>
-            </tr>
-            <?php else: ?>
             <tr>
                 <td class="indent" colspan="2">Total Payable Tuition Fees (After All Scholarship)</td>
                 <td class="amt"><?= number_format($first_sem_tuition_payable, 2) ?></td>
@@ -823,7 +775,6 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
                 <td class="indent" colspan="2">Per Semester Registration Fee</td>
                 <td class="amt"><?= number_format($reg_fee_1st_sem, 2) ?></td>
             </tr>
-            <?php endif; ?>
 
             <tr class="subtotal">
                 <td colspan="2"><strong>Total First Semester Payable Amount</strong></td>
@@ -835,11 +786,7 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
             <tr class="highlight">
                 <td colspan="2"><strong>First Semester Monthly Payment</strong>
                     <span style="font-size:9.5px; color:#92400e; font-weight:400;">
-                        <?php if ($is_fixed_pkg): ?>
-                        Flat agreed monthly fee (Tuition, Institutional &amp; English bundled)
-                        <?php else: ?>
                         (<?= number_format($first_sem_tuition_payable, 2) ?> Tuition + <?= number_format($first_sem_fixed_payable, 2) ?> Institutional &amp; Dev. Fee + <?= number_format($first_sem_english_payable, 2) ?> English Fee) ÷ <?= (int)$mps ?> months
-                        <?php endif; ?>
                         &nbsp;|&nbsp; <em><?= h($sem_type_months_label) ?></em>
                     </span>
                 </td>
