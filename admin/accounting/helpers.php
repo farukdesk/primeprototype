@@ -1452,7 +1452,7 @@ function acc_package_is_fixed_monthly(array $pkg): bool
  * fixed + English portions). Fixed packages use the flat package
  * `monthly_payment`; that amount only ever drops when a manual tuition
  * scholarship/concession is recorded on the semester (tuition_fee vs
- * tuition_payable), never automatically.
+ * tuition_payable) and never changes automatically.
  *
  * @return array{0: float, 1: float} [sem_total_due, monthly_fee]
  */
