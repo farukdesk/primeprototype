@@ -869,7 +869,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'previ
     }
 }
 
-// ── STEP 2 – Confirm and import ───────────────────────────────────────────────
+// ── STEP 3 – Confirm and import ───────────────────────────────────────────────
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'import') {
     csrf_check();
@@ -1459,7 +1459,7 @@ foreach ($sys_fields as $key => $def) {
     </div>
 </form>
 
-<?php /* ── STEP 2: Preview ─────────────────────────────────────── */ ?>
+<?php /* ── STEP 3: Preview ─────────────────────────────────────── */ ?>
 <?php elseif ($step === 'preview' && $preview_rows !== null): ?>
 
 <?php
