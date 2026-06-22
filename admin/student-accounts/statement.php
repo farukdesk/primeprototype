@@ -252,28 +252,29 @@ $monthly_installment_base = $first_sem_tuition_payable + $first_sem_fixed_payabl
 $monthly_installment      = ($mps > 0) ? (int)round($monthly_installment_base / $mps) : 0;
 
 // Fixed-payment packages (payment_type='fixed') use a flat agreed monthly fee
-// that bundles tuition + institutional fees. The English Course Fee is billed
-// separately, on top. Honor that here via
+// that covers tuition only. Institutional (fixed) fees and the English Course
+// Fee are billed separately, on top. Honor that here via
 // acc_semester_monthly_due() so the statement matches the Collect Payment page.
 $is_fixed_pkg = $sf1 ? acc_package_is_fixed_monthly($pkg) : false;
 if ($is_fixed_pkg) {
     $months_int_pkg = max(1, (int)round($mps));
     [$fixed_sem_total, $fixed_monthly] = acc_semester_monthly_due($pkg, $sf1, 0.0, $months_int_pkg);
-    // The English Course Fee is billed separately (on top of the flat monthly
-    // fee); acc_semester_monthly_due() already includes it in $fixed_sem_total.
+    // Institutional (fixed) fees and the English Course Fee are billed separately
+    // (on top of the flat monthly fee); acc_semester_monthly_due() already
+    // includes both in $fixed_sem_total.
     $fixed_english_per_sem     = $english_per_sem_gross;
-    // Fold institutional fees into the flat monthly bundle (English stays counted).
-    $first_sem_fixed_payable   = 0.0;
-    $first_sem_english_payable = 0.0;
-    $first_sem_tuition_payable = $fixed_sem_total;
+    // The flat monthly fee covers tuition only; institutional and English fees
+    // stay on their own lines (post-scholarship values preserved). The semester
+    // total equals the flat monthly bundle plus those separate fees.
+    $first_sem_tuition_payable = max(0.0, $fixed_sem_total - $first_sem_english_payable - $first_sem_fixed_payable);
     $total_payable_first_sem   = $fixed_sem_total + $reg_fee_1st_sem;
     $monthly_installment_base  = $fixed_sem_total;
     $monthly_installment       = (int)round($fixed_monthly);
     // Regular (pre-scholarship) per-semester payable for a fixed package is the
-    // flat monthly fee across the semester, plus the separate English fee and
-    // the registration fee.
+    // flat monthly fee across the semester, plus the separate institutional and
+    // English fees and the registration fee.
     $regular_payable_per_sem   = (float)$pkg['monthly_payment'] * $months_int_pkg
-                               + $fixed_english_per_sem + $reg_fee_1st_sem;
+                               + $fixed_per_sem_gross + $english_per_sem_gross + $reg_fee_1st_sem;
 }
 
 // Semester type label for display
