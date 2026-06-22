@@ -1467,9 +1467,11 @@ function acc_semester_monthly_due(array $pkg, array $sf, float $merit_sem_total_
     $months_int = max(1, $months_int);
 
     if (acc_package_is_fixed_monthly($pkg)) {
-        // Payable tuition per semester is the Base Tuition / Semester (net of any
-        // manual scholarship/concession). The Fixed Monthly Payment is static and
-        // is intentionally NOT used in this calculation.
+        // Payable tuition per semester is the Base Tuition / Semester. We read it
+        // from $sf['tuition_payable'], which sfp_recalculate_semester() already
+        // stores net of any manual scholarship/concession (tuition_fee minus
+        // discounts). The Fixed Monthly Payment is static and is intentionally NOT
+        // used in this calculation.
         $tuition_per_sem = max(0.0, (float)($sf['tuition_payable'] ?? 0));
 
         $total_months    = (float)($pkg['total_months'] ?? 0);
