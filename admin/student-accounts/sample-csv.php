@@ -43,6 +43,7 @@ $headers = [
     'Total Fee',
     'Payable Amount',
     'Payment Start Month',
+    'Payment Start Year',
 ];
 fputcsv($out, $headers, ',', '"', '');
 
@@ -64,7 +65,8 @@ fputcsv($out, [
     '360000',
     '477000',
     '477000',
-    '01-2026',
+    'January',
+    '2026',
 ], ',', '"', '');
 
 // Example 2 – Fixed payment student (flat Monthly Payment that never changes automatically).
@@ -85,7 +87,8 @@ fputcsv($out, [
     '300000',
     '417000',
     '367000',
-    '01-2026',
+    'January',
+    '2026',
 ], ',', '"', '');
 
 fclose($out);

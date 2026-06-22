@@ -213,6 +213,52 @@ function bip_parse_month_year(string $s): ?array
     return null;
 }
 
+/**
+ * Parse a payment-start month/year that may arrive as one combined column
+ * ("01-2026", "January 2026") or as two separate columns matching the accounts
+ * office layout: a "Payment Start Month" name/number plus a "Payment Start Year".
+ */
+function bip_parse_month_year_parts(string $month_raw, string $year_raw): ?array
+{
+    $month_raw = trim($month_raw);
+    $year_raw  = trim($year_raw);
+
+    // Combined value already containing a year (e.g. "01-2026" or "January 2026").
+    $combined = bip_parse_month_year($month_raw);
+    if ($combined !== null) {
+        return $combined;
+    }
+
+    if ($month_raw === '' || $year_raw === '' || !preg_match('/\b(2\d{3})\b/', $year_raw, $ym)) {
+        return null;
+    }
+    $year = (int)$ym[1];
+
+    $month = 0;
+    if (preg_match('/^\d{1,2}$/', $month_raw)) {
+        $month = (int)$month_raw;
+    } else {
+        $month_map = [
+            'january' => 1, 'february' => 2, 'march' => 3, 'april' => 4,
+            'may' => 5, 'june' => 6, 'july' => 7, 'august' => 8,
+            'september' => 9, 'october' => 10, 'november' => 11, 'december' => 12,
+            'jan' => 1, 'feb' => 2, 'mar' => 3, 'apr' => 4, 'jun' => 6,
+            'jul' => 7, 'aug' => 8, 'sep' => 9, 'oct' => 10, 'nov' => 11, 'dec' => 12,
+        ];
+        $month = $month_map[strtolower($month_raw)] ?? 0;
+    }
+
+    if ($month < 1 || $month > 12) {
+        return null;
+    }
+
+    return [
+        'month' => $month,
+        'year'  => $year,
+        'token' => sprintf('%02d-%04d', $month, $year),
+    ];
+}
+
 function bip_row_value(array $row, array $keys): string
 {
     foreach ($keys as $key) {
@@ -233,6 +279,9 @@ function bip_normalize_program_name(string $value): string
 
     $value = str_replace(['&', '+'], ' and ', $value);
     $value = preg_replace('/\b(b\.?\s*sc\.?|bachelor\s+of\s+science|bachelor\s+of\s+arts|bachelor\s+of|master\s+of|bs|ba)\b/u', ' ', $value);
+    // Drop honours/honorary degree qualifiers (e.g. "BA(Hons) in English") so the
+    // remaining subject text matches the financial-config program name.
+    $value = preg_replace('/\b(hons?|honou?rs?|honorary)\b/u', ' ', $value);
     $value = preg_replace('/\bin\b/u', ' ', $value);
     $value = preg_replace('/\bprogramme\b/u', 'program', $value);
     $value = preg_replace('/\bdual\b/u', ' ', $value);
@@ -363,6 +412,59 @@ function bip_find_cf_program(PDO $db, string $program_name): ?array
                 return $program;
             }
         }
+    }
+
+    return null;
+}
+
+/**
+ * Look up the program name a student is assigned to in the student portal.
+ *
+ * Students are linked to dept_academic_programs via students.program_id; that
+ * record's program_name is the authoritative program the student belongs to.
+ */
+function bip_student_assigned_program_name(PDO $db, $program_id): string
+{
+    $program_id = (int)$program_id;
+    if ($program_id <= 0) {
+        return '';
+    }
+
+    static $cache = [];
+    if (array_key_exists($program_id, $cache)) {
+        return $cache[$program_id];
+    }
+
+    $stmt = $db->prepare('SELECT program_name FROM dept_academic_programs WHERE id = ? LIMIT 1');
+    $stmt->execute([$program_id]);
+    $cache[$program_id] = trim((string)($stmt->fetchColumn() ?: ''));
+
+    return $cache[$program_id];
+}
+
+/**
+ * Resolve the financial-config program (cf_programs) for a student.
+ *
+ * The imported "Program" column text is matched first with regex/alias rules
+ * (bip_find_cf_program). Because that label comes from the old ERP and can be
+ * abbreviated, garbled, or blank, we cross-check it against the program the
+ * student is actually assigned to in the student portal
+ * (students.program_id → dept_academic_programs.program_name), which is
+ * authoritative, and fall back to it whenever the imported text cannot be
+ * resolved.
+ */
+function bip_resolve_cf_program(PDO $db, string $import_program_name, array $student): ?array
+{
+    $import_match = $import_program_name !== ''
+        ? bip_find_cf_program($db, $import_program_name)
+        : null;
+    if ($import_match !== null) {
+        return $import_match;
+    }
+
+    $assigned_name = bip_student_assigned_program_name($db, $student['program_id'] ?? null);
+    if ($assigned_name !== '') {
+        return bip_find_cf_program($db, $assigned_name);
     }
 
     return null;
@@ -842,7 +944,7 @@ function bip_import_student(
     $payment_type    = ($pdf['payment_type'] ?? 'merit') === 'fixed' ? 'fixed' : 'merit';
     $program_name    = $pdf['program_name'] ?: 'Unknown Programme';
 
-    $cf_program    = $program_name !== '' ? bip_find_cf_program($db, $program_name) : null;
+    $cf_program    = bip_resolve_cf_program($db, $program_name, $student);
     $cf_program_id = $cf_program['id'] ?? null;
     if ($cf_program !== null && !empty($cf_program['program_name'])) {
         $program_name = (string)$cf_program['program_name'];
@@ -1156,8 +1258,9 @@ function bip_parse_csv_row(array $row): ?array
     }
 
     $total_semesters = (int)preg_replace('/\D+/', '', bip_row_value($row, ['Total Semesters']));
-    $payment_start   = bip_parse_month_year(
-        bip_row_value($row, ['Admission MM-YYYY', 'Admission', 'Admission Month', 'Payment Start Month'])
+    $payment_start   = bip_parse_month_year_parts(
+        bip_row_value($row, ['Payment Start Month', 'Admission MM-YYYY', 'Admission', 'Admission Month']),
+        bip_row_value($row, ['Payment Start Year', 'Payment Year'])
     );
 
     return [
