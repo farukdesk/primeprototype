@@ -933,6 +933,10 @@ function bip_store_proof_for_student(
     if (!in_array($mime, BIP_PROOF_IMAGE_MIMES, true)) {
         return ['status' => 'failed', 'message' => 'File is not a valid image (JPG/PNG/GIF/WebP)', 'student_name' => $student_name];
     }
+    // Defense-in-depth: confirm the bytes are a real image, not just a spoofed MIME.
+    if (@getimagesize($src_path) === false) {
+        return ['status' => 'failed', 'message' => 'File is not a readable image', 'student_name' => $student_name];
+    }
 
     $ext = strtolower(pathinfo($original_name, PATHINFO_EXTENSION));
     if (!in_array($ext, BIP_PROOF_IMAGE_EXTS, true)) {
