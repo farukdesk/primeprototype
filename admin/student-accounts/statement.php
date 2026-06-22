@@ -252,13 +252,17 @@ $monthly_installment_base = $first_sem_tuition_payable + $first_sem_fixed_payabl
 $monthly_installment      = ($mps > 0) ? (int)round($monthly_installment_base / $mps) : 0;
 
 // Fixed-payment packages (payment_type='fixed') use a flat agreed monthly fee
-// that bundles tuition + institutional + English. Honor that here via
+// that bundles tuition + institutional fees. The English Course Fee is billed
+// separately, on top. Honor that here via
 // acc_semester_monthly_due() so the statement matches the Collect Payment page.
 $is_fixed_pkg = $sf1 ? acc_package_is_fixed_monthly($pkg) : false;
 if ($is_fixed_pkg) {
     $months_int_pkg = max(1, (int)round($mps));
     [$fixed_sem_total, $fixed_monthly] = acc_semester_monthly_due($pkg, $sf1, 0.0, $months_int_pkg);
-    // Fold institutional & English into the flat monthly bundle.
+    // The English Course Fee is billed separately (on top of the flat monthly
+    // fee); acc_semester_monthly_due() already includes it in $fixed_sem_total.
+    $fixed_english_per_sem     = $english_per_sem_gross;
+    // Fold institutional fees into the flat monthly bundle (English stays counted).
     $first_sem_fixed_payable   = 0.0;
     $first_sem_english_payable = 0.0;
     $first_sem_tuition_payable = $fixed_sem_total;
@@ -266,8 +270,10 @@ if ($is_fixed_pkg) {
     $monthly_installment_base  = $fixed_sem_total;
     $monthly_installment       = (int)round($fixed_monthly);
     // Regular (pre-scholarship) per-semester payable for a fixed package is the
-    // flat monthly fee across the semester plus the registration fee.
-    $regular_payable_per_sem   = (float)$pkg['monthly_payment'] * $months_int_pkg + $reg_fee_1st_sem;
+    // flat monthly fee across the semester, plus the separate English fee and
+    // the registration fee.
+    $regular_payable_per_sem   = (float)$pkg['monthly_payment'] * $months_int_pkg
+                               + $fixed_english_per_sem + $reg_fee_1st_sem;
 }
 
 // Semester type label for display
@@ -791,7 +797,7 @@ $page_title   = 'Statement of Payment – ' . $pkg['student_name'];
             <?php if ($is_fixed_pkg): ?>
             <tr>
                 <td class="indent" colspan="2">Total Payable (After All Scholarship)
-                    <span style="font-size:9.5px;color:#6b7280;">— flat monthly fee bundles Tuition, Institutional &amp; English</span>
+                    <span style="font-size:9.5px;color:#6b7280;">— flat monthly fee bundles Tuition &amp; Institutional fees; English Course Fee billed separately</span>
                 </td>
                 <td class="amt"><?= number_format($first_sem_tuition_payable, 2) ?></td>
             </tr>
