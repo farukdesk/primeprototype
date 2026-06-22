@@ -237,12 +237,107 @@ function ci_auto_map(array $norm_headers, array $fields): array {
     return $map;
 }
 
+/**
+ * Normalise a free-text name into a compact alias key for fuzzy matching.
+ * Decodes HTML entities (e.g. "&amp;" → "&"), lowercases, then strips every
+ * character that is not a letter or digit. This lets minor spacing/punctuation
+ * differences ("BA(Hons) in Bangla" vs "BA (Hons) in Bangla") map to one key.
+ */
+function ci_alias_key(string $input): string {
+    $s = html_entity_decode($input, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $s = strtolower($s);
+    return preg_replace('/[^a-z0-9]/', '', $s);
+}
+
+/**
+ * Canonicalise an incoming CSV department name to the name used in this system.
+ * Returns the canonical name when a known alias matches, otherwise the original
+ * input unchanged.
+ */
+function ci_canonical_dept_name(string $input): string {
+    static $aliases = null;
+    if ($aliases === null) {
+        $map = [
+            'Dept. of English'                => 'Department of English',
+            'Dept. of Business Administration'=> 'Department of Business Administration',
+            'Dept. of CE'                     => 'Department of Civil Engineering (CE)',
+            'Dept. of CSE'                    => 'Department of Computer Science & Engineering',
+            'Dept. of EEE'                    => 'Department of Electrical and Electronic Engineering (EEE)',
+            'Dept. of Law'                    => 'Department of Law',
+            'Dept. of Bangla'                 => 'Department of Bangla',
+            'Dept. of Education'              => 'Department of Education',
+        ];
+        $aliases = [];
+        foreach ($map as $from => $to) {
+            $aliases[ci_alias_key($from)] = $to;
+        }
+    }
+    return $aliases[ci_alias_key($input)] ?? $input;
+}
+
+/**
+ * Extract the last four digits of a student ID and return the leading one,
+ * used to disambiguate 1-year vs 2-year postgraduate programs.
+ * Returns '' when fewer than four digits are present.
+ */
+function ci_student_id_last4_lead(string $student_id): string {
+    $digits = preg_replace('/\D/', '', $student_id);
+    if (strlen($digits) < 4) return '';
+    return substr($digits, -4, 1);
+}
+
+/**
+ * Canonicalise an incoming CSV program name to the name used in this system.
+ * Some postgraduate programs depend on the student ID: when the last four
+ * digits begin with 3 the 1-year variant is used, with 7 the 2-year variant.
+ * Returns the canonical name when a known alias matches, otherwise the original.
+ */
+function ci_canonical_prog_name(string $input, string $student_id = ''): string {
+    static $aliases = null;
+    if ($aliases === null) {
+        $map = [
+            'BA(Hons) in Bangla'   => 'Bachelor of Arts in Bangla',
+            'BA(Hons) in Bangl'    => 'Bachelor of Arts in Bangla',
+            'BA (Hons) in English' => 'Bachelor of Arts in English',
+            'BBA'                  => 'Bachelor of Business Administration (BBA)- 4 Years',
+            'B.Sc. in Civil Engineering' => 'Bachelor of Science in Civil Engineering (CE)',
+            'B.Sc in CSE'          => 'Department of Computer Science & Engineering',
+            'LLB(Hons)'            => 'Bachelor of Laws (LL.B. Hons.)',
+            'Master of Laws (Regular)'              => 'Master of Laws (LLM)- 1 Year',
+            'Master of Laws (Preliminary & Final)'  => 'Master of Laws (LLM) Preli & Final- 2 Years',
+        ];
+        $aliases = [];
+        foreach ($map as $from => $to) {
+            $aliases[ci_alias_key($from)] = $to;
+        }
+    }
+
+    $key  = ci_alias_key($input);
+    $lead = ci_student_id_last4_lead($student_id);
+
+    // Programs whose duration depends on the student ID's last four digits.
+    if ($key === ci_alias_key('MA in English')) {
+        if ($lead === '3') return 'Master of Arts in English (1 Year)';
+        if ($lead === '7') return 'Master of Arts in English (2 Years)';
+        return $input;
+    }
+    if ($key === ci_alias_key('MBA')) {
+        if ($lead === '3') return 'Masters of Business Administration (MBA)-1 Year';
+        if ($lead === '7') return 'Masters of Business Administration (MBA)- 2 Years';
+        return $input;
+    }
+
+    return $aliases[$key] ?? $input;
+}
+
 function ci_resolve_dept(string $input, array $by_name, array $by_code): ?array {
+    $input = ci_canonical_dept_name($input);
     $key = strtolower(trim($input));
     return $by_name[$key] ?? $by_code[$key] ?? null;
 }
 
-function ci_resolve_prog(string $input, int $dept_id, array $prog_by_name): ?array {
+function ci_resolve_prog(string $input, int $dept_id, array $prog_by_name, string $student_id = ''): ?array {
+    $input = ci_canonical_prog_name($input, $student_id);
     $key = strtolower(trim($input));
     if ($key === '') return null;
     return $prog_by_name[$dept_id][$key] ?? null;
@@ -536,7 +631,10 @@ function ci_validate_row(
     // ── Resolve: Program ─────────────────────────────────────
     $prog = null;
     if ($dept && $prog_raw !== '') {
-        $prog = ci_resolve_prog($prog_raw, (int)$dept['id'], $prog_by_name);
+        // Canonicalise so the stored text matches this system's program names,
+        // resolving ID-dependent variants (MA in English / MBA) via the student ID.
+        $prog_raw = ci_canonical_prog_name($prog_raw, $id_raw);
+        $prog = ci_resolve_prog($prog_raw, (int)$dept['id'], $prog_by_name, $id_raw);
         if ($prog === null) {
             $warnings[] = 'Program "' . h($prog_raw) . '" not found for this department – will be stored as text.';
         }
