@@ -244,7 +244,8 @@ require_once __DIR__ . '/../includes/header.php';
                     $current_monthly_total = ($months_per_semester > 0) ? ($current_sem_total / $months_per_semester) : 0.0;
 
                     // Fixed-payment packages use a flat agreed monthly fee that bundles
-                    // tuition + institutional + English (matches Collect Payment / view).
+                    // tuition + institutional fees (English Course Fee is billed
+                    // separately, on top — matches Collect Payment / view).
                     if (acc_package_is_fixed_monthly($pkg)) {
                         $months_int_row = max(1, (int)round($months_per_semester));
                         $sf_calc = [

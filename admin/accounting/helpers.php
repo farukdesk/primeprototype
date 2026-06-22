@@ -1450,9 +1450,13 @@ function acc_package_is_fixed_monthly(array $pkg): bool
  *
  * Merit-based packages use the supplied merit calculation (tuition_payable +
  * fixed + English portions). Fixed packages use the flat package
- * `monthly_payment`; that amount only ever drops when a manual tuition
- * scholarship/concession is recorded on the semester (tuition_fee vs
- * tuition_payable) and never changes automatically.
+ * `monthly_payment` for tuition + institutional fees; that amount only ever
+ * drops when a manual tuition scholarship/concession is recorded on the
+ * semester (tuition_fee vs tuition_payable) and never changes automatically.
+ *
+ * The English Course Fee is NOT part of the flat monthly bundle: it is charged
+ * separately, on top of the flat monthly amount, so it is always counted in the
+ * semester total (and therefore in collection, dues and statements).
  *
  * @return array{0: float, 1: float} [sem_total_due, monthly_fee]
  */
@@ -1463,7 +1467,15 @@ function acc_semester_monthly_due(array $pkg, array $sf, float $merit_sem_total_
     if (acc_package_is_fixed_monthly($pkg)) {
         $fixed_monthly = (float)$pkg['monthly_payment'];
         $scholarship   = max(0.0, (float)($sf['tuition_fee'] ?? 0) - (float)($sf['tuition_payable'] ?? 0));
-        $sem_total     = max(0.0, $fixed_monthly * $months_int - $scholarship);
+
+        // English Course Fee is billed separately, on top of the flat monthly fee.
+        $total_months    = (float)($pkg['total_months'] ?? 0);
+        $mps             = (float)($pkg['months_per_semester'] ?? 0);
+        $english_per_sem = ($total_months > 0 && $mps > 0)
+            ? round((float)($pkg['english_course_fee'] ?? 0) / $total_months * $mps, 2) : 0.0;
+        $english_per_sem = max(0.0, $english_per_sem - (float)($sf['english_discount_amount'] ?? 0));
+
+        $sem_total = max(0.0, $fixed_monthly * $months_int - $scholarship) + $english_per_sem;
     } else {
         $sem_total = $merit_sem_total_due;
     }
