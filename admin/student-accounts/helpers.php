@@ -15,6 +15,33 @@ require_once __DIR__ . '/../change-log/helpers.php';
  */
 define('SFP_MAX_BI_SEMESTER_COUNT', 8);
 
+/**
+ * student_files.file_name marker used to tag "OLD ERP Proof" images that are
+ * attached to a student's account via the bulk proof upload. Stored on
+ * student_files so the proof can be listed/viewed on the student account view.
+ */
+define('SFP_OLD_ERP_PROOF_LABEL', 'OLD ERP Proof');
+
+// ── OLD ERP proof images attached to a student ────────────────────────────────
+
+/**
+ * Fetch all OLD ERP proof files attached to a student (newest first).
+ * Used by the student account view to show / download imported data proofs.
+ *
+ * @return array<int,array<string,mixed>>
+ */
+function sfp_get_old_erp_proofs(int $student_id): array
+{
+    $stmt = db()->prepare(
+        'SELECT id, stored_name, original_name, mime_type, file_size, created_at
+           FROM student_files
+          WHERE student_id = ? AND file_name = ?
+          ORDER BY created_at DESC, id DESC'
+    );
+    $stmt->execute([$student_id, SFP_OLD_ERP_PROOF_LABEL]);
+    return $stmt->fetchAll();
+}
+
 // ── Permission helpers ────────────────────────────────────────────────────────
 
 function sfp_can_edit(): bool

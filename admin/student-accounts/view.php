@@ -16,6 +16,9 @@ if (!$pkg) {
 $page_title    = 'Student Account – ' . $pkg['student_name'];
 $semester_fees = sfp_get_semester_fees($id);
 
+// OLD ERP proof images attached to this student (via bulk proof upload)
+$old_erp_proofs = sfp_get_old_erp_proofs((int)$pkg['student_id']);
+
 // Active scholarship policies (with tiers) for the Add Scholarship modal
 $sc_policies = sfp_get_active_sc_policies_with_tiers();
 
@@ -191,6 +194,11 @@ require_once __DIR__ . '/../includes/header.php';
             <i class="fas fa-file-invoice-dollar me-2 text-success"></i>
             Student Account – <?= h($pkg['student_name']) ?>
         </h1>
+        <div class="mt-1">
+            <span class="badge bg-success" title="This fee package is a locked accounting snapshot. Editing the course/program fees — and any CSV re-import — will not change these figures.">
+                <i class="fas fa-lock me-1"></i>Protected accounting record
+            </span>
+        </div>
         <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small">
             <li class="breadcrumb-item"><a href="<?= APP_URL ?>/index.php">Dashboard</a></li>
             <li class="breadcrumb-item"><a href="<?= APP_URL ?>/student-accounts/index.php">Student Accounts</a></li>
@@ -376,6 +384,44 @@ require_once __DIR__ . '/../includes/header.php';
                     <div style="font-size:.875rem;"><?= h((string)$val) ?></div>
                 </div>
                 <?php endforeach; ?>
+
+                <hr class="my-2">
+                <div class="d-flex mb-2 gap-2 align-items-start">
+                    <div style="min-width:150px;font-size:.8rem;color:#6b7280;font-weight:600;">OLD ERP Proof</div>
+                    <div style="font-size:.875rem;">
+                        <?php if (empty($old_erp_proofs)): ?>
+                            <span class="text-muted">No proof uploaded</span>
+                        <?php else: ?>
+                            <div class="d-flex flex-column gap-2">
+                                <?php foreach ($old_erp_proofs as $proof):
+                                    $proof_url = UPLOAD_URL . '/students/files/' . rawurlencode($proof['stored_name']);
+                                    $is_image  = strncmp((string)($proof['mime_type'] ?? ''), 'image/', 6) === 0;
+                                ?>
+                                <div class="d-flex align-items-center gap-2 flex-wrap">
+                                    <?php if ($is_image): ?>
+                                    <a href="<?= h($proof_url) ?>" target="_blank" rel="noopener">
+                                        <img src="<?= h($proof_url) ?>" alt="OLD ERP Proof"
+                                             style="height:48px;width:48px;object-fit:cover;border-radius:.375rem;border:1px solid #dee2e6;">
+                                    </a>
+                                    <?php endif; ?>
+                                    <a href="<?= h($proof_url) ?>" target="_blank" rel="noopener"
+                                       class="btn btn-outline-success btn-sm">
+                                        <i class="fas fa-eye me-1"></i>View
+                                    </a>
+                                    <a href="<?= h($proof_url) ?>"
+                                       download="<?= h($proof['original_name']) ?>"
+                                       class="btn btn-outline-secondary btn-sm">
+                                        <i class="fas fa-download me-1"></i>Download
+                                    </a>
+                                    <span class="text-muted" style="font-size:.75rem;">
+                                        <?= h($proof['original_name']) ?>
+                                    </span>
+                                </div>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
