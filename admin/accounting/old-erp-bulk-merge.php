@@ -340,6 +340,22 @@ function oebm_build_month_slots(array $summary): array
 }
 
 /**
+ * Does an installment slot match a requested calendar month (and optional year)?
+ *
+ * When $month_year is null only the calendar month is compared (the original
+ * month-only behaviour); when supplied the slot must also fall in that year.
+ *
+ * @param array<string,mixed> $slot
+ */
+function oebm_slot_matches(array $slot, int $month_num, ?int $month_year): bool
+{
+    if ((int)$slot['cal_month'] !== $month_num) {
+        return false;
+    }
+    return $month_year === null || (int)$slot['cal_year'] === $month_year;
+}
+
+/**
  * Validate and classify every CSV row.
  *
  * Each result row carries a status:
@@ -514,16 +530,9 @@ function oebm_validate_rows(array $rows): array
                 $month_label = oebm_month_name($month_num)
                     . ($month_year !== null ? ' ' . $month_year : '');
 
-                $slot_matches = static function (array $slot) use ($month_num, $month_year): bool {
-                    if ($slot['cal_month'] !== $month_num) {
-                        return false;
-                    }
-                    return $month_year === null || $slot['cal_year'] === $month_year;
-                };
-
                 $target = null;
                 foreach ($slots as $k => $slot) {
-                    if (!$slot['consumed'] && $slot_matches($slot)) {
+                    if (!$slot['consumed'] && oebm_slot_matches($slot, $month_num, $month_year)) {
                         $target = $k;
                         break;
                     }
@@ -532,7 +541,7 @@ function oebm_validate_rows(array $rows): array
                 if ($target === null) {
                     $has_month = false;
                     foreach ($slots as $slot) {
-                        if ($slot_matches($slot)) { $has_month = true; break; }
+                        if (oebm_slot_matches($slot, $month_num, $month_year)) { $has_month = true; break; }
                     }
                     if ($has_month) {
                         $status  = 'duplicate';
