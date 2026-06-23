@@ -892,6 +892,40 @@ function acc_direct_delete_voucher(int $voucher_id, string $reason, ?string $att
 }
 
 /**
+ * Super-admin bulk immediate deletion. Deletes many vouchers with one shared
+ * reason (and optional shared attachment). Each voucher is deleted via
+ * acc_direct_delete_voucher so it keeps the same per-voucher audit trail.
+ *
+ * Vouchers that are missing/already deleted or that already have an open delete
+ * request are skipped silently. Returns the count actually deleted.
+ *
+ * @param int[] $voucher_ids
+ */
+function acc_bulk_direct_delete_vouchers(array $voucher_ids, string $reason, ?string $attachment = null): int
+{
+    if (!acc_can_delete_voucher_directly()) {
+        throw new RuntimeException('You are not authorised to delete vouchers directly.');
+    }
+
+    $voucher_ids = array_map('intval', $voucher_ids);
+    $voucher_ids = array_filter($voucher_ids, static fn(int $id): bool => $id > 0);
+    $voucher_ids = array_values(array_unique($voucher_ids));
+
+    $deleted = 0;
+    foreach ($voucher_ids as $vid) {
+        if (!acc_get_voucher($vid)) {
+            continue; // not found or already deleted
+        }
+        if (acc_voucher_has_open_delete_request($vid)) {
+            continue; // an open workflow request exists; skip
+        }
+        acc_direct_delete_voucher($vid, $reason, $attachment);
+        $deleted++;
+    }
+    return $deleted;
+}
+
+/**
  * "Accounts" group raises a pending delete request.
  *
  * @return int request id
