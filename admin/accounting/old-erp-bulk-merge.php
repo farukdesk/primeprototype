@@ -207,21 +207,23 @@ function oebm_parse_amount(string $raw): ?float
  */
 function oebm_normalize_receipt(string $raw): string
 {
-    $parts = array_map('trim', explode(',', $raw));
-    $parts = array_values(array_filter($parts, static fn($p) => $p !== ''));
-    $parts = array_values(array_unique($parts));
-    return implode(', ', $parts);
+    return implode(', ', oebm_split_receipts($raw, true));
 }
 
 /**
- * Split a normalised receipt string into its individual receipt numbers.
+ * Split a receipt string into its individual, trimmed receipt numbers.
  *
+ * @param  bool $unique When true, duplicate receipt numbers are removed.
  * @return string[]
  */
-function oebm_split_receipts(string $receipt): array
+function oebm_split_receipts(string $receipt, bool $unique = false): array
 {
     $parts = array_map('trim', explode(',', $receipt));
-    return array_values(array_filter($parts, static fn($p) => $p !== ''));
+    $parts = array_filter($parts, static fn($p) => $p !== '');
+    if ($unique) {
+        $parts = array_unique($parts);
+    }
+    return array_values($parts);
 }
 
 /**
