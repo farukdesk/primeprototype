@@ -11,7 +11,7 @@ $payment_timeline_limit = 500;
 // ── Filters ───────────────────────────────────────────────────────────────────
 $f_dept      = (int)($_GET['dept_id']  ?? 0);
 $f_program   = trim($_GET['program']   ?? '');
-$f_batch     = trim($_GET['batch']     ?? '');
+$f_batch     = (int)($_GET['batch']    ?? 0); // University batch (student_batches.id)
 $f_status    = trim($_GET['status']    ?? '');
 $f_student_q = trim($_GET['student_q'] ?? '');
 $f_as_of_date = trim($_GET['as_of_date'] ?? date('Y-m-d'));
@@ -32,10 +32,11 @@ $programs_list = $db->query(
 )->fetchAll(PDO::FETCH_COLUMN);
 
 $batches_list = $db->query(
-    'SELECT DISTINCT admitted_semester FROM students
-     WHERE admitted_semester IS NOT NULL AND admitted_semester != ""
-     ORDER BY admitted_semester DESC'
-)->fetchAll(PDO::FETCH_COLUMN);
+    'SELECT id, name FROM student_batches
+     WHERE is_active = 1
+     ORDER BY sort_order, name ASC'
+)->fetchAll(PDO::FETCH_ASSOC);
+$batch_name_by_id = array_column($batches_list, 'name', 'id');
 
 // ── Main data query ────────────────────────────────────────────────────────────
 // Fetches one row per student-package, with aggregated semester fees and paid amounts.
@@ -51,8 +52,8 @@ if ($f_program !== '') {
     $where[]  = 'p.program_name = ?';
     $params[] = $f_program;
 }
-if ($f_batch !== '') {
-    $where[]  = 's.admitted_semester = ?';
+if ($f_batch) {
+    $where[]  = 's.batch_id = ?';
     $params[] = $f_batch;
 }
 if ($f_status !== '') {
@@ -79,6 +80,7 @@ $stmt = $db->prepare(
          s.phone,
          d.name                     AS dept_name,
          d.code                     AS dept_code,
+         ub.name                    AS batch_name,
          p.program_name,
          p.payment_type,
          p.monthly_payment,
@@ -101,6 +103,7 @@ $stmt = $db->prepare(
      FROM sfp_packages p
      JOIN students s ON s.id = p.student_id
      LEFT JOIN dept_departments d ON d.id = s.dept_id
+     LEFT JOIN student_batches ub ON ub.id = s.batch_id
      LEFT JOIN cf_programs cp ON cp.id = p.cf_program_id
      LEFT JOIN (
          SELECT package_id,
@@ -206,7 +209,92 @@ function due_report_current_obligation(array $pkg, array $semester_fees, string 
     return $total;
 }
 
-// ── Compute due-as-of-today balance per row ───────────────────────────────
+/**
+ * Build an ordered breakdown of the fee items that have fallen due up to $as_of_date,
+ * then sequentially apply the total amount paid so only the still-outstanding items
+ * remain. Returns a list of ['label' => string, 'amount' => float] (e.g. one-time
+ * heads, per-semester registration, and each due month). The amounts sum to the
+ * student's outstanding balance as of the date.
+ */
+function due_report_due_breakdown(array $pkg, array $semester_fees, string $as_of_date, float $default_form_id_fee, float $total_paid): array
+{
+    $as_of_first = date('Y-m-01', strtotime($as_of_date));
+    $ao_year     = (int)date('Y', strtotime($as_of_first));
+    $ao_month    = (int)date('n', strtotime($as_of_first));
+
+    $form_id_fee = ((float)$pkg['form_id_fee'] > 0) ? (float)$pkg['form_id_fee'] : $default_form_id_fee;
+
+    $items = [];
+    $admission_obl = (float)$pkg['admission_fees'] + $form_id_fee;
+    if ($admission_obl > 0) {
+        $items[] = ['label' => 'Admission', 'amount' => round($admission_obl, 2)];
+    }
+
+    if (!empty($semester_fees)) {
+        $start_month = acc_package_start_month($pkg);
+        $start_year  = acc_package_start_year($pkg, $semester_fees);
+
+        $months     = (float)($pkg['total_months']       ?? 0);
+        $mps        = (float)($pkg['months_per_semester'] ?? 0);
+        $months_int = max(1, (int)round($mps));
+        $reg_fee    = (float)($pkg['reg_fee_per_semester'] ?? 0.0);
+
+        foreach ($semester_fees as $sf) {
+            $sem_num      = (int)$sf['semester_number'];
+            $first_offset = ($sem_num - 1) * $months_int;
+            $first_info   = acc_month_year_for_slot($start_month, $start_year, $first_offset);
+
+            $sem_started = ($first_info['year'] < $ao_year)
+                || ($first_info['year'] === $ao_year && $first_info['month'] <= $ao_month);
+            if (!$sem_started) {
+                continue;
+            }
+
+            if ($reg_fee > 0) {
+                $items[] = ['label' => 'Registration (Sem ' . $sem_num . ')', 'amount' => round($reg_fee, 2)];
+            }
+
+            $fixed_per_sem   = ($months > 0 && $mps > 0)
+                ? round((float)$pkg['fixed_institutional_fees'] / $months * $mps, 2) : 0.0;
+            $english_per_sem = ($months > 0 && $mps > 0)
+                ? round((float)$pkg['english_course_fee']       / $months * $mps, 2) : 0.0;
+            $fixed_per_sem   = max(0.0, $fixed_per_sem   - (float)($sf['fixed_discount_amount']   ?? 0));
+            $english_per_sem = max(0.0, $english_per_sem - (float)($sf['english_discount_amount'] ?? 0));
+
+            $merit_sem_total = (float)$sf['tuition_payable'] + $fixed_per_sem + $english_per_sem;
+            [$sem_total, $monthly_fee] = acc_semester_monthly_due($pkg, $sf, $merit_sem_total, $months_int);
+
+            for ($m = 1; $m <= $months_int; $m++) {
+                $mi = acc_month_year_for_slot($start_month, $start_year, $first_offset + ($m - 1));
+                $month_passed = ($mi['year'] < $ao_year)
+                    || ($mi['year'] === $ao_year && $mi['month'] <= $ao_month);
+                if (!$month_passed) {
+                    break;
+                }
+                $m_due = ($m < $months_int)
+                    ? $monthly_fee
+                    : max(0.0, $sem_total - $monthly_fee * ($months_int - 1));
+                if ($m_due > 0) {
+                    $items[] = ['label' => $mi['label'], 'amount' => round($m_due, 2)];
+                }
+            }
+        }
+    }
+
+    // Apply payments sequentially (chronological order) so paid items drop off.
+    $remaining = $total_paid;
+    $due_items = [];
+    foreach ($items as $it) {
+        $applied = min($it['amount'], max(0.0, $remaining));
+        $remaining -= $applied;
+        $out = round($it['amount'] - $applied, 2);
+        if ($out > 0.009) {
+            $due_items[] = ['label' => $it['label'], 'amount' => $out];
+        }
+    }
+
+    return $due_items;
+}
 $default_form_id_fee = acc_student_form_id_total_fee(); // 1000 BDT
 
 $rows = [];
@@ -237,11 +325,20 @@ foreach ($raw_rows as $r) {
         continue;
     }
 
+    $due_items = due_report_due_breakdown(
+        $r,
+        $sf_by_package[(int)$r['package_id']] ?? [],
+        $f_as_of_date,
+        $default_form_id_fee,
+        $total_paid
+    );
+
     $rows[] = $r + [
         'total_due'       => round($total_due, 2),
         'total_paid'      => round($total_paid, 2),
         'outstanding'     => round($outstanding, 2),
         'paid_percentage' => $paid_percentage,
+        'due_items'       => $due_items,
     ];
 }
 
@@ -256,7 +353,7 @@ $kpi_students_due    = $kpi_total_students - $kpi_students_clear;
 // ── Group by batch ────────────────────────────────────────────────────────────
 $by_batch = [];
 foreach ($rows as $r) {
-    $key = $r['admitted_semester'] ?: '(No Batch)';
+    $key = $r['batch_name'] ?: '(No Batch)';
     if (!isset($by_batch[$key])) {
         $by_batch[$key] = ['batch' => $key, 'students' => 0, 'total_due' => 0.0, 'total_paid' => 0.0, 'outstanding' => 0.0];
     }
@@ -395,7 +492,7 @@ $as_of_label = date('d M Y', strtotime($f_as_of_date));
 ?>
 
 <!-- ── Page header ── -->
-<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2 no-print">
     <div>
         <h4 class="mb-0 fw-semibold"><i class="fas fa-exclamation-circle me-2 text-danger"></i>Student Due Report</h4>
         <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small">
@@ -451,12 +548,12 @@ $as_of_label = date('d M Y', strtotime($f_as_of_date));
             </div>
 
             <div class="col-md">
-                <label class="form-label small fw-semibold mb-1">Batch (Semester)</label>
+                <label class="form-label small fw-semibold mb-1">Batch</label>
                 <select name="batch" class="form-select form-select-sm">
                     <option value="">All Batches</option>
                     <?php foreach ($batches_list as $b): ?>
-                    <option value="<?= h($b) ?>" <?= $f_batch === $b ? 'selected' : '' ?>>
-                        <?= h($b) ?>
+                    <option value="<?= (int)$b['id'] ?>" <?= $f_batch === (int)$b['id'] ? 'selected' : '' ?>>
+                        <?= h($b['name']) ?>
                     </option>
                     <?php endforeach; ?>
                 </select>
@@ -492,7 +589,7 @@ $as_of_label = date('d M Y', strtotime($f_as_of_date));
 </div>
 
 <!-- ── KPI Cards ── -->
-<div class="row g-3 mb-4">
+<div class="row g-3 mb-4 no-print">
     <div class="col-6 col-md-2">
         <div class="card border-0 shadow-sm h-100 text-center">
             <div class="card-body p-3">
@@ -543,36 +640,78 @@ $as_of_label = date('d M Y', strtotime($f_as_of_date));
     </div>
 </div>
 
-<!-- ── Print header (hidden on screen) ── -->
-<div class="d-none d-print-block mb-3">
-    <div class="text-center mb-2">
-        <?php $logo = acc_university_logo_url(); if ($logo): ?>
-        <img src="<?= h($logo) ?>" alt="Logo" style="height:50px;width:auto;margin-bottom:6px"><br>
-        <?php endif; ?>
-        <strong style="font-size:14pt">Student Due Report</strong><br>
-        <span style="font-size:9pt;color:#555"><?= h(acc_university_address()) ?></span><br>
-        <span style="font-size:8pt;color:#888">Generated: <?= date('d M Y, h:i A') ?> | Due As of: <?= h(date('d M Y', strtotime($f_as_of_date))) ?></span>
-        <?php if ($f_dept || $f_program !== '' || $f_batch !== '' || $f_status !== '' || $f_student_q !== ''): ?>
-        <div style="font-size:8pt;color:#666;margin-top:4px">
-            Filters:
-            <?php if ($f_student_q): echo h("Student: $f_student_q"); echo " &nbsp;"; endif; ?>
-            <?php if ($f_dept):      $dn = array_column($depts, 'name', 'id')[$f_dept] ?? ''; echo h("Dept: $dn"); echo " &nbsp;"; endif; ?>
-            <?php if ($f_program):   echo h("Program: $f_program"); echo " &nbsp;"; endif; ?>
-            <?php if ($f_batch):     echo h("Batch: $f_batch"); echo " &nbsp;"; endif; ?>
-            <?php if ($f_status):    echo h("Status: $f_status"); endif; ?>
-        </div>
-        <?php endif; ?>
-    </div>
-    <table style="width:100%;border-collapse:collapse;font-size:9pt;margin-bottom:8px">
+<!-- ── Print report (hidden on screen) ── -->
+<?php
+$print_dept    = $f_dept ? (array_column($depts, 'name', 'id')[$f_dept] ?? 'All Departments') : 'All Departments';
+$print_program = $f_program !== '' ? $f_program : 'All Programs';
+$print_batch   = $f_batch ? ($batch_name_by_id[$f_batch] ?? 'All Batches') : 'All Batches';
+$print_logo    = acc_university_logo_url();
+?>
+<div class="d-none d-print-block print-report">
+    <table style="width:100%;border-collapse:collapse;margin-bottom:10px">
         <tr>
-            <td style="border:1px solid #ccc;padding:5px;background:#f5f5f5;font-weight:bold">Total Students</td>
-            <td style="border:1px solid #ccc;padding:5px"><?= number_format($kpi_total_students) ?></td>
-            <td style="border:1px solid #ccc;padding:5px;background:#f5f5f5;font-weight:bold">Students with Due</td>
-            <td style="border:1px solid #ccc;padding:5px;color:#c00"><?= number_format($kpi_students_due) ?></td>
-            <td style="border:1px solid #ccc;padding:5px;background:#f5f5f5;font-weight:bold">Due as of <?= h($as_of_label) ?></td>
-            <td style="border:1px solid #ccc;padding:5px;color:#c00;font-weight:bold"><?= $currency ?> <?= number_format($kpi_total_out, 2) ?></td>
+            <td style="width:22%;vertical-align:middle">
+                <?php if ($print_logo): ?>
+                <img src="<?= h($print_logo) ?>" alt="Logo" style="height:55px;width:auto">
+                <?php endif; ?>
+            </td>
+            <td style="width:56%;text-align:center;vertical-align:middle">
+                <div style="font-size:15pt;font-weight:bold">Student Due Report</div>
+                <div style="font-size:10pt;margin-top:2px"><?= h($print_dept) ?> &middot; <?= h($print_program) ?></div>
+                <div style="font-size:10pt;margin-top:1px">Batch: <?= h($print_batch) ?></div>
+            </td>
+            <td style="width:22%;text-align:right;vertical-align:middle;font-size:8pt;color:#555">
+                Generated:<br><?= date('d M Y, h:i A') ?><br>
+                <span style="color:#888">Due As of: <?= h($as_of_label) ?></span>
+            </td>
         </tr>
     </table>
+
+    <?php if (empty($rows)): ?>
+    <p style="font-size:10pt;text-align:center;padding:12px">No outstanding dues found for the selected filters.</p>
+    <?php else: ?>
+    <table style="width:100%;border-collapse:collapse;font-size:8.5pt">
+        <thead>
+            <tr style="background:#eee">
+                <th style="border:1px solid #999;padding:4px;text-align:left;width:4%">#</th>
+                <th style="border:1px solid #999;padding:4px;text-align:left;width:12%">Student ID</th>
+                <th style="border:1px solid #999;padding:4px;text-align:left;width:22%">Name</th>
+                <th style="border:1px solid #999;padding:4px;text-align:right;width:14%">Due as of <?= h($as_of_label) ?> (<?= $currency ?>)</th>
+                <th style="border:1px solid #999;padding:4px;text-align:left">Due Breakdown (Head / Month : Amount)</th>
+            </tr>
+        </thead>
+        <tbody>
+        <?php foreach ($rows as $i => $r): ?>
+            <tr>
+                <td style="border:1px solid #999;padding:4px;text-align:left"><?= $i + 1 ?></td>
+                <td style="border:1px solid #999;padding:4px;text-align:left"><?= h($r['student_sid']) ?></td>
+                <td style="border:1px solid #999;padding:4px;text-align:left"><?= h($r['full_name']) ?></td>
+                <td style="border:1px solid #999;padding:4px;text-align:right;font-weight:bold;color:#c00"><?= number_format($r['outstanding'], 2) ?></td>
+                <td style="border:1px solid #999;padding:4px;text-align:left">
+                    <?php
+                    if (!empty($r['due_items'])) {
+                        $parts = [];
+                        foreach ($r['due_items'] as $di) {
+                            $parts[] = h($di['label']) . ': ' . number_format($di['amount'], 2);
+                        }
+                        echo implode(', ', $parts);
+                    } else {
+                        echo '<span style="color:#888">—</span>';
+                    }
+                    ?>
+                </td>
+            </tr>
+        <?php endforeach; ?>
+        </tbody>
+        <tfoot>
+            <tr style="background:#f5f5f5;font-weight:bold">
+                <td colspan="3" style="border:1px solid #999;padding:4px;text-align:right">Grand Total (<?= number_format($kpi_total_students) ?> students)</td>
+                <td style="border:1px solid #999;padding:4px;text-align:right;color:#c00"><?= number_format($kpi_total_out, 2) ?></td>
+                <td style="border:1px solid #999;padding:4px"></td>
+            </tr>
+        </tfoot>
+    </table>
+    <?php endif; ?>
 </div>
 
 <!-- ── Tabs ── -->
@@ -818,7 +957,6 @@ $as_of_label = date('d M Y', strtotime($f_as_of_date));
                             <th>Program</th>
                             <th>Batch</th>
                             <th>Status</th>
-                            <th class="text-end">Total Due (<?= h($currency) ?>)</th>
                             <th class="text-end">Paid (<?= h($currency) ?>)</th>
                             <th class="text-end">Due as of <?= h($as_of_label) ?> (<?= h($currency) ?>)</th>
                             <th class="no-print">Progress</th>
@@ -838,7 +976,7 @@ $as_of_label = date('d M Y', strtotime($f_as_of_date));
                         </td>
                         <td><?= h($r['dept_name'] ?? '—') ?></td>
                         <td><?= h($r['program_name']) ?></td>
-                        <td><?= h($r['admitted_semester'] ?? '—') ?></td>
+                        <td><?= h($r['batch_name'] ?? '—') ?></td>
                         <td>
                             <?php
                             $status_map = [
@@ -851,7 +989,6 @@ $as_of_label = date('d M Y', strtotime($f_as_of_date));
                             ?>
                             <span class="badge <?= $sc ?> bg-opacity-75"><?= h($r['student_status']) ?></span>
                         </td>
-                        <td class="text-end"><?= number_format($r['total_due'], 2) ?></td>
                         <td class="text-end text-success fw-semibold"><?= number_format($r['total_paid'], 2) ?></td>
                         <td class="text-end <?= $r['outstanding'] >= 0.01 ? 'text-danger fw-bold' : 'text-success' ?>">
                             <?= number_format($r['outstanding'], 2) ?>
@@ -869,7 +1006,7 @@ $as_of_label = date('d M Y', strtotime($f_as_of_date));
                             if ($f_student_q !== '') $focus_url['student_q'] = $f_student_q;
                             if ($f_dept > 0) $focus_url['dept_id'] = $f_dept;
                             if ($f_program !== '') $focus_url['program'] = $f_program;
-                            if ($f_batch !== '') $focus_url['batch'] = $f_batch;
+                            if ($f_batch > 0) $focus_url['batch'] = $f_batch;
                             if ($f_status !== '') $focus_url['status'] = $f_status;
                             if ($f_min_due > 0) $focus_url['min_due'] = $f_min_due;
                             $focus_url['as_of_date'] = $f_as_of_date;
@@ -893,7 +1030,6 @@ $as_of_label = date('d M Y', strtotime($f_as_of_date));
                     <tfoot class="table-light fw-bold">
                         <tr>
                             <td colspan="7" class="text-end">Grand Total</td>
-                            <td class="text-end"><?= number_format($kpi_total_due, 2) ?></td>
                             <td class="text-end text-success"><?= number_format($kpi_total_paid, 2) ?></td>
                             <td class="text-end text-danger"><?= number_format($kpi_total_out, 2) ?></td>
                             <td colspan="2" class="no-print"></td>
@@ -909,7 +1045,7 @@ $as_of_label = date('d M Y', strtotime($f_as_of_date));
     <div class="tab-pane fade <?= $active_tab === 'batch' ? 'show active' : '' ?>" id="pane-batch" role="tabpanel">
         <div class="card border-0 shadow-sm border-top-0 rounded-0 rounded-bottom">
             <div class="card-header py-2 px-3 no-print">
-                <strong class="small">Due by Admission Batch</strong>
+                <strong class="small">Due by Batch</strong>
             </div>
             <?php if (empty($by_batch)): ?>
             <div class="card-body text-center py-5 text-muted">
@@ -921,7 +1057,7 @@ $as_of_label = date('d M Y', strtotime($f_as_of_date));
                     <thead class="table-light">
                         <tr>
                             <th>#</th>
-                            <th>Admission Batch</th>
+                            <th>Batch</th>
                             <th class="text-center">Students</th>
                             <th class="text-end">Total Due (<?= h($currency) ?>)</th>
                             <th class="text-end">Total Paid (<?= h($currency) ?>)</th>
@@ -1111,95 +1247,17 @@ $as_of_label = date('d M Y', strtotime($f_as_of_date));
 
 </div><!-- /tab-content -->
 
-<!-- ── Print-only: grouped summary tables ── -->
-<div class="d-none d-print-block mt-4">
-    <?php if (!empty($by_dept)): ?>
-    <h6 style="font-size:10pt;font-weight:bold;margin-bottom:4px;border-bottom:1px solid #ccc">Due by Department</h6>
-    <table style="width:100%;border-collapse:collapse;font-size:8.5pt;margin-bottom:12px">
-        <thead><tr style="background:#eee">
-            <th style="border:1px solid #ccc;padding:4px">#</th>
-            <th style="border:1px solid #ccc;padding:4px">Department</th>
-            <th style="border:1px solid #ccc;padding:4px;text-align:center">Students</th>
-            <th style="border:1px solid #ccc;padding:4px;text-align:right">Total Due</th>
-            <th style="border:1px solid #ccc;padding:4px;text-align:right">Paid</th>
-            <th style="border:1px solid #ccc;padding:4px;text-align:right">Due as of <?= h($as_of_label) ?></th>
-        </tr></thead>
-        <tbody>
-        <?php foreach ($by_dept as $i => $bd): ?>
-        <tr>
-            <td style="border:1px solid #ccc;padding:4px"><?= $i+1 ?></td>
-            <td style="border:1px solid #ccc;padding:4px"><?= h($bd['dept']) ?></td>
-            <td style="border:1px solid #ccc;padding:4px;text-align:center"><?= $bd['students'] ?></td>
-            <td style="border:1px solid #ccc;padding:4px;text-align:right"><?= number_format($bd['total_due'],2) ?></td>
-            <td style="border:1px solid #ccc;padding:4px;text-align:right"><?= number_format($bd['total_paid'],2) ?></td>
-            <td style="border:1px solid #ccc;padding:4px;text-align:right;font-weight:bold;color:#c00"><?= number_format($bd['outstanding'],2) ?></td>
-        </tr>
-        <?php endforeach; ?>
-        </tbody>
-    </table>
-    <?php endif; ?>
-
-    <?php if (!empty($by_program)): ?>
-    <h6 style="font-size:10pt;font-weight:bold;margin-bottom:4px;border-bottom:1px solid #ccc">Due by Program</h6>
-    <table style="width:100%;border-collapse:collapse;font-size:8.5pt;margin-bottom:12px">
-        <thead><tr style="background:#eee">
-            <th style="border:1px solid #ccc;padding:4px">#</th>
-            <th style="border:1px solid #ccc;padding:4px">Program</th>
-            <th style="border:1px solid #ccc;padding:4px;text-align:center">Students</th>
-            <th style="border:1px solid #ccc;padding:4px;text-align:right">Total Due</th>
-            <th style="border:1px solid #ccc;padding:4px;text-align:right">Paid</th>
-            <th style="border:1px solid #ccc;padding:4px;text-align:right">Due as of <?= h($as_of_label) ?></th>
-        </tr></thead>
-        <tbody>
-        <?php foreach ($by_program as $i => $bp): ?>
-        <tr>
-            <td style="border:1px solid #ccc;padding:4px"><?= $i+1 ?></td>
-            <td style="border:1px solid #ccc;padding:4px"><?= h($bp['program']) ?></td>
-            <td style="border:1px solid #ccc;padding:4px;text-align:center"><?= $bp['students'] ?></td>
-            <td style="border:1px solid #ccc;padding:4px;text-align:right"><?= number_format($bp['total_due'],2) ?></td>
-            <td style="border:1px solid #ccc;padding:4px;text-align:right"><?= number_format($bp['total_paid'],2) ?></td>
-            <td style="border:1px solid #ccc;padding:4px;text-align:right;font-weight:bold;color:#c00"><?= number_format($bp['outstanding'],2) ?></td>
-        </tr>
-        <?php endforeach; ?>
-        </tbody>
-    </table>
-    <?php endif; ?>
-
-    <?php if (!empty($by_batch)): ?>
-    <h6 style="font-size:10pt;font-weight:bold;margin-bottom:4px;border-bottom:1px solid #ccc">Due by Batch</h6>
-    <table style="width:100%;border-collapse:collapse;font-size:8.5pt;margin-bottom:12px">
-        <thead><tr style="background:#eee">
-            <th style="border:1px solid #ccc;padding:4px">#</th>
-            <th style="border:1px solid #ccc;padding:4px">Admission Batch</th>
-            <th style="border:1px solid #ccc;padding:4px;text-align:center">Students</th>
-            <th style="border:1px solid #ccc;padding:4px;text-align:right">Total Due</th>
-            <th style="border:1px solid #ccc;padding:4px;text-align:right">Paid</th>
-            <th style="border:1px solid #ccc;padding:4px;text-align:right">Due as of <?= h($as_of_label) ?></th>
-        </tr></thead>
-        <tbody>
-        <?php foreach ($by_batch as $i => $b): ?>
-        <tr>
-            <td style="border:1px solid #ccc;padding:4px"><?= $i+1 ?></td>
-            <td style="border:1px solid #ccc;padding:4px"><?= h($b['batch']) ?></td>
-            <td style="border:1px solid #ccc;padding:4px;text-align:center"><?= $b['students'] ?></td>
-            <td style="border:1px solid #ccc;padding:4px;text-align:right"><?= number_format($b['total_due'],2) ?></td>
-            <td style="border:1px solid #ccc;padding:4px;text-align:right"><?= number_format($b['total_paid'],2) ?></td>
-            <td style="border:1px solid #ccc;padding:4px;text-align:right;font-weight:bold;color:#c00"><?= number_format($b['outstanding'],2) ?></td>
-        </tr>
-        <?php endforeach; ?>
-        </tbody>
-    </table>
-    <?php endif; ?>
-</div>
+</div><!-- /tab-content -->
 
 <style>
 @media print {
     #sidebar, #topbar, .no-print, nav[aria-label="breadcrumb"] { display: none !important; }
     #main-wrapper { margin-left: 0 !important; }
-    .card { box-shadow: none !important; border: 1px solid #dee2e6 !important; }
-    .tab-pane { display: block !important; opacity: 1 !important; }
-    #pane-batch, #pane-program, #pane-dept { display: none !important; }
-    .rounded-0.rounded-bottom { border-radius: 0 !important; }
+    /* Hide the interactive on-screen report; only the dedicated print report shows. */
+    #dueTabs, .tab-content { display: none !important; }
+    .print-report { display: block !important; }
+    .print-report table { page-break-inside: auto; }
+    .print-report tr { page-break-inside: avoid; }
 }
 @page { size: A4 portrait; margin: 12mm; }
 </style>
