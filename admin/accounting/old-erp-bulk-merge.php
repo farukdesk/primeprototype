@@ -125,7 +125,10 @@ function oebm_parse_month_year(string $raw): ?array
 
     // Split the alphabetic month token from an optional trailing year, allowing
     // common separators (space, dash, dot, slash, underscore) or none at all.
-    if (!preg_match('/^\s*([a-z]+)[\s_\-.\/]*([0-9]{2,4})?\s*$/i', $raw, $m)) {
+    // The year, when present, must be exactly two or four digits — a two-digit
+    // year is taken as 20xx (this ERP's data is all from the current century),
+    // and odd 3-digit inputs are rejected as invalid rather than guessed.
+    if (!preg_match('/^\s*([a-z]+)[\s_\-.\/]*([0-9]{2}|[0-9]{4})?\s*$/i', $raw, $m)) {
         return null;
     }
     $month = $map[strtolower($m[1])] ?? null;
