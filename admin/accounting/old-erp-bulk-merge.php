@@ -14,7 +14,8 @@
  *
  * where Fee Type is either a one-time / registration head — Admission Fee,
  * Form Fee, ID Card Fee, Registration Fee — or the name of a month (Jan,
- * February, …) identifying a monthly tuition installment.
+ * February, …), optionally with a year suffix such as "Jan-26" (January 2026),
+ * identifying a monthly tuition installment.
  *
  * Monthly payments exported from the old ERP are frequently listed out of
  * order (e.g. a student whose schedule starts in January may have rows that
@@ -57,9 +58,9 @@ if (isset($_GET['sample'])) {
     fputcsv($out, ['02826105101071', 'Form Fee', '15/01/2023', '500', 'OLD-RCPT-1001'], ',', '"', '\\');
     fputcsv($out, ['02826105101071', 'ID Card Fee', '15/01/2023', '500', 'OLD-RCPT-1001'], ',', '"', '\\');
     fputcsv($out, ['02826105101071', 'Registration Fee', '15/01/2023', '2000', 'OLD-RCPT-1001'], ',', '"', '\\');
-    fputcsv($out, ['02826105101071', 'January', '20/01/2023', '5000', 'OLD-RCPT-1002, OLD-RCPT-1003'], ',', '"', '\\');
-    fputcsv($out, ['02826105101071', 'Feb', '18/02/2023', '5000', 'OLD-RCPT-1010'], ',', '"', '\\');
-    fputcsv($out, ['02826105101071', 'Mar', '19/03/2023', '5000', 'OLD-RCPT-1021'], ',', '"', '\\');
+    fputcsv($out, ['02826105101071', 'Jan-23', '20/01/2023', '5000', 'OLD-RCPT-1002, OLD-RCPT-1003'], ',', '"', '\\');
+    fputcsv($out, ['02826105101071', 'Feb-23', '18/02/2023', '5000', 'OLD-RCPT-1010'], ',', '"', '\\');
+    fputcsv($out, ['02826105101071', 'Mar-23', '19/03/2023', '5000', 'OLD-RCPT-1021'], ',', '"', '\\');
     fclose($out);
     exit;
 }
@@ -85,12 +86,28 @@ function oebm_normalize_fee_type(string $raw): ?string
  * Normalise a month-name fee cell to a calendar month number (1–12).
  *
  * Accepts full and abbreviated English month names (case/space-insensitive),
- * e.g. "Jan", "January", "SEPT". Returns null when the cell is not a month.
+ * e.g. "Jan", "January", "SEPT". An optional year suffix is ignored here; use
+ * oebm_parse_month_year() when the year matters. Returns null when the cell is
+ * not a month.
  */
 function oebm_normalize_month(string $raw): ?int
 {
-    $s = strtolower(trim($raw));
-    $s = preg_replace('/[\s_\-.]+/', '', $s);
+    $parsed = oebm_parse_month_year($raw);
+    return $parsed['month'] ?? null;
+}
+
+/**
+ * Parse a month-name fee cell that may carry an optional year suffix.
+ *
+ * Accepts plain month names ("Jan", "January") as well as month-year forms
+ * such as "jan-26", "Feb-26", "Mar 2026" or "Jan/26", where a two-digit year is
+ * interpreted as 20xx. Returns ['month' => 1–12, 'year' => int|null], or null
+ * when the cell is not a recognised month.
+ *
+ * @return array{month:int, year:?int}|null
+ */
+function oebm_parse_month_year(string $raw): ?array
+{
     static $map = [
         'jan' => 1, 'january' => 1,
         'feb' => 2, 'february' => 2,
@@ -105,7 +122,26 @@ function oebm_normalize_month(string $raw): ?int
         'nov' => 11, 'november' => 11,
         'dec' => 12, 'december' => 12,
     ];
-    return $map[$s] ?? null;
+
+    // Split the alphabetic month token from an optional trailing year, allowing
+    // common separators (space, dash, dot, slash, underscore) or none at all.
+    if (!preg_match('/^\s*([a-z]+)[\s_\-.\/]*([0-9]{2,4})?\s*$/i', $raw, $m)) {
+        return null;
+    }
+    $month = $map[strtolower($m[1])] ?? null;
+    if ($month === null) {
+        return null;
+    }
+
+    $year = null;
+    if (isset($m[2]) && $m[2] !== '') {
+        $year = (int)$m[2];
+        if ($year < 100) {
+            // Two-digit year → 20xx (e.g. "26" → 2026).
+            $year += 2000;
+        }
+    }
+    return ['month' => $month, 'year' => $year];
 }
 
 /**
@@ -394,16 +430,19 @@ function oebm_validate_rows(array $rows): array
         // A fee cell is either a one-time / registration head, or the name of a
         // month (Jan, February, …) identifying a monthly tuition installment.
         $fee_type  = oebm_normalize_fee_type($fee_raw);
-        $month_num = $fee_type === null ? oebm_normalize_month($fee_raw) : null;
+        $month_info = $fee_type === null ? oebm_parse_month_year($fee_raw) : null;
+        $month_num  = $month_info['month'] ?? null;
+        $month_year = $month_info['year'] ?? null;
         if ($fee_type === null && $month_num === null) {
             if ($status !== 'invalid') $status = 'invalid';
-            $notes[] = 'Unrecognised fee type "' . $fee_raw . '". Use Admission Fee, Form Fee, ID Card Fee, Registration Fee, or a month name (Jan–Dec) for monthly tuition.';
+            $notes[] = 'Unrecognised fee type "' . $fee_raw . '". Use Admission Fee, Form Fee, ID Card Fee, Registration Fee, or a month name (Jan–Dec, optionally with a year like Jan-26) for monthly tuition.';
         } elseif ($fee_type !== null) {
             $resolved['fee_type']       = $fee_type;
             $resolved['fee_type_label'] = acc_fee_type_label($fee_type);
         } else {
             // Provisional label; replaced with the concrete installment below.
-            $resolved['fee_type_label'] = oebm_month_name($month_num) . ' Tuition';
+            $resolved['fee_type_label'] = oebm_month_name($month_num)
+                . ($month_year !== null ? ' ' . $month_year : '') . ' Tuition';
         }
 
         // ── Date ────────────────────────────────────────────────────────────
@@ -460,16 +499,29 @@ function oebm_validate_rows(array $rows): array
                 // in this student's schedule. Slots are matched by their real
                 // calendar month (not by the row's position in the file), so
                 // monthly payments listed out of order in the old ERP export are
-                // automatically placed on the correct installment.
+                // automatically placed on the correct installment. When the CSV
+                // cell also specifies a year (e.g. "Jan-26"), the slot must match
+                // that calendar year too, which disambiguates schedules that span
+                // the same month across two academic years.
                 if (!isset($slot_state[$sid])) {
                     $slot_state[$sid]        = oebm_build_month_slots($summary);
                     $tuition_remaining[$sid] = (float)($summary['totals']['tuition']['out'] ?? 0);
                 }
                 $slots =& $slot_state[$sid];
 
+                $month_label = oebm_month_name($month_num)
+                    . ($month_year !== null ? ' ' . $month_year : '');
+
+                $slot_matches = static function (array $slot) use ($month_num, $month_year): bool {
+                    if ($slot['cal_month'] !== $month_num) {
+                        return false;
+                    }
+                    return $month_year === null || $slot['cal_year'] === $month_year;
+                };
+
                 $target = null;
                 foreach ($slots as $k => $slot) {
-                    if (!$slot['consumed'] && $slot['cal_month'] === $month_num) {
+                    if (!$slot['consumed'] && $slot_matches($slot)) {
                         $target = $k;
                         break;
                     }
@@ -478,14 +530,14 @@ function oebm_validate_rows(array $rows): array
                 if ($target === null) {
                     $has_month = false;
                     foreach ($slots as $slot) {
-                        if ($slot['cal_month'] === $month_num) { $has_month = true; break; }
+                        if ($slot_matches($slot)) { $has_month = true; break; }
                     }
                     if ($has_month) {
                         $status  = 'duplicate';
-                        $notes[] = 'All ' . oebm_month_name($month_num) . ' tuition installment(s) are already accounted for in the current ERP — skipped.';
+                        $notes[] = 'All ' . $month_label . ' tuition installment(s) are already accounted for in the current ERP — skipped.';
                     } else {
                         $status  = 'invalid';
-                        $notes[] = 'Student schedule has no ' . oebm_month_name($month_num) . ' tuition installment.';
+                        $notes[] = 'Student schedule has no ' . $month_label . ' tuition installment.';
                     }
                 } else {
                     $slot = $slots[$target];
@@ -722,7 +774,7 @@ require_once __DIR__ . '/../includes/header.php';
             <strong>Merge a student's full historical account from the old ERP in bulk.</strong>
             <ol class="mb-2 mt-1 ps-3">
                 <li>Prepare a CSV with the columns <code>Student ID</code>, <code>Fee Type</code>, <code>Date</code>, <code>Amount Paid</code>, <code>Receipt Number</code>. Dates use the <strong>DD/MM/YYYY</strong> format (e.g. <code>15/01/2023</code>).</li>
-                <li><code>Fee Type</code> may be <strong>Admission Fee</strong>, <strong>Form Fee</strong>, <strong>ID Card Fee</strong> or <strong>Registration Fee</strong>, or a <strong>month name</strong> (<code>Jan</code>, <code>February</code>, …) for a monthly tuition installment.</li>
+                <li><code>Fee Type</code> may be <strong>Admission Fee</strong>, <strong>Form Fee</strong>, <strong>ID Card Fee</strong> or <strong>Registration Fee</strong>, or a <strong>month name</strong> (<code>Jan</code>, <code>February</code>, …) for a monthly tuition installment. Add a year to target a specific one, e.g. <code>Jan-26</code> means January 2026.</li>
                 <li><strong>Monthly payments don't need to be in order.</strong> Each month is matched to the installment with the same calendar month in the student's own schedule, so out-of-order months from the old ERP are placed on the correct slot automatically.</li>
                 <li>Upload it to preview. Every row is validated and colour-coded before anything is saved.</li>
                 <li><strong>Duplicate receipt numbers are allowed</strong> — one historical receipt often covers several fee heads, so the same number may repeat across rows.</li>
