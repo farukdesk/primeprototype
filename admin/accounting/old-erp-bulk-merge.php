@@ -160,6 +160,14 @@ function oebm_month_name(int $month): string
     return $names[$month] ?? (string)$month;
 }
 
+/**
+ * Human-readable month label including an optional year (e.g. "January 2026").
+ */
+function oebm_format_month_label(int $month, ?int $year): string
+{
+    return oebm_month_name($month) . ($year !== null ? ' ' . $year : '');
+}
+
 
 function oebm_parse_date(string $raw): ?string
 {
@@ -293,7 +301,10 @@ function oebm_read_csv(string $csv_text): array
         // quoted, str_getcsv spreads those numbers across extra trailing columns;
         // gather everything from the receipt column onward so none are lost.
         if ($col_receipt === $last_col && count($r) > $col_receipt + 1) {
-            $receipt_raw = implode(', ', array_slice($r, $col_receipt));
+            $receipt_raw = implode(', ', array_filter(
+                array_slice($r, $col_receipt),
+                static fn($v) => trim((string)$v) !== ''
+            ));
         } else {
             $receipt_raw = (string)($r[$col_receipt] ?? '');
         }
@@ -462,8 +473,7 @@ function oebm_validate_rows(array $rows): array
             $resolved['fee_type_label'] = acc_fee_type_label($fee_type);
         } else {
             // Provisional label; replaced with the concrete installment below.
-            $resolved['fee_type_label'] = oebm_month_name($month_num)
-                . ($month_year !== null ? ' ' . $month_year : '') . ' Tuition';
+            $resolved['fee_type_label'] = oebm_format_month_label($month_num, $month_year) . ' Tuition';
         }
 
         // ── Date ────────────────────────────────────────────────────────────
@@ -530,8 +540,7 @@ function oebm_validate_rows(array $rows): array
                 }
                 $slots =& $slot_state[$sid];
 
-                $month_label = oebm_month_name($month_num)
-                    . ($month_year !== null ? ' ' . $month_year : '');
+                $month_label = oebm_format_month_label($month_num, $month_year);
 
                 $target = null;
                 foreach ($slots as $k => $slot) {
