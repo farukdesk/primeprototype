@@ -2,12 +2,21 @@
 /**
  * Old ERP – Bulk CSV Merge
  *
- * Bulk-merge historical (old ERP) admission-day receipts into the current
+ * Bulk-merge a student's full historical (old ERP) account into the current
  * system. The admin uploads a CSV containing, per row:
  *
  *     Student ID, Fee Type, Date, Amount Paid, Receipt Number
  *
- * where Fee Type is one of: Admission Fee, Form Fee, ID Card Fee, Registration Fee.
+ * where Fee Type is either a one-time / registration head — Admission Fee,
+ * Form Fee, ID Card Fee, Registration Fee — or the name of a month (Jan,
+ * February, …) identifying a monthly tuition installment.
+ *
+ * Monthly payments exported from the old ERP are frequently listed out of
+ * order (e.g. a student whose schedule starts in January may have rows that
+ * begin at March). Each monthly row is therefore matched to the installment
+ * with the same calendar month in the student's own schedule, so the months
+ * are re-ordered onto the correct slots automatically, regardless of the order
+ * they appear in the file.
  *
  * The workflow is two steps:
  *   1. Upload → server validates every row and renders a colour-coded preview.
@@ -29,8 +38,9 @@ require_once __DIR__ . '/helpers.php';
 
 $page_title = 'Old ERP Bulk CSV Merge';
 
-// Fee heads this tool can merge (admission-day one-time fees + registration).
-const OEBM_FEE_TYPES = ['admission', 'form_fee', 'id_card_fee', 'registration'];
+// Fee heads this tool can merge: admission-day one-time fees, registration and
+// monthly tuition (the latter supplied per row as a month name, Jan–Dec).
+const OEBM_FEE_TYPES = ['admission', 'form_fee', 'id_card_fee', 'registration', 'semester_tuition'];
 
 // ── Sample CSV template download ────────────────────────────────────────────
 if (isset($_GET['sample'])) {
@@ -42,6 +52,9 @@ if (isset($_GET['sample'])) {
     fputcsv($out, ['02826105101071', 'Form Fee', '2023-01-15', '500', 'OLD-RCPT-1001'], ',', '"', '\\');
     fputcsv($out, ['02826105101071', 'ID Card Fee', '2023-01-15', '500', 'OLD-RCPT-1001'], ',', '"', '\\');
     fputcsv($out, ['02826105101071', 'Registration Fee', '2023-01-15', '2000', 'OLD-RCPT-1001'], ',', '"', '\\');
+    fputcsv($out, ['02826105101071', 'January', '2023-01-20', '5000', 'OLD-RCPT-1002'], ',', '"', '\\');
+    fputcsv($out, ['02826105101071', 'Feb', '2023-02-18', '5000', 'OLD-RCPT-1010'], ',', '"', '\\');
+    fputcsv($out, ['02826105101071', 'Mar', '2023-03-19', '5000', 'OLD-RCPT-1021'], ',', '"', '\\');
     fclose($out);
     exit;
 }
@@ -64,8 +77,46 @@ function oebm_normalize_fee_type(string $raw): ?string
 }
 
 /**
- * Parse a date cell into Y-m-d, trying a handful of common formats.
+ * Normalise a month-name fee cell to a calendar month number (1–12).
+ *
+ * Accepts full and abbreviated English month names (case/space-insensitive),
+ * e.g. "Jan", "January", "SEPT". Returns null when the cell is not a month.
  */
+function oebm_normalize_month(string $raw): ?int
+{
+    $s = strtolower(trim($raw));
+    $s = preg_replace('/[\s_\-.]+/', '', $s);
+    static $map = [
+        'jan' => 1, 'january' => 1,
+        'feb' => 2, 'february' => 2,
+        'mar' => 3, 'march' => 3,
+        'apr' => 4, 'april' => 4,
+        'may' => 5,
+        'jun' => 6, 'june' => 6,
+        'jul' => 7, 'july' => 7,
+        'aug' => 8, 'august' => 8,
+        'sep' => 9, 'sept' => 9, 'september' => 9,
+        'oct' => 10, 'october' => 10,
+        'nov' => 11, 'november' => 11,
+        'dec' => 12, 'december' => 12,
+    ];
+    return $map[$s] ?? null;
+}
+
+/**
+ * Human-readable month name for a calendar month number (1–12).
+ */
+function oebm_month_name(int $month): string
+{
+    static $names = [
+        1 => 'January', 2 => 'February', 3 => 'March', 4 => 'April',
+        5 => 'May', 6 => 'June', 7 => 'July', 8 => 'August',
+        9 => 'September', 10 => 'October', 11 => 'November', 12 => 'December',
+    ];
+    return $names[$month] ?? (string)$month;
+}
+
+
 function oebm_parse_date(string $raw): ?string
 {
     $raw = trim($raw);
@@ -175,6 +226,39 @@ function oebm_read_csv(string $csv_text): array
 }
 
 /**
+ * Flatten a student's fee summary into an ordered list of monthly tuition
+ * installment slots, each carrying the calendar month it falls on plus the
+ * amounts already paid / outstanding in the current ERP.
+ *
+ * Slots are returned in chronological order (semester, then month), which lets
+ * the validator place an out-of-order CSV month onto the earliest matching,
+ * still-unconsumed installment.
+ *
+ * @param  array<string,mixed> $summary  Result of acc_student_fee_summary().
+ * @return array<int,array<string,mixed>>
+ */
+function oebm_build_month_slots(array $summary): array
+{
+    $slots = [];
+    foreach (($summary['semesters'] ?? []) as $sem) {
+        foreach (($sem['monthly_rows'] ?? []) as $mr) {
+            $slots[] = [
+                'semester_fee_id' => (int)$sem['id'],
+                'semester_number' => (int)$sem['semester_number'],
+                'month_number'    => (int)$mr['month_number'],
+                'cal_month'       => (int)$mr['cal_month'],
+                'cal_year'        => (int)$mr['cal_year'],
+                'label'           => (string)$mr['month_label'],
+                'paid'            => (float)$mr['paid'],
+                'out'             => (float)$mr['out'],
+                'consumed'        => false,
+            ];
+        }
+    }
+    return $slots;
+}
+
+/**
  * Validate and classify every CSV row.
  *
  * Each result row carries a status:
@@ -191,6 +275,10 @@ function oebm_validate_rows(array $rows): array
     $counts  = ['merge' => 0, 'duplicate' => 0, 'invalid' => 0];
 
     $summary_cache = [];   // SID => fee summary (or false when not found)
+
+    // Per-student state for monthly tuition allocation across the batch.
+    $slot_state        = [];   // SID => mutable month-slot list (oebm_build_month_slots)
+    $tuition_remaining = [];   // SID => outstanding tuition pool, decremented as rows consume it
 
     foreach ($rows as $idx => $row) {
         $row_no   = $idx + 2; // +1 header, +1 to be 1-based for humans
@@ -214,6 +302,7 @@ function oebm_validate_rows(array $rows): array
             'existing_amount'   => null,
             'semester_fee_id'   => null,
             'semester_number'   => null,
+            'month_number'      => null,
         ];
 
         // Skip a completely blank line.
@@ -259,13 +348,19 @@ function oebm_validate_rows(array $rows): array
         }
 
         // ── Fee type ────────────────────────────────────────────────────────
-        $fee_type = oebm_normalize_fee_type($fee_raw);
-        if ($fee_type === null) {
+        // A fee cell is either a one-time / registration head, or the name of a
+        // month (Jan, February, …) identifying a monthly tuition installment.
+        $fee_type  = oebm_normalize_fee_type($fee_raw);
+        $month_num = $fee_type === null ? oebm_normalize_month($fee_raw) : null;
+        if ($fee_type === null && $month_num === null) {
             if ($status !== 'invalid') $status = 'invalid';
-            $notes[] = 'Unrecognised fee type "' . $fee_raw . '". Use Admission Fee, Form Fee, ID Card Fee or Registration Fee.';
-        } else {
+            $notes[] = 'Unrecognised fee type "' . $fee_raw . '". Use Admission Fee, Form Fee, ID Card Fee, Registration Fee, or a month name (Jan–Dec) for monthly tuition.';
+        } elseif ($fee_type !== null) {
             $resolved['fee_type']       = $fee_type;
             $resolved['fee_type_label'] = acc_fee_type_label($fee_type);
+        } else {
+            // Provisional label; replaced with the concrete installment below.
+            $resolved['fee_type_label'] = oebm_month_name($month_num) . ' Tuition';
         }
 
         // ── Date ────────────────────────────────────────────────────────────
@@ -299,17 +394,85 @@ function oebm_validate_rows(array $rows): array
         }
 
         // ── Existing-payment / amount-validation checks ─────────────────────
-        // Only meaningful once we have a fee head, an amount and a package.
+        // Only meaningful once we have a fee head/month, an amount and a package.
         //
         // Duplicate receipt numbers are allowed here, so a matching receipt in
         // the current ERP is shown for reference but never blocks the row. The
-        // real duplicate guard is the per-fee-head "already paid" check below.
-        if ($status !== 'invalid' && $fee_type !== null && $resolved['amount'] !== null) {
+        // real duplicate guard is the per-fee-head / per-installment "already
+        // paid" check below.
+        if ($status !== 'invalid' && ($fee_type !== null || $month_num !== null) && $resolved['amount'] !== null) {
             $existing = $receipt !== '' ? acc_find_payment_by_transaction_number($receipt) : null;
             if ($existing) {
                 $resolved['existing_amount'] = (float)$existing['amount'];
             }
-            if ($summary) {
+            if ($summary && $month_num !== null) {
+                // ── Monthly tuition installment ─────────────────────────────
+                // Resolve the CSV month name to the matching calendar-month slot
+                // in this student's schedule. Slots are matched by their real
+                // calendar month (not by the row's position in the file), so
+                // monthly payments listed out of order in the old ERP export are
+                // automatically placed on the correct installment.
+                if (!isset($slot_state[$sid])) {
+                    $slot_state[$sid]        = oebm_build_month_slots($summary);
+                    $tuition_remaining[$sid] = (float)($summary['totals']['tuition']['out'] ?? 0);
+                }
+                $slots =& $slot_state[$sid];
+
+                $target = null;
+                foreach ($slots as $k => $slot) {
+                    if (!$slot['consumed'] && $slot['cal_month'] === $month_num) {
+                        $target = $k;
+                        break;
+                    }
+                }
+
+                if ($target === null) {
+                    $has_month = false;
+                    foreach ($slots as $slot) {
+                        if ($slot['cal_month'] === $month_num) { $has_month = true; break; }
+                    }
+                    if ($has_month) {
+                        $status  = 'duplicate';
+                        $notes[] = 'All ' . oebm_month_name($month_num) . ' tuition installment(s) are already accounted for in the current ERP — skipped.';
+                    } else {
+                        $status  = 'invalid';
+                        $notes[] = 'Student schedule has no ' . oebm_month_name($month_num) . ' tuition installment.';
+                    }
+                } else {
+                    $slot = $slots[$target];
+                    $resolved['fee_type']        = 'semester_tuition';
+                    $resolved['fee_type_label']  = 'Tuition – ' . $slot['label'];
+                    $resolved['semester_fee_id'] = $slot['semester_fee_id'];
+                    $resolved['semester_number'] = $slot['semester_number'];
+                    $resolved['month_number']    = $slot['month_number'];
+
+                    if ($slot['out'] <= 0.001 && $slot['paid'] > 0.001) {
+                        // This installment is already paid in the current ERP.
+                        $status = 'duplicate';
+                        $resolved['existing_amount'] = $slot['paid'];
+                        $slots[$target]['consumed'] = true;
+                        if (abs($slot['paid'] - (float)$resolved['amount']) > 0.001) {
+                            $notes[] = $slot['label'] . ' tuition is already paid in current ERP ('
+                                . acc_currency() . ' ' . number_format($slot['paid'], 2)
+                                . '), but CSV amount is ' . acc_currency() . ' ' . number_format((float)$resolved['amount'], 2)
+                                . ' — amount mismatch, manual correction needed.';
+                        } else {
+                            $notes[] = $slot['label'] . ' tuition is already paid in current ERP — skipped.';
+                        }
+                    } elseif ((float)$resolved['amount'] > ($tuition_remaining[$sid] ?? 0) + 0.001) {
+                        // Would push tuition paid beyond the total tuition due.
+                        $status  = 'invalid';
+                        $notes[] = 'Amount ' . acc_currency() . ' ' . number_format((float)$resolved['amount'], 2)
+                            . ' exceeds the outstanding tuition of '
+                            . acc_currency() . ' ' . number_format((float)($tuition_remaining[$sid] ?? 0), 2) . '.';
+                    } else {
+                        $slots[$target]['consumed'] = true;
+                        $tuition_remaining[$sid]    = max(0.0, ($tuition_remaining[$sid] ?? 0) - (float)$resolved['amount']);
+                        $notes[] = 'Applied to ' . $slot['label'] . ' tuition installment.';
+                    }
+                }
+                unset($slots);
+            } elseif ($summary && $fee_type !== null) {
                 $head        = $summary['totals'][$fee_type] ?? ['due' => 0, 'paid' => 0, 'out' => 0];
                 $due         = (float)($head['due'] ?? 0);
                 $paid        = (float)($head['paid'] ?? 0);
@@ -445,7 +608,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 $res['fee_type'],
                                 $res['semester_fee_id'] !== null ? (int)$res['semester_fee_id'] : null,
                                 $res['semester_number'] !== null ? (int)$res['semester_number'] : null,
-                                null,
+                                $res['month_number'] !== null ? (int)$res['month_number'] : null,
                                 'old_erp',
                                 null,
                                 $res['receipt'],
@@ -507,13 +670,14 @@ require_once __DIR__ . '/../includes/header.php';
     <div class="d-flex gap-3">
         <div class="fs-4 text-info"><i class="fas fa-info-circle"></i></div>
         <div class="small">
-            <strong>Merge historical admission-day receipts from the old ERP in bulk.</strong>
+            <strong>Merge a student's full historical account from the old ERP in bulk.</strong>
             <ol class="mb-2 mt-1 ps-3">
                 <li>Prepare a CSV with the columns <code>Student ID</code>, <code>Fee Type</code>, <code>Date</code>, <code>Amount Paid</code>, <code>Receipt Number</code>.</li>
-                <li><code>Fee Type</code> must be one of <strong>Admission Fee</strong>, <strong>Form Fee</strong>, <strong>ID Card Fee</strong> or <strong>Registration Fee</strong>.</li>
+                <li><code>Fee Type</code> may be <strong>Admission Fee</strong>, <strong>Form Fee</strong>, <strong>ID Card Fee</strong> or <strong>Registration Fee</strong>, or a <strong>month name</strong> (<code>Jan</code>, <code>February</code>, …) for a monthly tuition installment.</li>
+                <li><strong>Monthly payments don't need to be in order.</strong> Each month is matched to the installment with the same calendar month in the student's own schedule, so out-of-order months from the old ERP are placed on the correct slot automatically.</li>
                 <li>Upload it to preview. Every row is validated and colour-coded before anything is saved.</li>
                 <li><strong>Duplicate receipt numbers are allowed</strong> — one historical receipt often covers several fee heads, so the same number may repeat across rows.</li>
-                <li>Rows whose fee head is already paid in the current ERP are <strong>highlighted for manual correction</strong> — including any amount mismatch — and are never re-inserted.</li>
+                <li>Rows whose fee head or month is already paid in the current ERP are <strong>highlighted for manual correction</strong> — including any amount mismatch — and are never re-inserted.</li>
                 <li>Confirm to merge only the valid rows. Each is stored as an <em>Old ERP</em> payment (a memo voucher), so dues update without double-counting income.</li>
             </ol>
             <a href="<?= APP_URL ?>/accounting/old-erp-bulk-merge.php?sample=1" class="alert-link">
