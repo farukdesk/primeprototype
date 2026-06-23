@@ -8,6 +8,54 @@ if (!acc_can_request_voucher_delete()) {
     redirect(APP_URL . '/accounting/vouchers.php');
 }
 
+// ── Bulk deletion (Super Admin only) ──────────────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['bulk'])) {
+    csrf_check();
+    if (!acc_can_delete_voucher_directly()) {
+        flash_set('error', 'Only a Super Administrator can bulk delete vouchers.');
+        redirect(APP_URL . '/accounting/vouchers.php');
+    }
+
+    $ids    = array_map('intval', (array)($_POST['ids'] ?? []));
+    $ids    = array_values(array_filter($ids, static fn(int $id): bool => $id > 0));
+    $reason = trim($_POST['reason'] ?? '');
+    $errors = [];
+
+    if (!$ids) {
+        $errors[] = 'Please select at least one voucher to delete.';
+    }
+    if (strlen($reason) < 10) {
+        $errors[] = 'Please provide a detailed reason (minimum 10 characters).';
+    }
+
+    $attachment = null;
+    if (empty($errors) && !empty($_FILES['attachment']['name'])) {
+        try {
+            $attachment = acc_store_delete_attachment($_FILES['attachment']);
+        } catch (RuntimeException $e) {
+            $errors[] = $e->getMessage();
+        }
+    }
+
+    if (!empty($errors)) {
+        flash_set('error', implode(' ', $errors));
+        redirect(APP_URL . '/accounting/vouchers.php');
+    }
+
+    try {
+        $deleted = acc_bulk_direct_delete_vouchers($ids, $reason, $attachment);
+        $skipped = count($ids) - $deleted;
+        $msg = $deleted . ' voucher(s) deleted and logged.';
+        if ($skipped > 0) {
+            $msg .= ' ' . $skipped . ' skipped (not found, already deleted, or pending a delete request).';
+        }
+        flash_set($deleted > 0 ? 'success' : 'error', $msg);
+    } catch (RuntimeException $e) {
+        flash_set('error', $e->getMessage());
+    }
+    redirect(APP_URL . '/accounting/vouchers.php');
+}
+
 $id      = (int)($_GET['id'] ?? $_POST['id'] ?? 0);
 $voucher = acc_get_voucher($id);
 if (!$voucher) {

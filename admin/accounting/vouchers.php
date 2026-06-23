@@ -72,6 +72,13 @@ $stmt = db()->prepare(
 $stmt->execute($params);
 $vouchers = $stmt->fetchAll();
 
+// Resolve business purpose (e.g. student fee) so we can show the linked student
+// ID alongside the narration/reference for each voucher on this page.
+$voucher_purposes = acc_get_voucher_purposes(array_map(static fn($v) => (int)$v['id'], $vouchers));
+
+// Super Admins can bulk-select and delete multiple vouchers at once.
+$can_bulk_delete = acc_can_delete_voucher_directly();
+
 $created_by_stmt = db()->query(
     "SELECT u.id, u.full_name
      FROM users u
@@ -106,6 +113,12 @@ require_once __DIR__ . '/../includes/header.php';
         </ol></nav>
     </div>
     <div class="d-flex gap-2 flex-wrap">
+        <?php if ($can_bulk_delete): ?>
+        <button type="button" class="btn btn-outline-danger btn-sm js-bulk-delete-open" disabled
+                data-bs-toggle="modal" data-bs-target="#voucherBulkDeleteModal">
+            <i class="fas fa-trash-alt me-1"></i> Delete Selected (<span class="js-bulk-count">0</span>)
+        </button>
+        <?php endif; ?>
         <?php if (acc_can_access_voucher_delete()): ?>
         <a href="<?= APP_URL ?>/accounting/voucher-delete-requests.php" class="btn btn-outline-danger btn-sm"><i class="fas fa-trash-restore me-1"></i> Delete Requests</a>
         <?php endif; ?>
@@ -185,6 +198,11 @@ require_once __DIR__ . '/../includes/header.php';
             <table class="table table-hover align-middle mb-0">
                 <thead class="table-light">
                     <tr>
+                        <?php if ($can_bulk_delete): ?>
+                        <th style="width:1%">
+                            <input type="checkbox" class="form-check-input" id="vdSelectAll" title="Select all">
+                        </th>
+                        <?php endif; ?>
                         <th>Voucher #</th>
                         <th>Type</th>
                         <th>Date</th>
@@ -198,6 +216,12 @@ require_once __DIR__ . '/../includes/header.php';
                 <tbody>
                     <?php foreach ($vouchers as $v): ?>
                     <tr>
+                        <?php if ($can_bulk_delete): ?>
+                        <td>
+                            <input type="checkbox" class="form-check-input js-voucher-check"
+                                   form="bulkDeleteForm" name="ids[]" value="<?= (int)$v['id'] ?>">
+                        </td>
+                        <?php endif; ?>
                         <td>
                             <a href="<?= APP_URL ?>/accounting/voucher-view.php?id=<?= $v['id'] ?>" class="fw-semibold text-decoration-none">
                                 <?= h($v['voucher_number']) ?>
@@ -211,6 +235,23 @@ require_once __DIR__ . '/../includes/header.php';
                         <td>
                             <div class="small"><?= h($v['narration'] ?? '–') ?></div>
                             <?php if ($v['reference']): ?><div class="text-muted" style="font-size:.72rem"><?= h($v['reference']) ?></div><?php endif; ?>
+                            <?php
+                            $vp  = $voucher_purposes[(int)$v['id']] ?? null;
+                            $sid = '';
+                            $sname = '';
+                            if ($vp) {
+                                $sid   = $vp['kind'] === 'admission_fee'
+                                    ? ($vp['assigned_student_id'] ?? '')
+                                    : ($vp['student_id'] ?? '');
+                                $sname = $vp['student_name'] ?? '';
+                            }
+                            if ($sid !== ''):
+                            ?>
+                            <div style="font-size:.72rem">
+                                <span class="badge bg-light text-dark border"><i class="fas fa-id-card me-1 text-primary"></i><?= h($sid) ?></span>
+                                <?php if ($sname !== ''): ?><span class="text-muted ms-1"><?= h($sname) ?></span><?php endif; ?>
+                            </div>
+                            <?php endif; ?>
                         </td>
                         <td class="text-end fw-semibold"><?= $currency ?> <?= number_format($v['total_amount'], 2) ?></td>
                         <td><?= acc_voucher_status_badge($v['status']) ?></td>
@@ -324,6 +365,70 @@ document.querySelectorAll('.js-voucher-delete').forEach(function (btn) {
         });
     });
 });
+</script>
+<?php endif; ?>
+
+<?php if ($can_bulk_delete): ?>
+<!-- Bulk Voucher Delete Modal (Super Admin) -->
+<div class="modal fade" id="voucherBulkDeleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <form method="post" action="<?= APP_URL ?>/accounting/voucher-delete.php" enctype="multipart/form-data" class="modal-content" id="bulkDeleteForm">
+            <?= csrf_field() ?>
+            <input type="hidden" name="bulk" value="1">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-trash-alt me-2 text-danger"></i>Delete Selected Vouchers</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-danger small">
+                    You are about to delete <strong><span class="js-bulk-count">0</span></strong> selected voucher(s) with one shared note.
+                    This clears each entry and its calculations from every report. This is logged permanently and cannot be undone.
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Reason for Deletion <span class="text-danger">*</span></label>
+                    <textarea name="reason" class="form-control" rows="4" required minlength="10"
+                              placeholder="Explain in detail why these vouchers must be deleted…"></textarea>
+                </div>
+                <div class="mb-1">
+                    <label class="form-label fw-semibold">Attachment <span class="text-muted small">(optional)</span></label>
+                    <input type="file" name="attachment" class="form-control" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx">
+                    <div class="form-text">Allowed: pdf, jpg, png, doc, docx, xls, xlsx (max 5 MB). Applied to all selected vouchers.</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-danger">
+                    <i class="fas fa-trash-alt me-1"></i> Delete <span class="js-bulk-count">0</span> Voucher(s)
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+<script>
+(function () {
+    var selectAll = document.getElementById('vdSelectAll');
+    var checks    = Array.prototype.slice.call(document.querySelectorAll('.js-voucher-check'));
+    var bulkBtn   = document.querySelector('.js-bulk-delete-open');
+    var countEls  = Array.prototype.slice.call(document.querySelectorAll('.js-bulk-count'));
+
+    function selectedCount() {
+        return checks.filter(function (c) { return c.checked; }).length;
+    }
+    function refresh() {
+        var n = selectedCount();
+        countEls.forEach(function (el) { el.textContent = n; });
+        if (bulkBtn) { bulkBtn.disabled = n === 0; }
+        if (selectAll) { selectAll.checked = n > 0 && n === checks.length; }
+    }
+    if (selectAll) {
+        selectAll.addEventListener('change', function () {
+            checks.forEach(function (c) { c.checked = selectAll.checked; });
+            refresh();
+        });
+    }
+    checks.forEach(function (c) { c.addEventListener('change', refresh); });
+    refresh();
+})();
 </script>
 <?php endif; ?>
 
