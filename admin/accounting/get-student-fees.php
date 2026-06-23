@@ -33,10 +33,22 @@ try {
         exit;
     }
 
+    // Full calendar-month names so the transaction history can show the real
+    // month (e.g. "January 2026") next to the sequential "Month N" label.
+    $full_month_names = [
+        1 => 'January', 2 => 'February', 3 => 'March', 4 => 'April',
+        5 => 'May', 6 => 'June', 7 => 'July', 8 => 'August',
+        9 => 'September', 10 => 'October', 11 => 'November', 12 => 'December',
+    ];
     $month_labels_map = [];
     foreach ($summary['semesters'] as $sem) {
         foreach (($sem['monthly_rows'] ?? []) as $mr) {
-            $month_labels_map[(int)$sem['semester_number'] . ':' . (int)$mr['month_number']] = $mr['month_label'] ?? '';
+            $cal_month = (int)($mr['cal_month'] ?? 0);
+            $cal_year  = (int)($mr['cal_year'] ?? 0);
+            $label = ($cal_month >= 1 && $cal_month <= 12 && $cal_year > 0)
+                ? $full_month_names[$cal_month] . ' ' . $cal_year
+                : ($mr['month_label'] ?? '');
+            $month_labels_map[(int)$sem['semester_number'] . ':' . (int)$mr['month_number']] = $label;
         }
     }
 
