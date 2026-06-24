@@ -923,7 +923,7 @@ require_once __DIR__ . '/../includes/header.php';
                     </button>
                 </div>
             </div>
-            <!-- Starts collapsed; JS auto-opens in renderFeeSummary() when outstanding fees exist -->
+            <!-- Auto-expands on student load (renderFeeSummary → loadFeeSummary); also toggleable via the Details button -->
             <div class="card-body p-0 collapse" id="feeObligationsCollapse" data-bs-parent="#studentFeeAccordion">
                 <div class="px-4 py-2 border-bottom bg-light-subtle" id="multiCollectBar" style="display:none;">
                     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -962,32 +962,20 @@ require_once __DIR__ . '/../includes/header.php';
                     </table>
                 </div>
 
-                <!-- Additional / Examination fees (variable amount, outside the schedule) -->
-                <div class="border-top">
-                    <div class="px-4 py-2 d-flex align-items-center justify-content-between flex-wrap gap-2 bg-light-subtle">
+                <!-- ── Additional & Examination Fees ──────────────────────────────
+                     Rendered as a separate "variable amount" schedule shown at the
+                     very bottom of the Fee Schedule, after the last semester. These
+                     fees are billed on demand and stay OUTSIDE the outstanding total. -->
+                <div class="border-top" id="additionalFeesSection">
+                    <!-- Section header (matches the in-table semester section style) -->
+                    <div class="px-4 py-2 bg-secondary-subtle border-bottom">
                         <span class="small fw-semibold text-muted">
-                            <i class="fas fa-plus-circle me-1 text-success"></i>Additional &amp; Examination Fees
-                            <span class="text-muted fw-normal">(variable amount, outside total balance)</span>
+                            <i class="fas fa-chevron-right me-1"></i>Additional &amp; Examination Fees
+                            <span class="fw-normal">(variable amount, outside total balance)</span>
                         </span>
-                        <div class="d-flex align-items-end gap-2 flex-wrap">
-                            <div>
-                                <label class="form-label small mb-1" for="addlFeeType">Fee Type</label>
-                                <select id="addlFeeType" class="form-select form-select-sm" style="min-width:230px;">
-                                    <option value="retake_fee">Re-Take Fee</option>
-                                    <option value="improvement_fee">Improvement Fee</option>
-                                    <option value="special_exam_midterm">Special Examination (Mid Term)</option>
-                                    <option value="special_exam_final">Special Examination (Final)</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="form-label small mb-1" for="addlFeeAmount">Amount (<?= acc_currency() ?>)</label>
-                                <input type="number" id="addlFeeAmount" class="form-control form-control-sm" step="0.01" min="0.01" placeholder="0.00" style="max-width:140px;">
-                            </div>
-                            <button type="button" class="btn btn-sm btn-success" id="btnCollectAddlFee">
-                                <i class="fas fa-hand-holding-usd me-1"></i>Collect
-                            </button>
-                        </div>
                     </div>
+
+                    <!-- Collected additional fees (hidden until at least one exists) -->
                     <div class="table-responsive" id="additionalFeesWrap" style="display:none;">
                         <table class="table table-sm align-middle mb-0" id="additionalFeesTable">
                             <thead class="table-light">
@@ -1008,6 +996,41 @@ require_once __DIR__ . '/../includes/header.php';
                                 </tr>
                             </tfoot>
                         </table>
+                    </div>
+
+                    <!-- Empty-state hint shown when nothing has been collected yet -->
+                    <div class="px-4 py-2 small text-muted fst-italic" id="additionalFeesEmpty">
+                        <i class="fas fa-circle-info me-1"></i>No additional or examination fees collected yet. Add one below.
+                    </div>
+
+                    <!-- Inline "add a variable fee" form (compact &amp; grouped) -->
+                    <div class="px-4 py-3 bg-light-subtle border-top">
+                        <div class="row g-2 align-items-end">
+                            <div class="col-sm-6 col-md-5 col-lg-4">
+                                <label class="form-label small mb-1" for="addlFeeType">Fee Type</label>
+                                <select id="addlFeeType" class="form-select form-select-sm">
+                                    <option value="retake_fee">Re-Take Fee</option>
+                                    <option value="improvement_fee">Improvement Fee</option>
+                                    <option value="special_exam_midterm">Special Examination (Mid Term)</option>
+                                    <option value="special_exam_final">Special Examination (Final)</option>
+                                </select>
+                            </div>
+                            <div class="col-sm-4 col-md-4 col-lg-3">
+                                <label class="form-label small mb-1" for="addlFeeAmount">Amount (<?= acc_currency() ?>)</label>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text"><?= acc_currency() ?></span>
+                                    <input type="number" id="addlFeeAmount" class="form-control" step="0.01" min="0.01" placeholder="0.00">
+                                </div>
+                            </div>
+                            <div class="col-sm-2 col-md-3 col-lg-2">
+                                <button type="button" class="btn btn-sm btn-success w-100" id="btnCollectAddlFee">
+                                    <i class="fas fa-hand-holding-usd me-1"></i>Collect
+                                </button>
+                            </div>
+                        </div>
+                        <div class="form-text mt-1">
+                            <i class="fas fa-info-circle me-1"></i>Billed on demand — not included in the outstanding balance above.
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1914,7 +1937,9 @@ require_once __DIR__ . '/../includes/header.php';
                 renderFeeSummary(data);
                 document.getElementById('feeSummaryWrap').style.display = '';
                 document.getElementById('paymentFormCard').style.display = 'none';
-                // Fee obligations table stays collapsed; user can expand via the Details button
+                // Auto-expand the fee schedule so dues and the Additional &
+                // Examination Fees section are immediately visible on load.
+                openAccordionSection('feeObligationsCollapse');
             })
             .catch(() => {
                 btnLoad.disabled = false;
@@ -2084,16 +2109,19 @@ require_once __DIR__ . '/../includes/header.php';
         const body     = document.getElementById('additionalFeesBody');
         const totalEl  = document.getElementById('additionalFeesTotal');
         const grandEl  = document.getElementById('grandTotalPaid');
+        const emptyEl  = document.getElementById('additionalFeesEmpty');
         const items    = (additional.items || []).filter(it => Number(it.paid) > 0);
         const addlTotal = Number(additional.total_paid || 0);
 
         body.innerHTML = '';
         if (items.length === 0) {
             // Nothing collected yet — hide the breakdown table but keep the
-            // collection controls visible.
+            // collection controls (and an empty-state hint) visible.
             wrap.style.display = 'none';
+            if (emptyEl) emptyEl.style.display = '';
             return;
         }
+        if (emptyEl) emptyEl.style.display = 'none';
 
         items.forEach(it => {
             const tr = document.createElement('tr');
