@@ -1721,10 +1721,28 @@ function acc_student_fee_summary(int $student_id): ?array
                         + $total_paid_for('fixed_fee')
                         + $total_paid_for('english_fee');
 
+    // Additional / examination fees (variable amount, collected outside the
+    // scheduled obligations). They have no "due"; only the paid amount matters.
+    $additional_items = [];
+    $additional_total_paid = 0.0;
+    foreach (acc_additional_fee_types() as $add_type) {
+        $paid = $total_paid_for($add_type);
+        $additional_total_paid += $paid;
+        $additional_items[] = [
+            'fee_type'  => $add_type,
+            'label'     => acc_fee_type_label($add_type),
+            'paid'      => round($paid, 2),
+        ];
+    }
+
     return [
         'package'     => $pkg,
         'cf_settings' => ['reg_fee_per_semester' => $reg_fee, 'form_id_fee' => $form_id_total_fee],
         'semesters'   => $semesters_enriched,
+        'additional'  => [
+            'items'       => $additional_items,
+            'total_paid'  => round($additional_total_paid, 2),
+        ],
         'totals'      => [
             // Admission head now reflects only the base admission fee. Form fee and
             // ID card fee are collected as their own heads below.
@@ -2073,7 +2091,11 @@ function acc_income_account_id_by_code(string $code): int
  */
 function acc_student_fee_types(): array
 {
-    return ['admission', 'form_fee', 'id_card_fee', 'registration', 'semester_tuition', 'fixed_fee', 'english_fee', 'other'];
+    return array_merge(
+        ['admission', 'form_fee', 'id_card_fee', 'registration', 'semester_tuition', 'fixed_fee', 'english_fee'],
+        acc_additional_fee_types(),
+        ['other']
+    );
 }
 
 /**
@@ -2091,6 +2113,10 @@ function acc_default_income_code_for_fee_type(string $fee_type): string
         'semester_tuition' => '4100', // Tuition Fees
         'fixed_fee'        => '4100', // Tuition Fees
         'english_fee'      => '4100', // Tuition Fees
+        'retake_fee'           => '4700', // Miscellaneous Income
+        'improvement_fee'      => '4700', // Miscellaneous Income
+        'special_exam_midterm' => '4700', // Miscellaneous Income
+        'special_exam_final'   => '4700', // Miscellaneous Income
         'other'            => '4700', // Miscellaneous Income
         default            => '4700',
     };
@@ -2775,9 +2801,34 @@ function acc_fee_type_label(string $fee_type): string
         'semester_tuition' => 'Semester Tuition Fee',
         'fixed_fee'        => 'Fixed Institutional Fee',
         'english_fee'      => 'English Course Fee',
+        'retake_fee'           => 'Re-Take Fee',
+        'improvement_fee'      => 'Improvement Fee',
+        'special_exam_midterm' => 'Special Examination (Mid Term)',
+        'special_exam_final'   => 'Special Examination (Final)',
         'other'            => 'Other Fee',
         default            => ucfirst(str_replace('_', ' ', $fee_type)),
     };
+}
+
+/**
+ * Additional / examination fee heads collected with a variable (non-fixed)
+ * amount. These are NOT part of the scheduled fee obligations: they have no
+ * "due", and once collected they are reported outside the fee schedule's
+ * outstanding balance.
+ *
+ * @return string[]
+ */
+function acc_additional_fee_types(): array
+{
+    return ['retake_fee', 'improvement_fee', 'special_exam_midterm', 'special_exam_final'];
+}
+
+/**
+ * True when the given fee type is a variable-amount additional/examination fee.
+ */
+function acc_is_additional_fee_type(string $fee_type): bool
+{
+    return in_array($fee_type, acc_additional_fee_types(), true);
 }
 
 /**

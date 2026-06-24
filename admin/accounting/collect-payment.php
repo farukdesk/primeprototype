@@ -71,7 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
     $reference       = trim($_POST['reference']          ?? '');
     $narration       = trim($_POST['narration']          ?? '');
 
-    $valid_types = ['admission','form_fee','id_card_fee','registration','semester_tuition','fixed_fee','english_fee','other'];
+    $valid_types = ['admission','form_fee','id_card_fee','registration','semester_tuition','fixed_fee','english_fee','retake_fee','improvement_fee','special_exam_midterm','special_exam_final','other'];
 
     if (!$student_id)                          $errors[] = 'Invalid student.';
     if (!$package_id)                          $errors[] = 'Student has no fee package.';
@@ -961,6 +961,55 @@ require_once __DIR__ . '/../includes/header.php';
                         </tfoot>
                     </table>
                 </div>
+
+                <!-- Additional / Examination fees (variable amount, outside the schedule) -->
+                <div class="border-top">
+                    <div class="px-4 py-2 d-flex align-items-center justify-content-between flex-wrap gap-2 bg-light-subtle">
+                        <span class="small fw-semibold text-muted">
+                            <i class="fas fa-plus-circle me-1 text-success"></i>Additional &amp; Examination Fees
+                            <span class="text-muted fw-normal">(variable amount, outside total balance)</span>
+                        </span>
+                        <div class="d-flex align-items-end gap-2 flex-wrap">
+                            <div>
+                                <label class="form-label small mb-1" for="addlFeeType">Fee Type</label>
+                                <select id="addlFeeType" class="form-select form-select-sm" style="min-width:230px;">
+                                    <option value="retake_fee">Re-Take Fee</option>
+                                    <option value="improvement_fee">Improvement Fee</option>
+                                    <option value="special_exam_midterm">Special Examination (Mid Term)</option>
+                                    <option value="special_exam_final">Special Examination (Final)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="form-label small mb-1" for="addlFeeAmount">Amount (<?= acc_currency() ?>)</label>
+                                <input type="number" id="addlFeeAmount" class="form-control form-control-sm" step="0.01" min="0.01" placeholder="0.00" style="max-width:140px;">
+                            </div>
+                            <button type="button" class="btn btn-sm btn-success" id="btnCollectAddlFee">
+                                <i class="fas fa-hand-holding-usd me-1"></i>Collect
+                            </button>
+                        </div>
+                    </div>
+                    <div class="table-responsive" id="additionalFeesWrap" style="display:none;">
+                        <table class="table table-sm align-middle mb-0" id="additionalFeesTable">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-4">Additional Payment</th>
+                                    <th class="text-end pe-4">Amount Paid</th>
+                                </tr>
+                            </thead>
+                            <tbody id="additionalFeesBody"></tbody>
+                            <tfoot class="table-light fw-bold">
+                                <tr>
+                                    <td class="ps-4">Total Additional Payments</td>
+                                    <td class="text-end pe-4 text-success" id="additionalFeesTotal"></td>
+                                </tr>
+                                <tr class="table-secondary">
+                                    <td class="ps-4">Grand Total Paid (Schedule + Additional)</td>
+                                    <td class="text-end pe-4" id="grandTotalPaid"></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -1327,6 +1376,10 @@ require_once __DIR__ . '/../includes/header.php';
             semester_tuition: 'Semester Tuition',
             fixed_fee:        'Fixed Institutional Fee',
             english_fee:      'English Course Fee',
+            retake_fee:           'Re-Take Fee',
+            improvement_fee:      'Improvement Fee',
+            special_exam_midterm: 'Special Examination (Mid Term)',
+            special_exam_final:   'Special Examination (Final)',
             other:            'Other',
         };
         return map[type] || type;
@@ -2004,6 +2057,9 @@ require_once __DIR__ . '/../includes/header.php';
         document.getElementById('footTotalPaid').textContent = fmt(grandPaid);
         document.getElementById('footTotalOut').textContent  = fmt(grandOut);
 
+        // Additional / examination payments (variable amount, outside schedule)
+        renderAdditionalFees(s.additional || {items: [], total_paid: 0}, grandPaid);
+
         // Outstanding badge
         document.getElementById('totalOutstandingBadge').textContent =
             'Outstanding: ' + fmt(grandOut);
@@ -2022,7 +2078,87 @@ require_once __DIR__ . '/../includes/header.php';
         showSmartPayCard();
     }
 
-    // ── Render transaction history ────────────────────────────────────────────
+    // ── Render additional / examination fees (variable, outside schedule) ──────
+    function renderAdditionalFees(additional, grandSchedulePaid) {
+        const wrap     = document.getElementById('additionalFeesWrap');
+        const body     = document.getElementById('additionalFeesBody');
+        const totalEl  = document.getElementById('additionalFeesTotal');
+        const grandEl  = document.getElementById('grandTotalPaid');
+        const items    = (additional.items || []).filter(it => Number(it.paid) > 0);
+        const addlTotal = Number(additional.total_paid || 0);
+
+        body.innerHTML = '';
+        if (items.length === 0) {
+            // Nothing collected yet — hide the breakdown table but keep the
+            // collection controls visible.
+            wrap.style.display = 'none';
+            return;
+        }
+
+        items.forEach(it => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="ps-4 small">${feeTypeLabel(it.fee_type)}</td>
+                <td class="text-end pe-4 small text-success fw-semibold">${fmt(it.paid)}</td>`;
+            body.appendChild(tr);
+        });
+
+        totalEl.textContent = fmt(addlTotal);
+        grandEl.textContent = fmt(Number(grandSchedulePaid || 0) + addlTotal);
+        wrap.style.display = '';
+    }
+
+    // ── Open the payment form to collect a variable additional fee ────────────
+    function openAdditionalFeeForm() {
+        if (!currentStudent) {
+            alert('Please load a student first.');
+            return;
+        }
+        const sel      = document.getElementById('addlFeeType');
+        const feeType  = sel.value;
+        const label    = sel.options[sel.selectedIndex].text;
+        const amount   = parseFloat(document.getElementById('addlFeeAmount').value);
+        if (!(amount > 0)) {
+            alert('Please enter a valid amount for the additional fee.');
+            document.getElementById('addlFeeAmount').focus();
+            return;
+        }
+
+        document.getElementById('hCollectionMode').value = 'single';
+        document.getElementById('hFeeItems').value = '';
+        document.getElementById('hStudentId').value    = currentStudent.id;
+        document.getElementById('hPackageId').value    = currentStudent.package_id;
+        document.getElementById('hFeeType').value      = feeType;
+        document.getElementById('hSemFeeId').value     = '';
+        document.getElementById('hSemNumber').value    = '';
+        document.getElementById('hMonthNumber').value  = '';
+        document.getElementById('hIncomeAccountId').value = incomeAccountsMap[feeType] ?? '';
+
+        document.getElementById('payAmount').value     = amount.toFixed(2);
+        document.getElementById('payOutstanding').textContent = 'Variable (additional fee)';
+        document.getElementById('payFormFeeLabel').textContent = label;
+        selectedFeeItems.clear();
+        document.querySelectorAll('.feeMultiChk').forEach(el => { el.checked = false; });
+        syncMultiCollectBar();
+
+        const pkg  = currentSummary.package;
+        document.getElementById('payNarration').value =
+            label + ' – ' + pkg.student_name + ' (' + currentStudent.student_id + ')';
+
+        const incomeAccId = incomeAccountsMap[feeType] ?? 0;
+        const incomeAccLabelMap = <?= json_encode(
+            array_column(array_map(fn($a) => ['id' => $a['id'], 'label' => $a['code'] . ' – ' . $a['name']], $income_accounts), 'label', 'id')
+        ) ?>;
+        document.getElementById('incomeAccountLabel').textContent =
+            incomeAccLabelMap[incomeAccId] ? incomeAccLabelMap[incomeAccId] : 'the income account';
+
+        const card = document.getElementById('paymentFormCard');
+        card.style.display = '';
+        openAccordionSection('paymentFormCollapse');
+        card.scrollIntoView({behavior: 'smooth', block: 'start'});
+    }
+
+
     function renderTransactionHistory(payments) {
         const card       = document.getElementById('transactionHistoryCard');
         const tbody      = document.getElementById('transactionTableBody');
@@ -2145,6 +2281,7 @@ require_once __DIR__ . '/../includes/header.php';
 
     document.getElementById('payMethod').addEventListener('change', updateStudentPaymentMethodUI);
     document.getElementById('admPayMethod').addEventListener('change', updateAdmissionPaymentMethodUI);
+    document.getElementById('btnCollectAddlFee').addEventListener('click', openAdditionalFeeForm);
     updateStudentPaymentMethodUI();
     updateAdmissionPaymentMethodUI();
 
