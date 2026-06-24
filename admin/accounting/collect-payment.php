@@ -715,8 +715,13 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
         </div>
 
-        <!-- ── Smart Payment Card ─────────────────────────────────────────── -->
-        <div class="card border-0 shadow-sm mb-3" id="smartPayCard" style="display:none;">
+        <!-- ── Smart Payment + Additional Payment (two columns) ───────────────
+             Left: Smart Payment (distribute an amount across scheduled dues).
+             Right: Additional Payment (variable exam/other fees) and a live list
+             of additional fees already collected for this student. -->
+        <div class="row g-3 mb-3" id="smartRow" style="display:none;">
+        <div class="col-12 col-xl-7">
+        <div class="card border-0 shadow-sm h-100" id="smartPayCard" style="display:none;">
             <div class="card-header py-3 px-4 bg-primary bg-opacity-10 d-flex align-items-center justify-content-between flex-wrap gap-2">
                 <span class="fw-semibold text-primary fs-6">
                     <i class="fas fa-bolt me-2"></i>Smart Payment
@@ -802,7 +807,89 @@ require_once __DIR__ . '/../includes/header.php';
 
             </div>
         </div>
-        <!-- /Smart Payment Card ──────────────────────────────────────────── -->
+        <!-- "no scheduled dues" placeholder keeps the left column filled -->
+        <div class="card border-0 shadow-sm h-100" id="smartPayNone" style="display:none;">
+            <div class="card-body p-4 text-center">
+                <i class="fas fa-check-circle fa-2x text-success opacity-50 d-block mb-2"></i>
+                <div class="fw-semibold text-success">No outstanding scheduled dues.</div>
+                <div class="small text-muted">Use <strong>Additional Payment</strong> to collect examination or other variable fees.</div>
+            </div>
+        </div>
+        </div><!-- /left column -->
+
+        <!-- ── Additional Payment column ──────────────────────────────────── -->
+        <div class="col-12 col-xl-5">
+        <div class="card border-0 shadow-sm h-100" id="additionalPayCard">
+            <div class="card-header py-3 px-4 bg-success bg-opacity-10 d-flex align-items-center justify-content-between flex-wrap gap-2">
+                <span class="fw-semibold text-success fs-6">
+                    <i class="fas fa-hand-holding-usd me-2"></i>Additional Payment
+                </span>
+                <span class="small text-success">Total: <span class="badge bg-success px-3 py-2" id="additionalFeesTotalBadge">—</span></span>
+            </div>
+            <div class="card-body p-4">
+                <div class="small text-muted mb-2">
+                    <i class="fas fa-circle-info me-1"></i>Variable examination / other fees, collected outside the fee schedule (not part of the outstanding balance).
+                </div>
+
+                <!-- Collected additional fees (hidden until at least one exists) -->
+                <div class="table-responsive mb-2" id="additionalFeesWrap" style="display:none;">
+                    <table class="table table-sm align-middle mb-0" id="additionalFeesTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Additional Fee</th>
+                                <th class="text-end">Amount Paid</th>
+                            </tr>
+                        </thead>
+                        <tbody id="additionalFeesBody"></tbody>
+                        <tfoot class="table-light fw-bold">
+                            <tr>
+                                <td>Total Additional Payments</td>
+                                <td class="text-end text-success" id="additionalFeesTotal"></td>
+                            </tr>
+                            <tr class="table-secondary">
+                                <td>Grand Total Paid (Schedule + Additional)</td>
+                                <td class="text-end" id="grandTotalPaid"></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+
+                <!-- Empty-state hint shown when nothing has been collected yet -->
+                <div class="small text-muted fst-italic mb-2" id="additionalFeesEmpty">
+                    <i class="fas fa-circle-info me-1"></i>No additional or examination fees collected yet. Add one below.
+                </div>
+
+                <!-- Inline "add a variable fee" form -->
+                <div class="border-top pt-3">
+                    <div class="row g-2">
+                        <div class="col-12">
+                            <label class="form-label small mb-1" for="addlFeeType">Fee Type</label>
+                            <select id="addlFeeType" class="form-select form-select-sm">
+                                <option value="retake_fee">Re-Take Fee</option>
+                                <option value="improvement_fee">Improvement Fee</option>
+                                <option value="special_exam_midterm">Special Examination (Mid Term)</option>
+                                <option value="special_exam_final">Special Examination (Final)</option>
+                            </select>
+                        </div>
+                        <div class="col-7">
+                            <label class="form-label small mb-1" for="addlFeeAmount">Amount (<?= acc_currency() ?>)</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text"><?= acc_currency() ?></span>
+                                <input type="number" id="addlFeeAmount" class="form-control" step="0.01" min="0.01" placeholder="0.00">
+                            </div>
+                        </div>
+                        <div class="col-5 d-flex align-items-end">
+                            <button type="button" class="btn btn-sm btn-success w-100" id="btnCollectAddlFee">
+                                <i class="fas fa-hand-holding-usd me-1"></i>Collect
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        </div><!-- /Additional Payment column -->
+        </div><!-- /smartRow -->
+        <!-- /Smart Payment + Additional Payment ───────────────────────────── -->
 
         <!-- Payment form (shown when user clicks Collect / Proceed) -->
         <div id="paymentFormCard" style="display:none;">
@@ -960,78 +1047,6 @@ require_once __DIR__ . '/../includes/header.php';
                             </tr>
                         </tfoot>
                     </table>
-                </div>
-
-                <!-- ── Additional & Examination Fees ──────────────────────────────
-                     Rendered as a separate "variable amount" schedule shown at the
-                     very bottom of the Fee Schedule, after the last semester. These
-                     fees are billed on demand and stay OUTSIDE the outstanding total. -->
-                <div class="border-top" id="additionalFeesSection">
-                    <!-- Section header (matches the in-table semester section style) -->
-                    <div class="px-4 py-2 bg-secondary-subtle border-bottom">
-                        <span class="small fw-semibold text-muted">
-                            <i class="fas fa-chevron-right me-1"></i>Additional &amp; Examination Fees
-                            <span class="fw-normal">(variable amount, outside total balance)</span>
-                        </span>
-                    </div>
-
-                    <!-- Collected additional fees (hidden until at least one exists) -->
-                    <div class="table-responsive" id="additionalFeesWrap" style="display:none;">
-                        <table class="table table-sm align-middle mb-0" id="additionalFeesTable">
-                            <thead class="table-light">
-                                <tr>
-                                    <th class="ps-4">Additional Payment</th>
-                                    <th class="text-end pe-4">Amount Paid</th>
-                                </tr>
-                            </thead>
-                            <tbody id="additionalFeesBody"></tbody>
-                            <tfoot class="table-light fw-bold">
-                                <tr>
-                                    <td class="ps-4">Total Additional Payments</td>
-                                    <td class="text-end pe-4 text-success" id="additionalFeesTotal"></td>
-                                </tr>
-                                <tr class="table-secondary">
-                                    <td class="ps-4">Grand Total Paid (Schedule + Additional)</td>
-                                    <td class="text-end pe-4" id="grandTotalPaid"></td>
-                                </tr>
-                            </tfoot>
-                        </table>
-                    </div>
-
-                    <!-- Empty-state hint shown when nothing has been collected yet -->
-                    <div class="px-4 py-2 small text-muted fst-italic" id="additionalFeesEmpty">
-                        <i class="fas fa-circle-info me-1"></i>No additional or examination fees collected yet. Add one below.
-                    </div>
-
-                    <!-- Inline "add a variable fee" form (compact &amp; grouped) -->
-                    <div class="px-4 py-3 bg-light-subtle border-top">
-                        <div class="row g-2 align-items-end">
-                            <div class="col-sm-6 col-md-5 col-lg-4">
-                                <label class="form-label small mb-1" for="addlFeeType">Fee Type</label>
-                                <select id="addlFeeType" class="form-select form-select-sm">
-                                    <option value="retake_fee">Re-Take Fee</option>
-                                    <option value="improvement_fee">Improvement Fee</option>
-                                    <option value="special_exam_midterm">Special Examination (Mid Term)</option>
-                                    <option value="special_exam_final">Special Examination (Final)</option>
-                                </select>
-                            </div>
-                            <div class="col-sm-4 col-md-4 col-lg-3">
-                                <label class="form-label small mb-1" for="addlFeeAmount">Amount (<?= acc_currency() ?>)</label>
-                                <div class="input-group input-group-sm">
-                                    <span class="input-group-text"><?= acc_currency() ?></span>
-                                    <input type="number" id="addlFeeAmount" class="form-control" step="0.01" min="0.01" placeholder="0.00">
-                                </div>
-                            </div>
-                            <div class="col-sm-2 col-md-3 col-lg-2">
-                                <button type="button" class="btn btn-sm btn-success w-100" id="btnCollectAddlFee">
-                                    <i class="fas fa-hand-holding-usd me-1"></i>Collect
-                                </button>
-                            </div>
-                        </div>
-                        <div class="form-text mt-1">
-                            <i class="fas fa-info-circle me-1"></i>Billed on demand — not included in the outstanding balance above.
-                        </div>
-                    </div>
                 </div>
             </div>
         </div>
@@ -1385,6 +1400,17 @@ require_once __DIR__ . '/../includes/header.php';
     let currentSummary = null;
     let selectedFeeItems = new Map();
 
+    // ── Prevent the mouse wheel from accidentally changing number inputs ──────
+    // When a number field is focused, scrolling the wheel over it bumps the value
+    // up/down. Blur the field on wheel so the page scrolls instead of mutating
+    // the amount (e.g. the Smart Payment "Amount to Collect" field).
+    document.addEventListener('wheel', function (e) {
+        const el = e.target;
+        if (el instanceof HTMLInputElement && el.type === 'number' && el === document.activeElement) {
+            el.blur();
+        }
+    }, {passive: true});
+
     // ── Helpers ──────────────────────────────────────────────────────────────
     function fmt(n) {
         return CURRENCY + ' ' + Number(n).toLocaleString('en-BD', {minimumFractionDigits: 2, maximumFractionDigits: 2});
@@ -1733,6 +1759,13 @@ require_once __DIR__ . '/../includes/header.php';
     function showSmartPayCard() {
         const stats = getSmartPayStats();
 
+        // The Smart Payment / Additional Payment row is always shown once a
+        // student is loaded; the left card flips between the distribution UI and
+        // a "no scheduled dues" placeholder.
+        const rowEl  = document.getElementById('smartRow');
+        const noneEl = document.getElementById('smartPayNone');
+        if (rowEl) rowEl.style.display = '';
+
         spTotalOut.textContent = fmt(stats.due_now);
 
         // Past-due pill
@@ -1767,8 +1800,10 @@ require_once __DIR__ . '/../includes/header.php';
 
         if (stats.total > 0) {
             spCard.style.display = '';
+            if (noneEl) noneEl.style.display = 'none';
         } else {
             spCard.style.display = 'none';
+            if (noneEl) noneEl.style.display = '';
         }
     }
 
@@ -2110,8 +2145,11 @@ require_once __DIR__ . '/../includes/header.php';
         const totalEl  = document.getElementById('additionalFeesTotal');
         const grandEl  = document.getElementById('grandTotalPaid');
         const emptyEl  = document.getElementById('additionalFeesEmpty');
+        const badgeEl  = document.getElementById('additionalFeesTotalBadge');
         const items    = (additional.items || []).filter(it => Number(it.paid) > 0);
         const addlTotal = Number(additional.total_paid || 0);
+
+        if (badgeEl) badgeEl.textContent = addlTotal > 0 ? fmt(addlTotal) : (CURRENCY + ' 0.00');
 
         body.innerHTML = '';
         if (items.length === 0) {
@@ -2126,8 +2164,8 @@ require_once __DIR__ . '/../includes/header.php';
         items.forEach(it => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td class="ps-4 small">${feeTypeLabel(it.fee_type)}</td>
-                <td class="text-end pe-4 small text-success fw-semibold">${fmt(it.paid)}</td>`;
+                <td class="small">${feeTypeLabel(it.fee_type)}</td>
+                <td class="text-end small text-success fw-semibold">${fmt(it.paid)}</td>`;
             body.appendChild(tr);
         });
 
