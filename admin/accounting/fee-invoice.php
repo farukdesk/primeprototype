@@ -118,6 +118,11 @@ $invoice_student_id = null; // numeric students.id for balance computation
 // (Smart Payment). Computed after the rows are gathered.
 $payment_method_captured = false;
 
+// Per-request caches to avoid N+1 lookups when a single voucher carries many
+// fee heads (e.g. a Smart Payment distributed across several months).
+$sem_label_cache = []; // semester_fee_id => label
+$summary_cache   = []; // student_id      => acc_student_fee_summary()
+
 foreach ($voucher_ids as $vid) {
     $v   = $vouchers[$vid] ?? null;
     if (!$v) continue;
@@ -165,16 +170,24 @@ foreach ($voucher_ids as $vid) {
             $row_mon_lbl = '';
 
             if ($sfp['semester_number']) {
-                $sf_row = db()->prepare('SELECT semester_label FROM sfp_semester_fees WHERE id = ?');
-                $sf_row->execute([$sfp['semester_fee_id']]);
-                $sf_row = $sf_row->fetch();
-                $row_sem_lbl = ($sf_row && $sf_row['semester_label'])
-                    ? $sf_row['semester_label']
+                $sf_id = (int)$sfp['semester_fee_id'];
+                if (!array_key_exists($sf_id, $sem_label_cache)) {
+                    $sf_row = db()->prepare('SELECT semester_label FROM sfp_semester_fees WHERE id = ?');
+                    $sf_row->execute([$sf_id]);
+                    $sf_row = $sf_row->fetch();
+                    $sem_label_cache[$sf_id] = ($sf_row && $sf_row['semester_label']) ? $sf_row['semester_label'] : '';
+                }
+                $row_sem_lbl = $sem_label_cache[$sf_id] !== ''
+                    ? $sem_label_cache[$sf_id]
                     : 'Semester ' . $sfp['semester_number'];
             }
             if ($sfp['month_number']) {
                 $row_mon_lbl = 'Month ' . $sfp['month_number'];
-                $summary = acc_student_fee_summary((int)$sfp['student_id']);
+                $stu_id = (int)$sfp['student_id'];
+                if (!array_key_exists($stu_id, $summary_cache)) {
+                    $summary_cache[$stu_id] = acc_student_fee_summary($stu_id);
+                }
+                $summary = $summary_cache[$stu_id];
                 if ($summary) {
                     foreach ($summary['semesters'] as $sem) {
                         if ((int)$sem['semester_number'] !== (int)$sfp['semester_number']) continue;
