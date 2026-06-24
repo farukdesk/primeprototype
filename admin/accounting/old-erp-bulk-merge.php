@@ -61,6 +61,9 @@ if (isset($_GET['sample'])) {
     fputcsv($out, ['02826105101071', 'Jan-23', '20/01/2023', '5000', 'OLD-RCPT-1002, OLD-RCPT-1003'], ',', '"', '\\');
     fputcsv($out, ['02826105101071', 'Feb-23', '18/02/2023', '5000', 'OLD-RCPT-1010'], ',', '"', '\\');
     fputcsv($out, ['02826105101071', 'Mar-23', '19/03/2023', '5000', 'OLD-RCPT-1021'], ',', '"', '\\');
+    fputcsv($out, ['02826105101071', 'Re-Take Fee', '22/03/2023', '1500', 'OLD-RCPT-1025'], ',', '"', '\\');
+    fputcsv($out, ['02826105101071', 'Special Exam (Mid Term)', '05/04/2023', '800', 'OLD-RCPT-1030'], ',', '"', '\\');
+    fputcsv($out, ['02826105101071', 'Miscellaneous (Remedial Course)', '17/06/2026, 06/04/2026', '1200', 'OLD-RCPT-1040'], ',', '"', '\\');
     fclose($out);
     exit;
 }
@@ -71,15 +74,49 @@ if (isset($_GET['sample'])) {
 function oebm_normalize_fee_type(string $raw): ?string
 {
     $s = strtolower(trim($raw));
+    // Drop bracketed qualifiers such as "(Remedial Course)" and collapse any
+    // run of spaces / underscores / dashes to a single space so labels written
+    // as "retake_fee", "Re-Take Fee" or "special exam (final)" all normalise.
+    $s = preg_replace('/[()\[\]{}]/', ' ', $s);
     $s = preg_replace('/[\s_\-]+/', ' ', $s);
     $s = trim($s);
-    return match ($s) {
+
+    // One-time / registration heads (exact match).
+    $exact = match ($s) {
         'admission', 'admission fee', 'admission fees'        => 'admission',
         'form', 'form fee', 'form fees'                       => 'form_fee',
         'id card', 'id card fee', 'id card fees', 'idcard'    => 'id_card_fee',
         'registration', 'registration fee', 'registration fees', 'reg', 'reg fee' => 'registration',
         default                                               => null,
     };
+    if ($exact !== null) {
+        return $exact;
+    }
+
+    // Additional / examination fee heads. These carry a variable amount and are
+    // not part of the scheduled fee obligations, so the old ERP labels them
+    // inconsistently — match them loosely on their key word(s).
+    if (str_contains($s, 'retake') || str_contains($s, 're take')) {
+        return 'retake_fee';
+    }
+    if (str_contains($s, 'improvement')) {
+        return 'improvement_fee';
+    }
+    if (str_contains($s, 'special') && str_contains($s, 'mid')) {
+        return 'special_exam_midterm';
+    }
+    if (str_contains($s, 'special') && str_contains($s, 'final')) {
+        return 'special_exam_final';
+    }
+    // Remedial-course, miscellaneous and any other ad-hoc fee are collected under
+    // the catch-all "other" head (the schema has no dedicated remedial type).
+    if (str_contains($s, 'remedial') || str_contains($s, 'remidial')
+        || str_contains($s, 'miscellaneous') || str_contains($s, 'misc')
+        || $s === 'other' || $s === 'other fee' || $s === 'fee' || $s === 'fees') {
+        return 'other';
+    }
+
+    return null;
 }
 
 /**
@@ -190,6 +227,33 @@ function oebm_parse_date(string $raw): ?string
 }
 
 /**
+ * Does a cell look like a calendar date (e.g. "17/06/2026", "6-4-2026")?
+ *
+ * A deliberately strict day/month/year shape used to recognise a date cell —
+ * tight enough never to mistake an amount ("5000") or a receipt number
+ * ("OLD-RCPT-1001") for a date when recovering unquoted spilled columns.
+ */
+function oebm_looks_like_date(string $raw): bool
+{
+    return (bool)preg_match('#^\s*\d{1,4}[/.\-]\d{1,2}[/.\-]\d{1,4}\s*$#', trim($raw));
+}
+
+/**
+ * Split a Date cell that may legitimately carry more than one date.
+ *
+ * The old ERP occasionally records two dates for a single payment, e.g.
+ * "17/06/2026, 06/04/2026". This splits on commas and trims/drops blanks so the
+ * caller can pick the first valid date rather than rejecting the whole row.
+ *
+ * @return string[]
+ */
+function oebm_split_dates(string $raw): array
+{
+    $parts = array_map('trim', explode(',', $raw));
+    return array_values(array_filter($parts, static fn($p) => $p !== ''));
+}
+
+/**
  * Parse an amount cell (strips currency symbols, thousands separators).
  * Returns null when the value is not a valid positive number.
  */
@@ -293,9 +357,26 @@ function oebm_read_csv(string $csv_text): array
 
     $rows = [];
     $count = count($parsed);
-    $last_col = count($header) - 1;
+    $header_count = count($header);
+    $last_col = $header_count - 1;
     for ($i = 1; $i < $count; $i++) {
         $r = $parsed[$i];
+        // The old ERP sometimes records two dates for one payment, e.g.
+        // "17/06/2026, 06/04/2026". When that cell is not quoted, str_getcsv
+        // splits it into extra columns, pushing Amount and Receipt to the right.
+        // Collapse consecutive date-looking cells at the Date position back into
+        // a single cell (kept comma-separated) and realign the trailing columns.
+        if ($col_date !== null && $col_date < $last_col && count($r) > $header_count) {
+            $extra  = count($r) - $header_count;
+            $dates  = [trim((string)($r[$col_date] ?? ''))];
+            $j      = $col_date + 1;
+            while ($extra > 0 && $j < count($r) && oebm_looks_like_date((string)$r[$j])) {
+                $dates[] = trim((string)$r[$j]);
+                array_splice($r, $j, 1); // remove spilled cell, shifting later columns left
+                $extra--;
+            }
+            $r[$col_date] = implode(', ', $dates);
+        }
         // The Receipt Number is typically the last column and may legitimately
         // contain several comma-separated receipt numbers. When that cell is not
         // quoted, str_getcsv spreads those numbers across extra trailing columns;
@@ -467,7 +548,7 @@ function oebm_validate_rows(array $rows): array
         $month_year = $month_info['year'] ?? null;
         if ($fee_type === null && $month_num === null) {
             if ($status !== 'invalid') $status = 'invalid';
-            $notes[] = 'Unrecognised fee type "' . $fee_raw . '". Use Admission Fee, Form Fee, ID Card Fee, Registration Fee, or a month name (Jan–Dec, optionally with a year like Jan-26) for monthly tuition.';
+            $notes[] = 'Unrecognised fee type "' . $fee_raw . '". Use Admission Fee, Form Fee, ID Card Fee, Registration Fee, a month name (Jan–Dec, optionally with a year like Jan-26) for monthly tuition, or an additional fee (Re-Take, Improvement, Special Exam Mid Term/Final, Remedial/Miscellaneous, Other).';
         } elseif ($fee_type !== null) {
             $resolved['fee_type']       = $fee_type;
             $resolved['fee_type_label'] = acc_fee_type_label($fee_type);
@@ -477,12 +558,25 @@ function oebm_validate_rows(array $rows): array
         }
 
         // ── Date ────────────────────────────────────────────────────────────
-        $date = oebm_parse_date($date_raw);
+        // A Date cell may carry more than one date (e.g. "17/06/2026,
+        // 06/04/2026"); use the first one that parses rather than rejecting the
+        // whole row, and note when a second date was present for transparency.
+        $date_parts = oebm_split_dates($date_raw);
+        $date = null;
+        foreach ($date_parts as $dp) {
+            $date = oebm_parse_date($dp);
+            if ($date !== null) {
+                break;
+            }
+        }
         if ($date === null) {
             if ($status !== 'invalid') $status = 'invalid';
             $notes[] = 'Invalid date "' . $date_raw . '".';
         } else {
             $resolved['date'] = $date;
+            if (count($date_parts) > 1) {
+                $notes[] = 'Multiple dates found ("' . $date_raw . '"); used the first valid date ' . $date . '.';
+            }
         }
 
         // ── Amount ──────────────────────────────────────────────────────────
@@ -596,8 +690,14 @@ function oebm_validate_rows(array $rows): array
                     }
                 }
                 unset($slots);
+            } elseif ($summary && $fee_type !== null && (acc_is_additional_fee_type($fee_type) || $fee_type === 'other')) {
+                // ── Additional / examination / miscellaneous fee ────────────
+                // These carry a variable amount and have no scheduled "due", so
+                // there is nothing to validate against the fee schedule and no
+                // per-head duplicate guard — merge them as-is. Duplicate receipt
+                // numbers remain allowed, so a matching receipt is only noted.
+                $notes[] = 'Additional fee — will be recorded as ' . $resolved['fee_type_label'] . '.';
             } elseif ($summary && $fee_type !== null) {
-                $head        = $summary['totals'][$fee_type] ?? ['due' => 0, 'paid' => 0, 'out' => 0];
                 $due         = (float)($head['due'] ?? 0);
                 $paid        = (float)($head['paid'] ?? 0);
                 $outstanding = (float)($head['out'] ?? 0);
@@ -796,8 +896,8 @@ require_once __DIR__ . '/../includes/header.php';
         <div class="small">
             <strong>Merge a student's full historical account from the old ERP in bulk.</strong>
             <ol class="mb-2 mt-1 ps-3">
-                <li>Prepare a CSV with the columns <code>Student ID</code>, <code>Fee Type</code>, <code>Date</code>, <code>Amount Paid</code>, <code>Receipt Number</code>. Dates use the <strong>DD/MM/YYYY</strong> format (e.g. <code>15/01/2023</code>).</li>
-                <li><code>Fee Type</code> may be <strong>Admission Fee</strong>, <strong>Form Fee</strong>, <strong>ID Card Fee</strong> or <strong>Registration Fee</strong>, or a <strong>month name</strong> (<code>Jan</code>, <code>February</code>, …) for a monthly tuition installment. Add a year to target a specific one, e.g. <code>Jan-26</code> means January 2026.</li>
+                <li>Prepare a CSV with the columns <code>Student ID</code>, <code>Fee Type</code>, <code>Date</code>, <code>Amount Paid</code>, <code>Receipt Number</code>. Dates use the <strong>DD/MM/YYYY</strong> format (e.g. <code>15/01/2023</code>). If a cell carries <strong>two dates</strong> (e.g. <code>17/06/2026, 06/04/2026</code>) the first valid date is used.</li>
+                <li><code>Fee Type</code> may be <strong>Admission Fee</strong>, <strong>Form Fee</strong>, <strong>ID Card Fee</strong> or <strong>Registration Fee</strong>, a <strong>month name</strong> (<code>Jan</code>, <code>February</code>, …) for a monthly tuition installment (add a year to target a specific one, e.g. <code>Jan-26</code> = January 2026), or an <strong>additional fee</strong> — <strong>Re-Take</strong>, <strong>Improvement</strong>, <strong>Special Exam (Mid Term / Final)</strong>, <strong>Remedial / Miscellaneous</strong> or <strong>Other</strong> (these are recorded at the amount given, with no schedule check).</li>
                 <li><strong>Monthly payments don't need to be in order.</strong> Each month is matched to the installment with the same calendar month in the student's own schedule, so out-of-order months from the old ERP are placed on the correct slot automatically.</li>
                 <li>Upload it to preview. Every row is validated and colour-coded before anything is saved.</li>
                 <li><strong>Duplicate receipt numbers are allowed</strong> — one historical receipt often covers several fee heads, so the same number may repeat across rows.</li>
