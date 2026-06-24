@@ -100,6 +100,57 @@ function inv_resolve_adm(int $vid): ?array
 }
 
 // ── Build fee line items for the table ───────────────────────────────────────
+
+/**
+ * Remove the parts of a stored payment note that merely repeat the fee
+ * description already shown on the receipt row (fee type, semester and month
+ * labels). A Smart Payment note such as
+ *   "Semester 1 – Month 2 (Jun 2026) | Smart fee payment – Test Master (...)"
+ * collapses to just "Smart fee payment – Test Master (...)" so the Fee
+ * Description column no longer duplicates the semester / month information.
+ */
+function inv_clean_note(string $note, string $fee_lbl, string $sem_lbl, string $mon_lbl): string
+{
+    $note = trim($note);
+    if ($note === '') {
+        return '';
+    }
+    $norm = static function (string $s): string {
+        $s = strtolower($s);
+        $s = str_replace(['–', '—'], '-', $s);
+        $s = preg_replace('/\s+/', ' ', $s);
+        return trim((string)$s);
+    };
+    $remove = array_filter(
+        [$fee_lbl, $sem_lbl, $mon_lbl],
+        static fn($x) => trim((string)$x) !== ''
+    );
+
+    $segments = preg_split('/\s*\|\s*/', $note) ?: [];
+    $kept = [];
+    foreach ($segments as $seg) {
+        $seg = trim($seg);
+        if ($seg === '') {
+            continue;
+        }
+        $residual = $norm($seg);
+        foreach ($remove as $r) {
+            $rn = $norm((string)$r);
+            if ($rn !== '') {
+                $residual = str_replace($rn, '', $residual);
+            }
+        }
+        // Drop leftover separators/punctuation; keep the segment only when some
+        // meaningful text remains after the duplicated labels are stripped.
+        $residual = trim($residual, " -–—/|.,");
+        $residual = trim((string)preg_replace('/\s+/', ' ', $residual));
+        if ($residual !== '') {
+            $kept[] = $seg;
+        }
+    }
+    return implode(' | ', $kept);
+}
+
 $fee_rows = [];  // Each: ['voucher_number','fee_type_lbl','semester_lbl','month_lbl','amount','narration']
 $payer_name   = '';
 $payer_sid    = '';
@@ -269,9 +320,30 @@ if ($invoice_student_id) {
         $admission_out   = (float)($inv_summary['totals']['admission']['out']    ?? 0);
         $form_fee_out    = (float)($inv_summary['totals']['form_fee']['out']     ?? 0);
         $id_card_out     = (float)($inv_summary['totals']['id_card_fee']['out']  ?? 0);
-        $registration_out = (float)($inv_summary['totals']['registration']['out'] ?? 0);
-        $due_now  += $admission_out + $form_fee_out + $id_card_out + $registration_out;
-        $total_out = $due_now; // seed with one-time fees
+        // Registration fee is tied to a specific semester, so it only becomes
+        // "due as of today" once that semester has actually started. Registration
+        // for semesters that have not started yet is still outstanding overall
+        // (counted in $total_out) but is NOT counted as due today.
+        $registration_out      = (float)($inv_summary['totals']['registration']['out'] ?? 0); // all semesters
+        $registration_due_now  = 0.0; // started semesters only
+        foreach (($inv_summary['semesters'] ?? []) as $sem) {
+            $reg_out = (float)($sem['reg_out'] ?? 0);
+            if ($reg_out <= 0) continue;
+            // A semester's start month is its first monthly row's calendar month.
+            $first_row = ($sem['monthly_rows'][0] ?? null);
+            $scy = (int)($first_row['cal_year']  ?? 0);
+            $scm = (int)($first_row['cal_month'] ?? 0);
+            $started = $first_row === null
+                || $scy < $now_year
+                || ($scy === $now_year && $scm <= $now_month);
+            if ($started) {
+                $registration_due_now += $reg_out;
+            }
+        }
+        $due_now  += $admission_out + $form_fee_out + $id_card_out + $registration_due_now;
+        // Total outstanding still reflects every unpaid head (including future
+        // semesters' registration), so the advance/cleared detection stays correct.
+        $total_out = $admission_out + $form_fee_out + $id_card_out + $registration_out;
 
         // Monthly tuition: only count months on or before today
         $monthly_due_now = 0.0;
@@ -292,7 +364,7 @@ if ($invoice_student_id) {
         // Head-by-head breakdown of what is due as of today (only non-zero heads)
         $due_breakdown = [];
         if ($monthly_due_now > 0.01) $due_breakdown[] = ['label' => 'Monthly Tuition Fees', 'amount' => round($monthly_due_now, 2)];
-        if ($registration_out > 0.01) $due_breakdown[] = ['label' => 'Registration Fees',    'amount' => round($registration_out, 2)];
+        if ($registration_due_now > 0.01) $due_breakdown[] = ['label' => 'Registration Fees', 'amount' => round($registration_due_now, 2)];
         if ($admission_out > 0.01)    $due_breakdown[] = ['label' => 'Admission Fee',          'amount' => round($admission_out, 2)];
         if ($id_card_out > 0.01)      $due_breakdown[] = ['label' => 'ID Card Fee',            'amount' => round($id_card_out, 2)];
         if ($form_fee_out > 0.01)     $due_breakdown[] = ['label' => 'Form Fee',               'amount' => round($form_fee_out, 2)];
@@ -761,9 +833,21 @@ function render_copy(
                         <?php if ($row['month_lbl']): ?>
                             <span style="font-size:10px;color:#555;"> / <?= h($row['month_lbl']) ?></span>
                         <?php endif; ?>
-                        <?php $row_note = $is_multi ? $row['narration'] : ''; ?>
+                        <?php
+                            // Strip the parts of the note that just repeat the fee
+                            // type / semester / month already shown above, then
+                            // show any remaining note inline on the same line.
+                            $row_note = $is_multi
+                                ? inv_clean_note(
+                                    (string)$row['narration'],
+                                    (string)$row['fee_type_lbl'],
+                                    (string)$row['semester_lbl'],
+                                    (string)$row['month_lbl']
+                                  )
+                                : '';
+                        ?>
                         <?php if ($row_note): ?>
-                            <br><span style="font-size:10px;color:#6b7280;"><?= h($row_note) ?></span>
+                            <span style="font-size:10px;color:#6b7280;"> — <?= h($row_note) ?></span>
                         <?php endif; ?>
                     </td>
                     <td class="text-right"><?= h(number_format((float)$row['amount'], 2)) ?></td>

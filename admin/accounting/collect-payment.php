@@ -2112,13 +2112,32 @@ require_once __DIR__ . '/../includes/header.php';
             });
         });
 
+        // Schedule-only paid total, captured before the Additional / Examination
+        // rows below add to grandPaid — used for the Additional Payment card's
+        // "Grand Total Paid (Schedule + Additional)" figure.
+        const scheduleGrandPaid = grandPaid;
+
+        // ── Additional / Examination fees ────────────────────────────────────
+        // Variable examination / other fees collected outside the scheduled
+        // obligations. They carry no due or outstanding, so they appear as a
+        // trailing section right after the last semester for full visibility.
+        const addlItems = ((s.additional && s.additional.items) || [])
+            .filter(it => Number(it.paid) > 0);
+        if (addlItems.length) {
+            addSectionRow('Additional / Examination Fees');
+            addlItems.forEach(it => {
+                addRow(feeTypeLabel(it.fee_type), 0, Number(it.paid), 0,
+                       it.fee_type, null, null, null, null, null);
+            });
+        }
+
         // Footer totals
         document.getElementById('footTotalDue').textContent  = fmt(grandDue);
         document.getElementById('footTotalPaid').textContent = fmt(grandPaid);
         document.getElementById('footTotalOut').textContent  = fmt(grandOut);
 
         // Additional / examination payments (variable amount, outside schedule)
-        renderAdditionalFees(s.additional || {items: [], total_paid: 0}, grandPaid);
+        renderAdditionalFees(s.additional || {items: [], total_paid: 0}, scheduleGrandPaid);
 
         // Outstanding badge
         document.getElementById('totalOutstandingBadge').textContent =
