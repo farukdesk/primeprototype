@@ -120,6 +120,59 @@ function oebm_normalize_fee_type(string $raw): ?string
 }
 
 /**
+ * Fee-type labels that are old-ERP export artefacts rather than real payments.
+ *
+ * The old ERP export interleaves informational summary lines — notably
+ * "Monthly Payment Old Data" and "Current Dues" — among the genuine receipts.
+ * These are never collectable payments, so the whole row is ignored.
+ */
+function oebm_is_ignored_fee_type(string $raw): bool
+{
+    $s = strtolower(trim($raw));
+    $s = preg_replace('/[()\[\]{}]/', ' ', $s);
+    $s = preg_replace('/[\s_\-]+/', ' ', $s);
+    $s = trim($s);
+    if ($s === '') {
+        return false;
+    }
+    return str_contains($s, 'monthly payment old data')
+        || str_contains($s, 'current due');
+}
+
+/**
+ * Look up a student by ID, tolerant of leading zeros.
+ *
+ * The old ERP and the current system sometimes store the same student ID with
+ * or without leading zeros (e.g. "02826105101071" vs "2826105101071"). An exact
+ * match is tried first, then a leading-zero-insensitive match on both sides so
+ * the row is accepted regardless of how the zero is written.
+ *
+ * @return array<string,mixed>|null
+ */
+function oebm_lookup_student(string $sid): ?array
+{
+    $sid = trim($sid);
+    if ($sid === '') {
+        return null;
+    }
+    $stu = acc_get_student_by_sid($sid);
+    if ($stu) {
+        return $stu;
+    }
+    // Leading-zero-insensitive match on both the CSV value and the stored ID.
+    $stmt = db()->prepare(
+        "SELECT s.id, s.student_id, s.full_name, s.dept_id, s.status,
+                p.id AS package_id
+         FROM students s
+         LEFT JOIN sfp_packages p ON p.student_id = s.id
+         WHERE TRIM(LEADING '0' FROM s.student_id) = TRIM(LEADING '0' FROM ?)
+         LIMIT 1"
+    );
+    $stmt->execute([$sid]);
+    return $stmt->fetch() ?: null;
+}
+
+/**
  * Normalise a month-name fee cell to a calendar month number (1–12).
  *
  * Accepts full and abbreviated English month names (case/space-insensitive),
@@ -464,7 +517,7 @@ function oebm_slot_matches(array $slot, int $month_num, ?int $month_year): bool
 function oebm_validate_rows(array $rows): array
 {
     $results = [];
-    $counts  = ['merge' => 0, 'duplicate' => 0, 'invalid' => 0];
+    $counts  = ['merge' => 0, 'duplicate' => 0, 'invalid' => 0, 'ignored' => 0];
 
     $summary_cache = [];   // SID => fee summary (or false when not found)
 
@@ -502,6 +555,36 @@ function oebm_validate_rows(array $rows): array
             continue;
         }
 
+        // ── Rows to ignore entirely ─────────────────────────────────────────
+        // The old ERP export interleaves informational lines that are not real
+        // payments — "Monthly Payment Old Data" / "Current Dues" summaries and
+        // zero-amount placeholder rows. These are dropped from the merge with an
+        // explicit "ignored" status so the admin can see they were recognised
+        // and intentionally skipped (never merged, never flagged as invalid).
+        if (oebm_is_ignored_fee_type($fee_raw)) {
+            $counts['ignored']++;
+            $results[] = [
+                'row_no'   => $row_no,
+                'status'   => 'ignored',
+                'notes'    => ['Fee type "' . $fee_raw . '" is an old-ERP summary line — row ignored.'],
+                'input'    => $row,
+                'resolved' => $resolved,
+            ];
+            continue;
+        }
+        $amount_peek = oebm_parse_amount($amt_raw);
+        if ($amount_peek !== null && abs($amount_peek) < 0.001) {
+            $counts['ignored']++;
+            $results[] = [
+                'row_no'   => $row_no,
+                'status'   => 'ignored',
+                'notes'    => ['Amount is zero — row ignored.'],
+                'input'    => $row,
+                'resolved' => $resolved,
+            ];
+            continue;
+        }
+
         // ── Student ─────────────────────────────────────────────────────────
         $summary = null;
         if ($sid === '') {
@@ -509,7 +592,7 @@ function oebm_validate_rows(array $rows): array
             $notes[] = 'Student ID is missing.';
         } else {
             if (!array_key_exists($sid, $summary_cache)) {
-                $stu = acc_get_student_by_sid($sid);
+                $stu = oebm_lookup_student($sid);
                 if (!$stu) {
                     $summary_cache[$sid] = false;
                 } else {
@@ -598,6 +681,32 @@ function oebm_validate_rows(array $rows): array
         if ($receipt === '') {
             if ($status !== 'invalid') $status = 'invalid';
             $notes[] = 'Receipt number is required for old ERP payments.';
+        }
+
+        // ── Disambiguate mislabelled admission rows ─────────────────────────
+        // The old ERP frequently lists BOTH the admission fee and the form fee
+        // under the single "Admission Fee" label, so the head appears twice for
+        // one student (e.g. 10,000 = real admission, 500 = form fee). Re-classify
+        // by amount: a row whose amount matches the Form Fee (or ID Card Fee)
+        // due — and not the admission base due — is that fee mislabelled.
+        if ($fee_type === 'admission' && $summary && $resolved['amount'] !== null) {
+            $amt     = (float)$resolved['amount'];
+            $adm_due = (float)($summary['totals']['admission']['due'] ?? 0);
+            $ff_due  = (float)($summary['totals']['form_fee']['due'] ?? 0);
+            $ic_due  = (float)($summary['totals']['id_card_fee']['due'] ?? 0);
+            $remapped = null;
+            if ($ff_due > 0 && abs($amt - $ff_due) < 0.001 && abs($amt - $adm_due) > 0.001) {
+                $remapped = 'form_fee';
+            } elseif ($ic_due > 0 && abs($amt - $ic_due) < 0.001 && abs($amt - $adm_due) > 0.001) {
+                $remapped = 'id_card_fee';
+            }
+            if ($remapped !== null) {
+                $fee_type = $remapped;
+                $resolved['fee_type']       = $remapped;
+                $resolved['fee_type_label'] = acc_fee_type_label($remapped);
+                $notes[] = 'Re-classified from "' . $fee_raw . '" to ' . acc_fee_type_label($remapped)
+                    . ' based on the amount (' . acc_currency() . ' ' . number_format($amt, 2) . ').';
+            }
         }
 
         // ── Existing-payment / amount-validation checks ─────────────────────
@@ -698,6 +807,11 @@ function oebm_validate_rows(array $rows): array
                 // numbers remain allowed, so a matching receipt is only noted.
                 $notes[] = 'Additional fee — will be recorded as ' . $resolved['fee_type_label'] . '.';
             } elseif ($summary && $fee_type !== null) {
+                // One-time / registration head — validate against this head's
+                // own obligation in the current ERP (admission, form fee, ID card
+                // fee or registration). The grand-total per head lives under
+                // $summary['totals'][$fee_type] as due / paid / out.
+                $head        = $summary['totals'][$fee_type] ?? null;
                 $due         = (float)($head['due'] ?? 0);
                 $paid        = (float)($head['paid'] ?? 0);
                 $outstanding = (float)($head['out'] ?? 0);
@@ -851,7 +965,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                     $did_commit = true;
                     $commit_summary = ['merged' => $merged, 'failed' => $failed];
-                    $skipped = ($counts['duplicate'] ?? 0) + ($counts['invalid'] ?? 0);
+                    $skipped = ($counts['duplicate'] ?? 0) + ($counts['invalid'] ?? 0) + ($counts['ignored'] ?? 0);
                     $msg = $merged . ' payment(s) merged successfully. ' . $skipped . ' row(s) were skipped (duplicates / invalid).';
                     if ($failed) {
                         $msg .= ' ' . count($failed) . ' row(s) failed during merge.';
@@ -903,6 +1017,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <li><strong>Duplicate receipt numbers are allowed</strong> — one historical receipt often covers several fee heads, so the same number may repeat across rows.</li>
                 <li><strong>A single row may carry several receipt numbers</strong> — list them comma separated in the Receipt Number cell (e.g. <code>OLD-RCPT-1002, OLD-RCPT-1003</code>).</li>
                 <li>Rows whose fee head or month is already paid in the current ERP are <strong>highlighted for manual correction</strong> — including any amount mismatch — and are never re-inserted.</li>
+                <li><strong>Summary and zero-amount rows are ignored.</strong> Old-ERP export lines such as <code>Monthly Payment Old Data</code> or <code>Current Dues</code>, and any row with an amount of <code>0</code>, are skipped automatically (shown in grey). Student IDs are matched with or without leading zeros.</li>
                 <li>Confirm to merge only the valid rows. Each is stored as an <em>Old ERP</em> payment (a memo voucher), so dues update without double-counting income.</li>
             </ol>
             <a href="<?= APP_URL ?>/accounting/old-erp-bulk-merge.php?sample=1" class="alert-link">
@@ -940,6 +1055,7 @@ require_once __DIR__ . '/../includes/header.php';
     $merge_count = $counts['merge'] ?? 0;
     $dup_count   = $counts['duplicate'] ?? 0;
     $inv_count   = $counts['invalid'] ?? 0;
+    $ign_count   = $counts['ignored'] ?? 0;
 ?>
 <!-- ── Preview ────────────────────────────────────────────────────────────── -->
 <div class="card border-0 shadow-sm mb-4">
@@ -949,6 +1065,7 @@ require_once __DIR__ . '/../includes/header.php';
             <span class="badge bg-success">Ready to merge: <?= (int)$merge_count ?></span>
             <span class="badge bg-warning text-dark">Already in ERP / review: <?= (int)$dup_count ?></span>
             <span class="badge bg-danger">Invalid: <?= (int)$inv_count ?></span>
+            <span class="badge bg-secondary">Ignored: <?= (int)$ign_count ?></span>
         </div>
     </div>
     <div class="card-body p-0">
@@ -981,11 +1098,13 @@ require_once __DIR__ . '/../includes/header.php';
                         $row_class = match ($r['status']) {
                             'merge'     => 'table-success',
                             'duplicate' => 'table-warning',
+                            'ignored'   => 'table-secondary',
                             default     => 'table-danger',
                         };
                         $badge = match ($r['status']) {
                             'merge'     => '<span class="badge bg-success">Merge</span>',
                             'duplicate' => '<span class="badge bg-warning text-dark">Review</span>',
+                            'ignored'   => '<span class="badge bg-secondary">Ignored</span>',
                             default     => '<span class="badge bg-danger">Invalid</span>',
                         };
                     ?>
@@ -1008,7 +1127,7 @@ require_once __DIR__ . '/../includes/header.php';
     <?php if (!$did_commit): ?>
     <div class="card-footer py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
         <span class="text-muted small">
-            Only the <strong><?= (int)$merge_count ?></strong> green row(s) will be merged. Yellow and red rows are skipped.
+            Only the <strong><?= (int)$merge_count ?></strong> green row(s) will be merged. Yellow, red and grey rows are skipped.
         </span>
         <form method="post" onsubmit="return confirm('Merge <?= (int)$merge_count ?> valid payment(s)? Duplicates and invalid rows will be skipped.');">
             <?= csrf_field() ?>
