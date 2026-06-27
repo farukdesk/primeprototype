@@ -200,6 +200,10 @@ function due_report_current_obligation(array $pkg, array $semester_fees, string 
             if (!$month_passed) {
                 break;
             }
+            if (!empty($pkg['student_id']) && function_exists('sd_is_month_dropped')
+                && sd_is_month_dropped((int)$pkg['student_id'], (int)$mi['year'], (int)$mi['month'])) {
+                continue; // Semester drop month – not owed
+            }
             $total += ($m < $months_int)
                 ? $monthly_fee
                 : max(0.0, $sem_total - $monthly_fee * ($months_int - 1));
@@ -270,6 +274,11 @@ function due_report_due_breakdown(array $pkg, array $semester_fees, string $as_o
                     || ($mi['year'] === $ao_year && $mi['month'] <= $ao_month);
                 if (!$month_passed) {
                     break;
+                }
+                if (!empty($pkg['student_id']) && function_exists('sd_is_month_dropped')
+                    && sd_is_month_dropped((int)$pkg['student_id'], (int)$mi['year'], (int)$mi['month'])) {
+                    $items[] = ['label' => $mi['label'] . ' — Semester Drop', 'amount' => 0.0];
+                    continue;
                 }
                 $m_due = ($m < $months_int)
                     ? $monthly_fee
@@ -988,6 +997,9 @@ $print_logo    = acc_university_logo_url();
                             $sc = $status_map[$r['student_status']] ?? 'bg-secondary';
                             ?>
                             <span class="badge <?= $sc ?> bg-opacity-75"><?= h($r['student_status']) ?></span>
+                            <?php if (function_exists('sd_current_badge')): $sd_badge = sd_current_badge((int)$r['student_id']); if ($sd_badge !== ''): ?>
+                            <div class="mt-1"><?= $sd_badge ?></div>
+                            <?php endif; endif; ?>
                         </td>
                         <td class="text-end text-success fw-semibold"><?= number_format($r['total_paid'], 2) ?></td>
                         <td class="text-end <?= $r['outstanding'] >= 0.01 ? 'text-danger fw-bold' : 'text-success' ?>">

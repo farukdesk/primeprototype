@@ -153,6 +153,13 @@ if ($start_month < 1 || $start_month > 12) {
         : CF_DEFAULT_START_MONTH;
 }
 
+// Semester drop context for this student (drives the "Semester Drop" banner /
+// month badges so paused months are not shown as a normal due).
+$sd_student_id = (int)($pkg['student_id'] ?? 0);
+$sd_start_year = (int)($payment_start['year'] ?? date('Y'));
+$sd_drop_now   = ($sd_student_id > 0 && function_exists('sd_student_on_drop_now'))
+    ? sd_student_on_drop_now($sd_student_id) : null;
+
 // Semester 1 reg fee is now shown in the registration column together with all other semesters.
 $total_reg_fees      = $reg_fee_per_sem * count($semester_fees);
 
@@ -228,6 +235,22 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <?= flash_show() ?>
+
+<?php if ($sd_drop_now): ?>
+<div class="alert alert-warning d-flex align-items-center gap-2" role="alert">
+    <i class="fas fa-pause-circle fa-lg"></i>
+    <div>
+        <strong>Semester Drop active.</strong>
+        This student is on a <?= h(sd_type_label($sd_drop_now['semester_type'])) ?> break from
+        <strong><?= h(date('d M Y', strtotime($sd_drop_now['drop_start']))) ?></strong> to
+        <strong><?= h(date('d M Y', strtotime($sd_drop_now['drop_end']))) ?></strong>.
+        Monthly tuition for these months is <em>not counted as a due</em>.
+        <?php if (function_exists('sd_can_view') && sd_can_view()): ?>
+        <a href="<?= APP_URL ?>/semester-drop/index.php?q=<?= rawurlencode((string)$pkg['student_sid']) ?>" class="alert-link">View drops</a>.
+        <?php endif; ?>
+    </div>
+</div>
+<?php endif; ?>
 
 <!-- ══════════════════════════════════════════════════════════
      PACKAGE SUMMARY CARDS
@@ -798,14 +821,33 @@ $first_sem_label   = ($first_sem && $first_sem['semester_label']) ? $first_sem['
                 </thead>
                 <tbody>
                 <?php for ($m = 1; $m <= $num_months; $m++): ?>
-                <?php $month_name = sfp_get_month_name($m, $start_month); ?>
-                <tr>
+                <?php
+                    $month_name = sfp_get_month_name($m, $start_month);
+                    $mi_slot = (function_exists('acc_month_year_for_slot'))
+                        ? acc_month_year_for_slot($start_month, $sd_start_year, $m - 1)
+                        : ['year' => $sd_start_year, 'month' => $start_month];
+                    $m_dropped = ($sd_student_id > 0 && function_exists('sd_is_month_dropped'))
+                        && sd_is_month_dropped($sd_student_id, (int)$mi_slot['year'], (int)$mi_slot['month']);
+                ?>
+                <tr<?= $m_dropped ? ' class="table-warning"' : '' ?>>
                     <td class="fw-semibold text-muted"><?= $m ?></td>
-                    <td>Month <?= $m ?><?= $month_name ? ' (' . h($month_name) . ')' : '' ?></td>
+                    <td>
+                        Month <?= $m ?><?= $month_name ? ' (' . h($month_name) . ')' : '' ?>
+                        <?php if ($m_dropped): ?>
+                        <span class="badge bg-warning text-dark ms-1"><i class="fas fa-pause me-1"></i>Semester Drop</span>
+                        <?php endif; ?>
+                    </td>
+                    <?php if ($m_dropped): ?>
+                    <td class="text-end text-muted">—</td>
+                    <td class="text-end text-muted">—</td>
+                    <td class="text-end text-muted">—</td>
+                    <td class="text-end fw-bold text-muted">Not due</td>
+                    <?php else: ?>
                     <td class="text-end"><?= sfp_money($monthly_tuition) ?></td>
                     <td class="text-end"><?= sfp_money($monthly_fixed) ?></td>
                     <td class="text-end"><?= sfp_money($monthly_english) ?></td>
                     <td class="text-end fw-bold text-success"><?= sfp_money($monthly_total) ?></td>
+                    <?php endif; ?>
                 </tr>
                 <?php endfor; ?>
                 </tbody>

@@ -219,6 +219,9 @@ require_once __DIR__ . '/../includes/header.php';
                             <?= h($pkg['student_name']) ?>
                         </a><br>
                         <small class="text-muted"><?= h($pkg['student_sid']) ?></small>
+                        <?php if (function_exists('sd_current_badge')): $sd_b = sd_current_badge((int)$pkg['student_id']); if ($sd_b !== ''): ?>
+                        <div class="mt-1"><?= $sd_b ?></div>
+                        <?php endif; endif; ?>
                     </td>
                     <td>
                         <?= h($pkg['program_name']) ?>

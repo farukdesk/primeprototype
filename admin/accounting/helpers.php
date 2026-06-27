@@ -9,6 +9,7 @@
 
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../change-log/helpers.php';
+require_once __DIR__ . '/../semester-drop/helpers.php';
 
 const ACC_INVOICE_CUSTOM_LOGO_FILE = 'Prime_University_Invoice logo.png';
 const ACC_STUDENT_FORM_FEE = 500.0;
@@ -1690,6 +1691,10 @@ function acc_student_fee_summary(int $student_id): ?array
             $month_credit -= $m_paid;
             $month_offset = ((int)$sf['semester_number'] - 1) * $months_int + ($m - 1);
             $month_info = acc_month_year_for_slot($start_month, $start_year, $month_offset);
+            // Semester drop: months inside an active drop window are not counted
+            // as a due – they are surfaced as "Semester Drop" instead.
+            $is_dropped = function_exists('sd_is_month_dropped')
+                && sd_is_month_dropped($student_id, (int)$month_info['year'], (int)$month_info['month']);
             $monthly_rows[] = [
                 'month_number' => $m,
                 'month_label'  => $month_info['label'],
@@ -1697,7 +1702,8 @@ function acc_student_fee_summary(int $student_id): ?array
                 'cal_year'     => $month_info['year'],
                 'due'          => round($m_due, 2),
                 'paid'         => round($m_paid, 2),
-                'out'          => round(max(0.0, $m_due - $m_paid), 2),
+                'out'          => $is_dropped ? 0.0 : round(max(0.0, $m_due - $m_paid), 2),
+                'dropped'      => $is_dropped,
             ];
         }
 
@@ -3082,6 +3088,8 @@ function acc_outstanding_through_current_month(int $package_id): float
     $now_month = (int)date('n');
     $now_year  = (int)date('Y');
 
+    $sd_student_id = (int)($pkg['student_id'] ?? 0);
+
     $months     = (float)($pkg['total_months']       ?? 0);
     $mps        = (float)($pkg['months_per_semester'] ?? 0);
     $months_int = max(1, (int)round($mps));
@@ -3130,6 +3138,12 @@ function acc_outstanding_through_current_month(int $package_id): float
                 // Months within a semester are sequential; once one is in the future
                 // all remaining months in this semester are also in the future.
                 break;
+            }
+
+            // Semester drop: months inside an active drop window are not owed.
+            if ($sd_student_id > 0 && function_exists('sd_is_month_dropped')
+                && sd_is_month_dropped($sd_student_id, (int)$month_info['year'], (int)$month_info['month'])) {
+                continue;
             }
 
             // Last month absorbs any rounding remainder

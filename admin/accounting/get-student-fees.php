@@ -91,6 +91,18 @@ try {
             'full_name'  => $student['full_name'],
             'package_id' => $student['package_id'],
         ],
+        'semester_drop'   => (function_exists('sd_student_on_drop_now')
+            ? (function () use ($student) {
+                $row = sd_student_on_drop_now((int)$student['id']);
+                if (!$row) { return null; }
+                return [
+                    'type'       => $row['semester_type'],
+                    'type_label' => sd_type_label($row['semester_type']),
+                    'drop_start' => $row['drop_start'],
+                    'drop_end'   => $row['drop_end'],
+                ];
+              })()
+            : null),
         'summary'         => $summary,
         'income_accounts' => $income_accounts,
         'payments'        => $payments,
