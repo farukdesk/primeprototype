@@ -873,6 +873,130 @@ function oebm_validate_rows(array $rows): array
     return ['results' => $results, 'counts' => $counts];
 }
 
+/**
+ * Collect the rows that did NOT merge — i.e. failed or need manual attention.
+ *
+ * "Failed" rows are those flagged invalid (failed validation) or duplicate
+ * (already in the current ERP / needs review). Intentionally-ignored summary
+ * and zero-amount rows are not failures and are excluded. Any commit-time
+ * failures (rows that passed validation but threw while saving) are merged in
+ * by row number, with their saved error message used as the issue.
+ *
+ * @param array<int,array<string,mixed>> $results        Validated rows.
+ * @param array<int,string>              $commit_failures Map of row_no => message.
+ * @return array<int,array{row_no:int,student_id:string,student_name:string,fee_type:string,date:string,amount:string,status:string,issue:string}>
+ */
+function oebm_failed_report_rows(array $results, array $commit_failures = []): array
+{
+    $rows = [];
+    foreach ($results as $r) {
+        $status = (string)$r['status'];
+        $res    = $r['resolved'];
+        $row_no = (int)$r['row_no'];
+
+        $is_validation_failure = in_array($status, ['invalid', 'duplicate'], true);
+        $is_commit_failure     = isset($commit_failures[$row_no]);
+
+        if (!$is_validation_failure && !$is_commit_failure) {
+            continue;
+        }
+
+        if ($is_commit_failure) {
+            $status_label = 'Failed';
+            $issue        = (string)$commit_failures[$row_no];
+        } elseif ($status === 'duplicate') {
+            $status_label = 'Already in ERP / review';
+            $issue        = trim(implode(' ', $r['notes']));
+        } else {
+            $status_label = 'Invalid';
+            $issue        = trim(implode(' ', $r['notes']));
+        }
+        if ($issue === '') {
+            $issue = 'No further detail provided.';
+        }
+
+        $rows[] = [
+            'row_no'       => $row_no,
+            'student_id'   => (string)($r['input']['student_id'] ?? ''),
+            'student_name' => (string)($res['student_name'] ?? ''),
+            'fee_type'     => (string)($res['fee_type_label'] ?? ($r['input']['fee_type'] ?? '')),
+            'date'         => (string)($res['date'] ?? ($r['input']['date'] ?? '')),
+            'amount'       => $res['amount'] !== null ? number_format((float)$res['amount'], 2) : (string)($r['input']['amount'] ?? ''),
+            'status'       => $status_label,
+            'issue'        => $issue,
+        ];
+    }
+    return $rows;
+}
+
+/**
+ * Build a printable HTML document listing the failed / needs-attention rows,
+ * for Dompdf rendering.
+ *
+ * @param array<int,array<string,string>> $failed_rows     From oebm_failed_report_rows().
+ * @param string                          $generated_label Human date/time label.
+ */
+function oebm_failed_report_html(array $failed_rows, string $generated_label): string
+{
+    $esc = static fn($v): string => htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
+
+    $logo_path     = dirname(dirname(__DIR__)) . '/assets/img/logo/logo-black.png';
+    $logo_data_uri = '';
+    if (is_file($logo_path) && is_readable($logo_path)) {
+        $logo_binary = file_get_contents($logo_path);
+        if ($logo_binary !== false) {
+            $logo_data_uri = 'data:image/png;base64,' . base64_encode($logo_binary);
+        }
+    }
+
+    $rows_html = '';
+    if (!$failed_rows) {
+        $rows_html = '<tr><td colspan="6" style="padding:12px;border:1px solid #0f172a;text-align:center;color:#16a34a;">'
+            . 'No failed rows — every row was either merged or intentionally ignored.</td></tr>';
+    } else {
+        foreach ($failed_rows as $i => $row) {
+            $zebra = ($i % 2 === 0) ? '#ffffff' : '#f8fafc';
+            $rows_html .= '<tr style="background:' . $zebra . ';">'
+                . '<td style="padding:7px 9px;border:1px solid #cbd5e1;text-align:center;">' . $esc($row['row_no']) . '</td>'
+                . '<td style="padding:7px 9px;border:1px solid #cbd5e1;font-weight:bold;">' . $esc($row['student_id']) . '</td>'
+                . '<td style="padding:7px 9px;border:1px solid #cbd5e1;">' . $esc($row['student_name'] !== '' ? $row['student_name'] : '—') . '</td>'
+                . '<td style="padding:7px 9px;border:1px solid #cbd5e1;">' . $esc($row['fee_type'] !== '' ? $row['fee_type'] : '—') . '</td>'
+                . '<td style="padding:7px 9px;border:1px solid #cbd5e1;">' . $esc($row['status']) . '</td>'
+                . '<td style="padding:7px 9px;border:1px solid #cbd5e1;">' . $esc($row['issue']) . '</td>'
+                . '</tr>';
+        }
+    }
+
+    $logo_html = $logo_data_uri !== ''
+        ? '<img src="' . $logo_data_uri . '" alt="Logo" style="height:42px;margin-bottom:6px;">'
+        : '';
+
+    return '<!DOCTYPE html><html><head><meta charset="utf-8"><style>'
+        . 'body{font-family:DejaVu Sans, sans-serif;color:#0f172a;font-size:9.5pt;margin:0;}'
+        . '</style></head><body>'
+        . '<div style="text-align:center;margin:0 0 14px;">'
+        . $logo_html
+        . '<div style="font-size:14pt;font-weight:bold;">Prime University</div>'
+        . '<div style="font-size:11pt;font-weight:bold;margin-top:2px;">Old ERP Bulk Merge — Failed Rows Report</div>'
+        . '<div style="font-size:8.5pt;color:#64748b;margin-top:2px;">Generated ' . $esc($generated_label)
+        . ' &nbsp;|&nbsp; Total failed rows: ' . count($failed_rows) . '</div>'
+        . '</div>'
+        . '<table style="width:100%;border-collapse:collapse;font-size:8.5pt;">'
+        . '<thead><tr style="background:#0f172a;color:#ffffff;">'
+        . '<th style="padding:8px 9px;border:1px solid #0f172a;text-align:center;width:5%;">Row</th>'
+        . '<th style="padding:8px 9px;border:1px solid #0f172a;text-align:left;width:16%;">Student ID</th>'
+        . '<th style="padding:8px 9px;border:1px solid #0f172a;text-align:left;width:18%;">Student</th>'
+        . '<th style="padding:8px 9px;border:1px solid #0f172a;text-align:left;width:15%;">Fee Type</th>'
+        . '<th style="padding:8px 9px;border:1px solid #0f172a;text-align:left;width:16%;">Status</th>'
+        . '<th style="padding:8px 9px;border:1px solid #0f172a;text-align:left;width:30%;">Issue</th>'
+        . '</tr></thead>'
+        . '<tbody>' . $rows_html . '</tbody>'
+        . '</table>'
+        . '<div style="margin:14px 0 0;font-size:8pt;color:#64748b;">These rows were not merged. Correct the listed issues in the CSV and re-upload, '
+        . 'or resolve them manually in the current ERP. This is a software-generated report.</div>'
+        . '</body></html>';
+}
+
 $errors   = [];
 $results  = null;
 $counts   = null;
@@ -905,6 +1029,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($csv_text === '') {
             $errors[] = 'The merge session expired. Please upload the CSV again.';
         }
+    } elseif ($action === 'report_pdf') {
+        $csv_text = base64_decode((string)($_POST['csv_data'] ?? ''), true) ?: '';
+        if ($csv_text === '') {
+            $errors[] = 'The merge session expired. Please upload the CSV again.';
+        }
     } else {
         $errors[] = 'Unknown action.';
     }
@@ -921,12 +1050,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $counts  = $validated['counts'];
             $csv_b64 = base64_encode($csv_text);
 
+            if ($action === 'report_pdf') {
+                // Stream a PDF report of the failed / needs-attention rows.
+                $commit_failures = [];
+                $cf_raw = (string)($_POST['commit_failures'] ?? '');
+                if ($cf_raw !== '') {
+                    $decoded = json_decode(base64_decode($cf_raw, true) ?: '', true);
+                    if (is_array($decoded)) {
+                        foreach ($decoded as $k => $v) {
+                            $commit_failures[(int)$k] = (string)$v;
+                        }
+                    }
+                }
+                $failed_rows = oebm_failed_report_rows($results, $commit_failures);
+                require_once __DIR__ . '/../../vendor/autoload.php';
+                $pdf_html = oebm_failed_report_html($failed_rows, date('d M Y, h:i A'));
+                $dompdf = new \Dompdf\Dompdf(['isRemoteEnabled' => false]);
+                $dompdf->loadHtml($pdf_html, 'UTF-8');
+                $dompdf->setPaper('A4', 'portrait');
+                $dompdf->render();
+                $dompdf->stream('old-erp-bulk-merge-failed-' . date('Ymd-His') . '.pdf', ['Attachment' => true]);
+                exit;
+            }
+
             if ($action === 'confirm') {
                 // Merge only the rows that passed validation. Re-validation above
                 // guarantees we never touch duplicate/invalid rows.
                 $cash_account_id = acc_received_into_account_id_for_payment_method('old_erp');
                 $merged = 0;
                 $failed = [];
+                $commit_failures_map = [];
                 if ($cash_account_id <= 0) {
                     $errors[] = 'Received-into (cash) account is not configured for Old ERP payments. Please set it in Accounting Settings.';
                 } else {
@@ -961,10 +1114,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $merged++;
                         } catch (Throwable $e) {
                             $failed[] = 'Row ' . $r['row_no'] . ' (receipt ' . $res['receipt'] . '): ' . $e->getMessage();
+                            $commit_failures_map[(int)$r['row_no']] = $e->getMessage();
                         }
                     }
                     $did_commit = true;
-                    $commit_summary = ['merged' => $merged, 'failed' => $failed];
+                    $commit_summary = ['merged' => $merged, 'failed' => $failed, 'failures_map' => $commit_failures_map];
                     $skipped = ($counts['duplicate'] ?? 0) + ($counts['invalid'] ?? 0) + ($counts['ignored'] ?? 0);
                     $msg = $merged . ' payment(s) merged successfully. ' . $skipped . ' row(s) were skipped (duplicates / invalid).';
                     if ($failed) {
@@ -1139,6 +1293,73 @@ require_once __DIR__ . '/../includes/header.php';
         </form>
     </div>
     <?php endif; ?>
+</div>
+
+<?php
+    // ── Failed / needs-attention report ─────────────────────────────────────
+    $report_commit_failures = ($did_commit && $commit_summary && !empty($commit_summary['failures_map']))
+        ? $commit_summary['failures_map']
+        : [];
+    $failed_report_rows = oebm_failed_report_rows($results, $report_commit_failures);
+    $commit_failures_b64 = $report_commit_failures
+        ? base64_encode((string)json_encode($report_commit_failures))
+        : '';
+?>
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span class="fw-semibold">
+            <i class="fas fa-triangle-exclamation me-2 text-danger"></i>Failed Rows Report
+            <span class="badge bg-danger ms-1"><?= count($failed_report_rows) ?></span>
+        </span>
+        <?php if ($failed_report_rows): ?>
+        <form method="post" target="_blank">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="report_pdf">
+            <input type="hidden" name="csv_data" value="<?= h($csv_b64) ?>">
+            <input type="hidden" name="commit_failures" value="<?= h($commit_failures_b64) ?>">
+            <button type="submit" class="btn btn-outline-danger btn-sm">
+                <i class="fas fa-file-pdf me-1"></i> Download PDF
+            </button>
+        </form>
+        <?php endif; ?>
+    </div>
+    <div class="card-body p-0">
+        <?php if (!$failed_report_rows): ?>
+        <div class="alert alert-success m-3 mb-0">
+            <i class="fas fa-check-circle me-1"></i> No failed rows — every row was either merged or intentionally ignored.
+        </div>
+        <?php else: ?>
+        <div class="px-4 pt-3 small text-muted">
+            The following student ID(s) could not be merged. Correct the listed issues in the CSV and re-upload, or resolve them manually.
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>#</th>
+                        <th>Student ID</th>
+                        <th>Student</th>
+                        <th>Fee Type</th>
+                        <th>Status</th>
+                        <th>Issue</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($failed_report_rows as $fr): ?>
+                    <tr>
+                        <td><?= (int)$fr['row_no'] ?></td>
+                        <td class="fw-semibold"><?= h($fr['student_id']) ?></td>
+                        <td><?= h($fr['student_name'] !== '' ? $fr['student_name'] : '—') ?></td>
+                        <td><?= h($fr['fee_type'] !== '' ? $fr['fee_type'] : '—') ?></td>
+                        <td><?= h($fr['status']) ?></td>
+                        <td class="small"><?= h($fr['issue']) ?></td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <?php endif; ?>
+    </div>
 </div>
 <?php endif; ?>
 
