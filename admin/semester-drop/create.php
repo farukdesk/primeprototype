@@ -32,9 +32,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // Validate drop start date
-    $start_dt = $drop_start !== '' ? \DateTimeImmutable::createFromFormat('!Y-m-d', $drop_start) : false;
-    if (!$start_dt || $start_dt->format('Y-m-d') !== $drop_start) {
+    $start_dt = false;
+    if ($drop_start !== '') {
+        $start_dt = \DateTimeImmutable::createFromFormat('!Y-m-d', $drop_start);
+    }
+    if (!($start_dt instanceof \DateTimeImmutable) || $start_dt->format('Y-m-d') !== $drop_start) {
         $errors[] = 'Please provide a valid drop start date.';
+        $start_dt = false;
     }
 
     // Prevent overlapping active drops for the same student

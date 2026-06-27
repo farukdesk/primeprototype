@@ -823,9 +823,10 @@ $first_sem_label   = ($first_sem && $first_sem['semester_label']) ? $first_sem['
                 <?php for ($m = 1; $m <= $num_months; $m++): ?>
                 <?php
                     $month_name = sfp_get_month_name($m, $start_month);
-                    $mi_slot = (function_exists('acc_month_year_for_slot'))
-                        ? acc_month_year_for_slot($start_month, $sd_start_year, $m - 1)
-                        : ['year' => $sd_start_year, 'month' => $start_month];
+                    // acc_month_year_for_slot is always available here (accounting/helpers
+                    // is required at the top of this page) and gives the real calendar
+                    // month/year for month $m of semester 1 (slot offset $m - 1).
+                    $mi_slot = acc_month_year_for_slot($start_month, $sd_start_year, $m - 1);
                     $m_dropped = ($sd_student_id > 0 && function_exists('sd_is_month_dropped'))
                         && sd_is_month_dropped($sd_student_id, (int)$mi_slot['year'], (int)$mi_slot['month']);
                 ?>
