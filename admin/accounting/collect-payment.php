@@ -715,6 +715,12 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
         </div>
 
+        <!-- Semester drop banner (populated by JS) -->
+        <div id="semesterDropBanner" class="alert alert-warning d-flex align-items-center gap-2" style="display:none;">
+            <i class="fas fa-pause-circle fa-lg"></i>
+            <div id="semesterDropBannerText"></div>
+        </div>
+
         <!-- ── Smart Payment + Additional Payment (two columns) ───────────────
              Left: Smart Payment (distribute an amount across scheduled dues).
              Right: Additional Payment (variable exam/other fees) and a live list
@@ -1996,6 +2002,28 @@ require_once __DIR__ . '/../includes/header.php';
             'ID: ' + currentStudent.student_id + '   |   Program: ' + pkg.program_name;
         document.getElementById('infoStatus').textContent = pkg.student_status ?? 'Active';
 
+        // Semester drop banner + status badge
+        const sdBanner = document.getElementById('semesterDropBanner');
+        const sd = data.semester_drop;
+        if (sd) {
+            const fmt = (d) => {
+                const p = String(d).split('-');
+                if (p.length !== 3) return d;
+                const dt = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2]));
+                return dt.toLocaleDateString('en-GB', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
+            };
+            document.getElementById('semesterDropBannerText').innerHTML =
+                '<strong>Semester Drop active.</strong> ' + sd.type_label + ' break from <strong>'
+                + fmt(sd.drop_start) + '</strong> to <strong>' + fmt(sd.drop_end)
+                + '</strong>. Monthly tuition for these months is <em>not counted as a due</em>.';
+            sdBanner.style.display = '';
+            const st = document.getElementById('infoStatus');
+            st.textContent = 'Semester Drop';
+            st.className = 'badge bg-warning text-dark border px-3 py-2';
+        } else if (sdBanner) {
+            sdBanner.style.display = 'none';
+        }
+
         const tbody = document.getElementById('feeTableBody');
         tbody.innerHTML = '';
 
@@ -2102,10 +2130,15 @@ require_once __DIR__ . '/../includes/header.php';
                 'registration', sf.id, sf.semester_number, semLabel, null, null
             );
 
-            // Monthly overall fees (tuition + fixed + English portion / months)
+            // Monthly overall fees (tuition + fixed + English portion / months).
+            // Semester-drop months are deferred (shifted to later calendar months
+            // via the server-side schedule), so every monthly row here is a real
+            // obligation carrying its full due — none are zeroed out.
             sf.monthly_rows.forEach(mr => {
+                const baseLabel = semLabel + ' – Month ' + mr.month_number
+                    + (mr.month_label ? ' (' + mr.month_label + ')' : '');
                 addRow(
-                    semLabel + ' – Month ' + mr.month_number + (mr.month_label ? ' (' + mr.month_label + ')' : ''),
+                    baseLabel,
                     mr.due, mr.paid, mr.out,
                     'semester_tuition', sf.id, sf.semester_number, semLabel, mr.month_number, mr.month_label || ''
                 );

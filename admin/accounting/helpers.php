@@ -9,6 +9,7 @@
 
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../change-log/helpers.php';
+require_once __DIR__ . '/../semester-drop/helpers.php';
 
 const ACC_INVOICE_CUSTOM_LOGO_FILE = 'Prime_University_Invoice logo.png';
 const ACC_STUDENT_FORM_FEE = 500.0;
@@ -1689,7 +1690,13 @@ function acc_student_fee_summary(int $student_id): ?array
             $m_paid = min($m_due, max(0.0, $month_credit));
             $month_credit -= $m_paid;
             $month_offset = ((int)$sf['semester_number'] - 1) * $months_int + ($m - 1);
-            $month_info = acc_month_year_for_slot($start_month, $start_year, $month_offset);
+            // Semester drop (deferral): obligation months are shifted forward past
+            // any active drop windows so the dropped months' tuition is not erased
+            // but pushed to the end – the student still owes the full programme
+            // total and the schedule is extended by the drop length.
+            $month_info = (function_exists('sd_shifted_slot_calendar') && $student_id > 0)
+                ? sd_shifted_slot_calendar($student_id, $start_month, $start_year, $month_offset)
+                : acc_month_year_for_slot($start_month, $start_year, $month_offset);
             $monthly_rows[] = [
                 'month_number' => $m,
                 'month_label'  => $month_info['label'],
@@ -3082,6 +3089,8 @@ function acc_outstanding_through_current_month(int $package_id): float
     $now_month = (int)date('n');
     $now_year  = (int)date('Y');
 
+    $sd_student_id = (int)($pkg['student_id'] ?? 0);
+
     $months     = (float)($pkg['total_months']       ?? 0);
     $mps        = (float)($pkg['months_per_semester'] ?? 0);
     $months_int = max(1, (int)round($mps));
@@ -3093,9 +3102,13 @@ function acc_outstanding_through_current_month(int $package_id): float
     foreach ($semester_fees as $sf) {
         $sem_num = (int)$sf['semester_number'];
 
-        // Offset of the first month of this semester
+        // Offset of the first month of this semester. Shifted forward past any
+        // active drop windows so a deferred semester's registration / tuition is
+        // not treated as due before its real (post-drop) start month.
         $first_offset    = ($sem_num - 1) * $months_int;
-        $first_month_info = acc_month_year_for_slot($start_month, $start_year, $first_offset);
+        $first_month_info = ($sd_student_id > 0 && function_exists('sd_shifted_slot_calendar'))
+            ? sd_shifted_slot_calendar($sd_student_id, $start_month, $start_year, $first_offset)
+            : acc_month_year_for_slot($start_month, $start_year, $first_offset);
 
         // Has this semester started yet?
         $sem_started = ($first_month_info['year'] < $now_year)
@@ -3119,16 +3132,22 @@ function acc_outstanding_through_current_month(int $package_id): float
         $merit_sem_total_due = (float)$sf['tuition_payable'] + $fixed_per_sem + $english_per_sem;
         [$sem_total_due, $monthly_fee] = acc_semester_monthly_due($pkg, $sf, $merit_sem_total_due, $months_int);
 
-        // Only add months that have already fallen due (≤ current calendar month)
+        // Only add months that have already fallen due (≤ current calendar month).
+        // Semester drop (deferral): the obligation month is shifted forward past any
+        // active drop windows, so a dropped month's tuition is not discarded – it is
+        // simply not counted as due until its deferred calendar month arrives.
         for ($m = 1; $m <= $months_int; $m++) {
-            $month_info = acc_month_year_for_slot($start_month, $start_year, $first_offset + ($m - 1));
+            $global_offset = $first_offset + ($m - 1);
+            $month_info = ($sd_student_id > 0 && function_exists('sd_shifted_slot_calendar'))
+                ? sd_shifted_slot_calendar($sd_student_id, $start_month, $start_year, $global_offset)
+                : acc_month_year_for_slot($start_month, $start_year, $global_offset);
 
             $month_due = ($month_info['year'] < $now_year)
                 || ($month_info['year'] === $now_year && $month_info['month'] <= $now_month);
 
             if (!$month_due) {
-                // Months within a semester are sequential; once one is in the future
-                // all remaining months in this semester are also in the future.
+                // Months map to strictly increasing (deferred) calendar months, so once
+                // one is in the future all remaining months are also in the future.
                 break;
             }
 

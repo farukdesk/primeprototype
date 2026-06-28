@@ -327,6 +327,7 @@ if (is_portal_student()) {
     $is_portal_global_notice_active = strpos($current_path, '/students/portal-global-notice') !== false;
     $is_admit_card_active = strpos($current_path, '/admit-card/') !== false
                          || strpos($current_path, '/students/my-admit-card') !== false;
+    $is_semester_drop_active = strpos($current_path, '/semester-drop/') !== false;
     ?>
 
     <!-- ── Student Portal: show ONLY My Profile and My Finances for student users ── -->
@@ -1040,6 +1041,35 @@ if (is_portal_student()) {
                 <a href="<?= APP_URL ?>/admit-card/create.php"
                    class="<?= strpos($current_path, '/admit-card/create') !== false ? 'active' : '' ?>">
                     <i class="fas fa-plus"></i> New Admit Card
+                </a>
+            </li>
+            <?php endif; ?>
+        </ul>
+    </div>
+    <?php endif; ?>
+
+    <!-- ── Semester Drop ── -->
+    <?php if (is_super_admin() || can_access('semester-drop')): ?>
+    <button class="nav-group-toggle <?= $is_semester_drop_active ? '' : 'collapsed' ?>"
+            data-bs-toggle="collapse" data-bs-target="#grp-semester-drop"
+            aria-expanded="<?= $is_semester_drop_active ? 'true' : 'false' ?>">
+        <i class="fas fa-pause-circle grp-icon" style="color:#f59e0b"></i>
+        Semester Drop
+        <i class="fas fa-chevron-down toggle-icon"></i>
+    </button>
+    <div class="collapse <?= $is_semester_drop_active ? 'show' : '' ?>" id="grp-semester-drop">
+        <ul class="nav flex-column grp-items">
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/semester-drop/index.php"
+                   class="<?= ($is_semester_drop_active && strpos($current_path, '/create') === false) ? 'active' : '' ?>">
+                    <i class="fas fa-list"></i> All Drops
+                </a>
+            </li>
+            <?php if (is_super_admin() || can_access('semester-drop', 'can_create')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/semester-drop/create.php"
+                   class="<?= strpos($current_path, '/semester-drop/create') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-plus"></i> New Semester Drop
                 </a>
             </li>
             <?php endif; ?>

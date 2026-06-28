@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_access('students');
 require_once __DIR__ . '/helpers.php';
+require_once __DIR__ . '/../semester-drop/helpers.php';
 require_once __DIR__ . '/../includes/mailer.php';
 
 $id      = (int)($_GET['id'] ?? 0);
@@ -508,6 +509,9 @@ $statusChipClass = match($student['status']) {
             <div class="sv-hero-chips">
                 <span class="sv-chip chip-id"><i class="fas fa-id-card me-1" style="opacity:.7;"></i><?= h($student['student_id']) ?></span>
                 <span class="sv-chip <?= $statusChipClass ?>"><?= h($student['status']) ?></span>
+                <?php if (function_exists('sd_current_badge')): $sd_badge = sd_current_badge((int)$student['id']); if ($sd_badge !== ''): ?>
+                <?= $sd_badge ?>
+                <?php endif; endif; ?>
                 <?php if ($student['sex']): ?>
                 <span class="sv-chip"><?= h($student['sex']) ?></span>
                 <?php endif; ?>
