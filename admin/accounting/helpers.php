@@ -1705,7 +1705,6 @@ function acc_student_fee_summary(int $student_id): ?array
                 'due'          => round($m_due, 2),
                 'paid'         => round($m_paid, 2),
                 'out'          => round(max(0.0, $m_due - $m_paid), 2),
-                'dropped'      => false,
             ];
         }
 

@@ -2130,19 +2130,13 @@ require_once __DIR__ . '/../includes/header.php';
                 'registration', sf.id, sf.semester_number, semLabel, null, null
             );
 
-            // Monthly overall fees (tuition + fixed + English portion / months)
+            // Monthly overall fees (tuition + fixed + English portion / months).
+            // Semester-drop months are deferred (shifted to later calendar months
+            // via the server-side schedule), so every monthly row here is a real
+            // obligation carrying its full due — none are zeroed out.
             sf.monthly_rows.forEach(mr => {
                 const baseLabel = semLabel + ' – Month ' + mr.month_number
                     + (mr.month_label ? ' (' + mr.month_label + ')' : '');
-                if (mr.dropped) {
-                    // Semester drop month – not counted as a due.
-                    addRow(
-                        baseLabel + ' — Semester Drop',
-                        0, 0, 0,
-                        'semester_tuition', sf.id, sf.semester_number, semLabel, mr.month_number, mr.month_label || ''
-                    );
-                    return;
-                }
                 addRow(
                     baseLabel,
                     mr.due, mr.paid, mr.out,

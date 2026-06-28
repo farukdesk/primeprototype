@@ -21,6 +21,12 @@ const SD_SLUG       = 'semester-drop';
 const SD_BI_MONTHS  = 6;   // BI semester drop blocks 6 months
 const SD_TRI_MONTHS = 4;   // TRI semester drop blocks 4 months
 
+// Extra iterations granted to the calendar-walk loop guards on top of the
+// theoretical maximum (obligation slots + deferred months). Purely a safety net
+// so malformed drop data can never cause an unbounded loop; large enough to be
+// irrelevant in practice (50 years of monthly slots).
+const SD_MAX_GUARD_HEADROOM = 600;
+
 // Evidence upload constraints (mirrors the student file uploader)
 const SD_EVIDENCE_EXTS  = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'doc', 'docx'];
 const SD_EVIDENCE_MIMES = [
@@ -295,7 +301,7 @@ function sd_shifted_slot_calendar(int $student_id, int $start_month, int $start_
     $guard    = 0;
     // Generous upper bound: every obligation slot plus all deferred months,
     // with extra headroom so we never loop unbounded on malformed data.
-    $maxGuard = $obligation_offset + sd_dropped_months_count($student_id) + 600;
+    $maxGuard = $obligation_offset + sd_dropped_months_count($student_id) + SD_MAX_GUARD_HEADROOM;
 
     while ($guard++ <= $maxGuard) {
         $info = sd_month_year_for_slot($start_month, $start_year, $cal);
@@ -340,7 +346,7 @@ function sd_build_schedule(int $student_id, int $start_month, int $start_year, i
     $slot    = 0;   // global obligation index
     $cal     = 0;   // calendar offset from the start month
     $guard   = 0;
-    $maxGuard = $start_slot + $num_obligations + sd_dropped_months_count($student_id) + 600;
+    $maxGuard = $start_slot + $num_obligations + sd_dropped_months_count($student_id) + SD_MAX_GUARD_HEADROOM;
 
     $has_drops = !empty(sd_active_drops_for_student($student_id));
 
