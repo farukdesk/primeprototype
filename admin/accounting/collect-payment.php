@@ -2039,6 +2039,35 @@ require_once __DIR__ . '/../includes/header.php';
             tbody.appendChild(tr);
         }
 
+        // Add a shaded indicator row marking a semester-drop gap in the schedule.
+        // Dropped months carry no due (tuition is deferred to later calendar
+        // months), so they never appear as obligation rows. This row makes the
+        // break visible, e.g. "Semester Drop · Feb 2026 – May 2026".
+        const MONTH_ABBR = ['', 'Jan','Feb','Mar','Apr','May','Jun',
+                            'Jul','Aug','Sep','Oct','Nov','Dec'];
+        function monthIdxLabel(idx) {
+            const y = Math.floor((idx - 1) / 12);
+            const m = idx - y * 12;
+            return MONTH_ABBR[m] + ' ' + y;
+        }
+        function addDropRow(startIdx, endIdx) {
+            const span = endIdx - startIdx + 1;
+            const range = (startIdx === endIdx)
+                ? monthIdxLabel(startIdx)
+                : monthIdxLabel(startIdx) + ' – ' + monthIdxLabel(endIdx);
+            const tr = document.createElement('tr');
+            tr.className = 'sd-drop-row';
+            tr.style.background = 'repeating-linear-gradient(45deg, #f8f9fa, #f8f9fa 10px, #f1f3f5 10px, #f1f3f5 20px)';
+            tr.style.boxShadow = 'inset 3px 0 0 #f59e0b';
+            tr.innerHTML = `<td colspan="6" class="ps-4 py-2 small fst-italic text-muted">
+                <i class="fas fa-pause-circle me-1" style="color:#f59e0b"></i>
+                <span class="fw-semibold">Semester Drop</span>
+                · ${range}
+                <span class="text-secondary">(${span} month${span === 1 ? '' : 's'} — tuition deferred, no due)</span>
+            </td>`;
+            tbody.appendChild(tr);
+        }
+
         // Add a fee data row (monthNumber optional – null for non-monthly fees)
         function addRow(label, due, paid, out, feeType, semFeeId, semNumber, semLabel, monthNumber, monthLabel) {
             grandDue  += due;
@@ -2119,6 +2148,10 @@ require_once __DIR__ . '/../includes/header.php';
                'id_card_fee', null, null, null, null, null);
 
         // ── Per-semester: Registration + Monthly overall fees ────────────────
+        // Track the calendar month of the previous obligation across semesters
+        // so a deferred semester-drop gap (missing calendar months between two
+        // consecutive obligation rows) can be surfaced as a shaded marker row.
+        let prevMonthIdx = null;
         s.semesters.forEach(sf => {
             const semLabel = sf.semester_label || ('Semester ' + sf.semester_number);
             addSectionRow(semLabel);
@@ -2135,6 +2168,19 @@ require_once __DIR__ . '/../includes/header.php';
             // via the server-side schedule), so every monthly row here is a real
             // obligation carrying its full due — none are zeroed out.
             sf.monthly_rows.forEach(mr => {
+                const calM = Number(mr.cal_month) || 0;
+                const calY = Number(mr.cal_year) || 0;
+                const curIdx = (calM >= 1 && calM <= 12 && calY > 0)
+                    ? calY * 12 + calM
+                    : null;
+                // A jump of more than one calendar month since the previous
+                // obligation means those in-between months were dropped.
+                if (curIdx !== null && prevMonthIdx !== null && curIdx - prevMonthIdx > 1) {
+                    addDropRow(prevMonthIdx + 1, curIdx - 1);
+                }
+                if (curIdx !== null) {
+                    prevMonthIdx = curIdx;
+                }
                 const baseLabel = semLabel + ' – Month ' + mr.month_number
                     + (mr.month_label ? ' (' + mr.month_label + ')' : '');
                 addRow(
