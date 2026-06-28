@@ -794,6 +794,36 @@ $monthly_fixed     = (float)$pkg['monthly_fixed_fee'];
 $monthly_english   = (float)$pkg['monthly_english_fee'];
 $monthly_total     = $monthly_tuition + $monthly_fixed + $monthly_english;
 $first_sem_label   = ($first_sem && $first_sem['semester_label']) ? $first_sem['semester_label'] : 'Semester 1';
+
+// ── Semester drop (deferral) schedule context ───────────────────────────────
+// Dropped months are not erased – they are deferred, pushing later obligations
+// forward and extending the programme end. Build a shift-aware schedule for the
+// active semester (obligation rows interleaved with "Semester Drop" placeholders)
+// and compute the extended programme end date.
+$sd_dropped_total = ($sd_student_id > 0 && function_exists('sd_dropped_months_count'))
+    ? sd_dropped_months_count($sd_student_id) : 0;
+
+$breakdown_rows = ($num_months > 0 && $first_sem && function_exists('sd_build_schedule') && $sd_student_id > 0)
+    ? sd_build_schedule($sd_student_id, $start_month, $sd_start_year, $num_months, 0)
+    : [];
+if (empty($breakdown_rows) && $num_months > 0 && $first_sem) {
+    for ($m = 1; $m <= $num_months; $m++) {
+        $mi = acc_month_year_for_slot($start_month, $sd_start_year, $m - 1);
+        $breakdown_rows[] = [
+            'type' => 'obligation', 'slot' => $m - 1,
+            'month' => (int)$mi['month'], 'year' => (int)$mi['year'], 'label' => (string)$mi['label'],
+        ];
+    }
+}
+
+// Extended programme end (last obligation month of the whole programme, shifted).
+$total_program_months = $num_months * max(1, count($semester_fees));
+$prog_end_info = null;
+if ($total_program_months > 0) {
+    $prog_end_info = ($sd_student_id > 0 && function_exists('sd_shifted_slot_calendar'))
+        ? sd_shifted_slot_calendar($sd_student_id, $start_month, $sd_start_year, $total_program_months - 1)
+        : acc_month_year_for_slot($start_month, $sd_start_year, $total_program_months - 1);
+}
 ?>
 <div class="card mt-4">
     <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -807,6 +837,15 @@ $first_sem_label   = ($first_sem && $first_sem['semester_label']) ? $first_sem['
         <?php if (!$first_sem || $num_months < 1): ?>
         <p class="text-muted px-4 py-3 mb-0">No semester data available.</p>
         <?php else: ?>
+        <?php if ($sd_dropped_total > 0 && $prog_end_info): ?>
+        <div class="alert alert-warning rounded-0 mb-0 py-2 px-4" style="font-size:.8rem;">
+            <i class="fas fa-pause-circle me-1"></i>
+            <strong>Semester drop in effect:</strong>
+            <?= (int)$sd_dropped_total ?> month<?= $sd_dropped_total === 1 ? '' : 's' ?> deferred.
+            Dropped months are not waived — the tuition is pushed to the end, so the
+            programme is extended to <strong><?= h($prog_end_info['label']) ?></strong>.
+        </div>
+        <?php endif; ?>
         <div class="table-responsive">
             <table class="table table-hover mb-0" style="font-size:.875rem;">
                 <thead>
@@ -820,37 +859,38 @@ $first_sem_label   = ($first_sem && $first_sem['semester_label']) ? $first_sem['
                     </tr>
                 </thead>
                 <tbody>
-                <?php for ($m = 1; $m <= $num_months; $m++): ?>
-                <?php
-                    $month_name = sfp_get_month_name($m, $start_month);
-                    // acc_month_year_for_slot is always available here (accounting/helpers
-                    // is required at the top of this page) and gives the real calendar
-                    // month/year for month $m of semester 1 (slot offset $m - 1).
-                    $mi_slot = acc_month_year_for_slot($start_month, $sd_start_year, $m - 1);
-                    $m_dropped = ($sd_student_id > 0 && function_exists('sd_is_month_dropped'))
-                        && sd_is_month_dropped($sd_student_id, (int)$mi_slot['year'], (int)$mi_slot['month']);
-                ?>
-                <tr<?= $m_dropped ? ' class="table-warning"' : '' ?>>
-                    <td class="fw-semibold text-muted"><?= $m ?></td>
+                <?php foreach ($breakdown_rows as $brow): ?>
+                <?php if (($brow['type'] ?? '') === 'drop'): ?>
+                <tr class="table-warning">
+                    <td class="fw-semibold text-muted">—</td>
                     <td>
-                        Month <?= $m ?><?= $month_name ? ' (' . h($month_name) . ')' : '' ?>
-                        <?php if ($m_dropped): ?>
+                        <?= h($brow['label']) ?>
                         <span class="badge bg-warning text-dark ms-1"><i class="fas fa-pause me-1"></i>Semester Drop</span>
-                        <?php endif; ?>
                     </td>
-                    <?php if ($m_dropped): ?>
                     <td class="text-end text-muted">—</td>
                     <td class="text-end text-muted">—</td>
                     <td class="text-end text-muted">—</td>
                     <td class="text-end fw-bold text-muted">Not due</td>
-                    <?php else: ?>
+                </tr>
+                <?php else: ?>
+                <?php
+                    $slot       = (int)($brow['slot'] ?? 0);
+                    $disp_no    = $slot + 1; // obligation month number within semester 1
+                    $month_name = sfp_get_month_name($disp_no, $start_month);
+                ?>
+                <tr>
+                    <td class="fw-semibold text-muted"><?= $disp_no ?></td>
+                    <td>
+                        Month <?= $disp_no ?><?= $month_name ? ' (' . h($month_name) . ')' : '' ?>
+                        <span class="text-muted ms-1" style="font-size:.72rem;">· <?= h($brow['label']) ?></span>
+                    </td>
                     <td class="text-end"><?= sfp_money($monthly_tuition) ?></td>
                     <td class="text-end"><?= sfp_money($monthly_fixed) ?></td>
                     <td class="text-end"><?= sfp_money($monthly_english) ?></td>
                     <td class="text-end fw-bold text-success"><?= sfp_money($monthly_total) ?></td>
-                    <?php endif; ?>
                 </tr>
-                <?php endfor; ?>
+                <?php endif; ?>
+                <?php endforeach; ?>
                 </tbody>
                 <tfoot class="table-light fw-bold">
                     <tr>

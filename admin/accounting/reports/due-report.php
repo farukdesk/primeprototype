@@ -173,7 +173,10 @@ function due_report_current_obligation(array $pkg, array $semester_fees, string 
     foreach ($semester_fees as $sf) {
         $sem_num      = (int)$sf['semester_number'];
         $first_offset = ($sem_num - 1) * $months_int;
-        $first_info   = acc_month_year_for_slot($start_month, $start_year, $first_offset);
+        $sd_sid       = (int)($pkg['student_id'] ?? 0);
+        $first_info   = ($sd_sid > 0 && function_exists('sd_shifted_slot_calendar'))
+            ? sd_shifted_slot_calendar($sd_sid, $start_month, $start_year, $first_offset)
+            : acc_month_year_for_slot($start_month, $start_year, $first_offset);
 
         $sem_started = ($first_info['year'] < $ao_year)
             || ($first_info['year'] === $ao_year && $first_info['month'] <= $ao_month);
@@ -193,16 +196,17 @@ function due_report_current_obligation(array $pkg, array $semester_fees, string 
         $merit_sem_total = (float)$sf['tuition_payable'] + $fixed_per_sem + $english_per_sem;
         [$sem_total, $monthly_fee] = acc_semester_monthly_due($pkg, $sf, $merit_sem_total, $months_int);
 
+        // Semester drop (deferral): each obligation month is shifted forward past any
+        // active drop windows; the dropped months' tuition is deferred, not erased.
         for ($m = 1; $m <= $months_int; $m++) {
-            $mi = acc_month_year_for_slot($start_month, $start_year, $first_offset + ($m - 1));
+            $global_offset = $first_offset + ($m - 1);
+            $mi = ($sd_sid > 0 && function_exists('sd_shifted_slot_calendar'))
+                ? sd_shifted_slot_calendar($sd_sid, $start_month, $start_year, $global_offset)
+                : acc_month_year_for_slot($start_month, $start_year, $global_offset);
             $month_passed = ($mi['year'] < $ao_year)
                 || ($mi['year'] === $ao_year && $mi['month'] <= $ao_month);
             if (!$month_passed) {
                 break;
-            }
-            if (!empty($pkg['student_id']) && function_exists('sd_is_month_dropped')
-                && sd_is_month_dropped((int)$pkg['student_id'], (int)$mi['year'], (int)$mi['month'])) {
-                continue; // Semester drop month – not owed
             }
             $total += ($m < $months_int)
                 ? $monthly_fee
@@ -246,7 +250,10 @@ function due_report_due_breakdown(array $pkg, array $semester_fees, string $as_o
         foreach ($semester_fees as $sf) {
             $sem_num      = (int)$sf['semester_number'];
             $first_offset = ($sem_num - 1) * $months_int;
-            $first_info   = acc_month_year_for_slot($start_month, $start_year, $first_offset);
+            $sd_sid       = (int)($pkg['student_id'] ?? 0);
+            $first_info   = ($sd_sid > 0 && function_exists('sd_shifted_slot_calendar'))
+                ? sd_shifted_slot_calendar($sd_sid, $start_month, $start_year, $first_offset)
+                : acc_month_year_for_slot($start_month, $start_year, $first_offset);
 
             $sem_started = ($first_info['year'] < $ao_year)
                 || ($first_info['year'] === $ao_year && $first_info['month'] <= $ao_month);
@@ -268,17 +275,17 @@ function due_report_due_breakdown(array $pkg, array $semester_fees, string $as_o
             $merit_sem_total = (float)$sf['tuition_payable'] + $fixed_per_sem + $english_per_sem;
             [$sem_total, $monthly_fee] = acc_semester_monthly_due($pkg, $sf, $merit_sem_total, $months_int);
 
+            // Semester drop (deferral): obligation months are shifted forward past any
+            // active drop windows so the dropped months' tuition is deferred, not erased.
             for ($m = 1; $m <= $months_int; $m++) {
-                $mi = acc_month_year_for_slot($start_month, $start_year, $first_offset + ($m - 1));
+                $global_offset = $first_offset + ($m - 1);
+                $mi = ($sd_sid > 0 && function_exists('sd_shifted_slot_calendar'))
+                    ? sd_shifted_slot_calendar($sd_sid, $start_month, $start_year, $global_offset)
+                    : acc_month_year_for_slot($start_month, $start_year, $global_offset);
                 $month_passed = ($mi['year'] < $ao_year)
                     || ($mi['year'] === $ao_year && $mi['month'] <= $ao_month);
                 if (!$month_passed) {
                     break;
-                }
-                if (!empty($pkg['student_id']) && function_exists('sd_is_month_dropped')
-                    && sd_is_month_dropped((int)$pkg['student_id'], (int)$mi['year'], (int)$mi['month'])) {
-                    $items[] = ['label' => $mi['label'] . ' — Semester Drop', 'amount' => 0.0];
-                    continue;
                 }
                 $m_due = ($m < $months_int)
                     ? $monthly_fee
