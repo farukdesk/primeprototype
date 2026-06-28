@@ -203,7 +203,8 @@ require_once __DIR__ . '/../includes/header.php';
                 <ul class="small text-muted mb-0 ps-3">
                     <li>A <strong>Bi-semester</strong> drop blocks <strong>6 months</strong>.</li>
                     <li>A <strong>Tri-semester</strong> drop blocks <strong>4 months</strong>.</li>
-                    <li>During the blocked window the student's monthly tuition is <strong>not counted as due</strong> – it shows as <em>Semester Drop</em> in Accounts, Collect Payment and the student profile.</li>
+                    <li>The dropped months are <strong>deferred, not waived</strong>: the monthly tuition is pushed to the end of the schedule, so the student still owes the full programme total and the <strong>programme end is extended</strong> by the drop length.</li>
+                    <li>During the blocked window the dropped months show as <em>Semester Drop</em> placeholders in Accounts, Collect Payment and the student profile, and are not counted as due until their deferred calendar month arrives.</li>
                     <li>Evidence is mandatory unless recorded by a Super Administrator.</li>
                 </ul>
             </div>

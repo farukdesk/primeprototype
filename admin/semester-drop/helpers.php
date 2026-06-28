@@ -244,6 +244,11 @@ function sd_month_year_for_slot(int $start_month, int $start_year, int $offset):
     if (function_exists('acc_month_year_for_slot')) {
         return acc_month_year_for_slot($start_month, $start_year, $offset);
     }
+    // Fallback: acc_month_year_for_slot() lives in admin/accounting/helpers.php and
+    // is loaded in every normal request that touches fees. This self-contained copy
+    // keeps the Semester Drop module usable when it is required on its own (e.g. the
+    // module's own pages, or unit-style includes) without pulling in the accounting
+    // layer. It must stay numerically identical to acc_month_year_for_slot().
     static $month_short_names = [
         1 => 'Jan', 2 => 'Feb', 3 => 'Mar', 4 => 'Apr', 5 => 'May', 6 => 'Jun',
         7 => 'Jul', 8 => 'Aug', 9 => 'Sep', 10 => 'Oct', 11 => 'Nov', 12 => 'Dec',
@@ -299,8 +304,11 @@ function sd_shifted_slot_calendar(int $student_id, int $start_month, int $start_
     $slot     = 0;   // obligation slot currently being placed
     $cal      = 0;   // calendar offset from the start month
     $guard    = 0;
-    // Generous upper bound: every obligation slot plus all deferred months,
-    // with extra headroom so we never loop unbounded on malformed data.
+    // Upper bound on calendar steps: to place obligation slot N we advance the
+    // calendar cursor once per non-dropped month (at most N+1) plus once per
+    // dropped month we skip (at most sd_dropped_months_count). The extra
+    // SD_MAX_GUARD_HEADROOM is a safety net against malformed drop data so the
+    // loop can never run unbounded.
     $maxGuard = $obligation_offset + sd_dropped_months_count($student_id) + SD_MAX_GUARD_HEADROOM;
 
     while ($guard++ <= $maxGuard) {
