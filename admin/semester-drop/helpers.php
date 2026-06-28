@@ -215,6 +215,173 @@ function sd_is_month_dropped(int $student_id, int $cal_year, int $cal_month): bo
     return false;
 }
 
+// ── Calendar-shift helpers (deferral model) ─────────────────────────────────
+//
+// A semester drop does NOT erase the dropped months' obligations – it *defers*
+// them. Every later obligation slot is pushed forward past the blocked calendar
+// months, so the student still owes the full programme total and the schedule
+// (programme end) is automatically extended by the drop length (Bi = 6 months,
+// Tri = 4 months). The helpers below translate a sequential obligation slot into
+// the real calendar month it lands on once dropped months are skipped.
+
+/**
+ * Calendar month/year/label for a slot offset from the package start month.
+ *
+ * Delegates to the accounting helper when available (so labels stay identical
+ * across the app) and falls back to a self-contained implementation otherwise,
+ * keeping this module dependency-light.
+ *
+ * @return array{month:int,year:int,label:string}
+ */
+function sd_month_year_for_slot(int $start_month, int $start_year, int $offset): array
+{
+    if (function_exists('acc_month_year_for_slot')) {
+        return acc_month_year_for_slot($start_month, $start_year, $offset);
+    }
+    static $month_short_names = [
+        1 => 'Jan', 2 => 'Feb', 3 => 'Mar', 4 => 'Apr', 5 => 'May', 6 => 'Jun',
+        7 => 'Jul', 8 => 'Aug', 9 => 'Sep', 10 => 'Oct', 11 => 'Nov', 12 => 'Dec',
+    ];
+    $serial      = ($start_month - 1) + $offset;
+    $month_index = (($serial % 12) + 12) % 12;
+    $month       = $month_index + 1;
+    $year        = $start_year + (int)floor(($serial - $month_index) / 12);
+    return [
+        'month' => $month,
+        'year'  => $year,
+        'label' => ($month_short_names[$month] ?? '') . ' ' . $year,
+    ];
+}
+
+/**
+ * Total number of deferred (dropped) months for a student across all active
+ * drops. Used to compute the extended programme end date / month count.
+ *
+ * Note: overlapping drop windows are summed by their block length; this matches
+ * the intended "extend by drop length" semantics (Bi = 6, Tri = 4) and is only
+ * an upper bound in the rare overlapping case.
+ */
+function sd_dropped_months_count(int $student_id): int
+{
+    $total = 0;
+    foreach (sd_active_drops_for_student($student_id) as $row) {
+        $total += (int)($row['block_months'] ?? 0);
+    }
+    return $total;
+}
+
+/**
+ * Map a sequential obligation slot (0-based) to the real calendar month it
+ * lands on once active drop windows are skipped.
+ *
+ * Walks a calendar cursor forward from the package start month; calendar months
+ * inside an active drop window are skipped without consuming an obligation slot,
+ * so every obligation after a drop is shifted forward (deferred).
+ *
+ * @return array{month:int,year:int,label:string}
+ */
+function sd_shifted_slot_calendar(int $student_id, int $start_month, int $start_year, int $obligation_offset): array
+{
+    if ($obligation_offset < 0) {
+        $obligation_offset = 0;
+    }
+    // No active drops → behaves exactly like the plain calendar mapping.
+    if (empty(sd_active_drops_for_student($student_id))) {
+        return sd_month_year_for_slot($start_month, $start_year, $obligation_offset);
+    }
+
+    $slot     = 0;   // obligation slot currently being placed
+    $cal      = 0;   // calendar offset from the start month
+    $guard    = 0;
+    // Generous upper bound: every obligation slot plus all deferred months,
+    // with extra headroom so we never loop unbounded on malformed data.
+    $maxGuard = $obligation_offset + sd_dropped_months_count($student_id) + 600;
+
+    while ($guard++ <= $maxGuard) {
+        $info = sd_month_year_for_slot($start_month, $start_year, $cal);
+        if (sd_is_month_dropped($student_id, (int)$info['year'], (int)$info['month'])) {
+            $cal++;
+            continue;
+        }
+        if ($slot === $obligation_offset) {
+            return $info;
+        }
+        $slot++;
+        $cal++;
+    }
+
+    // Safety fallback (should be unreachable): unshifted calendar slot.
+    return sd_month_year_for_slot($start_month, $start_year, $obligation_offset);
+}
+
+/**
+ * Build an ordered schedule of calendar rows for a block of obligation slots,
+ * interleaving "Semester Drop" placeholder rows for the skipped (deferred)
+ * calendar months.
+ *
+ * Each returned row is:
+ *   ['type' => 'obligation'|'drop', 'slot' => ?int, 'month' => int,
+ *    'year' => int, 'label' => string]
+ * where 'slot' is the 0-based global obligation index for obligation rows and
+ * null for drop placeholder rows.
+ *
+ * @param int $num_obligations Number of obligation rows to emit.
+ * @param int $start_slot      Global obligation index of the first row to emit.
+ * @return array<int,array{type:string,slot:?int,month:int,year:int,label:string}>
+ */
+function sd_build_schedule(int $student_id, int $start_month, int $start_year, int $num_obligations, int $start_slot = 0): array
+{
+    $rows = [];
+    if ($num_obligations < 1) {
+        return $rows;
+    }
+
+    $emitted = 0;   // obligation rows emitted so far
+    $slot    = 0;   // global obligation index
+    $cal     = 0;   // calendar offset from the start month
+    $guard   = 0;
+    $maxGuard = $start_slot + $num_obligations + sd_dropped_months_count($student_id) + 600;
+
+    $has_drops = !empty(sd_active_drops_for_student($student_id));
+
+    while ($emitted < $num_obligations && $guard++ <= $maxGuard) {
+        $info   = sd_month_year_for_slot($start_month, $start_year, $cal);
+        $is_drop = $has_drops
+            && sd_is_month_dropped($student_id, (int)$info['year'], (int)$info['month']);
+
+        if ($is_drop) {
+            // Surface deferred calendar months as informational placeholder rows,
+            // but only once we have reached the requested window of slots.
+            if ($slot >= $start_slot) {
+                $rows[] = [
+                    'type'  => 'drop',
+                    'slot'  => null,
+                    'month' => (int)$info['month'],
+                    'year'  => (int)$info['year'],
+                    'label' => (string)$info['label'],
+                ];
+            }
+            $cal++;
+            continue;
+        }
+
+        if ($slot >= $start_slot) {
+            $rows[] = [
+                'type'  => 'obligation',
+                'slot'  => $slot,
+                'month' => (int)$info['month'],
+                'year'  => (int)$info['year'],
+                'label' => (string)$info['label'],
+            ];
+            $emitted++;
+        }
+        $slot++;
+        $cal++;
+    }
+
+    return $rows;
+}
+
 // ── Presentation helpers ────────────────────────────────────────────────────
 
 /**
