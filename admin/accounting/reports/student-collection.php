@@ -60,6 +60,7 @@ $stmt = $db->prepare(
          p.fee_type,
          p.payment_method,
          p.mobile_banking_provider,
+         COALESCE(u.full_name, 'System') AS collected_by,
          p.amount
      FROM sfp_payments p
      JOIN students                s  ON s.id  = p.student_id
@@ -67,6 +68,7 @@ $stmt = $db->prepare(
      LEFT JOIN dept_departments   d  ON d.id  = s.dept_id
      LEFT JOIN dept_academic_programs ap ON ap.id = s.program_id
      LEFT JOIN student_batches    ub ON ub.id = s.batch_id
+     LEFT JOIN users              u  ON u.id  = p.collected_by
      WHERE $where_sql
      ORDER BY v.voucher_date DESC, p.id DESC"
 );
@@ -315,7 +317,7 @@ require_once __DIR__ . '/../../includes/header.php';
 </div>
 
 <!-- ── Table ── -->
-<div class="card border-0 shadow-sm">
+<div class="card border-0 shadow-sm no-print">
     <div class="card-header py-2 px-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
         <strong class="small"><span id="recCount"><?= $txn_count ?></span> record(s) · <?= h($period_label) ?></strong>
         <div class="d-flex align-items-center gap-2 no-print">
@@ -378,6 +380,44 @@ require_once __DIR__ . '/../../includes/header.php';
         <nav><ul class="pagination pagination-sm mb-0" id="pager"></ul></nav>
     </div>
 </div>
+
+<!-- ── Print-only compact table (fits A4) ── -->
+<table class="d-none d-print-table print-collection">
+    <thead>
+        <tr>
+            <th>Student</th>
+            <th>Program</th>
+            <th>Collection<br>Date</th>
+            <th>Invoice No</th>
+            <th>Fee Type</th>
+            <th>Collected By</th>
+            <th class="text-end">Amount</th>
+        </tr>
+    </thead>
+    <tbody>
+        <?php foreach ($rows as $r): ?>
+        <tr>
+            <td>
+                <span class="pc-id"><?= h($r['sid']) ?></span><br>
+                <span class="pc-name"><?= h($r['student_name']) ?></span><br>
+                <span class="pc-batch"><?= h($r['batch_name'] !== '' ? $r['batch_name'] : '—') ?></span>
+            </td>
+            <td><?= h($r['program_name'] ?? '—') ?></td>
+            <td><?= date('d M Y', strtotime($r['collection_date'])) ?></td>
+            <td><?= h($r['invoice_no']) ?></td>
+            <td><?= h(acc_fee_type_label($r['fee_type'])) ?></td>
+            <td><?= h($r['collected_by']) ?></td>
+            <td class="text-end"><?= number_format((float)$r['amount'], 2) ?></td>
+        </tr>
+        <?php endforeach; ?>
+    </tbody>
+    <tfoot>
+        <tr>
+            <td colspan="6" class="text-end fw-bold">Filtered Total</td>
+            <td class="text-end fw-bold"><?= $currency ?> <?= number_format($total, 2) ?></td>
+        </tr>
+    </tfoot>
+</table>
 <?php endif; ?>
 
 <style>
@@ -385,6 +425,17 @@ require_once __DIR__ . '/../../includes/header.php';
     #sidebar, #topbar, .no-print, nav[aria-label="breadcrumb"] { display: none !important; }
     #main-wrapper, #content { margin-left: 0 !important; }
     .card { box-shadow: none !important; border: 1px solid #dee2e6 !important; }
+    table.print-collection { display: table !important; width: 100%; border-collapse: collapse; font-size: 8pt; }
+    table.print-collection th, table.print-collection td {
+        border: 1px solid #999; padding: 3px 5px; vertical-align: top; text-align: left;
+    }
+    table.print-collection thead { display: table-header-group; }
+    table.print-collection thead th { background: #e9ecef !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    table.print-collection tr { page-break-inside: avoid; }
+    table.print-collection .pc-id { font-weight: 700; }
+    table.print-collection .pc-name { font-size: 7.5pt; }
+    table.print-collection .pc-batch { font-size: 7pt; color: #555; }
+    table.print-collection .text-end { text-align: right !important; }
 }
 @page { size: A4 portrait; margin: 12mm; }
 </style>
