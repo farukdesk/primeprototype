@@ -13,42 +13,27 @@ $fee_type   = trim($_GET['fee_type']  ?? '');
 $pay_method = trim($_GET['payment_method'] ?? '');
 $staff_id   = (int)($_GET['staff_id'] ?? 0);
 
-// ── Build query ───────────────────────────────────────────────────────────────
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_from)) { $date_from = ''; }
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_to))   { $date_to   = ''; }
 
+// ── Build query ───────────────────────────────────────────────────────────────
 $where  = ['v.status = \'posted\'', 'v.is_deleted = 0'];
 $params = [];
 
-if ($date_from) {
-    $where[]  = 'DATE(v.voucher_date) >= ?';
-    $params[] = $date_from;
-}
-if ($date_to) {
-    $where[]  = 'DATE(v.voucher_date) <= ?';
-    $params[] = $date_to;
-}
-if ($fee_type) {
-    $where[]  = 'p.fee_type = ?';
-    $params[] = $fee_type;
-}
-if ($pay_method) {
-    $where[]  = 'p.payment_method = ?';
-    $params[] = $pay_method;
-}
-if ($staff_id) {
-    $where[]  = 'p.collected_by = ?';
-    $params[] = $staff_id;
-}
+if ($date_from) { $where[] = 'DATE(v.voucher_date) >= ?'; $params[] = $date_from; }
+if ($date_to)   { $where[] = 'DATE(v.voucher_date) <= ?'; $params[] = $date_to;   }
+if ($fee_type)  { $where[] = 'p.fee_type = ?';            $params[] = $fee_type;  }
+if ($pay_method){ $where[] = 'p.payment_method = ?';      $params[] = $pay_method;}
+if ($staff_id)  { $where[] = 'p.collected_by = ?';        $params[] = $staff_id;  }
 
 $where_sql = implode(' AND ', $where);
-
-// ── Detailed rows (per-transaction with full student info) ─────────────────
 
 $rows = db()->prepare(
     "SELECT
          s.student_id                              AS sid,
          s.full_name                               AS student_name,
          COALESCE(ap.program_name, d.name, '—')   AS program,
-         COALESCE(s.admitted_semester, '—')        AS batch,
+         COALESCE(ub.name, s.admitted_semester, '—') AS batch,
          COALESCE(u.full_name, 'System')           AS collected_by,
          p.fee_type,
          p.payment_method,
@@ -63,6 +48,7 @@ $rows = db()->prepare(
      LEFT JOIN users                  u  ON u.id  = p.collected_by
      LEFT JOIN dept_departments       d  ON d.id  = s.dept_id
      LEFT JOIN dept_academic_programs ap ON ap.id = s.program_id
+     LEFT JOIN student_batches        ub ON ub.id = s.batch_id
      WHERE $where_sql
      ORDER BY v.voucher_date DESC, p.id DESC"
 );
@@ -71,17 +57,24 @@ $rows = $rows->fetchAll();
 
 $grand_total = array_sum(array_column($rows, 'amount'));
 
-// ── Per-staff summary (for stat cards) ────────────────────────────────────
-
-$staff_totals = [];
+// ── Aggregations (stat cards + charts) ─────────────────────────────────────
+$staff_totals  = [];
+$by_pay_method = [];
+$by_fee_type   = [];
 foreach ($rows as $r) {
+    $amt  = (float)$r['amount'];
     $name = $r['collected_by'];
-    $staff_totals[$name] = ($staff_totals[$name] ?? 0.0) + (float)$r['amount'];
+    $staff_totals[$name]  = ($staff_totals[$name] ?? 0.0) + $amt;
+    $pm   = acc_payment_method_label($r['payment_method']);
+    $ft   = acc_fee_type_label($r['fee_type']);
+    $by_pay_method[$pm]   = ($by_pay_method[$pm] ?? 0) + $amt;
+    $by_fee_type[$ft]     = ($by_fee_type[$ft]   ?? 0) + $amt;
 }
 arsort($staff_totals);
+arsort($by_pay_method);
+arsort($by_fee_type);
 
 // ── Staff list for filter dropdown ─────────────────────────────────────────
-
 $staff_list = db()->query(
     "SELECT DISTINCT u.id, u.full_name
      FROM sfp_payments p
@@ -90,10 +83,9 @@ $staff_list = db()->query(
 )->fetchAll();
 
 $fee_types   = acc_student_fee_types();
-$pay_methods = ['cash' => 'Cash', 'bank' => 'Bank', 'mobile_banking' => 'Mobile Banking'];
+$pay_methods = ['cash' => 'Cash', 'bank' => 'Bank', 'mobile_banking' => 'Mobile Banking', 'old_erp' => 'Old ERP'];
 
 // ── Period label for display ───────────────────────────────────────────────
-
 $period_label = ($date_from === $date_to && $date_from === date('Y-m-d'))
     ? 'Today — ' . date('d M Y')
     : (($date_from ? date('d M Y', strtotime($date_from)) : 'All time')
@@ -103,14 +95,14 @@ $period_label = ($date_from === $date_to && $date_from === date('Y-m-d'))
 require_once __DIR__ . '/../../includes/header.php';
 ?>
 
-<!-- ── Screen: page header ── -->
+<!-- ── Page header ── -->
 <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2 no-print">
     <div>
         <h4 class="mb-0 fw-semibold"><i class="fas fa-users me-2 text-info"></i>Staff Collection Report</h4>
         <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small">
             <li class="breadcrumb-item"><a href="<?= APP_URL ?>">Dashboard</a></li>
-            <li class="breadcrumb-item"><a href="<?= APP_URL ?>/accounting/index.php">Accounting</a></li>
-            <li class="breadcrumb-item active">Staff Collection Report</li>
+            <li class="breadcrumb-item"><a href="<?= APP_URL ?>/accounting/reports/index.php">Reports</a></li>
+            <li class="breadcrumb-item active">Staff Collection</li>
         </ol></nav>
     </div>
     <button onclick="window.print()" class="btn btn-info btn-sm text-white shadow-sm">
@@ -119,50 +111,38 @@ require_once __DIR__ . '/../../includes/header.php';
 </div>
 
 <!-- ── Filters ── -->
-<div class="card border-0 shadow-sm mb-4 no-print">
+<div class="card border-0 shadow-sm mb-3 no-print">
     <div class="card-body p-3">
-        <!-- Quick date shortcuts -->
-        <div class="mb-3 d-flex flex-wrap align-items-center gap-2">
-            <span class="small fw-semibold text-muted me-1">Quick Range:</span>
+        <div class="mb-2 d-flex flex-wrap align-items-center gap-1">
+            <span class="small fw-semibold text-muted me-1">Quick:</span>
             <?php
-            $quick_ranges = [
-                'today' => 'Today',
-                'week'  => 'This Week',
-                'month' => 'This Month',
-                'year'  => 'This Year',
-            ];
-            // Detect active quick range
+            $quick_ranges = ['today' => 'Today', 'week' => 'This Week', 'month' => 'This Month', 'year' => 'This Year'];
             $active_range = '';
             $today_str = date('Y-m-d');
             if ($date_from === $today_str && $date_to === $today_str) {
                 $active_range = 'today';
             } elseif ($date_to === $today_str) {
-                $week_start  = date('Y-m-d', strtotime('monday this week'));
-                $month_start = date('Y-m-01');
-                $year_start  = date('Y-01-01');
-                if ($date_from === $week_start)  $active_range = 'week';
-                elseif ($date_from === $month_start) $active_range = 'month';
-                elseif ($date_from === $year_start)  $active_range = 'year';
+                if ($date_from === date('Y-m-d', strtotime('monday this week'))) $active_range = 'week';
+                elseif ($date_from === date('Y-m-01')) $active_range = 'month';
+                elseif ($date_from === date('Y-01-01')) $active_range = 'year';
             }
             foreach ($quick_ranges as $range => $label):
                 $cls = ($active_range === $range) ? 'btn-info text-white' : 'btn-outline-info';
             ?>
-            <button type="button" class="btn <?= $cls ?> btn-sm sc-btn" data-range="<?= $range ?>">
-                <?= $label ?>
-            </button>
+            <button type="button" class="btn <?= $cls ?> btn-sm sc-btn" data-range="<?= $range ?>"><?= $label ?></button>
             <?php endforeach; ?>
         </div>
 
         <form method="get" id="filterForm" class="row g-2 align-items-end">
-            <div class="col-auto">
+            <div class="col-6 col-md-auto">
                 <label class="form-label small fw-semibold mb-1">From</label>
                 <input type="date" name="date_from" id="date_from" class="form-control form-control-sm" value="<?= h($date_from) ?>">
             </div>
-            <div class="col-auto">
+            <div class="col-6 col-md-auto">
                 <label class="form-label small fw-semibold mb-1">To</label>
                 <input type="date" name="date_to" id="date_to" class="form-control form-control-sm" value="<?= h($date_to) ?>">
             </div>
-            <div class="col-auto">
+            <div class="col-6 col-md-auto">
                 <label class="form-label small fw-semibold mb-1">Fee Type</label>
                 <select name="fee_type" class="form-select form-select-sm">
                     <option value="">All Types</option>
@@ -171,7 +151,7 @@ require_once __DIR__ . '/../../includes/header.php';
                     <?php endforeach; ?>
                 </select>
             </div>
-            <div class="col-auto">
+            <div class="col-6 col-md-auto">
                 <label class="form-label small fw-semibold mb-1">Payment Method</label>
                 <select name="payment_method" class="form-select form-select-sm">
                     <option value="">All Methods</option>
@@ -181,7 +161,7 @@ require_once __DIR__ . '/../../includes/header.php';
                 </select>
             </div>
             <?php if (!empty($staff_list)): ?>
-            <div class="col-auto">
+            <div class="col-6 col-md-auto">
                 <label class="form-label small fw-semibold mb-1">Collected By</label>
                 <select name="staff_id" class="form-select form-select-sm">
                     <option value="">All Staff</option>
@@ -191,7 +171,7 @@ require_once __DIR__ . '/../../includes/header.php';
                 </select>
             </div>
             <?php endif; ?>
-            <div class="col-auto">
+            <div class="col-12 col-md-auto">
                 <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-sync me-1"></i> Generate</button>
                 <a href="?" class="btn btn-outline-secondary btn-sm">Reset</a>
             </div>
@@ -199,18 +179,13 @@ require_once __DIR__ . '/../../includes/header.php';
     </div>
 </div>
 
-<!-- ══════════════════════════════════════════════════════════════════════════
-     PRINTABLE REPORT AREA
-     ══════════════════════════════════════════════════════════════════════ -->
 <div id="printArea">
 
 <!-- ── Print header ── -->
 <div class="print-header d-none d-print-block mb-4">
     <table width="100%" style="border-bottom:2px solid #0d6efd;padding-bottom:10px;margin-bottom:10px">
         <tr>
-            <td width="70">
-                <img src="<?= h(acc_university_logo_url()) ?>" alt="Logo" style="height:56px;width:auto">
-            </td>
+            <td width="70"><img src="<?= h(acc_university_logo_url()) ?>" alt="Logo" style="height:56px;width:auto"></td>
             <td style="padding-left:12px">
                 <div style="font-size:15pt;font-weight:700;color:#0d6efd">Prime University</div>
                 <div style="font-size:8pt;color:#555"><?= h(acc_university_address()) ?></div>
@@ -227,30 +202,24 @@ require_once __DIR__ . '/../../includes/header.php';
     </table>
 </div>
 
-<!-- ── Summary stat cards (screen) ── -->
 <?php if (!empty($rows)): ?>
-<div class="row g-3 mb-4 no-print">
-    <!-- Grand Total -->
+<!-- ── Summary stat cards (screen) ── -->
+<div class="row g-3 mb-3 no-print">
     <div class="col-6 col-md-3">
         <div class="card border-0 shadow-sm h-100" style="background:linear-gradient(135deg,#0d6efd,#6ea8fe)">
             <div class="card-body p-3 text-white">
-                <div class="d-flex align-items-center gap-2 mb-1">
-                    <i class="fas fa-coins fa-lg opacity-75"></i>
-                    <span class="fw-semibold small opacity-90">Grand Total</span>
-                </div>
+                <div class="d-flex align-items-center gap-2 mb-1"><i class="fas fa-coins fa-lg opacity-75"></i><span class="fw-semibold small opacity-90">Grand Total</span></div>
                 <div class="fw-bold" style="font-size:1.3rem"><?= $currency ?> <?= number_format($grand_total, 2) ?></div>
                 <div style="font-size:.72rem;opacity:.8"><?= count($rows) ?> transaction(s)</div>
             </div>
         </div>
     </div>
-    <?php foreach ($staff_totals as $sname => $stotal): ?>
+    <?php $shown = 0; foreach ($staff_totals as $sname => $stotal): if ($shown++ >= 3) break; ?>
     <div class="col-6 col-md-3">
         <div class="card border-0 shadow-sm h-100">
             <div class="card-body p-3">
                 <div class="d-flex align-items-center gap-2 mb-1">
-                    <span class="rounded-circle bg-info bg-opacity-10 text-info d-inline-flex align-items-center justify-content-center" style="width:28px;height:28px;font-size:.8rem">
-                        <i class="fas fa-user"></i>
-                    </span>
+                    <span class="rounded-circle bg-info bg-opacity-10 text-info d-inline-flex align-items-center justify-content-center" style="width:28px;height:28px;font-size:.8rem"><i class="fas fa-user"></i></span>
                     <span class="fw-semibold small text-truncate" title="<?= h($sname) ?>"><?= h($sname) ?></span>
                 </div>
                 <div class="fw-bold text-primary" style="font-size:1.1rem"><?= $currency ?> <?= number_format($stotal, 2) ?></div>
@@ -261,36 +230,36 @@ require_once __DIR__ . '/../../includes/header.php';
     <?php endforeach; ?>
 </div>
 
-<!-- ── Print summary strip ── -->
-<div class="d-none d-print-block mb-3">
-    <table width="100%" style="border-collapse:collapse">
-        <tr>
-            <td style="background:#0d6efd;color:#fff;padding:6px 10px;border-radius:4px 0 0 4px;font-weight:700;font-size:9pt">
-                Grand Total &nbsp; <?= $currency ?> <?= number_format($grand_total, 2) ?>
-            </td>
-            <td style="padding:6px 10px;font-size:8pt;color:#555">
-                <?= count($rows) ?> transaction(s) &nbsp;|&nbsp; <?= h($period_label) ?>
-            </td>
-            <?php foreach ($staff_totals as $sname => $stotal): ?>
-            <td style="padding:6px 10px;font-size:8pt;color:#333;border-left:1px solid #dee2e6">
-                <strong><?= h($sname) ?>:</strong> <?= $currency ?> <?= number_format($stotal, 2) ?>
-            </td>
-            <?php endforeach; ?>
-        </tr>
-    </table>
+<!-- ── Charts ── -->
+<div class="row g-3 mb-3 no-print">
+    <div class="col-12 col-xl-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header py-2 px-3 bg-white"><strong class="small"><i class="fas fa-user-tie me-1 text-info"></i>Collection by Staff</strong></div>
+            <div class="card-body p-3"><canvas id="staffChart" height="160"></canvas></div>
+        </div>
+    </div>
+    <div class="col-12 col-md-6 col-xl-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header py-2 px-3 bg-white"><strong class="small"><i class="fas fa-money-bill-wave me-1 text-success"></i>Payment Method</strong></div>
+            <div class="card-body p-3"><canvas id="payChart" height="200"></canvas></div>
+        </div>
+    </div>
+    <div class="col-12 col-md-6 col-xl-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header py-2 px-3 bg-white"><strong class="small"><i class="fas fa-tags me-1 text-danger"></i>Fee Type</strong></div>
+            <div class="card-body p-3"><canvas id="feeChart" height="200"></canvas></div>
+        </div>
+    </div>
 </div>
 <?php endif; ?>
 
 <!-- ── Detail table ── -->
 <div class="card border-0 shadow-sm">
-    <div class="card-header py-2 px-3 d-flex align-items-center justify-content-between no-print">
-        <strong class="small">
-            <i class="fas fa-table me-1 text-info"></i>
-            Transaction Breakdown &nbsp;·&nbsp; <?= h($period_label) ?>
-        </strong>
-        <span class="fw-bold small text-primary">
-            <?= count($rows) ?> record(s) &nbsp;|&nbsp; Total: <?= $currency ?> <?= number_format($grand_total, 2) ?>
-        </span>
+    <div class="card-header py-2 px-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <strong class="small"><i class="fas fa-table me-1 text-info"></i> Transaction Breakdown · <span id="recCount"><?= count($rows) ?></span> record(s)</strong>
+        <div class="d-flex align-items-center gap-2 no-print">
+            <input type="search" id="tableSearch" class="form-control form-control-sm" style="max-width:220px" placeholder="Search records…">
+        </div>
     </div>
     <div class="card-body p-0">
         <?php if (empty($rows)): ?>
@@ -328,6 +297,7 @@ require_once __DIR__ . '/../../includes/header.php';
                     'cash'           => 'fa-money-bill-wave',
                     'bank'           => 'fa-university',
                     'mobile_banking' => 'fa-mobile-alt',
+                    'old_erp'        => 'fa-database',
                 ];
                 ?>
                 <tbody id="tableBody">
@@ -335,8 +305,8 @@ require_once __DIR__ . '/../../includes/header.php';
                         $ft_color = $ft_colors[$r['fee_type']] ?? 'secondary';
                         $pm_icon  = $pm_icons[$r['payment_method']] ?? 'fa-credit-card';
                     ?>
-                    <tr class="data-row" data-page="<?= floor($i / 10) + 1 ?>">
-                        <td class="text-center text-muted small"><?= $i + 1 ?></td>
+                    <tr class="data-row">
+                        <td class="text-center text-muted small idx"><?= $i + 1 ?></td>
                         <td class="text-muted small text-nowrap"><?= date('d M Y', strtotime($r['collection_date'])) ?></td>
                         <td>
                             <div class="fw-semibold"><?= h($r['student_name']) ?></div>
@@ -370,178 +340,153 @@ require_once __DIR__ . '/../../includes/header.php';
                                 <?= h($r['invoice_no']) ?>&nbsp;<i class="fas fa-external-link-alt" style="font-size:.6rem"></i>
                             </a>
                         </td>
-                        <td class="text-end fw-bold text-success"><?= number_format((float)$r['amount'], 2) ?></td>
+                        <td class="text-end fw-bold text-success amt"><?= number_format((float)$r['amount'], 2) ?></td>
                     </tr>
                     <?php endforeach; ?>
                 </tbody>
                 <tfoot style="background:#e8f0fe">
                     <tr>
-                        <td colspan="8" class="text-end fw-bold" style="font-size:.85rem">
-                            <i class="fas fa-calculator me-1 text-primary"></i> Grand Total
-                        </td>
-                        <td class="text-end fw-bold text-primary" style="font-size:.9rem">
-                            <?= $currency ?> <?= number_format($grand_total, 2) ?>
-                        </td>
+                        <td colspan="8" class="text-end fw-bold" style="font-size:.85rem"><i class="fas fa-calculator me-1 text-primary"></i> Filtered Total</td>
+                        <td class="text-end fw-bold text-primary" style="font-size:.9rem" id="footTotal"><?= $currency ?> <?= number_format($grand_total, 2) ?></td>
                     </tr>
                 </tfoot>
             </table>
         </div>
-
-        <!-- ── Pagination (screen only) ── -->
-        <?php $total_pages = (int)ceil(count($rows) / 10); ?>
-        <?php if ($total_pages > 1): ?>
-        <div class="d-flex align-items-center justify-content-between px-3 py-2 border-top no-print">
-            <div class="small text-muted" id="pageInfo">Showing page 1 of <?= $total_pages ?></div>
-            <nav>
-                <ul class="pagination pagination-sm mb-0" id="pagination">
-                    <li class="page-item" id="prevBtn">
-                        <a class="page-link" href="#" onclick="changePage(-1);return false">
-                            <i class="fas fa-chevron-left"></i>
-                        </a>
-                    </li>
-                    <?php for ($p = 1; $p <= $total_pages; $p++): ?>
-                    <li class="page-item <?= $p === 1 ? 'active' : '' ?>" id="pageBtn<?= $p ?>">
-                        <a class="page-link" href="#" onclick="goToPage(<?= $p ?>);return false"><?= $p ?></a>
-                    </li>
-                    <?php endfor; ?>
-                    <li class="page-item" id="nextBtn">
-                        <a class="page-link" href="#" onclick="changePage(1);return false">
-                            <i class="fas fa-chevron-right"></i>
-                        </a>
-                    </li>
-                </ul>
-            </nav>
+        <div class="card-footer bg-white d-flex align-items-center justify-content-between flex-wrap gap-2 no-print">
+            <div class="d-flex align-items-center gap-2">
+                <label class="small text-muted mb-0">Rows:</label>
+                <select id="pageSize" class="form-select form-select-sm" style="width:auto">
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                    <option value="all">All</option>
+                </select>
+                <span class="small text-muted" id="pageInfo"></span>
+            </div>
+            <nav><ul class="pagination pagination-sm mb-0" id="pager"></ul></nav>
         </div>
-        <?php endif; ?>
         <?php endif; ?>
     </div>
 </div>
 
 </div><!-- #printArea -->
 
-<!-- ══════════════════════════════════════════════════════════════════════════
-     STYLES
-     ══════════════════════════════════════════════════════════════════════ -->
 <style>
-/* ── Screen ── */
-#collectionTable thead th {
-    font-size: .78rem;
-    text-transform: uppercase;
-    letter-spacing: .04em;
-    color: #495057;
-    border-bottom: 2px solid #d0d9f5;
-    white-space: nowrap;
-}
-#collectionTable tbody tr:hover {
-    background: #f5f8ff;
-}
-
-/* ── Print ── */
+#collectionTable thead th { font-size:.78rem; text-transform:uppercase; letter-spacing:.04em; color:#495057; border-bottom:2px solid #d0d9f5; white-space:nowrap; }
+#collectionTable tbody tr:hover { background:#f5f8ff; }
 @media print {
-    #sidebar, #topbar, .no-print, nav[aria-label="breadcrumb"] { display: none !important; }
-    #main-wrapper, body, html { margin: 0 !important; padding: 0 !important; }
-    #printArea { width: 100%; }
-
-    #collectionTable {
-        font-size: 7.8pt !important;
-        border-collapse: collapse;
-        width: 100%;
-    }
-    #collectionTable th,
-    #collectionTable td {
-        padding: 4px 5px !important;
-        border: 1px solid #ccc !important;
-        vertical-align: middle !important;
-    }
-    #collectionTable thead {
-        background: #dce8ff !important;
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-    }
-    #collectionTable tfoot {
-        background: #e0eaff !important;
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-    }
-
-    /* Hide external-link icon in print */
-    .inv-link .fa-external-link-alt { display: none !important; }
-    .inv-link { color: #000 !important; text-decoration: none !important; }
-
-    /* Show ALL rows when printing */
-    .data-row { display: table-row !important; }
-
-    .card { box-shadow: none !important; border: 1px solid #dee2e6 !important; }
-    .badge { border: 1px solid #aaa !important; background: transparent !important; color: #000 !important; }
-    #tableWrapper { overflow: visible !important; }
+    #sidebar, #topbar, .no-print, nav[aria-label="breadcrumb"] { display:none !important; }
+    #main-wrapper, body, html { margin:0 !important; padding:0 !important; }
+    #printArea { width:100%; }
+    #collectionTable { font-size:7.8pt !important; border-collapse:collapse; width:100%; }
+    #collectionTable th, #collectionTable td { padding:4px 5px !important; border:1px solid #ccc !important; vertical-align:middle !important; }
+    #collectionTable thead { background:#dce8ff !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    #collectionTable tfoot { background:#e0eaff !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .inv-link .fa-external-link-alt { display:none !important; }
+    .inv-link { color:#000 !important; text-decoration:none !important; }
+    .data-row { display:table-row !important; }
+    .card { box-shadow:none !important; border:1px solid #dee2e6 !important; }
+    .badge { border:1px solid #aaa !important; background:transparent !important; color:#000 !important; }
+    #tableWrapper { overflow:visible !important; }
 }
-@page {
-    size: A4 portrait;
-    margin: 12mm 10mm 14mm 10mm;
-}
+@page { size: A4 portrait; margin: 12mm 10mm 14mm 10mm; }
 </style>
 
-<!-- ══════════════════════════════════════════════════════════════════════════
-     SCRIPTS
-     ══════════════════════════════════════════════════════════════════════ -->
+<?php if (!empty($rows)): ?>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <script>
 (function () {
     'use strict';
+    var palette = ['#0d6efd','#16a34a','#7c3aed','#ea580c','#dc2626','#0891b2','#ca8a04','#db2777','#475569','#65a30d'];
 
-    /* ── Quick date range buttons ── */
+    var staffEl = document.getElementById('staffChart');
+    if (staffEl) new Chart(staffEl, {
+        type: 'bar',
+        data: { labels: <?= json_encode(array_keys($staff_totals)) ?>, datasets: [{ data: <?= json_encode(array_map('round', array_values($staff_totals))) ?>, backgroundColor: 'rgba(13,202,240,.75)', borderRadius: 4 }] },
+        options: { indexAxis: 'y', responsive: true, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } }
+    });
+    function pie(id, labels, data) {
+        var el = document.getElementById(id);
+        if (el) new Chart(el, { type: 'doughnut', data: { labels: labels, datasets: [{ data: data, backgroundColor: palette }] }, options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } } } } });
+    }
+    pie('payChart', <?= json_encode(array_keys($by_pay_method)) ?>, <?= json_encode(array_map('round', array_values($by_pay_method))) ?>);
+    pie('feeChart', <?= json_encode(array_keys($by_fee_type)) ?>, <?= json_encode(array_map('round', array_values($by_fee_type))) ?>);
+
+    // ── Quick date buttons ──
     var today = new Date();
-    function fmt(d) { return d.toISOString().slice(0, 10); }
-
+    function fmt(d) { return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
     document.querySelectorAll('.sc-btn').forEach(function (btn) {
         btn.addEventListener('click', function () {
-            var range = this.dataset.range;
-            var from, to = fmt(today);
-            if (range === 'today') {
-                from = to;
-            } else if (range === 'week') {
-                var d = new Date(today);
-                var day = d.getDay() || 7; // treat Sunday as 7
-                d.setDate(d.getDate() - day + 1); // Monday
-                from = fmt(d);
-            } else if (range === 'month') {
-                from = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-01';
-            } else if (range === 'year') {
-                from = today.getFullYear() + '-01-01';
-            }
+            var range = this.dataset.range, from, to = fmt(today);
+            if (range === 'today') { from = to; }
+            else if (range === 'week') { var d = new Date(today); d.setDate(d.getDate() - ((d.getDay()+6)%7)); from = fmt(d); }
+            else if (range === 'month') { from = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-01'; }
+            else if (range === 'year') { from = today.getFullYear() + '-01-01'; }
             document.getElementById('date_from').value = from;
-            document.getElementById('date_to').value   = to;
+            document.getElementById('date_to').value = to;
             document.getElementById('filterForm').submit();
         });
     });
 
-    /* ── Pagination ── */
-    var currentPage = 1;
-    var totalPages  = <?= $total_pages ?? 1 ?>;
+    // ── Client-side search + pagination ──
+    var table = document.getElementById('collectionTable');
+    if (!table) return;
+    var allRows = Array.prototype.slice.call(table.tBodies[0].rows);
+    var search = document.getElementById('tableSearch');
+    var pageSel = document.getElementById('pageSize');
+    var pager = document.getElementById('pager');
+    var pageInfo = document.getElementById('pageInfo');
+    var recCount = document.getElementById('recCount');
+    var footTotal = document.getElementById('footTotal');
+    var currency = <?= json_encode($currency) ?>;
+    var page = 1;
 
-    function showPage(page) {
-        if (page < 1) page = 1;
-        if (page > totalPages) page = totalPages;
-        currentPage = page;
-
-        document.querySelectorAll('.data-row').forEach(function (row) {
-            row.style.display = parseInt(row.dataset.page) === currentPage ? '' : 'none';
-        });
-
-        // Update pagination buttons
-        for (var p = 1; p <= totalPages; p++) {
-            var btn = document.getElementById('pageBtn' + p);
-            if (btn) btn.classList.toggle('active', p === currentPage);
-        }
-
-        var info = document.getElementById('pageInfo');
-        if (info) info.textContent = 'Showing page ' + currentPage + ' of ' + totalPages;
+    function money(n) { return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    function filtered() {
+        var q = (search.value || '').toLowerCase().trim();
+        if (!q) return allRows;
+        return allRows.filter(function (tr) { return tr.textContent.toLowerCase().indexOf(q) !== -1; });
     }
-
-    window.goToPage    = function (p) { showPage(p); };
-    window.changePage  = function (d) { showPage(currentPage + d); };
-
-    if (totalPages > 1) showPage(1);
+    function render() {
+        var rows = filtered();
+        var size = pageSel.value === 'all' ? rows.length : parseInt(pageSel.value, 10);
+        if (size < 1) size = rows.length || 1;
+        var pages = Math.max(1, Math.ceil(rows.length / size));
+        if (page > pages) page = pages;
+        var start = (page - 1) * size, end = start + size, total = 0;
+        allRows.forEach(function (tr) { tr.style.display = 'none'; });
+        rows.forEach(function (tr, i) {
+            total += parseFloat((tr.querySelector('.amt').textContent || '0').replace(/,/g, '')) || 0;
+            if (i >= start && i < end) { tr.style.display = ''; tr.querySelector('.idx').textContent = i + 1; }
+        });
+        recCount.textContent = rows.length;
+        footTotal.textContent = currency + ' ' + money(total);
+        pageInfo.textContent = rows.length ? ('Showing ' + (start + 1) + '–' + Math.min(end, rows.length) + ' of ' + rows.length) : 'No matching records';
+        pager.innerHTML = '';
+        if (pages > 1) {
+            function item(label, target, disabled, active) {
+                var li = document.createElement('li');
+                li.className = 'page-item' + (disabled ? ' disabled' : '') + (active ? ' active' : '');
+                var a = document.createElement('a');
+                a.className = 'page-link'; a.href = '#'; a.textContent = label;
+                a.addEventListener('click', function (e) { e.preventDefault(); if (!disabled && !active) { page = target; render(); } });
+                li.appendChild(a); pager.appendChild(li);
+            }
+            item('«', page - 1, page === 1, false);
+            var from = Math.max(1, page - 2), to = Math.min(pages, page + 2);
+            if (from > 1) item('1', 1, false, page === 1);
+            if (from > 2) item('…', page, true, false);
+            for (var p = from; p <= to; p++) item(String(p), p, false, p === page);
+            if (to < pages - 1) item('…', page, true, false);
+            if (to < pages) item(String(pages), pages, false, page === pages);
+            item('»', page + 1, page === pages, false);
+        }
+    }
+    search.addEventListener('input', function () { page = 1; render(); });
+    pageSel.addEventListener('change', function () { page = 1; render(); });
+    render();
 })();
 </script>
+<?php endif; ?>
 
 <?php require_once __DIR__ . '/../../includes/footer.php'; ?>

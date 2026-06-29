@@ -318,7 +318,8 @@ if (is_portal_student()) {
                        || strpos($current_path, '/email-templates/') !== false || strpos($current_path, '/change-log/') !== false;
     $is_internal_active = strpos($current_path, '/file-manager/') !== false || strpos($current_path, '/notice-signing/') !== false || strpos($current_path, '/my-signature/') !== false;
     $is_seo_active      = strpos($current_path, '/seo/') !== false;
-    $is_accounting_active = strpos($current_path, '/accounting/') !== false;
+    $is_reports_active    = strpos($current_path, '/accounting/reports/') !== false;
+    $is_accounting_active = strpos($current_path, '/accounting/') !== false && !$is_reports_active;
     $is_scholarship_active = strpos($current_path, '/scholarship/') !== false;
     $is_vc_approval_active = strpos($current_path, '/vc-approval/') !== false;
     $is_medical_active = strpos($current_path, '/medical-center/') !== false;
@@ -1391,7 +1392,7 @@ if (is_portal_student()) {
     <?php endif; ?>
 
     <!-- ── Accounting ── -->
-    <?php if (is_super_admin() || can_access('accounting') || can_access('accounting-coa') || can_access('accounting-reports')): ?>
+    <?php if (is_super_admin() || can_access('accounting') || can_access('accounting-coa')): ?>
     <button class="nav-group-toggle <?= $is_accounting_active ? '' : 'collapsed' ?>"
             data-bs-toggle="collapse" data-bs-target="#grp-accounting"
             aria-expanded="<?= $is_accounting_active ? 'true' : 'false' ?>">
@@ -1445,7 +1446,53 @@ if (is_portal_student()) {
                 </a>
             </li>
             <?php endif; ?>
-            <?php if (is_super_admin() || can_access('accounting-reports')): ?>
+            <?php if (is_super_admin()): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/accounting/settings.php"
+                   class="<?= strpos($current_path, '/accounting/settings') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-cog"></i> Settings
+                </a>
+            </li>
+            <?php endif; ?>
+        </ul>
+    </div>
+    <?php endif; ?>
+
+    <!-- ── Reports (financial reports module) ── -->
+    <?php if (is_super_admin() || can_access('accounting-reports')): ?>
+    <button class="nav-group-toggle <?= $is_reports_active ? '' : 'collapsed' ?>"
+            data-bs-toggle="collapse" data-bs-target="#grp-reports"
+            aria-expanded="<?= $is_reports_active ? 'true' : 'false' ?>">
+        <i class="fas fa-chart-pie grp-icon" style="color:#0d6efd"></i>
+        Reports
+        <i class="fas fa-chevron-down toggle-icon"></i>
+    </button>
+    <div class="collapse <?= $is_reports_active ? 'show' : '' ?>" id="grp-reports">
+        <ul class="nav flex-column grp-items">
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/accounting/reports/index.php"
+                   class="<?= preg_match('#/accounting/reports/index\.php$#', $current_path) ? 'active' : '' ?>">
+                    <i class="fas fa-th-large"></i> Reports Home
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/accounting/reports/student-collection.php"
+                   class="<?= strpos($current_path, '/accounting/reports/student-collection') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-file-invoice-dollar"></i> Student Collection
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/accounting/reports/staff-collection.php"
+                   class="<?= strpos($current_path, '/accounting/reports/staff-collection') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-users"></i> Staff Collection
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/accounting/reports/due-report.php"
+                   class="<?= strpos($current_path, '/accounting/reports/due-report') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-exclamation-circle"></i> Due Report
+                </a>
+            </li>
             <li class="nav-item">
                 <a href="<?= APP_URL ?>/accounting/reports/trial-balance.php"
                    class="<?= strpos($current_path, '/accounting/reports/trial-balance') !== false ? 'active' : '' ?>">
@@ -1488,15 +1535,6 @@ if (is_portal_student()) {
                     <i class="fas fa-university"></i> Bank Book
                 </a>
             </li>
-            <?php endif; ?>
-            <?php if (is_super_admin()): ?>
-            <li class="nav-item">
-                <a href="<?= APP_URL ?>/accounting/settings.php"
-                   class="<?= strpos($current_path, '/accounting/settings') !== false ? 'active' : '' ?>">
-                    <i class="fas fa-cog"></i> Settings
-                </a>
-            </li>
-            <?php endif; ?>
         </ul>
     </div>
     <?php endif; ?>
