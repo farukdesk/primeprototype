@@ -513,7 +513,7 @@ $as_of_label = date('d M Y', strtotime($f_as_of_date));
         <h4 class="mb-0 fw-semibold"><i class="fas fa-exclamation-circle me-2 text-danger"></i>Student Due Report</h4>
         <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small">
             <li class="breadcrumb-item"><a href="<?= APP_URL ?>">Dashboard</a></li>
-            <li class="breadcrumb-item"><a href="<?= APP_URL ?>/accounting/index.php">Accounting</a></li>
+            <li class="breadcrumb-item"><a href="<?= APP_URL ?>/accounting/reports/index.php">Reports</a></li>
             <li class="breadcrumb-item active">Due Report</li>
         </ol></nav>
     </div>
@@ -655,6 +655,87 @@ $as_of_label = date('d M Y', strtotime($f_as_of_date));
         </div>
     </div>
 </div>
+
+<!-- ── Visual summary charts ── -->
+<?php if (!empty($rows)):
+    // Build chart datasets sorted by outstanding (top 8, rest grouped)
+    $due_chart = function (array $agg, string $key, int $n = 8): array {
+        $list = array_values($agg);
+        usort($list, fn($a, $b) => $b['outstanding'] <=> $a['outstanding']);
+        $labels = []; $out = []; $paid = [];
+        $top = array_slice($list, 0, $n);
+        foreach ($top as $row) {
+            $labels[] = $row[$key] !== '' ? $row[$key] : 'Unspecified';
+            $out[]    = round($row['outstanding']);
+            $paid[]   = round($row['total_paid']);
+        }
+        if (count($list) > $n) {
+            $rest = array_slice($list, $n);
+            $labels[] = 'Others';
+            $out[]    = round(array_sum(array_column($rest, 'outstanding')));
+            $paid[]   = round(array_sum(array_column($rest, 'total_paid')));
+        }
+        return ['labels' => $labels, 'outstanding' => $out, 'paid' => $paid];
+    };
+    $chart_prog  = $due_chart($by_program, 'program');
+    $chart_dpt   = $due_chart($by_dept, 'dept');
+    $chart_bat   = $due_chart($by_batch, 'batch');
+?>
+<div class="row g-3 mb-4 no-print">
+    <div class="col-12 col-xl-4">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header py-2 px-3 bg-white"><strong class="small"><i class="fas fa-chart-pie me-1 text-danger"></i>Collected vs Outstanding</strong></div>
+            <div class="card-body p-3 d-flex align-items-center justify-content-center"><canvas id="paidDueChart" height="220"></canvas></div>
+        </div>
+    </div>
+    <div class="col-12 col-xl-8">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header py-2 px-3 bg-white"><strong class="small"><i class="fas fa-graduation-cap me-1 text-primary"></i>Outstanding by Program</strong></div>
+            <div class="card-body p-3"><canvas id="progDueChart" height="120"></canvas></div>
+        </div>
+    </div>
+    <div class="col-12 col-xl-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header py-2 px-3 bg-white"><strong class="small"><i class="fas fa-building me-1 text-info"></i>Outstanding by Department</strong></div>
+            <div class="card-body p-3"><canvas id="deptDueChart" height="180"></canvas></div>
+        </div>
+    </div>
+    <div class="col-12 col-xl-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header py-2 px-3 bg-white"><strong class="small"><i class="fas fa-layer-group me-1 text-warning"></i>Outstanding by Batch</strong></div>
+            <div class="card-body p-3"><canvas id="batchDueChart" height="180"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+    var pdEl = document.getElementById('paidDueChart');
+    if (pdEl) new Chart(pdEl, {
+        type: 'doughnut',
+        data: { labels: ['Collected', 'Outstanding'], datasets: [{ data: [<?= round($kpi_total_paid) ?>, <?= round($kpi_total_out) ?>], backgroundColor: ['#16a34a', '#dc2626'] }] },
+        options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+    });
+    function stackedBar(id, data, horizontal) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        new Chart(el, {
+            type: 'bar',
+            data: { labels: data.labels, datasets: [
+                { label: 'Outstanding', data: data.outstanding, backgroundColor: 'rgba(220,38,38,.8)', borderRadius: 4 },
+                { label: 'Collected',  data: data.paid,        backgroundColor: 'rgba(22,163,74,.65)', borderRadius: 4 }
+            ] },
+            options: { indexAxis: horizontal ? 'y' : 'x', responsive: true, plugins: { legend: { position: 'top' } },
+                scales: { x: { stacked: true, beginAtZero: true }, y: { stacked: true, beginAtZero: true } } }
+        });
+    }
+    stackedBar('progDueChart',  <?= json_encode($chart_prog) ?>, false);
+    stackedBar('deptDueChart',  <?= json_encode($chart_dpt) ?>,  true);
+    stackedBar('batchDueChart', <?= json_encode($chart_bat) ?>,  true);
+})();
+</script>
+<?php endif; ?>
 
 <!-- ── Print report (hidden on screen) ── -->
 <?php
