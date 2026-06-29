@@ -15,6 +15,7 @@ $staff_id   = (int)($_GET['staff_id'] ?? 0);
 
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_from)) { $date_from = ''; }
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_to))   { $date_to   = ''; }
+if ($date_from && $date_to && $date_from > $date_to) { [$date_from, $date_to] = [$date_to, $date_from]; }
 
 // ── Build query ───────────────────────────────────────────────────────────────
 $where  = ['v.status = \'posted\'', 'v.is_deleted = 0'];
@@ -419,7 +420,7 @@ require_once __DIR__ . '/../../includes/header.php';
         btn.addEventListener('click', function () {
             var range = this.dataset.range, from, to = fmt(today);
             if (range === 'today') { from = to; }
-            else if (range === 'week') { var d = new Date(today); d.setDate(d.getDate() - ((d.getDay()+6)%7)); from = fmt(d); }
+            else if (range === "week") { var d = new Date(today); d.setDate(d.getDate() - ((d.getDay()+6)%7)); from = fmt(d); } // (getDay()+6)%7 = days since Monday
             else if (range === 'month') { from = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-01'; }
             else if (range === 'year') { from = today.getFullYear() + '-01-01'; }
             document.getElementById('date_from').value = from;
