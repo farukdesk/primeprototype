@@ -1049,13 +1049,13 @@ if (is_portal_student()) {
     </div>
     <?php endif; ?>
 
-    <!-- ── Semester Drop ── -->
+    <!-- ── Semester Drop / Dropout ── -->
     <?php if (is_super_admin() || can_access('semester-drop')): ?>
     <button class="nav-group-toggle <?= $is_semester_drop_active ? '' : 'collapsed' ?>"
             data-bs-toggle="collapse" data-bs-target="#grp-semester-drop"
             aria-expanded="<?= $is_semester_drop_active ? 'true' : 'false' ?>">
         <i class="fas fa-pause-circle grp-icon" style="color:#f59e0b"></i>
-        Semester Drop
+        Semester Drop / Dropout
         <i class="fas fa-chevron-down toggle-icon"></i>
     </button>
     <div class="collapse <?= $is_semester_drop_active ? 'show' : '' ?>" id="grp-semester-drop">
@@ -1063,14 +1063,20 @@ if (is_portal_student()) {
             <li class="nav-item">
                 <a href="<?= APP_URL ?>/semester-drop/index.php"
                    class="<?= ($is_semester_drop_active && strpos($current_path, '/create') === false) ? 'active' : '' ?>">
-                    <i class="fas fa-list"></i> All Drops
+                    <i class="fas fa-list"></i> All Records
                 </a>
             </li>
             <?php if (is_super_admin() || can_access('semester-drop', 'can_create')): ?>
             <li class="nav-item">
                 <a href="<?= APP_URL ?>/semester-drop/create.php"
-                   class="<?= strpos($current_path, '/semester-drop/create') !== false ? 'active' : '' ?>">
+                   class="<?= strpos($current_path, '/semester-drop/create.php') !== false ? 'active' : '' ?>">
                     <i class="fas fa-plus"></i> New Semester Drop
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/semester-drop/create-dropout.php"
+                   class="<?= strpos($current_path, '/semester-drop/create-dropout.php') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-user-slash"></i> Add Dropout Student
                 </a>
             </li>
             <?php endif; ?>

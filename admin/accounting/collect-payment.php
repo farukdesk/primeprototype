@@ -721,6 +721,12 @@ require_once __DIR__ . '/../includes/header.php';
             <div id="semesterDropBannerText"></div>
         </div>
 
+        <!-- Dropout (frozen account) banner (populated by JS) -->
+        <div id="dropoutBanner" class="alert alert-dark d-flex align-items-center gap-2" style="display:none;">
+            <i class="fas fa-user-slash fa-lg"></i>
+            <div id="dropoutBannerText"></div>
+        </div>
+
         <!-- ── Smart Payment + Additional Payment (two columns) ───────────────
              Left: Smart Payment (distribute an amount across scheduled dues).
              Right: Additional Payment (variable exam/other fees) and a live list
@@ -2022,6 +2028,27 @@ require_once __DIR__ . '/../includes/header.php';
             st.className = 'badge bg-warning text-dark border px-3 py-2';
         } else if (sdBanner) {
             sdBanner.style.display = 'none';
+        }
+
+        // Dropout (frozen account) banner + status badge
+        const doBanner = document.getElementById('dropoutBanner');
+        const dout = data.dropout;
+        if (dout) {
+            const fmtD = (d) => {
+                const p = String(d).split('-');
+                if (p.length !== 3) return d;
+                const dt = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2]));
+                return dt.toLocaleDateString('en-GB', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
+            };
+            document.getElementById('dropoutBannerText').innerHTML =
+                '<strong>Official dropout.</strong> This account has been <strong>frozen</strong> since <strong>'
+                + fmtD(dout.effective_date) + '</strong> and is <em>no longer counted as a due</em>.';
+            doBanner.style.display = '';
+            const st2 = document.getElementById('infoStatus');
+            st2.textContent = 'Dropped Out';
+            st2.className = 'badge bg-dark border px-3 py-2';
+        } else if (doBanner) {
+            doBanner.style.display = 'none';
         }
 
         const tbody = document.getElementById('feeTableBody');

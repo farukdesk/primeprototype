@@ -13,15 +13,19 @@ if (!$drop) {
 
 $page_title = 'Semester Drop – ' . $drop['student_name'];
 $today      = date('Y-m-d');
-$is_current = $drop['status'] === 'active'
+$is_dropout = ($drop['kind'] ?? 'drop') === 'dropout';
+$is_current = !$is_dropout && $drop['status'] === 'active'
     && $drop['drop_start'] <= $today && $today <= $drop['drop_end'];
+if ($is_dropout) {
+    $page_title = 'Dropout – ' . $drop['student_name'];
+}
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
 <nav aria-label="breadcrumb" class="mb-3">
     <ol class="breadcrumb mb-0" style="font-size:.83rem;">
-        <li class="breadcrumb-item"><a href="<?= APP_URL ?>/semester-drop/index.php">Semester Drop</a></li>
+        <li class="breadcrumb-item"><a href="<?= APP_URL ?>/semester-drop/index.php">Semester Drop / Dropout</a></li>
         <li class="breadcrumb-item active"><?= h($drop['student_name']) ?></li>
     </ol>
 </nav>
@@ -30,13 +34,21 @@ require_once __DIR__ . '/../includes/header.php';
 
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <h1 class="h4 mb-0">
-        <i class="fas fa-pause-circle me-2 text-warning"></i><?= h($drop['student_name']) ?>
+        <i class="fas <?= $is_dropout ? 'fa-user-slash text-dark' : 'fa-pause-circle text-warning' ?> me-2"></i><?= h($drop['student_name']) ?>
         <small class="text-muted">(<?= h($drop['student_sid']) ?>)</small>
     </h1>
     <div class="d-flex gap-2">
-        <?= sd_status_badge($drop['status']) ?>
-        <?php if ($is_current): ?>
-        <span class="badge bg-warning text-dark"><i class="fas fa-circle me-1" style="font-size:.5rem;"></i>On break now</span>
+        <?php if ($is_dropout): ?>
+            <?php if ($drop['status'] === 'active'): ?>
+            <span class="badge bg-dark"><i class="fas fa-snowflake me-1"></i>Dropped Out · Account Frozen</span>
+            <?php else: ?>
+            <span class="badge bg-success"><i class="fas fa-undo me-1"></i>Re-instated</span>
+            <?php endif; ?>
+        <?php else: ?>
+            <?= sd_status_badge($drop['status']) ?>
+            <?php if ($is_current): ?>
+            <span class="badge bg-warning text-dark"><i class="fas fa-circle me-1" style="font-size:.5rem;"></i>On break now</span>
+            <?php endif; ?>
         <?php endif; ?>
     </div>
 </div>
@@ -44,7 +56,7 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="row g-4">
     <div class="col-lg-7">
         <div class="card">
-            <div class="card-header py-3"><h6 class="mb-0 fw-semibold">Drop Details</h6></div>
+            <div class="card-header py-3"><h6 class="mb-0 fw-semibold"><?= $is_dropout ? 'Dropout Details' : 'Drop Details' ?></h6></div>
             <div class="card-body">
                 <dl class="row mb-0">
                     <dt class="col-sm-4 text-muted">Student</dt>
@@ -54,6 +66,12 @@ require_once __DIR__ . '/../includes/header.php';
                         </a> <span class="text-muted small">(<?= h($drop['student_sid']) ?>)</span>
                     </dd>
 
+                    <?php if ($is_dropout): ?>
+                    <dt class="col-sm-4 text-muted">Dropout Effective</dt>
+                    <dd class="col-sm-8"><?= h(date('d M Y', strtotime($drop['drop_start']))) ?>
+                        <span class="text-muted small">– account frozen from this date</span>
+                    </dd>
+                    <?php else: ?>
                     <dt class="col-sm-4 text-muted">Semester Type</dt>
                     <dd class="col-sm-8">
                         <span class="badge bg-info text-dark"><?= h(sd_type_label($drop['semester_type'])) ?></span>
@@ -65,6 +83,7 @@ require_once __DIR__ . '/../includes/header.php';
 
                     <dt class="col-sm-4 text-muted">Drop End</dt>
                     <dd class="col-sm-8"><?= h(date('d M Y', strtotime($drop['drop_end']))) ?></dd>
+                    <?php endif; ?>
 
                     <dt class="col-sm-4 text-muted">Reason</dt>
                     <dd class="col-sm-8"><?= $drop['reason'] ? nl2br(h($drop['reason'])) : '<span class="text-muted">—</span>' ?></dd>
@@ -75,7 +94,7 @@ require_once __DIR__ . '/../includes/header.php';
                     </dd>
 
                     <?php if ($drop['status'] === 'cancelled'): ?>
-                    <dt class="col-sm-4 text-muted">Cancelled by</dt>
+                    <dt class="col-sm-4 text-muted"><?= $is_dropout ? 'Re-instated by' : 'Cancelled by' ?></dt>
                     <dd class="col-sm-8"><?= h($drop['cancelled_by_name'] ?? '—') ?>
                         <?php if ($drop['cancelled_at']): ?>
                         <span class="text-muted small">on <?= h(date('d M Y, g:i a', strtotime($drop['cancelled_at']))) ?></span>
@@ -103,10 +122,43 @@ require_once __DIR__ . '/../includes/header.php';
                 <?php else: ?>
                 <p class="text-muted mb-0"><i class="fas fa-info-circle me-1"></i>No evidence attached (recorded without evidence).</p>
                 <?php endif; ?>
+
+                <?php if ($is_dropout && $drop['status'] === 'cancelled' && !empty($drop['reinstate_stored_name'])): ?>
+                <hr>
+                <p class="small text-muted mb-1 fw-semibold">Re-instatement evidence</p>
+                <a href="<?= sd_evidence_url($drop['reinstate_stored_name']) ?>" target="_blank"
+                   class="btn btn-outline-success btn-sm">
+                    <i class="fas fa-paperclip me-1"></i>
+                    <?= h($drop['reinstate_original_name'] ?: 'View evidence') ?>
+                </a>
+                <?php endif; ?>
             </div>
         </div>
 
-        <?php if ($drop['status'] === 'active' && sd_can_delete()): ?>
+        <?php if ($is_dropout && $drop['status'] === 'active' && sd_can_delete()): ?>
+        <div class="card border-success">
+            <div class="card-header py-3 bg-success-subtle"><h6 class="mb-0 fw-semibold text-success">Re-instate Dropout</h6></div>
+            <div class="card-body">
+                <p class="small text-muted">Re-instating restores the student to <strong>Active</strong> and un-freezes their account. Evidence and a comment are required.</p>
+                <form method="post" action="<?= APP_URL ?>/semester-drop/reinstate.php" enctype="multipart/form-data"
+                      onsubmit="return confirm('Re-instate this student? Their status will return to Active and their account un-frozen.');">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="id" value="<?= (int)$drop['id'] ?>">
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold">Comment <span class="text-danger">*</span></label>
+                        <textarea name="reinstate_comment" class="form-control form-control-sm" rows="2" required></textarea>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold">Evidence <span class="text-danger">*</span></label>
+                        <input type="file" name="evidence" class="form-control form-control-sm"
+                               accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx" required>
+                        <small class="text-muted">Image, PDF or Word, up to 20 MB.</small>
+                    </div>
+                    <button class="btn btn-success btn-sm"><i class="fas fa-undo me-1"></i>Re-instate Student</button>
+                </form>
+            </div>
+        </div>
+        <?php elseif (!$is_dropout && $drop['status'] === 'active' && sd_can_delete()): ?>
         <div class="card border-danger">
             <div class="card-header py-3 bg-danger-subtle"><h6 class="mb-0 fw-semibold text-danger">Cancel Drop</h6></div>
             <div class="card-body">

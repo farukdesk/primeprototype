@@ -315,6 +315,12 @@ $default_form_id_fee = acc_student_form_id_total_fee(); // 1000 BDT
 
 $rows = [];
 foreach ($raw_rows as $r) {
+    // Official dropout: account frozen – no longer counted as a due anywhere.
+    if (function_exists('sd_student_dropped_out')
+        && sd_student_dropped_out((int)($r['student_id'] ?? 0))) {
+        continue;
+    }
+
     $form_id_fee = ((float)$r['form_id_fee'] > 0) ? (float)$r['form_id_fee'] : $default_form_id_fee;
 
     $num_sems = (int)$r['num_sems'];

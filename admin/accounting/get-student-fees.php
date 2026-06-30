@@ -103,6 +103,16 @@ try {
                 ];
               })()
             : null),
+        'dropout'         => (function_exists('sd_active_dropout_for_student')
+            ? (function () use ($student) {
+                $row = sd_active_dropout_for_student((int)$student['id']);
+                if (!$row) { return null; }
+                return [
+                    'effective_date' => $row['drop_start'],
+                    'reason'         => $row['reason'] ?? null,
+                ];
+              })()
+            : null),
         'summary'         => $summary,
         'income_accounts' => $income_accounts,
         'payments'        => $payments,
