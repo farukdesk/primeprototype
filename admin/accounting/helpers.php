@@ -3091,7 +3091,13 @@ function acc_outstanding_through_current_month(int $package_id): float
 
     $sd_student_id = (int)($pkg['student_id'] ?? 0);
 
-    $months     = (float)($pkg['total_months']       ?? 0);
+    // Official dropout: from the dropout effective date the account is frozen and
+    // is no longer counted as a due in any financial fact, so report zero.
+    if ($sd_student_id > 0 && function_exists('sd_student_dropped_out')
+        && sd_student_dropped_out($sd_student_id)) {
+        return 0.0;
+    }
+
     $mps        = (float)($pkg['months_per_semester'] ?? 0);
     $months_int = max(1, (int)round($mps));
     $reg_fee    = (float)($pkg['reg_fee_per_semester'] ?? 0.0);

@@ -3,7 +3,7 @@ require_once __DIR__ . '/../includes/auth.php';
 require_access('semester-drop', 'can_create');
 require_once __DIR__ . '/helpers.php';
 
-$page_title = 'New Semester Drop';
+$page_title = 'New Dropout';
 $db         = db();
 
 $is_super = is_super_admin();
@@ -13,17 +13,16 @@ $me       = auth_user();
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
-    $student_id = (int)($_POST['student_id'] ?? 0);
-    $type       = ($_POST['semester_type'] ?? '') === 'tri' ? 'tri' : 'bi';
-    $drop_start = trim($_POST['drop_start'] ?? '');
-    $reason     = trim($_POST['reason'] ?? '');
+    $student_id     = (int)($_POST['student_id'] ?? 0);
+    $effective_date = trim($_POST['effective_date'] ?? '');
+    $reason         = trim($_POST['reason'] ?? '');
 
     $errors = [];
 
     // Validate student
     $student = null;
     if ($student_id > 0) {
-        $st = $db->prepare('SELECT id, full_name, student_id FROM students WHERE id = ?');
+        $st = $db->prepare('SELECT id, full_name, student_id, status FROM students WHERE id = ?');
         $st->execute([$student_id]);
         $student = $st->fetch(PDO::FETCH_ASSOC) ?: null;
     }
@@ -31,28 +30,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'Please select a valid student.';
     }
 
-    // Validate drop start date
-    $start_dt = false;
-    if ($drop_start !== '') {
-        $start_dt = \DateTimeImmutable::createFromFormat('!Y-m-d', $drop_start);
+    // Validate effective date
+    $eff_dt = false;
+    if ($effective_date !== '') {
+        $eff_dt = \DateTimeImmutable::createFromFormat('!Y-m-d', $effective_date);
     }
-    if (!($start_dt instanceof \DateTimeImmutable) || $start_dt->format('Y-m-d') !== $drop_start) {
-        $errors[] = 'Please provide a valid drop start date.';
-        $start_dt = false;
+    if (!($eff_dt instanceof \DateTimeImmutable) || $eff_dt->format('Y-m-d') !== $effective_date) {
+        $errors[] = 'Please provide a valid dropout effective date.';
+        $eff_dt = false;
     }
 
-    // Prevent overlapping active drops for the same student
-    if ($student && $start_dt) {
-        $new_end = sd_compute_end($drop_start, $type);
-        $ov = $db->prepare(
-            'SELECT COUNT(*) FROM semester_drops
-              WHERE student_id = ? AND status = \'active\' AND kind = \'drop\'
-                AND drop_start <= ? AND drop_end >= ?'
-        );
-        $ov->execute([$student_id, $new_end, $drop_start]);
-        if ((int)$ov->fetchColumn() > 0) {
-            $errors[] = 'This student already has an active semester drop overlapping this period.';
-        }
+    // Already dropped out?
+    if ($student && sd_student_dropped_out((int)$student['id'])) {
+        $errors[] = 'This student is already recorded as an official dropout.';
     }
 
     // Evidence: required unless the creator is a super admin
@@ -71,15 +61,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (empty($errors) && $student) {
-        $new_id = sd_create_drop(
+        $new_id = sd_create_dropout(
             (int)$student['id'],
-            $type,
-            $drop_start,
+            $effective_date,
             $reason !== '' ? $reason : null,
             $evidence_file_id,
             (int)$me['id']
         );
-        flash_set('success', 'Semester drop recorded for ' . h($student['full_name']) . '.');
+        flash_set('success', h($student['full_name']) . ' has been recorded as an official dropout. Their account is now frozen.');
         clear_old();
         redirect(APP_URL . '/semester-drop/view.php?id=' . $new_id);
     }
@@ -88,13 +77,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash_set('error', $e);
     }
     save_old([
-        'student_id'    => $student_id,
-        'student_label' => trim($_POST['student_label'] ?? ''),
-        'semester_type' => $type,
-        'drop_start'    => $drop_start,
-        'reason'        => $reason,
+        'student_id'     => $student_id,
+        'student_label'  => trim($_POST['student_label'] ?? ''),
+        'effective_date' => $effective_date,
+        'reason'         => $reason,
     ]);
-    redirect(APP_URL . '/semester-drop/create.php');
+    redirect(APP_URL . '/semester-drop/create-dropout.php');
 }
 
 require_once __DIR__ . '/../includes/header.php';
@@ -102,12 +90,12 @@ require_once __DIR__ . '/../includes/header.php';
 
 <nav aria-label="breadcrumb" class="mb-3">
     <ol class="breadcrumb mb-0" style="font-size:.83rem;">
-        <li class="breadcrumb-item"><a href="<?= APP_URL ?>/semester-drop/index.php">Semester Drop</a></li>
-        <li class="breadcrumb-item active">New</li>
+        <li class="breadcrumb-item"><a href="<?= APP_URL ?>/semester-drop/index.php">Semester Drop / Dropout</a></li>
+        <li class="breadcrumb-item active">New Dropout</li>
     </ol>
 </nav>
 
-<h1 class="h3 mb-4"><i class="fas fa-pause-circle me-2 text-warning"></i>New Semester Drop</h1>
+<h1 class="h3 mb-4"><i class="fas fa-user-slash me-2 text-dark"></i>New Dropout</h1>
 
 <?= flash_show() ?>
 
@@ -130,48 +118,19 @@ require_once __DIR__ . '/../includes/header.php';
                     <small class="text-muted">Start typing to search, then pick the student from the list.</small>
                 </div>
 
-                <!-- Semester type -->
+                <!-- Effective date -->
                 <div class="mb-4">
-                    <label class="form-label fw-semibold">Semester Type <span class="text-danger">*</span></label>
-                    <div class="row g-2">
-                        <div class="col-sm-6">
-                            <input type="radio" class="btn-check" name="semester_type" id="type_bi" value="bi"
-                                   <?= old('semester_type', 'bi') === 'tri' ? '' : 'checked' ?>>
-                            <label class="btn btn-outline-warning w-100 text-start p-3" for="type_bi">
-                                <span class="fw-bold d-block">Bi-semester</span>
-                                <small class="text-muted">Blocks <strong>6 months</strong></small>
-                            </label>
-                        </div>
-                        <div class="col-sm-6">
-                            <input type="radio" class="btn-check" name="semester_type" id="type_tri" value="tri"
-                                   <?= old('semester_type') === 'tri' ? 'checked' : '' ?>>
-                            <label class="btn btn-outline-warning w-100 text-start p-3" for="type_tri">
-                                <span class="fw-bold d-block">Tri-semester</span>
-                                <small class="text-muted">Blocks <strong>4 months</strong></small>
-                            </label>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Drop window -->
-                <div class="row g-3 mb-4">
-                    <div class="col-sm-6">
-                        <label class="form-label fw-semibold">Drop Start <span class="text-danger">*</span></label>
-                        <input type="date" name="drop_start" id="drop_start" class="form-control"
-                               value="<?= old('drop_start', date('Y-m-d')) ?>" required>
-                    </div>
-                    <div class="col-sm-6">
-                        <label class="form-label fw-semibold">Drop End <span class="text-muted">(auto)</span></label>
-                        <input type="text" id="drop_end_preview" class="form-control" readonly
-                               placeholder="Calculated from type & start">
-                    </div>
+                    <label class="form-label fw-semibold">Dropout Effective Date <span class="text-danger">*</span></label>
+                    <input type="date" name="effective_date" class="form-control"
+                           value="<?= old('effective_date', date('Y-m-d')) ?>" required>
+                    <small class="text-muted">From this date the account is frozen and no longer counted as a due.</small>
                 </div>
 
                 <!-- Reason -->
                 <div class="mb-4">
                     <label class="form-label fw-semibold">Reason <span class="text-muted">(optional)</span></label>
                     <textarea name="reason" class="form-control" rows="2"
-                              placeholder="Why is the student taking a break?"><?= old('reason') ?></textarea>
+                              placeholder="Why is the student dropping out?"><?= old('reason') ?></textarea>
                 </div>
 
                 <!-- Evidence -->
@@ -183,7 +142,7 @@ require_once __DIR__ . '/../includes/header.php';
                            accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx" <?= $is_super ? '' : 'required' ?>>
                     <small class="text-muted">
                         <?php if ($is_super): ?>
-                        As a Super Administrator you may record a drop without evidence.
+                        As a Super Administrator you may record a dropout without evidence.
                         <?php else: ?>
                         A supporting document is required (image, PDF or Word, up to 20 MB).
                         <?php endif; ?>
@@ -191,7 +150,10 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
             </div>
             <div class="card-footer d-flex gap-2">
-                <button type="submit" class="btn btn-warning"><i class="fas fa-save me-1"></i>Save Semester Drop</button>
+                <button type="submit" class="btn btn-dark"
+                        onclick="return confirm('Record this student as an official dropout? Their account will be frozen and their status set to Dropped.');">
+                    <i class="fas fa-user-slash me-1"></i>Record Dropout
+                </button>
                 <a href="<?= APP_URL ?>/semester-drop/index.php" class="btn btn-outline-secondary">Cancel</a>
             </div>
         </form>
@@ -199,12 +161,12 @@ require_once __DIR__ . '/../includes/header.php';
     <div class="col-lg-4">
         <div class="card bg-light border-0">
             <div class="card-body">
-                <h6 class="fw-semibold"><i class="fas fa-info-circle me-1 text-warning"></i>How it works</h6>
+                <h6 class="fw-semibold"><i class="fas fa-info-circle me-1 text-dark"></i>What a dropout does</h6>
                 <ul class="small text-muted mb-0 ps-3">
-                    <li>A <strong>Bi-semester</strong> drop blocks <strong>6 months</strong>.</li>
-                    <li>A <strong>Tri-semester</strong> drop blocks <strong>4 months</strong>.</li>
-                    <li>The dropped months are <strong>deferred, not waived</strong>: the monthly tuition is pushed to the end of the schedule, so the student still owes the full programme total and the <strong>programme end is extended</strong> by the drop length.</li>
-                    <li>During the blocked window the dropped months show as <em>Semester Drop</em> placeholders in Accounts, Collect Payment and the student profile, and are not counted as due until their deferred calendar month arrives.</li>
+                    <li>The student is officially marked as having <strong>left the university</strong>.</li>
+                    <li>Their student <strong>status becomes “Dropped”</strong>.</li>
+                    <li>From the effective date the <strong>account is frozen</strong> – it is no longer counted as a due in any financial fact (due reports, outstanding balances, etc.).</li>
+                    <li>Re-instating a dropout later requires <strong>evidence and a comment</strong>.</li>
                     <li>Evidence is mandatory unless recorded by a Super Administrator.</li>
                 </ul>
             </div>
@@ -218,10 +180,6 @@ require_once __DIR__ . '/../includes/header.php';
     var input    = document.getElementById('student_search');
     var hidden   = document.getElementById('student_id');
     var results  = document.getElementById('student_results');
-    var typeBi   = document.getElementById('type_bi');
-    var typeTri  = document.getElementById('type_tri');
-    var startEl  = document.getElementById('drop_start');
-    var endEl    = document.getElementById('drop_end_preview');
     var timer    = null;
 
     function clearResults() { results.innerHTML = ''; }
@@ -261,25 +219,5 @@ require_once __DIR__ . '/../includes/header.php';
     document.addEventListener('click', function (e) {
         if (!results.contains(e.target) && e.target !== input) clearResults();
     });
-
-    // ── Drop end preview ──────────────────────────────────────────────────
-    function monthsForType() {
-        return (typeTri && typeTri.checked) ? 4 : 6;
-    }
-    function updateEnd() {
-        if (!startEl.value) { endEl.value = ''; return; }
-        var parts = startEl.value.split('-');
-        if (parts.length !== 3) { endEl.value = ''; return; }
-        var d = new Date(Date.UTC(+parts[0], +parts[1] - 1, +parts[2]));
-        d.setUTCMonth(d.getUTCMonth() + monthsForType());
-        d.setUTCDate(d.getUTCDate() - 1);
-        var opts = { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' };
-        endEl.value = d.toLocaleDateString('en-GB', opts) + '  (' + monthsForType() + ' months)';
-    }
-    [typeBi, typeTri, startEl].forEach(function (el) {
-        if (el) el.addEventListener('change', updateEnd);
-    });
-    if (startEl) startEl.addEventListener('input', updateEnd);
-    updateEnd();
 }());
 </script>

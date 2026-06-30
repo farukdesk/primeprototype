@@ -512,6 +512,9 @@ $statusChipClass = match($student['status']) {
                 <?php if (function_exists('sd_current_badge')): $sd_badge = sd_current_badge((int)$student['id']); if ($sd_badge !== ''): ?>
                 <?= $sd_badge ?>
                 <?php endif; endif; ?>
+                <?php if (function_exists('sd_dropout_badge')): $sd_do_badge = sd_dropout_badge((int)$student['id']); if ($sd_do_badge !== ''): ?>
+                <?= $sd_do_badge ?>
+                <?php endif; endif; ?>
                 <?php if ($student['sex']): ?>
                 <span class="sv-chip"><?= h($student['sex']) ?></span>
                 <?php endif; ?>

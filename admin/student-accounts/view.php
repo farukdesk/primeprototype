@@ -159,6 +159,8 @@ $sd_student_id = (int)($pkg['student_id'] ?? 0);
 $sd_start_year = (int)($payment_start['year'] ?? date('Y'));
 $sd_drop_now   = ($sd_student_id > 0 && function_exists('sd_student_on_drop_now'))
     ? sd_student_on_drop_now($sd_student_id) : null;
+$sd_dropout    = ($sd_student_id > 0 && function_exists('sd_active_dropout_for_student'))
+    ? sd_active_dropout_for_student($sd_student_id) : null;
 
 // Semester 1 reg fee is now shown in the registration column together with all other semesters.
 $total_reg_fees      = $reg_fee_per_sem * count($semester_fees);
@@ -252,8 +254,21 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 <?php endif; ?>
 
-<!-- ══════════════════════════════════════════════════════════
-     PACKAGE SUMMARY CARDS
+<?php if ($sd_dropout): ?>
+<div class="alert alert-dark d-flex align-items-center gap-2" role="alert">
+    <i class="fas fa-user-slash fa-lg"></i>
+    <div>
+        <strong>Official dropout – account frozen.</strong>
+        This student officially dropped out on
+        <strong><?= h(date('d M Y', strtotime($sd_dropout['drop_start']))) ?></strong>.
+        From that date the account is <em>frozen and no longer counted as a due</em> in any financial fact.
+        <?php if (function_exists('sd_can_view') && sd_can_view()): ?>
+        <a href="<?= APP_URL ?>/semester-drop/index.php?kind=dropout&q=<?= rawurlencode((string)$pkg['student_sid']) ?>" class="alert-link">View dropout</a>.
+        <?php endif; ?>
+    </div>
+</div>
+<?php endif; ?>
+
      Formula: Standard Tuition (Full) + Fixed Institutional Fees (total) + English Course Fee (total)
 ═══════════════════════════════════════════════════════════ -->
 <div class="row g-3 mb-4">

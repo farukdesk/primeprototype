@@ -89,10 +89,12 @@ function sd_get_drop(int $id): ?array
     $stmt = db()->prepare(
         'SELECT d.*, s.full_name AS student_name, s.student_id AS student_sid,
                 sf.stored_name AS evidence_stored_name, sf.original_name AS evidence_original_name,
+                rf.stored_name AS reinstate_stored_name, rf.original_name AS reinstate_original_name,
                 cb.full_name AS created_by_name, xb.full_name AS cancelled_by_name
          FROM semester_drops d
          JOIN students s ON s.id = d.student_id
          LEFT JOIN student_files sf ON sf.id = d.evidence_file_id
+         LEFT JOIN student_files rf ON rf.id = d.reinstate_evidence_file_id
          LEFT JOIN users cb ON cb.id = d.created_by
          LEFT JOIN users xb ON xb.id = d.cancelled_by
          WHERE d.id = ?'
@@ -120,8 +122,8 @@ function sd_create_drop(
 
     $stmt = db()->prepare(
         'INSERT INTO semester_drops
-            (student_id, semester_type, block_months, drop_start, drop_end, reason, evidence_file_id, status, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, \'active\', ?)'
+            (student_id, kind, semester_type, block_months, drop_start, drop_end, reason, evidence_file_id, status, created_by)
+         VALUES (?, \'drop\', ?, ?, ?, ?, ?, ?, \'active\', ?)'
     );
     $stmt->execute([
         $student_id,
@@ -149,6 +151,137 @@ function sd_cancel_drop(int $id, int $user_id, ?string $reason): void
     $stmt->execute([$user_id, ($reason !== null && $reason !== '') ? $reason : null, $id]);
 }
 
+// ── Dropout (official freeze) ───────────────────────────────────────────────
+//
+// An official dropout marks that a student has formally left the university and
+// no longer communicates with us. From the chosen effective date the student's
+// account is FROZEN: it is no longer counted as a due in any financial fact, and
+// the student's status is set to 'Dropped'. Re-instating a dropout requires
+// supporting evidence and a comment.
+
+/**
+ * Record an official dropout for a student and freeze their account.
+ *
+ * Stores a kind='dropout' row (the unused deferral fields carry harmless
+ * placeholders) and flips students.status to 'Dropped' inside one transaction.
+ *
+ * @return int  The new record id.
+ */
+function sd_create_dropout(
+    int $student_id,
+    string $effective_date,
+    ?string $reason,
+    ?int $evidence_file_id,
+    int $created_by
+): int {
+    $db = db();
+    $db->beginTransaction();
+    try {
+        $stmt = $db->prepare(
+            'INSERT INTO semester_drops
+                (student_id, kind, semester_type, block_months, drop_start, drop_end, reason, evidence_file_id, status, created_by)
+             VALUES (?, \'dropout\', NULL, 0, ?, ?, ?, ?, \'active\', ?)'
+        );
+        // drop_end mirrors the effective date – a dropout freeze is open-ended,
+        // so drop_end is only a placeholder and is never used by the freeze logic.
+        $stmt->execute([
+            $student_id,
+            $effective_date,
+            $effective_date,
+            ($reason !== null && $reason !== '') ? $reason : null,
+            $evidence_file_id,
+            $created_by,
+        ]);
+        $new_id = (int)$db->lastInsertId();
+
+        $upd = $db->prepare('UPDATE students SET status = \'Dropped\' WHERE id = ?');
+        $upd->execute([$student_id]);
+
+        $db->commit();
+    } catch (Throwable $e) {
+        $db->rollBack();
+        throw $e;
+    }
+    return $new_id;
+}
+
+/**
+ * Re-instate an officially dropped-out student.
+ *
+ * Marks the dropout record cancelled (capturing the reviewer, the mandatory
+ * comment and the uploaded evidence) and restores the student's status to
+ * 'Active' in one transaction.
+ */
+function sd_reinstate_dropout(int $id, int $student_id, int $user_id, string $reason, int $evidence_file_id): void
+{
+    $db = db();
+    $db->beginTransaction();
+    try {
+        $stmt = $db->prepare(
+            'UPDATE semester_drops
+                SET status = \'cancelled\', cancelled_by = ?, cancelled_at = NOW(),
+                    cancel_reason = ?, reinstate_evidence_file_id = ?
+              WHERE id = ? AND kind = \'dropout\' AND status = \'active\''
+        );
+        $stmt->execute([$user_id, $reason, $evidence_file_id, $id]);
+
+        $upd = $db->prepare('UPDATE students SET status = \'Active\' WHERE id = ?');
+        $upd->execute([$student_id]);
+
+        $db->commit();
+    } catch (Throwable $e) {
+        $db->rollBack();
+        throw $e;
+    }
+}
+
+/**
+ * The active (un-reinstated) dropout row for a student, or null. Cached per
+ * request and tolerant of the table/column not being migrated yet.
+ *
+ * @return array{id:int,drop_start:string,reason:?string}|null
+ */
+function sd_active_dropout_for_student(int $student_id): ?array
+{
+    static $cache = [];
+    if (array_key_exists($student_id, $cache)) {
+        return $cache[$student_id];
+    }
+    $row = null;
+    try {
+        $stmt = db()->prepare(
+            'SELECT id, drop_start, reason
+               FROM semester_drops
+              WHERE student_id = ? AND kind = \'dropout\' AND status = \'active\'
+              ORDER BY drop_start ASC
+              LIMIT 1'
+        );
+        $stmt->execute([$student_id]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+    } catch (Throwable $e) {
+        $row = null;
+    }
+    $cache[$student_id] = $row;
+    return $row;
+}
+
+/**
+ * Is this student officially dropped out (account frozen)?
+ */
+function sd_student_dropped_out(int $student_id): bool
+{
+    return $student_id > 0 && sd_active_dropout_for_student($student_id) !== null;
+}
+
+/**
+ * Effective dropout (freeze) date for a student, or null when not dropped out.
+ */
+function sd_dropout_freeze_date(int $student_id): ?string
+{
+    $row = sd_active_dropout_for_student($student_id);
+    return $row['drop_start'] ?? null;
+}
+
 // ── Lookups used by accounts / profile integrations ─────────────────────────
 
 /**
@@ -167,7 +300,7 @@ function sd_active_drops_for_student(int $student_id): array
         $stmt = db()->prepare(
             'SELECT id, drop_start, drop_end, semester_type, block_months
                FROM semester_drops
-              WHERE student_id = ? AND status = \'active\'
+              WHERE student_id = ? AND status = \'active\' AND kind = \'drop\'
               ORDER BY drop_start ASC'
         );
         $stmt->execute([$student_id]);
@@ -429,6 +562,29 @@ function sd_current_badge(int $student_id): string
     return '<span class="badge bg-warning text-dark" title="On semester drop until '
         . h(date('d M Y', strtotime($row['drop_end']))) . '">'
         . '<i class="fas fa-pause-circle me-1"></i>Semester Drop</span>';
+}
+
+/**
+ * Badge shown next to a student who has officially dropped out (frozen account).
+ * Returns an empty string when the student is not dropped out.
+ */
+function sd_dropout_badge(int $student_id): string
+{
+    $row = sd_active_dropout_for_student($student_id);
+    if (!$row) {
+        return '';
+    }
+    return '<span class="badge bg-dark" title="Officially dropped out on '
+        . h(date('d M Y', strtotime($row['drop_start']))) . ' – account frozen">'
+        . '<i class="fas fa-user-slash me-1"></i>Dropped Out</span>';
+}
+
+/**
+ * Human label for a record kind.
+ */
+function sd_kind_label(string $kind): string
+{
+    return $kind === 'dropout' ? 'Dropout' : 'Semester Drop';
 }
 
 /**

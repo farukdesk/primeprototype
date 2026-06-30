@@ -18,6 +18,11 @@ if (!$drop) {
     redirect(APP_URL . '/semester-drop/index.php');
 }
 
+if (($drop['kind'] ?? 'drop') === 'dropout') {
+    flash_set('error', 'Dropouts are re-instated, not cancelled. Use the re-instate option.');
+    redirect(APP_URL . '/semester-drop/view.php?id=' . $id);
+}
+
 if ($drop['status'] !== 'active') {
     flash_set('warning', 'This semester drop is already cancelled.');
     redirect(APP_URL . '/semester-drop/view.php?id=' . $id);
