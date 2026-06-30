@@ -430,10 +430,10 @@ require_once __DIR__ . '/../../includes/header.php';
     #main-wrapper, body, html { margin:0 !important; padding:0 !important; }
     #printArea { width:100%; }
     .sc-summary { -webkit-print-color-adjust:exact; print-color-adjust:exact; page-break-inside:avoid; }
-    #collectionTable { font-size:7pt !important; border-collapse:collapse; width:100%; table-layout:fixed; }
-    #collectionTable th, #collectionTable td { padding:3px 4px !important; border:1px solid #ccc !important; vertical-align:top !important; word-break:break-word; overflow-wrap:anywhere; white-space:normal !important; }
-    #collectionTable thead th { font-size:6.5pt !important; }
-    /* Proportional column widths so all 9 columns fit one A4 portrait page */
+    #collectionTable { font-size:7.5pt !important; border-collapse:collapse; width:100%; table-layout:fixed; }
+    #collectionTable th, #collectionTable td { padding:3px 5px !important; border:1px solid #ccc !important; vertical-align:top !important; word-break:break-word; overflow-wrap:anywhere; white-space:normal !important; }
+    #collectionTable thead th { font-size:7pt !important; }
+    /* Proportional column widths so all 9 columns fit one A4 landscape page */
     #collectionTable th:nth-child(1), #collectionTable td:nth-child(1) { width:3%; }   /* # */
     #collectionTable th:nth-child(2), #collectionTable td:nth-child(2) { width:8%; }   /* Date */
     #collectionTable th:nth-child(3), #collectionTable td:nth-child(3) { width:18%; }  /* Student */
@@ -443,8 +443,8 @@ require_once __DIR__ . '/../../includes/header.php';
     #collectionTable th:nth-child(7), #collectionTable td:nth-child(7) { width:11%; }  /* Method */
     #collectionTable th:nth-child(8), #collectionTable td:nth-child(8) { width:11%; }  /* Invoice */
     #collectionTable th:nth-child(9), #collectionTable td:nth-child(9) { width:10%; text-align:right; } /* Amount */
-    #collectionTable td:nth-child(8) .inv-link { font-family:inherit !important; font-size:6.5pt !important; word-break:break-all; }
-    #collectionTable td:nth-child(9) { font-size:6.5pt !important; white-space:nowrap !important; }
+    #collectionTable td:nth-child(8) .inv-link { font-family:inherit !important; font-size:7pt !important; word-break:break-all; }
+    #collectionTable td:nth-child(9) { font-size:7pt !important; white-space:nowrap !important; }
     #collectionTable thead { background:#dce8ff !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; display:table-header-group; }
     #collectionTable tfoot { background:#e0eaff !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
     #collectionTable tr { page-break-inside:avoid; }
@@ -455,7 +455,7 @@ require_once __DIR__ . '/../../includes/header.php';
     .badge { display:inline !important; border:0 !important; padding:0 4px 0 0 !important; background:transparent !important; color:#000 !important; font-weight:400 !important; font-size:inherit !important; white-space:normal !important; word-break:break-word; overflow-wrap:anywhere; }
     #tableWrapper { overflow:visible !important; }
 }
-@page { size: A4 portrait; margin: 12mm 10mm 14mm 10mm; }
+@page { size: A4 landscape; margin: 10mm 10mm 12mm 10mm; }
 </style>
 
 <!-- ── Quick date range buttons (always available, even with no results) ── -->
