@@ -1177,8 +1177,8 @@ function acc_income_statement(?string $date_from = null, ?string $date_to = null
 
     $stmt = db()->prepare(
         "SELECT a.id, a.code, a.name, a.type,
-                COALESCE(SUM(vi.debit_amount),0)  AS total_debit,
-                COALESCE(SUM(vi.credit_amount),0) AS total_credit
+                COALESCE(SUM(CASE WHEN v.id IS NOT NULL THEN vi.debit_amount  ELSE 0 END),0) AS total_debit,
+                COALESCE(SUM(CASE WHEN v.id IS NOT NULL THEN vi.credit_amount ELSE 0 END),0) AS total_credit
          FROM acc_accounts a
          LEFT JOIN acc_voucher_items vi ON vi.account_id = a.id
          LEFT JOIN acc_vouchers v ON v.id = vi.voucher_id AND $where
@@ -1221,8 +1221,8 @@ function acc_balance_sheet(?string $as_of = null): array
 
     $stmt = db()->prepare(
         "SELECT a.id, a.code, a.name, a.type, a.opening_balance,
-                COALESCE(SUM(vi.debit_amount),0)  AS total_debit,
-                COALESCE(SUM(vi.credit_amount),0) AS total_credit
+                COALESCE(SUM(CASE WHEN v.id IS NOT NULL THEN vi.debit_amount  ELSE 0 END),0) AS total_debit,
+                COALESCE(SUM(CASE WHEN v.id IS NOT NULL THEN vi.credit_amount ELSE 0 END),0) AS total_credit
          FROM acc_accounts a
          LEFT JOIN acc_voucher_items vi ON vi.account_id = a.id
          LEFT JOIN acc_vouchers v ON v.id = vi.voucher_id AND $where
