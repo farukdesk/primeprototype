@@ -440,9 +440,9 @@ require_once __DIR__ . '/../../includes/header.php';
     #collectionTable th:nth-child(4), #collectionTable td:nth-child(4) { width:13%; }  /* Program */
     #collectionTable th:nth-child(5), #collectionTable td:nth-child(5) { width:12%; }  /* Staff */
     #collectionTable th:nth-child(6), #collectionTable td:nth-child(6) { width:14%; }  /* Fee Type */
-    #collectionTable th:nth-child(7), #collectionTable td:nth-child(7) { width:11%; }  /* Method */
-    #collectionTable th:nth-child(8), #collectionTable td:nth-child(8) { width:11%; }  /* Invoice */
-    #collectionTable th:nth-child(9), #collectionTable td:nth-child(9) { width:10%; text-align:right; } /* Amount */
+    #collectionTable th:nth-child(7), #collectionTable td:nth-child(7) { width:9%; }   /* Method */
+    #collectionTable th:nth-child(8), #collectionTable td:nth-child(8) { width:10%; }  /* Invoice */
+    #collectionTable th:nth-child(9), #collectionTable td:nth-child(9) { width:13%; text-align:right; } /* Amount */
     #collectionTable td:nth-child(8) .inv-link { font-family:inherit !important; font-size:7pt !important; word-break:break-all; }
     #collectionTable td:nth-child(9) { font-size:7pt !important; white-space:nowrap !important; }
     #collectionTable thead { background:#dce8ff !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; display:table-header-group; }
