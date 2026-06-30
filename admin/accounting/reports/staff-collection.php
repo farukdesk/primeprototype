@@ -452,7 +452,7 @@ require_once __DIR__ . '/../../includes/header.php';
     .inv-link { color:#000 !important; text-decoration:none !important; }
     .data-row { display:table-row !important; }
     .card { box-shadow:none !important; border:1px solid #dee2e6 !important; }
-    .badge { border:0 !important; padding:0 4px 0 0 !important; background:transparent !important; color:#000 !important; font-weight:400 !important; }
+    .badge { display:inline !important; border:0 !important; padding:0 4px 0 0 !important; background:transparent !important; color:#000 !important; font-weight:400 !important; font-size:inherit !important; white-space:normal !important; word-break:break-word; overflow-wrap:anywhere; }
     #tableWrapper { overflow:visible !important; }
 }
 @page { size: A4 portrait; margin: 12mm 10mm 14mm 10mm; }
