@@ -586,6 +586,11 @@ function sd_kind_label(string $kind): string
 {
     return $kind === 'dropout' ? 'Dropout' : 'Semester Drop';
 }
+
+/**
+ * Validate and store an uploaded evidence file, returning the new
+ * student_files.id, or null on failure.
+ */
 function sd_store_evidence(array $file, int $student_id, int $uploaded_by): ?int
 {
     if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {

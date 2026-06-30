@@ -184,7 +184,7 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="col-6 col-md-2">
                 <label class="form-label fw-semibold small mb-1">Status</label>
                 <select name="status" class="form-select form-select-sm">
-                    <option value="">All Status</option>
+                    <option value="">All Statuses</option>
                     <option value="active"    <?= $f_status === 'active'    ? 'selected' : '' ?>>Active</option>
                     <option value="cancelled" <?= $f_status === 'cancelled' ? 'selected' : '' ?>>Cancelled / Re-instated</option>
                 </select>
