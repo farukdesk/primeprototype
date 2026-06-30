@@ -355,17 +355,10 @@ require_once __DIR__ . '/../../includes/header.php';
                     'english_fee'      => 'secondary',
                     'other'            => 'dark',
                 ];
-                $pm_icons = [
-                    'cash'           => 'fa-money-bill-wave',
-                    'bank'           => 'fa-university',
-                    'mobile_banking' => 'fa-mobile-alt',
-                    'old_erp'        => 'fa-database',
-                ];
                 ?>
                 <tbody id="tableBody">
                     <?php foreach ($rows as $i => $r):
                         $ft_color = $ft_colors[$r['fee_type']] ?? 'secondary';
-                        $pm_icon  = $pm_icons[$r['payment_method']] ?? 'fa-credit-card';
                     ?>
                     <tr class="data-row">
                         <td class="text-center text-muted small idx"><?= $i + 1 ?></td>
@@ -373,16 +366,13 @@ require_once __DIR__ . '/../../includes/header.php';
                         <td>
                             <div class="fw-semibold"><?= h($r['student_name']) ?></div>
                             <span class="badge bg-secondary bg-opacity-10 text-dark border" style="font-size:.72rem"><?= h($r['sid']) ?></span>
-                            <span class="badge bg-light text-secondary border" style="font-size:.7rem"><?= h($r['batch']) ?></span>
+                            <div class="small text-muted">Batch: <?= h($r['batch']) ?></div>
                         </td>
                         <td>
                             <div class="small text-muted"><?= h($r['program']) ?></div>
                         </td>
                         <td>
-                            <span class="d-flex align-items-center gap-1">
-                                <span class="rounded-circle bg-info bg-opacity-10 text-info d-inline-flex align-items-center justify-content-center" style="width:22px;height:22px;font-size:.65rem;flex-shrink:0"><i class="fas fa-user"></i></span>
-                                <?= h($r['collected_by']) ?>
-                            </span>
+                            <?= h($r['collected_by']) ?>
                         </td>
                         <td>
                             <span class="badge bg-<?= $ft_color ?> bg-opacity-10 text-<?= $ft_color ?> border border-<?= $ft_color ?> border-opacity-25" style="font-size:.75rem">
@@ -390,7 +380,6 @@ require_once __DIR__ . '/../../includes/header.php';
                             </span>
                         </td>
                         <td>
-                            <i class="fas <?= $pm_icon ?> text-muted me-1" style="font-size:.75rem"></i>
                             <?= h(acc_payment_method_label($r['payment_method'], $r['mobile_banking_provider'])) ?>
                         </td>
                         <td>
@@ -408,7 +397,7 @@ require_once __DIR__ . '/../../includes/header.php';
                 </tbody>
                 <tfoot style="background:#e8f0fe">
                     <tr>
-                        <td colspan="8" class="text-end fw-bold" style="font-size:.85rem"><i class="fas fa-calculator me-1 text-primary"></i> Filtered Total</td>
+                        <td colspan="8" class="text-end fw-bold" style="font-size:.85rem"><i class="fas fa-calculator me-1 text-primary"></i> Grand Total</td>
                         <td class="text-end fw-bold text-primary" style="font-size:.9rem" id="footTotal"><?= $currency ?> <?= number_format($grand_total, 2) ?></td>
                     </tr>
                 </tfoot>
@@ -442,18 +431,20 @@ require_once __DIR__ . '/../../includes/header.php';
     #printArea { width:100%; }
     .sc-summary { -webkit-print-color-adjust:exact; print-color-adjust:exact; page-break-inside:avoid; }
     #collectionTable { font-size:7pt !important; border-collapse:collapse; width:100%; table-layout:fixed; }
-    #collectionTable th, #collectionTable td { padding:3px 4px !important; border:1px solid #ccc !important; vertical-align:top !important; word-wrap:break-word; overflow-wrap:break-word; white-space:normal !important; }
+    #collectionTable th, #collectionTable td { padding:3px 4px !important; border:1px solid #ccc !important; vertical-align:top !important; word-break:break-word; overflow-wrap:anywhere; white-space:normal !important; }
     #collectionTable thead th { font-size:6.5pt !important; }
     /* Proportional column widths so all 9 columns fit one A4 portrait page */
     #collectionTable th:nth-child(1), #collectionTable td:nth-child(1) { width:3%; }   /* # */
     #collectionTable th:nth-child(2), #collectionTable td:nth-child(2) { width:8%; }   /* Date */
-    #collectionTable th:nth-child(3), #collectionTable td:nth-child(3) { width:19%; }  /* Student */
-    #collectionTable th:nth-child(4), #collectionTable td:nth-child(4) { width:14%; }  /* Program */
-    #collectionTable th:nth-child(5), #collectionTable td:nth-child(5) { width:13%; }  /* Staff */
-    #collectionTable th:nth-child(6), #collectionTable td:nth-child(6) { width:13%; }  /* Fee Type */
+    #collectionTable th:nth-child(3), #collectionTable td:nth-child(3) { width:18%; }  /* Student */
+    #collectionTable th:nth-child(4), #collectionTable td:nth-child(4) { width:13%; }  /* Program */
+    #collectionTable th:nth-child(5), #collectionTable td:nth-child(5) { width:12%; }  /* Staff */
+    #collectionTable th:nth-child(6), #collectionTable td:nth-child(6) { width:14%; }  /* Fee Type */
     #collectionTable th:nth-child(7), #collectionTable td:nth-child(7) { width:11%; }  /* Method */
-    #collectionTable th:nth-child(8), #collectionTable td:nth-child(8) { width:9%; }   /* Invoice */
+    #collectionTable th:nth-child(8), #collectionTable td:nth-child(8) { width:11%; }  /* Invoice */
     #collectionTable th:nth-child(9), #collectionTable td:nth-child(9) { width:10%; text-align:right; } /* Amount */
+    #collectionTable td:nth-child(8) .inv-link { font-family:inherit !important; font-size:6.5pt !important; word-break:break-all; }
+    #collectionTable td:nth-child(9) { font-size:6.5pt !important; white-space:nowrap !important; }
     #collectionTable thead { background:#dce8ff !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; display:table-header-group; }
     #collectionTable tfoot { background:#e0eaff !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
     #collectionTable tr { page-break-inside:avoid; }
