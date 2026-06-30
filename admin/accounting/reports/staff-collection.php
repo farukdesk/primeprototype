@@ -75,6 +75,29 @@ arsort($staff_totals);
 arsort($by_pay_method);
 arsort($by_fee_type);
 
+// ── Staff × Payment-method cross-tab (for print summary) ───────────────────
+$method_order  = ['cash' => 'Cash', 'bank' => 'Bank', 'mobile_banking' => 'Mobile Banking', 'old_erp' => 'Old ERP'];
+$method_keys   = [];          // payment methods actually present, in $method_order order
+$staff_matrix  = [];          // [staff_name][method] => amount
+$method_totals = [];          // [method] => amount
+foreach ($rows as $r) {
+    $amt  = (float)$r['amount'];
+    $name = $r['collected_by'];
+    $mk   = strtolower(trim($r['payment_method']));
+    if (!isset($method_order[$mk])) { $mk = 'cash'; }
+    $staff_matrix[$name][$mk] = ($staff_matrix[$name][$mk] ?? 0.0) + $amt;
+    $method_totals[$mk]       = ($method_totals[$mk] ?? 0.0) + $amt;
+}
+foreach ($method_order as $mk => $lbl) {
+    if (isset($method_totals[$mk])) { $method_keys[$mk] = $lbl; }
+}
+// Order staff rows by their total collection (desc) to match $staff_totals
+$staff_matrix_sorted = [];
+foreach ($staff_totals as $name => $tot) {
+    if (isset($staff_matrix[$name])) { $staff_matrix_sorted[$name] = $staff_matrix[$name]; }
+}
+$staff_matrix = $staff_matrix_sorted;
+
 // ── Staff list for filter dropdown ─────────────────────────────────────────
 $staff_list = db()->query(
     "SELECT DISTINCT u.id, u.full_name
@@ -204,6 +227,44 @@ require_once __DIR__ . '/../../includes/header.php';
 </div>
 
 <?php if (!empty($rows)): ?>
+<!-- ── Print-only summary: staff × payment-method collection ── -->
+<div class="d-none d-print-block mb-3">
+    <div style="font-size:10pt;font-weight:700;color:#0d6efd;margin-bottom:5px">Collection Summary — by Staff &amp; Payment Method</div>
+    <table class="sc-summary" style="width:100%;border-collapse:collapse;font-size:8pt">
+        <thead>
+            <tr style="background:#dce8ff">
+                <th style="text-align:left;padding:4px 6px;border:1px solid #b9c9ef">#</th>
+                <th style="text-align:left;padding:4px 6px;border:1px solid #b9c9ef">Staff</th>
+                <?php foreach ($method_keys as $mk => $lbl): ?>
+                <th style="text-align:right;padding:4px 6px;border:1px solid #b9c9ef"><?= h($lbl) ?></th>
+                <?php endforeach; ?>
+                <th style="text-align:right;padding:4px 6px;border:1px solid #b9c9ef">Total (<?= h($currency) ?>)</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php $sidx = 0; foreach ($staff_matrix as $sname => $mrow): $sidx++; ?>
+            <tr>
+                <td style="padding:3px 6px;border:1px solid #ccc;color:#666"><?= $sidx ?></td>
+                <td style="padding:3px 6px;border:1px solid #ccc;font-weight:600"><?= h($sname) ?></td>
+                <?php foreach ($method_keys as $mk => $lbl): ?>
+                <td style="text-align:right;padding:3px 6px;border:1px solid #ccc"><?= isset($mrow[$mk]) ? number_format($mrow[$mk], 2) : '—' ?></td>
+                <?php endforeach; ?>
+                <td style="text-align:right;padding:3px 6px;border:1px solid #ccc;font-weight:700"><?= number_format($staff_totals[$sname] ?? 0, 2) ?></td>
+            </tr>
+            <?php endforeach; ?>
+        </tbody>
+        <tfoot>
+            <tr style="background:#e0eaff;font-weight:700">
+                <td colspan="2" style="text-align:right;padding:4px 6px;border:1px solid #b9c9ef">Total Collection</td>
+                <?php foreach ($method_keys as $mk => $lbl): ?>
+                <td style="text-align:right;padding:4px 6px;border:1px solid #b9c9ef"><?= number_format($method_totals[$mk] ?? 0, 2) ?></td>
+                <?php endforeach; ?>
+                <td style="text-align:right;padding:4px 6px;border:1px solid #b9c9ef;color:#0d6efd"><?= number_format($grand_total, 2) ?></td>
+            </tr>
+        </tfoot>
+    </table>
+</div>
+
 <!-- ── Summary stat cards (screen) ── -->
 <div class="row g-3 mb-3 no-print">
     <div class="col-6 col-md-3">
@@ -274,10 +335,10 @@ require_once __DIR__ . '/../../includes/header.php';
             <table class="table table-hover align-middle mb-0" id="collectionTable" style="font-size:.82rem">
                 <thead style="background:#f0f4ff">
                     <tr>
-                        <th class="text-center" style="width:38px">#</th>
-                        <th style="width:82px">Date</th>
+                        <th class="text-center" style="width:30px">#</th>
+                        <th style="width:74px">Date</th>
                         <th>Student</th>
-                        <th>Program / Batch</th>
+                        <th>Program</th>
                         <th>Staff</th>
                         <th>Fee Type</th>
                         <th>Method</th>
@@ -312,10 +373,10 @@ require_once __DIR__ . '/../../includes/header.php';
                         <td>
                             <div class="fw-semibold"><?= h($r['student_name']) ?></div>
                             <span class="badge bg-secondary bg-opacity-10 text-dark border" style="font-size:.72rem"><?= h($r['sid']) ?></span>
+                            <span class="badge bg-light text-secondary border" style="font-size:.7rem"><?= h($r['batch']) ?></span>
                         </td>
                         <td>
                             <div class="small text-muted"><?= h($r['program']) ?></div>
-                            <span class="badge bg-light text-secondary border" style="font-size:.7rem"><?= h($r['batch']) ?></span>
                         </td>
                         <td>
                             <span class="d-flex align-items-center gap-1">
@@ -379,19 +440,53 @@ require_once __DIR__ . '/../../includes/header.php';
     #sidebar, #topbar, .no-print, nav[aria-label="breadcrumb"] { display:none !important; }
     #main-wrapper, body, html { margin:0 !important; padding:0 !important; }
     #printArea { width:100%; }
-    #collectionTable { font-size:7.8pt !important; border-collapse:collapse; width:100%; }
-    #collectionTable th, #collectionTable td { padding:4px 5px !important; border:1px solid #ccc !important; vertical-align:middle !important; }
-    #collectionTable thead { background:#dce8ff !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .sc-summary { -webkit-print-color-adjust:exact; print-color-adjust:exact; page-break-inside:avoid; }
+    #collectionTable { font-size:7pt !important; border-collapse:collapse; width:100%; table-layout:fixed; }
+    #collectionTable th, #collectionTable td { padding:3px 4px !important; border:1px solid #ccc !important; vertical-align:top !important; word-wrap:break-word; overflow-wrap:break-word; white-space:normal !important; }
+    #collectionTable thead th { font-size:6.5pt !important; }
+    /* Proportional column widths so all 9 columns fit one A4 portrait page */
+    #collectionTable th:nth-child(1), #collectionTable td:nth-child(1) { width:3%; }   /* # */
+    #collectionTable th:nth-child(2), #collectionTable td:nth-child(2) { width:8%; }   /* Date */
+    #collectionTable th:nth-child(3), #collectionTable td:nth-child(3) { width:19%; }  /* Student */
+    #collectionTable th:nth-child(4), #collectionTable td:nth-child(4) { width:14%; }  /* Program */
+    #collectionTable th:nth-child(5), #collectionTable td:nth-child(5) { width:13%; }  /* Staff */
+    #collectionTable th:nth-child(6), #collectionTable td:nth-child(6) { width:13%; }  /* Fee Type */
+    #collectionTable th:nth-child(7), #collectionTable td:nth-child(7) { width:11%; }  /* Method */
+    #collectionTable th:nth-child(8), #collectionTable td:nth-child(8) { width:9%; }   /* Invoice */
+    #collectionTable th:nth-child(9), #collectionTable td:nth-child(9) { width:10%; text-align:right; } /* Amount */
+    #collectionTable thead { background:#dce8ff !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; display:table-header-group; }
     #collectionTable tfoot { background:#e0eaff !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    #collectionTable tr { page-break-inside:avoid; }
     .inv-link .fa-external-link-alt { display:none !important; }
     .inv-link { color:#000 !important; text-decoration:none !important; }
     .data-row { display:table-row !important; }
     .card { box-shadow:none !important; border:1px solid #dee2e6 !important; }
-    .badge { border:1px solid #aaa !important; background:transparent !important; color:#000 !important; }
+    .badge { border:0 !important; padding:0 4px 0 0 !important; background:transparent !important; color:#000 !important; font-weight:400 !important; }
     #tableWrapper { overflow:visible !important; }
 }
 @page { size: A4 portrait; margin: 12mm 10mm 14mm 10mm; }
 </style>
+
+<!-- ── Quick date range buttons (always available, even with no results) ── -->
+<script>
+(function () {
+    'use strict';
+    var today = new Date();
+    function fmt(d) { return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+    document.querySelectorAll('.sc-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var range = this.dataset.range, from, to = fmt(today);
+            if (range === 'today') { from = to; }
+            else if (range === 'week') { var d = new Date(today); d.setDate(d.getDate() - ((d.getDay()+6)%7)); from = fmt(d); } // (getDay()+6)%7 = days since Monday
+            else if (range === 'month') { from = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-01'; }
+            else if (range === 'year') { from = today.getFullYear() + '-01-01'; }
+            document.getElementById('date_from').value = from;
+            document.getElementById('date_to').value = to;
+            document.getElementById('filterForm').submit();
+        });
+    });
+})();
+</script>
 
 <?php if (!empty($rows)): ?>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
@@ -412,22 +507,6 @@ require_once __DIR__ . '/../../includes/header.php';
     }
     pie('payChart', <?= json_encode(array_keys($by_pay_method)) ?>, <?= json_encode(array_map('round', array_values($by_pay_method))) ?>);
     pie('feeChart', <?= json_encode(array_keys($by_fee_type)) ?>, <?= json_encode(array_map('round', array_values($by_fee_type))) ?>);
-
-    // ── Quick date buttons ──
-    var today = new Date();
-    function fmt(d) { return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
-    document.querySelectorAll('.sc-btn').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-            var range = this.dataset.range, from, to = fmt(today);
-            if (range === 'today') { from = to; }
-            else if (range === "week") { var d = new Date(today); d.setDate(d.getDate() - ((d.getDay()+6)%7)); from = fmt(d); } // (getDay()+6)%7 = days since Monday
-            else if (range === 'month') { from = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-01'; }
-            else if (range === 'year') { from = today.getFullYear() + '-01-01'; }
-            document.getElementById('date_from').value = from;
-            document.getElementById('date_to').value = to;
-            document.getElementById('filterForm').submit();
-        });
-    });
 
     // ── Client-side search + pagination ──
     var table = document.getElementById('collectionTable');
