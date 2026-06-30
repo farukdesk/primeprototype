@@ -24,6 +24,14 @@ ALTER TABLE `semester_drops`
       COMMENT 'drop = semester deferral, dropout = official freeze'
       AFTER `student_id`;
 
+-- Dropout rows have no semester type (the deferral window does not apply), so
+-- `semester_type` is stored as NULL for them. Relax the original NOT NULL
+-- constraint so dropouts can be recorded. Existing 'drop' rows are unaffected.
+ALTER TABLE `semester_drops`
+  MODIFY COLUMN `semester_type`
+      ENUM('bi','tri') DEFAULT NULL
+      COMMENT 'bi or tri semester; NULL for dropout rows';
+
 ALTER TABLE `semester_drops`
   ADD COLUMN IF NOT EXISTS `reinstate_evidence_file_id`
       int(10) UNSIGNED DEFAULT NULL
