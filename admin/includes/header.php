@@ -49,7 +49,7 @@ if (is_portal_student()) {
 
     <style>
         :root {
-            --sidebar-width: 290px;
+            --sidebar-width: 320px;
             --sidebar-bg:    #1a1f36;
             --sidebar-text:  #a8b2d8;
             --sidebar-hover: #252d4a;
