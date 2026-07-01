@@ -610,7 +610,7 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
     <div class="card-body p-4">
         <form method="post" enctype="multipart/form-data">
-            <?php csrf_field(); ?>
+            <?= csrf_field() ?>
             <div class="row g-3 align-items-end">
                 <div class="col-md-8">
                     <label for="tabulation_file" class="form-label fw-medium">Select File
