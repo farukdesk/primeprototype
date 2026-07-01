@@ -454,6 +454,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['tabulation_file'])) 
                             $all_students[$id] = [
                                 'name'     => $data['name'],
                                 'subjects' => [],
+                                // Default declared values so downstream checks work
+                                // even when the file has no CGPA/Total-Credits sheet.
+                                'declared_cgpa'          => null,
+                                'declared_total_credits' => null,
+                                'remarks'                => '',
                             ];
                         }
                         $all_students[$id]['subjects'] = array_merge(
