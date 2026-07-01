@@ -119,11 +119,15 @@ function tc_parse_sheet(array $rows, bool $is_cgpa_sheet = false, string $sheet_
     $id_col     = -1;
     $name_col   = -1;
 
-    // Primary scan: look for an explicit "ID No." header cell.
+    // Primary scan: look for an explicit ID-column header cell.  Different
+    // tabulation exports label this column differently — subject sheets use
+    // "ID No." while the summary/CGPA sheet often uses just "ID" — so accept
+    // the common variants.
+    $id_header_labels = ['id no.', 'id no', 'id', 'id.', 'student id', 'student id no.', 'student id no'];
     foreach ($rows as $ri => $row) {
         foreach ($row as $ci => $cell) {
             $val = strtolower(trim((string)$cell));
-            if ($val === 'id no.' || $val === 'id no') {
+            if (in_array($val, $id_header_labels, true)) {
                 $id_col     = $ci;
                 $name_col   = $ci + 1;
                 $data_start = $ri + 1;
@@ -132,13 +136,16 @@ function tc_parse_sheet(array $rows, bool $is_cgpa_sheet = false, string $sheet_
         }
     }
 
-    // Fallback: some sheets omit the "ID No." header row.  Scan rows for the
+    // Fallback: some sheets omit the ID header row.  Scan rows for the
     // first cell that looks like a long numeric student ID (possibly stored as
-    // a float, e.g. "282210004081002.0") and treat that row as data start.
+    // a float, e.g. "282210004081002.0", or as text with a leading apostrophe
+    // marker, e.g. "'0282230005131041") and treat that row as data start.
     if ($id_col < 0) {
         foreach ($rows as $ri => $row) {
             foreach ($row as $ci => $cell) {
-                $val  = trim((string)$cell);
+                // Strip the Excel text-marker apostrophe so text-formatted IDs
+                // (which preserve leading zeros) still match the ID pattern.
+                $val  = ltrim(trim((string)$cell), "'");
                 // Normalize float-formatted IDs ("282210004081002.0" → "282210004081002")
                 $norm = preg_match('/^(\d+)\.0+$/', $val, $m) ? $m[1] : $val;
                 if (preg_match('/^\d{8,}$/', $norm)) {
