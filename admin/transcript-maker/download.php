@@ -127,7 +127,11 @@ $rowspan = max(1, count($rows));
         table.meta td.ml:first-child { width: 105pt; }
 
         /* Grades table – fixed column widths mirror the reference document
-           (twips / 20 = points). */
+           (twips / 20 = points).  The markup intentionally repeats each size as
+           both a legacy HTML attribute (px = twips / 15) and a CSS rule (pt):
+           MS Word honours the precise CSS points, while other viewers that drop
+           imported CSS (e.g. borders / row heights) still render correctly from
+           the equivalent HTML attributes. */
         table.grades { width: 517.5pt; border-collapse: collapse; table-layout: fixed; }
         table.grades td, table.grades th {
             border: 0.5pt solid #000;
