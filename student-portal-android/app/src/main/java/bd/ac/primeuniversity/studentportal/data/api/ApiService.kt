@@ -1,0 +1,52 @@
+package bd.ac.primeuniversity.studentportal.data.api
+
+import bd.ac.primeuniversity.studentportal.data.model.FinancesResponse
+import bd.ac.primeuniversity.studentportal.data.model.LoginResponse
+import bd.ac.primeuniversity.studentportal.data.model.MeResponse
+import bd.ac.primeuniversity.studentportal.data.model.NoticeDetailResponse
+import bd.ac.primeuniversity.studentportal.data.model.NoticesResponse
+import bd.ac.primeuniversity.studentportal.data.model.SimpleResponse
+import retrofit2.Response
+import retrofit2.http.Field
+import retrofit2.http.FormUrlEncoded
+import retrofit2.http.GET
+import retrofit2.http.POST
+import retrofit2.http.Query
+
+/**
+ * Retrofit definition of the Prime University student portal API.
+ * Mirrors the PHP endpoints under admin/api/student/.
+ */
+interface ApiService {
+
+    @FormUrlEncoded
+    @POST("auth/login.php")
+    suspend fun login(
+        @Field("login") login: String,
+        @Field("password") password: String,
+        @Field("device_id") deviceId: String,
+        @Field("device_name") deviceName: String,
+    ): Response<LoginResponse>
+
+    @POST("auth/logout.php")
+    suspend fun logout(): Response<SimpleResponse>
+
+    @GET("auth/me.php")
+    suspend fun me(): Response<MeResponse>
+
+    @GET("notices.php")
+    suspend fun getNotices(
+        @Query("type") type: String,
+        @Query("page") page: Int,
+        @Query("limit") limit: Int = 20,
+    ): Response<NoticesResponse>
+
+    @GET("notices.php")
+    suspend fun getNoticeDetail(
+        @Query("id") id: Int,
+        @Query("type") type: String,
+    ): Response<NoticeDetailResponse>
+
+    @GET("finances.php")
+    suspend fun getFinances(): Response<FinancesResponse>
+}

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand palette (mirrors the web/Flutter portal) -->
+    <color name="primary">#1B3A6B</color>        <!-- Deep navy -->
+    <color name="primary_dark">#0F2347</color>
+    <color name="accent">#C9A227</color>         <!-- Gold -->
+    <color name="on_primary">#FFFFFF</color>
+
+    <color name="success">#10B981</color>
+    <color name="error">#EF4444</color>
+    <color name="warning">#F59E0B</color>
+    <color name="info">#3B82F6</color>
+
+    <color name="background">#F0F2F5</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="text_primary">#1A1F36</color>
+    <color name="text_secondary">#6B7280</color>
+    <color name="divider">#E5E7EB</color>
+    <color name="field_fill">#F9FAFB</color>
+
+    <color name="white">#FFFFFF</color>
+    <color name="black">#000000</color>
+    <color name="transparent">#00000000</color>
+
+    <color name="info_soft">#1F3B82F6</color>
+    <color name="success_soft">#1F10B981</color>
+    <color name="error_soft">#14EF4444</color>
+    <color name="primary_soft">#141B3A6B</color>
+</resources>
