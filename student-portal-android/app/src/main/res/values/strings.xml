@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PU Student Portal</string>
+
+    <!-- Branding -->
+    <string name="university_name">Prime University</string>
+    <string name="student_portal">STUDENT PORTAL</string>
+
+    <!-- Login -->
+    <string name="sign_in_title">Sign in to your account</string>
+    <string name="sign_in_subtitle">Use your student portal credentials.</string>
+    <string name="hint_login">Student ID or Username</string>
+    <string name="hint_password">Password</string>
+    <string name="action_sign_in">Sign In</string>
+    <string name="required">Required</string>
+    <string name="offline_message">No internet connection.</string>
+    <string name="offline_banner">You are offline – data may be outdated.</string>
+    <string name="copyright">© %1$s Prime University\nAll rights reserved.</string>
+
+    <!-- Bottom navigation -->
+    <string name="tab_home">Home</string>
+    <string name="tab_notices">Notices</string>
+    <string name="tab_finances">Finances</string>
+    <string name="tab_profile">Profile</string>
+
+    <!-- Dashboard -->
+    <string name="welcome_back">Welcome back, 👋</string>
+    <string name="student">Student</string>
+    <string name="stat_notices">Notices</string>
+    <string name="stat_outstanding">Outstanding</string>
+    <string name="recent_notices">Recent Notices</string>
+    <string name="no_recent_notices">No recent notices.</string>
+
+    <!-- Notices -->
+    <string name="seg_university">University</string>
+    <string name="seg_department">Department</string>
+    <string name="no_notices">No notices yet.</string>
+    <string name="label_university">University</string>
+    <string name="download_attachment">Download Attachment</string>
+
+    <!-- Finances -->
+    <string name="my_finances">My Finances</string>
+    <string name="fee_summary">Fee Summary</string>
+    <string name="total_due">Total Due</string>
+    <string name="paid">Paid</string>
+    <string name="outstanding">Outstanding</string>
+    <string name="semester_breakdown">Semester Breakdown</string>
+    <string name="payment_history">Payment History</string>
+    <string name="cleared">Cleared</string>
+    <string name="fee_payment">Fee Payment</string>
+    <string name="no_fee_package">No fee package has been assigned to your account yet. Please contact the Accounts Office.</string>
+
+    <!-- Profile -->
+    <string name="profile">Profile</string>
+    <string name="academic_information">Academic Information</string>
+    <string name="contact_information">Contact Information</string>
+    <string name="label_student_id">Student ID</string>
+    <string name="label_status">Status</string>
+    <string name="label_department">Department</string>
+    <string name="label_program">Program</string>
+    <string name="label_batch">Batch</string>
+    <string name="label_email">Email</string>
+    <string name="label_phone">Phone</string>
+
+    <!-- Settings -->
+    <string name="settings">Settings</string>
+    <string name="account">Account</string>
+    <string name="about_section">About</string>
+    <string name="privacy_policy">Privacy Policy</string>
+    <string name="about">About</string>
+    <string name="about_version">PU Student Portal v%1$s</string>
+    <string name="sign_out">Sign Out</string>
+    <string name="sign_out_confirm">Are you sure you want to sign out?</string>
+    <string name="cancel">Cancel</string>
+
+    <!-- Generic -->
+    <string name="retry">Retry</string>
+    <string name="dash">—</string>
+    <string name="settings_desc">Settings</string>
+</resources>
