@@ -10,7 +10,7 @@
  *   { "ok": true, "student": {...}, "summary": {...}, "payments": [...] }
  */
 
-require_once __DIR__ . '/../includes/auth_student_api.php';
+require_once __DIR__ . '/includes/auth_student_api.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     sp_api_error(405, 'Method Not Allowed. Use GET.');
@@ -20,7 +20,7 @@ $ctx     = sp_api_auth();
 $student = $ctx['student'];
 
 try {
-    require_once dirname(__DIR__, 3) . '/accounting/helpers.php';
+    require_once dirname(__DIR__, 2) . '/accounting/helpers.php';
 } catch (Throwable $e) {
     sp_api_error(503, 'Accounting module is not available.');
 }

@@ -14,7 +14,7 @@
  *   { "ok": true, "type": "...", "notices": [...], "total": N, "page": N, "per_page": N }
  */
 
-require_once __DIR__ . '/../includes/auth_student_api.php';
+require_once __DIR__ . '/includes/auth_student_api.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     sp_api_error(405, 'Method Not Allowed. Use GET.');
