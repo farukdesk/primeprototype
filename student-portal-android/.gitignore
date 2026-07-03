@@ -11,6 +11,10 @@ keystore.properties
 *.jks
 *.keystore
 
+# Firebase (contains project keys; add locally, never commit)
+google-services.json
+app/google-services.json
+
 # Android Studio / IntelliJ
 .idea/
 *.iml

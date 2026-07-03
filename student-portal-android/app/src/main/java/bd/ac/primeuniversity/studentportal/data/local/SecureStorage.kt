@@ -31,6 +31,20 @@ class SecureStorage(context: Context) {
             if (value == null) remove(KEY_TOKEN) else putString(KEY_TOKEN, value)
         }.apply()
 
+    /** The most recent FCM registration token reported by Firebase. */
+    var fcmToken: String?
+        get() = prefs.getString(KEY_FCM_TOKEN, null)
+        set(value) = prefs.edit().apply {
+            if (value == null) remove(KEY_FCM_TOKEN) else putString(KEY_FCM_TOKEN, value)
+        }.apply()
+
+    /** The FCM token last successfully registered with the server (for dedupe). */
+    var registeredFcmToken: String?
+        get() = prefs.getString(KEY_FCM_REGISTERED, null)
+        set(value) = prefs.edit().apply {
+            if (value == null) remove(KEY_FCM_REGISTERED) else putString(KEY_FCM_REGISTERED, value)
+        }.apply()
+
     /** A stable per-install device id, generated once and reused. */
     val deviceId: String
         get() {
@@ -43,12 +57,19 @@ class SecureStorage(context: Context) {
         }
 
     fun clear() {
-        prefs.edit().remove(KEY_TOKEN).apply()
+        // Keep the FCM token itself (it survives logout), but forget which token
+        // was registered so it is re-registered for the next signed-in student.
+        prefs.edit()
+            .remove(KEY_TOKEN)
+            .remove(KEY_FCM_REGISTERED)
+            .apply()
     }
 
     companion object {
         const val PREF_FILE = "pu_secure_prefs"
         private const val KEY_TOKEN = "api_token"
         private const val KEY_DEVICE_ID = "device_id"
+        private const val KEY_FCM_TOKEN = "fcm_token"
+        private const val KEY_FCM_REGISTERED = "fcm_registered_token"
     }
 }
