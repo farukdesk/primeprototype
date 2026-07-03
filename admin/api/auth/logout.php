@@ -28,7 +28,7 @@ if ($device_id !== '') {
        ->execute([$API_USER['user_id'], $device_id]);
 } else {
     // Identify the token row by its hash (same hash used in login.php)
-    preg_match('/^Bearer\s+(.+)$/i', $_SERVER['HTTP_AUTHORIZATION'] ?? '', $m);
+    preg_match('/^Bearer\s+(.+)$/i', api_authorization_header(), $m);
     $raw_token   = trim($m[1] ?? '');
     $stored_hash = hash('sha256', $raw_token);
     db()->prepare('DELETE FROM api_tokens WHERE token = ?')

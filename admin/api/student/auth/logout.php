@@ -11,7 +11,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     sp_api_error(405, 'Method Not Allowed. Use POST.');
 }
 
-$header = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+$header = api_authorization_header();
 if (preg_match('/^Bearer\s+(.+)$/i', trim($header), $m)) {
     $hash = hash('sha256', trim($m[1]));
     db()->prepare('DELETE FROM api_tokens WHERE token = ?')->execute([$hash]);

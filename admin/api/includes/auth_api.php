@@ -12,6 +12,7 @@
 
 require_once dirname(__DIR__, 2) . '/includes/config.php';
 require_once dirname(__DIR__, 2) . '/includes/db.php';
+require_once __DIR__ . '/authorization_header.php';
 
 // ── CORS headers (adjust origins as needed) ──────────────────────────────────
 header('Content-Type: application/json; charset=utf-8');
@@ -48,7 +49,7 @@ function api_ok(array $data = []): void
  */
 function api_auth(): array
 {
-    $header = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+    $header = api_authorization_header();
     if (!preg_match('/^Bearer\s+(.+)$/i', trim($header), $m)) {
         api_error(401, 'Missing or malformed Authorization header.');
     }
