@@ -41,6 +41,10 @@ object NotificationHelper {
     fun show(context: Context, title: String?, body: String?, url: String?) {
         ensureChannel(context)
 
+        // A stable-per-call base id in the positive Int range, used to derive
+        // unique request codes and the notification id (avoids Long→Int overflow).
+        val baseId = (System.currentTimeMillis() and 0x7FFFFFFF).toInt()
+
         val intent = Intent(context, SplashActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             if (!url.isNullOrBlank()) putExtra(EXTRA_URL, url)
@@ -51,7 +55,7 @@ object NotificationHelper {
         }
         val contentIntent = PendingIntent.getActivity(
             context,
-            System.currentTimeMillis().toInt(),
+            baseId,
             intent,
             flags,
         )
@@ -74,14 +78,14 @@ object NotificationHelper {
                 PendingIntent.FLAG_UPDATE_CURRENT
             }
             val viewPending = PendingIntent.getActivity(
-                context, (System.currentTimeMillis() + 1).toInt(), viewIntent, viewFlags,
+                context, baseId xor 0x1, viewIntent, viewFlags,
             )
             builder.addAction(0, context.getString(R.string.notification_open_link), viewPending)
         }
 
         try {
             NotificationManagerCompat.from(context)
-                .notify(System.currentTimeMillis().toInt(), builder.build())
+                .notify(baseId, builder.build())
         } catch (_: SecurityException) {
             // POST_NOTIFICATIONS permission not granted on Android 13+.
         }
