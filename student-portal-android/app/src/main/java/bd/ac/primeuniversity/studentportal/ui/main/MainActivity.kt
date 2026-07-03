@@ -22,14 +22,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private val app: PrimeApp by lazy { application as PrimeApp }
 
-    private val fragments: Map<Int, Fragment> by lazy {
-        mapOf(
-            R.id.nav_dashboard to DashboardFragment(),
-            R.id.nav_notices to NoticesFragment(),
-            R.id.nav_finances to FinancesFragment(),
-            R.id.nav_profile to ProfileFragment(),
-        )
-    }
+    private val fragments = LinkedHashMap<Int, Fragment>()
     private var activeId = R.id.nav_dashboard
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -37,16 +30,33 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        val tabIds = listOf(
+            R.id.nav_dashboard, R.id.nav_notices, R.id.nav_finances, R.id.nav_profile
+        )
+
         if (savedInstanceState == null) {
-            // Attach all fragments once, keep state like an IndexedStack.
+            // First launch: create and attach all fragments, IndexedStack style.
             supportFragmentManager.beginTransaction().apply {
-                fragments.forEach { (id, fragment) ->
+                tabIds.forEach { id ->
+                    val fragment = newFragment(id)
+                    fragments[id] = fragment
                     add(R.id.fragmentContainer, fragment, id.toString())
                     if (id != activeId) hide(fragment)
                 }
             }.commit()
         } else {
+            // Restored: reuse the fragments the FragmentManager already recreated.
             activeId = savedInstanceState.getInt(STATE_ACTIVE, R.id.nav_dashboard)
+            tabIds.forEach { id ->
+                val fragment = supportFragmentManager.findFragmentByTag(id.toString())
+                    ?: newFragment(id).also {
+                        supportFragmentManager.beginTransaction()
+                            .add(R.id.fragmentContainer, it, id.toString())
+                            .apply { if (id != activeId) hide(it) }
+                            .commit()
+                    }
+                fragments[id] = fragment
+            }
         }
 
         binding.bottomNav.setOnItemSelectedListener { item ->
@@ -54,6 +64,13 @@ class MainActivity : AppCompatActivity() {
             true
         }
         binding.bottomNav.selectedItemId = activeId
+    }
+
+    private fun newFragment(id: Int): Fragment = when (id) {
+        R.id.nav_notices -> NoticesFragment()
+        R.id.nav_finances -> FinancesFragment()
+        R.id.nav_profile -> ProfileFragment()
+        else -> DashboardFragment()
     }
 
     override fun onResume() {
