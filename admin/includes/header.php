@@ -286,7 +286,7 @@ if (is_portal_student()) {
     $is_tabulation_checker_active = strpos($current_path, '/tabulation-checker/') !== false;
     $is_transcript_maker_active = strpos($current_path, '/transcript-maker/') !== false;
     $is_academic_active = strpos($current_path, '/departments/') !== false || strpos($current_path, '/faculty-profiles/') !== false || strpos($current_path, '/students/') !== false || strpos($current_path, '/course-curriculum/') !== false || $is_course_offer_active;
-    $is_comms_active    = strpos($current_path, '/contact/') !== false || strpos($current_path, '/support-tickets/') !== false || strpos($current_path, '/knowledge-base/') !== false || strpos($current_path, '/broadcast/') !== false;
+    $is_comms_active    = strpos($current_path, '/contact/') !== false || strpos($current_path, '/support-tickets/') !== false || strpos($current_path, '/knowledge-base/') !== false || strpos($current_path, '/broadcast/') !== false || strpos($current_path, '/app-notifications/') !== false;
     $is_leads_active    = strpos($current_path, '/leads/') !== false;
     $is_alumni_active   = strpos($current_path, '/alumni/') !== false;
     $is_admissions_active = strpos($current_path, '/admissions/') !== false;
@@ -1673,7 +1673,7 @@ if (is_portal_student()) {
     <?php endif; ?>
 
     <!-- ── Communication ── -->
-    <?php if (is_super_admin() || can_access('contact') || can_access('support-tickets') || can_access('knowledge-base') || can_access('broadcast')): ?>
+    <?php if (is_super_admin() || can_access('contact') || can_access('support-tickets') || can_access('knowledge-base') || can_access('broadcast') || can_access('app-notifications')): ?>
     <button class="nav-group-toggle <?= $is_comms_active ? '' : 'collapsed' ?>"
             data-bs-toggle="collapse" data-bs-target="#grp-comms"
             aria-expanded="<?= $is_comms_active ? 'true' : 'false' ?>">
@@ -1696,6 +1696,14 @@ if (is_portal_student()) {
                 <a href="<?= APP_URL ?>/broadcast/index.php"
                    class="<?= strpos($current_path, '/broadcast/') !== false ? 'active' : '' ?>">
                     <i class="fas fa-bullhorn"></i> Broadcast
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('app-notifications')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/app-notifications/index.php"
+                   class="<?= strpos($current_path, '/app-notifications/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-mobile-alt"></i> App Notification
                 </a>
             </li>
             <?php endif; ?>
