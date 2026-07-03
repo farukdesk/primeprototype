@@ -49,4 +49,12 @@ interface ApiService {
 
     @GET("finances.php")
     suspend fun getFinances(): Response<FinancesResponse>
+
+    @FormUrlEncoded
+    @POST("push/register.php")
+    suspend fun registerPushToken(
+        @Field("fcm_token") fcmToken: String,
+        @Field("device_id") deviceId: String,
+        @Field("platform") platform: String = "android",
+    ): Response<SimpleResponse>
 }

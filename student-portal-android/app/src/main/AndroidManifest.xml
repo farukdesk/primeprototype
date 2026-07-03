@@ -4,6 +4,8 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Required on Android 13+ to show push notifications -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:name=".PrimeApp"
@@ -46,6 +48,20 @@
             android:name=".ui.settings.SettingsActivity"
             android:exported="false"
             android:parentActivityName=".ui.main.MainActivity" />
+
+        <!-- Firebase Cloud Messaging: receives push notifications from the
+             admin panel's App Notification module. -->
+        <service
+            android:name=".messaging.PushMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="pu_announcements" />
 
     </application>
 

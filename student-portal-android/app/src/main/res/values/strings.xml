@@ -77,4 +77,9 @@
     <string name="retry">Retry</string>
     <string name="dash">—</string>
     <string name="settings_desc">Settings</string>
+
+    <!-- Push notifications -->
+    <string name="notification_channel_name">Announcements</string>
+    <string name="notification_channel_desc">Push notifications published from the university admin panel.</string>
+    <string name="notification_open_link">Open</string>
 </resources>

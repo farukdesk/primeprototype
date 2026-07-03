@@ -5,6 +5,7 @@ import androidx.lifecycle.MutableLiveData
 import bd.ac.primeuniversity.studentportal.data.model.Stats
 import bd.ac.primeuniversity.studentportal.data.model.Student
 import bd.ac.primeuniversity.studentportal.data.repo.StudentRepository
+import bd.ac.primeuniversity.studentportal.messaging.NotificationHelper
 
 /**
  * Application entry point. Holds the shared [StudentRepository] and the current
@@ -19,6 +20,12 @@ class PrimeApp : Application() {
 
     /** Latest dashboard summary stats. */
     val currentStats = MutableLiveData<Stats?>(null)
+
+    override fun onCreate() {
+        super.onCreate()
+        // Prepare the announcements notification channel up-front.
+        NotificationHelper.ensureChannel(this)
+    }
 
     fun setSession(student: Student?, stats: Stats? = currentStats.value) {
         currentStudent.postValue(student)

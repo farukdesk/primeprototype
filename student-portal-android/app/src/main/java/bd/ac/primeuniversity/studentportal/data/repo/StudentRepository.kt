@@ -95,6 +95,40 @@ class StudentRepository private constructor(context: Context) {
 
     suspend fun getFinances(): AppResult<FinancesResponse> = call { api.getFinances() }
 
+    // ── Push notifications ────────────────────────────────────────────────────
+
+    /**
+     * Remembers the latest FCM token and, when a student is signed in, registers
+     * it with the server so the admin panel can push notifications to this device.
+     * Safe to call repeatedly; it only hits the network when something changed.
+     */
+    suspend fun cacheAndSyncPushToken(fcmToken: String) {
+        if (fcmToken.isBlank()) return
+        storage.fcmToken = fcmToken
+        syncPushToken()
+    }
+
+    /**
+     * Registers the stored FCM token with the server if the student is logged in
+     * and the token has not already been registered. Best-effort: never throws.
+     */
+    suspend fun syncPushToken() {
+        val fcmToken = storage.fcmToken
+        if (fcmToken.isNullOrBlank() || !hasToken) return
+        if (fcmToken == storage.registeredFcmToken) return
+
+        withContext(Dispatchers.IO) {
+            try {
+                val response = api.registerPushToken(fcmToken, storage.deviceId)
+                if (response.isSuccessful && response.body()?.ok == true) {
+                    storage.registeredFcmToken = fcmToken
+                }
+            } catch (_: Exception) {
+                // Best-effort; will retry on the next app start or token refresh.
+            }
+        }
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     /**
