@@ -1,0 +1,14 @@
+# Student/Admin API – ensure the Authorization header reaches PHP.
+# Many Apache + PHP-FPM/CGI setups drop the Authorization header, which breaks
+# bearer-token auth (clients get 401 right after logging in). These directives
+# forward it so $_SERVER exposes it (as HTTP_AUTHORIZATION / REDIRECT_HTTP_AUTHORIZATION).
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+</IfModule>
+
+<IfModule mod_setenvif.c>
+    SetEnvIf Authorization "(.+)" HTTP_AUTHORIZATION=$1
+</IfModule>
