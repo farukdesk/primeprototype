@@ -2,7 +2,8 @@
 /**
  * Student/Admin API – Authorization header resolver
  * ==================================================
- * Returns the raw `Authorization` request header (e.g. "******").
+ * Returns the raw `Authorization` request header, i.e. the "Bearer" scheme
+ * followed by the token.
  *
  * `$_SERVER['HTTP_AUTHORIZATION']` is unreliable: many Apache + PHP-FPM/CGI
  * setups strip the Authorization header before it reaches PHP, which makes
