@@ -144,6 +144,25 @@ function lm_signature_url(string $file): string
     return UPLOAD_URL . '/' . NS_SIG_SUBDIR . '/' . rawurlencode($file);
 }
 
+/**
+ * A stored signature image as a base64 data URI for embedding in a PDF
+ * (dompdf cannot fetch remote URLs). Returns '' when the file is missing.
+ */
+function lm_signature_data_uri(string $file): string
+{
+    if ($file === '') return '';
+    $path = UPLOAD_DIR . '/' . NS_SIG_SUBDIR . '/' . basename($file);
+    if (!is_file($path) || !is_readable($path)) return '';
+    $bytes = file_get_contents($path);
+    if ($bytes === false) return '';
+    $mime = 'image/png';
+    if (function_exists('mime_content_type')) {
+        $detected = @mime_content_type($path);
+        if (is_string($detected) && $detected !== '') $mime = $detected;
+    }
+    return 'data:' . $mime . ';base64,' . base64_encode($bytes);
+}
+
 // ── Date / day helpers ──────────────────────────────────────────────────────────
 
 /**
@@ -357,4 +376,144 @@ function lm_pending_for_user(array $user): int
     );
     $stmt->execute(array_merge($group_ids, [(int)$user['id']]));
     return (int)$stmt->fetchColumn();
+}
+
+// ── PDF (approved leave application) ─────────────────────────────────────────
+
+/** University logo as a base64 data URI for embedding in a PDF, or '' if none. */
+function lm_logo_data_uri(): string
+{
+    $logo = dirname(dirname(__DIR__)) . '/assets/img/logo/logo-black.png';
+    if (is_file($logo) && is_readable($logo)) {
+        $bytes = file_get_contents($logo);
+        if ($bytes !== false) {
+            return 'data:image/png;base64,' . base64_encode($bytes);
+        }
+    }
+    return '';
+}
+
+/**
+ * Build the printable "Leave Application" HTML for an approved leave request.
+ *
+ * @param array $req       Leave request row joined with requester name/email.
+ * @param array $approvals Ordered approval steps (from lm_request_approvals()).
+ * @param array $profile   Optional staff profile (employee_id, dept_name).
+ */
+function lm_build_pdf_html(array $req, array $approvals, array $profile = []): string
+{
+    $fmt = fn(float $n) => rtrim(rtrim(number_format($n, 1), '0'), '.');
+
+    $logo_uri = lm_logo_data_uri();
+    $logo_html = $logo_uri
+        ? '<img src="' . $logo_uri . '" style="width:150px;height:auto;max-height:70px;" alt="Prime University">'
+        : '<span style="font-weight:bold;font-size:16px;">Prime University</span>';
+
+    $generated = date('d M Y, g:i A');
+
+    $employee_name = $req['requester_name'] ?? '';
+    $employee_id   = $profile['employee_id'] ?? '';
+    $department    = $profile['dept_name'] ?? '';
+
+    $is_short = ($req['category'] === 'short');
+    $start_disp = date('d M Y', strtotime($req['start_date']));
+    $end_disp   = date('d M Y', strtotime($req['end_date']));
+    $total_days = $fmt((float)$req['days']);
+
+    // Remaining balance (Casual/Sick consume a yearly balance; otherwise N/A).
+    $balance_line = 'N/A';
+    if (in_array($req['category'], LM_BALANCE_CATEGORIES, true)) {
+        $bal  = lm_get_balance((int)$req['user_id'], (int)date('Y', strtotime($req['start_date'])));
+        $rem  = $req['category'] === 'casual' ? $bal['casual_remaining'] : $bal['sick_remaining'];
+        $tot  = $req['category'] === 'casual' ? $bal['casual_total']     : $bal['sick_total'];
+        $balance_line = $fmt((float)$rem) . ' of ' . $fmt((float)$tot) . ' day(s) ('
+                      . lm_category_label($req['category']) . ')';
+    }
+
+    $row = fn(string $label, string $value) =>
+        '<tr>'
+        . '<td style="padding:6px 10px;font-weight:bold;width:200px;vertical-align:top;">' . h($label) . '</td>'
+        . '<td style="padding:6px 10px;vertical-align:top;">' . $value . '</td>'
+        . '</tr>';
+
+    $details = '';
+    $details .= $row('Employee Name:', h($employee_name));
+    $details .= $row('Employee ID:', $employee_id !== '' ? h($employee_id) : '&mdash;');
+    $details .= $row('Department:', $department !== '' ? h($department) : '&mdash;');
+    $details .= $row('Leave Type:', h(lm_category_label($req['category'])));
+    if ($is_short) {
+        $details .= $row('Leave Date:', h($start_disp));
+        $details .= $row('Time:',
+            h(substr((string)$req['start_time'], 0, 5)) . ' &ndash; ' . h(substr((string)$req['end_time'], 0, 5)));
+    } else {
+        $details .= $row('Leave Start Date:', h($start_disp));
+        $details .= $row('Leave End Date:', h($end_disp));
+        $details .= $row('Total Leave Days:', '<strong>' . h($total_days) . '</strong> day(s)');
+    }
+
+    // Approved-by block: each approved step with approver name + signature image.
+    $approved_rows = '';
+    foreach ($approvals as $a) {
+        if (($a['status'] ?? '') !== 'approved') continue;
+        $sig_uri  = !empty($a['signature_file']) ? lm_signature_data_uri($a['signature_file']) : '';
+        $sig_html = $sig_uri
+            ? '<img src="' . $sig_uri . '" style="max-height:45px;max-width:150px;">'
+            : '<span style="color:#888;">(signed)</span>';
+        $acted = !empty($a['acted_at']) ? date('d M Y', strtotime($a['acted_at'])) : '';
+        $label = $a['label'] ?: ($a['group_name'] ?? '');
+        $approved_rows .=
+            '<td style="width:33%;padding:10px;text-align:center;vertical-align:bottom;">'
+            . '<div style="min-height:50px;">' . $sig_html . '</div>'
+            . '<div style="border-top:1px solid #333;margin-top:4px;padding-top:4px;font-size:12px;">'
+            . '<strong>' . h($a['approver_name'] ?? '—') . '</strong><br>'
+            . h($label) . ($acted !== '' ? '<br>' . h($acted) : '')
+            . '</div></td>';
+    }
+    $approved_block = $approved_rows !== ''
+        ? '<table style="width:100%;border-collapse:collapse;"><tr>' . $approved_rows . '</tr></table>'
+        : '<p style="color:#888;">No approvals recorded.</p>';
+
+    ob_start();
+    ?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+    body { font-family: DejaVu Sans, sans-serif; color:#222; font-size:13px; }
+    .lm-header { width:100%; border-bottom:2px solid #333; padding-bottom:10px; margin-bottom:20px; }
+    .lm-header td { vertical-align:middle; }
+    .lm-title { font-size:20px; font-weight:bold; text-align:center; }
+    .lm-meta { text-align:right; font-size:11px; color:#555; }
+    .lm-section-title { font-weight:bold; font-size:14px; margin:18px 0 6px; border-bottom:1px solid #ccc; padding-bottom:4px; }
+    table.lm-details { width:100%; border-collapse:collapse; }
+    .lm-reason { border:1px solid #ddd; padding:10px; background:#fafafa; white-space:pre-wrap; }
+    .lm-balance { padding:8px 10px; }
+</style>
+</head>
+<body>
+    <table class="lm-header">
+        <tr>
+            <td style="width:33%;text-align:left;"><?= $logo_html ?></td>
+            <td style="width:34%;" class="lm-title">Leave Application</td>
+            <td style="width:33%;" class="lm-meta"><?= h($generated) ?></td>
+        </tr>
+    </table>
+
+    <table class="lm-details">
+        <?= $details ?>
+    </table>
+
+    <div class="lm-section-title">Leave Reason</div>
+    <div class="lm-reason"><?= nl2br(h($req['reason'])) ?></div>
+
+    <div class="lm-section-title">Approved By</div>
+    <?= $approved_block ?>
+
+    <div class="lm-section-title">Remaining Leave Balance</div>
+    <div class="lm-balance"><?= h($balance_line) ?></div>
+</body>
+</html>
+    <?php
+    return (string)ob_get_clean();
 }

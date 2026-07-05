@@ -54,6 +54,11 @@ $fmt = fn(float $n) => rtrim(rtrim(number_format($n, 1), '0'), '.');
             <li class="breadcrumb-item active">Request #<?= $id ?></li>
         </ol>
     </nav>
+    <?php if ($req['status'] === 'approved'): ?>
+    <a href="<?= APP_URL ?>/leave-management/download.php?id=<?= $id ?>" class="btn btn-primary" style="border-radius:10px;">
+        <i class="fas fa-file-pdf me-1"></i> Download PDF
+    </a>
+    <?php endif; ?>
 </div>
 
 <?= flash_show() ?>
