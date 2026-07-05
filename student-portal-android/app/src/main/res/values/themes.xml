@@ -17,14 +17,14 @@
         <item name="android:navigationBarColor">@color/surface</item>
         <item name="android:windowLightStatusBar">false</item>
 
-        <item name="android:windowAnimationStyle">@style/WindowAnimation.Slide</item>
+        <item name="android:windowAnimationStyle">@style/WindowAnimationSlide</item>
 
         <item name="materialButtonStyle">@style/Widget.StudentPortal.Button</item>
         <item name="textInputStyle">@style/Widget.StudentPortal.TextInput</item>
     </style>
 
     <!-- Slide transition between activities for a smoother navigation feel. -->
-    <style name="WindowAnimation.Slide">
+    <style name="WindowAnimationSlide">
         <item name="android:activityOpenEnterAnimation">@anim/slide_in_right</item>
         <item name="android:activityOpenExitAnimation">@anim/slide_out_left</item>
         <item name="android:activityCloseEnterAnimation">@anim/slide_in_left</item>
