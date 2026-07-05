@@ -7,7 +7,7 @@
  * Delegates to the existing accounting helpers used by the web portal.
  *
  * Success response:
- *   { "ok": true, "student": {...}, "summary": {...}, "payments": [...] }
+ *   { "ok": true, "student": {...}, "summary": {...}, "schedule": [...], "payments": [...] }
  */
 
 require_once __DIR__ . '/includes/auth_student_api.php';
@@ -45,6 +45,7 @@ if (!$rec || !$rec['package_id']) {
             'full_name'  => $student['student_name'],
         ],
         'summary'  => null,
+        'schedule' => [],
         'payments' => [],
         'message'  => 'No fee package has been assigned to your account yet. Please contact the Accounts Office.',
     ]);
@@ -65,6 +66,7 @@ if (!$summary) {
             'full_name'  => $rec['full_name'],
         ],
         'summary'  => null,
+        'schedule' => [],
         'payments' => [],
         'message'  => 'Fee summary is not available. Please contact the Accounts Office.',
     ]);
@@ -90,7 +92,9 @@ $payments = array_map(function ($p) use ($month_labels_map) {
         'id'             => (int)$p['id'],
         'voucher_number' => $p['voucher_number'],
         'date'           => $p['voucher_date'] ?? $p['collected_at'] ?? null,
-        'fee_type'       => $p['fee_type'],
+        'fee_type'       => function_exists('acc_fee_type_label')
+            ? acc_fee_type_label((string)$p['fee_type'])
+            : $p['fee_type'],
         'semester'       => $p['semester_number'] ?? null,
         'month_label'    => (!empty($p['semester_number']) && !empty($p['month_number']))
             ? ($month_labels_map[(int)$p['semester_number'] . ':' . (int)$p['month_number']] ?? '')
@@ -104,20 +108,99 @@ $payments = array_map(function ($p) use ($month_labels_map) {
     ];
 }, $raw_payments);
 
-// Compact summary for the mobile dashboard
-$total_due  = 0;
-$total_paid = 0;
-$semesters  = [];
-foreach ($summary['semesters'] ?? [] as $sem) {
-    $total_due  += (float)($sem['total_due']  ?? 0);
-    $total_paid += (float)($sem['total_paid'] ?? 0);
-    $semesters[] = [
-        'label'         => $sem['semester_label'] ?? 'Semester ' . $sem['semester_number'],
-        'total_due'     => (float)($sem['total_due']  ?? 0),
-        'total_paid'    => (float)($sem['total_paid'] ?? 0),
-        'outstanding'   => round((float)($sem['total_due'] ?? 0) - (float)($sem['total_paid'] ?? 0), 2),
+// ── Fee Schedule & Outstanding Balance breakdown ─────────────────────────────
+// Mirrors the web collect-payment.php "Fee Schedule & Outstanding Balance" table:
+// Admission-day fees, then per-semester Registration + monthly obligations, and
+// finally any additional / examination fees. Grand totals are accumulated so the
+// mobile summary reflects the true programme totals (not a hard-coded "Cleared").
+$schedule   = [];
+$grand_due  = 0.0;
+$grand_paid = 0.0;
+$grand_out  = 0.0;
+
+$make_row = function (string $label, float $due, float $paid, float $out)
+        use (&$grand_due, &$grand_paid, &$grand_out): array {
+    $grand_due  += $due;
+    $grand_paid += $paid;
+    $grand_out  += $out;
+    return [
+        'label' => $label,
+        'due'   => round($due, 2),
+        'paid'  => round($paid, 2),
+        'out'   => round($out, 2),
     ];
+};
+
+$totals = $summary['totals'] ?? [];
+
+// Admission-day one-time fees (Admission Fee, Form Fee, ID Card Fee)
+$admission_rows = [];
+foreach ([
+    'admission'   => 'Admission Fee',
+    'form_fee'    => 'Form Fee',
+    'id_card_fee' => 'ID Card Fee',
+] as $key => $label) {
+    $head = $totals[$key] ?? null;
+    if (!$head) continue;
+    $due  = (float)($head['due']  ?? 0);
+    $paid = (float)($head['paid'] ?? 0);
+    if ($due <= 0 && $paid <= 0) continue;
+    $admission_rows[] = $make_row($label, $due, $paid, (float)($head['out'] ?? max(0.0, $due - $paid)));
 }
+if ($admission_rows) {
+    $schedule[] = ['title' => 'Admission', 'rows' => $admission_rows];
+}
+
+// Per-semester: Registration fee + monthly overall fees (tuition + fixed + English)
+foreach ($summary['semesters'] ?? [] as $sf) {
+    $sem_label = $sf['semester_label'] ?? ('Semester ' . ($sf['semester_number'] ?? ''));
+    $rows = [];
+
+    $reg_fee = (float)($sf['reg_fee'] ?? 0);
+    if ($reg_fee > 0) {
+        $rows[] = $make_row(
+            'Registration Fee',
+            $reg_fee,
+            (float)($sf['reg_paid'] ?? 0),
+            (float)($sf['reg_out'] ?? 0)
+        );
+    }
+
+    foreach (($sf['monthly_rows'] ?? []) as $mr) {
+        $month_label = 'Month ' . ($mr['month_number'] ?? '');
+        if (!empty($mr['month_label'])) {
+            $month_label .= ' (' . $mr['month_label'] . ')';
+        }
+        $rows[] = $make_row(
+            $month_label,
+            (float)($mr['due']  ?? 0),
+            (float)($mr['paid'] ?? 0),
+            (float)($mr['out']  ?? 0)
+        );
+    }
+
+    if ($rows) {
+        $schedule[] = ['title' => $sem_label, 'rows' => $rows];
+    }
+}
+
+// Additional / examination fees (variable amount, no due – only paid matters)
+$additional_rows = [];
+foreach (($summary['additional']['items'] ?? []) as $it) {
+    $paid = (float)($it['paid'] ?? 0);
+    if ($paid <= 0) continue;
+    $additional_rows[] = $make_row((string)($it['label'] ?? 'Additional Fee'), 0.0, $paid, 0.0);
+}
+if ($additional_rows) {
+    $schedule[] = ['title' => 'Additional / Examination Fees', 'rows' => $additional_rows];
+}
+
+// Outstanding that has actually fallen due as of today (obligations up to the
+// current calendar month). Future months are excluded.
+$due_as_of_today = null;
+try {
+    $due_as_of_today = acc_outstanding_through_current_month((int)$rec['package_id']);
+} catch (Throwable $e) {}
 
 sp_api_ok([
     'student' => [
@@ -127,10 +210,14 @@ sp_api_ok([
         'status'     => $rec['status'],
     ],
     'summary' => [
-        'total_due'   => round($total_due, 2),
-        'total_paid'  => round($total_paid, 2),
-        'outstanding' => round($total_due - $total_paid, 2),
-        'semesters'   => $semesters,
+        'total_due'       => round($grand_due, 2),
+        'total_paid'      => round($grand_paid, 2),
+        'outstanding'     => round($grand_out, 2),
+        // Balance due right now (obligations up to the current month, future
+        // installments excluded).
+        'due_as_of_today' => $due_as_of_today !== null ? round($due_as_of_today, 2) : round($grand_out, 2),
+        'as_of_date'      => date('d M Y'),
     ],
+    'schedule' => $schedule,
     'payments' => $payments,
 ]);

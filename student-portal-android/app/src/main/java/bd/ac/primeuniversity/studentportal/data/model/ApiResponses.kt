@@ -37,6 +37,7 @@ data class NoticeDetailResponse(
 data class FinancesResponse(
     @SerializedName("student") val student: Student? = null,
     @SerializedName("summary") val summary: FinanceSummary? = null,
+    @SerializedName("schedule") val schedule: List<ScheduleSection> = emptyList(),
     @SerializedName("payments") val payments: List<Payment> = emptyList(),
     @SerializedName("message") val message: String? = null,
 ) : BaseResponse()

@@ -7,14 +7,22 @@ data class FinanceSummary(
     @SerializedName("total_due") val totalDue: Double = 0.0,
     @SerializedName("total_paid") val totalPaid: Double = 0.0,
     @SerializedName("outstanding") val outstanding: Double = 0.0,
-    @SerializedName("semesters") val semesters: List<SemesterSummary> = emptyList(),
+    @SerializedName("due_as_of_today") val dueAsOfToday: Double = 0.0,
+    @SerializedName("as_of_date") val asOfDate: String? = null,
 )
 
-data class SemesterSummary(
+/** A grouped section of the Fee Schedule & Outstanding Balance breakdown. */
+data class ScheduleSection(
+    @SerializedName("title") val title: String = "",
+    @SerializedName("rows") val rows: List<ScheduleRow> = emptyList(),
+)
+
+/** A single fee line within a schedule section. */
+data class ScheduleRow(
     @SerializedName("label") val label: String = "",
-    @SerializedName("total_due") val totalDue: Double = 0.0,
-    @SerializedName("total_paid") val totalPaid: Double = 0.0,
-    @SerializedName("outstanding") val outstanding: Double = 0.0,
+    @SerializedName("due") val due: Double = 0.0,
+    @SerializedName("paid") val paid: Double = 0.0,
+    @SerializedName("out") val out: Double = 0.0,
 )
 
 data class Payment(
