@@ -2,9 +2,18 @@
 -- Leave Management module – database migration
 -- ============================================================================
 -- Adds staff leave management: per-user leave balances (Casual / Sick), leave
--- requests (Casual, Sick, Additional, Short – the latter two are paid/unpaid and
--- do not consume a balance) and a configurable, ordered, multi-user-group
--- approval workflow where each approver applies their uploaded signature.
+-- requests (Casual, Sick, Additional, Short, Maternity, Paternity, Study) and a
+-- configurable, ordered, multi-user-group approval workflow that is scoped per
+-- requester user group, so different departments / groups can have different
+-- approval systems. Each approver applies their uploaded signature.
+--
+-- Leave types:
+--   Casual / Sick        – consume the yearly balance (default 10 days each)
+--   Additional           – paid/unpaid (chosen), no balance
+--   Short                – always paid; single day with a start/end time
+--   Maternity            – entitlement of 120 days, paid
+--   Paternity            – entitlement of 7 days, paid
+--   Study                – always unpaid, no balance
 --
 -- The sidebar and feature pages gate access with can_access('leave-management').
 -- This migration also registers the module row so it appears on the Module
@@ -27,26 +36,38 @@ CREATE TABLE IF NOT EXISTS `leave_balances` (
     UNIQUE KEY `uniq_user_year` (`user_id`, `year`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ── Ordered, group-based approval flow (global config) ──────────────────────
--- Admins assign which user group approves at each step, in order.
+-- ── Ordered, group-based approval flow (per requester user group) ───────────
+-- Admins first pick a requester user group (the department / staff group) and
+-- then assign which user group approves at each step, in order. Different
+-- requester groups can therefore have completely different approval systems.
 CREATE TABLE IF NOT EXISTS `leave_approval_flow` (
-    `id`         int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
-    `step_order` smallint(5) UNSIGNED NOT NULL COMMENT 'Ascending approval step order (1 = first)',
-    `group_id`   int(10) UNSIGNED NOT NULL COMMENT 'FK user_groups.id that approves this step',
-    `label`      varchar(120)     DEFAULT NULL COMMENT 'Optional label shown on the request (e.g. "Head of Dept")',
-    `is_active`  tinyint(1)       NOT NULL DEFAULT 1,
-    `created_at` datetime         NOT NULL DEFAULT current_timestamp(),
-    `updated_at` datetime         NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+    `id`                 int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+    `requester_group_id` int(10) UNSIGNED NOT NULL DEFAULT 0 COMMENT 'FK user_groups.id whose members this flow applies to (the requester group / department)',
+    `step_order`         smallint(5) UNSIGNED NOT NULL COMMENT 'Ascending approval step order (1 = first)',
+    `group_id`           int(10) UNSIGNED NOT NULL COMMENT 'FK user_groups.id that approves this step',
+    `label`              varchar(120)     DEFAULT NULL COMMENT 'Optional label shown on the request (e.g. "Head of Dept")',
+    `is_active`          tinyint(1)       NOT NULL DEFAULT 1,
+    `created_at`         datetime         NOT NULL DEFAULT current_timestamp(),
+    `updated_at`         datetime         NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
     PRIMARY KEY (`id`),
-    KEY `idx_flow_order` (`step_order`)
+    KEY `idx_flow_order` (`step_order`),
+    KEY `idx_flow_reqgroup` (`requester_group_id`, `step_order`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Upgrade older installs: add the requester-group scoping column + index.
+ALTER TABLE `leave_approval_flow`
+    ADD COLUMN IF NOT EXISTS `requester_group_id` int(10) UNSIGNED NOT NULL DEFAULT 0
+        COMMENT 'FK user_groups.id whose members this flow applies to (the requester group / department)'
+        AFTER `id`;
+ALTER TABLE `leave_approval_flow`
+    ADD INDEX IF NOT EXISTS `idx_flow_reqgroup` (`requester_group_id`, `step_order`);
 
 -- ── Leave requests ──────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `leave_requests` (
     `id`           int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
     `user_id`      int(10) UNSIGNED NOT NULL COMMENT 'Requesting staff user (FK users.id)',
-    `category`     enum('casual','sick','additional','short') NOT NULL,
-    `pay_type`     enum('paid','unpaid') DEFAULT NULL COMMENT 'Only for additional / short leave',
+    `category`     enum('casual','sick','additional','short','maternity','paternity','study') NOT NULL,
+    `pay_type`     enum('paid','unpaid') DEFAULT NULL COMMENT 'Paid/unpaid marker (fixed for short/study/maternity/paternity, chosen for additional)',
     `start_date`   date             NOT NULL,
     `end_date`     date             NOT NULL,
     `start_time`   time             DEFAULT NULL COMMENT 'Short leave only',
@@ -61,6 +82,11 @@ CREATE TABLE IF NOT EXISTS `leave_requests` (
     KEY `idx_lr_user`   (`user_id`),
     KEY `idx_lr_status` (`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Upgrade older installs: widen the category enum with the new leave types.
+ALTER TABLE `leave_requests`
+    MODIFY COLUMN `category`
+        enum('casual','sick','additional','short','maternity','paternity','study') NOT NULL;
 
 -- ── Per-request approval steps (snapshot of the flow at request time) ───────
 CREATE TABLE IF NOT EXISTS `leave_request_approvals` (
@@ -88,7 +114,7 @@ INSERT INTO `modules`
 SELECT
     'Leave Management',
     'leave-management',
-    'Staff leave requests (Casual, Sick, Additional, Short) with per-user balances and a step-by-step, multi-group signed approval workflow.',
+    'Staff leave requests (Casual, Sick, Additional, Short, Maternity, Paternity, Study) with per-user balances and a per-group, step-by-step signed approval workflow.',
     'fas fa-plane-departure',
     NULL,
     62,

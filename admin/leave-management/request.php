@@ -12,7 +12,8 @@ $user       = auth_user();
 $errors     = [];
 $year       = (int)date('Y');
 $balance    = lm_get_balance((int)$user['id'], $year);
-$flow       = lm_active_flow();
+$flow_group = lm_flow_group_for_user($user);
+$flow       = lm_active_flow_for_group($flow_group);
 
 // Preserve input on validation error
 $in = [
@@ -41,8 +42,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($end === '')           $errors[] = 'End date is required.';
     if ($reason === '')        $errors[] = 'Please provide a reason for the leave.';
 
-    // Additional / Short leave require a paid/unpaid selection
-    if (in_array($category, LM_PAYTYPE_CATEGORIES, true)) {
+    // Paid/unpaid: fixed for some categories, chosen by the requester for others.
+    $fixed_pay = lm_fixed_pay($category);
+    if ($fixed_pay !== null) {
+        $pay_type = $fixed_pay;
+    } elseif (lm_category_needs_paytype($category)) {
         $pay_type = in_array($in['pay_type'], ['paid', 'unpaid'], true) ? $in['pay_type'] : '';
         if ($pay_type === '') $errors[] = 'Please mark the leave as Paid or Unpaid.';
     }
@@ -88,6 +92,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    // Entitlement cap for fixed-day categories (Maternity 120, Paternity 7).
+    if (empty($errors)) {
+        $max = lm_category_max_days($category);
+        if ($max !== null && $days > $max) {
+            $errors[] = sprintf(
+                '%s cannot exceed %s day(s); you requested %s.',
+                lm_category_label($category),
+                rtrim(rtrim(number_format($max, 1), '0'), '.'),
+                rtrim(rtrim(number_format($days, 1), '0'), '.')
+            );
+        }
+    }
+
     if (empty($errors)) {
         $db = db();
         $db->beginTransaction();
@@ -101,7 +118,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $user['id'], $category, $pay_type, $start, $end, $start_t, $end_t, $days, $reason, 'pending', 1,
             ]);
             $rid = (int)$db->lastInsertId();
-            lm_snapshot_flow_for_request($rid);
+            lm_snapshot_flow_for_request($rid, $flow_group);
             $db->commit();
 
             log_change('leave-management', 'CREATE', $rid, lm_category_label($category) . ' (' . $days . 'd)');
@@ -136,7 +153,7 @@ require_once __DIR__ . '/../includes/header.php';
 <?php if (empty($flow)): ?>
 <div class="alert alert-warning">
     <i class="fas fa-exclamation-triangle me-1"></i>
-    No approval flow has been configured yet. You can still submit a request, but it will remain pending until an administrator sets up the approval steps.
+    No approval flow has been configured for your user group yet. You can still submit a request, but it will remain pending until an administrator sets up the approval steps for your group.
 </div>
 <?php endif; ?>
 
@@ -158,9 +175,12 @@ require_once __DIR__ . '/../includes/header.php';
                             <?php endforeach; ?>
                         </select>
                         <div class="form-text">
-                            Casual &amp; Sick leave consume your yearly balance. Additional &amp; Short leave are marked Paid/Unpaid and do not use a balance.
+                            Casual &amp; Sick leave consume your yearly balance. Additional leave is marked Paid/Unpaid.
+                            Short &amp; Maternity &amp; Paternity leave are paid; Study leave is unpaid. Maternity is capped at <?= (int)LM_MATERNITY_DAYS ?> day(s) and Paternity at <?= (int)LM_PATERNITY_DAYS ?> day(s).
                         </div>
                     </div>
+
+                    <div class="alert alert-secondary py-2 px-3" id="catNote" style="display:none;"></div>
 
                     <div class="row g-3" id="payTypeWrap">
                         <div class="col-md-6 mb-3">
@@ -249,15 +269,24 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <script>
+var LM_NOTES = {
+    short:     'Short leave is always <strong>paid</strong>. Choose the date and the start/end time.',
+    study:     'Study leave is always <strong>unpaid</strong>.',
+    maternity: 'Maternity leave is <strong>paid</strong> with an entitlement of up to <strong><?= (int)LM_MATERNITY_DAYS ?></strong> day(s).',
+    paternity: 'Paternity leave is <strong>paid</strong> with an entitlement of up to <strong><?= (int)LM_PATERNITY_DAYS ?></strong> day(s).'
+};
 function lmToggle() {
     var cat   = document.getElementById('category').value;
-    var isPay = (cat === 'additional' || cat === 'short');
+    var isPay = (cat === 'additional');
     var isShort = (cat === 'short');
     document.getElementById('payTypeWrap').style.display = isPay ? '' : 'none';
     document.getElementById('timeWrap').style.display    = isShort ? '' : 'none';
     document.getElementById('endWrap').style.display      = isShort ? 'none' : '';
     document.getElementById('startLabel').textContent     = isShort ? 'Date' : 'Start Date';
     document.getElementById('end_date').required          = !isShort;
+    var note = document.getElementById('catNote');
+    if (LM_NOTES[cat]) { note.innerHTML = LM_NOTES[cat]; note.style.display = ''; }
+    else { note.style.display = 'none'; }
     lmDays();
 }
 function lmDays() {
