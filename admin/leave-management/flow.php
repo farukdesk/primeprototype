@@ -55,11 +55,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $sid = (int)($_POST['id'] ?? 0);
         $db->prepare('DELETE FROM leave_approval_flow WHERE id = ? AND requester_group_id = ?')->execute([$sid, $req_gid]);
         // Re-sequence remaining steps within this requester group to stay contiguous.
-        $rows = $db->prepare('SELECT id FROM leave_approval_flow WHERE requester_group_id = ? ORDER BY step_order ASC, id ASC');
-        $rows->execute([$req_gid]);
+        $rstmt = $db->prepare('SELECT id FROM leave_approval_flow WHERE requester_group_id = ? ORDER BY step_order ASC, id ASC');
+        $rstmt->execute([$req_gid]);
+        $rows = $rstmt->fetchAll();
         $i = 0;
         $upd = $db->prepare('UPDATE leave_approval_flow SET step_order = ? WHERE id = ?');
-        foreach ($rows->fetchAll() as $r) { $i++; $upd->execute([$i, (int)$r['id']]); }
+        foreach ($rows as $r) { $i++; $upd->execute([$i, (int)$r['id']]); }
         log_change('leave-management', 'DELETE', $sid, 'Approval step');
         flash_set('success', 'Approval step removed.');
     } elseif ($action === 'move') {

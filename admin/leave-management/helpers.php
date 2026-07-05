@@ -27,8 +27,8 @@ require_once __DIR__ . '/../notice-signing/helpers.php';
 // ── Constants ─────────────────────────────────────────────────────────────────
 define('LM_DEFAULT_CASUAL', 10.0);
 define('LM_DEFAULT_SICK',   10.0);
-define('LM_MATERNITY_DAYS', 120.0); // Maternity leave entitlement (days)
-define('LM_PATERNITY_DAYS', 7.0);   // Paternity leave entitlement (days)
+const LM_MATERNITY_DAYS = 120.0; // Maternity leave entitlement (days)
+const LM_PATERNITY_DAYS = 7.0;   // Paternity leave entitlement (days)
 
 const LM_CATEGORIES = ['casual', 'sick', 'additional', 'short', 'maternity', 'paternity', 'study'];
 const LM_BALANCE_CATEGORIES = ['casual', 'sick'];   // consume a yearly balance
@@ -44,8 +44,8 @@ const LM_FIXED_PAY = [
 
 // Fixed day entitlement (cap) for certain categories; null = no fixed cap.
 const LM_MAX_DAYS = [
-    'maternity' => 120.0,
-    'paternity' => 7.0,
+    'maternity' => LM_MATERNITY_DAYS,
+    'paternity' => LM_PATERNITY_DAYS,
 ];
 
 // ── Permission helpers ────────────────────────────────────────────────────────
