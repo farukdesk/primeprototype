@@ -48,6 +48,7 @@
     <string name="fee_schedule_breakdown">Fee Schedule &amp; Outstanding Balance</string>
     <string name="fee_type">Fee Type</string>
     <string name="due_as_of_today">Due as of today</string>
+    <string name="due_as_of_today_dated">Due as of today (%1$s)</string>
     <string name="payment_history">Payment History</string>
     <string name="cleared">Cleared</string>
     <string name="fee_payment">Fee Payment</string>

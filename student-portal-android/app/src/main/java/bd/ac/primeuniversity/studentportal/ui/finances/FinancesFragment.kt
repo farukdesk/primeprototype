@@ -83,7 +83,7 @@ class FinancesFragment : Fragment() {
         // Balance due right now (obligations up to the current month)
         binding.dueToday.text = Formatters.money(summary.dueAsOfToday)
         binding.dueTodayLabel.text = summary.asOfDate?.let {
-            getString(R.string.due_as_of_today) + " (" + it + ")"
+            getString(R.string.due_as_of_today_dated, it)
         } ?: getString(R.string.due_as_of_today)
 
         // Fee schedule & outstanding balance breakdown
