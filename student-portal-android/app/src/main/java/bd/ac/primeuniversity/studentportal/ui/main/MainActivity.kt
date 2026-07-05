@@ -118,6 +118,7 @@ class MainActivity : AppCompatActivity() {
         val target = fragments[id] ?: return
         val current = fragments[activeId] ?: return
         supportFragmentManager.beginTransaction()
+            .setCustomAnimations(R.anim.fade_in, R.anim.fade_out)
             .hide(current)
             .show(target)
             .commit()

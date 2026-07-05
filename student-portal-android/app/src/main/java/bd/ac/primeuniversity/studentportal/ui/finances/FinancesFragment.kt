@@ -37,6 +37,9 @@ class FinancesFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        binding.swipeRefresh.setColorSchemeResources(
+            R.color.primary, R.color.accent, R.color.cat_finance
+        )
         binding.swipeRefresh.setOnRefreshListener { load(fromSwipe = true) }
         load()
     }
@@ -118,6 +121,7 @@ class FinancesFragment : Fragment() {
         )
 
         section.rows.forEach { row -> addScheduleRow(item, row) }
+        item.root.startAnimation(entranceAnimation())
         binding.semesterContainer.addView(item.root)
     }
 
@@ -152,8 +156,14 @@ class FinancesFragment : Fragment() {
         }.joinToString(" · ")
         item.payMeta.text = meta
         item.payAmount.text = Formatters.money(payment.amount)
+        item.root.startAnimation(entranceAnimation())
         binding.paymentContainer.addView(item.root)
     }
+
+    /** A fresh fade + rise animation instance for each dynamically added card. */
+    private fun entranceAnimation() = android.view.animation.AnimationUtils.loadAnimation(
+        requireContext(), R.anim.fade_in_up
+    )
 
     private fun showMessage(message: String) {
         binding.summaryCard.visibility = View.GONE

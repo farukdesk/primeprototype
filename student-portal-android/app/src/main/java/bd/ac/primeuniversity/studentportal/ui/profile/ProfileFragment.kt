@@ -7,6 +7,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import bd.ac.primeuniversity.studentportal.PrimeApp
+import bd.ac.primeuniversity.studentportal.R
 import bd.ac.primeuniversity.studentportal.data.model.Student
 import bd.ac.primeuniversity.studentportal.databinding.FragmentProfileBinding
 import bd.ac.primeuniversity.studentportal.databinding.ItemInfoRowBinding
@@ -59,6 +60,9 @@ class ProfileFragment : Fragment() {
         val row = ItemInfoRowBinding.inflate(layoutInflater, container, false)
         row.rowLabel.text = label
         row.rowValue.text = value
+        row.root.startAnimation(
+            android.view.animation.AnimationUtils.loadAnimation(requireContext(), R.anim.fade_in_up)
+        )
         container.addView(row.root)
     }
 

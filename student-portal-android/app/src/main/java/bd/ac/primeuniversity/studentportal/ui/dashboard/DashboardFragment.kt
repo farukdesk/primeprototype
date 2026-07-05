@@ -50,6 +50,21 @@ class DashboardFragment : Fragment() {
 
         binding.btnSettings.setOnClickListener { openSettings() }
 
+        // Colourful pull-to-refresh spinner.
+        binding.swipeRefresh.setColorSchemeResources(
+            R.color.primary, R.color.accent, R.color.info, R.color.cat_campus
+        )
+
+        // Gentle entrance animation for the header stat cards.
+        val enter = android.view.animation.AnimationUtils.loadAnimation(
+            requireContext(), R.anim.fade_in_up
+        )
+        binding.statNotices.root.startAnimation(enter)
+        binding.statOutstanding.root.startAnimation(
+            android.view.animation.AnimationUtils.loadAnimation(requireContext(), R.anim.fade_in_up)
+                .also { it.startOffset = 80 }
+        )
+
         // Stat cards static labels/icons
         binding.statNotices.statLabel.text = getString(R.string.stat_notices)
         binding.statNotices.statIcon.setImageResource(R.drawable.ic_notifications)
@@ -122,7 +137,7 @@ class DashboardFragment : Fragment() {
 
     private fun tint(view: View, colorRes: Int) {
         val base = color(colorRes)
-        view.background?.mutate()?.setTint(ColorUtils.setAlphaComponent(base, 30))
+        view.background?.mutate()?.setTint(ColorUtils.setAlphaComponent(base, 40))
     }
 
     private fun color(res: Int) = ContextCompat.getColor(requireContext(), res)

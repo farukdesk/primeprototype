@@ -26,4 +26,27 @@
     <color name="success_soft">#1F10B981</color>
     <color name="error_soft">#14EF4444</color>
     <color name="primary_soft">#141B3A6B</color>
+
+    <!-- Vibrant accents for a more colourful, lively UI -->
+    <color name="purple">#7C3AED</color>
+    <color name="violet">#8B5CF6</color>
+    <color name="teal">#14B8A6</color>
+    <color name="sky">#0EA5E9</color>
+    <color name="indigo">#4F46E5</color>
+    <color name="pink">#EC4899</color>
+    <color name="orange">#F97316</color>
+    <color name="slate">#64748B</color>
+
+    <!-- Per-section launcher accent colours -->
+    <color name="cat_academic">#4F46E5</color>   <!-- Indigo -->
+    <color name="cat_exam">#0EA5E9</color>        <!-- Sky -->
+    <color name="cat_campus">#8B5CF6</color>      <!-- Violet -->
+    <color name="cat_profile">#10B981</color>     <!-- Emerald -->
+    <color name="cat_finance">#F97316</color>     <!-- Orange -->
+    <color name="cat_settings">#64748B</color>    <!-- Slate -->
+
+    <!-- Gradient stops for a brighter header -->
+    <color name="header_gradient_start">#0F2347</color>
+    <color name="header_gradient_center">#1B3A6B</color>
+    <color name="header_gradient_end">#3457A6</color>
 </resources>

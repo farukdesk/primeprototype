@@ -46,6 +46,8 @@ class NoticesFragment : Fragment() {
         val lm = LinearLayoutManager(requireContext())
         binding.list.layoutManager = lm
         binding.list.adapter = adapter
+        binding.list.layoutAnimation = android.view.animation.AnimationUtils
+            .loadLayoutAnimation(requireContext(), R.anim.layout_animation_fall_down)
         binding.list.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrolled(rv: RecyclerView, dx: Int, dy: Int) {
                 if (dy <= 0) return
@@ -53,6 +55,9 @@ class NoticesFragment : Fragment() {
             }
         })
 
+        binding.swipeRefresh.setColorSchemeResources(
+            R.color.primary, R.color.accent, R.color.cat_campus
+        )
         binding.segUniversity.setOnClickListener { selectSegment(SEG_UNIVERSITY) }
         binding.segDepartment.setOnClickListener { selectSegment(SEG_DEPARTMENT) }
         binding.swipeRefresh.setOnRefreshListener { reload(fromSwipe = true) }
@@ -107,8 +112,12 @@ class NoticesFragment : Fragment() {
             when (result) {
                 is AppResult.Success -> {
                     total = result.data.total
+                    val firstPage = page == 1
                     items.addAll(result.data.notices)
                     adapter.submitList(items.toList())
+                    if (firstPage && items.isNotEmpty()) {
+                        binding.list.scheduleLayoutAnimation()
+                    }
                     binding.emptyState.visibility =
                         if (items.isEmpty()) View.VISIBLE else View.GONE
                 }

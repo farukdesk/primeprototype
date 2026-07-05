@@ -59,7 +59,7 @@ class DashboardMenuAdapter(
             val accent = ContextCompat.getColor(context, feature.colorRes)
             binding.menuIcon.setColorFilter(accent)
             binding.iconContainer.background?.mutate()
-                ?.setTint(ColorUtils.setAlphaComponent(accent, 30))
+                ?.setTint(ColorUtils.setAlphaComponent(accent, 40))
 
             if (feature.subtitleRes != 0) {
                 binding.menuSubtitle.setText(feature.subtitleRes)
