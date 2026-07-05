@@ -116,6 +116,9 @@ dependencies {
     // Image loading (student photo / attachments preview)
     implementation 'com.github.bumptech.glide:glide:4.16.0'
 
+    // QR code generation for the digital student ID card
+    implementation 'com.google.zxing:core:3.5.3'
+
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.2.1'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1'

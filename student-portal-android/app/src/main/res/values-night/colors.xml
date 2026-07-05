@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark theme overrides. Brand navy/gold stay the same; surfaces darken. -->
+    <color name="background">#0E1420</color>
+    <color name="surface">#182233</color>
+    <color name="text_primary">#F1F5F9</color>
+    <color name="text_secondary">#94A3B8</color>
+    <color name="divider">#2A3547</color>
+    <color name="field_fill">#1F2A3C</color>
+
+    <color name="info_soft">#333B82F6</color>
+    <color name="success_soft">#3310B981</color>
+    <color name="error_soft">#33EF4444</color>
+    <color name="primary_soft">#333B82F6</color>
+</resources>

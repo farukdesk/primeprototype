@@ -6,6 +6,7 @@ import bd.ac.primeuniversity.studentportal.data.model.Stats
 import bd.ac.primeuniversity.studentportal.data.model.Student
 import bd.ac.primeuniversity.studentportal.data.repo.StudentRepository
 import bd.ac.primeuniversity.studentportal.messaging.NotificationHelper
+import bd.ac.primeuniversity.studentportal.util.ThemePrefs
 
 /**
  * Application entry point. Holds the shared [StudentRepository] and the current
@@ -23,6 +24,8 @@ class PrimeApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // Apply the saved light/dark theme preference before any UI is shown.
+        ThemePrefs.apply(this)
         // Prepare the announcements notification channel up-front.
         NotificationHelper.ensureChannel(this)
     }

@@ -49,6 +49,16 @@
             android:exported="false"
             android:parentActivityName=".ui.main.MainActivity" />
 
+        <activity
+            android:name=".ui.feature.FeatureActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.main.MainActivity" />
+
+        <activity
+            android:name=".ui.idcard.IdCardActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.main.MainActivity" />
+
         <!-- Firebase Cloud Messaging: receives push notifications from the
              admin panel's App Notification module. -->
         <service

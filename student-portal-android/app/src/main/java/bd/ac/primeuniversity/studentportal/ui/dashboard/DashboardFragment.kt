@@ -1,5 +1,6 @@
 package bd.ac.primeuniversity.studentportal.ui.dashboard
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -14,22 +15,25 @@ import bd.ac.primeuniversity.studentportal.R
 import bd.ac.primeuniversity.studentportal.data.model.Stats
 import bd.ac.primeuniversity.studentportal.data.model.Student
 import bd.ac.primeuniversity.studentportal.databinding.FragmentDashboardBinding
+import bd.ac.primeuniversity.studentportal.ui.feature.FeatureActivity
+import bd.ac.primeuniversity.studentportal.ui.idcard.IdCardActivity
 import bd.ac.primeuniversity.studentportal.ui.main.MainActivity
-import bd.ac.primeuniversity.studentportal.ui.notices.NoticeAdapter
-import bd.ac.primeuniversity.studentportal.ui.notices.NoticeDetailActivity
 import bd.ac.primeuniversity.studentportal.ui.settings.SettingsActivity
 import bd.ac.primeuniversity.studentportal.util.AppResult
 import bd.ac.primeuniversity.studentportal.util.Formatters
 import kotlinx.coroutines.launch
 
-/** Home tab: welcome header, quick stats and the three most recent notices. */
+/**
+ * Home tab: welcome header, quick stats and a grouped launcher menu giving
+ * access to every student-portal feature (Academic, Examination, Campus,
+ * Profile, Finances and Settings).
+ */
 class DashboardFragment : Fragment() {
 
     private var _binding: FragmentDashboardBinding? = null
     private val binding get() = _binding!!
 
     private val app: PrimeApp by lazy { requireActivity().application as PrimeApp }
-    private val adapter = NoticeAdapter(showPreview = false) { openNotice(it) }
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
@@ -41,16 +45,10 @@ class DashboardFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        binding.recentNotices.layoutManager = LinearLayoutManager(requireContext())
-        binding.recentNotices.adapter = adapter
+        binding.menuList.layoutManager = LinearLayoutManager(requireContext())
+        binding.menuList.adapter = DashboardMenuAdapter(buildDashboardMenu()) { onFeature(it) }
 
-        binding.btnSettings.setOnClickListener {
-            startActivity(android.content.Intent(requireContext(), SettingsActivity::class.java))
-        }
-        val goNotices = View.OnClickListener {
-            (activity as? MainActivity)?.selectTab(R.id.nav_notices)
-        }
-        binding.viewAll.setOnClickListener(goNotices)
+        binding.btnSettings.setOnClickListener { openSettings() }
 
         // Stat cards static labels/icons
         binding.statNotices.statLabel.text = getString(R.string.stat_notices)
@@ -61,13 +59,39 @@ class DashboardFragment : Fragment() {
         app.currentStudent.observe(viewLifecycleOwner) { renderStudent(it) }
         app.currentStats.observe(viewLifecycleOwner) { renderStats(it) }
 
-        binding.swipeRefresh.setOnRefreshListener { loadRecentNotices(fromSwipe = true) }
-        loadRecentNotices()
+        binding.swipeRefresh.setOnRefreshListener { refreshSession() }
+    }
+
+    private fun onFeature(feature: Feature) {
+        val activity = activity as? MainActivity
+        when (feature) {
+            Feature.NOTICES -> activity?.selectTab(R.id.nav_notices)
+            Feature.DUE_TODAY,
+            Feature.TOTAL_PAID,
+            Feature.TRANSACTION_HISTORY -> activity?.selectTab(R.id.nav_finances)
+            Feature.STUDENT_PROFILE -> activity?.selectTab(R.id.nav_profile)
+            Feature.SETTINGS -> openSettings()
+            Feature.THEME -> openSettings(openTheme = true)
+            Feature.ID_CARD -> startActivity(Intent(requireContext(), IdCardActivity::class.java))
+            else -> startActivity(FeatureActivity.intent(requireContext(), feature))
+        }
+    }
+
+    private fun openSettings(openTheme: Boolean = false) {
+        val intent = Intent(requireContext(), SettingsActivity::class.java)
+            .putExtra(SettingsActivity.EXTRA_OPEN_THEME, openTheme)
+        startActivity(intent)
     }
 
     private fun renderStudent(student: Student?) {
         binding.studentName.text = student?.fullName?.takeIf { it.isNotBlank() }
             ?: getString(R.string.student)
+        val meta = listOfNotNull(
+            student?.studentId?.takeIf { it.isNotBlank() },
+            student?.deptCode?.takeIf { it.isNotBlank() } ?: student?.deptName,
+        ).joinToString(" · ")
+        binding.studentMeta.text = meta
+        binding.studentMeta.visibility = if (meta.isBlank()) View.GONE else View.VISIBLE
     }
 
     private fun renderStats(stats: Stats?) {
@@ -85,29 +109,15 @@ class DashboardFragment : Fragment() {
             if (outstanding != null) Formatters.moneyWhole(outstanding) else getString(R.string.dash)
     }
 
-    private fun loadRecentNotices(fromSwipe: Boolean = false) {
-        if (!fromSwipe) binding.noticesProgress.visibility = View.VISIBLE
-        binding.noticesEmpty.visibility = View.GONE
+    private fun refreshSession() {
         lifecycleScope.launch {
-            val result = app.repository.getNotices("university", 1)
-            binding.noticesProgress.visibility = View.GONE
-            binding.swipeRefresh.isRefreshing = false
-            when (result) {
-                is AppResult.Success -> {
-                    val list = result.data.notices.take(3)
-                    adapter.submitList(list)
-                    binding.noticesEmpty.visibility =
-                        if (list.isEmpty()) View.VISIBLE else View.GONE
-                }
-                is AppResult.Error -> {
-                    if (adapter.itemCount == 0) binding.noticesEmpty.visibility = View.VISIBLE
-                }
+            when (val result = app.repository.me()) {
+                is AppResult.Success ->
+                    app.setSession(result.data.student, result.data.stats)
+                is AppResult.Error -> Unit
             }
+            _binding?.swipeRefresh?.isRefreshing = false
         }
-    }
-
-    private fun openNotice(notice: bd.ac.primeuniversity.studentportal.data.model.Notice) {
-        startActivity(NoticeDetailActivity.intent(requireContext(), notice.id, notice.type))
     }
 
     private fun tint(view: View, colorRes: Int) {
