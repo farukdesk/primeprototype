@@ -92,6 +92,7 @@ function att_global_schedule(): array
 function att_weekly_off_days(): array
 {
     $raw = (string)att_get_setting('weekly_off_days', ATT_DEFAULT_WEEKLY_OFF);
+    if (trim($raw) === '') return [];
     $days = [];
     foreach (explode(',', $raw) as $d) {
         $d = (int)trim($d);

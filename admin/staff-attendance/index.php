@@ -35,7 +35,7 @@ if ($report === 'daily') {
     $range_label = date('d M', strtotime($from)) . ' – ' . date('d M Y', strtotime($to));
 } else { // monthly
     $month = $_GET['month'] ?? date('Y-m');
-    if (!preg_match('/^\d{4}-\d{2}$/', $month)) $month = date('Y-m');
+    if (!preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $month)) $month = date('Y-m');
     $from = $month . '-01';
     $to   = date('Y-m-t', strtotime($from));
     $range_label = date('F Y', strtotime($from));
