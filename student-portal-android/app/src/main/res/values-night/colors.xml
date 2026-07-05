@@ -12,4 +12,25 @@
     <color name="success_soft">#3310B981</color>
     <color name="error_soft">#33EF4444</color>
     <color name="primary_soft">#333B82F6</color>
+
+    <!-- Brighter accents for legibility on dark surfaces -->
+    <color name="purple">#A78BFA</color>
+    <color name="violet">#A78BFA</color>
+    <color name="teal">#2DD4BF</color>
+    <color name="sky">#38BDF8</color>
+    <color name="indigo">#818CF8</color>
+    <color name="pink">#F472B6</color>
+    <color name="orange">#FB923C</color>
+    <color name="slate">#94A3B8</color>
+
+    <color name="cat_academic">#818CF8</color>
+    <color name="cat_exam">#38BDF8</color>
+    <color name="cat_campus">#A78BFA</color>
+    <color name="cat_profile">#34D399</color>
+    <color name="cat_finance">#FB923C</color>
+    <color name="cat_settings">#94A3B8</color>
+
+    <color name="header_gradient_start">#0B1220</color>
+    <color name="header_gradient_center">#152341</color>
+    <color name="header_gradient_end">#24406E</color>
 </resources>

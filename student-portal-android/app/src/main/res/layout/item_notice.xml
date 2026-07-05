@@ -4,9 +4,13 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_marginBottom="12dp"
+    android:clickable="true"
+    android:focusable="true"
+    android:stateListAnimator="@animator/card_lift"
     app:cardBackgroundColor="@color/surface"
     app:cardCornerRadius="14dp"
     app:cardElevation="2dp"
+    app:rippleColor="@color/primary_soft"
     app:strokeWidth="0dp">
 
     <LinearLayout
