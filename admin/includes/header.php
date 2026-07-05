@@ -331,7 +331,7 @@ if (is_portal_student()) {
                          || strpos($current_path, '/students/my-admit-card') !== false;
     $is_semester_drop_active = strpos($current_path, '/semester-drop/') !== false;
     $is_clubs_active = strpos($current_path, '/clubs/') !== false;
-    $is_hr_active = $is_jobs_active || (strpos($current_path, '/staff-profiles/') !== false);
+    $is_hr_active = $is_jobs_active || (strpos($current_path, '/staff-profiles/') !== false) || (strpos($current_path, '/leave-management/') !== false);
     $is_coe_active = strpos($current_path, '/results/') !== false
                   || $is_spring_result_active || $is_tabulation_checker_active || $is_transcript_maker_active
                   || strpos($current_path, '/student-verification/') !== false
@@ -1630,7 +1630,7 @@ if (is_portal_student()) {
     <?php endif; ?>
 
     <!-- ── HR & Staff ── -->
-    <?php if (is_super_admin() || can_access('jobs') || can_access('staff-departments')): ?>
+    <?php if (is_super_admin() || can_access('jobs') || can_access('staff-departments') || can_access('leave-management')): ?>
     <button class="nav-group-toggle <?= $is_hr_active ? '' : 'collapsed' ?>"
             data-bs-toggle="collapse" data-bs-target="#grp-jobs"
             aria-expanded="<?= $is_hr_active ? 'true' : 'false' ?>">
@@ -1665,6 +1665,14 @@ if (is_portal_student()) {
                 <a href="<?= APP_URL ?>/staff-profiles/departments.php"
                    class="<?= strpos($current_path, '/staff-profiles/departments') !== false ? 'active' : '' ?>">
                     <i class="fas fa-sitemap"></i> Staff Departments
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('leave-management')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/leave-management/index.php"
+                   class="<?= strpos($current_path, '/leave-management/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-plane-departure"></i> Leave Management
                 </a>
             </li>
             <?php endif; ?>
