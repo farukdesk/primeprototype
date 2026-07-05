@@ -64,7 +64,7 @@ if ($action === 'approve' || $action === 'reject') {
     $is_admin = lm_is_admin();
 
     if (!$can_step && !$is_admin) {
-        flash_set('error', 'You are not authorised to act on this step.');
+        flash_set('error', 'You are not authorized to act on this step.');
         redirect($view_url);
     }
 
