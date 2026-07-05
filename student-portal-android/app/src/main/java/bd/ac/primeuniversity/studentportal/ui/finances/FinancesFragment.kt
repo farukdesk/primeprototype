@@ -11,16 +11,17 @@ import bd.ac.primeuniversity.studentportal.PrimeApp
 import bd.ac.primeuniversity.studentportal.R
 import bd.ac.primeuniversity.studentportal.data.model.FinanceSummary
 import bd.ac.primeuniversity.studentportal.data.model.Payment
-import bd.ac.primeuniversity.studentportal.data.model.SemesterSummary
+import bd.ac.primeuniversity.studentportal.data.model.ScheduleRow
+import bd.ac.primeuniversity.studentportal.data.model.ScheduleSection
 import bd.ac.primeuniversity.studentportal.databinding.FragmentFinancesBinding
 import bd.ac.primeuniversity.studentportal.databinding.ItemPaymentBinding
-import bd.ac.primeuniversity.studentportal.databinding.ItemSemesterBinding
+import bd.ac.primeuniversity.studentportal.databinding.ItemScheduleRowBinding
+import bd.ac.primeuniversity.studentportal.databinding.ItemScheduleSectionBinding
 import bd.ac.primeuniversity.studentportal.util.AppResult
 import bd.ac.primeuniversity.studentportal.util.Formatters
-import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
-/** Finances tab: fee summary, semester breakdown and payment history. */
+/** Finances tab: fee summary, fee schedule & outstanding balance breakdown and payment history. */
 class FinancesFragment : Fragment() {
 
     private var _binding: FragmentFinancesBinding? = null
@@ -48,14 +49,19 @@ class FinancesFragment : Fragment() {
             binding.swipeRefresh.isRefreshing = false
             when (result) {
                 is AppResult.Success -> render(
-                    result.data.summary, result.data.payments, result.data.message
+                    result.data.summary, result.data.schedule, result.data.payments, result.data.message
                 )
                 is AppResult.Error -> showMessage(result.message)
             }
         }
     }
 
-    private fun render(summary: FinanceSummary?, payments: List<Payment>, message: String?) {
+    private fun render(
+        summary: FinanceSummary?,
+        schedule: List<ScheduleSection>,
+        payments: List<Payment>,
+        message: String?
+    ) {
         binding.semesterContainer.removeAllViews()
         binding.paymentContainer.removeAllViews()
 
@@ -74,10 +80,16 @@ class FinancesFragment : Fragment() {
             if (summary.outstanding > 0) 0xFFFF6B6B.toInt() else 0xFF6EE7B7.toInt()
         )
 
-        // Semester breakdown
-        if (summary.semesters.isNotEmpty()) {
+        // Balance due right now (obligations up to the current month)
+        binding.dueToday.text = Formatters.money(summary.dueAsOfToday)
+        binding.dueTodayLabel.text = summary.asOfDate?.let {
+            getString(R.string.due_as_of_today_dated, it)
+        } ?: getString(R.string.due_as_of_today)
+
+        // Fee schedule & outstanding balance breakdown
+        if (schedule.isNotEmpty()) {
             binding.semesterHeader.visibility = View.VISIBLE
-            summary.semesters.forEach { addSemesterCard(it) }
+            schedule.forEach { addScheduleSection(it) }
         } else {
             binding.semesterHeader.visibility = View.GONE
         }
@@ -91,26 +103,41 @@ class FinancesFragment : Fragment() {
         }
     }
 
-    private fun addSemesterCard(sem: SemesterSummary) {
-        val item = ItemSemesterBinding.inflate(
+    private fun addScheduleSection(section: ScheduleSection) {
+        val item = ItemScheduleSectionBinding.inflate(
             layoutInflater, binding.semesterContainer, false
         )
-        item.semLabel.text = sem.label
-        val cleared = sem.outstanding <= 0
-        item.semStatus.text = if (cleared) getString(R.string.cleared)
-        else "${Formatters.money(sem.outstanding)} due"
-        item.semStatus.setTextColor(
+        item.sectionTitle.text = section.title
+
+        val outstanding = section.rows.sumOf { it.out }
+        val cleared = outstanding <= 0.0
+        item.sectionStatus.text = if (cleared) getString(R.string.cleared)
+        else "${Formatters.money(outstanding)} due"
+        item.sectionStatus.setTextColor(
             ContextCompat.getColor(requireContext(), if (cleared) R.color.success else R.color.error)
         )
-        val pct = if (sem.totalDue > 0)
-            ((sem.totalPaid / sem.totalDue).coerceIn(0.0, 1.0) * 100).roundToInt() else 0
-        item.semProgress.progress = pct
-        item.semProgress.progressTintList = android.content.res.ColorStateList.valueOf(
-            ContextCompat.getColor(requireContext(), if (pct >= 100) R.color.success else R.color.primary)
-        )
-        item.semDetail.text =
-            "${Formatters.money(sem.totalPaid)} of ${Formatters.money(sem.totalDue)} paid"
+
+        section.rows.forEach { row -> addScheduleRow(item, row) }
         binding.semesterContainer.addView(item.root)
+    }
+
+    private fun addScheduleRow(section: ItemScheduleSectionBinding, row: ScheduleRow) {
+        val rowBinding = ItemScheduleRowBinding.inflate(
+            layoutInflater, section.rowContainer, false
+        )
+        rowBinding.rowLabel.text = row.label
+        rowBinding.rowDue.text = if (row.due > 0) Formatters.money(row.due) else "—"
+        rowBinding.rowPaid.text = if (row.paid > 0) Formatters.money(row.paid) else "—"
+        val cleared = row.out <= 0.0
+        rowBinding.rowOut.text = when {
+            row.out > 0 -> Formatters.money(row.out)
+            row.due > 0 -> getString(R.string.paid)
+            else -> "—"
+        }
+        rowBinding.rowOut.setTextColor(
+            ContextCompat.getColor(requireContext(), if (cleared) R.color.success else R.color.error)
+        )
+        section.rowContainer.addView(rowBinding.root)
     }
 
     private fun addPaymentCard(payment: Payment) {
