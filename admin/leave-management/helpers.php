@@ -6,12 +6,17 @@
  *   casual     – consumes the yearly Casual balance (default 10 days)
  *   sick       – consumes the yearly Sick balance (default 10 days)
  *   additional – outside the balance categories, marked paid/unpaid, no balance
- *   short      – outside the balance categories, marked paid/unpaid, no balance
+ *   short      – always paid, single day with a start/end time, no balance
+ *   maternity  – entitlement of 120 days, paid, no balance
+ *   paternity  – entitlement of 7 days, paid, no balance
+ *   study      – always unpaid, no balance
  *
  * Approval: a request is routed through an ordered list of user groups
- * (leave_approval_flow). Each step is approved by a member of the assigned
- * group, who applies their uploaded signature image. When every step is
- * approved the request becomes "approved"; a rejection at any step rejects it.
+ * (leave_approval_flow) that is scoped to the requester's user group, so
+ * different groups / departments can have different approval systems. Each step
+ * is approved by a member of the assigned group, who applies their uploaded
+ * signature image. When every step is approved the request becomes "approved";
+ * a rejection at any step rejects it.
  */
 
 require_once __DIR__ . '/../includes/auth.php';
@@ -22,10 +27,26 @@ require_once __DIR__ . '/../notice-signing/helpers.php';
 // ── Constants ─────────────────────────────────────────────────────────────────
 define('LM_DEFAULT_CASUAL', 10.0);
 define('LM_DEFAULT_SICK',   10.0);
+define('LM_MATERNITY_DAYS', 120.0); // Maternity leave entitlement (days)
+define('LM_PATERNITY_DAYS', 7.0);   // Paternity leave entitlement (days)
 
-const LM_CATEGORIES = ['casual', 'sick', 'additional', 'short'];
-const LM_BALANCE_CATEGORIES = ['casual', 'sick'];       // consume a balance
-const LM_PAYTYPE_CATEGORIES = ['additional', 'short'];  // require paid/unpaid
+const LM_CATEGORIES = ['casual', 'sick', 'additional', 'short', 'maternity', 'paternity', 'study'];
+const LM_BALANCE_CATEGORIES = ['casual', 'sick'];   // consume a yearly balance
+const LM_PAYTYPE_CATEGORIES = ['additional'];       // user chooses paid/unpaid
+
+// Categories whose paid/unpaid status is fixed (not chosen by the requester).
+const LM_FIXED_PAY = [
+    'short'     => 'paid',
+    'study'     => 'unpaid',
+    'maternity' => 'paid',
+    'paternity' => 'paid',
+];
+
+// Fixed day entitlement (cap) for certain categories; null = no fixed cap.
+const LM_MAX_DAYS = [
+    'maternity' => 120.0,
+    'paternity' => 7.0,
+];
 
 // ── Permission helpers ────────────────────────────────────────────────────────
 
@@ -59,6 +80,9 @@ function lm_category_label(string $cat): string
         'sick'       => 'Sick Leave',
         'additional' => 'Additional Leave',
         'short'      => 'Short Leave',
+        'maternity'  => 'Maternity Leave',
+        'paternity'  => 'Paternity Leave',
+        'study'      => 'Study Leave',
         default      => ucfirst($cat),
     };
 }
@@ -70,9 +94,30 @@ function lm_category_badge(string $cat): string
         'sick'       => 'bg-warning text-dark',
         'additional' => 'bg-primary',
         'short'      => 'bg-secondary',
+        'maternity'  => 'bg-danger',
+        'paternity'  => 'bg-success',
+        'study'      => 'bg-dark',
     ];
     $cls = $map[$cat] ?? 'bg-light text-dark';
     return '<span class="badge ' . $cls . '">' . h(lm_category_label($cat)) . '</span>';
+}
+
+/** The fixed paid/unpaid value for a category, or null if the requester chooses. */
+function lm_fixed_pay(string $cat): ?string
+{
+    return LM_FIXED_PAY[$cat] ?? null;
+}
+
+/** Whether the requester picks paid/unpaid for this category. */
+function lm_category_needs_paytype(string $cat): bool
+{
+    return in_array($cat, LM_PAYTYPE_CATEGORIES, true);
+}
+
+/** Fixed day entitlement (cap) for a category, or null when there is none. */
+function lm_category_max_days(string $cat): ?float
+{
+    return LM_MAX_DAYS[$cat] ?? null;
 }
 
 function lm_status_badge(string $status): string
@@ -177,17 +222,56 @@ function lm_set_balance(int $user_id, int $year, float $casual, float $sick): vo
 
 // ── Approval-flow helpers ───────────────────────────────────────────────────────
 
-/** The configured, ordered, active approval steps (global config). */
-function lm_active_flow(): array
+/**
+ * The configured, ordered, active approval steps for a given requester group.
+ * Different requester groups can define different approval systems.
+ */
+function lm_active_flow_for_group(int $requester_group_id): array
 {
-    $stmt = db()->query(
+    if ($requester_group_id < 1) return [];
+    $stmt = db()->prepare(
         'SELECT f.*, g.name AS group_name
            FROM leave_approval_flow f
            JOIN user_groups g ON g.id = f.group_id
-          WHERE f.is_active = 1
+          WHERE f.is_active = 1 AND f.requester_group_id = ?
           ORDER BY f.step_order ASC, f.id ASC'
     );
+    $stmt->execute([$requester_group_id]);
     return $stmt->fetchAll();
+}
+
+/** Whether a requester group has at least one active approval step. */
+function lm_group_has_flow(int $requester_group_id): bool
+{
+    if ($requester_group_id < 1) return false;
+    $stmt = db()->prepare(
+        'SELECT 1 FROM leave_approval_flow WHERE requester_group_id = ? AND is_active = 1 LIMIT 1'
+    );
+    $stmt->execute([$requester_group_id]);
+    return (bool)$stmt->fetchColumn();
+}
+
+/**
+ * Resolve which of the user's groups drives the approval flow. Prefers the
+ * user's primary group when it has a configured flow, otherwise the first of
+ * their groups that does; falls back to the primary group id.
+ */
+function lm_flow_group_for_user(array $user): int
+{
+    $primary   = (int)($user['group_id'] ?? 0);
+    $group_ids = array_map('intval', $user['group_ids'] ?? ($primary ? [$primary] : []));
+
+    if ($primary > 0 && lm_group_has_flow($primary)) return $primary;
+    foreach ($group_ids as $gid) {
+        if (lm_group_has_flow($gid)) return $gid;
+    }
+    return $primary > 0 ? $primary : (int)($group_ids[0] ?? 0);
+}
+
+/** The active approval steps that apply to the given requesting user. */
+function lm_active_flow_for_user(array $user): array
+{
+    return lm_active_flow_for_group(lm_flow_group_for_user($user));
 }
 
 /** Selectable user groups for building the flow (excludes super-admin groups). */
@@ -199,12 +283,12 @@ function lm_group_options(): array
 }
 
 /**
- * Snapshot the current active flow into a request's approval steps.
+ * Snapshot the requester group's active flow into a request's approval steps.
  * Returns the number of steps created.
  */
-function lm_snapshot_flow_for_request(int $request_id): int
+function lm_snapshot_flow_for_request(int $request_id, int $requester_group_id): int
 {
-    $flow = lm_active_flow();
+    $flow = lm_active_flow_for_group($requester_group_id);
     $ins = db()->prepare(
         'INSERT INTO leave_request_approvals (request_id, step_order, group_id, label)
          VALUES (?,?,?,?)'
