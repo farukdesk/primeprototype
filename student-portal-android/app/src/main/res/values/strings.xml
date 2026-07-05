@@ -82,6 +82,67 @@
     <string name="dash">—</string>
     <string name="settings_desc">Settings</string>
 
+    <!-- Dashboard menu sections -->
+    <string name="section_academic">Academic</string>
+    <string name="section_examination">Examination</string>
+    <string name="section_campus">Campus</string>
+    <string name="section_profile">Profile</string>
+    <string name="section_settings">Settings</string>
+    <string name="section_finances">Finances</string>
+    <string name="quick_access">Quick Access</string>
+
+    <!-- Academic -->
+    <string name="feat_registered_courses">Registered Courses</string>
+    <string name="feat_course_registration">Course Registration</string>
+    <string name="feat_course_modules">Course Modules</string>
+
+    <!-- Examination -->
+    <string name="feat_results">Results</string>
+    <string name="feat_results_desc">Semester-wise &amp; course-wise</string>
+    <string name="feat_exam_schedule">Exam Schedule</string>
+    <string name="feat_seat_plan">Seat Plan</string>
+    <string name="feat_admit_card">Admit Card</string>
+    <string name="feat_transcript">Transcript (Unofficial)</string>
+
+    <!-- Campus -->
+    <string name="feat_notices">Notices</string>
+    <string name="feat_academic_calendar">Academic Calendar</string>
+    <string name="feat_events">Events</string>
+    <string name="feat_holiday_list">Holiday List</string>
+    <string name="feat_class_schedule">Class Schedule</string>
+    <string name="feat_overall_attendance">Overall Attendance</string>
+    <string name="feat_daily_attendance">Daily Attendance</string>
+
+    <!-- Profile -->
+    <string name="feat_student_profile">Student Profile</string>
+    <string name="feat_id_card">ID Card (Digital QR)</string>
+    <string name="feat_emergency_contact">Emergency Contact</string>
+
+    <!-- Settings menu -->
+    <string name="feat_password_change">Password Change</string>
+    <string name="feat_settings">Settings</string>
+    <string name="feat_theme">Dark / Light Mode</string>
+
+    <!-- Finances -->
+    <string name="feat_due_today">Due as of today</string>
+    <string name="feat_total_paid">Total paid as of today</string>
+    <string name="feat_transaction_history">Transaction history</string>
+
+    <!-- Feature detail (coming soon) -->
+    <string name="coming_soon">Coming soon</string>
+    <string name="coming_soon_body">This feature is on the way. We\'re bringing it to your student portal shortly — check back after the next update.</string>
+
+    <!-- Theme picker -->
+    <string name="theme_dialog_title">Appearance</string>
+    <string name="theme_system">Use system default</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+
+    <!-- ID card -->
+    <string name="id_card_title">Student ID Card</string>
+    <string name="id_card_scan_hint">Scan to verify identity</string>
+    <string name="id_card_valid">Valid student ID · Prime University</string>
+
     <!-- Push notifications -->
     <string name="notification_channel_name">Announcements</string>
     <string name="notification_channel_desc">Push notifications published from the university admin panel.</string>
