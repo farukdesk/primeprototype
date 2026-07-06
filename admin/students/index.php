@@ -453,22 +453,37 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
 
     <?php if ($total_pages > 1): ?>
-    <div class="card-footer py-3 px-4 d-flex justify-content-between align-items-center">
+    <div class="card-footer py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
         <small class="text-muted">
             Showing <?= $offset + 1 ?>–<?= min($offset + $per_page, $total_rows) ?> of <?= $total_rows ?>
         </small>
         <nav>
-            <ul class="pagination pagination-sm mb-0">
+            <ul class="pagination pagination-sm mb-0 flex-wrap">
                 <?php
-                $qp = $_GET;
+                $qp    = $_GET;
+                $range = 2;
+
+                $qp['page'] = max(1, $page - 1);
+                ?>
+                <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>">
+                    <a class="page-link" href="?<?= http_build_query($qp) ?>" aria-label="Previous">&laquo;</a>
+                </li>
+                <?php
                 for ($p = 1; $p <= $total_pages; $p++):
-                    $qp['page'] = $p;
-                    $active = $p === $page;
+                    if ($p === 1 || $p === $total_pages || abs($p - $page) <= $range):
+                        $qp['page'] = $p;
+                        $active = $p === $page;
                 ?>
                 <li class="page-item <?= $active ? 'active' : '' ?>">
                     <a class="page-link" href="?<?= http_build_query($qp) ?>"><?= $p ?></a>
                 </li>
-                <?php endfor; ?>
+                <?php elseif (abs($p - $page) === $range + 1): ?>
+                <li class="page-item disabled"><span class="page-link">…</span></li>
+                <?php endif; endfor; ?>
+                <?php $qp['page'] = min($total_pages, $page + 1); ?>
+                <li class="page-item <?= $page >= $total_pages ? 'disabled' : '' ?>">
+                    <a class="page-link" href="?<?= http_build_query($qp) ?>" aria-label="Next">&raquo;</a>
+                </li>
             </ul>
         </nav>
     </div>
