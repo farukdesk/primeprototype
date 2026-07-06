@@ -60,8 +60,14 @@ $errors     = [];
 $preview    = null;
 
 // Resolve program
+// Reject departments the current user is not scoped to (linked to their profile).
+if ($dept_id > 0 && !can_access_dept($dept_id)) {
+    $dept_id    = 0;
+    $program_id = 0;
+}
+
 $program_row = null;
-if ($program_id > 0 && $dept_id > 0 && can_access_dept($dept_id)) {
+if ($program_id > 0 && $dept_id > 0) {
     $st = db()->prepare(
         "SELECT p.*, d.name AS dept_name
            FROM dept_academic_programs p
@@ -71,12 +77,6 @@ if ($program_id > 0 && $dept_id > 0 && can_access_dept($dept_id)) {
     );
     $st->execute([$program_id, $dept_id]);
     $program_row = $st->fetch() ?: null;
-}
-
-// Reject departments the current user is not scoped to (linked to their profile).
-if ($dept_id > 0 && !can_access_dept($dept_id)) {
-    $dept_id    = 0;
-    $program_id = 0;
 }
 
 $departments     = cc_departments();
