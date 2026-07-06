@@ -23,6 +23,8 @@ if ($group['is_super'] && !is_super_admin()) {
 
 // Membership = users that have an assignment to this group, plus legacy users
 // whose primary group is this group but who have no assignment rows at all.
+// Returns a SQL fragment with two positional (?) placeholders, both of which
+// must be bound to the group id, in order, by the caller.
 function ug_member_ids_subquery(): string {
     return 'SELECT user_id FROM user_group_assignments WHERE group_id = ?
             UNION
@@ -222,7 +224,7 @@ require_once __DIR__ . '/../includes/header.php';
                                         </span>
                                     <?php else: ?>
                                     <form method="POST" action="<?= APP_URL ?>/user-groups/members.php?id=<?= $id ?>"
-                                          onsubmit="return confirm('Remove <?= h(addslashes($m['full_name'])) ?> from this group?');">
+                                          onsubmit="return confirm('Remove this user from the group?');">
                                         <?= csrf_field() ?>
                                         <input type="hidden" name="action" value="remove">
                                         <input type="hidden" name="id" value="<?= $id ?>">
