@@ -542,6 +542,9 @@ $statusChipClass = match($student['status']) {
                 <?php if (!empty($student['shift'])): ?>
                     &nbsp;·&nbsp; <?= h($student['shift']) ?> Shift
                 <?php endif; ?>
+                <?php if (!empty($student['section'])): ?>
+                    &nbsp;·&nbsp; <i class="fas fa-users me-1" style="opacity:.6;"></i>Section: <strong><?= h($student['section']) ?></strong>
+                <?php endif; ?>
                 <?php if (!empty($student['semester_type'])): ?>
                     &nbsp;·&nbsp; <span style="opacity:.75;"><?= h(sm_semester_type_label($student['semester_type'], true)) ?></span>
                 <?php endif; ?>

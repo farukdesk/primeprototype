@@ -80,6 +80,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $batch_id             = (int)($_POST['batch_id']            ?? 0);
     $year                 = trim($_POST['year']                 ?? '');
     $shift                = trim($_POST['shift']                ?? '');
+    $section              = trim($_POST['section']              ?? '');
     $poor_meritorious     = isset($_POST['poor_meritorious'])      ? 1 : 0;
     $freedom_fighter      = isset($_POST['freedom_fighter_quota']) ? 1 : 0;
     $waiver_percent       = trim($_POST['waiver_percent']       ?? '');
@@ -215,7 +216,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'UPDATE students SET
                student_id = ?, dept_id = ?, program_id = ?, admitted_semester = ?,
                semester_type = ?,
-               batch = ?, batch_id = ?, year = ?, shift = ?,
+               batch = ?, batch_id = ?, year = ?, shift = ?, section = ?,
                full_name = ?, father_name = ?, father_phone = ?, father_occupation = ?,
                father_yearly_income = ?,
                mother_name = ?, mother_phone = ?, mother_occupation = ?,
@@ -247,6 +248,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $batch_id       ?: null,
             $year           ?: null,
             $shift          ?: null,
+            $section        ?: null,
             $full_name,
             $father_name          ?: null,
             $father_phone         ?: null,
@@ -538,6 +540,15 @@ require_once __DIR__ . '/../includes/header.php';
                     <option value="">— Select —</option>
                     <?php foreach (['Day','Evening','Morning'] as $sh): ?>
                     <option value="<?= $sh ?>" <?= ($student['shift'] ?? '') === $sh ? 'selected' : '' ?>><?= $sh ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold">Section</label>
+                <select name="section" class="form-select">
+                    <option value="">— Select —</option>
+                    <?php foreach (SM_SECTIONS as $sec): ?>
+                    <option value="<?= $sec ?>" <?= ($student['section'] ?? '') === $sec ? 'selected' : '' ?>><?= $sec ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
