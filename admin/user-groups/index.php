@@ -137,6 +137,10 @@ require_once __DIR__ . '/../includes/header.php';
                         </td>
                         <td>
                             <div class="d-flex gap-1">
+                                <a href="<?= APP_URL ?>/user-groups/members.php?id=<?= $g['id'] ?>"
+                                   class="btn btn-sm btn-outline-secondary" title="Manage Members" style="border-radius:7px;">
+                                    <i class="fas fa-user-friends"></i>
+                                </a>
                                 <a href="<?= APP_URL ?>/access/index.php?group_id=<?= $g['id'] ?>"
                                    class="btn btn-sm btn-outline-info" title="Manage Access" style="border-radius:7px;">
                                     <i class="fas fa-shield-alt"></i>
