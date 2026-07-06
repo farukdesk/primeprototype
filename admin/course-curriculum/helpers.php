@@ -44,13 +44,17 @@ function cc_is_staff(): bool
 }
 
 /**
- * Fetch all active departments ordered by name.
+ * Fetch all active departments ordered by name, restricted to the
+ * departments the current user is scoped to (linked to their profile).
+ * Super admins and users without a scope see all departments.
  */
 function cc_departments(): array
 {
-    return db()
+    $rows = db()
         ->query("SELECT id, name FROM dept_departments WHERE is_active = 1 ORDER BY name ASC")
         ->fetchAll();
+
+    return array_values(array_filter($rows, fn($d) => can_access_dept((int)$d['id'])));
 }
 
 /**

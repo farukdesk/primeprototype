@@ -50,6 +50,10 @@ if (!$program_row) {
     flash_set('danger', 'Program not found.');
     redirect(APP_URL . '/course-curriculum/index.php');
 }
+if (!can_access_dept($dept_id)) {
+    flash_set('danger', 'You do not have permission to access this department.');
+    redirect(APP_URL . '/course-curriculum/index.php');
+}
 
 // Load faculty for this department
 $dept_faculty = cc_get_dept_faculty($dept_id);
