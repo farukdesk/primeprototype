@@ -547,7 +547,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <label class="form-label fw-semibold">Section</label>
                 <select name="section" class="form-select">
                     <option value="">— Select —</option>
-                    <?php foreach (['A','B','C','D','E','F','G'] as $sec): ?>
+                    <?php foreach (SM_SECTIONS as $sec): ?>
                     <option value="<?= $sec ?>" <?= ($student['section'] ?? '') === $sec ? 'selected' : '' ?>><?= $sec ?></option>
                     <?php endforeach; ?>
                 </select>

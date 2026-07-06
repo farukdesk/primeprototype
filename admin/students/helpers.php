@@ -25,6 +25,9 @@ const SM_FILE_MIMES  = [
 const SM_PHOTO_MAX   = 5 * 1024 * 1024;  // 5 MB
 const SM_FILE_MAX    = 20 * 1024 * 1024; // 20 MB
 
+// ── Allowed class sections ────────────────────────────────────────────────────
+const SM_SECTIONS = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
+
 // ── Permission helpers ────────────────────────────────────────────────────────
 
 function sm_is_staff(): bool

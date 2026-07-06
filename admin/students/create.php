@@ -651,7 +651,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <label class="form-label">Section</label>
                 <select name="section" class="form-select">
                     <option value="">— Select —</option>
-                    <?php foreach (['A','B','C','D','E','F','G'] as $sec): ?>
+                    <?php foreach (SM_SECTIONS as $sec): ?>
                     <option value="<?= $sec ?>" <?= old('section') === $sec ? 'selected' : '' ?>><?= $sec ?></option>
                     <?php endforeach; ?>
                 </select>

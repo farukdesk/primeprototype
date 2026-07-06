@@ -27,7 +27,7 @@ $per_page = 20;
 
 $valid_statuses  = ['Active', 'Inactive', 'Graduated', 'Dropped', 'Not Admitted Yet'];
 $valid_sem_types = ['bi_semester', 'trimester'];
-$valid_sections  = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
+$valid_sections  = SM_SECTIONS;
 $valid_genders   = ['Male', 'Female', 'Other'];
 $valid_bloods    = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
