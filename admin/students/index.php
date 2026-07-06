@@ -19,11 +19,17 @@ $f_sem      = trim($_GET['semester'] ?? '');
 $f_sem_type = trim($_GET['sem_type'] ?? '');
 $f_program  = (int)($_GET['program'] ?? 0);
 $f_batch    = (int)($_GET['batch']   ?? 0);
+$f_section  = trim($_GET['section']  ?? '');
+$f_gender   = trim($_GET['gender']   ?? '');
+$f_blood    = trim($_GET['blood']    ?? '');
 $page       = max(1, (int)($_GET['page'] ?? 1));
 $per_page = 20;
 
 $valid_statuses  = ['Active', 'Inactive', 'Graduated', 'Dropped', 'Not Admitted Yet'];
 $valid_sem_types = ['bi_semester', 'trimester'];
+$valid_sections  = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
+$valid_genders   = ['Male', 'Female', 'Other'];
+$valid_bloods    = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
 $where  = [];
 $params = [];
@@ -59,6 +65,18 @@ if ($f_program > 0) {
 if ($f_batch > 0) {
     $where[]  = 's.batch_id = ?';
     $params[] = $f_batch;
+}
+if (in_array($f_section, $valid_sections, true)) {
+    $where[]  = 's.section = ?';
+    $params[] = $f_section;
+}
+if (in_array($f_gender, $valid_genders, true)) {
+    $where[]  = 's.sex = ?';
+    $params[] = $f_gender;
+}
+if (in_array($f_blood, $valid_bloods, true)) {
+    $where[]  = 's.blood_group = ?';
+    $params[] = $f_blood;
 }
 
 // Apply department scope restriction for non-super-admins
@@ -293,6 +311,33 @@ require_once __DIR__ . '/../includes/header.php';
                     <option value="">All Types</option>
                     <option value="bi_semester" <?= $f_sem_type === 'bi_semester' ? 'selected' : '' ?>>Bi Semester</option>
                     <option value="trimester"   <?= $f_sem_type === 'trimester'   ? 'selected' : '' ?>>Trimester</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold" style="font-size:.8rem;">Section</label>
+                <select name="section" class="form-select form-select-sm">
+                    <option value="">All Sections</option>
+                    <?php foreach ($valid_sections as $sec): ?>
+                    <option value="<?= $sec ?>" <?= $f_section === $sec ? 'selected' : '' ?>><?= $sec ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold" style="font-size:.8rem;">Gender</label>
+                <select name="gender" class="form-select form-select-sm">
+                    <option value="">All Genders</option>
+                    <?php foreach ($valid_genders as $g): ?>
+                    <option value="<?= $g ?>" <?= $f_gender === $g ? 'selected' : '' ?>><?= $g ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold" style="font-size:.8rem;">Blood Group</label>
+                <select name="blood" class="form-select form-select-sm">
+                    <option value="">All Blood Groups</option>
+                    <?php foreach ($valid_bloods as $bg): ?>
+                    <option value="<?= $bg ?>" <?= $f_blood === $bg ? 'selected' : '' ?>><?= $bg ?></option>
+                    <?php endforeach; ?>
                 </select>
             </div>
             <div class="col-6 col-md-2 d-flex gap-2">

@@ -75,6 +75,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $batch_id             = (int)($_POST['batch_id']            ?? 0);
     $year                 = trim($_POST['year']                 ?? '');
     $shift                = trim($_POST['shift']                ?? '');
+    $section              = trim($_POST['section']              ?? '');
     $poor_meritorious     = isset($_POST['poor_meritorious'])     ? 1 : 0;
     $freedom_fighter      = isset($_POST['freedom_fighter_quota']) ? 1 : 0;
     $waiver_percent       = trim($_POST['waiver_percent']       ?? '');
@@ -204,7 +205,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo = db();
         $pdo->prepare(
             'INSERT INTO students
-               (student_id, dept_id, program_id, admitted_semester, semester_type, batch, batch_id, year, shift,
+               (student_id, dept_id, program_id, admitted_semester, semester_type, batch, batch_id, year, shift, section,
                 full_name, father_name, father_phone, father_occupation, father_yearly_income,
                 mother_name, mother_phone, mother_occupation, mother_yearly_income,
                 present_address, permanent_address, nationality, country,
@@ -219,7 +220,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 waiver_percent, form_fee, regi_fee, tuition_fee, misc_fee,
                 project_fee, total_fee, waiver_amount, total_waiver_credits, total_payable, monthly_installment,
                 ref_number, status, created_by)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
         )->execute([
             $student_id,
             $dept_id,
@@ -230,6 +231,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $batch_id       ?: null,
             $year           ?: null,
             $shift          ?: null,
+            $section        ?: null,
             $full_name,
             $father_name          ?: null,
             $father_phone         ?: null,
@@ -641,6 +643,16 @@ require_once __DIR__ . '/../includes/header.php';
                     <option value="">— Select —</option>
                     <?php foreach (['Day','Evening','Morning'] as $sh): ?>
                     <option value="<?= $sh ?>" <?= old('shift') === $sh ? 'selected' : '' ?>><?= $sh ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <!-- Section -->
+            <div class="col-6 col-md-4">
+                <label class="form-label">Section</label>
+                <select name="section" class="form-select">
+                    <option value="">— Select —</option>
+                    <?php foreach (['A','B','C','D','E','F','G'] as $sec): ?>
+                    <option value="<?= $sec ?>" <?= old('section') === $sec ? 'selected' : '' ?>><?= $sec ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>

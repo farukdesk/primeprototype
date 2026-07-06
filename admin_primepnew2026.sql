@@ -4314,6 +4314,7 @@ CREATE TABLE `students` (
   `batch_id` int(10) UNSIGNED DEFAULT NULL COMMENT 'FK student_batches.id',
   `year` varchar(10) DEFAULT NULL COMMENT 'Enrollment/academic year e.g. 2025',
   `shift` varchar(25) DEFAULT NULL COMMENT 'Day / Evening / Morning',
+  `section` varchar(5) DEFAULT NULL COMMENT 'Class section, e.g. A, B, C, D, E, F, G',
   `poor_meritorious` tinyint(1) NOT NULL DEFAULT 0 COMMENT '1 = poor/meritorious quota',
   `freedom_fighter_quota` tinyint(1) NOT NULL DEFAULT 0 COMMENT '1 = freedom fighter family quota',
   `waiver_percent` varchar(10) DEFAULT NULL,
