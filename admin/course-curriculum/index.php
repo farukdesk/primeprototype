@@ -9,6 +9,12 @@ $page_title = 'Course Curriculum';
 $sel_dept    = (int)($_GET['dept_id']    ?? 0);
 $sel_program = (int)($_GET['program_id'] ?? 0);
 
+// Reject departments the current user is not scoped to (linked to their profile).
+if ($sel_dept > 0 && !can_access_dept($sel_dept)) {
+    $sel_dept    = 0;
+    $sel_program = 0;
+}
+
 $departments = cc_departments();
 $programs    = $sel_dept > 0 ? cc_programs($sel_dept) : [];
 

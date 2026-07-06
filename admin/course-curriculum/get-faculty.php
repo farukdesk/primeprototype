@@ -15,5 +15,10 @@ if ($dept_id <= 0) {
     exit;
 }
 
+if (!can_access_dept($dept_id)) {
+    echo json_encode([]);
+    exit;
+}
+
 $faculty = cc_get_dept_faculty($dept_id);
 echo json_encode($faculty);

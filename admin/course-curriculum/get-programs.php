@@ -15,5 +15,10 @@ if ($dept_id <= 0) {
     exit;
 }
 
+if (!can_access_dept($dept_id)) {
+    echo json_encode([]);
+    exit;
+}
+
 $programs = cc_programs($dept_id);
 echo json_encode($programs);
