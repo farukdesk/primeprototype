@@ -28,6 +28,9 @@ const SM_FILE_MAX    = 20 * 1024 * 1024; // 20 MB
 // ── Allowed class sections ────────────────────────────────────────────────────
 const SM_SECTIONS = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
 
+// ── Allowed shifts ────────────────────────────────────────────────────────────
+const SM_SHIFTS = ['Morning', 'Day', 'Evening'];
+
 // ── Permission helpers ────────────────────────────────────────────────────────
 
 function sm_is_staff(): bool
