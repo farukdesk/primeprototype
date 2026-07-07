@@ -20,6 +20,7 @@ $f_sem_type = trim($_GET['sem_type'] ?? '');
 $f_program  = (int)($_GET['program'] ?? 0);
 $f_batch    = (int)($_GET['batch']   ?? 0);
 $f_section  = trim($_GET['section']  ?? '');
+$f_shift    = trim($_GET['shift']    ?? '');
 $f_gender   = trim($_GET['gender']   ?? '');
 $f_blood    = trim($_GET['blood']    ?? '');
 $page       = max(1, (int)($_GET['page'] ?? 1));
@@ -28,6 +29,7 @@ $per_page = 20;
 $valid_statuses  = ['Active', 'Inactive', 'Graduated', 'Dropped', 'Not Admitted Yet'];
 $valid_sem_types = ['bi_semester', 'trimester'];
 $valid_sections  = SM_SECTIONS;
+$valid_shifts    = SM_SHIFTS;
 $valid_genders   = ['Male', 'Female', 'Other'];
 $valid_bloods    = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
@@ -69,6 +71,10 @@ if ($f_batch > 0) {
 if (in_array($f_section, $valid_sections, true)) {
     $where[]  = 's.section = ?';
     $params[] = $f_section;
+}
+if (in_array($f_shift, $valid_shifts, true)) {
+    $where[]  = 's.shift = ?';
+    $params[] = $f_shift;
 }
 if (in_array($f_gender, $valid_genders, true)) {
     $where[]  = 's.sex = ?';
@@ -319,6 +325,15 @@ require_once __DIR__ . '/../includes/header.php';
                     <option value="">All Sections</option>
                     <?php foreach ($valid_sections as $sec): ?>
                     <option value="<?= $sec ?>" <?= $f_section === $sec ? 'selected' : '' ?>><?= $sec ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold" style="font-size:.8rem;">Shift</label>
+                <select name="shift" class="form-select form-select-sm">
+                    <option value="">All Shifts</option>
+                    <?php foreach ($valid_shifts as $sh): ?>
+                    <option value="<?= $sh ?>" <?= $f_shift === $sh ? 'selected' : '' ?>><?= $sh ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
