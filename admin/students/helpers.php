@@ -29,7 +29,7 @@ const SM_FILE_MAX    = 20 * 1024 * 1024; // 20 MB
 const SM_SECTIONS = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
 
 // ── Allowed shifts ────────────────────────────────────────────────────────────
-const SM_SHIFTS = ['Day', 'Evening', 'Morning'];
+const SM_SHIFTS = ['Morning', 'Day', 'Evening'];
 
 // ── Permission helpers ────────────────────────────────────────────────────────
 
