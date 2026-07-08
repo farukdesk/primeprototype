@@ -267,6 +267,8 @@ function sm_recently_updated_badge(?string $updated_at, ?string $created_at, int
         return '';
     }
     // Only treat as "updated" when it was edited after creation.
+    // Allow a 60-second cushion so tiny clock/insert drift between the
+    // created_at and updated_at timestamps isn't reported as an edit.
     $created_ts = $created_at !== null ? strtotime($created_at) : false;
     if ($created_ts !== false && ($updated_ts - $created_ts) < 60) {
         return '';

@@ -399,7 +399,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <?php else: ?>
                     <?php foreach ($students as $i => $s): ?>
                     <?php $upd_badge = sm_recently_updated_badge($s['updated_at'] ?? null, $s['created_at'] ?? null); ?>
-                    <tr<?= $upd_badge !== '' ? ' class="table-warning"' : '' ?>>
+                    <tr<?= $upd_badge !== '' ? ' class="table-warning" aria-label="Recently updated student record"' : '' ?>>
                         <td class="px-4"><?= $offset + $i + 1 ?></td>
                         <td><code class="text-primary"><?= h($s['student_id']) ?></code></td>
                         <td>
