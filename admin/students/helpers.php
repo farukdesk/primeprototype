@@ -31,6 +31,23 @@ const SM_SECTIONS = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
 // ── Allowed shifts ────────────────────────────────────────────────────────────
 const SM_SHIFTS = ['Morning', 'Day', 'Evening'];
 
+// ── Filter keys used by the student list; shared so view/edit can return to the
+//    same filtered list without resetting it ──────────────────────────────────
+const SM_FILTER_KEYS = ['search', 'dept', 'status', 'semester', 'sem_type',
+                        'program', 'batch', 'section', 'shift', 'gender', 'blood', 'page'];
+
+/**
+ * Build a URL back to the filtered student list from a raw `ret` query string,
+ * keeping only the known filter keys so the value is safe to reuse.
+ */
+function sm_return_url(?string $ret): array
+{
+    parse_str((string)$ret, $parts);
+    $parts = array_intersect_key(is_array($parts) ? $parts : [], array_flip(SM_FILTER_KEYS));
+    $qs    = http_build_query($parts);
+    return [$qs, APP_URL . '/students/index.php' . ($qs !== '' ? '?' . $qs : '')];
+}
+
 // ── Permission helpers ────────────────────────────────────────────────────────
 
 function sm_is_staff(): bool

@@ -117,7 +117,7 @@ $sql = 'SELECT s.*,
         JOIN dept_departments d ON d.id = s.dept_id
         LEFT JOIN dept_academic_programs p ON p.id = s.program_id'
      . $where_sql
-     . ' ORDER BY s.created_at DESC LIMIT ' . $per_page . ' OFFSET ' . $offset;
+     . ' ORDER BY LENGTH(s.student_id) ASC, s.student_id ASC LIMIT ' . $per_page . ' OFFSET ' . $offset;
 
 $stmt = db()->prepare($sql);
 $stmt->execute($params);
@@ -397,6 +397,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <?php endif; ?>
                     </td></tr>
                 <?php else: ?>
+                    <?php $ret = http_build_query($_GET); ?>
                     <?php foreach ($students as $i => $s): ?>
                     <tr>
                         <td class="px-4"><?= $offset + $i + 1 ?></td>
@@ -430,12 +431,12 @@ require_once __DIR__ . '/../includes/header.php';
                         <td><?= sm_status_badge($s['status']) ?></td>
                         <td class="text-end pe-4">
                             <div class="d-flex gap-1 justify-content-end">
-                                <a href="<?= APP_URL ?>/students/view.php?id=<?= $s['id'] ?>"
+                                <a href="<?= APP_URL ?>/students/view.php?<?= h(http_build_query(['id' => $s['id'], 'ret' => $ret])) ?>"
                                    class="btn btn-sm btn-outline-info" title="View" style="border-radius:7px;">
                                     <i class="fas fa-eye"></i>
                                 </a>
                                 <?php if (sm_is_staff()): ?>
-                                <a href="<?= APP_URL ?>/students/edit.php?id=<?= $s['id'] ?>"
+                                <a href="<?= APP_URL ?>/students/edit.php?<?= h(http_build_query(['id' => $s['id'], 'ret' => $ret])) ?>"
                                    class="btn btn-sm btn-outline-primary" title="Edit" style="border-radius:7px;">
                                     <i class="fas fa-edit"></i>
                                 </a>

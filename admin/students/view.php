@@ -10,6 +10,11 @@ $student = sm_get_student($id);
 $user    = auth_user();
 $is_staff = sm_is_staff();
 
+// ── Return-to-filtered-list support ───────────────────────────────────────────
+// Preserve the caller's active filters so navigating back / editing keeps the
+// same filtered list instead of resetting it.
+[$ret_qs, $back_url] = sm_return_url($_GET['ret'] ?? '');
+
 $page_title = 'Student – ' . $student['full_name'];
 
 // ── Handle POST actions ───────────────────────────────────────────────────────
@@ -485,7 +490,7 @@ $statusChipClass = match($student['status']) {
 <nav aria-label="breadcrumb" class="mb-3">
     <ol class="breadcrumb mb-0" style="font-size:.83rem;">
         <li class="breadcrumb-item"><a href="<?= APP_URL ?>/index.php">Dashboard</a></li>
-        <li class="breadcrumb-item"><a href="<?= APP_URL ?>/students/index.php">Students</a></li>
+        <li class="breadcrumb-item"><a href="<?= h($back_url) ?>">Students</a></li>
         <li class="breadcrumb-item active"><?= h($student['full_name']) ?></li>
     </ol>
 </nav>
@@ -574,7 +579,7 @@ $statusChipClass = match($student['status']) {
             </a>
             <?php endif; ?>
             <?php if ($is_staff): ?>
-            <a href="<?= APP_URL ?>/students/edit.php?id=<?= $id ?>" class="btn-hero btn-hero-edit">
+            <a href="<?= APP_URL ?>/students/edit.php?<?= h(http_build_query(['id' => $id, 'ret' => $ret_qs])) ?>" class="btn-hero btn-hero-edit">
                 <i class="fas fa-edit"></i> Edit
             </a>
             <?php endif; ?>
