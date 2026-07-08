@@ -613,46 +613,84 @@ require_once __DIR__ . '/../includes/header.php';
     var countEl   = document.getElementById('bulk-count');
     var clearBtn  = document.getElementById('bulk-clear');
 
+    // Persist selected student ids across pagination (page reloads) so the
+    // marks are not lost when moving between pages.
+    var STORAGE_KEY = 'sm_bulk_selected_ids';
+
+    function loadSelected() {
+        var set = {};
+        try {
+            var raw = sessionStorage.getItem(STORAGE_KEY);
+            if (raw) {
+                JSON.parse(raw).forEach(function (id) { set[String(id)] = true; });
+            }
+        } catch (e) { /* ignore storage/parse errors */ }
+        return set;
+    }
+    function saveSelected(set) {
+        try {
+            sessionStorage.setItem(STORAGE_KEY, JSON.stringify(Object.keys(set)));
+        } catch (e) { /* ignore storage errors */ }
+    }
+
+    var selected = loadSelected();
+
+    function selectedCount() {
+        return Object.keys(selected).length;
+    }
     function rowChecks() {
         return Array.prototype.slice.call(document.querySelectorAll('.bulk-row-check'));
     }
-    function checkedRows() {
-        return rowChecks().filter(function (c) { return c.checked; });
-    }
     function refresh() {
-        var checked = checkedRows();
-        countEl.textContent = checked.length;
-        bar.style.display = checked.length > 0 ? '' : 'none';
+        var count = selectedCount();
+        countEl.textContent = count;
+        bar.style.display = count > 0 ? '' : 'none';
         if (selectAll) {
             var all = rowChecks();
-            selectAll.checked = all.length > 0 && checked.length === all.length;
-            selectAll.indeterminate = checked.length > 0 && checked.length < all.length;
+            var checkedOnPage = all.filter(function (c) { return c.checked; }).length;
+            selectAll.checked = all.length > 0 && checkedOnPage === all.length;
+            selectAll.indeterminate = checkedOnPage > 0 && checkedOnPage < all.length;
         }
     }
 
+    // Restore checkbox state for the current page from the stored selection.
+    rowChecks().forEach(function (c) {
+        if (selected[c.value]) c.checked = true;
+        c.addEventListener('change', function () {
+            if (c.checked) { selected[c.value] = true; }
+            else { delete selected[c.value]; }
+            saveSelected(selected);
+            refresh();
+        });
+    });
+
     if (selectAll) {
         selectAll.addEventListener('change', function () {
-            rowChecks().forEach(function (c) { c.checked = selectAll.checked; });
+            rowChecks().forEach(function (c) {
+                c.checked = selectAll.checked;
+                if (c.checked) { selected[c.value] = true; }
+                else { delete selected[c.value]; }
+            });
+            saveSelected(selected);
             refresh();
         });
     }
-    rowChecks().forEach(function (c) {
-        c.addEventListener('change', refresh);
-    });
     if (clearBtn) {
         clearBtn.addEventListener('click', function () {
+            selected = {};
+            saveSelected(selected);
             rowChecks().forEach(function (c) { c.checked = false; });
             if (selectAll) selectAll.checked = false;
             refresh();
         });
     }
 
-    // Inject selected ids as hidden inputs on submit.
+    // Inject selected ids (from all pages) as hidden inputs on submit.
     window.smBulkPrepare = function (f) {
         var container = document.getElementById('bulk-ids-container');
         container.innerHTML = '';
-        var checked = checkedRows();
-        if (checked.length === 0) {
+        var ids = Object.keys(selected);
+        if (ids.length === 0) {
             alert('Select at least one student first.');
             return false;
         }
@@ -663,14 +701,19 @@ require_once __DIR__ . '/../includes/header.php';
             alert('Choose at least one field (Status, Shift or Section) to update.');
             return false;
         }
-        checked.forEach(function (c) {
+        ids.forEach(function (id) {
             var input = document.createElement('input');
             input.type  = 'hidden';
             input.name  = 'ids[]';
-            input.value = c.value;
+            input.value = id;
             container.appendChild(input);
         });
-        return confirm('Apply the quick update to ' + checked.length + ' selected student(s)?');
+        if (!confirm('Apply the quick update to ' + ids.length + ' selected student(s)?')) {
+            return false;
+        }
+        // Clear the persisted selection once the update is submitted.
+        try { sessionStorage.removeItem(STORAGE_KEY); } catch (e) { /* ignore */ }
+        return true;
     };
 
     refresh();
