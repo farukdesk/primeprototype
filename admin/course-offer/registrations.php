@@ -18,6 +18,8 @@ if (!$offer) {
 
 $subjects = co_get_subjects_with_teachers($offer_id);
 $batch_id = (int)$offer['batch_id'];
+$batch_sections = co_batch_sections($batch_id);
+$batch_shifts   = co_batch_shifts($batch_id);
 
 // ── Actions ────────────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -100,8 +102,6 @@ foreach ($reg_map as $list) $total_regs += count($list);
 
 $page_title = 'Course Registrations';
 require_once __DIR__ . '/../includes/header.php';
-echo '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.min.css">';
-echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>';
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -153,22 +153,20 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
 <?php else: ?>
 
 <?php if (co_is_staff()): ?>
-<!-- Quick manual enrollment -->
+<!-- Bulk manual enrollment -->
 <div class="card mb-4" style="border-radius:12px;">
     <div class="card-header py-3 px-4">
-        <h6 class="mb-0 fw-semibold"><i class="fas fa-user-plus me-2 text-muted"></i>Quick Enroll Students</h6>
+        <h6 class="mb-0 fw-semibold"><i class="fas fa-user-plus me-2 text-muted"></i>Enroll Students</h6>
     </div>
     <div class="card-body p-4">
-        <form method="POST">
+        <form method="POST" id="enroll-form">
             <?= csrf_field() ?>
             <input type="hidden" name="offer_id" value="<?= $offer_id ?>">
             <input type="hidden" name="action" value="add">
-            <div class="mb-3">
-                <label class="form-label fw-medium">Students <span class="text-danger">*</span></label>
-                <select name="student_ids[]" id="sel-students" multiple placeholder="Type student ID or name…"></select>
-                <div class="form-text">Only students of batch <strong><?= h($offer['batch_name']) ?></strong> can be enrolled.</div>
-            </div>
-            <div class="mb-3">
+            <div id="selected-inputs"></div>
+
+            <!-- Subjects -->
+            <div class="mb-4">
                 <label class="form-label fw-medium d-flex align-items-center gap-2">
                     Subjects <span class="text-danger">*</span>
                     <button type="button" class="btn btn-link btn-sm p-0" onclick="toggleAllSubs(true)">Select all</button>
@@ -192,8 +190,75 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                     <?php endforeach; ?>
                 </div>
             </div>
-            <button type="submit" class="btn btn-primary" style="border-radius:10px;">
-                <i class="fas fa-plus me-1"></i>Enroll
+
+            <!-- Student filters -->
+            <label class="form-label fw-medium">Students <span class="text-danger">*</span></label>
+            <div class="form-text mb-2">Only students of batch <strong><?= h($offer['batch_name']) ?></strong> are listed. Use the filters and checkboxes to bulk-select.</div>
+            <div class="row g-2 align-items-end mb-3">
+                <div class="col-md-5">
+                    <label class="form-label small mb-1">Search</label>
+                    <input type="text" id="stu-q" class="form-control form-control-sm" placeholder="Student ID or name…">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small mb-1">Section</label>
+                    <select id="stu-section" class="form-select form-select-sm">
+                        <option value="">All sections</option>
+                        <?php foreach ($batch_sections as $sec): ?>
+                        <option value="<?= h($sec) ?>"><?= h($sec) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small mb-1">Shift</label>
+                    <select id="stu-shift" class="form-select form-select-sm">
+                        <option value="">All shifts</option>
+                        <?php foreach ($batch_shifts as $sh): ?>
+                        <option value="<?= h($sh) ?>"><?= h($sh) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-md-1 d-grid">
+                    <button type="button" id="stu-reset" class="btn btn-light btn-sm" title="Reset filters">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Selection summary -->
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                <span class="badge bg-primary-subtle text-primary-emphasis border border-primary-subtle">
+                    <span id="sel-count">0</span> student(s) selected
+                </span>
+                <button type="button" class="btn btn-link btn-sm p-0" id="clear-sel">Clear selection</button>
+            </div>
+
+            <!-- Student table -->
+            <div class="table-responsive border rounded" style="max-height:22rem; overflow:auto;">
+                <table class="table table-sm table-hover align-middle mb-0" style="font-size:.85rem;">
+                    <thead class="table-light" style="position:sticky; top:0; z-index:1;">
+                        <tr>
+                            <th style="width:2.5rem;" class="text-center">
+                                <input type="checkbox" class="form-check-input" id="stu-check-all" title="Select all on this page">
+                            </th>
+                            <th>Student</th>
+                            <th style="width:5rem;">Section</th>
+                            <th style="width:6rem;">Shift</th>
+                        </tr>
+                    </thead>
+                    <tbody id="stu-tbody">
+                        <tr><td colspan="4" class="text-center text-muted py-3">Loading…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            <div class="d-flex justify-content-between align-items-center mt-2">
+                <small class="text-muted" id="stu-meta"></small>
+                <nav><ul class="pagination pagination-sm mb-0" id="stu-pager"></ul></nav>
+            </div>
+
+            <button type="submit" class="btn btn-primary mt-3" style="border-radius:10px;">
+                <i class="fas fa-plus me-1"></i>Enroll Selected
             </button>
         </form>
     </div>
@@ -220,9 +285,11 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
             <thead class="table-light">
                 <tr>
                     <th style="width:2.5rem;">#</th>
-                    <th>Student ID</th>
-                    <th>Name</th>
+                    <th>Student</th>
+                    <th>Department</th>
+                    <th style="width:7rem;">Batch</th>
                     <th style="width:5rem;">Section</th>
+                    <th style="width:6rem;">Shift</th>
                     <th style="width:6rem;">Source</th>
                     <?php if (co_is_staff()): ?><th style="width:4rem;"></th><?php endif; ?>
                 </tr>
@@ -231,9 +298,14 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
             <?php foreach ($regs as $i => $r): ?>
                 <tr>
                     <td class="text-muted"><?= $i + 1 ?></td>
-                    <td><span class="font-monospace"><?= h($r['student_id']) ?></span></td>
-                    <td><?= h($r['full_name']) ?></td>
+                    <td>
+                        <div class="fw-medium"><?= h($r['full_name']) ?></div>
+                        <div class="text-muted font-monospace" style="font-size:.78rem;"><?= h($r['student_id']) ?></div>
+                    </td>
+                    <td><?= h($r['dept_name'] ?: '—') ?></td>
+                    <td><?= h($r['batch_name'] ?: '—') ?></td>
                     <td><?= h($r['section'] ?: '—') ?></td>
+                    <td><?= h($r['shift'] ?: '—') ?></td>
                     <td>
                         <?php if ($r['source'] === 'admin'): ?>
                         <span class="badge bg-primary-subtle text-primary-emphasis border border-primary-subtle">Admin</span>
@@ -271,18 +343,189 @@ function toggleAllSubs(on) {
     document.querySelectorAll('.sub-check').forEach(function (c) { c.checked = on; });
 }
 <?php if (co_is_staff() && !empty($subjects)): ?>
-new TomSelect('#sel-students', {
-    plugins: ['remove_button'],
-    valueField: 'id',
-    labelField: 'text',
-    searchField: ['text'],
-    load: function (query, callback) {
-        fetch('<?= APP_URL ?>/course-offer/get-students.php?batch_id=<?= $batch_id ?>&q=' + encodeURIComponent(query))
+(function () {
+    var API      = '<?= APP_URL ?>/course-offer/get-students.php';
+    var BATCH_ID = <?= (int)$batch_id ?>;
+    var PER_PAGE = 25;
+
+    var qInput   = document.getElementById('stu-q');
+    var secSel   = document.getElementById('stu-section');
+    var shiftSel = document.getElementById('stu-shift');
+    var resetBtn = document.getElementById('stu-reset');
+    var tbody    = document.getElementById('stu-tbody');
+    var pager    = document.getElementById('stu-pager');
+    var meta     = document.getElementById('stu-meta');
+    var checkAll = document.getElementById('stu-check-all');
+    var selCount = document.getElementById('sel-count');
+    var clearBtn = document.getElementById('clear-sel');
+    var hidden   = document.getElementById('selected-inputs');
+    var form     = document.getElementById('enroll-form');
+
+    // Persist selection across pages/filters: map of student PK -> label
+    var selected = {};
+    var curPage  = 1;
+    var debounce = null;
+
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    function updateCount() {
+        var n = Object.keys(selected).length;
+        selCount.textContent = n;
+    }
+
+    function syncHiddenInputs() {
+        hidden.innerHTML = '';
+        Object.keys(selected).forEach(function (id) {
+            var inp = document.createElement('input');
+            inp.type = 'hidden';
+            inp.name = 'student_ids[]';
+            inp.value = id;
+            hidden.appendChild(inp);
+        });
+    }
+
+    function refreshCheckAll() {
+        var boxes = tbody.querySelectorAll('.stu-check');
+        if (!boxes.length) { checkAll.checked = false; return; }
+        var all = true;
+        boxes.forEach(function (b) { if (!b.checked) all = false; });
+        checkAll.checked = all;
+    }
+
+    function render(data) {
+        tbody.innerHTML = '';
+        if (!data.rows || !data.rows.length) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">No students found.</td></tr>';
+            meta.textContent = '0 students';
+            pager.innerHTML = '';
+            checkAll.checked = false;
+            return;
+        }
+        data.rows.forEach(function (r) {
+            var tr = document.createElement('tr');
+            var checked = selected.hasOwnProperty(r.id) ? 'checked' : '';
+            tr.innerHTML =
+                '<td class="text-center"><input type="checkbox" class="form-check-input stu-check" value="' + r.id + '" ' + checked + '></td>' +
+                '<td><div class="fw-medium">' + esc(r.full_name) + '</div>' +
+                '<div class="text-muted font-monospace" style="font-size:.78rem;">' + esc(r.student_id) + '</div></td>' +
+                '<td>' + esc(r.section || '—') + '</td>' +
+                '<td>' + esc(r.shift || '—') + '</td>';
+            tbody.appendChild(tr);
+        });
+
+        tbody.querySelectorAll('.stu-check').forEach(function (b) {
+            b.addEventListener('change', function () {
+                if (b.checked) { selected[b.value] = true; }
+                else { delete selected[b.value]; }
+                updateCount();
+                refreshCheckAll();
+            });
+        });
+
+        var start = (data.page - 1) * data.per_page + 1;
+        var end   = Math.min(data.page * data.per_page, data.total);
+        meta.textContent = start + '–' + end + ' of ' + data.total + ' students';
+        renderPager(data.page, data.pages);
+        refreshCheckAll();
+    }
+
+    function renderPager(page, pages) {
+        pager.innerHTML = '';
+        if (pages <= 1) return;
+        function item(label, target, disabled, active) {
+            var li = document.createElement('li');
+            li.className = 'page-item' + (disabled ? ' disabled' : '') + (active ? ' active' : '');
+            var a = document.createElement('a');
+            a.className = 'page-link';
+            a.href = '#';
+            a.textContent = label;
+            a.addEventListener('click', function (e) {
+                e.preventDefault();
+                if (disabled || active) return;
+                curPage = target;
+                load();
+            });
+            li.appendChild(a);
+            return li;
+        }
+        pager.appendChild(item('«', page - 1, page <= 1, false));
+        var from = Math.max(1, page - 2);
+        var to   = Math.min(pages, page + 2);
+        if (from > 1) pager.appendChild(item('1', 1, false, page === 1));
+        if (from > 2) pager.appendChild(item('…', page, true, false));
+        for (var p = from; p <= to; p++) pager.appendChild(item(String(p), p, false, p === page));
+        if (to < pages - 1) pager.appendChild(item('…', page, true, false));
+        if (to < pages) pager.appendChild(item(String(pages), pages, false, page === pages));
+        pager.appendChild(item('»', page + 1, page >= pages, false));
+    }
+
+    function load() {
+        var params = new URLSearchParams({
+            batch_id: BATCH_ID,
+            q: qInput.value.trim(),
+            section: secSel.value,
+            shift: shiftSel.value,
+            page: curPage,
+            per_page: PER_PAGE
+        });
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">Loading…</td></tr>';
+        fetch(API + '?' + params.toString())
             .then(function (r) { return r.json(); })
-            .then(function (data) { callback(data); })
-            .catch(function () { callback(); });
-    },
-});
+            .then(render)
+            .catch(function () {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-danger py-3">Failed to load students.</td></tr>';
+            });
+    }
+
+    function reloadFirstPage() { curPage = 1; load(); }
+
+    qInput.addEventListener('input', function () {
+        clearTimeout(debounce);
+        debounce = setTimeout(reloadFirstPage, 300);
+    });
+    secSel.addEventListener('change', reloadFirstPage);
+    shiftSel.addEventListener('change', reloadFirstPage);
+    resetBtn.addEventListener('click', function () {
+        qInput.value = ''; secSel.value = ''; shiftSel.value = '';
+        reloadFirstPage();
+    });
+
+    checkAll.addEventListener('change', function () {
+        tbody.querySelectorAll('.stu-check').forEach(function (b) {
+            b.checked = checkAll.checked;
+            if (checkAll.checked) { selected[b.value] = true; }
+            else { delete selected[b.value]; }
+        });
+        updateCount();
+    });
+
+    clearBtn.addEventListener('click', function () {
+        selected = {};
+        updateCount();
+        tbody.querySelectorAll('.stu-check').forEach(function (b) { b.checked = false; });
+        checkAll.checked = false;
+    });
+
+    form.addEventListener('submit', function (e) {
+        syncHiddenInputs();
+        if (Object.keys(selected).length === 0) {
+            e.preventDefault();
+            alert('Select at least one student to enroll.');
+            return;
+        }
+        var anySub = document.querySelector('.sub-check:checked');
+        if (!anySub) {
+            e.preventDefault();
+            alert('Select at least one subject.');
+        }
+    });
+
+    load();
+})();
 <?php endif; ?>
 </script>
 
