@@ -9,6 +9,7 @@ import '../services/fcm_service.dart';
 import '../theme/app_theme.dart';
 import 'tabs/dashboard_tab.dart';
 import 'tabs/notices_tab.dart';
+import 'tabs/courses_tab.dart';
 import 'tabs/finances_tab.dart';
 import 'tabs/profile_tab.dart';
 
@@ -26,6 +27,7 @@ class _HomeScreenState extends State<HomeScreen> {
   static const _tabs = [
     _TabInfo(Icons.home_outlined,       Icons.home_rounded,        'Home'),
     _TabInfo(Icons.notifications_none,  Icons.notifications_rounded,'Notices'),
+    _TabInfo(Icons.menu_book_outlined,  Icons.menu_book_rounded,    'Courses'),
     _TabInfo(Icons.account_balance_wallet_outlined, Icons.account_balance_wallet_rounded, 'Finances'),
     _TabInfo(Icons.person_outline,      Icons.person_rounded,       'Profile'),
   ];
@@ -71,6 +73,7 @@ class _HomeScreenState extends State<HomeScreen> {
               children: const [
                 DashboardTab(),
                 NoticesTab(),
+                CoursesTab(),
                 FinancesTab(),
                 ProfileTab(),
               ],

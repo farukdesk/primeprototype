@@ -121,6 +121,33 @@ class ApiService {
     return _parse(resp);
   }
 
+  // ── Course offers / registration ────────────────────────────────────────────
+
+  static Future<Map<String, dynamic>> getCourseOffers({
+    required VoidCallback onUnauthorized,
+  }) async {
+    _ensure(onUnauthorized);
+    final resp = await _dio.get('/course-offers.php');
+    return _parse(resp);
+  }
+
+  static Future<Map<String, dynamic>> registerCourse({
+    required int offerSubjectId,
+    required String action, // 'register' | 'drop'
+    required VoidCallback onUnauthorized,
+  }) async {
+    _ensure(onUnauthorized);
+    final resp = await _dio.post(
+      '/course-register.php',
+      data: {
+        'offer_subject_id': offerSubjectId,
+        'action':           action,
+      },
+      options: Options(contentType: Headers.formUrlEncodedContentType),
+    );
+    return _parse(resp);
+  }
+
   // ── Push token ────────────────────────────────────────────────────────────
 
   static Future<void> registerPushToken({
