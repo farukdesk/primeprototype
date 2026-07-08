@@ -40,7 +40,7 @@ if ($status !== '') {
         flash_set('error', 'Invalid status selected.');
         redirect($ret_qs !== '' ? $back_url : APP_URL . '/students/index.php');
     }
-    $set[]     = 's.status = ?';
+    $set[]     = 'status = ?';
     $vals[]    = $status;
     $applied[] = 'Status → ' . $status;
 }
@@ -49,7 +49,7 @@ if ($shift !== '') {
         flash_set('error', 'Invalid shift selected.');
         redirect($ret_qs !== '' ? $back_url : APP_URL . '/students/index.php');
     }
-    $set[]     = 's.shift = ?';
+    $set[]     = 'shift = ?';
     $vals[]    = $shift;
     $applied[] = 'Shift → ' . $shift;
 }
@@ -58,7 +58,7 @@ if ($section !== '') {
         flash_set('error', 'Invalid section selected.');
         redirect($ret_qs !== '' ? $back_url : APP_URL . '/students/index.php');
     }
-    $set[]     = 's.section = ?';
+    $set[]     = 'section = ?';
     $vals[]    = $section;
     $applied[] = 'Section → ' . $section;
 }
@@ -102,7 +102,7 @@ $target_ids = array_map(fn($r) => (int)$r['id'], $targets);
 
 // ── Apply the update ──────────────────────────────────────────────────────────
 $id_phs   = implode(',', array_fill(0, count($target_ids), '?'));
-$upd_sql  = 'UPDATE students s SET ' . implode(', ', array_map(fn($c) => str_replace('s.', '', $c), $set))
+$upd_sql  = 'UPDATE students SET ' . implode(', ', $set)
           . ' WHERE id IN (' . $id_phs . ')';
 $upd_vals = array_merge($vals, $target_ids);
 

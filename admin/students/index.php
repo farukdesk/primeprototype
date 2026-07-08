@@ -435,7 +435,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <tr>
                         <?php if ($is_staff): ?>
                         <th class="ps-4" style="width:34px;">
-                            <input type="checkbox" class="form-check-input" id="bulk-select-all" title="Select all on this page">
+                            <input type="checkbox" class="form-check-input" id="bulk-select-all" aria-label="Select all students on this page" title="Select all on this page">
                         </th>
                         <th style="width:40px;">#</th>
                         <?php else: ?>
@@ -465,7 +465,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <tr<?= $upd_badge !== '' ? ' class="table-warning" aria-label="Recently updated student record"' : '' ?>>
                         <?php if ($is_staff): ?>
                         <td class="ps-4">
-                            <input type="checkbox" class="form-check-input bulk-row-check" value="<?= (int)$s['id'] ?>">
+                            <input type="checkbox" class="form-check-input bulk-row-check" value="<?= (int)$s['id'] ?>" aria-label="Select <?= h($s['full_name']) ?>">
                         </td>
                         <td><?= $offset + $i + 1 ?></td>
                         <?php else: ?>
