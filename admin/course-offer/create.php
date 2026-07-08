@@ -146,14 +146,20 @@ foreach ($old_rows as $row) {
     if (!empty($teacher_ids)) {
         $ph = implode(',', array_fill(0, count($teacher_ids), '?'));
         $ts = db()->prepare(
-            "SELECT f.id, f.name, f.designation, d.name AS dept_name
+            "SELECT f.id, f.name, f.designation, f.dept_id, d.name AS dept_name
                FROM dept_faculty f JOIN dept_departments d ON d.id = f.dept_id
               WHERE f.id IN ($ph) ORDER BY f.name ASC"
         );
         $ts->execute($teacher_ids);
         $pre_teachers = $ts->fetchAll();
     }
-    $pre_rows[] = ['subject' => $sub, 'teacher_ids' => $teacher_ids, 'teachers' => $pre_teachers];
+    // Enable the "other department" toggle when any teacher is outside the offering dept.
+    $allow_other = false;
+    foreach ($pre_teachers as $t) {
+        if ($old_dept > 0 && (int)$t['dept_id'] !== $old_dept) { $allow_other = true; break; }
+    }
+    $pre_rows[] = ['subject' => $sub, 'teacher_ids' => $teacher_ids,
+                   'teachers' => $pre_teachers, 'allow_other' => $allow_other];
 }
 
 require_once __DIR__ . '/../includes/header.php';
@@ -344,6 +350,11 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                                             </option>
                                             <?php endforeach; ?>
                                         </select>
+                                        <div class="form-check mt-1">
+                                            <input class="form-check-input allow-other-dept" type="checkbox"
+                                                   id="allow-other-<?= $ri ?>" <?= !empty($pr['allow_other']) ? 'checked' : '' ?>>
+                                            <label class="form-check-label small text-muted" for="allow-other-<?= $ri ?>">Other department teacher</label>
+                                        </div>
                                     </td>
                                     <td class="text-center">
                                         <button type="button" class="btn btn-sm btn-outline-danger btn-remove-row"
@@ -462,7 +473,10 @@ function buildSubjectSelect(ri, cid, ctext) {
         dropdownParent: 'body',
         load: function(q, cb) {
             if (!q.length) return cb();
-            fetch(APP_URL + '/course-offer/get-subjects.php?q=' + encodeURIComponent(q))
+            var url = APP_URL + '/course-offer/get-subjects.php?q=' + encodeURIComponent(q);
+            var deptId = deptSelect.value;
+            if (deptId) url += '&dept_id=' + encodeURIComponent(deptId);
+            fetch(url)
                 .then(r => r.json()).then(cb).catch(function() { cb(); });
         },
         onChange: function(v) { hiddenEl.value = v || ''; },
@@ -473,13 +487,18 @@ function buildSubjectSelect(ri, cid, ctext) {
 
 function buildTeacherSelect(ri, tids, teachers) {
     var el = document.querySelector('[data-row="' + ri + '"] .teacher-select');
+    var otherEl = document.querySelector('[data-row="' + ri + '"] .allow-other-dept');
     var opts = { valueField: 'id', labelField: 'text', searchField: ['text'],
         maxItems: null, placeholder: 'Type to search teacher…',
         plugins: ['remove_button'],
         dropdownParent: 'body',
         load: function(q, cb) {
             if (!q.length) return cb();
-            fetch(APP_URL + '/course-offer/get-faculty.php?q=' + encodeURIComponent(q))
+            var url = APP_URL + '/course-offer/get-faculty.php?q=' + encodeURIComponent(q);
+            var deptId = deptSelect.value;
+            var allowOther = otherEl && otherEl.checked;
+            if (deptId && !allowOther) url += '&dept_id=' + encodeURIComponent(deptId);
+            fetch(url)
                 .then(r => r.json()).then(cb).catch(function() { cb(); });
         },
     };
@@ -488,6 +507,12 @@ function buildTeacherSelect(ri, tids, teachers) {
         opts.options = teachers;
     }
     tsTeacherMap[ri] = new TomSelect(el, opts);
+    // Re-check available teachers when the "other department" toggle changes.
+    if (otherEl) {
+        otherEl.addEventListener('change', function() {
+            tsTeacherMap[ri].clearOptions();
+        });
+    }
 }
 
 function addRow(cid, ctext, tids, teachers) {
@@ -507,6 +532,10 @@ function addRow(cid, ctext, tids, teachers) {
         '</td>' +
         '<td>' +
             '<select name="rows[' + ri + '][teacher_ids][]" class="form-select form-select-sm teacher-select" multiple></select>' +
+            '<div class="form-check mt-1">' +
+                '<input class="form-check-input allow-other-dept" type="checkbox" id="allow-other-' + ri + '">' +
+                '<label class="form-check-label small text-muted" for="allow-other-' + ri + '">Other department teacher</label>' +
+            '</div>' +
         '</td>' +
         '<td class="text-center">' +
             '<button type="button" class="btn btn-sm btn-outline-danger btn-remove-row" title="Remove row" style="border-radius:6px;">' +

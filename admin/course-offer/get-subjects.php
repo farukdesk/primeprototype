@@ -1,7 +1,8 @@
 <?php
 /**
- * AJAX – search subjects (course_curriculum) across ALL departments and programs.
- * Accepts: q (search string), limit (max results, default 30)
+ * AJAX – search subjects (course_curriculum).
+ * Accepts: q (search string), dept_id (optional – restrict to a department),
+ *          limit (max results, default 30)
  * Returns: [{id, text, course_code, course_name, program_name, dept_name, credit}]
  */
 require_once __DIR__ . '/../includes/auth.php';
@@ -9,11 +10,17 @@ auth_check();
 
 header('Content-Type: application/json; charset=utf-8');
 
-$q     = trim($_GET['q']     ?? '');
-$limit = max(1, min(100, (int)($_GET['limit'] ?? 30)));
+$q       = trim($_GET['q']     ?? '');
+$dept_id = (int)($_GET['dept_id'] ?? 0);
+$limit   = max(1, min(100, (int)($_GET['limit'] ?? 30)));
 
 $params = [];
 $where  = '1=1';
+
+if ($dept_id > 0) {
+    $where   .= ' AND p.dept_id = ?';
+    $params[] = $dept_id;
+}
 
 if ($q !== '') {
     $where   .= ' AND (c.course_code LIKE ? OR c.course_name LIKE ?)';
