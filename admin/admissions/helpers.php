@@ -313,6 +313,22 @@ function adm_generate_number(): string
         $stmt->execute(['next_form_number']);
         $current = (int)($stmt->fetchColumn() ?: 1);
 
+        // Skip any number already used as an application number. app_number is a
+        // single unique column fed by two independent sequences (direct admissions
+        // via next_form_number and form sales via next_fs_number, whose numbers are
+        // reused as app_number). Advancing past existing values avoids duplicate-key
+        // collisions with form-sale-derived or legacy application numbers.
+        $exists = $db->prepare(
+            'SELECT 1 FROM admissions_applications WHERE app_number = ? LIMIT 1'
+        );
+        do {
+            $exists->execute([(string)$current]);
+            $taken = (bool)$exists->fetchColumn();
+            if ($taken) {
+                $current++;
+            }
+        } while ($taken);
+
         $db->prepare(
             'INSERT INTO admissions_settings (setting_key, setting_value) VALUES (?, ?)
              ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)'
