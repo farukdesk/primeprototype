@@ -367,6 +367,61 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
+<?php if ($is_staff): ?>
+<!-- Bulk Quick Update -->
+<form method="POST" action="<?= APP_URL ?>/students/bulk-update.php" id="bulk-update-form"
+      onsubmit="return smBulkPrepare(this);">
+    <?= csrf_field() ?>
+    <input type="hidden" name="ret" value="<?= h(http_build_query($_GET)) ?>">
+    <div id="bulk-ids-container"></div>
+    <div class="card mb-3 border-primary" id="bulk-update-bar" style="display:none;">
+        <div class="card-body py-3 px-4">
+            <div class="row g-2 align-items-end">
+                <div class="col-12 col-md-auto">
+                    <span class="fw-semibold"><i class="fas fa-bolt text-primary me-1"></i>Quick Update</span>
+                    <span class="text-muted ms-1"><span id="bulk-count">0</span> selected</span>
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold mb-1" style="font-size:.8rem;">Status</label>
+                    <select name="status" class="form-select form-select-sm">
+                        <option value="">— keep —</option>
+                        <?php foreach ($valid_statuses as $s): ?>
+                        <option value="<?= $s ?>"><?= $s ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold mb-1" style="font-size:.8rem;">Shift</label>
+                    <select name="shift" class="form-select form-select-sm">
+                        <option value="">— keep —</option>
+                        <?php foreach ($valid_shifts as $sh): ?>
+                        <option value="<?= $sh ?>"><?= $sh ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold mb-1" style="font-size:.8rem;">Section</label>
+                    <select name="section" class="form-select form-select-sm">
+                        <option value="">— keep —</option>
+                        <?php foreach ($valid_sections as $sec): ?>
+                        <option value="<?= $sec ?>"><?= $sec ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-12 col-md-auto d-flex gap-2">
+                    <button type="submit" class="btn btn-primary btn-sm" style="border-radius:7px;">
+                        <i class="fas fa-check me-1"></i> Apply to Selected
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" id="bulk-clear" style="border-radius:7px;">
+                        Clear
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+<?php endif; ?>
+
 <!-- Table -->
 <div class="card">
     <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between">
@@ -378,7 +433,14 @@ require_once __DIR__ . '/../includes/header.php';
             <table class="table table-hover mb-0">
                 <thead class="table-light">
                     <tr>
+                        <?php if ($is_staff): ?>
+                        <th class="ps-4" style="width:34px;">
+                            <input type="checkbox" class="form-check-input" id="bulk-select-all" title="Select all on this page">
+                        </th>
+                        <th style="width:40px;">#</th>
+                        <?php else: ?>
                         <th class="px-4" style="width:40px;">#</th>
+                        <?php endif; ?>
                         <th>Student ID</th>
                         <th>Name</th>
                         <th>Department / Program</th>
@@ -390,7 +452,7 @@ require_once __DIR__ . '/../includes/header.php';
                 </thead>
                 <tbody>
                 <?php if (empty($students)): ?>
-                    <tr><td colspan="8" class="text-center text-muted py-4">
+                    <tr><td colspan="<?= $is_staff ? 9 : 8 ?>" class="text-center text-muted py-4">
                         No students found.
                         <?php if (sm_can_create()): ?>
                             <a href="<?= APP_URL ?>/students/create.php">Add the first one</a>.
@@ -401,7 +463,14 @@ require_once __DIR__ . '/../includes/header.php';
                     <?php foreach ($students as $i => $s): ?>
                     <?php $upd_badge = sm_recently_updated_badge($s['updated_at'] ?? null, $s['created_at'] ?? null); ?>
                     <tr<?= $upd_badge !== '' ? ' class="table-warning" aria-label="Recently updated student record"' : '' ?>>
+                        <?php if ($is_staff): ?>
+                        <td class="ps-4">
+                            <input type="checkbox" class="form-check-input bulk-row-check" value="<?= (int)$s['id'] ?>">
+                        </td>
+                        <td><?= $offset + $i + 1 ?></td>
+                        <?php else: ?>
                         <td class="px-4"><?= $offset + $i + 1 ?></td>
+                        <?php endif; ?>
                         <td><code class="text-primary"><?= h($s['student_id']) ?></code></td>
                         <td>
                             <div class="fw-medium"><?= h($s['full_name']) ?></div>
@@ -532,5 +601,78 @@ require_once __DIR__ . '/../includes/header.php';
 
     deptSel.addEventListener('change', filterPrograms);
     filterPrograms(); // run on page load to respect pre-selected dept
+}());
+
+// ── Bulk quick-update selection ───────────────────────────────────────────────
+(function () {
+    var bar     = document.getElementById('bulk-update-bar');
+    var form    = document.getElementById('bulk-update-form');
+    if (!bar || !form) return;
+
+    var selectAll = document.getElementById('bulk-select-all');
+    var countEl   = document.getElementById('bulk-count');
+    var clearBtn  = document.getElementById('bulk-clear');
+
+    function rowChecks() {
+        return Array.prototype.slice.call(document.querySelectorAll('.bulk-row-check'));
+    }
+    function checkedRows() {
+        return rowChecks().filter(function (c) { return c.checked; });
+    }
+    function refresh() {
+        var checked = checkedRows();
+        countEl.textContent = checked.length;
+        bar.style.display = checked.length > 0 ? '' : 'none';
+        if (selectAll) {
+            var all = rowChecks();
+            selectAll.checked = all.length > 0 && checked.length === all.length;
+            selectAll.indeterminate = checked.length > 0 && checked.length < all.length;
+        }
+    }
+
+    if (selectAll) {
+        selectAll.addEventListener('change', function () {
+            rowChecks().forEach(function (c) { c.checked = selectAll.checked; });
+            refresh();
+        });
+    }
+    rowChecks().forEach(function (c) {
+        c.addEventListener('change', refresh);
+    });
+    if (clearBtn) {
+        clearBtn.addEventListener('click', function () {
+            rowChecks().forEach(function (c) { c.checked = false; });
+            if (selectAll) selectAll.checked = false;
+            refresh();
+        });
+    }
+
+    // Inject selected ids as hidden inputs on submit.
+    window.smBulkPrepare = function (f) {
+        var container = document.getElementById('bulk-ids-container');
+        container.innerHTML = '';
+        var checked = checkedRows();
+        if (checked.length === 0) {
+            alert('Select at least one student first.');
+            return false;
+        }
+        var status  = f.querySelector('[name="status"]').value;
+        var shift   = f.querySelector('[name="shift"]').value;
+        var section = f.querySelector('[name="section"]').value;
+        if (!status && !shift && !section) {
+            alert('Choose at least one field (Status, Shift or Section) to update.');
+            return false;
+        }
+        checked.forEach(function (c) {
+            var input = document.createElement('input');
+            input.type  = 'hidden';
+            input.name  = 'ids[]';
+            input.value = c.value;
+            container.appendChild(input);
+        });
+        return confirm('Apply the quick update to ' + checked.length + ' selected student(s)?');
+    };
+
+    refresh();
 }());
 </script>
