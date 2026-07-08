@@ -8,6 +8,15 @@ $student = sm_get_student($id);
 $user    = auth_user();
 $errors  = [];
 
+// ── Return-to-filtered-list support ───────────────────────────────────────────
+// Preserve the caller's active filters so saving/cancelling returns to the same
+// filtered list instead of resetting it.
+$ret_keys = ['search','dept','status','semester','sem_type','program','batch','section','shift','gender','blood','page'];
+parse_str($_GET['ret'] ?? '', $ret_parts);
+$ret_parts = array_intersect_key(is_array($ret_parts) ? $ret_parts : [], array_flip($ret_keys));
+$ret_qs    = http_build_query($ret_parts);
+$back_url  = APP_URL . '/students/index.php' . ($ret_qs !== '' ? '?' . $ret_qs : '');
+
 $page_title = 'Edit Student – ' . $student['full_name'];
 
 $departments  = sm_dept_data();
@@ -337,7 +346,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                    'Student updated: ' . $full_name);
 
         flash_set('success', 'Student <strong>' . h($full_name) . '</strong> updated successfully.');
-        redirect(APP_URL . '/students/view.php?id=' . $id);
+        redirect($ret_qs !== '' ? $back_url : APP_URL . '/students/view.php?id=' . $id);
     }
 }
 
@@ -370,7 +379,7 @@ require_once __DIR__ . '/../includes/header.php';
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb mb-0">
             <li class="breadcrumb-item"><a href="<?= APP_URL ?>/index.php">Dashboard</a></li>
-            <li class="breadcrumb-item"><a href="<?= APP_URL ?>/students/index.php">Students</a></li>
+            <li class="breadcrumb-item"><a href="<?= h($back_url) ?>">Students</a></li>
             <li class="breadcrumb-item"><a href="<?= APP_URL ?>/students/view.php?id=<?= $id ?>"><?= h($student['full_name']) ?></a></li>
             <li class="breadcrumb-item active">Edit</li>
         </ol>
@@ -947,7 +956,7 @@ require_once __DIR__ . '/../includes/header.php';
     <button type="submit" class="btn btn-primary px-4" style="border-radius:10px;">
         <i class="fas fa-save me-1"></i> Update Student
     </button>
-    <a href="<?= APP_URL ?>/students/view.php?id=<?= $id ?>" class="btn btn-outline-secondary px-4" style="border-radius:10px;">
+    <a href="<?= $ret_qs !== '' ? h($back_url) : APP_URL . '/students/view.php?id=' . $id ?>" class="btn btn-outline-secondary px-4" style="border-radius:10px;">
         Cancel
     </a>
 </div>
