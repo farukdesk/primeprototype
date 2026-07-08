@@ -469,6 +469,30 @@ $acad_records = adm_get_academic_records($id);
             </div>
         </div>
 
+        <?php
+            $has_promoter = (($app['promoter_source'] ?? '') === 'Yes');
+            $has_prime    = (($app['prime_student'] ?? '') === 'Yes');
+            $source_note  = trim((string)($app['source_note'] ?? ''));
+        ?>
+        <?php if ($has_promoter || $has_prime || $source_note !== ''): ?>
+        <div class="avoid-break" style="font-size:13.5px;margin-bottom:12px;border:1px solid #cbd0f5;border-radius:4px;padding:12px">
+            <p style="margin:0 0 8px 0;font-weight:bold;color:#2b327a;text-transform:uppercase">Student Source</p>
+            <?php if ($has_promoter): ?>
+            <div style="margin-bottom:5px"><span style="font-weight:bold">Promoter :</span>
+                <?= h($app['promoter_name'] ?? '') ?><?php if (($app['promoter_contact'] ?? '') !== ''): ?>, <?= h($app['promoter_contact']) ?><?php endif; ?><?php if (($app['promoter_email'] ?? '') !== ''): ?>, <?= h($app['promoter_email']) ?><?php endif; ?><?php if (($app['promoter_address'] ?? '') !== ''): ?>, <?= h($app['promoter_address']) ?><?php endif; ?>
+            </div>
+            <?php endif; ?>
+            <?php if ($has_prime): ?>
+            <div style="margin-bottom:5px"><span style="font-weight:bold">Prime Student :</span>
+                ID <?= h($app['prime_student_id'] ?? '') ?><?php if (($app['prime_department'] ?? '') !== ''): ?>, <?= h($app['prime_department']) ?><?php endif; ?><?php if (($app['prime_program'] ?? '') !== ''): ?>, <?= h($app['prime_program']) ?><?php endif; ?>
+            </div>
+            <?php endif; ?>
+            <?php if ($source_note !== ''): ?>
+            <div><span style="font-weight:bold">Note :</span> <?= nl2br(h($source_note)) ?></div>
+            <?php endif; ?>
+        </div>
+        <?php endif; ?>
+
         <div style="font-size:13.5px;margin-bottom:10px;background:#fffde6;padding:10px;border:1px dashed #ffcc00;border-radius:4px">
             <p style="margin:0 0 8px 0;font-weight:bold;color:#2b327a">* Have you ever been dismissed from any examination or expelled from any institution of learning?</p>
             <div>
