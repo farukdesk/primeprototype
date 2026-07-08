@@ -13,11 +13,7 @@ $is_staff = sm_is_staff();
 // ── Return-to-filtered-list support ───────────────────────────────────────────
 // Preserve the caller's active filters so navigating back / editing keeps the
 // same filtered list instead of resetting it.
-$ret_keys = ['search','dept','status','semester','sem_type','program','batch','section','shift','gender','blood','page'];
-parse_str($_GET['ret'] ?? '', $ret_parts);
-$ret_parts = array_intersect_key(is_array($ret_parts) ? $ret_parts : [], array_flip($ret_keys));
-$ret_qs    = http_build_query($ret_parts);
-$back_url  = APP_URL . '/students/index.php' . ($ret_qs !== '' ? '?' . $ret_qs : '');
+[$ret_qs, $back_url] = sm_return_url($_GET['ret'] ?? '');
 
 $page_title = 'Student – ' . $student['full_name'];
 
