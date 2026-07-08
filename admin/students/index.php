@@ -363,6 +363,39 @@ require_once __DIR__ . '/../includes/header.php';
                     Reset
                 </a>
             </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold d-block" style="font-size:.8rem;">Download</label>
+                <?php $sm_export_qs = http_build_query(array_filter([
+                    'search'   => $search,
+                    'dept'     => $f_dept ?: null,
+                    'program'  => $f_program ?: null,
+                    'batch'    => $f_batch ?: null,
+                    'status'   => $f_status,
+                    'semester' => $f_sem,
+                    'sem_type' => $f_sem_type,
+                    'section'  => $f_section,
+                    'shift'    => $f_shift,
+                    'gender'   => $f_gender,
+                    'blood'    => $f_blood,
+                ], fn($v) => $v !== null && $v !== '')); ?>
+                <div class="btn-group w-100">
+                    <button type="button" class="btn btn-outline-danger btn-sm dropdown-toggle w-100"
+                            data-bs-toggle="dropdown" aria-expanded="false" style="border-radius:7px;">
+                        <i class="fas fa-download me-1"></i> Export
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item" href="<?= APP_URL ?>/students/export.php?format=pdf<?= $sm_export_qs ? '&' . h($sm_export_qs) : '' ?>" target="_blank" rel="noopener">
+                            <i class="fas fa-file-pdf text-danger me-2"></i> PDF
+                        </a></li>
+                        <li><a class="dropdown-item" href="<?= APP_URL ?>/students/export.php?format=excel<?= $sm_export_qs ? '&' . h($sm_export_qs) : '' ?>">
+                            <i class="fas fa-file-excel text-success me-2"></i> Excel
+                        </a></li>
+                        <li><a class="dropdown-item" href="<?= APP_URL ?>/students/export.php?format=word<?= $sm_export_qs ? '&' . h($sm_export_qs) : '' ?>">
+                            <i class="fas fa-file-word text-primary me-2"></i> Word
+                        </a></li>
+                    </ul>
+                </div>
+            </div>
         </form>
     </div>
 </div>

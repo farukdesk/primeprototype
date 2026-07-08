@@ -48,6 +48,133 @@ function sm_return_url(?string $ret): array
     return [$qs, APP_URL . '/students/index.php' . ($qs !== '' ? '?' . $qs : '')];
 }
 
+/**
+ * Build the WHERE clause, bound parameters and a human-readable description of
+ * the applied filters for the student list, from a raw request array (usually
+ * `$_GET`).  Shared by the list page and the export page so both stay in sync.
+ *
+ * @param array      $get        Raw request parameters (e.g. $_GET).
+ * @param int[]|null $dept_scope Department scope: null = unrestricted,
+ *                               int[] = allowed department ids.
+ *
+ * @return array{where_sql:string, params:array, labels:array<int,array{0:string,1:string}>}
+ *         `labels` is a list of [label, value] pairs describing active filters.
+ */
+function sm_build_list_filter(array $get, ?array $dept_scope): array
+{
+    $search     = trim((string)($get['search']   ?? ''));
+    $f_dept     = (int)($get['dept']    ?? 0);
+    $f_status   = (string)($get['status']   ?? '');
+    $f_sem      = trim((string)($get['semester'] ?? ''));
+    $f_sem_type = trim((string)($get['sem_type'] ?? ''));
+    $f_program  = (int)($get['program'] ?? 0);
+    $f_batch    = (int)($get['batch']   ?? 0);
+    $f_section  = trim((string)($get['section']  ?? ''));
+    $f_shift    = trim((string)($get['shift']    ?? ''));
+    $f_gender   = trim((string)($get['gender']   ?? ''));
+    $f_blood    = trim((string)($get['blood']    ?? ''));
+
+    $valid_statuses  = ['Active', 'Inactive', 'Graduated', 'Dropped', 'Not Admitted Yet'];
+    $valid_sem_types = ['bi_semester', 'trimester'];
+    $valid_sections  = SM_SECTIONS;
+    $valid_shifts    = SM_SHIFTS;
+    $valid_genders   = ['Male', 'Female', 'Other'];
+    $valid_bloods    = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
+
+    $where  = [];
+    $params = [];
+    $labels = [];
+
+    if ($search !== '') {
+        $like     = '%' . $search . '%';
+        $where[]  = '(s.student_id LIKE ? OR s.full_name LIKE ? OR s.email LIKE ? OR s.phone LIKE ?)';
+        $params[] = $like;
+        $params[] = $like;
+        $params[] = $like;
+        $params[] = $like;
+        $labels[] = ['Search', $search];
+    }
+    if ($f_dept > 0) {
+        $where[]  = 's.dept_id = ?';
+        $params[] = $f_dept;
+        $name = null;
+        foreach (sm_dept_data() as $d) {
+            if ((int)$d['id'] === $f_dept) { $name = $d['name']; break; }
+        }
+        $labels[] = ['Department', $name ?? ('#' . $f_dept)];
+    }
+    if (in_array($f_status, $valid_statuses, true)) {
+        $where[]  = 's.status = ?';
+        $params[] = $f_status;
+        $labels[] = ['Status', $f_status];
+    }
+    if ($f_sem !== '') {
+        $where[]  = 's.admitted_semester = ?';
+        $params[] = $f_sem;
+        $labels[] = ['Semester', $f_sem];
+    }
+    if (in_array($f_sem_type, $valid_sem_types, true)) {
+        $where[]  = 's.semester_type = ?';
+        $params[] = $f_sem_type;
+        $labels[] = ['Semester Type', sm_semester_type_label($f_sem_type)];
+    }
+    if ($f_program > 0) {
+        $where[]  = 's.program_id = ?';
+        $params[] = $f_program;
+        $name = null;
+        foreach (sm_program_data() as $p) {
+            if ((int)$p['id'] === $f_program) { $name = $p['program_name']; break; }
+        }
+        $labels[] = ['Program', $name ?? ('#' . $f_program)];
+    }
+    if ($f_batch > 0) {
+        $where[]  = 's.batch_id = ?';
+        $params[] = $f_batch;
+        $name = null;
+        foreach (sm_batches() as $b) {
+            if ((int)$b['id'] === $f_batch) { $name = $b['name']; break; }
+        }
+        $labels[] = ['Batch', $name ?? ('#' . $f_batch)];
+    }
+    if (in_array($f_section, $valid_sections, true)) {
+        $where[]  = 's.section = ?';
+        $params[] = $f_section;
+        $labels[] = ['Section', $f_section];
+    }
+    if (in_array($f_shift, $valid_shifts, true)) {
+        $where[]  = 's.shift = ?';
+        $params[] = $f_shift;
+        $labels[] = ['Shift', $f_shift];
+    }
+    if (in_array($f_gender, $valid_genders, true)) {
+        $where[]  = 's.sex = ?';
+        $params[] = $f_gender;
+        $labels[] = ['Gender', $f_gender];
+    }
+    if (in_array($f_blood, $valid_bloods, true)) {
+        $where[]  = 's.blood_group = ?';
+        $params[] = $f_blood;
+        $labels[] = ['Blood Group', $f_blood];
+    }
+
+    // Apply department scope restriction for non-super-admins.
+    if ($dept_scope !== null) {
+        if (empty($dept_scope)) {
+            $where[] = '0 = 1';
+        } else {
+            $phs     = implode(',', array_fill(0, count($dept_scope), '?'));
+            $where[] = "s.dept_id IN ($phs)";
+            array_push($params, ...$dept_scope);
+        }
+    }
+
+    return [
+        'where_sql' => $where ? ' WHERE ' . implode(' AND ', $where) : '',
+        'params'    => $params,
+        'labels'    => $labels,
+    ];
+}
+
 // ── Permission helpers ────────────────────────────────────────────────────────
 
 function sm_is_staff(): bool
