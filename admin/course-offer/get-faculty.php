@@ -1,7 +1,8 @@
 <?php
 /**
- * AJAX – search faculty across ALL departments.
- * Accepts: q (search string), limit (max results, default 40)
+ * AJAX – search faculty.
+ * Accepts: q (search string), dept_id (optional – restrict to a department),
+ *          limit (max results, default 40)
  * Returns: [{id, text, name, designation, dept_name}]
  */
 require_once __DIR__ . '/../includes/auth.php';
@@ -9,11 +10,17 @@ auth_check();
 
 header('Content-Type: application/json; charset=utf-8');
 
-$q     = trim($_GET['q']     ?? '');
-$limit = max(1, min(100, (int)($_GET['limit'] ?? 40)));
+$q       = trim($_GET['q']     ?? '');
+$dept_id = (int)($_GET['dept_id'] ?? 0);
+$limit   = max(1, min(100, (int)($_GET['limit'] ?? 40)));
 
 $params = [];
 $where  = 'f.is_active = 1';
+
+if ($dept_id > 0) {
+    $where   .= ' AND f.dept_id = ?';
+    $params[] = $dept_id;
+}
 
 if ($q !== '') {
     $where   .= ' AND (f.name LIKE ? OR f.designation LIKE ? OR d.name LIKE ?)';

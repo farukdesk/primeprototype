@@ -155,7 +155,7 @@ function co_get_subjects_with_teachers(int $offer_id): array
     $sub_ids = array_column($subjects, 'id');
     $ph      = implode(',', array_fill(0, count($sub_ids), '?'));
     $tst     = db()->prepare(
-        "SELECT t.offer_subject_id, f.id, f.name, f.designation, fd.name AS dept_name
+        "SELECT t.offer_subject_id, f.id, f.name, f.designation, f.dept_id, fd.name AS dept_name
            FROM co_offer_subject_teachers t
            JOIN dept_faculty      f  ON f.id  = t.faculty_id
            JOIN dept_departments  fd ON fd.id = f.dept_id
@@ -172,6 +172,7 @@ function co_get_subjects_with_teachers(int $offer_id): array
             'id'          => $tr['id'],
             'name'        => $tr['name'],
             'designation' => $tr['designation'],
+            'dept_id'     => $tr['dept_id'],
             'dept_name'   => $tr['dept_name'],
         ];
     }
