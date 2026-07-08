@@ -227,7 +227,7 @@ class _CoursesTabState extends State<CoursesTab> {
                     if ((sub.credit ?? '').isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 2),
-                        child: Text('${sub.credit} credit',
+                        child: Text('Credit: ${sub.credit}',
                             style: const TextStyle(
                                 fontSize: 12, color: AppTheme.textSecondary)),
                       ),
