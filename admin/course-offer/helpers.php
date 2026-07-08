@@ -312,6 +312,92 @@ function co_batch_students(int $batch_id, string $q = '', int $limit = 50): arra
 }
 
 /**
+ * Filtered + paginated students belonging to a batch (for bulk enrollment picker).
+ *
+ * Supported $filters keys: q (student_id/name), section, shift.
+ * Returns ['rows' => [...], 'total' => int] where each row contains
+ * id, student_id, full_name, section, shift, batch_name, dept_name, program_name.
+ */
+function co_batch_students_filtered(int $batch_id, array $filters = [], int $page = 1, int $per_page = 25): array
+{
+    $where  = ['s.batch_id = ?'];
+    $params = [$batch_id];
+
+    $q = trim($filters['q'] ?? '');
+    if ($q !== '') {
+        $where[]  = '(s.student_id LIKE ? OR s.full_name LIKE ?)';
+        $like     = '%' . $q . '%';
+        $params[] = $like;
+        $params[] = $like;
+    }
+    $section = trim($filters['section'] ?? '');
+    if ($section !== '') {
+        $where[]  = 's.section = ?';
+        $params[] = $section;
+    }
+    $shift = trim($filters['shift'] ?? '');
+    if ($shift !== '') {
+        $where[]  = 's.shift = ?';
+        $params[] = $shift;
+    }
+
+    $whereSQL = implode(' AND ', $where);
+
+    $countSt = db()->prepare("SELECT COUNT(*) FROM students s WHERE $whereSQL");
+    $countSt->execute($params);
+    $total = (int)$countSt->fetchColumn();
+
+    $per_page   = max(1, min(200, $per_page));
+    $limit_val  = (int)$per_page;
+    $offset_val = (int)max(0, $page - 1) * $limit_val;
+
+    $st = db()->prepare(
+        "SELECT s.id, s.student_id, s.full_name, s.section, s.shift,
+                d.name AS dept_name, p.program_name, b.name AS batch_name
+           FROM students s
+           LEFT JOIN dept_departments       d ON d.id = s.dept_id
+           LEFT JOIN dept_academic_programs p ON p.id = s.program_id
+           LEFT JOIN student_batches        b ON b.id = s.batch_id
+          WHERE $whereSQL
+          ORDER BY s.student_id ASC
+          LIMIT {$limit_val} OFFSET {$offset_val}"
+    );
+    $st->execute($params);
+
+    return ['rows' => $st->fetchAll(), 'total' => $total];
+}
+
+/**
+ * Distinct non-empty sections present in a batch (for the enrollment filter).
+ */
+function co_batch_sections(int $batch_id): array
+{
+    $st = db()->prepare(
+        "SELECT DISTINCT section
+           FROM students
+          WHERE batch_id = ? AND section IS NOT NULL AND section <> ''
+          ORDER BY section ASC"
+    );
+    $st->execute([$batch_id]);
+    return array_map('strval', array_column($st->fetchAll(), 'section'));
+}
+
+/**
+ * Distinct non-empty shifts present in a batch (for the enrollment filter).
+ */
+function co_batch_shifts(int $batch_id): array
+{
+    $st = db()->prepare(
+        "SELECT DISTINCT shift
+           FROM students
+          WHERE batch_id = ? AND shift IS NOT NULL AND shift <> ''
+          ORDER BY shift ASC"
+    );
+    $st->execute([$batch_id]);
+    return array_map('strval', array_column($st->fetchAll(), 'shift'));
+}
+
+/**
  * Registered students for every subject in an offer.
  * Returns array keyed by offer_subject_id → list of student rows.
  */
@@ -319,10 +405,13 @@ function co_registrations_by_subject(int $offer_id): array
 {
     $st = db()->prepare(
         "SELECT r.id AS reg_id, r.offer_subject_id, r.source, r.created_at,
-                s.id AS student_pk, s.student_id, s.full_name, s.section
+                s.id AS student_pk, s.student_id, s.full_name, s.section, s.shift,
+                d.name AS dept_name, b.name AS batch_name
            FROM co_registrations   r
            JOIN co_offer_subjects  cos ON cos.id = r.offer_subject_id
            JOIN students           s   ON s.id  = r.student_id
+           LEFT JOIN dept_departments d ON d.id = s.dept_id
+           LEFT JOIN student_batches  b ON b.id = s.batch_id
           WHERE cos.offer_id = ?
           ORDER BY s.student_id ASC"
     );

@@ -179,7 +179,7 @@ require_once __DIR__ . '/../includes/header.php';
     </small>
 </div>
 
-// Global row counter across all batch groups, starting at the page offset.
+<?php // Global row counter across all batch groups, starting at the page offset. ?>
 <?php $global_row = ($cur_page - 1) * $per_page + 1; ?>
 <?php foreach ($grouped as $batch_id => $group): ?>
 <div class="card mb-4" style="border-radius:12px; overflow:hidden;">
@@ -204,7 +204,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <th>Semester</th>
                     <th>Academic Intake</th>
                     <th style="width:5rem;" class="text-center">Status</th>
-                    <th class="text-end" style="width:6rem;">Actions</th>
+                    <th class="text-end text-nowrap" style="width:8.5rem;">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -253,7 +253,7 @@ require_once __DIR__ . '/../includes/header.php';
                 </td>
 
                 <!-- Actions -->
-                <td class="text-end pt-3">
+                <td class="text-end text-nowrap pt-3">
                     <a href="<?= APP_URL ?>/course-offer/registrations.php?offer_id=<?= $row['id'] ?>"
                        class="btn btn-sm btn-outline-primary me-1" title="Registrations">
                         <i class="fas fa-user-check"></i>
