@@ -177,6 +177,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $office_shift            = trim($_POST['office_shift']            ?? '') ?: null;
     $office_decision         = trim($_POST['office_decision']         ?? '') ?: null;
     $office_checked_by       = trim($_POST['office_checked_by']       ?? '') ?: null;
+    $promoter_source         = ($_POST['promoter_source'] ?? 'No') === 'Yes' ? 'Yes' : 'No';
+    $promoter_name           = trim($_POST['promoter_name']           ?? '') ?: null;
+    $promoter_address        = trim($_POST['promoter_address']        ?? '') ?: null;
+    $promoter_contact        = trim($_POST['promoter_contact']        ?? '') ?: null;
+    $promoter_email          = trim($_POST['promoter_email']          ?? '') ?: null;
+    $prime_student           = ($_POST['prime_student'] ?? 'No') === 'Yes' ? 'Yes' : 'No';
+    $prime_student_id        = trim($_POST['prime_student_id']        ?? '') ?: null;
+    $prime_department        = trim($_POST['prime_department']        ?? '') ?: null;
+    $prime_program           = trim($_POST['prime_program']           ?? '') ?: null;
+    $source_note             = trim($_POST['source_note']             ?? '') ?: null;
+    // If the source declarations are set to "No", clear their detail fields.
+    if ($promoter_source !== 'Yes') {
+        $promoter_name = $promoter_address = $promoter_contact = $promoter_email = null;
+    }
+    if ($prime_student !== 'Yes') {
+        $prime_student_id = $prime_department = $prime_program = null;
+    }
 
     if ($student_name === '') $errors[] = 'Student name is required.';
 
@@ -245,6 +262,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $reference_name, $reference_address_1, $reference_address_2, $reference_address_3, $reference_contact,
             $expelled_answer, $expelled_detail,
             $office_university_batch, $office_dept_batch, $office_section, $office_shift, $office_decision, $office_checked_by,
+            $promoter_source, $promoter_name, $promoter_address, $promoter_contact, $promoter_email,
+            $prime_student, $prime_student_id, $prime_department, $prime_program, $source_note,
             $user['id'],
         ];
         $application_placeholders = implode(',', array_fill(0, count($application_values), '?'));
@@ -263,6 +282,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 reference_name, reference_address_1, reference_address_2, reference_address_3, reference_contact,
                  expelled_answer, expelled_detail,
                  office_university_batch, office_dept_batch, office_section, office_shift, office_decision, office_checked_by,
+                 promoter_source, promoter_name, promoter_address, promoter_contact, promoter_email,
+                 prime_student, prime_student_id, prime_department, prime_program, source_note,
                  created_by)
              VALUES (' . $application_placeholders . ')'
         )->execute($application_values);
@@ -1336,6 +1357,90 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
             </div>
         </div>
 
+        <!-- Student Source -->
+        <div class="card border-0 shadow-sm mb-4" style="border-left:4px solid #0d6efd !important">
+            <div class="adm-card-hdr d-flex align-items-center gap-2">
+                <span class="card-icon bg-primary bg-opacity-10"><i class="fas fa-user-friends text-primary"></i></span>
+                <span class="fw-semibold">Student Source</span>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <!-- Promoter -->
+                    <div class="col-12">
+                        <label class="form-label fw-medium">Student source promoter?</label>
+                        <div class="d-flex gap-4 mt-1">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="promoter_source" id="promoter_no" value="No"
+                                       <?= (($_POST['promoter_source'] ?? 'No') === 'No') ? 'checked' : '' ?> onchange="togglePromoter()">
+                                <label class="form-check-label fw-medium" for="promoter_no">
+                                    <i class="fas fa-times-circle text-success me-1"></i>No
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="promoter_source" id="promoter_yes" value="Yes"
+                                       <?= (($_POST['promoter_source'] ?? '') === 'Yes') ? 'checked' : '' ?> onchange="togglePromoter()">
+                                <label class="form-check-label fw-medium" for="promoter_yes">
+                                    <i class="fas fa-check-circle text-primary me-1"></i>Yes
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12" id="promoter_fields_wrap" style="<?= (($_POST['promoter_source'] ?? '') !== 'Yes') ? 'display:none' : '' ?>">
+                        <div class="row g-3">
+                            <div class="col-12 col-sm-6">
+                                <label class="form-label">Promoter Name</label>
+                                <input type="text" name="promoter_name" class="form-control" value="<?= h($_POST['promoter_name'] ?? '') ?>">
+                            </div>
+                            <div class="col-12 col-sm-6">
+                                <label class="form-label">Contact Number</label>
+                                <input type="text" name="promoter_contact" class="form-control" value="<?= h($_POST['promoter_contact'] ?? '') ?>">
+                            </div>
+                            <div class="col-12 col-sm-6">
+                                <label class="form-label">Email</label>
+                                <input type="email" name="promoter_email" class="form-control" value="<?= h($_POST['promoter_email'] ?? '') ?>">
+                            </div>
+                            <div class="col-12 col-sm-6">
+                                <label class="form-label">Address</label>
+                                <input type="text" name="promoter_address" class="form-control" value="<?= h($_POST['promoter_address'] ?? '') ?>">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Prime Student -->
+                    <div class="col-12">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="prime_student" id="prime_student" value="Yes"
+                                   <?= (($_POST['prime_student'] ?? '') === 'Yes') ? 'checked' : '' ?> onchange="togglePrimeStudent()">
+                            <label class="form-check-label fw-medium" for="prime_student">Prime Student?</label>
+                        </div>
+                    </div>
+                    <div class="col-12" id="prime_student_fields_wrap" style="<?= (($_POST['prime_student'] ?? '') !== 'Yes') ? 'display:none' : '' ?>">
+                        <div class="row g-3">
+                            <div class="col-12 col-sm-4">
+                                <label class="form-label">Student ID</label>
+                                <input type="text" name="prime_student_id" class="form-control" value="<?= h($_POST['prime_student_id'] ?? '') ?>">
+                            </div>
+                            <div class="col-12 col-sm-4">
+                                <label class="form-label">Department</label>
+                                <input type="text" name="prime_department" class="form-control" value="<?= h($_POST['prime_department'] ?? '') ?>">
+                            </div>
+                            <div class="col-12 col-sm-4">
+                                <label class="form-label">Program</label>
+                                <input type="text" name="prime_program" class="form-control" value="<?= h($_POST['prime_program'] ?? '') ?>">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Note -->
+                    <div class="col-12">
+                        <label class="form-label">Note</label>
+                        <textarea name="source_note" class="form-control" rows="2"
+                                  placeholder="Any additional note about the student source…"><?= h($_POST['source_note'] ?? '') ?></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- For Office Use Only -->
         <div class="card border-0 shadow-sm mb-4" style="border-left:4px solid #6c757d !important">
             <div class="adm-card-hdr d-flex align-items-center gap-2">
@@ -1597,6 +1702,16 @@ document.getElementById('photoInput').addEventListener('change', function() {
 function toggleExpelled() {
     document.getElementById('expelled_detail_wrap').style.display =
         document.getElementById('expelled_yes').checked ? '' : 'none';
+}
+
+// ── Student source toggles ────────────────────────────────────────────────────
+function togglePromoter() {
+    document.getElementById('promoter_fields_wrap').style.display =
+        document.getElementById('promoter_yes').checked ? '' : 'none';
+}
+function togglePrimeStudent() {
+    document.getElementById('prime_student_fields_wrap').style.display =
+        document.getElementById('prime_student').checked ? '' : 'none';
 }
 
 // ── Address: district/thana searchable selects ────────────────────────────────

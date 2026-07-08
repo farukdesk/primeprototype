@@ -101,6 +101,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $office_shift            = trim($_POST['office_shift']            ?? '') ?: null;
     $office_decision         = trim($_POST['office_decision']         ?? '') ?: null;
     $office_checked_by       = trim($_POST['office_checked_by']       ?? '') ?: null;
+    $promoter_source         = ($_POST['promoter_source'] ?? 'No') === 'Yes' ? 'Yes' : 'No';
+    $promoter_name           = trim($_POST['promoter_name']           ?? '') ?: null;
+    $promoter_address        = trim($_POST['promoter_address']        ?? '') ?: null;
+    $promoter_contact        = trim($_POST['promoter_contact']        ?? '') ?: null;
+    $promoter_email          = trim($_POST['promoter_email']          ?? '') ?: null;
+    $prime_student           = ($_POST['prime_student'] ?? 'No') === 'Yes' ? 'Yes' : 'No';
+    $prime_student_id        = trim($_POST['prime_student_id']        ?? '') ?: null;
+    $prime_department        = trim($_POST['prime_department']        ?? '') ?: null;
+    $prime_program           = trim($_POST['prime_program']           ?? '') ?: null;
+    $source_note             = trim($_POST['source_note']             ?? '') ?: null;
+    if ($promoter_source !== 'Yes') {
+        $promoter_name = $promoter_address = $promoter_contact = $promoter_email = null;
+    }
+    if ($prime_student !== 'Yes') {
+        $prime_student_id = $prime_department = $prime_program = null;
+    }
 
     if ($student_name === '') $errors[] = 'Student name is required.';
 
@@ -157,7 +173,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 local_guardian_name=?, local_guardian_address_1=?, local_guardian_address_2=?, local_guardian_address_3=?, local_guardian_contact=?,
                 reference_name=?, reference_address_1=?, reference_address_2=?, reference_address_3=?, reference_contact=?,
                 expelled_answer=?, expelled_detail=?,
-                office_university_batch=?, office_dept_batch=?, office_section=?, office_shift=?, office_decision=?, office_checked_by=?
+                office_university_batch=?, office_dept_batch=?, office_section=?, office_shift=?, office_decision=?, office_checked_by=?,
+                promoter_source=?, promoter_name=?, promoter_address=?, promoter_contact=?, promoter_email=?,
+                prime_student=?, prime_student_id=?, prime_department=?, prime_program=?, source_note=?
              WHERE id=?'
         )->execute([
             $status, $dept_id, $program_id, $year, $semester,
@@ -172,6 +190,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $reference_name, $reference_address_1, $reference_address_2, $reference_address_3, $reference_contact,
             $expelled_answer, $expelled_detail,
             $office_university_batch, $office_dept_batch, $office_section, $office_shift, $office_decision, $office_checked_by,
+            $promoter_source, $promoter_name, $promoter_address, $promoter_contact, $promoter_email,
+            $prime_student, $prime_student_id, $prime_department, $prime_program, $source_note,
             $id,
         ]);
 
@@ -594,6 +614,61 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                 </div>
             </div>
 
+            <!-- Section 9b: Student Source -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-white fw-semibold"><i class="fas fa-user-friends me-2 text-primary"></i>Student Source</div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <!-- Promoter -->
+                        <div class="col-12">
+                            <label class="form-label">Student source promoter?</label>
+                            <div class="d-flex gap-3 mt-1">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="promoter_source" id="promoter_no" value="No"
+                                           <?= (($app['promoter_source'] ?? 'No') === 'No') ? 'checked' : '' ?> onchange="togglePromoter()">
+                                    <label class="form-check-label" for="promoter_no">No</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="promoter_source" id="promoter_yes" value="Yes"
+                                           <?= (($app['promoter_source'] ?? '') === 'Yes') ? 'checked' : '' ?> onchange="togglePromoter()">
+                                    <label class="form-check-label" for="promoter_yes">Yes</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12" id="promoter_fields_wrap" style="<?= (($app['promoter_source'] ?? '') !== 'Yes') ? 'display:none' : '' ?>">
+                            <div class="row g-3">
+                                <div class="col-12 col-md-6"><label class="form-label">Promoter Name</label><input type="text" name="promoter_name" class="form-control" value="<?= $v('promoter_name') ?>"></div>
+                                <div class="col-12 col-md-6"><label class="form-label">Contact Number</label><input type="text" name="promoter_contact" class="form-control" value="<?= $v('promoter_contact') ?>"></div>
+                                <div class="col-12 col-md-6"><label class="form-label">Email</label><input type="email" name="promoter_email" class="form-control" value="<?= $v('promoter_email') ?>"></div>
+                                <div class="col-12 col-md-6"><label class="form-label">Address</label><input type="text" name="promoter_address" class="form-control" value="<?= $v('promoter_address') ?>"></div>
+                            </div>
+                        </div>
+
+                        <!-- Prime Student -->
+                        <div class="col-12">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="prime_student" id="prime_student" value="Yes"
+                                       <?= (($app['prime_student'] ?? '') === 'Yes') ? 'checked' : '' ?> onchange="togglePrimeStudent()">
+                                <label class="form-check-label" for="prime_student">Prime Student?</label>
+                            </div>
+                        </div>
+                        <div class="col-12" id="prime_student_fields_wrap" style="<?= (($app['prime_student'] ?? '') !== 'Yes') ? 'display:none' : '' ?>">
+                            <div class="row g-3">
+                                <div class="col-12 col-md-4"><label class="form-label">Student ID</label><input type="text" name="prime_student_id" class="form-control" value="<?= $v('prime_student_id') ?>"></div>
+                                <div class="col-12 col-md-4"><label class="form-label">Department</label><input type="text" name="prime_department" class="form-control" value="<?= $v('prime_department') ?>"></div>
+                                <div class="col-12 col-md-4"><label class="form-label">Program</label><input type="text" name="prime_program" class="form-control" value="<?= $v('prime_program') ?>"></div>
+                            </div>
+                        </div>
+
+                        <!-- Note -->
+                        <div class="col-12">
+                            <label class="form-label">Note</label>
+                            <textarea name="source_note" class="form-control" rows="2" placeholder="Any additional note about the student source…"><?= $v('source_note') ?></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Section 10: For Office Use Only -->
             <div class="card border-0 shadow-sm mb-4">
                 <div class="card-header bg-white fw-semibold"><i class="fas fa-stamp me-2 text-secondary"></i>For Office Use Only</div>
@@ -874,6 +949,14 @@ document.getElementById('photoInput').addEventListener('change', function() {
 function toggleExpelled() {
     var yes = document.getElementById('expelled_yes').checked;
     document.getElementById('expelled_detail_wrap').style.display = yes ? '' : 'none';
+}
+function togglePromoter() {
+    document.getElementById('promoter_fields_wrap').style.display =
+        document.getElementById('promoter_yes').checked ? '' : 'none';
+}
+function togglePrimeStudent() {
+    document.getElementById('prime_student_fields_wrap').style.display =
+        document.getElementById('prime_student').checked ? '' : 'none';
 }
 
 // ── Address: searchable district/thana selects ────────────────────────────────

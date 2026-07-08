@@ -282,6 +282,31 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
         </div>
 
+        <!-- Student Source -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white fw-semibold"><i class="fas fa-user-friends me-2 text-primary"></i>Student Source</div>
+            <div class="card-body">
+                <div class="row g-2">
+                    <div class="col-12"><div class="text-muted small">Student source promoter?</div><div><?= h($app['promoter_source'] ?? 'No') ?></div></div>
+                    <?php if (($app['promoter_source'] ?? '') === 'Yes'): ?>
+                    <div class="col-12 col-md-6"><div class="text-muted small">Promoter Name</div><div><?= h($app['promoter_name'] ?? '—') ?></div></div>
+                    <div class="col-12 col-md-6"><div class="text-muted small">Contact Number</div><div><?= h($app['promoter_contact'] ?? '—') ?></div></div>
+                    <div class="col-12 col-md-6"><div class="text-muted small">Email</div><div><?= h($app['promoter_email'] ?? '—') ?></div></div>
+                    <div class="col-12 col-md-6"><div class="text-muted small">Address</div><div><?= h($app['promoter_address'] ?? '—') ?></div></div>
+                    <?php endif; ?>
+                    <div class="col-12"><div class="text-muted small">Prime Student?</div><div><?= h($app['prime_student'] ?? 'No') ?></div></div>
+                    <?php if (($app['prime_student'] ?? '') === 'Yes'): ?>
+                    <div class="col-12 col-md-4"><div class="text-muted small">Student ID</div><div><?= h($app['prime_student_id'] ?? '—') ?></div></div>
+                    <div class="col-12 col-md-4"><div class="text-muted small">Department</div><div><?= h($app['prime_department'] ?? '—') ?></div></div>
+                    <div class="col-12 col-md-4"><div class="text-muted small">Program</div><div><?= h($app['prime_program'] ?? '—') ?></div></div>
+                    <?php endif; ?>
+                    <?php if (trim((string)($app['source_note'] ?? '')) !== ''): ?>
+                    <div class="col-12"><div class="text-muted small">Note</div><div><?= nl2br(h($app['source_note'])) ?></div></div>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+
         <!-- For Office Use Only -->
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-header bg-white fw-semibold"><i class="fas fa-stamp me-2 text-secondary"></i>For Office Use Only</div>
