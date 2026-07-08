@@ -398,11 +398,15 @@ require_once __DIR__ . '/../includes/header.php';
                     </td></tr>
                 <?php else: ?>
                     <?php foreach ($students as $i => $s): ?>
-                    <tr>
+                    <?php $upd_badge = sm_recently_updated_badge($s['updated_at'] ?? null, $s['created_at'] ?? null); ?>
+                    <tr<?= $upd_badge !== '' ? ' class="table-warning"' : '' ?>>
                         <td class="px-4"><?= $offset + $i + 1 ?></td>
                         <td><code class="text-primary"><?= h($s['student_id']) ?></code></td>
                         <td>
                             <div class="fw-medium"><?= h($s['full_name']) ?></div>
+                            <?php if ($upd_badge !== ''): ?>
+                            <div class="mt-1"><?= $upd_badge ?></div>
+                            <?php endif; ?>
                             <?php if ($s['photo']): ?>
                             <small class="text-muted"><i class="fas fa-image me-1"></i>Photo on file</small>
                             <?php endif; ?>
