@@ -364,7 +364,7 @@ require_once __DIR__ . '/../includes/header.php';
                 </a>
             </div>
             <div class="col-6 col-md-2">
-                <label class="form-label fw-semibold d-block" style="font-size:.8rem;">Download</label>
+                <label class="form-label fw-semibold d-block" style="font-size:.8rem;">Export</label>
                 <?php $sm_export_qs = http_build_query(array_filter([
                     'search'   => $search,
                     'dept'     => $f_dept ?: null,
