@@ -283,6 +283,103 @@ function co_save_subjects_teachers(int $offer_id, array $rows): void
     }
 }
 
+// ── Registration helpers ──────────────────────────────────────────────────────
+
+/**
+ * Active students belonging to a batch (for manual enrollment search).
+ * Optional $q filters by student_id or name.
+ */
+function co_batch_students(int $batch_id, string $q = '', int $limit = 50): array
+{
+    $params = [$batch_id];
+    $where  = 's.batch_id = ?';
+    if ($q !== '') {
+        $where   .= ' AND (s.student_id LIKE ? OR s.full_name LIKE ?)';
+        $like     = '%' . $q . '%';
+        $params[] = $like;
+        $params[] = $like;
+    }
+    $limit = max(1, min(200, $limit));
+    $st = db()->prepare(
+        "SELECT s.id, s.student_id, s.full_name, s.section
+           FROM students s
+          WHERE $where
+          ORDER BY s.student_id ASC
+          LIMIT $limit"
+    );
+    $st->execute($params);
+    return $st->fetchAll();
+}
+
+/**
+ * Registered students for every subject in an offer.
+ * Returns array keyed by offer_subject_id → list of student rows.
+ */
+function co_registrations_by_subject(int $offer_id): array
+{
+    $st = db()->prepare(
+        "SELECT r.id AS reg_id, r.offer_subject_id, r.source, r.created_at,
+                s.id AS student_pk, s.student_id, s.full_name, s.section
+           FROM co_registrations   r
+           JOIN co_offer_subjects  cos ON cos.id = r.offer_subject_id
+           JOIN students           s   ON s.id  = r.student_id
+          WHERE cos.offer_id = ?
+          ORDER BY s.student_id ASC"
+    );
+    $st->execute([$offer_id]);
+
+    $map = [];
+    foreach ($st->fetchAll() as $row) {
+        $map[(int)$row['offer_subject_id']][] = $row;
+    }
+    return $map;
+}
+
+/**
+ * Register a student into a single offer subject.
+ * Idempotent: existing rows are left untouched (INSERT IGNORE semantics).
+ * Returns true when a new row was created.
+ */
+function co_register_student(int $offer_subject_id, int $student_id, string $source, ?int $by): bool
+{
+    $source = $source === 'admin' ? 'admin' : 'self';
+    $st = db()->prepare(
+        "INSERT IGNORE INTO co_registrations
+             (offer_subject_id, student_id, source, registered_by)
+         VALUES (?, ?, ?, ?)"
+    );
+    $st->execute([$offer_subject_id, $student_id, $source, $by]);
+    return $st->rowCount() > 0;
+}
+
+/**
+ * Remove a student's registration from a single offer subject.
+ * Returns true when a row was removed.
+ */
+function co_unregister_student(int $offer_subject_id, int $student_id): bool
+{
+    $st = db()->prepare(
+        "DELETE FROM co_registrations WHERE offer_subject_id = ? AND student_id = ?"
+    );
+    $st->execute([$offer_subject_id, $student_id]);
+    return $st->rowCount() > 0;
+}
+
+/**
+ * The offer subject IDs a student is registered for within a given offer.
+ */
+function co_student_registered_subject_ids(int $offer_id, int $student_id): array
+{
+    $st = db()->prepare(
+        "SELECT r.offer_subject_id
+           FROM co_registrations  r
+           JOIN co_offer_subjects cos ON cos.id = r.offer_subject_id
+          WHERE cos.offer_id = ? AND r.student_id = ?"
+    );
+    $st->execute([$offer_id, $student_id]);
+    return array_map('intval', array_column($st->fetchAll(), 'offer_subject_id'));
+}
+
 // ── Paginated listing ─────────────────────────────────────────────────────────
 
 /**

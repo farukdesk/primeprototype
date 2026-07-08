@@ -254,6 +254,10 @@ require_once __DIR__ . '/../includes/header.php';
 
                 <!-- Actions -->
                 <td class="text-end pt-3">
+                    <a href="<?= APP_URL ?>/course-offer/registrations.php?offer_id=<?= $row['id'] ?>"
+                       class="btn btn-sm btn-outline-primary me-1" title="Registrations">
+                        <i class="fas fa-user-check"></i>
+                    </a>
                     <?php if (co_is_staff()): ?>
                     <a href="<?= APP_URL ?>/course-offer/edit.php?id=<?= $row['id'] ?>"
                        class="btn btn-sm btn-outline-secondary me-1" title="Edit">
