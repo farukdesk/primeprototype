@@ -229,6 +229,77 @@ function sm_status_badge(string $status): string
     return '<span class="badge ' . $cls . '">' . h($status) . '</span>';
 }
 
+/**
+ * Human-readable "time ago" string, e.g. "just now", "5 min ago", "3 hours ago".
+ * Returns '' when the input is empty or unparseable.
+ */
+function sm_relative_time(?string $datetime): string
+{
+    if ($datetime === null || trim($datetime) === '' || str_starts_with($datetime, '0000')) {
+        return '';
+    }
+    $ts = strtotime($datetime);
+    if ($ts === false) {
+        return '';
+    }
+    $diff = time() - $ts;
+    if ($diff < 0) {
+        $diff = 0;
+    }
+    if ($diff < 60) {
+        return 'just now';
+    }
+    $units = [
+        ['sec' => 31536000, 'name' => 'year'],
+        ['sec' => 2592000,  'name' => 'month'],
+        ['sec' => 86400,    'name' => 'day'],
+        ['sec' => 3600,     'name' => 'hour'],
+        ['sec' => 60,       'name' => 'min'],
+    ];
+    foreach ($units as $u) {
+        if ($diff >= $u['sec']) {
+            $val = (int)floor($diff / $u['sec']);
+            $label = $u['name'];
+            if ($label !== 'min' && $val > 1) {
+                $label .= 's';
+            }
+            return $val . ' ' . $label . ' ago';
+        }
+    }
+    return 'just now';
+}
+
+/**
+ * Badge highlighting a recently edited student record.
+ * Shows "Updated X ago" when updated_at is later than created_at (i.e. the record
+ * was edited after creation) and falls within $within_hours. Returns '' otherwise.
+ */
+function sm_recently_updated_badge(?string $updated_at, ?string $created_at, int $within_hours = 24): string
+{
+    if ($updated_at === null || trim($updated_at) === '') {
+        return '';
+    }
+    $updated_ts = strtotime($updated_at);
+    if ($updated_ts === false) {
+        return '';
+    }
+    // Only treat as "updated" when it was edited after creation.
+    // Allow a 60-second cushion so tiny clock/insert drift between the
+    // created_at and updated_at timestamps isn't reported as an edit.
+    $created_ts = $created_at !== null ? strtotime($created_at) : false;
+    if ($created_ts !== false && ($updated_ts - $created_ts) < 60) {
+        return '';
+    }
+    if ((time() - $updated_ts) > $within_hours * 3600) {
+        return '';
+    }
+    $rel = sm_relative_time($updated_at);
+    $text = $rel !== '' ? 'Updated ' . $rel : 'Recently updated';
+    return '<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle" '
+         . 'title="' . h('Updated ' . $updated_at) . '">'
+         . '<i class="fas fa-clock-rotate-left me-1"></i>' . h($text) . '</span>';
+}
+
 function sm_sex_badge(string $sex): string
 {
     $map = [
