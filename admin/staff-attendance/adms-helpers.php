@@ -253,7 +253,9 @@ function adms_store_punch(array $device, array $rec, ?int $user_id): bool
             $rec['verify'],
             $rec['raw'],
         ]);
-        return $stmt->rowCount() === 1; // 1 = insert, 2/0 = duplicate update
+        // rowCount(): 1 = fresh insert; 2 = duplicate that changed a value;
+        // 0 = duplicate with identical values. Only a fresh insert is "new".
+        return $stmt->rowCount() === 1;
     } catch (Throwable $e) {
         return false;
     }

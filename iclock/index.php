@@ -144,7 +144,7 @@ if ($endpoint === 'cdata') {
         adms_respond("OK\n"); // still ack so the device does not loop forever
     }
 
-    $body  = (string)file_get_contents('php://input', false, null, 0, ADMS_MAX_BODY_BYTES + 1);
+    $body  = (string)file_get_contents('php://input', false, null, 0, ADMS_MAX_BODY_BYTES);
     $stamp = trim((string)($_GET['Stamp'] ?? $_GET['stamp'] ?? ''));
 
     if ($table !== 'ATTLOG') {
