@@ -66,7 +66,9 @@ under **Recent Requests** on the Devices page.
 2. On the Devices page confirm **Last Seen** / **Last Push** update and the punch
    appears under **Recent Punches**.
 3. Confirm the staff member's row shows the correct in/out time on the main
-   Staff Attendance report. The earliest punch of a day becomes `in_time` and the
+   Staff Attendance report. Any staff member mapped to a device appears on the
+   report automatically, even if their own user group lacks the Staff Attendance
+   module permission. The earliest punch of a day becomes `in_time` and the
    latest becomes `out_time`; a single punch leaves `out_time` empty ("No Out
    Time"). Re-sent or out-of-order punches are de-duplicated and always converge
    to the correct row (the raw `att_punch_log` is the source of truth).
