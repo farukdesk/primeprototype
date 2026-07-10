@@ -1,0 +1,21 @@
+# ADMS / iclock receiver – route every /iclock/* request to the front controller.
+# The ZKTeco device firmware hard-codes paths like /iclock/cdata and
+# /iclock/getrequest, so we internally rewrite them all to index.php while
+# preserving the original query string (SN, table, Stamp, …).
+
+Options -Indexes
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /iclock/
+
+    # Serve real files (e.g. index.php itself) directly.
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+
+    # Everything else (cdata, getrequest, fdata, devicecmd, …) → index.php.
+    RewriteRule ^ index.php [L,QSA]
+</IfModule>
+
+DirectoryIndex index.php
