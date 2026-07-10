@@ -119,7 +119,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $departments   = co_departments();
 $all_batches   = co_student_batches();
 $semester_opts = co_semester_options();
-$intake_opts   = co_academic_intake_options();
 
 $old_dept     = (int)($_SESSION['old']['dept_id']         ?? $_GET['dept_id']    ?? 0);
 $old_program  = (int)($_SESSION['old']['program_id']      ?? $_GET['program_id'] ?? 0);
@@ -128,6 +127,15 @@ $old_semester = $_SESSION['old']['semester']              ?? '';
 $old_intake   = $_SESSION['old']['academic_intake']       ?? '';
 $old_rows     = (array)($_SESSION['old']['rows']          ?? []);
 $old_status   = $_SESSION['old']['status']                ?? 'active';
+
+// Academic Intake options depend on the department's calendar (Law is
+// bi-semester, everything else is trimester).
+$old_dept_name = '';
+foreach ($departments as $d) {
+    if ((int)$d['id'] === $old_dept) { $old_dept_name = $d['name']; break; }
+}
+$old_dept_bi = co_dept_is_bi_semester($old_dept_name);
+$intake_opts = co_academic_intake_options($old_dept_bi);
 
 $programs = $old_dept > 0 ? co_programs($old_dept) : [];
 
@@ -438,7 +446,9 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
 var APP_URL      = <?= json_encode(APP_URL) ?>;
 var PRE_ROWS     = <?= $pre_rows_json ?>;
 var rowCounter   = <?= count($pre_rows) ?>;
-var DEPARTMENTS  = <?= json_encode(array_map(function ($d) { return ['id' => (int)$d['id'], 'name' => $d['name']]; }, $departments)) ?>;
+var DEPARTMENTS  = <?= json_encode(array_map(function ($d) { return ['id' => (int)$d['id'], 'name' => $d['name'], 'bi' => co_dept_is_bi_semester($d['name'])]; }, $departments)) ?>;
+var INTAKE_TRI   = <?= json_encode(co_academic_intake_options(false)) ?>;
+var INTAKE_BI    = <?= json_encode(co_academic_intake_options(true)) ?>;
 
 function otherDeptOptionsHtml() {
     var html = '<option value="">— All departments —</option>';
@@ -459,6 +469,7 @@ var programSelect = document.getElementById('sel-program');
 
 deptSelect.addEventListener('change', function() {
     var deptId = this.value;
+    applyIntakeOptions(deptId);
     programSelect.innerHTML = '<option value="">— Select Program —</option>';
     if (!deptId) return;
     fetch(APP_URL + '/course-offer/get-programs.php?dept_id=' + encodeURIComponent(deptId))
@@ -482,10 +493,28 @@ new TomSelect('#sel-semester', {
 });
 
 var intakeInput = document.getElementById('intake-input');
-new TomSelect('#sel-intake', {
+var tsIntake = new TomSelect('#sel-intake', {
     allowEmptyOption: true, create: true, sortField: 'text',
     onChange: function(v) { intakeInput.value = v || ''; },
 });
+
+// Swap Academic Intake options between trimester (3 semesters/year) and
+// bi-semester (2 semesters/year) based on the selected department.
+function applyIntakeOptions(deptId) {
+    var dept = DEPARTMENTS.find(function(d) { return String(d.id) === String(deptId); });
+    var list = (dept && dept.bi) ? INTAKE_BI : INTAKE_TRI;
+    var current = tsIntake.getValue();
+    tsIntake.clearOptions();
+    tsIntake.addOption({ value: '', text: '— Select academic intake —' });
+    list.forEach(function(ai) { tsIntake.addOption({ value: ai, text: ai }); });
+    // Preserve the current selection if it is still valid for this calendar.
+    if (current && list.indexOf(current) !== -1) {
+        tsIntake.setValue(current, true);
+    } else {
+        tsIntake.setValue('', true);
+    }
+    tsIntake.refreshOptions(false);
+}
 
 // ── Subject-row helpers ───────────────────────────────────────────────────────
 function buildSubjectSelect(ri, cid, ctext) {

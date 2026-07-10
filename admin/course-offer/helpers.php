@@ -88,22 +88,36 @@ function co_semester_options(): array
 }
 
 /**
- * Predefined academic intake options.
+ * Whether a department runs on a bi-semester (two semesters per year) calendar.
+ * All departments are trimester (three semesters per year) except Law, which
+ * runs on a bi-semester calendar.
  */
-function co_academic_intake_options(): array
+function co_dept_is_bi_semester(?string $dept_name): bool
 {
-    return [
-        '1st Year 1st Semester',
-        '1st Year 2nd Semester',
-        '2nd Year 1st Semester',
-        '2nd Year 2nd Semester',
-        '3rd Year 1st Semester',
-        '3rd Year 2nd Semester',
-        '4th Year 1st Semester',
-        '4th Year 2nd Semester',
-        '5th Year 1st Semester',
-        '5th Year 2nd Semester',
-    ];
+    return $dept_name !== null && stripos($dept_name, 'law') !== false;
+}
+
+/**
+ * Predefined academic intake options.
+ *
+ * Trimester departments (the default) have three semesters per year, e.g.
+ * "1st Year 1st Semester", "1st Year 2nd Semester", "1st Year 3rd Semester".
+ * Bi-semester departments (Law) have two semesters per year.
+ */
+function co_academic_intake_options(bool $bi_semester = false): array
+{
+    $years     = ['1st', '2nd', '3rd', '4th', '5th'];
+    $semesters = $bi_semester
+        ? ['1st Semester', '2nd Semester']
+        : ['1st Semester', '2nd Semester', '3rd Semester'];
+
+    $opts = [];
+    foreach ($years as $y) {
+        foreach ($semesters as $s) {
+            $opts[] = "$y Year $s";
+        }
+    }
+    return $opts;
 }
 
 // ── Offer record helpers ──────────────────────────────────────────────────────
