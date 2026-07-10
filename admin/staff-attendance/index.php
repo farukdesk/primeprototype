@@ -61,6 +61,20 @@ require_once __DIR__ . '/../includes/header.php';
 
 $depts   = att_departments();
 $weekday = ['1' => 'Mon', '2' => 'Tue', '3' => 'Wed', '4' => 'Thu', '5' => 'Fri', '6' => 'Sat', '7' => 'Sun'];
+
+// Calendar month the drill-down opens on (the month containing the range start).
+$staff_month = date('Y-m', strtotime($from));
+
+/** URL to a staff member's calendar drill-down, preserving the report filters. */
+$staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $search): string {
+    return APP_URL . '/staff-attendance/staff.php?' . http_build_query([
+        'user_id' => $uid,
+        'month'   => $staff_month,
+        'report'  => $report,
+        'dept'    => $dept_id,
+        'q'       => $search,
+    ]);
+};
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
@@ -187,7 +201,7 @@ $weekday = ['1' => 'Mon', '2' => 'Tue', '3' => 'Wed', '4' => 'Thu', '5' => 'Fri'
                     ?>
                         <tr>
                             <td class="px-3 small text-muted"><?= h(date('d M Y', strtotime($date))) ?></td>
-                            <td><strong><?= h($s['full_name']) ?></strong></td>
+                            <td><a href="<?= h($staff_link($uid)) ?>" class="fw-bold text-decoration-none"><?= h($s['full_name']) ?></a></td>
                             <td><?= h($s['employee_id'] ?? '—') ?></td>
                             <td class="small"><?= h($s['dept_name'] ?? '—') ?></td>
                             <td><?= h(att_display_time($rec['in_time'] ?? null)) ?></td>
@@ -256,18 +270,19 @@ $weekday = ['1' => 'Mon', '2' => 'Tue', '3' => 'Wed', '4' => 'Thu', '5' => 'Fri'
                     <?php foreach ($staff as $s):
                         $uid = (int)$s['id'];
                         $x   = $summ[$uid];
+                        $slink = h($staff_link($uid));
                     ?>
-                        <tr>
-                            <td class="px-3"><strong><?= h($s['full_name']) ?></strong></td>
-                            <td><?= h($s['employee_id'] ?? '—') ?></td>
+                        <tr style="cursor:pointer;" onclick="window.location='<?= $slink ?>'">
+                            <td class="px-3"><a href="<?= $slink ?>" class="fw-bold text-decoration-none"><?= h($s['full_name']) ?></a></td>
+                            <td><a href="<?= $slink ?>" class="text-decoration-none text-reset"><?= h($s['employee_id'] ?? '—') ?></a></td>
                             <td class="small"><?= h($s['dept_name'] ?? '—') ?></td>
-                            <td><?= (int)$x['working_days'] ?></td>
-                            <td><span class="badge bg-success"><?= (int)$x['present'] ?></span></td>
-                            <td><?= $x['late']  ? '<span class="badge bg-warning text-dark">' . (int)$x['late']  . '</span>' : '<span class="text-muted">0</span>' ?></td>
-                            <td><?= $x['early'] ? '<span class="badge bg-warning text-dark">' . (int)$x['early'] . '</span>' : '<span class="text-muted">0</span>' ?></td>
-                            <td><?= $x['leave'] ? '<span class="badge bg-primary">' . (int)$x['leave'] . '</span>' : '<span class="text-muted">0</span>' ?></td>
-                            <td><?= $x['absent'] ? '<span class="badge bg-danger">' . (int)$x['absent'] . '</span>' : '<span class="text-muted">0</span>' ?></td>
-                            <td><strong><?= h(att_format_hours((int)$x['minutes'])) ?></strong></td>
+                            <td><a href="<?= $slink ?>" class="text-decoration-none text-reset"><?= (int)$x['working_days'] ?></a></td>
+                            <td><a href="<?= $slink ?>" class="text-decoration-none"><span class="badge bg-success"><?= (int)$x['present'] ?></span></a></td>
+                            <td><a href="<?= $slink ?>" class="text-decoration-none"><?= $x['late']  ? '<span class="badge bg-warning text-dark">' . (int)$x['late']  . '</span>' : '<span class="text-muted">0</span>' ?></a></td>
+                            <td><a href="<?= $slink ?>" class="text-decoration-none"><?= $x['early'] ? '<span class="badge bg-warning text-dark">' . (int)$x['early'] . '</span>' : '<span class="text-muted">0</span>' ?></a></td>
+                            <td><a href="<?= $slink ?>" class="text-decoration-none"><?= $x['leave'] ? '<span class="badge bg-primary">' . (int)$x['leave'] . '</span>' : '<span class="text-muted">0</span>' ?></a></td>
+                            <td><a href="<?= $slink ?>" class="text-decoration-none"><?= $x['absent'] ? '<span class="badge bg-danger">' . (int)$x['absent'] . '</span>' : '<span class="text-muted">0</span>' ?></a></td>
+                            <td><a href="<?= $slink ?>" class="text-decoration-none text-reset"><strong><?= h(att_format_hours((int)$x['minutes'])) ?></strong></a></td>
                         </tr>
                     <?php endforeach; ?>
                     </tbody>
@@ -278,9 +293,10 @@ $weekday = ['1' => 'Mon', '2' => 'Tue', '3' => 'Wed', '4' => 'Thu', '5' => 'Fri'
 </div>
 
 <p class="text-muted small mt-3">
-    Statuses are derived from each staff member's effective schedule
-    (individual override or the global office hours) and the configured grace buffers.
-    Holidays and weekly-off days are excluded from absence counts.
+    Click any staff member (name or count) to open their monthly calendar with in/out
+    times and a day-by-day breakdown. Statuses are derived from each staff member's
+    effective schedule (individual override or the global office hours) and the
+    configured grace buffers. Holidays and weekly-off days are excluded from absence counts.
 </p>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>

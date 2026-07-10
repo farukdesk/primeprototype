@@ -65,15 +65,21 @@ $logo_html = $logo_uri
     : '<span style="font-weight:bold;font-size:15px;">Prime University</span>';
 $generated = date('d M Y, g:i A');
 
-// Column widths (points). The page width is derived from the number of dates so
-// nothing is clipped on very wide cycles.
-$w_serial = 22;
-$w_name   = 120;
-$w_id     = 55;
-$w_date   = 34;
-$w_total  = 40;
-$page_w   = 30 + $w_serial + $w_name + $w_id + (count($dates) * $w_date) + (2 * $w_total);
-$page_h   = 595; // A4 landscape height; rows paginate vertically.
+// The report is laid out on a single A4 sheet in landscape (horizontal) so it
+// always fits one standard paper width. The grid table below uses width:100%
+// with a fixed layout, so the column widths act as proportional hints and are
+// scaled by dompdf to fill exactly the A4 landscape content width — nothing is
+// clipped off the page, however wide the cycle. Rows still paginate vertically.
+$page_w = 842; // A4 landscape width  (pt)
+$page_h = 595; // A4 landscape height (pt)
+
+// Relative column-width hints. Their sum is irrelevant (the table is scaled to
+// 100% of the page width); only their ratio to one another matters.
+$w_serial = 18;
+$w_name   = 96;
+$w_id     = 46;
+$w_date   = 26;
+$w_total  = 32;
 
 // Header row of dates.
 $date_head = '';
@@ -240,7 +246,7 @@ $options->set('defaultFont', 'DejaVu Sans');
 
 $dompdf = new \Dompdf\Dompdf($options);
 $dompdf->loadHtml($html, 'UTF-8');
-$dompdf->setPaper([0, 0, $page_w, $page_h]);
+$dompdf->setPaper('a4', 'landscape');
 $dompdf->render();
 
 $filename = 'staff-attendance-' . $range['month'] . '.pdf';
