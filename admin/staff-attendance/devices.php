@@ -91,7 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                  ON DUPLICATE KEY UPDATE user_id = VALUES(user_id), is_active = 1'
             );
             $stmt->execute([$device_id, $pin, $user_id]);
-            log_change('staff-attendance', 'UPDATE', $user_id, 'Device user id map ' . $pin);
+            log_change('staff-attendance', 'UPDATE', $user_id, 'Device User ID map ' . $pin);
             flash_set('success', 'Device User ID mapping saved.');
         }
     } elseif ($action === 'delete_map') {
