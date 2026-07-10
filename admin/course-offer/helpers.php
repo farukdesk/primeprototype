@@ -25,13 +25,17 @@ function co_can_delete(): bool
 // ── Cascade data helpers ──────────────────────────────────────────────────────
 
 /**
- * All active departments ordered by name.
+ * All active departments ordered by name, restricted to the departments the
+ * current user is scoped to (linked to their profile). Super admins and users
+ * without a scope see all departments.
  */
 function co_departments(): array
 {
-    return db()
+    $rows = db()
         ->query("SELECT id, name FROM dept_departments WHERE is_active = 1 ORDER BY name ASC")
         ->fetchAll();
+
+    return array_values(array_filter($rows, fn($d) => can_access_dept((int)$d['id'])));
 }
 
 /**
@@ -527,6 +531,20 @@ function co_get_offers_filtered(array $filters = [], int $page = 1, int $per_pag
     if (!empty($filters['status'])) {
         $where[]  = 'o.status = ?';
         $params[] = $filters['status'];
+    }
+
+    // Restrict to the departments the current user is scoped to (linked to
+    // their profile). null = unrestricted; [] = no access to any department.
+    $scope = get_dept_scope();
+    if ($scope !== null) {
+        if (empty($scope)) {
+            return ['rows' => [], 'total' => 0];
+        }
+        $scope_ph = implode(',', array_fill(0, count($scope), '?'));
+        $where[]  = "o.dept_id IN ($scope_ph)";
+        foreach ($scope as $sid) {
+            $params[] = (int)$sid;
+        }
     }
 
     $search = trim($filters['search'] ?? '');

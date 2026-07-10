@@ -16,6 +16,12 @@ if (!$offer) {
     redirect(APP_URL . '/course-offer/index.php');
 }
 
+// Reject offers whose department the current user is not scoped to.
+if (!can_access_dept((int)$offer['dept_id'])) {
+    flash_set('error', 'You do not have permission to edit course offers for this department.');
+    redirect(APP_URL . '/course-offer/index.php');
+}
+
 $page_title = 'Edit Course Offer';
 $errors     = [];
 clear_old();
@@ -53,6 +59,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         );
         $chk->execute([$program_id, $dept_id]);
         if (!$chk->fetch()) $errors[] = 'Selected program does not belong to the selected department.';
+    }
+
+    // Verify the user is scoped to the selected department (profile-linked).
+    if ($dept_id > 0 && !can_access_dept($dept_id)) {
+        $errors[] = 'You do not have permission to assign course offers to the selected department.';
     }
 
     if ($batch_id > 0) {

@@ -16,6 +16,12 @@ if (!$offer) {
     redirect(APP_URL . '/course-offer/index.php');
 }
 
+// Reject offers whose department the current user is not scoped to.
+if (!can_access_dept((int)$offer['dept_id'])) {
+    flash_set('error', 'You do not have permission to delete course offers for this department.');
+    redirect(APP_URL . '/course-offer/index.php');
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 

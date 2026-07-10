@@ -51,6 +51,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    // Verify the user is scoped to the selected department (profile-linked).
+    if ($dept_id > 0 && !can_access_dept($dept_id)) {
+        $errors[] = 'You do not have permission to create course offers for the selected department.';
+    }
+
     // Verify batch exists
     if ($batch_id > 0) {
         $chk = db()->prepare("SELECT id FROM student_batches WHERE id = ? LIMIT 1");

@@ -16,6 +16,12 @@ if (!$offer) {
     redirect(APP_URL . '/course-offer/index.php');
 }
 
+// Reject offers whose department the current user is not scoped to.
+if (!can_access_dept((int)$offer['dept_id'])) {
+    flash_set('error', 'You do not have permission to manage registrations for this department.');
+    redirect(APP_URL . '/course-offer/index.php');
+}
+
 $subjects = co_get_subjects_with_teachers($offer_id);
 $batch_id = (int)$offer['batch_id'];
 $dept_id      = (int)$offer['dept_id'];

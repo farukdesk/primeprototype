@@ -11,4 +11,7 @@ header('Content-Type: application/json; charset=utf-8');
 $dept_id = (int)($_GET['dept_id'] ?? 0);
 if ($dept_id <= 0) { echo '[]'; exit; }
 
+// Only expose programs for departments the user is scoped to.
+if (!can_access_dept($dept_id)) { echo '[]'; exit; }
+
 echo json_encode(co_programs($dept_id));
