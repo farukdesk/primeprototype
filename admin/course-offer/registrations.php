@@ -20,6 +20,7 @@ $subjects = co_get_subjects_with_teachers($offer_id);
 $batch_id = (int)$offer['batch_id'];
 $batch_sections = co_batch_sections($batch_id);
 $batch_shifts   = co_batch_shifts($batch_id);
+$all_batches    = co_student_batches();
 
 // ── Actions ────────────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -55,10 +56,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect(APP_URL . '/course-offer/registrations.php?offer_id=' . $offer_id);
         }
 
-        // Only enrol students that actually belong to this offer's batch.
+        // Enrol any existing student. Students sometimes continue with a batch
+        // other than their own, so enrollment is not restricted to this offer's
+        // batch — we only verify each selected student actually exists.
         $ph      = implode(',', array_fill(0, count($student_ids), '?'));
-        $chk     = db()->prepare("SELECT id FROM students WHERE batch_id = ? AND id IN ($ph)");
-        $chk->execute(array_merge([$batch_id], $student_ids));
+        $chk     = db()->prepare("SELECT id FROM students WHERE id IN ($ph)");
+        $chk->execute($student_ids);
         $allowed = array_map('intval', array_column($chk->fetchAll(), 'id'));
 
         $added = 0;
@@ -73,7 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'Manually enrolled ' . count($allowed) . ' student(s) into ' . count($subject_ids) . ' subject(s) (' . $added . ' new)');
 
         $msg = "Added <strong>$added</strong> registration(s) for " . count($allowed) . ' student(s).';
-        if ($skipped > 0) $msg .= " $skipped student(s) skipped (not in this batch).";
+        if ($skipped > 0) $msg .= " $skipped student(s) skipped (not found).";
         flash_set('success', $msg);
         redirect(APP_URL . '/course-offer/registrations.php?offer_id=' . $offer_id);
     }
@@ -193,13 +196,28 @@ require_once __DIR__ . '/../includes/header.php';
 
             <!-- Student filters -->
             <label class="form-label fw-medium">Students <span class="text-danger">*</span></label>
-            <div class="form-text mb-2">Only students of batch <strong><?= h($offer['batch_name']) ?></strong> are listed. Use the filters and checkboxes to bulk-select.</div>
+            <div class="form-text mb-2">
+                Students of batch <strong><?= h($offer['batch_name']) ?></strong> are listed by default.
+                Switch the <strong>Batch</strong> filter to pull a student who is continuing with another
+                batch, or choose <strong>All batches</strong> to search everyone.
+            </div>
             <div class="row g-2 align-items-end mb-3">
-                <div class="col-md-5">
+                <div class="col-md-4">
+                    <label class="form-label small mb-1">Batch</label>
+                    <select id="stu-batch" class="form-select form-select-sm">
+                        <option value="0">All batches</option>
+                        <?php foreach ($all_batches as $b): ?>
+                        <option value="<?= (int)$b['id'] ?>" <?= (int)$b['id'] === $batch_id ? 'selected' : '' ?>>
+                            <?= h($b['name']) ?><?= (int)$b['id'] === $batch_id ? ' (offer batch)' : '' ?>
+                        </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-md-4">
                     <label class="form-label small mb-1">Search</label>
                     <input type="text" id="stu-q" class="form-control form-control-sm" placeholder="Student ID or name…">
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <label class="form-label small mb-1">Section</label>
                     <select id="stu-section" class="form-select form-select-sm">
                         <option value="">All sections</option>
@@ -208,7 +226,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-1">
                     <label class="form-label small mb-1">Shift</label>
                     <select id="stu-shift" class="form-select form-select-sm">
                         <option value="">All shifts</option>
@@ -241,12 +259,13 @@ require_once __DIR__ . '/../includes/header.php';
                                 <input type="checkbox" class="form-check-input" id="stu-check-all" title="Select all on this page">
                             </th>
                             <th>Student</th>
+                            <th>Batch</th>
                             <th style="width:5rem;">Section</th>
                             <th style="width:6rem;">Shift</th>
                         </tr>
                     </thead>
                     <tbody id="stu-tbody">
-                        <tr><td colspan="4" class="text-center text-muted py-3">Loading…</td></tr>
+                        <tr><td colspan="5" class="text-center text-muted py-3">Loading…</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -345,9 +364,9 @@ function toggleAllSubs(on) {
 <?php if (co_is_staff() && !empty($subjects)): ?>
 (function () {
     var API      = '<?= APP_URL ?>/course-offer/get-students.php';
-    var BATCH_ID = <?= (int)$batch_id ?>;
     var PER_PAGE = 25;
 
+    var batchSel = document.getElementById('stu-batch');
     var qInput   = document.getElementById('stu-q');
     var secSel   = document.getElementById('stu-section');
     var shiftSel = document.getElementById('stu-shift');
@@ -399,7 +418,7 @@ function toggleAllSubs(on) {
     function render(data) {
         tbody.innerHTML = '';
         if (!data.rows || !data.rows.length) {
-            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">No students found.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">No students found.</td></tr>';
             meta.textContent = '0 students';
             pager.innerHTML = '';
             checkAll.checked = false;
@@ -412,6 +431,7 @@ function toggleAllSubs(on) {
                 '<td class="text-center"><input type="checkbox" class="form-check-input stu-check" value="' + r.id + '" ' + checked + '></td>' +
                 '<td><div class="fw-medium">' + esc(r.full_name) + '</div>' +
                 '<div class="text-muted font-monospace" style="font-size:.78rem;">' + esc(r.student_id) + '</div></td>' +
+                '<td>' + esc(r.batch_name || '—') + '</td>' +
                 '<td>' + esc(r.section || '—') + '</td>' +
                 '<td>' + esc(r.shift || '—') + '</td>';
             tbody.appendChild(tr);
@@ -465,24 +485,25 @@ function toggleAllSubs(on) {
 
     function load() {
         var params = new URLSearchParams({
-            batch_id: BATCH_ID,
+            batch_id: batchSel.value,
             q: qInput.value.trim(),
             section: secSel.value,
             shift: shiftSel.value,
             page: curPage,
             per_page: PER_PAGE
         });
-        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">Loading…</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Loading…</td></tr>';
         fetch(API + '?' + params.toString())
             .then(function (r) { return r.json(); })
             .then(render)
             .catch(function () {
-                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-danger py-3">Failed to load students.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger py-3">Failed to load students.</td></tr>';
             });
     }
 
     function reloadFirstPage() { curPage = 1; load(); }
 
+    batchSel.addEventListener('change', reloadFirstPage);
     qInput.addEventListener('input', function () {
         clearTimeout(debounce);
         debounce = setTimeout(reloadFirstPage, 300);
@@ -490,6 +511,7 @@ function toggleAllSubs(on) {
     secSel.addEventListener('change', reloadFirstPage);
     shiftSel.addEventListener('change', reloadFirstPage);
     resetBtn.addEventListener('click', function () {
+        batchSel.value = '<?= (int)$batch_id ?>';
         qInput.value = ''; secSel.value = ''; shiftSel.value = '';
         reloadFirstPage();
     });
