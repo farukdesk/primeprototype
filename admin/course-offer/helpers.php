@@ -94,7 +94,10 @@ function co_semester_options(): array
  */
 function co_dept_is_bi_semester(?string $dept_name): bool
 {
-    return $dept_name !== null && stripos($dept_name, 'law') !== false;
+    // Match "Law" as a whole word (e.g. "Department of Law", "Law & Justice")
+    // so unrelated names containing the letters "law" (e.g. "Outlaw") are not
+    // mistakenly treated as bi-semester.
+    return $dept_name !== null && preg_match('/\blaw\b/i', $dept_name) === 1;
 }
 
 /**
