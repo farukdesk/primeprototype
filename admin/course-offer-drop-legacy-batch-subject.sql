@@ -19,7 +19,25 @@
 -- Because `.gitignore` ignores *.sql, this file is force-added to the repo.
 -- ----------------------------------------------------------------------------
 
--- ── 1. Drop the legacy unique key (batch_id, curriculum_id) ─────────────────
+-- ── 1. Ensure the batch_id FK keeps a supporting index ─────────────────────
+-- The `fk_co_batch` foreign key on `batch_id` is currently backed by the
+-- leftmost column of `uq_co_batch_subject (batch_id, curriculum_id)`. Dropping
+-- that unique key while it is the only index on `batch_id` fails with:
+--   #1553 - Cannot drop index 'uq_co_batch_subject': needed in a foreign key
+--           constraint
+-- Add a plain index on `batch_id` first so the FK has another index to rely on.
+SET @batch_idx_exists := (
+    SELECT COUNT(*) FROM information_schema.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME   = 'co_offers'
+       AND INDEX_NAME   = 'idx_co_batch'
+);
+SET @ddl := IF(@batch_idx_exists = 0,
+    'ALTER TABLE `co_offers` ADD KEY `idx_co_batch` (`batch_id`)',
+    'SELECT 1');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- ── 2. Drop the legacy unique key (batch_id, curriculum_id) ─────────────────
 SET @idx_exists := (
     SELECT COUNT(*) FROM information_schema.STATISTICS
      WHERE TABLE_SCHEMA = DATABASE()
@@ -31,7 +49,7 @@ SET @ddl := IF(@idx_exists > 0,
     'SELECT 1');
 PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
--- ── 2. Drop the now-unused legacy `curriculum_id` column ────────────────────
+-- ── 3. Drop the now-unused legacy `curriculum_id` column ────────────────────
 SET @col_exists := (
     SELECT COUNT(*) FROM information_schema.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE()
