@@ -460,7 +460,7 @@ var DEPARTMENTS = <?= json_encode(array_map(function ($d) { return ['id' => (int
 function otherDeptOptionsHtml() {
     var html = '<option value="">— All departments —</option>';
     DEPARTMENTS.forEach(function(d) {
-        var name = String(d.name).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        var name = String(d.name).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         html += '<option value="' + d.id + '">' + name + '</option>';
     });
     return html;
