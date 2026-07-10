@@ -219,6 +219,25 @@ function att_holidays_in_range(string $from, string $to): array
     return $map;
 }
 
+/**
+ * Prime University attendance "month" range for a given YYYY-MM. The payroll-style
+ * cycle runs from the 26th of the previous calendar month to the 25th of the
+ * selected month (inclusive) — e.g. month "2026-07" spans 26 Jun 2026 → 25 Jul 2026.
+ *
+ * @return array{from:string,to:string,label:string,month:string}
+ */
+function att_prime_month_range(string $month): array
+{
+    if (!preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $month)) {
+        $month = date('Y-m');
+    }
+    $to        = $month . '-25';
+    $prevMonth = date('Y-m', strtotime($month . '-01 -1 month'));
+    $from      = $prevMonth . '-26';
+    $label     = date('d M Y', strtotime($from)) . ' – ' . date('d M Y', strtotime($to));
+    return ['from' => $from, 'to' => $to, 'label' => $label, 'month' => $month];
+}
+
 /** Whether a given Y-m-d date is a weekly-off day. */
 function att_is_weekly_off(string $date): bool
 {
@@ -448,4 +467,17 @@ function att_records_map(array $user_ids, string $from, string $to): array
         $map[$r['user_id'] . '|' . $r['work_date']] = $r;
     }
     return $map;
+}
+
+/** University logo as a base64 data URI for embedding in a PDF, or '' if none. */
+function att_logo_data_uri(): string
+{
+    $logo = dirname(dirname(__DIR__)) . '/assets/img/logo/logo-black.png';
+    if (is_file($logo) && is_readable($logo)) {
+        $bytes = file_get_contents($logo);
+        if ($bytes !== false) {
+            return 'data:image/png;base64,' . base64_encode($bytes);
+        }
+    }
+    return '';
 }
