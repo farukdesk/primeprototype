@@ -78,6 +78,7 @@ $weekday = ['1' => 'Mon', '2' => 'Tue', '3' => 'Wed', '4' => 'Thu', '5' => 'Fri'
         <a href="<?= APP_URL ?>/staff-attendance/settings.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-gear me-1"></i> Settings</a>
         <a href="<?= APP_URL ?>/staff-attendance/schedules.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-user-gear me-1"></i> Staff Schedules</a>
         <a href="<?= APP_URL ?>/staff-attendance/holidays.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-calendar-day me-1"></i> Holidays</a>
+        <a href="<?= APP_URL ?>/staff-attendance/devices.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-fingerprint me-1"></i> Devices</a>
         <?php endif; ?>
     </div>
 </div>
