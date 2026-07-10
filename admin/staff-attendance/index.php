@@ -138,6 +138,12 @@ $weekday = ['1' => 'Mon', '2' => 'Tue', '3' => 'Wed', '4' => 'Thu', '5' => 'Fri'
             <?= ucfirst($report) ?> Report — <?= h($range_label) ?>
             <span class="badge bg-secondary ms-1"><?= count($staff) ?> staff</span>
         </h6>
+        <?php if ($report === 'monthly'): ?>
+        <a href="<?= APP_URL ?>/staff-attendance/report-pdf.php?month=<?= urlencode(date('Y-m', strtotime($from))) ?>&dept=<?= (int)$dept_id ?>&q=<?= urlencode($search) ?>"
+           class="btn btn-outline-danger btn-sm" target="_blank" rel="noopener">
+            <i class="fas fa-file-pdf me-1"></i> Download PDF (26th–25th)
+        </a>
+        <?php endif; ?>
     </div>
     <div class="card-body p-0">
         <?php if (empty($staff)): ?>
