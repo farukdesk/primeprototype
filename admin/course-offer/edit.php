@@ -379,6 +379,14 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                                                    id="allow-other-<?= $ri ?>" <?= !empty($pr['allow_other']) ? 'checked' : '' ?>>
                                             <label class="form-check-label small text-muted" for="allow-other-<?= $ri ?>">Other department teacher</label>
                                         </div>
+                                        <div class="other-dept-wrap mt-1" <?= !empty($pr['allow_other']) ? '' : 'style="display:none;"' ?>>
+                                            <select class="form-select form-select-sm other-dept-select">
+                                                <option value="">— All departments —</option>
+                                                <?php foreach ($departments as $d): ?>
+                                                <option value="<?= (int)$d['id'] ?>"><?= h($d['name']) ?></option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </div>
                                     </td>
                                     <td class="text-center">
                                         <button type="button" class="btn btn-sm btn-outline-danger btn-remove-row"
@@ -447,6 +455,16 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
 var APP_URL    = <?= json_encode(APP_URL) ?>;
 var PRE_ROWS   = <?= $pre_rows_json ?>;
 var rowCounter = <?= count($pre_rows) ?>;
+var DEPARTMENTS = <?= json_encode(array_map(function ($d) { return ['id' => (int)$d['id'], 'name' => $d['name']]; }, $departments)) ?>;
+
+function otherDeptOptionsHtml() {
+    var html = '<option value="">— All departments —</option>';
+    DEPARTMENTS.forEach(function(d) {
+        var name = String(d.name).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        html += '<option value="' + d.id + '">' + name + '</option>';
+    });
+    return html;
+}
 
 var tsSubjectMap = {};
 var tsTeacherMap = {};
@@ -507,6 +525,8 @@ function buildSubjectSelect(ri, cid, ctext) {
 function buildTeacherSelect(ri, tids, teachers) {
     var el = document.querySelector('[data-row="' + ri + '"] .teacher-select');
     var otherEl = document.querySelector('[data-row="' + ri + '"] .allow-other-dept');
+    var otherWrap = document.querySelector('[data-row="' + ri + '"] .other-dept-wrap');
+    var otherDeptEl = document.querySelector('[data-row="' + ri + '"] .other-dept-select');
     var opts = { valueField: 'id', labelField: 'text', searchField: ['text'],
         maxItems: null, placeholder: 'Type to search teacher\u2026',
         plugins: ['remove_button'],
@@ -516,7 +536,12 @@ function buildTeacherSelect(ri, tids, teachers) {
             var url = APP_URL + '/course-offer/get-faculty.php?q=' + encodeURIComponent(q);
             var deptId = deptSelect.value;
             var allowOther = otherEl && otherEl.checked;
-            if (deptId && !allowOther) url += '&dept_id=' + encodeURIComponent(deptId);
+            if (allowOther) {
+                var otherDept = otherDeptEl && otherDeptEl.value;
+                if (otherDept) url += '&dept_id=' + encodeURIComponent(otherDept);
+            } else if (deptId) {
+                url += '&dept_id=' + encodeURIComponent(deptId);
+            }
             fetch(url)
                 .then(r => r.json()).then(cb).catch(function() { cb(); });
         },
@@ -526,9 +551,17 @@ function buildTeacherSelect(ri, tids, teachers) {
         opts.options = teachers;
     }
     tsTeacherMap[ri] = new TomSelect(el, opts);
-    // Re-check available teachers when the "other department" toggle changes.
+    // Toggle the department picker and re-check available teachers when the
+    // "other department" toggle or the chosen department changes.
     if (otherEl) {
         otherEl.addEventListener('change', function() {
+            if (otherWrap) otherWrap.style.display = otherEl.checked ? '' : 'none';
+            if (!otherEl.checked && otherDeptEl) otherDeptEl.value = '';
+            tsTeacherMap[ri].clearOptions();
+        });
+    }
+    if (otherDeptEl) {
+        otherDeptEl.addEventListener('change', function() {
             tsTeacherMap[ri].clearOptions();
         });
     }
@@ -554,6 +587,9 @@ function addRow(cid, ctext, tids, teachers) {
             '<div class="form-check mt-1">' +
                 '<input class="form-check-input allow-other-dept" type="checkbox" id="allow-other-' + ri + '">' +
                 '<label class="form-check-label small text-muted" for="allow-other-' + ri + '">Other department teacher</label>' +
+            '</div>' +
+            '<div class="other-dept-wrap mt-1" style="display:none;">' +
+                '<select class="form-select form-select-sm other-dept-select">' + otherDeptOptionsHtml() + '</select>' +
             '</div>' +
         '</td>' +
         '<td class="text-center">' +
