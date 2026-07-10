@@ -107,7 +107,7 @@ foreach ($dates as $d) {
 }
 
 // Cell colour class per status (mirrors att_status_badge colours).
-$cell_class = static function (string $status): string {
+$status_cell_class = static function (string $status): string {
     return match ($status) {
         'present'                     => 'cal-present',
         'late_in', 'late_and_early'   => 'cal-late',
@@ -120,7 +120,7 @@ $cell_class = static function (string $status): string {
     };
 };
 
-$weekday_full = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+$weekday_abbr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 ?>
 
 <style>
@@ -233,7 +233,7 @@ $weekday_full = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     <div class="card-body p-2">
         <table class="att-cal">
             <thead>
-                <tr><?php foreach ($weekday_full as $wd): ?><th><?= $wd ?></th><?php endforeach; ?></tr>
+                <tr><?php foreach ($weekday_abbr as $wd): ?><th><?= $wd ?></th><?php endforeach; ?></tr>
             </thead>
             <tbody>
             <?php
@@ -248,7 +248,7 @@ $weekday_full = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
                 $info   = $days[$d];
                 $rec    = $info['rec'];
                 $status = $info['status'];
-                $cls    = $cell_class($status);
+                $cls    = $status_cell_class($status);
                 $is_today = ($d === date('Y-m-d')) ? ' cal-today' : '';
                 $link = APP_URL . '/staff-attendance/entry.php?user_id=' . $user_id . '&date=' . urlencode($d);
                 $tag  = '';
