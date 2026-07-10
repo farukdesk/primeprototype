@@ -322,17 +322,50 @@ function att_status_badge(string $status): string
 // ── Staff directory ─────────────────────────────────────────────────────────
 
 /**
- * Active staff (users whose primary group can view the Staff Attendance module)
- * with employee-id / department info. Optional filters: department id and a
- * name/username/employee-id search term.
+ * Whether the att_device_users table (from the ADMS migration) is present.
+ * Cached so att_staff_list() can safely reference it before the migration runs.
+ */
+function att_device_users_table_exists(): bool
+{
+    static $exists = null;
+    if ($exists === null) {
+        try {
+            db()->query('SELECT 1 FROM att_device_users LIMIT 1');
+            $exists = true;
+        } catch (Throwable $e) {
+            $exists = false;
+        }
+    }
+    return $exists;
+}
+
+/**
+ * Active staff to show on the attendance report. This is anyone whose primary
+ * group can view the Staff Attendance module OR who is mapped to a device on the
+ * Devices page (att_device_users). The device mapping is included so punches
+ * pushed by a ZKTeco device always surface on the report, even when the mapped
+ * employee's own group lacks the module permission (their device punches are
+ * still folded into att_records by the ADMS receiver).
+ *
+ * Optional filters: department id and a name/username/employee-id search term.
  */
 function att_staff_list(int $dept_id = 0, string $search = ''): array
 {
+    $membership = "EXISTS (SELECT 1 FROM group_module_access gma
+                   JOIN modules mm ON mm.id = gma.module_id AND mm.slug = 'staff-attendance'
+                  WHERE gma.group_id = u.group_id AND gma.can_view = 1)";
+    // Also include users mapped to an attendance device so their pushed punches
+    // are never hidden from the report. Guarded because the ADMS tables may not
+    // exist yet (migration not applied).
+    if (att_device_users_table_exists()) {
+        $membership = '(' . $membership . "
+                  OR EXISTS (SELECT 1 FROM att_device_users du
+                              WHERE du.user_id = u.id AND du.is_active = 1))";
+    }
+
     $where  = [
         'u.is_active = 1',
-        "EXISTS (SELECT 1 FROM group_module_access gma
-                   JOIN modules mm ON mm.id = gma.module_id AND mm.slug = 'staff-attendance'
-                  WHERE gma.group_id = u.group_id AND gma.can_view = 1)",
+        $membership,
     ];
     $params = [];
 
