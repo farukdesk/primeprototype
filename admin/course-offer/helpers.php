@@ -315,14 +315,21 @@ function co_batch_students(int $batch_id, string $q = '', int $limit = 50): arra
 /**
  * Filtered + paginated students belonging to a batch (for bulk enrollment picker).
  *
+ * Pass $batch_id <= 0 to search across every batch (used when an admin needs to
+ * enrol a student who is continuing with a batch other than their own).
+ *
  * Supported $filters keys: q (student_id/name), section, shift.
  * Returns ['rows' => [...], 'total' => int] where each row contains
  * id, student_id, full_name, section, shift, batch_name, dept_name, program_name.
  */
 function co_batch_students_filtered(int $batch_id, array $filters = [], int $page = 1, int $per_page = 25): array
 {
-    $where  = ['s.batch_id = ?'];
-    $params = [$batch_id];
+    $where  = [];
+    $params = [];
+    if ($batch_id > 0) {
+        $where[]  = 's.batch_id = ?';
+        $params[] = $batch_id;
+    }
 
     $q = trim($filters['q'] ?? '');
     if ($q !== '') {
@@ -342,7 +349,7 @@ function co_batch_students_filtered(int $batch_id, array $filters = [], int $pag
         $params[] = $shift;
     }
 
-    $whereSQL = implode(' AND ', $where);
+    $whereSQL = $where ? implode(' AND ', $where) : '1=1';
 
     $countSt = db()->prepare("SELECT COUNT(*) FROM students s WHERE $whereSQL");
     $countSt->execute($params);

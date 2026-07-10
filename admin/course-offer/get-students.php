@@ -1,7 +1,8 @@
 <?php
 /**
- * AJAX – filtered + paginated student search within a batch for bulk enrollment.
- * Accepts: batch_id (required), q (search string), section, shift,
+ * AJAX – filtered + paginated student search for bulk enrollment.
+ * Accepts: batch_id (0 or omitted = search across all batches),
+ *          q (search string), section, shift,
  *          page (default 1), per_page (default 25)
  * Returns: {
  *   rows: [{id, student_id, full_name, section, shift, batch_name, dept_name, program_name}],
@@ -23,11 +24,6 @@ $batch_id = (int)($_GET['batch_id'] ?? 0);
 $page     = max(1, (int)($_GET['page'] ?? 1));
 $per_page = (int)($_GET['per_page'] ?? 25);
 $per_page = max(1, min(100, $per_page));
-
-if ($batch_id <= 0) {
-    echo json_encode(['rows' => [], 'total' => 0, 'page' => 1, 'per_page' => $per_page, 'pages' => 0]);
-    exit;
-}
 
 $filters = [
     'q'       => trim($_GET['q'] ?? ''),
