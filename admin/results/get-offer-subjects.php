@@ -1,0 +1,80 @@
+<?php
+/**
+ * AJAX: return offered subjects (course-offer subjects) for the mark-entry
+ * subject selector.
+ *
+ * Each row is one `co_offer_subjects` record belonging to an active `co_offers`
+ * offer that matches the requested department/program. Selecting a row uniquely
+ * identifies the offered course, so its active registered students can be loaded
+ * from `co_registrations` (see get-offer-students.php).
+ *
+ * Super admin / results staff with create rights and no faculty profile → every
+ * offered subject for the dept/program.
+ * Faculty (any user with a faculty_profiles record) → only offered subjects they
+ * are assigned to teach (co_offer_subject_teachers → dept_faculty).
+ *
+ * GET params:
+ *   dept_id     (int, required)
+ *   program_id  (int, required)
+ */
+require_once __DIR__ . '/../includes/auth.php';
+auth_check();
+require_once __DIR__ . '/helpers.php';
+if (!rm_can_view()) { http_response_code(403); echo '[]'; exit; }
+
+header('Content-Type: application/json');
+
+$dept_id    = (int)($_GET['dept_id']    ?? 0);
+$program_id = (int)($_GET['program_id'] ?? 0);
+if ($dept_id <= 0 || $program_id <= 0) { echo '[]'; exit; }
+
+$user_id = (int)auth_user()['id'];
+
+// Determine whether this user is a faculty member (has a faculty_profiles record).
+// Faculty members only see offered subjects they teach, even when they also hold
+// results admin permissions.
+$is_faculty_member = false;
+if (!is_super_admin()) {
+    $fac_check = db()->prepare('SELECT id FROM faculty_profiles WHERE user_id = ? LIMIT 1');
+    $fac_check->execute([$user_id]);
+    $is_faculty_member = (bool)$fac_check->fetch();
+}
+$restrict_to_teacher = !is_super_admin()
+    && (!(rm_can_create() || rm_is_staff()) || $is_faculty_member);
+
+$params = [$dept_id, $program_id];
+$teacher_filter = '';
+if ($restrict_to_teacher) {
+    $teacher_filter = "AND EXISTS (
+        SELECT 1 FROM co_offer_subject_teachers t
+        JOIN dept_faculty df ON df.id = t.faculty_id
+        WHERE t.offer_subject_id = cos.id AND df.user_id = ?
+    )";
+    $params[] = $user_id;
+}
+
+$sql = "SELECT cos.id            AS offer_subject_id,
+               cos.curriculum_id,
+               c.course_code,
+               c.course_name,
+               c.credit,
+               o.id              AS offer_id,
+               o.semester,
+               o.academic_intake,
+               b.name            AS batch_name,
+               (SELECT COUNT(*)
+                  FROM co_registrations r
+                  JOIN students s ON s.id = r.student_id
+                 WHERE r.offer_subject_id = cos.id
+                   AND s.status = 'Active') AS registered_count
+          FROM co_offer_subjects cos
+          JOIN co_offers          o ON o.id = cos.offer_id AND o.status = 'active'
+          JOIN course_curriculum  c ON c.id = cos.curriculum_id
+          LEFT JOIN student_batches b ON b.id = o.batch_id
+         WHERE o.dept_id = ? AND o.program_id = ?
+               $teacher_filter
+         ORDER BY b.sort_order ASC, b.name ASC, c.course_name ASC";
+
+$stmt = db()->prepare($sql);
+$stmt->execute($params);
+echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
