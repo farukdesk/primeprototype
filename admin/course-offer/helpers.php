@@ -318,7 +318,7 @@ function co_batch_students(int $batch_id, string $q = '', int $limit = 50): arra
  * Pass $batch_id <= 0 to search across every batch (used when an admin needs to
  * enrol a student who is continuing with a batch other than their own).
  *
- * Supported $filters keys: q (student_id/name), section, shift.
+ * Supported $filters keys: q (student_id/name), section, shift, dept_id, program_id.
  * Returns ['rows' => [...], 'total' => int] where each row contains
  * id, student_id, full_name, section, shift, batch_name, dept_name, program_name.
  */
@@ -329,6 +329,17 @@ function co_batch_students_filtered(int $batch_id, array $filters = [], int $pag
     if ($batch_id > 0) {
         $where[]  = 's.batch_id = ?';
         $params[] = $batch_id;
+    }
+
+    $dept_id = (int)($filters['dept_id'] ?? 0);
+    if ($dept_id > 0) {
+        $where[]  = 's.dept_id = ?';
+        $params[] = $dept_id;
+    }
+    $program_id = (int)($filters['program_id'] ?? 0);
+    if ($program_id > 0) {
+        $where[]  = 's.program_id = ?';
+        $params[] = $program_id;
     }
 
     $q = trim($filters['q'] ?? '');

@@ -18,6 +18,10 @@ if (!$offer) {
 
 $subjects = co_get_subjects_with_teachers($offer_id);
 $batch_id = (int)$offer['batch_id'];
+$dept_id      = (int)$offer['dept_id'];
+$program_id   = (int)$offer['program_id'];
+$all_depts    = co_departments();
+$dept_programs = $dept_id > 0 ? co_programs($dept_id) : [];
 $batch_sections = co_batch_sections($batch_id);
 $batch_shifts   = co_batch_shifts($batch_id);
 $all_batches    = co_student_batches();
@@ -197,12 +201,37 @@ require_once __DIR__ . '/../includes/header.php';
             <!-- Student filters -->
             <label class="form-label fw-medium">Students <span class="text-danger">*</span></label>
             <div class="form-text mb-2">
-                Students of batch <strong><?= h($offer['batch_name']) ?></strong> are listed by default.
-                Switch the <strong>Batch</strong> filter to pull a student who is continuing with another
-                batch, or choose <strong>All batches</strong> to search everyone.
+                Students of <strong><?= h($offer['dept_name']) ?></strong> &rsaquo;
+                <strong><?= h($offer['program_name']) ?></strong>, batch
+                <strong><?= h($offer['batch_name']) ?></strong> are listed by default.
+                Adjust the <strong>Department</strong>, <strong>Program</strong> or <strong>Batch</strong>
+                filters to pull a student who is continuing with another department, program or batch,
+                or choose the <strong>All</strong> options to search everyone.
             </div>
             <div class="row g-2 align-items-end mb-3">
-                <div class="col-md-4">
+                <div class="col-md-3">
+                    <label class="form-label small mb-1">Department</label>
+                    <select id="stu-dept" class="form-select form-select-sm">
+                        <option value="0">All departments</option>
+                        <?php foreach ($all_depts as $d): ?>
+                        <option value="<?= (int)$d['id'] ?>" <?= (int)$d['id'] === $dept_id ? 'selected' : '' ?>>
+                            <?= h($d['name']) ?><?= (int)$d['id'] === $dept_id ? ' (offer dept)' : '' ?>
+                        </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small mb-1">Program</label>
+                    <select id="stu-program" class="form-select form-select-sm">
+                        <option value="0">All programs</option>
+                        <?php foreach ($dept_programs as $p): ?>
+                        <option value="<?= (int)$p['id'] ?>" <?= (int)$p['id'] === $program_id ? 'selected' : '' ?>>
+                            <?= h($p['program_name']) ?><?= (int)$p['id'] === $program_id ? ' (offer program)' : '' ?>
+                        </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-md-3">
                     <label class="form-label small mb-1">Batch</label>
                     <select id="stu-batch" class="form-select form-select-sm">
                         <option value="0">All batches</option>
@@ -213,7 +242,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <label class="form-label small mb-1">Search</label>
                     <input type="text" id="stu-q" class="form-control form-control-sm" placeholder="Student ID or name…">
                 </div>
@@ -226,7 +255,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="col-md-1">
+                <div class="col-md-2">
                     <label class="form-label small mb-1">Shift</label>
                     <select id="stu-shift" class="form-select form-select-sm">
                         <option value="">All shifts</option>
@@ -364,8 +393,11 @@ function toggleAllSubs(on) {
 <?php if (co_is_staff() && !empty($subjects)): ?>
 (function () {
     var API      = '<?= APP_URL ?>/course-offer/get-students.php';
+    var PROG_API = '<?= APP_URL ?>/course-offer/get-programs.php';
     var PER_PAGE = 25;
 
+    var deptSel  = document.getElementById('stu-dept');
+    var progSel  = document.getElementById('stu-program');
     var batchSel = document.getElementById('stu-batch');
     var qInput   = document.getElementById('stu-q');
     var secSel   = document.getElementById('stu-section');
@@ -486,6 +518,8 @@ function toggleAllSubs(on) {
     function load() {
         var params = new URLSearchParams({
             batch_id: batchSel.value,
+            dept_id: deptSel.value,
+            program_id: progSel.value,
             q: qInput.value.trim(),
             section: secSel.value,
             shift: shiftSel.value,
@@ -503,6 +537,34 @@ function toggleAllSubs(on) {
 
     function reloadFirstPage() { curPage = 1; load(); }
 
+    // Repopulate the program dropdown for the chosen department.
+    function loadPrograms(selectId) {
+        var deptId = parseInt(deptSel.value, 10) || 0;
+        if (deptId <= 0) {
+            progSel.innerHTML = '<option value="0">All programs</option>';
+            return Promise.resolve();
+        }
+        return fetch(PROG_API + '?dept_id=' + deptId)
+            .then(function (r) { return r.json(); })
+            .then(function (list) {
+                progSel.innerHTML = '<option value="0">All programs</option>';
+                (list || []).forEach(function (p) {
+                    var opt = document.createElement('option');
+                    opt.value = p.id;
+                    opt.textContent = p.program_name;
+                    progSel.appendChild(opt);
+                });
+                if (selectId != null) progSel.value = String(selectId);
+            })
+            .catch(function () {
+                progSel.innerHTML = '<option value="0">All programs</option>';
+            });
+    }
+
+    deptSel.addEventListener('change', function () {
+        loadPrograms(0).then(reloadFirstPage);
+    });
+    progSel.addEventListener('change', reloadFirstPage);
     batchSel.addEventListener('change', reloadFirstPage);
     qInput.addEventListener('input', function () {
         clearTimeout(debounce);
@@ -511,9 +573,10 @@ function toggleAllSubs(on) {
     secSel.addEventListener('change', reloadFirstPage);
     shiftSel.addEventListener('change', reloadFirstPage);
     resetBtn.addEventListener('click', function () {
+        deptSel.value = '<?= (int)$dept_id ?>';
         batchSel.value = '<?= (int)$batch_id ?>';
         qInput.value = ''; secSel.value = ''; shiftSel.value = '';
-        reloadFirstPage();
+        loadPrograms(<?= (int)$program_id ?>).then(reloadFirstPage);
     });
 
     checkAll.addEventListener('change', function () {
