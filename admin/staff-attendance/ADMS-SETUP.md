@@ -20,9 +20,10 @@ Open **Staff Attendance → Devices** (requires the module's *can_edit* permissi
 1. **Register Device** and enter the exact **Serial Number (SN)** shown on the
    device (Menu → System Info / About). Only whitelisted, active serials are
    accepted — every other request is rejected and logged.
-2. Map each device **PIN** (the enrollment ID configured per employee on the
-   device) to an ERP staff member under **PIN → Staff Mapping**. Use *All devices*
-   for a shared mapping, or pick a device to override it. Unmapped PINs are still
+2. Map each device **User ID** (the enrollment ID configured per employee on the
+   device, sometimes labelled *PIN* in ZKTeco firmware) to an ERP staff member
+   under **Device User ID → Staff Mapping**. Use *All devices* for a shared
+   mapping, or pick a device to override it. Unmapped IDs are still
    logged (as *Unmapped*) but not folded into attendance.
 3. Optionally set a **System user** (credited as `created_by` on auto-generated
    rows) and the **device time zone** (Asia/Dhaka = `360`).

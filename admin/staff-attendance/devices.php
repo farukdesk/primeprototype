@@ -80,10 +80,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $device_id = (int)($_POST['map_device_id'] ?? 0); // 0 = all devices
         $pin       = mb_substr(trim($_POST['pin'] ?? ''), 0, 32);
         $user_id   = (int)($_POST['user_id'] ?? 0);
-        $valid_ids = array_map(fn($s) => (int)$s['id'], att_staff_list());
+        $valid_ids = array_map(fn($s) => (int)$s['id'], att_mappable_users());
 
         if ($pin === '' || $user_id < 1 || !in_array($user_id, $valid_ids, true)) {
-            flash_set('error', 'Choose a valid PIN and staff member.');
+            flash_set('error', 'Choose a valid Device User ID and staff member.');
         } else {
             $stmt = $db->prepare(
                 'INSERT INTO att_device_users (device_id, pin, user_id, is_active)
@@ -91,14 +91,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                  ON DUPLICATE KEY UPDATE user_id = VALUES(user_id), is_active = 1'
             );
             $stmt->execute([$device_id, $pin, $user_id]);
-            log_change('staff-attendance', 'UPDATE', $user_id, 'PIN map ' . $pin);
-            flash_set('success', 'PIN mapping saved.');
+            log_change('staff-attendance', 'UPDATE', $user_id, 'Device user id map ' . $pin);
+            flash_set('success', 'Device User ID mapping saved.');
         }
     } elseif ($action === 'delete_map') {
         $id = (int)($_POST['id'] ?? 0);
         if ($id > 0) {
             $db->prepare('DELETE FROM att_device_users WHERE id = ?')->execute([$id]);
-            flash_set('success', 'PIN mapping removed.');
+            flash_set('success', 'Device User ID mapping removed.');
         }
     } elseif ($action === 'save_settings') {
         $sys_user = max(0, (int)($_POST['adms_system_user_id'] ?? 0));
@@ -157,7 +157,7 @@ try {
     )->fetchAll();
 } catch (Throwable $e) { /* table missing */ }
 
-$staff        = att_staff_list();
+$staff        = att_mappable_users();
 $sys_user_id  = (int)att_get_setting('adms_system_user_id', '0');
 $tz_minutes   = (int)att_get_setting('adms_timezone_minutes', '360');
 
@@ -245,7 +245,7 @@ require_once __DIR__ . '/../includes/header.php';
                                     ], JSON_HEX_APOS | JSON_HEX_QUOT) ?>)'>
                                 <i class="fas fa-pen"></i>
                             </button>
-                            <form method="POST" class="d-inline" onsubmit="return confirm('Remove this device and its PIN mappings?');">
+                            <form method="POST" class="d-inline" onsubmit="return confirm('Remove this device and its user-id mappings?');">
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="action" value="delete_device">
                                 <input type="hidden" name="id" value="<?= (int)$d['id'] ?>">
@@ -261,11 +261,11 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <div class="row">
-    <!-- ── PIN → user mappings ─────────────────────────────────────────────── -->
+    <!-- ── Device user id → user mappings ──────────────────────────────────── -->
     <div class="col-lg-7 mb-4">
         <div class="card h-100" style="border-radius:12px;">
             <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center">
-                <h6 class="mb-0 fw-semibold"><i class="fas fa-id-badge me-2 text-primary"></i>PIN → Staff Mapping</h6>
+                <h6 class="mb-0 fw-semibold"><i class="fas fa-id-badge me-2 text-primary"></i>Device User ID → Staff Mapping</h6>
             </div>
             <div class="card-body">
                 <form method="POST" class="row g-2 align-items-end mb-3">
@@ -281,7 +281,7 @@ require_once __DIR__ . '/../includes/header.php';
                         </select>
                     </div>
                     <div class="col-sm-3">
-                        <label class="form-label small fw-semibold mb-1">Device PIN</label>
+                        <label class="form-label small fw-semibold mb-1">Device User ID</label>
                         <input type="text" name="pin" class="form-control form-control-sm" maxlength="32" required>
                     </div>
                     <div class="col-sm-4">
@@ -302,7 +302,7 @@ require_once __DIR__ . '/../includes/header.php';
 
                 <div class="table-responsive">
                     <table class="table table-sm table-hover align-middle mb-0">
-                        <thead class="table-light"><tr><th>Device</th><th>PIN</th><th>Staff</th><th></th></tr></thead>
+                        <thead class="table-light"><tr><th>Device</th><th>Device User ID</th><th>Staff</th><th></th></tr></thead>
                         <tbody>
                         <?php if (empty($mappings)): ?>
                             <tr><td colspan="4" class="text-center text-muted py-3">No mappings yet.</td></tr>
@@ -376,7 +376,7 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="card-body p-0">
                 <div class="table-responsive">
                     <table class="table table-sm table-hover align-middle mb-0">
-                        <thead class="table-light"><tr><th>Time</th><th>PIN</th><th>Staff</th></tr></thead>
+                        <thead class="table-light"><tr><th>Time</th><th>Device User ID</th><th>Staff</th></tr></thead>
                         <tbody>
                         <?php if (empty($recent_punches)): ?>
                             <tr><td colspan="3" class="text-center text-muted py-3">No punches received yet.</td></tr>

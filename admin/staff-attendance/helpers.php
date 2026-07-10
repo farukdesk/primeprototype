@@ -360,6 +360,33 @@ function att_staff_list(int $dept_id = 0, string $search = ''): array
     return $stmt->fetchAll();
 }
 
+/**
+ * Every active account that can be mapped to a device user id, i.e. all active
+ * `users` EXCEPT members of the Students user group. Unlike att_staff_list()
+ * this is NOT limited to groups with staff-attendance access, so any staff,
+ * officer or faculty account can be picked on the Devices page. Membership is
+ * taken from the user's primary group (users.group_id), consistent with
+ * att_staff_list(); groups literally named "Student"/"Students" are excluded.
+ */
+function att_mappable_users(): array
+{
+    try {
+        $stmt = db()->prepare(
+            "SELECT u.id, u.full_name, u.username, sp.employee_id
+               FROM users u
+               JOIN user_groups ug ON ug.id = u.group_id
+          LEFT JOIN staff_profiles sp ON sp.user_id = u.id
+              WHERE u.is_active = 1
+                AND LOWER(TRIM(ug.name)) NOT IN ('student', 'students')
+           ORDER BY u.full_name ASC"
+        );
+        $stmt->execute();
+        return $stmt->fetchAll();
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
 /** Active staff departments for filter dropdowns. */
 function att_departments(): array
 {
