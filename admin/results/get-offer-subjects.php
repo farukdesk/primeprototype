@@ -39,7 +39,8 @@ if (!is_super_admin()) {
     $fac_check->execute([$user_id]);
     $is_faculty_member = (bool)$fac_check->fetch();
 }
-$restrict_to_teacher = !(is_super_admin() || rm_can_create() || rm_is_staff()) || $is_faculty_member;
+$restrict_to_teacher = !is_super_admin()
+    && (!(rm_can_create() || rm_is_staff()) || $is_faculty_member);
 
 $params = [$dept_id, $program_id];
 $teacher_filter = '';

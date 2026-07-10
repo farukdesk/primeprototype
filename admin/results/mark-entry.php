@@ -113,11 +113,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $subject_title    = trim($_POST['subject_title']     ?? '');
     $credits          = trim($_POST['credits']           ?? '');
 
-    // Curriculum + semester are derived authoritatively from the selected course
+    // Curriculum + term label are derived authoritatively from the selected course
     // offer subject, so the client cannot spoof an unrelated subject/term.
-    $curriculum_id = 0;
-    $batch         = ''; // stored in result_mark_sheets.semester (offer's term label)
-    $offer_row     = null;
+    $curriculum_id  = 0;
+    $semester_label = ''; // stored in result_mark_sheets.semester (offer's term label)
+    $offer_row      = null;
     if ($offer_subject_id > 0) {
         $ost = db()->prepare(
             "SELECT cos.curriculum_id, o.dept_id, o.program_id,
@@ -131,22 +131,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $offer_row = $ost->fetch();
     }
     if ($offer_row) {
-        $curriculum_id = (int)$offer_row['curriculum_id'];
+        $curriculum_id  = (int)$offer_row['curriculum_id'];
         // Keep the sheet aligned with the offer's own dept/program.
-        $dept_id       = (int)$offer_row['dept_id'];
-        $program_id    = (int)$offer_row['program_id'];
-        $batch         = trim((string)($offer_row['semester'] ?: $offer_row['academic_intake']));
+        $dept_id        = (int)$offer_row['dept_id'];
+        $program_id     = (int)$offer_row['program_id'];
+        $semester_label = trim((string)($offer_row['semester'] ?: $offer_row['academic_intake']));
     }
     // Fall back to a non-empty term label so the NOT NULL `semester` column is satisfied.
-    if ($batch === '') {
+    if ($semester_label === '') {
         if ($exam_id > 0) {
             $ex = db()->prepare('SELECT exam_name, exam_year FROM ei_exams WHERE id = ? LIMIT 1');
             $ex->execute([$exam_id]);
             if ($exrow = $ex->fetch()) {
-                $batch = trim($exrow['exam_name'] . ' ' . $exrow['exam_year']);
+                $semester_label = trim($exrow['exam_name'] . ' ' . $exrow['exam_year']);
             }
         }
-        if ($batch === '') $batch = date('Y');
+        if ($semester_label === '') $semester_label = date('Y');
     }
 
     if ($dept_id <= 0)         $errors[] = 'Department is required.';
@@ -210,7 +210,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                    updated_at=NOW()
                  WHERE id=?'
             )->execute([
-                $dept_id, $program_id ?: null, $exam_id ?: null, $batch,
+                $dept_id, $program_id ?: null, $exam_id ?: null, $semester_label,
                 $curriculum_id ?: null, $offer_subject_id ?: null,
                 $subject_code ?: null, $subject_title,
                 $credits !== '' ? (float)$credits : null,
@@ -224,7 +224,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     subject_code, subject_title, credits, workflow_status, created_by)
                  VALUES (?,?,?,?,?,?,?,?,?,\'draft\',?)'
             )->execute([
-                $dept_id, $program_id ?: null, $exam_id ?: null, $batch,
+                $dept_id, $program_id ?: null, $exam_id ?: null, $semester_label,
                 $curriculum_id ?: null, $offer_subject_id ?: null,
                 $subject_code ?: null, $subject_title,
                 $credits !== '' ? (float)$credits : null,
@@ -1086,6 +1086,9 @@ foreach ($creatable as $cr) {
         fetch(APP_URL + '/results/get-offer-students.php?offer_subject_id=' + encodeURIComponent(offerSubjectId))
             .then(function(r) { return r.json(); })
             .then(function(data) {
+                // Intentional: always reset the table so it reflects only the
+                // selected course's registered students (an empty roster clears
+                // any rows carried over from a previously selected subject).
                 clearRows();
                 if (!data.length) {
                     if (showAlert) alert('No active registered students found for this course.');
