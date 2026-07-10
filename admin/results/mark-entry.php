@@ -71,10 +71,12 @@ if (!is_super_admin()) {
 // ── Load existing sheet (edit mode) ──────────────────────────────────────────
 if ($sheet_id > 0) {
     $stmt = db()->prepare(
-        'SELECT ms.*, d.name AS dept_name, p.program_name
+        'SELECT ms.*, d.name AS dept_name, p.program_name,
+                e.exam_name, e.exam_year
          FROM result_mark_sheets ms
          JOIN dept_departments d            ON d.id = ms.dept_id
          LEFT JOIN dept_academic_programs p ON p.id = ms.program_id
+         LEFT JOIN ei_exams e               ON e.id = ms.exam_id
          WHERE ms.id = ?'
     );
     $stmt->execute([$sheet_id]);
@@ -102,36 +104,84 @@ $page_title = $sheet ? 'Edit Mark Sheet' : 'New Mark Sheet';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
-    $action         = $_POST['action']         ?? 'save';
-    $dept_id        = (int)($_POST['dept_id']        ?? 0);
-    $program_id     = (int)($_POST['program_id']     ?? 0);
-    $batch          = trim($_POST['batch']           ?? '');
-    $curriculum_id  = (int)($_POST['curriculum_id']  ?? 0);
-    $subject_code   = trim($_POST['subject_code']    ?? '');
-    $subject_title  = trim($_POST['subject_title']   ?? '');
-    $credits        = trim($_POST['credits']         ?? '');
+    $action           = $_POST['action']           ?? 'save';
+    $dept_id          = (int)($_POST['dept_id']          ?? 0);
+    $program_id       = (int)($_POST['program_id']       ?? 0);
+    $exam_id          = (int)($_POST['exam_id']          ?? 0);
+    $offer_subject_id = (int)($_POST['offer_subject_id'] ?? 0);
+    $subject_code     = trim($_POST['subject_code']      ?? '');
+    $subject_title    = trim($_POST['subject_title']     ?? '');
+    $credits          = trim($_POST['credits']           ?? '');
 
-    if ($dept_id <= 0)        $errors[] = 'Department is required.';
-    if ($batch === '')        $errors[] = 'Batch is required.';
+    // Curriculum + semester are derived authoritatively from the selected course
+    // offer subject, so the client cannot spoof an unrelated subject/term.
+    $curriculum_id = 0;
+    $batch         = ''; // stored in result_mark_sheets.semester (offer's term label)
+    $offer_row     = null;
+    if ($offer_subject_id > 0) {
+        $ost = db()->prepare(
+            "SELECT cos.curriculum_id, o.dept_id, o.program_id,
+                    o.semester, o.academic_intake
+               FROM co_offer_subjects cos
+               JOIN co_offers o ON o.id = cos.offer_id
+              WHERE cos.id = ?
+              LIMIT 1"
+        );
+        $ost->execute([$offer_subject_id]);
+        $offer_row = $ost->fetch();
+    }
+    if ($offer_row) {
+        $curriculum_id = (int)$offer_row['curriculum_id'];
+        // Keep the sheet aligned with the offer's own dept/program.
+        $dept_id       = (int)$offer_row['dept_id'];
+        $program_id    = (int)$offer_row['program_id'];
+        $batch         = trim((string)($offer_row['semester'] ?: $offer_row['academic_intake']));
+    }
+    // Fall back to a non-empty term label so the NOT NULL `semester` column is satisfied.
+    if ($batch === '') {
+        if ($exam_id > 0) {
+            $ex = db()->prepare('SELECT exam_name, exam_year FROM ei_exams WHERE id = ? LIMIT 1');
+            $ex->execute([$exam_id]);
+            if ($exrow = $ex->fetch()) {
+                $batch = trim($exrow['exam_name'] . ' ' . $exrow['exam_year']);
+            }
+        }
+        if ($batch === '') $batch = date('Y');
+    }
+
+    if ($dept_id <= 0)         $errors[] = 'Department is required.';
+    if ($exam_id <= 0)         $errors[] = 'Please select an exam.';
+    if ($offer_subject_id <= 0 || !$offer_row) $errors[] = 'Please select a subject from the course offers.';
     if ($subject_title === '') $errors[] = 'Subject title is required.';
 
-    // Faculty: server-side check that the chosen curriculum subject is assigned to them
-    if ($curriculum_id > 0 && !is_super_admin() && !rm_can_create() && !rm_is_staff()) {
+    // Faculty: server-side check that they are assigned to teach this offered subject.
+    if ($offer_subject_id > 0 && !is_super_admin() && !rm_can_create() && !rm_is_staff()) {
         $fac_uid = (int)$user['id'];
+        // Faculty members only qualify when they are a teacher on this offer subject…
         $fa_stmt = db()->prepare(
-            "SELECT COUNT(*) FROM faculty_subject_assignments fsa
-              WHERE fsa.faculty_user_id = ? AND fsa.course_id = ? AND fsa.status = 'approved'"
+            "SELECT COUNT(*) FROM co_offer_subject_teachers t
+               JOIN dept_faculty df ON df.id = t.faculty_id
+              WHERE t.offer_subject_id = ? AND df.user_id = ?"
         );
-        $fa_stmt->execute([$fac_uid, $curriculum_id]);
+        $fa_stmt->execute([$offer_subject_id, $fac_uid]);
         $is_authorized = (int)$fa_stmt->fetchColumn() > 0;
-        if (!$is_authorized) {
+        // …or they are the approved/admin-assigned teacher of the curriculum subject.
+        if (!$is_authorized && $curriculum_id > 0) {
             $fa2 = db()->prepare(
+                "SELECT COUNT(*) FROM faculty_subject_assignments fsa
+                  WHERE fsa.faculty_user_id = ? AND fsa.course_id = ? AND fsa.status = 'approved'"
+            );
+            $fa2->execute([$fac_uid, $curriculum_id]);
+            $is_authorized = (int)$fa2->fetchColumn() > 0;
+        }
+        if (!$is_authorized && $curriculum_id > 0) {
+            $fa3 = db()->prepare(
                 "SELECT COUNT(*) FROM course_curriculum cc
                    JOIN dept_faculty df ON df.id = cc.assigned_faculty_id
                   WHERE df.user_id = ? AND cc.id = ?"
             );
-            $fa2->execute([$fac_uid, $curriculum_id]);
-            $is_authorized = (int)$fa2->fetchColumn() > 0;
+            $fa3->execute([$fac_uid, $curriculum_id]);
+            $is_authorized = (int)$fa3->fetchColumn() > 0;
         }
         if (!$is_authorized) {
             $errors[] = 'You are not authorized to submit results for this subject.';
@@ -154,13 +204,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Update existing sheet header
             $db->prepare(
                 'UPDATE result_mark_sheets SET
-                   dept_id=?, program_id=?, semester=?,
-                   curriculum_id=?, subject_code=?, subject_title=?, credits=?,
+                   dept_id=?, program_id=?, exam_id=?, semester=?,
+                   curriculum_id=?, offer_subject_id=?,
+                   subject_code=?, subject_title=?, credits=?,
                    updated_at=NOW()
                  WHERE id=?'
             )->execute([
-                $dept_id, $program_id ?: null, $batch,
-                $curriculum_id ?: null, $subject_code ?: null, $subject_title,
+                $dept_id, $program_id ?: null, $exam_id ?: null, $batch,
+                $curriculum_id ?: null, $offer_subject_id ?: null,
+                $subject_code ?: null, $subject_title,
                 $credits !== '' ? (float)$credits : null,
                 $sheet_id,
             ]);
@@ -168,12 +220,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Insert new sheet (always starts as draft)
             $db->prepare(
                 'INSERT INTO result_mark_sheets
-                   (dept_id, program_id, semester, curriculum_id,
+                   (dept_id, program_id, exam_id, semester, curriculum_id, offer_subject_id,
                     subject_code, subject_title, credits, workflow_status, created_by)
-                 VALUES (?,?,?,?,?,?,?,\'draft\',?)'
+                 VALUES (?,?,?,?,?,?,?,?,?,\'draft\',?)'
             )->execute([
-                $dept_id, $program_id ?: null, $batch,
-                $curriculum_id ?: null, $subject_code ?: null, $subject_title,
+                $dept_id, $program_id ?: null, $exam_id ?: null, $batch,
+                $curriculum_id ?: null, $offer_subject_id ?: null,
+                $subject_code ?: null, $subject_title,
                 $credits !== '' ? (float)$credits : null,
                 $user['id'],
             ]);
@@ -308,20 +361,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect(APP_URL . '/results/index.php?tab=my_sheets');
     }
 
-    save_old(compact('dept_id','program_id','batch',
-                     'curriculum_id','subject_code','subject_title','credits'));
+    save_old(compact('dept_id','program_id','exam_id','offer_subject_id',
+                     'subject_code','subject_title','credits'));
 }
 
 require_once __DIR__ . '/../includes/header.php';
 
-$v_dept_id       = $sheet ? $sheet['dept_id']       : (old('dept_id') ?: ($faculty_dept_id ?: null));
-$v_program_id    = $sheet ? $sheet['program_id']     : old('program_id');
-$v_batch         = $sheet ? $sheet['semester']       : old('batch');
-$v_curriculum_id = $sheet ? $sheet['curriculum_id']  : old('curriculum_id');
-$v_subject_code  = $sheet ? $sheet['subject_code']   : old('subject_code');
-$v_subject_title = $sheet ? $sheet['subject_title']  : old('subject_title');
-$v_credits       = $sheet ? $sheet['credits']        : old('credits');
-$is_edit         = $sheet !== null;
+// Active exams for the "Select Exam" dropdown (from the Exam Invigilation module).
+$exam_options = db()->query(
+    'SELECT id, exam_name, exam_year
+       FROM ei_exams
+      WHERE is_active = 1
+      ORDER BY exam_year DESC, exam_name ASC'
+)->fetchAll();
+
+$v_dept_id          = $sheet ? $sheet['dept_id']          : (old('dept_id') ?: ($faculty_dept_id ?: null));
+$v_program_id       = $sheet ? $sheet['program_id']        : old('program_id');
+$v_exam_id          = $sheet ? $sheet['exam_id']           : old('exam_id');
+$v_offer_subject_id = $sheet ? $sheet['offer_subject_id']  : old('offer_subject_id');
+$v_curriculum_id    = $sheet ? $sheet['curriculum_id']     : old('curriculum_id');
+$v_subject_code     = $sheet ? $sheet['subject_code']      : old('subject_code');
+$v_subject_title    = $sheet ? $sheet['subject_title']     : old('subject_title');
+$v_credits          = $sheet ? $sheet['credits']           : old('credits');
+$is_edit            = $sheet !== null;
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
@@ -394,18 +456,22 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
                             </select>
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label fw-medium">Batch / Semester <span class="text-danger">*</span></label>
-                            <!-- Custom searchable combobox for batch -->
-                            <div class="position-relative" id="batch_combobox_wrap">
-                                <input type="text" name="batch" id="batch_input" class="form-control"
-                                       value="<?= h($v_batch ?? '') ?>" placeholder="Type or search batch…"
-                                       maxlength="50" autocomplete="off" required>
-                                <div id="batch_dropdown"
-                                     class="position-absolute w-100 bg-white border rounded shadow-sm"
-                                     style="display:none;z-index:1050;max-height:220px;overflow-y:auto;top:100%;left:0;">
-                                </div>
+                            <label class="form-label fw-medium">Select Exam <span class="text-danger">*</span></label>
+                            <select name="exam_id" id="exam_select" class="form-select" required>
+                                <option value="">— Select Exam —</option>
+                                <?php foreach ($exam_options as $ex): ?>
+                                <option value="<?= (int)$ex['id'] ?>" <?= (int)$v_exam_id === (int)$ex['id'] ? 'selected' : '' ?>>
+                                    <?= h($ex['exam_name'] . ' ' . $ex['exam_year']) ?>
+                                </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <div class="form-text">
+                                <?php if (empty($exam_options)): ?>
+                                <span class="text-danger">No active exams. Create one in the Exam Invigilation module first.</span>
+                                <?php else: ?>
+                                Pulled from the Exam module.
+                                <?php endif; ?>
                             </div>
-                            <div class="form-text">Select an existing batch or type a new one.</div>
                         </div>
                     </div>
 
@@ -417,14 +483,14 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
                                 : '' ?>
                             <span class="text-danger">*</span>
                         </label>
-                        <select name="curriculum_id" id="curriculum_select" class="form-select"
+                        <select name="offer_subject_id" id="curriculum_select" class="form-select"
                                 <?= ($v_dept_id && $v_program_id) ? '' : 'disabled' ?>>
                             <option value="">— Select Subject —</option>
                         </select>
                         <div class="form-text" id="subject_hint">
                             <?= (!is_super_admin() && !rm_can_create() && !rm_is_staff())
-                                ? 'Only subjects approved for your profile are shown.'
-                                : 'Selecting a subject auto-fills code, title, and credits below.' ?>
+                                ? 'Only offered courses you teach are shown. Selecting one loads its registered students.'
+                                : 'Subjects are pulled from Course Offers. Selecting one loads its active registered students.' ?>
                         </div>
                     </div>
 
@@ -561,13 +627,9 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
         <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center">
             <h6 class="mb-0 fw-semibold"><i class="fas fa-list me-2 text-muted"></i>Student Marks</h6>
             <div class="d-flex gap-2">
-                <button type="button" id="btn_load_students" class="btn btn-sm btn-outline-primary"
-                        style="border-radius:8px;" disabled>
-                    <i class="fas fa-users me-1"></i> Load Students
-                </button>
-                <button type="button" id="btn_add_other_batch" class="btn btn-sm btn-outline-warning"
-                        style="border-radius:8px;" title="Add a student from a different batch">
-                    <i class="fas fa-user-plus me-1"></i> Other Batch
+                <button type="button" id="btn_reload_students" class="btn btn-sm btn-outline-primary"
+                        style="border-radius:8px;" disabled title="Reload registered students for the selected subject">
+                    <i class="fas fa-sync me-1"></i> Reload Registered
                 </button>
                 <button type="button" id="btn_add_row" class="btn btn-sm btn-outline-secondary"
                         style="border-radius:8px;">
@@ -649,41 +711,12 @@ else:
 ?>
                         <tr id="empty_row">
                             <td colspan="11" class="text-center text-muted py-3" id="empty_colspan">
-                                Enter a batch and select a program — students load automatically. Use "Load Students" to reload or "Add Row" to add manually.
+                                Select an exam and a subject — the active registered students of that course load automatically. Use "Add Row" to add a student manually.
                             </td>
                         </tr>
 <?php endif; ?>
                     </tbody>
                 </table>
-            </div>
-        </div>
-        <div id="other_batch_panel" class="px-3 pb-3" style="display:none;">
-            <div class="card border-warning" style="border-radius:10px;">
-                <div class="card-body p-3">
-                    <h6 class="fw-semibold mb-2" style="font-size:.85rem;">
-                        <i class="fas fa-user-plus me-1 text-warning"></i>
-                        Add Student from Another Batch
-                    </h6>
-                    <div class="row g-2 align-items-end">
-                        <div class="col-md-3">
-                            <label class="form-label small mb-1">Batch</label>
-                            <input type="text" id="other_batch_val" class="form-control form-control-sm"
-                                   list="other_batch_datalist" placeholder="e.g. 51st" autocomplete="off">
-                            <datalist id="other_batch_datalist"></datalist>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label small mb-1">Search by Student ID or Name</label>
-                            <input type="text" id="other_student_q" class="form-control form-control-sm"
-                                   placeholder="Type at least 2 characters…" autocomplete="off">
-                        </div>
-                        <div class="col-md-3">
-                            <button type="button" id="btn_other_search" class="btn btn-warning btn-sm w-100">
-                                <i class="fas fa-search me-1"></i> Search
-                            </button>
-                        </div>
-                    </div>
-                    <div id="other_student_results" class="mt-2"></div>
-                </div>
             </div>
         </div>
     </div>
@@ -728,24 +761,23 @@ foreach ($creatable as $cr) {
     var chainMap      = <?= json_encode($chain_map) ?>;
     var deptSel       = document.getElementById('dept_select');
     var progSel       = document.getElementById('prog_select');
+    var examSel       = document.getElementById('exam_select');
     var currSel       = document.getElementById('curriculum_select');
-    var batchInput    = document.getElementById('batch_input');
-    var batchDropdown = document.getElementById('batch_dropdown');
     var subCode       = document.getElementById('subject_code');
     var subTitle      = document.getElementById('subject_title');
     var credits       = document.getElementById('credits_input');
     var tbody         = document.getElementById('marks_tbody');
     var emptyRow      = document.getElementById('empty_row');
-    var btnLoad       = document.getElementById('btn_load_students');
+    var btnReload     = document.getElementById('btn_reload_students');
     var btnAdd        = document.getElementById('btn_add_row');
     var template      = document.getElementById('row_template');
     var chainInfo     = document.getElementById('chain_info');
     var chainText     = document.getElementById('chain_info_text');
 
-    var savedDept     = <?= (int)$v_dept_id ?>;
-    var savedProg     = <?= (int)$v_program_id ?>;
-    var savedCurr     = <?= (int)$v_curriculum_id ?>;
-    var savedBatch    = <?= json_encode($v_batch ?? '') ?>;
+    var savedDept         = <?= (int)$v_dept_id ?>;
+    var savedProg         = <?= (int)$v_program_id ?>;
+    var savedOfferSubject = <?= (int)$v_offer_subject_id ?>;
+    var savedCurr         = <?= (int)$v_curriculum_id ?>;
     var facultyDeptId = <?= $faculty_dept_id ?>;
     var isEditMode    = <?= $is_edit ? 'true' : 'false' ?>;
 
@@ -945,95 +977,6 @@ foreach ($creatable as $cr) {
             .then(function(data) { applyMarkDistribution(data); });
     }
 
-    // ── Batch combobox ────────────────────────────────────────────────────────
-    var batchAllValues = [];
-
-    function renderBatchDropdown(filter) {
-        if (!batchDropdown) return;
-        var q    = (filter || '').toLowerCase().trim();
-        var list = q ? batchAllValues.filter(function(b) { return b.toLowerCase().indexOf(q) !== -1; })
-                     : batchAllValues;
-        if (!list.length) {
-            batchDropdown.innerHTML = '<div class="px-3 py-2 text-muted small">No existing batches found. You may type a new one.</div>';
-        } else {
-            batchDropdown.innerHTML = list.map(function(b) {
-                return '<button type="button" class="batch-opt d-block w-100 text-start px-3 py-1 border-0 bg-transparent"'
-                     + ' style="font-size:.9rem;cursor:pointer;" data-val="' + escHtml(b) + '">'
-                     + escHtml(b) + '</button>';
-            }).join('');
-            batchDropdown.querySelectorAll('.batch-opt').forEach(function(btn) {
-                btn.addEventListener('mousedown', function(e) {
-                    e.preventDefault(); // keep focus on input
-                    batchInput.value = this.dataset.val;
-                    hideBatchDropdown();
-                    // Trigger student load when batch is picked from list
-                    if (progSel.value && batchInput.value.trim()) loadStudentsByBatch(false);
-                });
-            });
-        }
-        batchDropdown.style.display = '';
-    }
-
-    function hideBatchDropdown() {
-        if (batchDropdown) batchDropdown.style.display = 'none';
-    }
-
-    function loadBatches(deptId, progId) {
-        var url = APP_URL + '/results/get-batches.php?dept_id=' + (deptId || 0)
-                          + '&program_id=' + (progId || 0);
-        fetch(url)
-            .then(function(r) { return r.json(); })
-            .then(function(batches) { batchAllValues = batches || []; });
-    }
-
-    if (batchInput) {
-        batchInput.addEventListener('focus', function() {
-            renderBatchDropdown(this.value);
-        });
-        batchInput.addEventListener('input', function() {
-            renderBatchDropdown(this.value);
-        });
-        batchInput.addEventListener('change', function() {
-            hideBatchDropdown();
-            if (progSel.value && this.value.trim()) loadStudentsByBatch(false);
-        });
-        batchInput.addEventListener('blur', function() {
-            // Small delay so mousedown on options fires first
-            setTimeout(hideBatchDropdown, 200);
-        });
-        batchInput.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') { hideBatchDropdown(); }
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                hideBatchDropdown();
-                if (progSel.value && this.value.trim()) loadStudentsByBatch(false);
-            }
-        });
-    }
-
-    // ── Load all batches for "other batch" datalist ───────────────────────────
-    function loadOtherBatchList(deptId) {
-        var dl = document.getElementById('other_batch_datalist');
-        if (!dl || !deptId) return;
-        fetch(APP_URL + '/results/get-batches.php?dept_id=' + deptId)
-            .then(function(r) { return r.json(); })
-            .then(function(batches) {
-                dl.innerHTML = '';
-                batches.forEach(function(b) {
-                    var opt = document.createElement('option');
-                    opt.value = b;
-                    dl.appendChild(opt);
-                });
-            });
-    }
-
-    // Close batch dropdown when clicking outside
-    document.addEventListener('click', function(e) {
-        if (batchDropdown && !batchDropdown.contains(e.target) && e.target !== batchInput) {
-            hideBatchDropdown();
-        }
-    });
-
     // ── Chain info display ────────────────────────────────────────────────────
     function updateChainInfo(deptId, progId) {
         var chains = chainMap[deptId] || chainMap['global'] || [];
@@ -1053,7 +996,7 @@ foreach ($creatable as $cr) {
         progSel.disabled  = true;
         currSel.innerHTML = '<option value="">— Select Subject —</option>';
         currSel.disabled  = true;
-        if (btnLoad) btnLoad.disabled = true;
+        if (btnReload) btnReload.disabled = true;
         if (!deptId) { chainInfo.style.display='none'; return; }
         fetch(APP_URL + '/results/get-programs.php?dept_id=' + deptId)
             .then(function(r) { return r.json(); })
@@ -1066,30 +1009,28 @@ foreach ($creatable as $cr) {
                 });
                 progSel.disabled = false;
                 updateChainInfo(deptId, selectId);
-                loadBatches(deptId, selectId);
-                loadOtherBatchList(deptId);
                 if (selectId) {
-                    loadFacultySubjects(selectId, savedCurr);
-                    if (btnLoad) btnLoad.disabled = false;
-                    // In edit mode the saved rows are already rendered by PHP – do NOT
-                    // auto-load students here because clearRows() would wipe them.
-                    if (savedBatch && !isEditMode) loadStudentsByBatch(false);
+                    // In edit mode the saved rows are already rendered by PHP; keep
+                    // them (skipReload) so the registered-student fetch does not wipe
+                    // manually adjusted grades.
+                    loadOfferSubjects(deptId, selectId, savedOfferSubject, isEditMode);
                 }
             });
     }
 
-    // ── Subject selector (with is_assigned support) ───────────────────────────
-    function loadFacultySubjects(progId, selectId) {
+    // ── Subject selector (offered courses) ────────────────────────────────────
+    function loadOfferSubjects(deptId, progId, selectId, skipReload) {
         currSel.innerHTML = '<option value="">— Select Subject —</option>';
         currSel.disabled  = true;
-        if (!progId) return;
-        loadBatches(getDeptId(), progId);
-        fetch(APP_URL + '/results/get-faculty-subjects.php?program_id=' + progId)
+        if (btnReload) btnReload.disabled = true;
+        if (!deptId || !progId) return;
+        fetch(APP_URL + '/results/get-offer-subjects.php?dept_id=' + encodeURIComponent(deptId)
+                      + '&program_id=' + encodeURIComponent(progId))
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 if (!data.length) {
                     var o = document.createElement('option');
-                    o.value = ''; o.textContent = '— No assigned subjects found —';
+                    o.value = ''; o.textContent = '— No offered courses found —';
                     o.disabled = true;
                     currSel.appendChild(o);
                     currSel.disabled = false;
@@ -1098,46 +1039,58 @@ foreach ($creatable as $cr) {
 
                 data.forEach(function(s) {
                     var o = document.createElement('option');
-                    o.value = s.id;
-                    o.textContent = (s.course_code ? s.course_code + ' – ' : '') + s.course_name;
-                    o.dataset.code    = s.course_code || '';
-                    o.dataset.title   = s.course_name;
-                    o.dataset.credits = s.credit || '';
-                    if (s.id == selectId) o.selected = true;
+                    o.value = s.offer_subject_id;
+                    var label = (s.course_code ? s.course_code + ' – ' : '') + s.course_name;
+                    var ctx = [];
+                    if (s.batch_name) ctx.push(s.batch_name);
+                    if (s.semester)   ctx.push(s.semester);
+                    if (ctx.length)   label += ' (' + ctx.join(' · ') + ')';
+                    label += '  •  ' + (parseInt(s.registered_count, 10) || 0) + ' registered';
+                    o.textContent = label;
+                    o.dataset.curriculumId = s.curriculum_id || '';
+                    o.dataset.code         = s.course_code   || '';
+                    o.dataset.title        = s.course_name   || '';
+                    o.dataset.credits      = s.credit        || '';
+                    if (s.offer_subject_id == selectId) o.selected = true;
                     currSel.appendChild(o);
                 });
                 currSel.disabled = false;
-                if (selectId) fillFromCurriculum();
+                if (selectId) fillFromOffer(skipReload);
             });
     }
 
-    function fillFromCurriculum() {
+    function fillFromOffer(skipReload) {
         var sel = currSel.options[currSel.selectedIndex];
-        if (!sel || !sel.value) { applyMarkDistribution([]); return; }
+        if (!sel || !sel.value) {
+            subCode.value = ''; subTitle.value = ''; credits.value = '';
+            applyMarkDistribution([]);
+            if (btnReload) btnReload.disabled = true;
+            return;
+        }
         subCode.value  = sel.dataset.code    || '';
         subTitle.value = sel.dataset.title   || '';
         credits.value  = sel.dataset.credits || '';
-        loadMarkDistribution(sel.value);
+        if (btnReload) btnReload.disabled = false;
+
+        var curriculumId = sel.dataset.curriculumId || '';
+        loadMarkDistribution(curriculumId);
+
+        // Load the active registered students of the selected offered course.
+        // In edit mode the first render keeps the saved rows.
+        if (!skipReload) loadRegisteredStudents(sel.value, false);
     }
 
-    // ── Load students by batch ────────────────────────────────────────────────
-    function loadStudentsByBatch(showAlert) {
-        var deptId = getDeptId();
-        var progId = progSel.value;
-        var batch  = batchInput ? batchInput.value.trim() : '';
-        if (!progId || !batch) return;
-        var url = APP_URL + '/results/get-students.php?load_all=1'
-            + '&dept_id='    + encodeURIComponent(deptId)
-            + '&program_id=' + encodeURIComponent(progId)
-            + '&batch='      + encodeURIComponent(batch);
-        fetch(url)
+    // ── Load active registered students of the selected offer subject ─────────
+    function loadRegisteredStudents(offerSubjectId, showAlert) {
+        if (!offerSubjectId) return;
+        fetch(APP_URL + '/results/get-offer-students.php?offer_subject_id=' + encodeURIComponent(offerSubjectId))
             .then(function(r) { return r.json(); })
             .then(function(data) {
+                clearRows();
                 if (!data.length) {
-                    if (showAlert) alert('No students found for batch "' + batch + '" in this program.');
+                    if (showAlert) alert('No active registered students found for this course.');
                     return;
                 }
-                clearRows();
                 data.forEach(function(s) { appendRow(s.student_id, s.full_name, s.id); });
                 renumber();
             });
@@ -1148,95 +1101,28 @@ foreach ($creatable as $cr) {
         deptSel.addEventListener('change', function() {
             loadPrograms(this.value, 0);
             updateChainInfo(this.value, 0);
-            loadOtherBatchList(this.value);
         });
     }
 
     progSel.addEventListener('change', function() {
-        loadFacultySubjects(this.value, 0);
-        if (btnLoad) btnLoad.disabled = !this.value;
+        loadOfferSubjects(getDeptId(), this.value, 0, false);
         updateChainInfo(getDeptId(), this.value);
-        loadBatches(getDeptId(), this.value);
-        if (this.value && batchInput && batchInput.value.trim()) loadStudentsByBatch(false);
     });
 
-    currSel.addEventListener('change', fillFromCurriculum);
+    currSel.addEventListener('change', function() { fillFromOffer(false); });
 
-    // Manual "Load Students" button
-    if (btnLoad) {
-        btnLoad.addEventListener('click', function() {
-            var progId = progSel.value;
-            var batch  = batchInput ? batchInput.value.trim() : '';
-            if (!progId) { alert('Please select a program first.'); return; }
-            if (!batch)  { alert('Please enter a batch first.'); return; }
-            loadStudentsByBatch(true);
+    // Manual "Reload Registered" button
+    if (btnReload) {
+        btnReload.addEventListener('click', function() {
+            if (!currSel.value) { alert('Please select a subject first.'); return; }
+            loadRegisteredStudents(currSel.value, true);
         });
-    }
-
-    // ── "Other Batch" panel toggle ────────────────────────────────────────────
-    var btnOtherBatch   = document.getElementById('btn_add_other_batch');
-    var otherBatchPanel = document.getElementById('other_batch_panel');
-    var otherBatchVal   = document.getElementById('other_batch_val');
-    var otherStudentQ   = document.getElementById('other_student_q');
-    var btnOtherSearch  = document.getElementById('btn_other_search');
-    var otherResults    = document.getElementById('other_student_results');
-
-    if (btnOtherBatch) {
-        btnOtherBatch.addEventListener('click', function() {
-            var visible = otherBatchPanel.style.display !== 'none';
-            otherBatchPanel.style.display = visible ? 'none' : '';
-            if (!visible) loadOtherBatchList(getDeptId());
-        });
-    }
-
-    function doOtherSearch() {
-        var batch = otherBatchVal ? otherBatchVal.value.trim() : '';
-        var q     = otherStudentQ ? otherStudentQ.value.trim() : '';
-        if (!q || q.length < 2) { otherResults.innerHTML = '<small class="text-danger">Enter at least 2 characters.</small>'; return; }
-        var deptId = getDeptId();
-        var url = APP_URL + '/results/get-students.php?q=' + encodeURIComponent(q)
-                          + '&dept_id=' + encodeURIComponent(deptId);
-        if (batch) url += '&batch=' + encodeURIComponent(batch);
-        otherResults.innerHTML = '<small class="text-muted">Searching…</small>';
-        fetch(url)
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                if (!data.length) { otherResults.innerHTML = '<small class="text-warning">No students found.</small>'; return; }
-                var html = '<div class="list-group list-group-flush mt-1" style="max-height:180px;overflow-y:auto;">';
-                data.forEach(function(s) {
-                    html += '<button type="button" class="list-group-item list-group-item-action py-1 px-2 other-add-btn"'
-                          + ' data-sid="' + (s.student_id||'') + '"'
-                          + ' data-name="' + (s.full_name||'').replace(/"/g,'&quot;') + '"'
-                          + ' data-pk="'  + (s.id||0) + '" style="font-size:.82rem;">'
-                          + '<strong>' + (s.student_id||'') + '</strong> — ' + (s.full_name||'')
-                          + (s.batch ? ' <span class="badge bg-secondary ms-1">' + s.batch + '</span>' : '')
-                          + (s.program_name ? ' <small class="text-muted ms-1">' + s.program_name + '</small>' : '')
-                          + '</button>';
-                });
-                html += '</div>';
-                otherResults.innerHTML = html;
-                otherResults.querySelectorAll('.other-add-btn').forEach(function(btn) {
-                    btn.addEventListener('click', function() {
-                        appendRow(this.dataset.sid, this.dataset.name, this.dataset.pk);
-                        renumber();
-                        this.classList.add('active');
-                        this.disabled = true;
-                        this.textContent = '✓ Added';
-                    });
-                });
-            });
-    }
-
-    if (btnOtherSearch) btnOtherSearch.addEventListener('click', doOtherSearch);
-    if (otherStudentQ) {
-        otherStudentQ.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); doOtherSearch(); } });
     }
 
     // Initial load: programs (and subjects + students if editing)
     var initDept = facultyDeptId || savedDept;
     if (initDept) {
         loadPrograms(initDept, savedProg);
-        loadOtherBatchList(initDept);
     }
     if (!savedDept && !facultyDeptId) updateChainInfo(0, 0);
     // Load mark distribution for existing sheet (edit mode)
