@@ -24,6 +24,8 @@ $sheet_id = (int)($_GET['id'] ?? 0);
 $sheet    = null;
 $grades   = [];
 $errors   = [];
+// Only administrators (super admins) may remove registered students from a sheet.
+$can_remove_rows = is_super_admin();
 clear_old();
 
 // ── Creatable chains for this user ────────────────────────────────────────────
@@ -200,6 +202,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($errors)) {
         $db = db();
 
+        $is_new_sheet = ($sheet_id <= 0);
+
         if ($sheet_id > 0) {
             // Update existing sheet header
             $db->prepare(
@@ -269,10 +273,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $dist_absent_by_dist[(int)$dist_idx] = (array)$vals;
         }
 
+        // Collect a per-student snapshot of the marks entered for the change log.
+        $log_rows = [];
+
         foreach ($sids as $row_idx => $sid) {
             $sid = trim($sid);
             if ($sid === '') continue;
-
             // Build marks array for this row across all distributions
             $row_marks = [];
             foreach ($marks_by_dist as $dist_idx => $vals) {
@@ -323,6 +329,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $row_absent_flags,
                 $dist_max_values
             );
+
+            $log_rows[] = [
+                'sid'    => $sid,
+                'name'   => trim($names[$row_idx] ?? ''),
+                'marks'  => $row_marks,
+                'absent' => (bool)$derived_absent,
+            ];
         }
 
         // ── Submit: advance to first approver step ────────────────────────────
@@ -357,6 +370,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             flash_set('success', 'Mark sheet saved as draft.');
         }
+
+        // ── Change log: record every mark-entry action (create/update + marks) ──
+        $log_action = $is_new_sheet ? 'CREATE' : 'UPDATE';
+        $log_label  = trim(($subject_code !== '' ? $subject_code . ' — ' : '') . $subject_title);
+        if ($log_label === '') $log_label = 'Mark Sheet #' . $sheet_id;
+        $verb = ($action === 'submit') ? 'submitted for review' : 'saved as draft';
+        $log_desc = sprintf(
+            'Mark sheet %s and %s (%s) — %d student%s',
+            $is_new_sheet ? 'created' : 'updated',
+            $verb,
+            $semester_label,
+            count($log_rows),
+            count($log_rows) === 1 ? '' : 's'
+        );
+        log_change(
+            'results',
+            $log_action,
+            $sheet_id,
+            $log_label,
+            'marks',
+            null,
+            json_encode($log_rows),
+            $log_desc
+        );
 
         redirect(APP_URL . '/results/index.php?tab=my_sheets');
     }
@@ -699,10 +736,12 @@ if (!empty($grades)):
                             <td class="text-center grade-cell fw-bold" style="font-size:.8rem;">—</td>
                             <td class="text-center remarks-cell" style="font-size:.75rem;">—</td>
                             <td class="text-center">
+<?php if ($can_remove_rows): ?>
                                 <button type="button" class="btn btn-sm btn-outline-danger btn-remove-row p-0"
                                         style="width:24px;height:24px;line-height:1;border-radius:5px;">
                                     <i class="fas fa-times" style="font-size:.65rem;"></i>
                                 </button>
+<?php endif; ?>
                             </td>
                         </tr>
 <?php
@@ -780,6 +819,8 @@ foreach ($creatable as $cr) {
     var savedCurr         = <?= (int)$v_curriculum_id ?>;
     var facultyDeptId = <?= $faculty_dept_id ?>;
     var isEditMode    = <?= $is_edit ? 'true' : 'false' ?>;
+    // Only administrators may remove registered students from a sheet.
+    var CAN_REMOVE_ROWS = <?= $can_remove_rows ? 'true' : 'false' ?>;
 
     // ── Mark distribution defaults ────────────────────────────────────────────
     /** Minimum component max-marks to be considered "high-value" (absent → Incom). */
@@ -1094,7 +1135,7 @@ foreach ($creatable as $cr) {
                     if (showAlert) alert('No active registered students found for this course.');
                     return;
                 }
-                data.forEach(function(s) { appendRow(s.student_id, s.full_name, s.id); });
+                data.forEach(function(s) { appendRow(s.student_id, s.full_name, s.id, null, null, true); });
                 renumber();
             });
     }
@@ -1144,13 +1185,19 @@ foreach ($creatable as $cr) {
      * @param {Array|null}  savedMarks    pre-filled mark values
      * @param {Array|null}  absentFlags   per-segment absent flags
      */
-    function appendRow(sid, name, idPk, savedMarks, absentFlags) {
+    function appendRow(sid, name, idPk, savedMarks, absentFlags, isRegistered) {
         if (emptyRow) emptyRow.style.display = 'none';
         var clone = template.content.cloneNode(true);
         var tr    = clone.querySelector('tr');
         tr.querySelector('[name="student_id_pk[]"]').value = idPk || 0;
         tr.querySelector('[name="student_sid[]"]').value   = sid  || '';
         tr.querySelector('[name="student_name[]"]').value  = name || '';
+
+        // Registered students may only be removed by administrators.
+        if (isRegistered && !CAN_REMOVE_ROWS) {
+            var rmBtn = tr.querySelector('.btn-remove-row');
+            if (rmBtn) rmBtn.remove();
+        }
 
         // Inject mark cells before Total
         var totalTd = tr.querySelector('.total-cell');
