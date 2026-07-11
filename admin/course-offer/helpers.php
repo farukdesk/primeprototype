@@ -39,6 +39,18 @@ function co_departments(): array
 }
 
 /**
+ * All active departments ordered by name, regardless of the current user's
+ * department scope. Used where cross-department selection is required (e.g.
+ * assigning a teacher from another department to an offered subject).
+ */
+function co_all_departments(): array
+{
+    return db()
+        ->query("SELECT id, name FROM dept_departments WHERE is_active = 1 ORDER BY name ASC")
+        ->fetchAll();
+}
+
+/**
  * Active programs for a given department.
  */
 function co_programs(int $dept_id): array

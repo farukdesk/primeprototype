@@ -117,6 +117,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // ── Data for the form ─────────────────────────────────────────────────────────
 $departments   = co_departments();
+// Cross-department teacher assignment must be able to pick from every active
+// department, not just those the current user is scoped to.
+$all_departments = co_all_departments();
 $all_batches   = co_student_batches();
 $semester_opts = co_semester_options();
 
@@ -371,7 +374,7 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                                         <div class="other-dept-wrap mt-1" <?= !empty($pr['allow_other']) ? '' : 'style="display:none;"' ?>>
                                             <select class="form-select form-select-sm other-dept-select">
                                                 <option value="">— All departments —</option>
-                                                <?php foreach ($departments as $d): ?>
+                                                <?php foreach ($all_departments as $d): ?>
                                                 <option value="<?= (int)$d['id'] ?>"><?= h($d['name']) ?></option>
                                                 <?php endforeach; ?>
                                             </select>
@@ -447,12 +450,13 @@ var APP_URL      = <?= json_encode(APP_URL) ?>;
 var PRE_ROWS     = <?= $pre_rows_json ?>;
 var rowCounter   = <?= count($pre_rows) ?>;
 var DEPARTMENTS  = <?= json_encode(array_map(function ($d) { return ['id' => (int)$d['id'], 'name' => $d['name'], 'bi' => co_dept_is_bi_semester($d['name'])]; }, $departments)) ?>;
+var OTHER_DEPARTMENTS = <?= json_encode(array_map(function ($d) { return ['id' => (int)$d['id'], 'name' => $d['name']]; }, $all_departments)) ?>;
 var INTAKE_TRI   = <?= json_encode(co_academic_intake_options(false)) ?>;
 var INTAKE_BI    = <?= json_encode(co_academic_intake_options(true)) ?>;
 
 function otherDeptOptionsHtml() {
     var html = '<option value="">— All departments —</option>';
-    DEPARTMENTS.forEach(function(d) {
+    OTHER_DEPARTMENTS.forEach(function(d) {
         var name = String(d.name).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         html += '<option value="' + d.id + '">' + name + '</option>';
     });
