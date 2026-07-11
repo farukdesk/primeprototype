@@ -360,7 +360,10 @@ function co_batch_students_filtered(int $batch_id, array $filters = [], int $pag
     $where  = [];
     $params = [];
     if ($batch_id > 0) {
-        $where[]  = 's.batch_id = ?';
+        // Match the student's home batch OR an active transfer into this batch,
+        // so students moved via student_batch_transfers still show up here.
+        $where[]  = '(s.batch_id = ? OR s.id IN (SELECT sbt.student_id FROM student_batch_transfers sbt WHERE sbt.to_batch_id = ? AND sbt.is_active = 1))';
+        $params[] = $batch_id;
         $params[] = $batch_id;
     }
 
@@ -427,10 +430,12 @@ function co_batch_sections(int $batch_id): array
     $st = db()->prepare(
         "SELECT DISTINCT section
            FROM students
-          WHERE batch_id = ? AND section IS NOT NULL AND section <> ''
+          WHERE (batch_id = ?
+                 OR id IN (SELECT sbt.student_id FROM student_batch_transfers sbt WHERE sbt.to_batch_id = ? AND sbt.is_active = 1))
+            AND section IS NOT NULL AND section <> ''
           ORDER BY section ASC"
     );
-    $st->execute([$batch_id]);
+    $st->execute([$batch_id, $batch_id]);
     return array_map('strval', array_column($st->fetchAll(), 'section'));
 }
 
@@ -442,10 +447,12 @@ function co_batch_shifts(int $batch_id): array
     $st = db()->prepare(
         "SELECT DISTINCT shift
            FROM students
-          WHERE batch_id = ? AND shift IS NOT NULL AND shift <> ''
+          WHERE (batch_id = ?
+                 OR id IN (SELECT sbt.student_id FROM student_batch_transfers sbt WHERE sbt.to_batch_id = ? AND sbt.is_active = 1))
+            AND shift IS NOT NULL AND shift <> ''
           ORDER BY shift ASC"
     );
-    $st->execute([$batch_id]);
+    $st->execute([$batch_id, $batch_id]);
     return array_map('strval', array_column($st->fetchAll(), 'shift'));
 }
 
