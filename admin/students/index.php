@@ -65,7 +65,8 @@ if ($f_program > 0) {
     $params[] = $f_program;
 }
 if ($f_batch > 0) {
-    $where[]  = 's.batch_id = ?';
+    $where[]  = '(s.batch_id = ? OR s.id IN (SELECT sbt.student_id FROM student_batch_transfers sbt WHERE sbt.to_batch_id = ? AND sbt.is_active = 1))';
+    $params[] = $f_batch;
     $params[] = $f_batch;
 }
 if (in_array($f_section, $valid_sections, true)) {
@@ -122,6 +123,11 @@ $sql = 'SELECT s.*,
 $stmt = db()->prepare($sql);
 $stmt->execute($params);
 $students = $stmt->fetchAll();
+
+// Active batch transfers for the students on this page, keyed by student id, so
+// transfer students can be badged in the list (and, when a batch filter is
+// active, identified as "transferred in" vs. their home batch).
+$transfer_map = sm_transfers_for_students(array_column($students, 'id'));
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
 // Use the same WHERE clause as the main query to make stats reflect current filters
@@ -507,6 +513,25 @@ require_once __DIR__ . '/../includes/header.php';
                         <td><code class="text-primary"><?= h($s['student_id']) ?></code></td>
                         <td>
                             <div class="fw-medium"><?= h($s['full_name']) ?></div>
+                            <?php
+                            $s_transfers = $transfer_map[(int)$s['id']] ?? [];
+                            if ($s_transfers):
+                                // When a batch filter is active and this student's
+                                // home batch differs from it, they are here because
+                                // they were transferred into that batch.
+                                $is_transferred_in = $f_batch > 0 && (int)($s['batch_id'] ?? 0) !== $f_batch;
+                                $t_names = array_filter(array_column($s_transfers, 'to_batch_name'));
+                                $t_title = $is_transferred_in
+                                    ? 'Transferred into this batch'
+                                    : 'Transferred to: ' . h(implode(', ', $t_names));
+                            ?>
+                            <div class="mt-1">
+                                <span class="badge" style="background:#fef3c7;color:#92400e;font-size:.68rem;font-weight:600;"
+                                      title="<?= $t_title ?>">
+                                    <i class="fas fa-exchange-alt me-1"></i><?= $is_transferred_in ? 'Transferred In' : 'Transfer Student' ?>
+                                </span>
+                            </div>
+                            <?php endif; ?>
                             <?php if ($upd_badge !== ''): ?>
                             <div class="mt-1"><?= $upd_badge ?></div>
                             <?php endif; ?>

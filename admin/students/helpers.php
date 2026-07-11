@@ -128,7 +128,8 @@ function sm_build_list_filter(array $get, ?array $dept_scope): array
         $labels[] = ['Program', $name ?? ('#' . $f_program)];
     }
     if ($f_batch > 0) {
-        $where[]  = 's.batch_id = ?';
+        $where[]  = '(s.batch_id = ? OR s.id IN (SELECT sbt.student_id FROM student_batch_transfers sbt WHERE sbt.to_batch_id = ? AND sbt.is_active = 1))';
+        $params[] = $f_batch;
         $params[] = $f_batch;
         $name = null;
         foreach (sm_batches() as $b) {
@@ -523,6 +524,130 @@ function sm_batches(): array
         )->fetchAll(PDO::FETCH_ASSOC);
     }
     return $data;
+}
+
+// ── Individual batch transfers ────────────────────────────────────────────────
+//
+// A student keeps their original (home) batch in students.batch_id.  When a
+// student is transferred to another batch they get an active row in
+// student_batch_transfers so they show in BOTH batches, marked as a transfer.
+
+/**
+ * Returns the active batch transfers for a single student, newest first,
+ * including the human-readable source / target batch names.
+ *
+ * @return array<int,array<string,mixed>>
+ */
+function sm_student_transfers(int $student_id): array
+{
+    $stmt = db()->prepare(
+        'SELECT t.*,
+                fb.name AS from_batch_name,
+                tb.name AS to_batch_name,
+                u.full_name AS created_by_name
+           FROM student_batch_transfers t
+           LEFT JOIN student_batches fb ON fb.id = t.from_batch_id
+           LEFT JOIN student_batches tb ON tb.id = t.to_batch_id
+           LEFT JOIN users u ON u.id = t.created_by
+          WHERE t.student_id = ? AND t.is_active = 1
+          ORDER BY t.transferred_at DESC, t.id DESC'
+    );
+    $stmt->execute([$student_id]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+/**
+ * Returns a map of student_id => list of active transfers for the given set of
+ * student ids.  Used by the list view to badge transfer students without an
+ * extra query per row.
+ *
+ * @param  int[] $student_ids
+ * @return array<int,array<int,array<string,mixed>>>
+ */
+function sm_transfers_for_students(array $student_ids): array
+{
+    $ids = array_values(array_unique(array_map('intval', $student_ids)));
+    $ids = array_filter($ids, fn($v) => $v > 0);
+    if (!$ids) {
+        return [];
+    }
+    $phs  = implode(',', array_fill(0, count($ids), '?'));
+    $stmt = db()->prepare(
+        "SELECT t.student_id, t.to_batch_id, tb.name AS to_batch_name
+           FROM student_batch_transfers t
+           LEFT JOIN student_batches tb ON tb.id = t.to_batch_id
+          WHERE t.is_active = 1 AND t.student_id IN ($phs)
+          ORDER BY t.transferred_at DESC, t.id DESC"
+    );
+    $stmt->execute(array_values($ids));
+
+    $map = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $map[(int)$row['student_id']][] = $row;
+    }
+    return $map;
+}
+
+/**
+ * Records a batch transfer for a student.  The student's home batch
+ * (students.batch_id) is left untouched — the transfer only adds them to the
+ * target batch.  Returns [ok(bool), message(string)].
+ *
+ * @return array{0:bool,1:string}
+ */
+function sm_add_batch_transfer(int $student_id, int $to_batch_id, ?int $from_batch_id, string $note, ?int $user_id): array
+{
+    if ($to_batch_id <= 0) {
+        return [false, 'Please choose a batch to transfer the student into.'];
+    }
+    if ($from_batch_id !== null && $from_batch_id === $to_batch_id) {
+        return [false, 'The student is already in this batch — choose a different target batch.'];
+    }
+
+    // Validate the target batch exists and is active.
+    $valid = false;
+    foreach (sm_batches() as $b) {
+        if ((int)$b['id'] === $to_batch_id) { $valid = true; break; }
+    }
+    if (!$valid) {
+        return [false, 'The selected batch is not available.'];
+    }
+
+    // Re-activate an existing (soft-removed) transfer instead of duplicating.
+    $stmt = db()->prepare(
+        'SELECT id FROM student_batch_transfers WHERE student_id = ? AND to_batch_id = ?'
+    );
+    $stmt->execute([$student_id, $to_batch_id]);
+    $existing = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($existing) {
+        db()->prepare(
+            'UPDATE student_batch_transfers
+                SET is_active = 1, from_batch_id = ?, note = ?, transferred_at = NOW(), created_by = ?
+              WHERE id = ?'
+        )->execute([$from_batch_id, ($note !== '' ? $note : null), $user_id, (int)$existing['id']]);
+    } else {
+        db()->prepare(
+            'INSERT INTO student_batch_transfers
+                 (student_id, from_batch_id, to_batch_id, note, is_active, transferred_at, created_by)
+             VALUES (?, ?, ?, ?, 1, NOW(), ?)'
+        )->execute([$student_id, $from_batch_id, $to_batch_id, ($note !== '' ? $note : null), $user_id]);
+    }
+
+    return [true, 'Student transferred to the selected batch.'];
+}
+
+/**
+ * Removes (soft-deactivates) a batch transfer for a student.  The student's
+ * home batch is not affected.  Scoped by student_id to prevent tampering.
+ */
+function sm_remove_batch_transfer(int $transfer_id, int $student_id): bool
+{
+    $stmt = db()->prepare(
+        'UPDATE student_batch_transfers SET is_active = 0 WHERE id = ? AND student_id = ?'
+    );
+    $stmt->execute([$transfer_id, $student_id]);
+    return $stmt->rowCount() > 0;
 }
 
 /**

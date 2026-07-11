@@ -79,6 +79,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect(APP_URL . '/students/view.php?id=' . $id . '#comments');
     }
 
+    // ── Batch transfer: add ───────────────────────────────────────────────
+    if ($action === 'add_batch_transfer' && $is_staff) {
+        $to_batch_id = (int)($_POST['to_batch_id'] ?? 0);
+        $note        = trim($_POST['transfer_note'] ?? '');
+        $from_batch  = $student['batch_id'] !== null ? (int)$student['batch_id'] : null;
+
+        [$ok, $msg] = sm_add_batch_transfer($id, $to_batch_id, $from_batch, $note, (int)$user['id']);
+        if ($ok) {
+            $to_name = null;
+            foreach (sm_batches() as $b) {
+                if ((int)$b['id'] === $to_batch_id) { $to_name = $b['name']; break; }
+            }
+            log_change('students', 'UPDATE', $id,
+                $student['full_name'] . ' (' . $student['student_id'] . ')',
+                'batch_transfer', null, $to_name,
+                'Batch transfer added by ' . $user['full_name']);
+            flash_set('success', $msg);
+        } else {
+            flash_set('error', $msg);
+        }
+        redirect(APP_URL . '/students/view.php?id=' . $id . '#sv-batch-transfer');
+    }
+
+    // ── Batch transfer: remove ────────────────────────────────────────────
+    if ($action === 'remove_batch_transfer' && $is_staff) {
+        $transfer_id = (int)($_POST['transfer_id'] ?? 0);
+        if (sm_remove_batch_transfer($transfer_id, $id)) {
+            log_change('students', 'UPDATE', $id,
+                $student['full_name'] . ' (' . $student['student_id'] . ')',
+                'batch_transfer', null, null,
+                'Batch transfer removed by ' . $user['full_name']);
+            flash_set('success', 'Batch transfer removed. The student keeps their home batch.');
+        } else {
+            flash_set('error', 'Could not remove the batch transfer.');
+        }
+        redirect(APP_URL . '/students/view.php?id=' . $id . '#sv-batch-transfer');
+    }
+
     // ── Create portal user account ────────────────────────────────────────
     if ($action === 'create_portal_user' && $is_staff) {
         // Verify student has an email address
@@ -315,6 +353,9 @@ require_once __DIR__ . '/../includes/header.php';
 
 // Batch label for display
 $batchLabel = $student['batch_name'] ?? $student['batch'] ?? null;
+
+// Active batch transfers for this student (home batch stays in $student['batch_id']).
+$batch_transfers = sm_student_transfers($id);
 ?>
 
 <style>
@@ -544,6 +585,10 @@ $statusChipClass = match($student['status']) {
                 <?php if ($batchLabel): ?>
                     &nbsp;·&nbsp; <i class="fas fa-layer-group me-1" style="opacity:.6;"></i>Batch: <strong><?= h($batchLabel) ?></strong>
                 <?php endif; ?>
+                <?php if ($batch_transfers): ?>
+                    &nbsp;·&nbsp; <i class="fas fa-exchange-alt me-1" style="opacity:.6;"></i>Transferred to:
+                    <strong><?= h(implode(', ', array_filter(array_column($batch_transfers, 'to_batch_name')))) ?></strong>
+                <?php endif; ?>
                 <?php if (!empty($student['shift'])): ?>
                     &nbsp;·&nbsp; <?= h($student['shift']) ?> Shift
                 <?php endif; ?>
@@ -579,6 +624,9 @@ $statusChipClass = match($student['status']) {
             </a>
             <?php endif; ?>
             <?php if ($is_staff): ?>
+            <a href="#sv-batch-transfer" class="btn-hero">
+                <i class="fas fa-exchange-alt"></i> Batch Transfer
+            </a>
             <a href="<?= APP_URL ?>/students/edit.php?<?= h(http_build_query(['id' => $id, 'ret' => $ret_qs])) ?>" class="btn-hero btn-hero-edit">
                 <i class="fas fa-edit"></i> Edit
             </a>
@@ -611,6 +659,12 @@ $statusChipClass = match($student['status']) {
     <a href="#sv-results"><i class="fas fa-chart-bar me-1"></i>Results</a>
     <?php endif; ?>
     <?php if ($is_staff): ?>
+    <a href="#sv-batch-transfer" style="<?= $batch_transfers ? 'border-color:#fcd34d;color:#92400e;background:#fffbeb;' : '' ?>">
+        <i class="fas fa-exchange-alt me-1"></i>Batch Transfer
+        <?php if ($batch_transfers): ?>
+        <span class="badge ms-1" style="background:#f59e0b;color:#fff;font-size:.65rem;"><?= count($batch_transfers) ?></span>
+        <?php endif; ?>
+    </a>
     <a href="#sv-portal" style="<?= $portal_user ? 'border-color:#bbf7d0;color:#16a34a;background:#f0fdf4;' : '' ?>">
         <i class="fas fa-user-lock me-1"></i>Portal Account
         <?php if ($portal_user): ?>
@@ -1164,8 +1218,100 @@ $hasLocalGuardian = !empty($student['local_guardian_name']) || !empty($student['
 
 <?php if ($is_staff): ?>
 <!-- ══════════════════════════════════════════════════════════
-     PORTAL ACCOUNT
+     BATCH TRANSFER
 ═══════════════════════════════════════════════════════════ -->
+<div class="sv-card mb-4" id="sv-batch-transfer">
+    <div class="sv-card-header">
+        <div class="sv-card-header-icon" style="background:#fffbeb;color:#d97706;"><i class="fas fa-exchange-alt"></i></div>
+        <h6 class="sv-card-header-title">Batch Transfer</h6>
+        <?php if ($batch_transfers): ?>
+        <span class="badge ms-2" style="background:#fef3c7;color:#92400e;font-size:.72rem;"><?= count($batch_transfers) ?> active</span>
+        <?php endif; ?>
+    </div>
+    <div class="p-3">
+        <p class="text-muted mb-3" style="font-size:.85rem;">
+            Transferring keeps the student in their home batch
+            <strong><?= $batchLabel ? h($batchLabel) : '—' ?></strong>
+            and additionally lists them in the target batch, where they appear as a
+            transfer student. Removing a transfer does not affect the home batch.
+        </p>
+
+        <?php if ($batch_transfers): ?>
+        <div class="table-responsive mb-3">
+            <table class="table table-sm align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Transferred Into</th>
+                        <th>From (Home)</th>
+                        <th>Note</th>
+                        <th>Date</th>
+                        <th>By</th>
+                        <th class="text-end">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($batch_transfers as $t): ?>
+                    <tr>
+                        <td>
+                            <span class="badge" style="background:#fef3c7;color:#92400e;font-size:.72rem;">
+                                <i class="fas fa-layer-group me-1"></i><?= h($t['to_batch_name'] ?? ('#' . $t['to_batch_id'])) ?>
+                            </span>
+                        </td>
+                        <td class="text-muted"><?= h($t['from_batch_name'] ?? '—') ?></td>
+                        <td class="text-muted"><?= h($t['note'] ?? '') !== '' ? h($t['note']) : '—' ?></td>
+                        <td class="text-muted" style="font-size:.82rem;"><?= h(date('d M Y', strtotime($t['transferred_at']))) ?></td>
+                        <td class="text-muted" style="font-size:.82rem;"><?= h($t['created_by_name'] ?? '—') ?></td>
+                        <td class="text-end">
+                            <form method="POST" action="<?= APP_URL ?>/students/view.php?id=<?= $id ?>#sv-batch-transfer" style="display:inline;"
+                                  onsubmit="return confirm('Remove this batch transfer? The student stays in their home batch.');">
+                                <?= csrf_field() ?>
+                                <input type="hidden" name="action" value="remove_batch_transfer">
+                                <input type="hidden" name="transfer_id" value="<?= (int)$t['id'] ?>">
+                                <button type="submit" class="btn btn-sm btn-outline-danger" style="border-radius:7px;">
+                                    <i class="fas fa-times"></i> Remove
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <?php else: ?>
+        <div class="text-muted mb-3" style="font-size:.85rem;">
+            <i class="fas fa-info-circle me-1"></i>This student has no batch transfers.
+        </div>
+        <?php endif; ?>
+
+        <form method="POST" action="<?= APP_URL ?>/students/view.php?id=<?= $id ?>#sv-batch-transfer" class="row g-2 align-items-end">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="add_batch_transfer">
+            <div class="col-12 col-md-4">
+                <label class="form-label fw-semibold mb-1" style="font-size:.8rem;">Transfer into batch</label>
+                <select name="to_batch_id" class="form-select form-select-sm" required>
+                    <option value="">— Select batch —</option>
+                    <?php foreach (sm_batches() as $b): ?>
+                        <?php if ((int)$b['id'] === (int)($student['batch_id'] ?? 0)) continue; ?>
+                        <option value="<?= (int)$b['id'] ?>"><?= h($b['name']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-12 col-md-5">
+                <label class="form-label fw-semibold mb-1" style="font-size:.8rem;">Note <span class="text-muted">(optional)</span></label>
+                <input type="text" name="transfer_note" class="form-control form-control-sm" maxlength="255"
+                       placeholder="Reason / remark">
+            </div>
+            <div class="col-12 col-md-3">
+                <button type="submit" class="btn btn-warning btn-sm w-100" style="border-radius:7px;">
+                    <i class="fas fa-exchange-alt me-1"></i> Transfer Student
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+<?php endif; ?>
+
+<?php if ($is_staff): ?>
 <div class="sv-card mb-4" id="sv-portal">
     <div class="sv-card-header">
         <div class="sv-card-header-icon" style="background:#f0fdf4;color:#16a34a;"><i class="fas fa-user-lock"></i></div>
