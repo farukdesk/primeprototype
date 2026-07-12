@@ -26,15 +26,17 @@ try {
     if (wf_has_approver_role()) {
         $wf_counts['queue'] = count(wf_get_approver_queue());
     }
-    // Published
+    // Published (in dept scope OR authored by the current user, so a teacher
+    // always sees their own published sheets even outside their dept scope)
     $pub_where  = "workflow_status = 'published'";
     $pub_params = [];
     if ($dept_scope !== null && !empty($dept_scope)) {
         $dphs        = implode(',', array_fill(0, count($dept_scope), '?'));
-        $pub_where  .= " AND dept_id IN ($dphs)";
-        $pub_params  = $dept_scope;
+        $pub_where  .= " AND (dept_id IN ($dphs) OR created_by = ?)";
+        $pub_params  = array_merge($dept_scope, [$user_id]);
     } elseif ($dept_scope !== null && empty($dept_scope)) {
-        $pub_where .= ' AND 0=1';
+        $pub_where  .= ' AND created_by = ?';
+        $pub_params  = [$user_id];
     }
     $r = db()->prepare("SELECT COUNT(*) FROM result_mark_sheets WHERE $pub_where");
     $r->execute($pub_params);
@@ -115,7 +117,7 @@ endif;
 
 // ── Active tab: Published workflow sheets ─────────────────────────────────────
 if ($active_tab === 'published' && $has_wf_access):
-    _wf_render_published($dept_scope);
+    _wf_render_published($dept_scope, $user_id);
     require_once __DIR__ . '/../includes/footer.php';
     exit;
 endif;
@@ -245,18 +247,23 @@ function _wf_render_my_sheets(int $user_id, ?array $dept_scope): void
 }
 
 /**
- * Render "Published" tab — all published workflow sheets in user's scope.
+ * Render "Published" tab — all published workflow sheets in user's scope,
+ * plus any published sheets the current user authored (so a teacher always
+ * sees their own published results even outside their department scope).
  */
-function _wf_render_published(?array $dept_scope): void
+function _wf_render_published(?array $dept_scope, int $user_id = 0): void
 {
     $where  = ["ms.workflow_status = 'published'"];
     $params = [];
     if ($dept_scope !== null) {
-        if (empty($dept_scope)) { $where[] = '0=1'; }
-        else {
+        if (empty($dept_scope)) {
+            $where[]  = 'ms.created_by = ?';
+            $params[] = $user_id;
+        } else {
             $phs     = implode(',', array_fill(0, count($dept_scope), '?'));
-            $where[] = "ms.dept_id IN ($phs)";
+            $where[] = "(ms.dept_id IN ($phs) OR ms.created_by = ?)";
             array_push($params, ...$dept_scope);
+            $params[] = $user_id;
         }
     }
     $where_sql = 'WHERE ' . implode(' AND ', $where);

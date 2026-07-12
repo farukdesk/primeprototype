@@ -190,6 +190,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    // ── Duplicate guard ───────────────────────────────────────────────────────
+    // A batch's marks for a given exam may only be entered once. If a sheet for
+    // the same exam + offered subject has already been submitted (pending review)
+    // or published, block re-entry. A sheet that was *returned* to the teacher
+    // does not block, so it can be revised and re-submitted.
+    if (empty($errors) && $exam_id > 0 && $offer_subject_id > 0) {
+        $dup = db()->prepare(
+            "SELECT workflow_status FROM result_mark_sheets
+              WHERE exam_id = ? AND offer_subject_id = ?
+                AND workflow_status IN ('pending', 'published')
+                AND id <> ?
+              LIMIT 1"
+        );
+        $dup->execute([$exam_id, $offer_subject_id, $sheet_id]);
+        if ($dup->fetchColumn() !== false) {
+            $errors[] = 'The marks for this batch for this exam have already been submitted. '
+                      . 'You cannot mark again. If you want to mark again, please contact the '
+                      . 'Controller of Examinations with the permission of the Department Head.';
+        }
+    }
+
     // Resolve chain on submit/save
     $chain = null;
     if ($action === 'submit') {
@@ -440,6 +461,11 @@ $is_edit            = $sheet !== null;
 </div>
 <?php endif; ?>
 <?php flash_show(); ?>
+
+<div id="dup_warning" class="alert alert-warning d-none" role="alert">
+    <strong><i class="fas fa-exclamation-triangle me-1"></i> Marks already submitted</strong>
+    <div id="dup_warning_text" class="mt-1"></div>
+</div>
 
 <?php if ($sheet && $sheet['workflow_status'] === 'returned'): ?>
 <?php $history = wf_get_sheet_history($sheet_id); $last_return = null;
@@ -819,6 +845,7 @@ foreach ($creatable as $cr) {
     var savedCurr         = <?= (int)$v_curriculum_id ?>;
     var facultyDeptId = <?= $faculty_dept_id ?>;
     var isEditMode    = <?= $is_edit ? 'true' : 'false' ?>;
+    var currentSheetId = <?= (int)$sheet_id ?>;
     // Only administrators may remove registered students from a sheet.
     var CAN_REMOVE_ROWS = <?= $can_remove_rows ? 'true' : 'false' ?>;
 
@@ -1154,6 +1181,54 @@ foreach ($creatable as $cr) {
     });
 
     currSel.addEventListener('change', function() { fillFromOffer(false); });
+
+    // ── Duplicate guard (proactive) ───────────────────────────────────────────
+    // Warn the teacher — and disable the Save/Submit buttons — as soon as they
+    // pick an exam + subject whose marks have already been submitted/published.
+    var dupWarning     = document.getElementById('dup_warning');
+    var dupWarningText = document.getElementById('dup_warning_text');
+    var actionButtons  = Array.prototype.slice.call(
+        document.querySelectorAll('#markEntryForm button[name="action"]'));
+
+    function setActionsDisabled(disabled) {
+        actionButtons.forEach(function(b) { b.disabled = disabled; });
+    }
+
+    function checkDuplicate() {
+        var examId  = examSel ? examSel.value : '';
+        var offerId = currSel ? currSel.value : '';
+        if (!examId || !offerId) {
+            if (dupWarning) dupWarning.classList.add('d-none');
+            setActionsDisabled(false);
+            return;
+        }
+        fetch(APP_URL + '/results/check-duplicate-sheet.php?exam_id=' + encodeURIComponent(examId)
+                      + '&offer_subject_id=' + encodeURIComponent(offerId)
+                      + '&exclude_id=' + encodeURIComponent(currentSheetId))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data && data.duplicate) {
+                    if (dupWarningText) {
+                        dupWarningText.textContent =
+                            'The marks for this batch for this exam have already been submitted. '
+                          + 'You cannot mark again. If you want to mark again, please contact the '
+                          + 'Controller of Examinations with the permission of the Department Head.';
+                    }
+                    if (dupWarning) dupWarning.classList.remove('d-none');
+                    setActionsDisabled(true);
+                } else {
+                    if (dupWarning) dupWarning.classList.add('d-none');
+                    setActionsDisabled(false);
+                }
+            })
+            .catch(function(err) { /* fail open — server-side guard still applies */
+                if (window.console) console.error('Duplicate check failed:', err);
+            });
+    }
+
+    if (examSel) examSel.addEventListener('change', checkDuplicate);
+    currSel.addEventListener('change', checkDuplicate);
+
 
     // Manual "Reload Registered" button
     if (btnReload) {
