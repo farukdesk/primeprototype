@@ -35,6 +35,26 @@ if (empty($mark_distribution)) {
 }
 $dist_total = array_sum(array_column($mark_distribution, 'max_marks'));
 
+// Guard against distribution drift: if any grade stored more mark components than
+// the resolved distribution defines (e.g. the curriculum's mark distribution was
+// edited after marks were entered), extend the column list so no entered mark is
+// silently hidden from the printout.
+$max_marks_len = 0;
+foreach ($grades as $_g) {
+    if (!empty($_g['marks_json'])) {
+        $_decoded = json_decode($_g['marks_json'], true);
+        if (is_array($_decoded)) {
+            $max_marks_len = max($max_marks_len, count($_decoded));
+        }
+    }
+}
+while (count($mark_distribution) < $max_marks_len) {
+    $mark_distribution[] = [
+        'distribution_name' => 'Part ' . (count($mark_distribution) + 1),
+        'max_marks'         => '',
+    ];
+}
+
 $page_title = h($sheet['subject_title']);
 ?>
 <!DOCTYPE html>
@@ -191,7 +211,7 @@ $page_title = h($sheet['subject_title']);
                 <th rowspan="2" style="min-width:100px;">Student ID</th>
                 <th rowspan="2" style="min-width:140px;">Name</th>
                 <?php foreach ($mark_distribution as $_pd): ?>
-                <th><?= h($_pd['distribution_name']) ?><br><small>/<?= h($_pd['max_marks']) ?></small></th>
+                <th><?= h($_pd['distribution_name']) ?><?php if ($_pd['max_marks'] !== '' && $_pd['max_marks'] !== null): ?><br><small>/<?= h($_pd['max_marks']) ?></small><?php endif; ?></th>
                 <?php endforeach; ?>
                 <th rowspan="2" style="width:48px;">Total</th>
                 <th rowspan="2" style="width:48px;">Grade</th>

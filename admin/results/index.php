@@ -275,12 +275,15 @@ function _wf_render_published(?array $dept_scope, int $user_id = 0): void
                     p.program_name,
                     c.name          AS chain_name,
                     u.username      AS creator_name,
+                    e.exam_name,
+                    e.exam_year,
                     (SELECT COUNT(*) FROM result_sheet_grades sg WHERE sg.sheet_id = ms.id) AS student_count
              FROM result_mark_sheets ms
              JOIN dept_departments d              ON d.id  = ms.dept_id
              LEFT JOIN dept_academic_programs p   ON p.id  = ms.program_id
              LEFT JOIN wf_chains c                ON c.id  = ms.chain_id
              LEFT JOIN users u                    ON u.id  = ms.created_by
+             LEFT JOIN ei_exams e                 ON e.id  = ms.exam_id
              $where_sql
              ORDER BY ms.updated_at DESC
              LIMIT 500"
@@ -304,6 +307,7 @@ function _wf_render_published(?array $dept_scope, int $user_id = 0): void
                         <tr>
                             <th class="px-4">#</th>
                             <th>Subject</th>
+                            <th>Exam</th>
                             <th>Department / Program</th>
                             <th>Batch</th>
                             <th>Teacher</th>
@@ -313,7 +317,7 @@ function _wf_render_published(?array $dept_scope, int $user_id = 0): void
                     </thead>
                     <tbody>
                     <?php if (empty($sheets)): ?>
-                        <tr><td colspan="7" class="text-center text-muted py-5">No published sheets yet.</td></tr>
+                        <tr><td colspan="8" class="text-center text-muted py-5">No published sheets yet.</td></tr>
                     <?php else: ?>
                         <?php foreach ($sheets as $i => $s): ?>
                         <tr>
@@ -322,6 +326,13 @@ function _wf_render_published(?array $dept_scope, int $user_id = 0): void
                                 <div class="fw-medium"><?= h($s['subject_title']) ?></div>
                                 <?php if ($s['subject_code']): ?>
                                 <small class="text-muted"><?= h($s['subject_code']) ?></small>
+                                <?php endif; ?>
+                            </td>
+                            <td>
+                                <?php if (!empty($s['exam_name'])): ?>
+                                    <?= h(trim($s['exam_name'] . ' ' . ($s['exam_year'] ?? ''))) ?>
+                                <?php else: ?>
+                                    <span class="text-muted">—</span>
                                 <?php endif; ?>
                             </td>
                             <td>
