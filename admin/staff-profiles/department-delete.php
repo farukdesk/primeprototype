@@ -21,6 +21,6 @@ if (!$dept) {
 }
 
 db()->prepare('DELETE FROM staff_departments WHERE id = ?')->execute([$id]);
-log_change('staff_departments', $id, 'delete', 'Staff department deleted: ' . $dept['name']);
+log_change('staff_departments', 'DELETE', $id, $dept['name'], null, null, null, 'Staff department deleted: ' . $dept['name']);
 
 redirect(APP_URL . '/staff-profiles/departments.php');
