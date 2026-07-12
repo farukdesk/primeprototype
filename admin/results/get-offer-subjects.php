@@ -11,7 +11,9 @@
  * Super admin / results staff with create rights and no faculty profile → every
  * offered subject for the dept/program.
  * Faculty (any user with a faculty_profiles record) → only offered subjects they
- * are assigned to teach (co_offer_subject_teachers → dept_faculty).
+ * are authorized for: subjects they teach (co_offer_subject_teachers), their
+ * approved subject assignments (faculty_subject_assignments, status = approved),
+ * or curriculum courses admin-assigned to them (course_curriculum.assigned_faculty_id).
  *
  * GET params:
  *   dept_id     (int, required)
@@ -45,11 +47,32 @@ $restrict_to_teacher = !is_super_admin()
 $params = [$dept_id, $program_id];
 $teacher_filter = '';
 if ($restrict_to_teacher) {
-    $teacher_filter = "AND EXISTS (
-        SELECT 1 FROM co_offer_subject_teachers t
-        JOIN dept_faculty df ON df.id = t.faculty_id
-        WHERE t.offer_subject_id = cos.id AND df.user_id = ?
+    // Faculty may enter marks for an offered subject when they are authorized via
+    // ANY of the three sources below. These mirror the server-side authorization
+    // check in mark-entry.php and the approved subjects shown on my-profile.php:
+    //   1. assigned as a teacher on the course offer (co_offer_subject_teachers)
+    //   2. an approved subject assignment (faculty_subject_assignments, approved)
+    //   3. admin-assigned directly on the curriculum (course_curriculum.assigned_faculty_id)
+    $teacher_filter = "AND (
+        EXISTS (
+            SELECT 1 FROM co_offer_subject_teachers t
+            JOIN dept_faculty df ON df.id = t.faculty_id
+            WHERE t.offer_subject_id = cos.id AND df.user_id = ?
+        )
+        OR EXISTS (
+            SELECT 1 FROM faculty_subject_assignments fsa
+            WHERE fsa.course_id = cos.curriculum_id
+              AND fsa.faculty_user_id = ?
+              AND fsa.status = 'approved'
+        )
+        OR EXISTS (
+            SELECT 1 FROM course_curriculum cc2
+            JOIN dept_faculty df2 ON df2.id = cc2.assigned_faculty_id
+            WHERE cc2.id = cos.curriculum_id AND df2.user_id = ?
+        )
     )";
+    $params[] = $user_id;
+    $params[] = $user_id;
     $params[] = $user_id;
 }
 
