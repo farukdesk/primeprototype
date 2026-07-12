@@ -38,6 +38,9 @@ $sp_stmt = db()->prepare('SELECT department_type FROM staff_profiles WHERE user_
 $sp_stmt->execute([$id]);
 $employee_type = (string)($sp_stmt->fetchColumn() ?: '');
 
+// Only user-managers may set the Employee Type (self-editing users cannot).
+$can_manage_users = is_super_admin() || can_access('users', 'can_edit');
+
 $page_title = 'Edit User';
 $errors     = [];
 $groups     = db()->query('SELECT id, name, is_super FROM user_groups WHERE is_active = 1 ORDER BY name')->fetchAll();
@@ -112,7 +115,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         // Employee Type → staff_profiles.department_type (Administrative / Faculty)
-        if ($employee_type !== '') {
+        if ($can_manage_users && $employee_type !== '') {
             $db->prepare(
                 'INSERT INTO staff_profiles (user_id, department_type) VALUES (?, ?)
                  ON DUPLICATE KEY UPDATE department_type = VALUES(department_type)'
@@ -232,6 +235,7 @@ require_once __DIR__ . '/../includes/header.php';
                     </label>
                     <input type="password" name="password" class="form-control" autocomplete="new-password">
                 </div>
+                <?php if ($can_manage_users): ?>
                 <div class="col-md-6">
                     <label class="form-label fw-medium">Employee Type</label>
                     <select name="employee_type" id="employee_type" class="form-select">
@@ -246,6 +250,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <a href="<?= APP_URL ?>/faculty-profiles/index.php" target="_blank">Faculty Profiles</a>.
                     </small>
                 </div>
+                <?php endif; ?>
                 <div class="col-md-6">
                     <label class="form-label fw-medium">Confirm New Password</label>
                     <input type="password" name="password2" class="form-control" autocomplete="new-password">
