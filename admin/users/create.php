@@ -16,6 +16,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email          = trim($_POST['email']           ?? '');
     $phone          = trim($_POST['phone']           ?? '');
     $student_sid    = trim($_POST['student_sid']     ?? '');
+    $employee_type  = in_array($_POST['employee_type'] ?? '', ['administrative','educational'], true)
+                      ? $_POST['employee_type'] : '';
     $selected_groups = array_map('intval', (array)($_POST['group_ids'] ?? []));
     $primary_group_id = (int)($_POST['primary_group_id'] ?? 0);
     $password       = $_POST['password']  ?? '';
@@ -72,6 +74,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $new_user_id = (int)$db->lastInsertId();
 
+        // Employee Type → staff_profiles.department_type (Administrative / Faculty)
+        if ($employee_type !== '') {
+            $db->prepare(
+                'INSERT INTO staff_profiles (user_id, department_type) VALUES (?, ?)
+                 ON DUPLICATE KEY UPDATE department_type = VALUES(department_type)'
+            )->execute([$new_user_id, $employee_type]);
+        }
+
         // Save multi-group assignments
         $ins = $db->prepare(
             'INSERT IGNORE INTO user_group_assignments (user_id, group_id, is_primary) VALUES (?,?,?)'
@@ -94,7 +104,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect(APP_URL . '/users/index.php');
     }
 
-        save_old(compact('full_name', 'username', 'email', 'phone', 'student_sid', 'primary_group_id') + ['group_ids_post' => $selected_groups]);
+        save_old(compact('full_name', 'username', 'email', 'phone', 'student_sid', 'employee_type', 'primary_group_id') + ['group_ids_post' => $selected_groups]);
 }
 
 $old_selected = $_SESSION['old']['group_ids_post'] ?? [];
@@ -158,6 +168,16 @@ require_once __DIR__ . '/../includes/header.php';
                     </label>
                     <input type="text" name="student_sid" class="form-control"
                            value="<?= old('student_sid') ?>" maxlength="50" autocomplete="off">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-medium">Employee Type</label>
+                    <select name="employee_type" class="form-select">
+                        <?php $et_old = old('employee_type'); ?>
+                        <option value="">— Not an employee —</option>
+                        <option value="administrative" <?= $et_old === 'administrative' ? 'selected' : '' ?>>Administrative</option>
+                        <option value="educational" <?= $et_old === 'educational' ? 'selected' : '' ?>>Faculty</option>
+                    </select>
+                    <small class="text-muted">Administrative → Employee Profile; Faculty → Faculty Profiles.</small>
                 </div>
                 <div class="col-md-6">
                     <label class="form-label fw-medium">Password <span class="text-danger">*</span></label>

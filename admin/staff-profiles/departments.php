@@ -7,7 +7,7 @@ if (!sp_can_manage_depts()) {
     require_access('staff-departments', 'can_view');
 }
 
-$page_title = 'Staff Departments';
+$page_title = 'Employee Departments';
 $errors  = [];
 $success = '';
 
@@ -82,7 +82,7 @@ require_once __DIR__ . '/../includes/header.php';
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb mb-0">
             <li class="breadcrumb-item"><a href="<?= APP_URL ?>/index.php">Dashboard</a></li>
-            <li class="breadcrumb-item active">Staff Departments</li>
+            <li class="breadcrumb-item active">Employee Departments</li>
         </ol>
     </nav>
 </div>
@@ -135,7 +135,7 @@ require_once __DIR__ . '/../includes/header.php';
                                 Administrative Department
                             </option>
                             <option value="educational" <?= ($editing['type'] ?? '') === 'educational' ? 'selected' : '' ?>>
-                                Educational Department
+                                Faculty Department
                             </option>
                         </select>
                     </div>
@@ -152,7 +152,7 @@ require_once __DIR__ . '/../includes/header.php';
                             </option>
                             <?php endforeach; ?>
                         </select>
-                        <small class="text-muted">Link this staff department to an academic department to display its staff on that department's page.</small>
+                        <small class="text-muted">Link this Faculty department to an academic department to display its employees on that department's page.</small>
                     </div>
 
                     <div class="mb-3">
@@ -229,7 +229,7 @@ require_once __DIR__ . '/../includes/header.php';
                                     </a>
                                     <a href="<?= APP_URL ?>/staff-profiles/department-delete.php?id=<?= (int)$dept['id'] ?>"
                                        class="btn btn-sm btn-outline-danger ms-1" style="border-radius:8px;"
-                                       onclick="return confirm('Delete this department? Staff profiles linked to it will have their department cleared.')">
+                                       onclick="return confirm('Delete this department? Employee profiles linked to it will have their department cleared.')">
                                         <i class="fas fa-trash-alt"></i>
                                     </a>
                                 </td>
@@ -246,13 +246,13 @@ require_once __DIR__ . '/../includes/header.php';
         <div class="card">
             <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center">
                 <h6 class="mb-0 fw-semibold">
-                    <i class="fas fa-graduation-cap me-2 text-success"></i>Educational Departments
+                    <i class="fas fa-graduation-cap me-2 text-success"></i>Faculty Departments
                     <span class="badge bg-success ms-1"><?= count($edu_depts) ?></span>
                 </h6>
             </div>
             <div class="card-body p-0">
                 <?php if (empty($edu_depts)): ?>
-                <p class="text-muted p-4 mb-0">No educational departments yet. Use the form on the left to add one.</p>
+                <p class="text-muted p-4 mb-0">No Faculty departments yet. Use the form on the left to add one.</p>
                 <?php else: ?>
                 <div class="table-responsive">
                     <table class="table table-hover mb-0">
@@ -294,7 +294,7 @@ require_once __DIR__ . '/../includes/header.php';
                                     </a>
                                     <a href="<?= APP_URL ?>/staff-profiles/department-delete.php?id=<?= (int)$dept['id'] ?>"
                                        class="btn btn-sm btn-outline-danger ms-1" style="border-radius:8px;"
-                                       onclick="return confirm('Delete this department? Staff profiles linked to it will have their department cleared.')">
+                                       onclick="return confirm('Delete this department? Employee profiles linked to it will have their department cleared.')">
                                         <i class="fas fa-trash-alt"></i>
                                     </a>
                                 </td>

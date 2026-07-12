@@ -33,6 +33,14 @@ foreach ($current_assignments as $a) {
     if ($a['is_primary']) { $current_primary_id = (int)$a['group_id']; break; }
 }
 
+// Current Employee Type (department_type on staff_profiles: administrative | educational[=Faculty])
+$sp_stmt = db()->prepare('SELECT department_type FROM staff_profiles WHERE user_id = ?');
+$sp_stmt->execute([$id]);
+$employee_type = (string)($sp_stmt->fetchColumn() ?: '');
+
+// Only user-managers may set the Employee Type (self-editing users cannot).
+$can_manage_users = is_super_admin() || can_access('users', 'can_edit');
+
 $page_title = 'Edit User';
 $errors     = [];
 $groups     = db()->query('SELECT id, name, is_super FROM user_groups WHERE is_active = 1 ORDER BY name')->fetchAll();
@@ -46,6 +54,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email            = trim($_POST['email']           ?? '');
     $phone            = trim($_POST['phone']           ?? '');
     $student_sid      = trim($_POST['student_sid']     ?? '');
+    $employee_type    = in_array($_POST['employee_type'] ?? '', ['administrative','educational'], true)
+                        ? $_POST['employee_type'] : '';
     $password         = $_POST['password']  ?? '';
     $password2        = $_POST['password2'] ?? '';
     $selected_groups  = array_map('intval', (array)($_POST['group_ids'] ?? []));
@@ -102,6 +112,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $db->prepare(
                 'UPDATE users SET group_id=?, username=?, email=?, full_name=?, phone=?, student_sid=?, is_active=? WHERE id=?'
             )->execute([$primary_group_id, $username, $email, $full_name, $phone ?: null, $student_sid ?: null, $is_active, $id]);
+        }
+
+        // Employee Type → staff_profiles.department_type (Administrative / Faculty)
+        if ($can_manage_users && $employee_type !== '') {
+            $db->prepare(
+                'INSERT INTO staff_profiles (user_id, department_type) VALUES (?, ?)
+                 ON DUPLICATE KEY UPDATE department_type = VALUES(department_type)'
+            )->execute([$id, $employee_type]);
         }
 
         // Update multi-group assignments (super admin only, or when groups changed)
@@ -217,6 +235,22 @@ require_once __DIR__ . '/../includes/header.php';
                     </label>
                     <input type="password" name="password" class="form-control" autocomplete="new-password">
                 </div>
+                <?php if ($can_manage_users): ?>
+                <div class="col-md-6">
+                    <label class="form-label fw-medium">Employee Type</label>
+                    <select name="employee_type" id="employee_type" class="form-select">
+                        <option value="">— Not an employee —</option>
+                        <option value="administrative" <?= $employee_type === 'administrative' ? 'selected' : '' ?>>Administrative</option>
+                        <option value="educational" <?= $employee_type === 'educational' ? 'selected' : '' ?>>Faculty</option>
+                    </select>
+                    <small class="text-muted" id="employee_type_help">
+                        Administrative employees are managed in
+                        <a href="<?= APP_URL ?>/staff-profiles/index.php" target="_blank">Employee Profiles</a>;
+                        Faculty details come from
+                        <a href="<?= APP_URL ?>/faculty-profiles/index.php" target="_blank">Faculty Profiles</a>.
+                    </small>
+                </div>
+                <?php endif; ?>
                 <div class="col-md-6">
                     <label class="form-label fw-medium">Confirm New Password</label>
                     <input type="password" name="password2" class="form-control" autocomplete="new-password">
