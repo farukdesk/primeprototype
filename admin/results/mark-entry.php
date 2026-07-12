@@ -1221,7 +1221,9 @@ foreach ($creatable as $cr) {
                     setActionsDisabled(false);
                 }
             })
-            .catch(function() { /* fail open — server-side guard still applies */ });
+            .catch(function(err) { /* fail open — server-side guard still applies */
+                if (window.console) console.error('Duplicate check failed:', err);
+            });
     }
 
     if (examSel) examSel.addEventListener('change', checkDuplicate);
