@@ -11,7 +11,7 @@ if (!is_super_admin() && !sp_is_admin()) {
     require_access('staff-profile', 'can_view');
 }
 
-$page_title = 'Staff Profiles';
+$page_title = 'Employee Profiles';
 
 // ── Filters ───────────────────────────────────────────────────────────────────
 $search      = trim($_GET['search'] ?? '');
@@ -63,6 +63,7 @@ $offset      = ($page - 1) * $per_page;
 $rows_stmt = db()->prepare(
     'SELECT u.id, u.full_name, u.username, u.email, u.phone,
             sp.photo, sp.employee_id, sp.department_type, sp.designation,
+            sp.job_type, sp.employee_status,
             sd.name AS dept_name
      ' . $base_sql . $where_sql .
     ' ORDER BY u.full_name ASC LIMIT ' . $per_page . ' OFFSET ' . $offset
@@ -82,7 +83,7 @@ require_once __DIR__ . '/../includes/header.php';
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb mb-0">
             <li class="breadcrumb-item"><a href="<?= APP_URL ?>/index.php">Dashboard</a></li>
-            <li class="breadcrumb-item active">Staff Profiles</li>
+            <li class="breadcrumb-item active">Employee Profiles</li>
         </ol>
     </nav>
     <?php if (sp_can_manage_depts()): ?>
@@ -103,9 +104,9 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
             <div class="col-md-3">
                 <select name="dept_type" class="form-select" style="border-radius:10px;">
-                    <option value="">All Department Types</option>
+                    <option value="">All Employee Types</option>
                     <option value="administrative" <?= $f_type === 'administrative' ? 'selected' : '' ?>>Administrative</option>
-                    <option value="educational"    <?= $f_type === 'educational'    ? 'selected' : '' ?>>Educational</option>
+                    <option value="educational"    <?= $f_type === 'educational'    ? 'selected' : '' ?>>Faculty</option>
                 </select>
             </div>
             <div class="col-md-3">
@@ -113,7 +114,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <option value="0">All Departments</option>
                     <?php foreach ($all_depts as $d): ?>
                     <option value="<?= (int)$d['id'] ?>" <?= $f_dept === (int)$d['id'] ? 'selected' : '' ?>>
-                        <?= h($d['name']) ?> (<?= ucfirst($d['type']) ?>)
+                        <?= h($d['name']) ?> (<?= h(sp_employee_type_label($d['type'])) ?>)
                     </option>
                     <?php endforeach; ?>
                 </select>
@@ -124,21 +125,20 @@ require_once __DIR__ . '/../includes/header.php';
                 </button>
                 <a href="<?= APP_URL ?>/staff-profiles/index.php" class="btn btn-secondary" style="border-radius:10px;">
                     <i class="fas fa-times"></i>
-                </a>
-            </div>
+                </a>            </div>
         </form>
     </div>
 </div>
 
 <div class="card">
     <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center">
-        <h6 class="mb-0 fw-semibold"><i class="fas fa-id-badge me-2 text-muted"></i>Staff Profiles
+        <h6 class="mb-0 fw-semibold"><i class="fas fa-id-badge me-2 text-muted"></i>Employee Profiles
             <span class="badge bg-secondary ms-1"><?= $total_rows ?></span>
         </h6>
     </div>
     <div class="card-body p-0">
         <?php if (empty($rows)): ?>
-        <p class="text-muted p-4 mb-0">No staff profiles found.</p>
+        <p class="text-muted p-4 mb-0">No employee profiles found.</p>
         <?php else: ?>
         <div class="table-responsive">
             <table class="table table-hover mb-0">
@@ -146,11 +146,12 @@ require_once __DIR__ . '/../includes/header.php';
                     <tr>
                         <th>Photo</th>
                         <th>Name</th>
-                        <th>Username</th>
-                        <th>Email</th>
                         <th>Employee ID</th>
+                        <th>Employee Type</th>
                         <th>Department</th>
                         <th>Designation</th>
+                        <th>Job Type</th>
+                        <th>Status</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -166,19 +167,28 @@ require_once __DIR__ . '/../includes/header.php';
                         </div>
                         <?php endif; ?>
                     </td>
-                    <td><?= h($row['full_name']) ?></td>
-                    <td><code><?= h($row['username']) ?></code></td>
-                    <td><?= h($row['email']) ?></td>
+                    <td>
+                        <?= h($row['full_name']) ?>
+                        <div class="text-muted small"><code><?= h($row['username']) ?></code></div>
+                    </td>
                     <td><?= h($row['employee_id'] ?? '—') ?></td>
                     <td>
+                        <?php if (!empty($row['department_type'])): ?>
+                            <?= sp_dept_type_badge($row['department_type']) ?>
+                        <?php else: ?>
+                            <span class="text-muted">—</span>
+                        <?php endif; ?>
+                    </td>
+                    <td>
                         <?php if ($row['dept_name']): ?>
-                            <?= sp_dept_type_badge($row['department_type'] ?? '') ?>
                             <?= h($row['dept_name']) ?>
                         <?php else: ?>
                             <span class="text-muted">—</span>
                         <?php endif; ?>
                     </td>
                     <td><?= h($row['designation'] ?? '—') ?></td>
+                    <td><?= h($row['job_type'] ?? '—') ?></td>
+                    <td><?= sp_status_badge($row['employee_status'] ?? null) ?></td>
                 </tr>
                 <?php endforeach; ?>
                 </tbody>
