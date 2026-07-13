@@ -266,6 +266,9 @@ require_once __DIR__ . '/../includes/header.php';
         <div class="card h-100" style="border-radius:12px;">
             <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center">
                 <h6 class="mb-0 fw-semibold"><i class="fas fa-id-badge me-2 text-primary"></i>Device User ID → Staff Mapping</h6>
+                <a href="<?= APP_URL ?>/staff-attendance/devices-bulk-map.php" class="btn btn-outline-primary btn-sm">
+                    <i class="fas fa-file-csv me-1"></i> Bulk Map (CSV)
+                </a>
             </div>
             <div class="card-body">
                 <form method="POST" class="row g-2 align-items-end mb-3">
