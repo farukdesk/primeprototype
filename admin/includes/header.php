@@ -1668,6 +1668,14 @@ if (is_portal_student()) {
                 </a>
             </li>
             <?php endif; ?>
+            <?php if (is_super_admin()): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/staff-profiles/my-profile.php"
+                   class="<?= strpos($current_path, '/staff-profiles/my-profile') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-id-badge"></i> My Employee Profile
+                </a>
+            </li>
+            <?php endif; ?>
             <?php if (is_super_admin() || can_access('leave-management')): ?>
             <li class="nav-item">
                 <a href="<?= APP_URL ?>/leave-management/index.php"
