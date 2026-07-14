@@ -46,9 +46,14 @@ require_once __DIR__ . '/../includes/header.php';
         </ol>
     </nav>
     <?php if (is_super_admin() || can_access('users', 'can_create')): ?>
-    <a href="<?= APP_URL ?>/users/create.php" class="btn btn-primary" style="border-radius:10px;font-size:.875rem;">
-        <i class="fas fa-user-plus me-1"></i> New User
-    </a>
+    <div class="d-flex gap-2">
+        <a href="<?= APP_URL ?>/users/bulk-import.php" class="btn btn-outline-primary" style="border-radius:10px;font-size:.875rem;">
+            <i class="fas fa-file-csv me-1"></i> Bulk Import
+        </a>
+        <a href="<?= APP_URL ?>/users/create.php" class="btn btn-primary" style="border-radius:10px;font-size:.875rem;">
+            <i class="fas fa-user-plus me-1"></i> New User
+        </a>
+    </div>
     <?php endif; ?>
 </div>
 
