@@ -1,7 +1,16 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
 auth_check();
-require_access('faculty-profile', 'can_edit');
+
+// This is a self-service page: every authenticated staff/faculty account may view
+// and update its OWN faculty profile. We intentionally do NOT require the
+// faculty-profile module's "can_edit" permission here — many faculty accounts only
+// have view access (they are routed here on login), so demanding can_edit locked
+// them out of seeing or updating their own profile entirely. Portal students have
+// their own dedicated profile page.
+if (is_portal_student()) {
+    redirect(APP_URL . '/students/my-profile.php');
+}
 
 $user_id      = auth_user()['id'];
 $current_user = auth_user();
