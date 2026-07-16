@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../change-log/helpers.php';
+require_once __DIR__ . '/cv-helpers.php';
 
 $id   = (int)($_GET['id'] ?? 0);
 $me   = auth_user();
@@ -40,6 +41,13 @@ $employee_type = (string)($sp_stmt->fetchColumn() ?: '');
 
 // Only user-managers may set the Employee Type (self-editing users cannot).
 $can_manage_users = is_super_admin() || can_access('users', 'can_edit');
+$is_self          = ($id === (int)$me['id']);
+// Managers may always edit the CV; a self-editing user may edit their own CV
+// only if they already have an employee type assigned.
+$can_edit_cv      = $can_manage_users || ($is_self && $employee_type !== '');
+
+// Load current CV / profile data for display.
+[$cv_sp, $cv_quals, $cv_exps, $cv_fp] = cv_load_for_user($id);
 
 $page_title = 'Edit User';
 $errors     = [];
@@ -54,8 +62,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email            = trim($_POST['email']           ?? '');
     $phone            = trim($_POST['phone']           ?? '');
     $student_sid      = trim($_POST['student_sid']     ?? '');
-    $employee_type    = in_array($_POST['employee_type'] ?? '', ['administrative','educational'], true)
+    $posted_emp_type  = in_array($_POST['employee_type'] ?? '', ['administrative','educational'], true)
                         ? $_POST['employee_type'] : '';
+    // Self-editing users cannot change their employee type – keep the stored one.
+    $employee_type    = $can_manage_users ? $posted_emp_type : $employee_type;
     $password         = $_POST['password']  ?? '';
     $password2        = $_POST['password2'] ?? '';
     $selected_groups  = array_map('intval', (array)($_POST['group_ids'] ?? []));
@@ -90,6 +100,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($password !== $password2)  $errors[] = 'Passwords do not match.';
     }
 
+    // Validate any optional CV uploads (photo / faculty CV PDF).
+    if ($can_edit_cv) {
+        $errors = array_merge($errors, cv_validate_uploads($_FILES));
+    }
+
     if (empty($errors)) {
         $dup = db()->prepare('SELECT id FROM users WHERE username = ? AND id != ?');
         $dup->execute([$username, $id]);
@@ -115,11 +130,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         // Employee Type → staff_profiles.department_type (Administrative / Faculty)
-        if ($can_manage_users && $employee_type !== '') {
-            $db->prepare(
-                'INSERT INTO staff_profiles (user_id, department_type) VALUES (?, ?)
-                 ON DUPLICATE KEY UPDATE department_type = VALUES(department_type)'
-            )->execute([$id, $employee_type]);
+        // plus the full standard CV / profile (qualifications, experiences and,
+        // for Faculty, the academic faculty_profiles record).
+        if ($can_edit_cv && $employee_type !== '') {
+            cv_save_profiles($id, $employee_type, $_POST, $_FILES);
         }
 
         // Update multi-group assignments (super admin only, or when groups changed)
@@ -165,6 +179,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $current_group_ids  = $selected_groups;
     $current_primary_id = $primary_group_id;
     $edit_user = array_merge($edit_user, compact('full_name', 'username', 'email', 'phone', 'is_active'));
+
+    // Preserve typed CV / profile values on validation error.
+    if ($can_edit_cv) {
+        $cv_sp    = array_merge($cv_sp, $_POST);
+        $cv_fp    = array_merge($cv_fp, $_POST);
+        $cv_quals = cv_posted_rows($_POST, ['degree' => 'q_degree', 'group_name' => 'q_group',
+                        'board_university' => 'q_board', 'passing_year' => 'q_year',
+                        'grade' => 'q_grade', 'gpa_result' => 'q_result']);
+        $cv_exps  = cv_posted_rows($_POST, ['position' => 'x_position', 'organization' => 'x_organization',
+                        'department' => 'x_department', 'joining_date' => 'x_joining',
+                        'resign_date' => 'x_resign']);
+    }
 }
 
 require_once __DIR__ . '/../includes/header.php';
@@ -196,7 +222,7 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
         <?php endif; ?>
 
-        <form method="POST" novalidate>
+        <form method="POST" enctype="multipart/form-data" novalidate>
             <?= csrf_field() ?>
 
             <div class="row g-3">
@@ -307,6 +333,10 @@ require_once __DIR__ . '/../includes/header.php';
                 <?php endif; ?>
             </div>
 
+            <?php if ($can_edit_cv): ?>
+            <?php cv_render_section($employee_type, $cv_sp, $cv_quals, $cv_exps, $cv_fp); ?>
+            <?php endif; ?>
+
             <div class="d-flex gap-2 mt-4">
                 <button type="submit" class="btn btn-primary" style="border-radius:10px;">
                     <i class="fas fa-save me-1"></i> Update User
@@ -335,5 +365,6 @@ function updatePrimary() {
 }
 document.addEventListener('DOMContentLoaded', updatePrimary);
 </script>
+<?php if ($can_edit_cv) cv_render_script(); ?>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>

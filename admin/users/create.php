@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../change-log/helpers.php';
+require_once __DIR__ . '/cv-helpers.php';
 require_access('users', 'can_create');
 
 $page_title = 'Create User';
@@ -54,6 +55,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $primary_group_id = (int)reset($selected_groups);
     }
 
+    // Validate any optional CV uploads (photo / faculty CV PDF).
+    $errors = array_merge($errors, cv_validate_uploads($_FILES));
+
     if (empty($errors)) {
         $dup = db()->prepare('SELECT id FROM users WHERE username = ?');
         $dup->execute([$username]);
@@ -74,12 +78,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $new_user_id = (int)$db->lastInsertId();
 
-        // Employee Type → staff_profiles.department_type (Administrative / Faculty)
+        // Employee Type → staff_profiles.department_type + full standard CV /
+        // profile (personal info, qualifications, experiences and, for Faculty,
+        // the academic faculty_profiles record).
         if ($employee_type !== '') {
-            $db->prepare(
-                'INSERT INTO staff_profiles (user_id, department_type) VALUES (?, ?)
-                 ON DUPLICATE KEY UPDATE department_type = VALUES(department_type)'
-            )->execute([$new_user_id, $employee_type]);
+            cv_save_profiles($new_user_id, $employee_type, $_POST, $_FILES);
         }
 
         // Save multi-group assignments
@@ -108,6 +111,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $old_selected = $_SESSION['old']['group_ids_post'] ?? [];
+
+// CV / profile values for (re)display. On a POST that failed validation, keep
+// the typed values; on a fresh GET everything starts empty.
+$is_post     = ($_SERVER['REQUEST_METHOD'] === 'POST');
+$cv_emp_type = $is_post ? ($employee_type ?? '') : (string)($_SESSION['old']['employee_type'] ?? '');
+$cv_sp       = $is_post ? $_POST : [];
+$cv_fp       = $is_post ? $_POST : [];
+$cv_quals    = $is_post ? cv_posted_rows($_POST, ['degree' => 'q_degree', 'group_name' => 'q_group',
+                    'board_university' => 'q_board', 'passing_year' => 'q_year',
+                    'grade' => 'q_grade', 'gpa_result' => 'q_result']) : [];
+$cv_exps     = $is_post ? cv_posted_rows($_POST, ['position' => 'x_position', 'organization' => 'x_organization',
+                    'department' => 'x_department', 'joining_date' => 'x_joining',
+                    'resign_date' => 'x_resign']) : [];
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -138,7 +154,7 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
         <?php endif; ?>
 
-        <form method="POST" novalidate>
+        <form method="POST" enctype="multipart/form-data" novalidate>
             <?= csrf_field() ?>
 
             <div class="row g-3">
@@ -171,7 +187,7 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
                 <div class="col-md-6">
                     <label class="form-label fw-medium">Employee Type</label>
-                    <select name="employee_type" class="form-select">
+                    <select name="employee_type" id="employee_type" class="form-select">
                         <?php $et_old = old('employee_type'); ?>
                         <option value="">— Not an employee —</option>
                         <option value="administrative" <?= $et_old === 'administrative' ? 'selected' : '' ?>>Administrative</option>
@@ -237,6 +253,8 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
             </div>
 
+            <?php cv_render_section($cv_emp_type, $cv_sp, $cv_quals, $cv_exps, $cv_fp); ?>
+
             <div class="d-flex gap-2 mt-4">
                 <button type="submit" class="btn btn-primary" style="border-radius:10px;">
                     <i class="fas fa-save me-1"></i> Create User
@@ -268,5 +286,6 @@ function updatePrimary() {
 }
 document.addEventListener('DOMContentLoaded', updatePrimary);
 </script>
+<?php cv_render_script(); ?>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
