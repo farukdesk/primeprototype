@@ -1990,7 +1990,19 @@ if (is_portal_student()) {
                 <li><a class="dropdown-item" href="<?= APP_URL ?>/students/change-password.php">
                     <i class="fas fa-lock me-2 text-muted"></i>Change Password</a></li>
                 <?php else: ?>
-                <li><a class="dropdown-item" href="<?= APP_URL ?>/users/edit.php?id=<?= $user['id'] ?>">
+                <?php
+                // Point "My Profile" at the richer self-service profile page when the
+                // user has one: faculty members keep their info in faculty-profiles,
+                // general staff in staff-profiles. Fall back to the account editor.
+                if (!is_super_admin() && can_access('faculty-profile')) {
+                    $_my_profile_url = APP_URL . '/faculty-profiles/my-profile.php';
+                } elseif (!is_super_admin() && can_access('staff-profile')) {
+                    $_my_profile_url = APP_URL . '/staff-profiles/my-profile.php';
+                } else {
+                    $_my_profile_url = APP_URL . '/users/edit.php?id=' . $user['id'];
+                }
+                ?>
+                <li><a class="dropdown-item" href="<?= h($_my_profile_url) ?>">
                     <i class="fas fa-user-edit me-2 text-muted"></i>My Profile</a></li>
                 <li><a class="dropdown-item" href="<?= APP_URL ?>/my-signature/index.php">
                     <i class="fas fa-pen-nib me-2 text-muted"></i>My Signature</a></li>
