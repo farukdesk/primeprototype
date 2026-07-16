@@ -21,10 +21,11 @@ $f_edu_dept  = (int)($_GET['edu_dept_id'] ?? 0);
 $page        = max(1, (int)($_GET['page'] ?? 1));
 $per_page    = 20;
 
-// Only show users whose primary group has staff-profile module access
+// Only show users who have a registered employee profile (staff_profiles row
+// with an employee type set). This lists every registered staff / employee /
+// faculty member from the database.
 $where  = [
-    "u.is_active = 1",
-    "EXISTS (SELECT 1 FROM group_module_access gma JOIN modules mm ON mm.id = gma.module_id AND mm.slug = 'staff-profile' WHERE gma.group_id = u.group_id AND gma.can_view = 1)",
+    "sp.department_type IS NOT NULL",
 ];
 $params = [];
 
@@ -49,8 +50,8 @@ if ($f_edu_dept > 0) {
 $where_sql = ' WHERE ' . implode(' AND ', $where);
 
 $base_sql = 'FROM users u
-     JOIN user_groups ug ON ug.id = u.group_id
-     LEFT JOIN staff_profiles sp ON sp.user_id = u.id
+     LEFT JOIN user_groups ug ON ug.id = u.group_id
+     INNER JOIN staff_profiles sp ON sp.user_id = u.id
      LEFT JOIN staff_departments sd ON sd.id = sp.staff_dept_id';
 
 $count_stmt = db()->prepare('SELECT COUNT(*) ' . $base_sql . $where_sql);
@@ -152,6 +153,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <th>Designation</th>
                         <th>Job Type</th>
                         <th>Status</th>
+                        <th class="text-end">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -189,6 +191,16 @@ require_once __DIR__ . '/../includes/header.php';
                     <td><?= h($row['designation'] ?? '—') ?></td>
                     <td><?= h($row['job_type'] ?? '—') ?></td>
                     <td><?= sp_status_badge($row['employee_status'] ?? null) ?></td>
+                    <td class="text-end">
+                        <a href="<?= APP_URL ?>/staff-profiles/view.php?id=<?= (int)$row['id'] ?>"
+                           class="btn btn-sm btn-outline-primary" style="border-radius:8px;" title="View profile">
+                            <i class="fas fa-eye"></i>
+                        </a>
+                        <a href="<?= APP_URL ?>/staff-profiles/cv-pdf.php?id=<?= (int)$row['id'] ?>"
+                           class="btn btn-sm btn-outline-danger" style="border-radius:8px;" title="Download CV (PDF)">
+                            <i class="fas fa-file-pdf"></i>
+                        </a>
+                    </td>
                 </tr>
                 <?php endforeach; ?>
                 </tbody>
