@@ -6,7 +6,13 @@
  */
 require_once __DIR__ . '/../includes/auth.php';
 auth_check();
-require_access('faculty-profile', 'can_edit');
+// Self-service: faculty submit subject requests for their OWN profile, so we only
+// require an authenticated non-student account here (mirrors my-profile.php) rather
+// than the faculty-profile module's can_edit permission, which locked out faculty
+// that only have view access.
+if (is_portal_student()) {
+    redirect(APP_URL . '/students/my-profile.php');
+}
 require_once __DIR__ . '/fp-helpers.php';
 require_once __DIR__ . '/../change-log/helpers.php';
 
