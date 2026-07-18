@@ -4,10 +4,13 @@ require_once __DIR__ . '/../includes/mailer.php';
 require_once __DIR__ . '/../change-log/helpers.php';
 require_super_admin();
 
-define('USERS_INDEX', APP_URL . '/users/index.php');
+// Bring the admin back to the same filtered / paginated Users view.
+$return_qs = isset($_POST['return']) ? (string)$_POST['return'] : '';
+$return_qs = str_replace(["\r", "\n"], '', $return_qs);
+$users_index_url = APP_URL . '/users/index.php' . ($return_qs !== '' ? '?' . $return_qs : '');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    redirect(USERS_INDEX);
+    redirect($users_index_url);
 }
 
 csrf_check();
@@ -15,13 +18,13 @@ csrf_check();
 $id = (int)($_POST['id'] ?? 0);
 if (!$id) {
     flash_set('error', 'Invalid user.');
-    redirect(USERS_INDEX);
+    redirect($users_index_url);
 }
 
 $me = auth_user();
 if ($id === (int)$me['id']) {
     flash_set('error', 'You cannot reset your own password from this action.');
-    redirect(USERS_INDEX);
+    redirect($users_index_url);
 }
 
 $stmt = db()->prepare('SELECT id, full_name, email, username FROM users WHERE id = ?');
@@ -30,7 +33,7 @@ $user = $stmt->fetch();
 
 if (!$user) {
     flash_set('error', 'User not found.');
-    redirect(USERS_INDEX);
+    redirect($users_index_url);
 }
 
 // Generate a secure random 8-character password
@@ -70,4 +73,4 @@ if ($sent) {
     flash_set('warning', 'Password reset for <strong>' . h($user['full_name']) . '</strong>, but the email could not be sent. Please inform the user manually.');
 }
 
-redirect(USERS_INDEX);
+redirect($users_index_url);

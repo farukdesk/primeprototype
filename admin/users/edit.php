@@ -6,6 +6,12 @@ require_once __DIR__ . '/cv-helpers.php';
 $id   = (int)($_GET['id'] ?? 0);
 $me   = auth_user();
 
+// Carry the Users list's current search / group filter / page back through
+// this page so saving (or cancelling) an edit returns to the same filtered view.
+$return_qs = isset($_GET['return']) ? (string)$_GET['return'] : '';
+$return_qs = str_replace(["\r", "\n"], '', $return_qs);
+$users_index_url = APP_URL . '/users/index.php' . ($return_qs !== '' ? '?' . $return_qs : '');
+
 // Users can edit their own profile; others need the edit permission
 if ($id !== (int)$me['id']) {
     require_access('users', 'can_edit');
@@ -19,7 +25,7 @@ $edit_user = $stmt->fetch();
 
 if (!$edit_user) {
     flash_set('error', 'User not found.');
-    redirect(APP_URL . '/users/index.php');
+    redirect($users_index_url);
 }
 
 // Load user's current group assignments
@@ -171,8 +177,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         flash_set('success', "User <strong>" . h($full_name) . "</strong> updated.");
         redirect($id === (int)$me['id']
-            ? APP_URL . '/users/edit.php?id=' . $id
-            : APP_URL . '/users/index.php');
+            ? APP_URL . '/users/edit.php?id=' . $id . ($return_qs !== '' ? '&return=' . urlencode($return_qs) : '')
+            : $users_index_url);
     }
 
     // Repopulate for re-display
@@ -200,7 +206,7 @@ require_once __DIR__ . '/../includes/header.php';
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb mb-0">
             <li class="breadcrumb-item"><a href="<?= APP_URL ?>/index.php">Dashboard</a></li>
-            <li class="breadcrumb-item"><a href="<?= APP_URL ?>/users/index.php">Users</a></li>
+            <li class="breadcrumb-item"><a href="<?= h($users_index_url) ?>">Users</a></li>
             <li class="breadcrumb-item active">Edit</li>
         </ol>
     </nav>
@@ -341,7 +347,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <button type="submit" class="btn btn-primary" style="border-radius:10px;">
                     <i class="fas fa-save me-1"></i> Update User
                 </button>
-                <a href="<?= APP_URL ?>/users/index.php" class="btn btn-light" style="border-radius:10px;">Cancel</a>
+                <a href="<?= h($users_index_url) ?>" class="btn btn-light" style="border-radius:10px;">Cancel</a>
             </div>
         </form>
     </div>
