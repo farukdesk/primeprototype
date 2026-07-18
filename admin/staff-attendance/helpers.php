@@ -10,8 +10,9 @@
  *      in-time / out-time grace buffers.
  *
  * A day is only counted as Absent when it is a working day (not a holiday and
- * not a weekly-off day) and the staff member has no in-time and no approved
- * leave covering that date.
+ * not a weekly-off day), the date is not in the future, and the staff member
+ * has no in-time and no approved leave covering that date. Future dates are
+ * reported as "upcoming" instead of "absent".
  */
 
 require_once __DIR__ . '/../includes/auth.php';
@@ -274,8 +275,11 @@ function att_on_leave_user_ids(string $date): array
  * Derive the attendance status for a staff member on a date.
  *
  * $record is an att_records row (or null when none exists). Returns one of:
- *   holiday, weekly_off, leave, absent, present, late_in, early_out,
+ *   holiday, weekly_off, leave, absent, upcoming, present, late_in, early_out,
  *   late_and_early (both), incomplete (in-time but no out-time).
+ *
+ * Future dates (after today) with no recorded in-time are "upcoming", never
+ * "absent" — a day can only be marked absent once it has actually happened.
  */
 function att_compute_status(?array $record, int $user_id, string $date, array $sched, array $holidays, array $on_leave): string
 {
@@ -285,6 +289,7 @@ function att_compute_status(?array $record, int $user_id, string $date, array $s
     if (isset($holidays[$date]))            return $has_in ? 'present' : 'holiday';
     if (att_is_weekly_off($date))           return $has_in ? 'present' : 'weekly_off';
     if (!$has_in && in_array($user_id, $on_leave, true)) return 'leave';
+    if (!$has_in && $date > date('Y-m-d')) return 'upcoming';
     if (!$has_in)                           return 'absent';
 
     // Present with an in-time: check late-in / early-out against the schedule.
@@ -313,6 +318,7 @@ function att_status_label(string $status): string
         'late_and_early' => 'Late In & Early Out',
         'incomplete'     => 'No Out Time',
         'absent'         => 'Absent',
+        'upcoming'       => 'Upcoming',
         'leave'          => 'On Leave',
         'holiday'        => 'Holiday',
         'weekly_off'     => 'Weekly Off',
@@ -330,6 +336,7 @@ function att_status_badge(string $status): string
         'late_and_early' => 'bg-warning text-dark',
         'incomplete'     => 'bg-info text-dark',
         'absent'         => 'bg-danger',
+        'upcoming'       => 'bg-light text-muted border',
         'leave'          => 'bg-primary',
         'holiday'        => 'bg-secondary',
         'weekly_off'     => 'bg-light text-dark border',
