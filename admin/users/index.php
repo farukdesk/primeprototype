@@ -15,9 +15,9 @@ if ($filter_group) {
     $params[] = $filter_group;
 }
 if ($search !== '') {
-    $where[]  = '(u.full_name LIKE ? OR u.username LIKE ? OR u.email LIKE ?)';
+    $where[]  = '(u.full_name LIKE ? OR u.username LIKE ? OR u.email LIKE ? OR g.name LIKE ?)';
     $like     = '%' . $search . '%';
-    $params   = array_merge($params, [$like, $like, $like]);
+    $params   = array_merge($params, [$like, $like, $like, $like]);
 }
 
 $sql = 'SELECT u.*, g.name AS group_name, g.is_super,
@@ -62,7 +62,7 @@ require_once __DIR__ . '/../includes/header.php';
     <div class="card-body py-3 px-4">
         <form method="GET" class="d-flex gap-3 flex-wrap align-items-center">
             <input type="text" name="search" class="form-control" style="max-width:260px;border-radius:10px;"
-                   placeholder="Search name, username, email…" value="<?= h($search) ?>">
+                   placeholder="Search name, username, email, group…" value="<?= h($search) ?>">
             <select name="group_id" class="form-select" style="max-width:220px;border-radius:10px;">
                 <option value="">All Groups</option>
                 <?php foreach ($groups as $g): ?>
