@@ -61,7 +61,7 @@ $out = fopen('php://output', 'w');
 // UTF-8 BOM so Excel opens the file with correct encoding.
 fwrite($out, "\xEF\xBB\xBF");
 
-fputcsv($out, ['Name', 'Username', 'Email', 'Phone', 'Group', 'Department', 'Status', 'Created At']);
+fputcsv($out, ['Name', 'Username', 'Email', 'Phone', 'Group', 'Department', 'Status', 'Created At'], ',', '"', '\\');
 
 foreach ($users as $u) {
     fputcsv($out, [
@@ -73,7 +73,7 @@ foreach ($users as $u) {
         $u['dept_name'] ?? '',
         $u['is_active'] ? 'Active' : 'Inactive',
         $u['created_at'],
-    ]);
+    ], ',', '"', '\\');
 }
 
 fclose($out);
