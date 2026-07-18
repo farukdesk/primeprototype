@@ -139,16 +139,63 @@ try {
     )->fetchAll();
 } catch (Throwable $e) { /* table missing */ }
 
+// Recent punches: searchable, date-filterable, paginated.
+$p_search   = trim($_GET['p_search'] ?? '');
+$p_from     = trim($_GET['p_from'] ?? '');
+$p_to       = trim($_GET['p_to'] ?? '');
+$p_page     = max(1, (int)($_GET['p_page'] ?? 1));
+$p_per_page = 30;
+
+$p_is_date = fn($d) => (bool)preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $d);
+if ($p_from !== '' && !$p_is_date($p_from)) $p_from = '';
+if ($p_to   !== '' && !$p_is_date($p_to))   $p_to   = '';
+
+$p_where  = [];
+$p_params = [];
+if ($p_search !== '') {
+    $p_where[]  = '(p.pin LIKE ? OR u.full_name LIKE ? OR u.username LIKE ?)';
+    $p_like     = '%' . $p_search . '%';
+    $p_params   = array_merge($p_params, [$p_like, $p_like, $p_like]);
+}
+if ($p_from !== '') { $p_where[] = 'p.punch_time >= ?'; $p_params[] = $p_from . ' 00:00:00'; }
+if ($p_to   !== '') { $p_where[] = 'p.punch_time <= ?'; $p_params[] = $p_to . ' 23:59:59'; }
+$p_where_sql = $p_where ? ' WHERE ' . implode(' AND ', $p_where) : '';
+
 $recent_punches = [];
+$p_total = 0;
+$p_pages = 1;
 try {
-    $recent_punches = $db->query(
+    $cnt = $db->prepare(
+        'SELECT COUNT(*) FROM att_punch_log p LEFT JOIN users u ON u.id = p.user_id' . $p_where_sql
+    );
+    $cnt->execute($p_params);
+    $p_total = (int)$cnt->fetchColumn();
+
+    $p_pages  = max(1, (int)ceil($p_total / $p_per_page));
+    if ($p_page > $p_pages) $p_page = $p_pages;
+    $p_offset = ($p_page - 1) * $p_per_page;
+
+    $stmt = $db->prepare(
         'SELECT p.*, u.full_name
            FROM att_punch_log p
-      LEFT JOIN users u ON u.id = p.user_id
-       ORDER BY p.punch_time DESC, p.id DESC
-          LIMIT 30'
-    )->fetchAll();
+      LEFT JOIN users u ON u.id = p.user_id'
+        . $p_where_sql .
+        ' ORDER BY p.punch_time DESC, p.id DESC
+          LIMIT ' . (int)$p_per_page . ' OFFSET ' . (int)$p_offset
+    );
+    $stmt->execute($p_params);
+    $recent_punches = $stmt->fetchAll();
 } catch (Throwable $e) { /* table missing */ }
+
+// Builds pagination / clear links that preserve the current punch filters.
+$p_qs = function ($page) use ($p_search, $p_from, $p_to) {
+    $q = array_filter(
+        ['p_search' => $p_search, 'p_from' => $p_from, 'p_to' => $p_to],
+        fn($v) => $v !== ''
+    );
+    $q['p_page'] = max(1, (int)$page);
+    return APP_URL . '/staff-attendance/devices.php?' . http_build_query($q) . '#punches';
+};
 
 $recent_requests = [];
 try {
@@ -373,19 +420,34 @@ require_once __DIR__ . '/../includes/header.php';
 
 <!-- ── Recent activity ─────────────────────────────────────────────────────── -->
 <div class="row">
-    <div class="col-lg-6 mb-4">
+    <div class="col-lg-6 mb-4" id="punches">
         <div class="card h-100" style="border-radius:12px;">
-            <div class="card-header py-3 px-4"><h6 class="mb-0 fw-semibold"><i class="fas fa-clock-rotate-left me-2 text-primary"></i>Recent Punches</h6></div>
+            <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <h6 class="mb-0 fw-semibold"><i class="fas fa-clock-rotate-left me-2 text-primary"></i>Recent Punches</h6>
+                <span class="badge bg-light text-dark border"><?= (int)$p_total ?> total</span>
+            </div>
             <div class="card-body p-0">
+                <form method="GET" class="d-flex gap-2 flex-wrap align-items-center px-3 py-2 border-bottom">
+                    <input type="text" name="p_search" class="form-control form-control-sm" style="max-width:170px;"
+                           placeholder="Search ID or staff…" value="<?= h($p_search) ?>">
+                    <input type="date" name="p_from" class="form-control form-control-sm" style="max-width:150px;"
+                           value="<?= h($p_from) ?>" title="From date">
+                    <input type="date" name="p_to" class="form-control form-control-sm" style="max-width:150px;"
+                           value="<?= h($p_to) ?>" title="To date">
+                    <button class="btn btn-outline-primary btn-sm"><i class="fas fa-search me-1"></i>Filter</button>
+                    <?php if ($p_search !== '' || $p_from !== '' || $p_to !== ''): ?>
+                        <a href="<?= APP_URL ?>/staff-attendance/devices.php#punches" class="btn btn-light btn-sm">Clear</a>
+                    <?php endif; ?>
+                </form>
                 <div class="table-responsive">
                     <table class="table table-sm table-hover align-middle mb-0">
                         <thead class="table-light"><tr><th>Time</th><th>Device User ID</th><th>Staff</th></tr></thead>
                         <tbody>
                         <?php if (empty($recent_punches)): ?>
-                            <tr><td colspan="3" class="text-center text-muted py-3">No punches received yet.</td></tr>
+                            <tr><td colspan="3" class="text-center text-muted py-3">No punches found.</td></tr>
                         <?php else: foreach ($recent_punches as $p): ?>
                             <tr>
-                                <td class="small"><?= h(date('d M, H:i:s', strtotime($p['punch_time']))) ?></td>
+                                <td class="small"><?= h(date('d M Y, H:i:s', strtotime($p['punch_time']))) ?></td>
                                 <td><code><?= h($p['pin']) ?></code></td>
                                 <td class="small"><?= $p['user_id'] ? h($p['full_name'] ?? ('#' . (int)$p['user_id'])) : '<span class="badge bg-warning text-dark">Unmapped</span>' ?></td>
                             </tr>
@@ -393,6 +455,17 @@ require_once __DIR__ . '/../includes/header.php';
                         </tbody>
                     </table>
                 </div>
+                <?php if ($p_pages > 1): ?>
+                <div class="d-flex justify-content-between align-items-center px-3 py-2 border-top small">
+                    <span class="text-muted">Page <?= (int)$p_page ?> of <?= (int)$p_pages ?></span>
+                    <div class="btn-group">
+                        <a class="btn btn-sm btn-outline-secondary <?= $p_page <= 1 ? 'disabled' : '' ?>"
+                           href="<?= h($p_qs($p_page - 1)) ?>">&laquo; Prev</a>
+                        <a class="btn btn-sm btn-outline-secondary <?= $p_page >= $p_pages ? 'disabled' : '' ?>"
+                           href="<?= h($p_qs($p_page + 1)) ?>">Next &raquo;</a>
+                    </div>
+                </div>
+                <?php endif; ?>
             </div>
         </div>
     </div>
