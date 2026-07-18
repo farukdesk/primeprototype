@@ -114,6 +114,7 @@ $status_cell_class = static function (string $status): string {
         'early_out'                   => 'cal-early',
         'incomplete'                  => 'cal-incomplete',
         'absent'                      => 'cal-absent',
+        'upcoming'                    => 'cal-upcoming',
         'leave'                       => 'cal-leave',
         'holiday', 'weekly_off'       => 'cal-off',
         default                       => '',
@@ -143,6 +144,7 @@ $weekday_abbr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     .cal-absent     { background:#f8d7da; }
     .cal-leave      { background:#cfe2ff; }
     .cal-off        { background:#f1f3f5; color:#868e96; }
+    .cal-upcoming   { background:#ffffff; color:#adb5bd; }
     .cal-today .cal-day { color:#0d6efd; }
     .cal-today { box-shadow:inset 0 0 0 2px #0d6efd; }
     @media print {
