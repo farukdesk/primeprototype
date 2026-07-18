@@ -117,7 +117,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <td><strong><?= h($g['name']) ?></strong></td>
                         <td><?= h($g['description'] ?: '—') ?></td>
                         <td>
-                            <a href="<?= APP_URL ?>/users/index.php?group_id=<?= $g['id'] ?>" class="badge bg-secondary text-decoration-none">
+                            <a href="<?= APP_URL ?>/users/index.php?group_ids[]=<?= $g['id'] ?>" class="badge bg-secondary text-decoration-none">
                                 <?= (int)$g['user_count'] ?> users
                             </a>
                         </td>

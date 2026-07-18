@@ -4,15 +4,28 @@ require_access('users');
 
 $page_title = 'Users';
 
-$filter_group = (int)($_GET['group_id'] ?? 0);
-$search       = trim($_GET['search'] ?? '');
+// ── Filters ───────────────────────────────────────────────────────────────────
+$search = trim($_GET['search'] ?? '');
+
+// Multi-select group filter. `group_ids[]` holds the chosen groups and
+// `group_mode` decides whether they are included or excluded.
+// `group_id` (singular) is kept as a legacy fallback for old links
+// (e.g. the "N users" badge on the User Groups page).
+$selected_group_ids = array_map('intval', (array)($_GET['group_ids'] ?? []));
+if (empty($selected_group_ids) && !empty($_GET['group_id'])) {
+    $selected_group_ids = [(int)$_GET['group_id']];
+}
+$selected_group_ids = array_values(array_unique(array_filter($selected_group_ids, static fn($v) => $v > 0)));
+
+$group_mode = ($_GET['group_mode'] ?? 'in') === 'except' ? 'except' : 'in';
 
 $where  = [];
 $params = [];
 
-if ($filter_group) {
-    $where[]  = 'u.group_id = ?';
-    $params[] = $filter_group;
+if (!empty($selected_group_ids)) {
+    $placeholders = implode(',', array_fill(0, count($selected_group_ids), '?'));
+    $where[]  = $group_mode === 'except' ? "u.group_id NOT IN ($placeholders)" : "u.group_id IN ($placeholders)";
+    $params   = array_merge($params, $selected_group_ids);
 }
 if ($search !== '') {
     $where[]  = '(u.full_name LIKE ? OR u.username LIKE ? OR u.email LIKE ? OR g.name LIKE ?)';
@@ -34,6 +47,17 @@ $stmt->execute($params);
 $users = $stmt->fetchAll();
 
 $groups = db()->query('SELECT id, name FROM user_groups ORDER BY name')->fetchAll();
+
+$has_filters = $search !== '' || !empty($selected_group_ids);
+
+// Build the query string used for the "Export CSV" link / pagination-style
+// links so exports always honour whatever is currently on screen.
+$export_query = $_GET;
+unset($export_query['group_id']); // normalise legacy param out of the export link
+if (!empty($selected_group_ids)) {
+    $export_query['group_ids'] = $selected_group_ids;
+    $export_query['group_mode'] = $group_mode;
+}
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -63,16 +87,55 @@ require_once __DIR__ . '/../includes/header.php';
         <form method="GET" class="d-flex gap-3 flex-wrap align-items-center">
             <input type="text" name="search" class="form-control" style="max-width:260px;border-radius:10px;"
                    placeholder="Search name, username, email, group…" value="<?= h($search) ?>">
-            <select name="group_id" class="form-select" style="max-width:220px;border-radius:10px;">
-                <option value="">All Groups</option>
-                <?php foreach ($groups as $g): ?>
-                <option value="<?= $g['id'] ?>" <?= $filter_group == $g['id'] ? 'selected' : '' ?>>
-                    <?= h($g['name']) ?>
-                </option>
-                <?php endforeach; ?>
-            </select>
+
+            <!-- Multi-select group filter: choose any number of groups, then
+                 decide whether to include only those groups or everyone except them. -->
+            <div class="dropdown" id="groupFilterDropdown">
+                <button type="button" class="btn btn-outline-secondary dropdown-toggle text-truncate"
+                        data-bs-toggle="dropdown" data-bs-auto-close="outside"
+                        style="min-width:220px;max-width:280px;border-radius:10px;text-align:left;">
+                    <i class="fas fa-layer-group me-1 text-muted"></i>
+                    <span id="groupFilterLabel">All Groups</span>
+                </button>
+                <div class="dropdown-menu p-2 shadow" style="width:300px;border-radius:12px;">
+                    <input type="text" id="groupSearchInput" class="form-control form-control-sm mb-2"
+                           placeholder="Search groups…" autocomplete="off">
+
+                    <div class="btn-group btn-group-sm w-100 mb-2" role="group">
+                        <input type="radio" class="btn-check" name="group_mode" id="groupModeIn" value="in"
+                               autocomplete="off" <?= $group_mode !== 'except' ? 'checked' : '' ?>>
+                        <label class="btn btn-outline-primary" for="groupModeIn">Include selected</label>
+
+                        <input type="radio" class="btn-check" name="group_mode" id="groupModeExcept" value="except"
+                               autocomplete="off" <?= $group_mode === 'except' ? 'checked' : '' ?>>
+                        <label class="btn btn-outline-primary" for="groupModeExcept">Except selected</label>
+                    </div>
+
+                    <div class="d-flex justify-content-between small mb-2">
+                        <a href="#" id="groupSelectAll" class="text-decoration-none">Select all (visible)</a>
+                        <a href="#" id="groupClearAll" class="text-decoration-none">Clear</a>
+                    </div>
+
+                    <div id="groupCheckboxList" style="max-height:220px;overflow-y:auto;">
+                        <?php foreach ($groups as $g): ?>
+                        <div class="form-check group-option" data-name="<?= h(mb_strtolower($g['name'])) ?>">
+                            <input class="form-check-input group-checkbox" type="checkbox" name="group_ids[]"
+                                   value="<?= (int)$g['id'] ?>" id="grp<?= (int)$g['id'] ?>"
+                                   <?= in_array((int)$g['id'], $selected_group_ids, true) ? 'checked' : '' ?>>
+                            <label class="form-check-label" for="grp<?= (int)$g['id'] ?>"><?= h($g['name']) ?></label>
+                        </div>
+                        <?php endforeach; ?>
+                        <div id="groupNoMatch" class="text-muted small py-2" hidden>No matching groups.</div>
+                    </div>
+                </div>
+            </div>
+
             <button class="btn btn-outline-primary" style="border-radius:10px;"><i class="fas fa-search me-1"></i>Filter</button>
-            <?php if ($search || $filter_group): ?>
+            <button type="submit" formaction="<?= APP_URL ?>/users/export.php" formtarget="_blank"
+                    class="btn btn-outline-success" style="border-radius:10px;">
+                <i class="fas fa-file-export me-1"></i>Export CSV
+            </button>
+            <?php if ($has_filters): ?>
             <a href="<?= APP_URL ?>/users/index.php" class="btn btn-light" style="border-radius:10px;">Clear</a>
             <?php endif; ?>
         </form>
@@ -172,5 +235,66 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
     </div>
 </div>
+
+<script>
+(function () {
+    var searchInput = document.getElementById('groupSearchInput');
+    var options     = document.querySelectorAll('#groupCheckboxList .group-option');
+    var noMatch     = document.getElementById('groupNoMatch');
+    var label       = document.getElementById('groupFilterLabel');
+
+    function updateLabel() {
+        var checked = document.querySelectorAll('.group-checkbox:checked');
+        var modeEl  = document.querySelector('input[name="group_mode"]:checked');
+        var mode    = modeEl ? modeEl.value : 'in';
+
+        if (checked.length === 0) {
+            label.textContent = 'All Groups';
+            return;
+        }
+        var names = Array.prototype.map.call(checked, function (cb) {
+            return cb.closest('.group-option').querySelector('.form-check-label').textContent.trim();
+        });
+        var prefix = mode === 'except' ? 'Except: ' : '';
+        label.textContent = names.length <= 2
+            ? prefix + names.join(', ')
+            : prefix + names.length + ' groups selected';
+    }
+
+    // Predictive search: filter the checkbox list as the admin types.
+    searchInput.addEventListener('input', function () {
+        var q = this.value.trim().toLowerCase();
+        var visibleCount = 0;
+        options.forEach(function (opt) {
+            var match = opt.getAttribute('data-name').indexOf(q) !== -1;
+            opt.style.display = match ? '' : 'none';
+            if (match) visibleCount++;
+        });
+        noMatch.hidden = visibleCount !== 0;
+    });
+
+    document.getElementById('groupSelectAll').addEventListener('click', function (e) {
+        e.preventDefault();
+        options.forEach(function (opt) {
+            if (opt.style.display !== 'none') {
+                opt.querySelector('.group-checkbox').checked = true;
+            }
+        });
+        updateLabel();
+    });
+
+    document.getElementById('groupClearAll').addEventListener('click', function (e) {
+        e.preventDefault();
+        document.querySelectorAll('.group-checkbox').forEach(function (cb) { cb.checked = false; });
+        updateLabel();
+    });
+
+    document.querySelectorAll('.group-checkbox, input[name="group_mode"]').forEach(function (el) {
+        el.addEventListener('change', updateLabel);
+    });
+
+    updateLabel();
+})();
+</script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
