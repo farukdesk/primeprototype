@@ -139,6 +139,17 @@ try {
     )->fetchAll();
 } catch (Throwable $e) { /* table missing */ }
 
+// Count of distinct Device User IDs with unresolved punches, used to prompt
+// the 1-click Auto-Map tool below.
+$unmapped_pin_count = 0;
+try {
+    $unmapped_pin_count = (int)$db->query(
+        'SELECT COUNT(DISTINCT pin) FROM att_punch_log WHERE user_id IS NULL'
+    )->fetchColumn();
+} catch (Throwable $e) {
+    $unmapped_pin_count = 0;
+}
+
 // Recent punches: searchable, date-filterable, paginated.
 $p_search   = trim($_GET['p_search'] ?? '');
 $p_from     = trim($_GET['p_from'] ?? '');
@@ -240,6 +251,22 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
+<?php if ($unmapped_pin_count > 0): ?>
+<div class="alert alert-warning d-flex align-items-center justify-content-between flex-wrap gap-2" role="alert">
+    <div class="d-flex align-items-start gap-2">
+        <i class="fas fa-triangle-exclamation mt-1"></i>
+        <div class="small">
+            <strong><?= (int)$unmapped_pin_count ?> Device User ID<?= $unmapped_pin_count === 1 ? '' : 's' ?></strong>
+            in Recent Punches <?= $unmapped_pin_count === 1 ? 'has' : 'have' ?> no staff mapping yet
+            (common right after updating/re-importing staff).
+        </div>
+    </div>
+    <a href="<?= APP_URL ?>/staff-attendance/devices-auto-map.php" class="btn btn-warning btn-sm text-dark fw-semibold" style="border-radius:10px;">
+        <i class="fas fa-bolt me-1"></i> Auto-Map Now
+    </a>
+</div>
+<?php endif; ?>
+
 <!-- ── Devices ─────────────────────────────────────────────────────────────── -->
 <div class="card mb-4" style="border-radius:12px;">
     <div class="card-header py-3 px-4">
@@ -311,11 +338,19 @@ require_once __DIR__ . '/../includes/header.php';
     <!-- ── Device user id → user mappings ──────────────────────────────────── -->
     <div class="col-lg-7 mb-4">
         <div class="card h-100" style="border-radius:12px;">
-            <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center">
+            <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <h6 class="mb-0 fw-semibold"><i class="fas fa-id-badge me-2 text-primary"></i>Device User ID → Staff Mapping</h6>
-                <a href="<?= APP_URL ?>/staff-attendance/devices-bulk-map.php" class="btn btn-outline-primary btn-sm">
-                    <i class="fas fa-file-csv me-1"></i> Bulk Map (CSV)
-                </a>
+                <div class="d-flex gap-2">
+                    <a href="<?= APP_URL ?>/staff-attendance/devices-auto-map.php" class="btn btn-primary btn-sm">
+                        <i class="fas fa-bolt me-1"></i> Auto-Map (1-Click)
+                        <?php if ($unmapped_pin_count > 0): ?>
+                            <span class="badge bg-light text-dark ms-1"><?= (int)$unmapped_pin_count ?></span>
+                        <?php endif; ?>
+                    </a>
+                    <a href="<?= APP_URL ?>/staff-attendance/devices-bulk-map.php" class="btn btn-outline-primary btn-sm">
+                        <i class="fas fa-file-csv me-1"></i> Bulk Map (CSV)
+                    </a>
+                </div>
             </div>
             <div class="card-body">
                 <form method="POST" class="row g-2 align-items-end mb-3">
