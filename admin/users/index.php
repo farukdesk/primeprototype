@@ -60,7 +60,7 @@ if ($page > $total_pages) {
 }
 $offset = ($page - 1) * $per_page;
 
-$sql = 'SELECT u.*, g.name AS group_name, g.is_super '
+$sql = 'SELECT u.*, g.name AS group_name, g.is_super, fp.dept_id, d.name AS dept_name '
      . $from_sql
      . ' ORDER BY u.created_at DESC'
      . " LIMIT $per_page OFFSET $offset";
