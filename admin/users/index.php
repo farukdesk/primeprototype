@@ -33,14 +33,37 @@ if ($search !== '') {
     $params   = array_merge($params, [$like, $like, $like, $like]);
 }
 
-$sql = 'SELECT u.*, g.name AS group_name, g.is_super,
-               fp.dept_id, d.name AS dept_name
-        FROM users u
-        JOIN user_groups g ON g.id = u.group_id
+// NOTE: LEFT JOIN (not INNER JOIN) on user_groups — a user whose group was
+// deleted / has an invalid group_id must still show up in the list instead
+// of silently disappearing.
+$from_sql = 'FROM users u
+        LEFT JOIN user_groups g ON g.id = u.group_id
         LEFT JOIN faculty_profiles fp ON fp.user_id = u.id
         LEFT JOIN dept_departments d ON d.id = fp.dept_id'
-     . ($where ? ' WHERE ' . implode(' AND ', $where) : '')
-     . ' ORDER BY u.created_at DESC';
+     . ($where ? ' WHERE ' . implode(' AND ', $where) : '');
+
+// ── Pagination ───────────────────────────────────────────────────────────────
+$count_stmt = db()->prepare('SELECT COUNT(*) ' . $from_sql);
+$count_stmt->execute($params);
+$total_users = (int)$count_stmt->fetchColumn();
+
+$allowed_per_page = [25, 50, 100, 200];
+$per_page = (int)($_GET['per_page'] ?? 25);
+if (!in_array($per_page, $allowed_per_page, true)) {
+    $per_page = 25;
+}
+
+$total_pages = max(1, (int)ceil($total_users / $per_page));
+$page        = max(1, (int)($_GET['page'] ?? 1));
+if ($page > $total_pages) {
+    $page = $total_pages;
+}
+$offset = ($page - 1) * $per_page;
+
+$sql = 'SELECT u.*, g.name AS group_name, g.is_super '
+     . $from_sql
+     . ' ORDER BY u.created_at DESC'
+     . " LIMIT $per_page OFFSET $offset";
 
 $stmt = db()->prepare($sql);
 $stmt->execute($params);
@@ -50,14 +73,10 @@ $groups = db()->query('SELECT id, name FROM user_groups ORDER BY name')->fetchAl
 
 $has_filters = $search !== '' || !empty($selected_group_ids);
 
-// Build the query string used for the "Export CSV" link / pagination-style
-// links so exports always honour whatever is currently on screen.
-$export_query = $_GET;
-unset($export_query['group_id']); // normalise legacy param out of the export link
-if (!empty($selected_group_ids)) {
-    $export_query['group_ids'] = $selected_group_ids;
-    $export_query['group_mode'] = $group_mode;
-}
+// Full current query string (search, group filters, page, per_page…) so the
+// Edit / Delete / Reset-password actions can bring the admin straight back
+// to the same filtered + paginated view instead of a bare, reset list.
+$return_qs = http_build_query($_GET);
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -130,6 +149,15 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
             </div>
 
+            <select name="per_page" class="form-select" style="max-width:130px;border-radius:10px;" title="Users per page">
+                <?php foreach ($allowed_per_page as $pp): ?>
+                <option value="<?= $pp ?>" <?= $per_page === $pp ? 'selected' : '' ?>><?= $pp ?> / page</option>
+                <?php endforeach; ?>
+            </select>
+
+            <!-- Resetting the search/group filters should start back at page 1. -->
+            <input type="hidden" name="page" value="1">
+
             <button class="btn btn-outline-primary" style="border-radius:10px;"><i class="fas fa-search me-1"></i>Filter</button>
             <button type="submit" formaction="<?= APP_URL ?>/users/export.php" formtarget="_blank"
                     class="btn btn-outline-success" style="border-radius:10px;">
@@ -143,6 +171,15 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <div class="card">
+    <div class="card-header py-2 px-4 d-flex justify-content-between align-items-center">
+        <span class="text-muted small">
+            <?php if ($total_users > 0): ?>
+                Showing <strong><?= $offset + 1 ?>–<?= min($offset + $per_page, $total_users) ?></strong> of <strong><?= $total_users ?></strong> users
+            <?php else: ?>
+                No users found.
+            <?php endif; ?>
+        </span>
+    </div>
     <div class="card-body p-0">
         <div class="table-responsive">
             <table class="table table-hover mb-0">
@@ -165,7 +202,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <?php $me = auth_user(); ?>
                     <?php foreach ($users as $i => $u): ?>
                     <tr>
-                        <td class="px-4"><?= $i + 1 ?></td>
+                        <td class="px-4"><?= $offset + $i + 1 ?></td>
                         <td>
                             <div class="d-flex align-items-center gap-2">
                                 <div style="width:34px;height:34px;border-radius:50%;background:#4f8ef7;color:#fff;
@@ -183,7 +220,9 @@ require_once __DIR__ . '/../includes/header.php';
                         <td><?= h($u['email']) ?></td>
                         <td><?= $u['phone'] ? h($u['phone']) : '<span class="text-muted">—</span>' ?></td>
                         <td>
-                            <?php if ($u['is_super']): ?>
+                            <?php if (!$u['group_name']): ?>
+                                <span class="badge bg-secondary">No Group</span>
+                            <?php elseif ($u['is_super']): ?>
                                 <span class="badge badge-super"><?= h($u['group_name']) ?></span>
                             <?php else: ?>
                                 <span class="badge bg-primary bg-opacity-10 text-primary"><?= h($u['group_name']) ?></span>
@@ -200,7 +239,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <td>
                             <div class="d-flex gap-1">
                                 <?php if (is_super_admin() || can_access('users', 'can_edit')): ?>
-                                <a href="<?= APP_URL ?>/users/edit.php?id=<?= $u['id'] ?>"
+                                <a href="<?= h(APP_URL . '/users/edit.php?id=' . $u['id'] . '&return=' . urlencode($return_qs)) ?>"
                                    class="btn btn-sm btn-outline-primary" title="Edit" style="border-radius:7px;">
                                     <i class="fas fa-edit"></i>
                                 </a>
@@ -210,6 +249,7 @@ require_once __DIR__ . '/../includes/header.php';
                                       onsubmit="return confirm('Reset password for ' + <?= json_encode($u['full_name']) ?> + '? A new system-generated password will be emailed to them.');">
                                     <?= csrf_field() ?>
                                     <input type="hidden" name="id" value="<?= $u['id'] ?>">
+                                    <input type="hidden" name="return" value="<?= h($return_qs) ?>">
                                     <button class="btn btn-sm btn-outline-warning" title="Reset Password" style="border-radius:7px;">
                                         <i class="fas fa-key"></i>
                                     </button>
@@ -220,6 +260,7 @@ require_once __DIR__ . '/../includes/header.php';
                                       onsubmit="return confirm('Delete user ' + <?= json_encode($u['full_name']) ?> + '?');">
                                     <?= csrf_field() ?>
                                     <input type="hidden" name="id" value="<?= $u['id'] ?>">
+                                    <input type="hidden" name="return" value="<?= h($return_qs) ?>">
                                     <button class="btn btn-sm btn-outline-danger" title="Delete" style="border-radius:7px;">
                                         <i class="fas fa-trash"></i>
                                     </button>
@@ -234,6 +275,43 @@ require_once __DIR__ . '/../includes/header.php';
             </table>
         </div>
     </div>
+    <?php if ($total_pages > 1): ?>
+    <div class="card-footer bg-white py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span class="text-muted small">Page <?= $page ?> of <?= $total_pages ?></span>
+        <nav>
+            <ul class="pagination pagination-sm mb-0">
+                <?php
+                $link = static function (int $p) use ($_GET): string {
+                    $q = $_GET;
+                    $q['page'] = $p;
+                    return APP_URL . '/users/index.php?' . http_build_query($q);
+                };
+                $window_start = max(1, $page - 2);
+                $window_end   = min($total_pages, $page + 2);
+                ?>
+                <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>">
+                    <a class="page-link" href="<?= h($link(max(1, $page - 1))) ?>">&laquo;</a>
+                </li>
+                <?php if ($window_start > 1): ?>
+                <li class="page-item"><a class="page-link" href="<?= h($link(1)) ?>">1</a></li>
+                <?php if ($window_start > 2): ?><li class="page-item disabled"><span class="page-link">&hellip;</span></li><?php endif; ?>
+                <?php endif; ?>
+                <?php for ($p = $window_start; $p <= $window_end; $p++): ?>
+                <li class="page-item <?= $p === $page ? 'active' : '' ?>">
+                    <a class="page-link" href="<?= h($link($p)) ?>"><?= $p ?></a>
+                </li>
+                <?php endfor; ?>
+                <?php if ($window_end < $total_pages): ?>
+                <?php if ($window_end < $total_pages - 1): ?><li class="page-item disabled"><span class="page-link">&hellip;</span></li><?php endif; ?>
+                <li class="page-item"><a class="page-link" href="<?= h($link($total_pages)) ?>"><?= $total_pages ?></a></li>
+                <?php endif; ?>
+                <li class="page-item <?= $page >= $total_pages ? 'disabled' : '' ?>">
+                    <a class="page-link" href="<?= h($link(min($total_pages, $page + 1))) ?>">&raquo;</a>
+                </li>
+            </ul>
+        </nav>
+    </div>
+    <?php endif; ?>
 </div>
 
 <script>
