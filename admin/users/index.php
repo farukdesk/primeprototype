@@ -281,7 +281,10 @@ require_once __DIR__ . '/../includes/header.php';
         <nav>
             <ul class="pagination pagination-sm mb-0">
                 <?php
-                $link = static function (int $p) use ($_GET): string {
+                // Note: $_GET is a superglobal and is always available inside
+                // functions/closures automatically — it must NOT be listed in a
+                // use() clause (PHP raises a fatal error if it is).
+                $link = static function (int $p): string {
                     $q = $_GET;
                     $q['page'] = $p;
                     return APP_URL . '/users/index.php?' . http_build_query($q);
