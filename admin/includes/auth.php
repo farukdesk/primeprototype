@@ -10,8 +10,11 @@ require_once __DIR__ . '/db.php';
 function session_bootstrap(): void {
     if (session_status() === PHP_SESSION_NONE) {
         session_name(SESSION_NAME);
+        // Keep server-side session data alive longer than the idle timeout so
+        // that expiry is governed only by IDLE_TIMEOUT (checked in auth_check).
+        ini_set('session.gc_maxlifetime', (string)(IDLE_TIMEOUT + 600));
         session_set_cookie_params([
-            'lifetime' => SESSION_LIFETIME,
+            'lifetime' => 0, // session cookie – logout is driven by the idle timeout
             'path'     => '/',
             'secure'   => isset($_SERVER['HTTPS']),
             'httponly' => true,
@@ -52,6 +55,14 @@ function auth_check(): void {
     if (empty($_SESSION['user_id'])) {
         redirect(APP_URL . '/login.php');
     }
+    // Auto logout after IDLE_TIMEOUT seconds of total inactivity
+    $last = $_SESSION['last_activity'] ?? time();
+    if (time() - $last > IDLE_TIMEOUT) {
+        session_unset();
+        session_destroy();
+        redirect(APP_URL . '/login.php?timeout=1');
+    }
+    $_SESSION['last_activity'] = time();
 }
 
 function auth_user(): ?array {

@@ -25,6 +25,10 @@ define('LOGO_URL',    SITE_URL . '/assets/img/logo/logo-black.png'); // absolute
 define('SESSION_NAME',     'pu_admin_sess');
 define('SESSION_LIFETIME', 3600);   // seconds (1 hour)
 
+// Idle (inactivity) auto-logout
+define('IDLE_TIMEOUT',      1800);  // seconds of total inactivity before auto logout (30 min)
+define('IDLE_WARNING_SECS', 30);    // warning countdown (seconds) shown before auto logout
+
 // ── Security ─────────────────────────────────────────────────────────────────
 define('BCRYPT_COST', 12);
 define('CSRF_TOKEN_NAME', '_csrf_token');
