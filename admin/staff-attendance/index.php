@@ -17,7 +17,7 @@ $is_admin   = att_is_admin();
 
 // ── Filters ──────────────────────────────────────────────────────────────────
 $report  = $_GET['report'] ?? 'daily';
-if (!in_array($report, ['daily', 'weekly', 'monthly'], true)) $report = 'daily';
+if (!in_array($report, ['daily', 'weekly', 'monthly', 'range'], true)) $report = 'daily';
 $dept_id = (int)($_GET['dept'] ?? 0);
 $search  = trim($_GET['q'] ?? '');
 
@@ -33,6 +33,15 @@ if ($report === 'daily') {
     $from = date('Y-m-d', strtotime('monday this week', strtotime($anchor)));
     $to   = date('Y-m-d', strtotime('sunday this week', strtotime($anchor)));
     $range_label = date('d M', strtotime($from)) . ' – ' . date('d M Y', strtotime($to));
+} elseif ($report === 'range') {
+    // Custom From – To range. Reversed dates are swapped; capped at 366 days.
+    $from = att_normalize_date($_GET['from'] ?? date('Y-m-01'));
+    $to   = att_normalize_date($_GET['to']   ?? $today);
+    if ($from > $to) { [$from, $to] = [$to, $from]; }
+    if (strtotime($to) - strtotime($from) > 366 * 86400) {
+        $to = date('Y-m-d', strtotime($from . ' +366 days'));
+    }
+    $range_label = date('d M Y', strtotime($from)) . ' – ' . date('d M Y', strtotime($to));
 } else { // monthly
     $month = $_GET['month'] ?? date('Y-m');
     if (!preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $month)) $month = date('Y-m');
@@ -56,6 +65,94 @@ for ($d = strtotime($from); $d <= strtotime($to); $d = strtotime('+1 day', $d)) 
 // Pre-load approved-leave user ids per date.
 $leave_by_date = [];
 foreach ($dates as $d) $leave_by_date[$d] = att_on_leave_user_ids($d);
+
+// ── CSV export – follows the exact filters & date range resolved above ──────
+if (($_GET['export'] ?? '') === 'csv') {
+    // Daily is always exported day-by-day; other reports export a per-staff
+    // summary unless detail=1 requests the day-by-day breakdown.
+    $detail = $report === 'daily' || ($_GET['detail'] ?? '') === '1';
+
+    $status_labels = [
+        'present' => 'Present', 'late_in' => 'Late In', 'early_out' => 'Early Out',
+        'late_and_early' => 'Late In + Early Out', 'incomplete' => 'Incomplete',
+        'leave' => 'On Leave', 'absent' => 'Absent', 'holiday' => 'Holiday',
+        'weekly_off' => 'Weekly Off', 'off' => 'Off',
+    ];
+    $status_text = static fn(string $s): string => $status_labels[$s] ?? ucwords(str_replace('_', ' ', $s));
+
+    $filename = 'staff-attendance-' . $report . '-' . $from . '-to-' . $to
+              . ($detail ? '-day-by-day' : '-summary') . '.csv';
+    header('Content-Type: text/csv; charset=UTF-8');
+    header('Content-Disposition: attachment; filename="' . $filename . '"');
+    header('Cache-Control: no-store');
+    $out = fopen('php://output', 'w');
+    fwrite($out, "\xEF\xBB\xBF"); // UTF-8 BOM so Excel opens it correctly
+
+    if ($detail) {
+        fputcsv($out, ['Date', 'Employee Name', 'Employee ID', 'Department',
+                       'In Time', 'Out Time', 'Total Working Hours', 'Status']);
+        foreach ($dates as $d) {
+            $on_leave = $leave_by_date[$d] ?? [];
+            foreach ($staff as $s) {
+                $uid    = (int)$s['id'];
+                $rec    = $records[$uid . '|' . $d] ?? null;
+                $sched  = att_effective_schedule($uid);
+                $status = att_compute_status($rec, $uid, $d, $sched, $holidays, $on_leave);
+                $mins   = $rec ? att_worked_minutes($rec['in_time'], $rec['out_time']) : 0;
+                fputcsv($out, [
+                    date('d/m/Y', strtotime($d)),
+                    (string)$s['full_name'],
+                    (string)($s['employee_id'] ?? ''),
+                    (string)($s['dept_name'] ?? ''),
+                    att_display_time($rec['in_time'] ?? null),
+                    att_display_time($rec['out_time'] ?? null),
+                    att_format_hours($mins),
+                    $status_text($status),
+                ]);
+            }
+        }
+    } else {
+        fputcsv($out, ['Employee Name', 'Employee ID', 'Department', 'Working Days',
+                       'Present', 'Late In', 'Early Out', 'On Leave', 'Absent', 'Total Working Hours']);
+        foreach ($staff as $s) {
+            $uid   = (int)$s['id'];
+            $sched = att_effective_schedule($uid);
+            $x = ['present' => 0, 'late' => 0, 'early' => 0, 'absent' => 0,
+                  'leave' => 0, 'minutes' => 0, 'working_days' => 0];
+            foreach ($dates as $d) {
+                $on_leave = $leave_by_date[$d] ?? [];
+                $off      = isset($holidays[$d]) || att_is_weekly_off($d);
+                $rec      = $records[$uid . '|' . $d] ?? null;
+                $status   = att_compute_status($rec, $uid, $d, $sched, $holidays, $on_leave);
+                if (!$off) $x['working_days']++;
+                switch ($status) {
+                    case 'present':                              $x['present']++; break;
+                    case 'late_in':        $x['present']++; $x['late']++;  break;
+                    case 'early_out':      $x['present']++; $x['early']++; break;
+                    case 'late_and_early': $x['present']++; $x['late']++; $x['early']++; break;
+                    case 'incomplete':                           $x['present']++; break;
+                    case 'leave':                                $x['leave']++;   break;
+                    case 'absent':                               $x['absent']++;  break;
+                }
+                if ($rec) $x['minutes'] += att_worked_minutes($rec['in_time'], $rec['out_time']);
+            }
+            fputcsv($out, [
+                (string)$s['full_name'],
+                (string)($s['employee_id'] ?? ''),
+                (string)($s['dept_name'] ?? ''),
+                $x['working_days'],
+                $x['present'],
+                $x['late'],
+                $x['early'],
+                $x['leave'],
+                $x['absent'],
+                att_format_hours((int)$x['minutes']),
+            ]);
+        }
+    }
+    fclose($out);
+    exit;
+}
 
 require_once __DIR__ . '/../includes/header.php';
 
@@ -109,12 +206,21 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
                     <option value="daily"   <?= $report === 'daily'   ? 'selected' : '' ?>>Daily</option>
                     <option value="weekly"  <?= $report === 'weekly'  ? 'selected' : '' ?>>Weekly</option>
                     <option value="monthly" <?= $report === 'monthly' ? 'selected' : '' ?>>Monthly</option>
+                    <option value="range"   <?= $report === 'range'   ? 'selected' : '' ?>>Custom Range</option>
                 </select>
             </div>
             <?php if ($report === 'monthly'): ?>
             <div class="col-md-3">
                 <label class="form-label fw-semibold small mb-1">Month</label>
                 <input type="month" name="month" class="form-control" value="<?= h(date('Y-m', strtotime($from))) ?>">
+            </div>
+            <?php elseif ($report === 'range'): ?>
+            <div class="col-md-3">
+                <label class="form-label fw-semibold small mb-1">From – To</label>
+                <div class="input-group">
+                    <input type="date" name="from" class="form-control" value="<?= h($from) ?>" title="From date">
+                    <input type="date" name="to"   class="form-control" value="<?= h($to) ?>"   title="To date">
+                </div>
             </div>
             <?php else: ?>
             <div class="col-md-3">
@@ -152,12 +258,32 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
             <?= ucfirst($report) ?> Report — <?= h($range_label) ?>
             <span class="badge bg-secondary ms-1"><?= count($staff) ?> staff</span>
         </h6>
-        <?php if ($report === 'monthly'): ?>
-        <a href="<?= APP_URL ?>/staff-attendance/report-pdf.php?month=<?= urlencode(date('Y-m', strtotime($from))) ?>&dept=<?= (int)$dept_id ?>&q=<?= urlencode($search) ?>"
-           class="btn btn-outline-danger btn-sm" target="_blank" rel="noopener">
-            <i class="fas fa-file-pdf me-1"></i> Download PDF (26th–25th)
-        </a>
-        <?php endif; ?>
+        <div class="d-flex gap-2 flex-wrap">
+            <?php
+            // Export links are rebuilt from the RESOLVED filters, so the CSV
+            // always matches exactly the dates and staff shown on screen.
+            $export_base = ['report' => $report, 'dept' => $dept_id, 'q' => $search, 'export' => 'csv'];
+            if ($report === 'monthly')     { $export_base['month'] = date('Y-m', strtotime($from)); }
+            elseif ($report === 'range')   { $export_base['from'] = $from; $export_base['to'] = $to; }
+            else                           { $export_base['date'] = $from; }
+            $export_url        = APP_URL . '/staff-attendance/index.php?' . http_build_query($export_base);
+            $export_detail_url = APP_URL . '/staff-attendance/index.php?' . http_build_query($export_base + ['detail' => '1']);
+            ?>
+            <a href="<?= h($export_url) ?>" class="btn btn-outline-success btn-sm">
+                <i class="fas fa-file-csv me-1"></i> Export CSV<?= $report === 'daily' ? '' : ' (Summary)' ?>
+            </a>
+            <?php if ($report !== 'daily'): ?>
+            <a href="<?= h($export_detail_url) ?>" class="btn btn-outline-success btn-sm">
+                <i class="fas fa-file-csv me-1"></i> Export CSV (Day-by-Day)
+            </a>
+            <?php endif; ?>
+            <?php if ($report === 'monthly'): ?>
+            <a href="<?= APP_URL ?>/staff-attendance/report-pdf.php?month=<?= urlencode(date('Y-m', strtotime($from))) ?>&dept=<?= (int)$dept_id ?>&q=<?= urlencode($search) ?>"
+               class="btn btn-outline-danger btn-sm" target="_blank" rel="noopener">
+                <i class="fas fa-file-pdf me-1"></i> Download PDF (26th–25th)
+            </a>
+            <?php endif; ?>
+        </div>
     </div>
     <div class="card-body p-0">
         <?php if (empty($staff)): ?>
