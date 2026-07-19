@@ -6,7 +6,8 @@ if (!empty($_SESSION['user_id'])) {
     redirect(APP_URL . '/index.php');
 }
 
-$error = '';
+$error     = '';
+$timed_out = isset($_GET['timeout']);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
@@ -153,6 +154,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <?php if ($error): ?>
     <div class="alert alert-danger d-flex align-items-center gap-2 mb-3">
         <i class="fas fa-exclamation-circle"></i> <?= h($error) ?>
+    </div>
+    <?php endif; ?>
+
+    <?php if ($timed_out && !$error): ?>
+    <div class="alert alert-warning d-flex align-items-center gap-2 mb-3">
+        <i class="fas fa-clock"></i> You were logged out after <?= (int)(IDLE_TIMEOUT / 60) ?> minutes of inactivity. Please sign in again.
     </div>
     <?php endif; ?>
 
