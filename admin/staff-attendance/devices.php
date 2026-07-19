@@ -616,7 +616,12 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="card h-100" style="border-radius:12px;">
                     <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
                         <h6 class="mb-0 fw-semibold"><i class="fas fa-clock-rotate-left me-2 text-primary"></i>Recent Punches</h6>
-                        <span class="badge bg-light text-dark border"><?= (int)$p_total ?> total</span>
+                        <div class="d-flex align-items-center gap-2">
+                            <a href="<?= APP_URL ?>/staff-attendance/punches-import.php" class="btn btn-outline-primary btn-sm">
+                                <i class="fas fa-file-import me-1"></i> Import Punches (CSV)
+                            </a>
+                            <span class="badge bg-light text-dark border"><?= (int)$p_total ?> total</span>
+                        </div>
                     </div>
                     <div class="card-body p-0">
                         <form method="GET" class="d-flex gap-2 flex-wrap align-items-center px-3 py-2 border-bottom">
