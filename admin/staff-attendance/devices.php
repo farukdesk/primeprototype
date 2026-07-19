@@ -552,6 +552,9 @@ require_once __DIR__ . '/../includes/header.php';
                             <a href="<?= APP_URL ?>/staff-attendance/devices-bulk-map.php" class="btn btn-outline-secondary btn-sm">
                                 <i class="fas fa-file-csv me-1"></i> Bulk Map (CSV)
                             </a>
+                            <a href="<?= APP_URL ?>/staff-attendance/devices-merge-pins.php" class="btn btn-outline-warning btn-sm">
+                                <i class="fas fa-code-merge me-1"></i> Merge Duplicate IDs (0-prefix)
+                            </a>
                         </div>
                     </div>
                 </div>
