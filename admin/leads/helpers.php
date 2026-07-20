@@ -267,6 +267,39 @@ function leads_fb_source_badge(): string
     return '<span class="badge" style="background:#1877F2"><i class="fab fa-facebook-messenger me-1"></i>Facebook</span>';
 }
 
+/**
+ * Fetch a user's profile (name + picture) from Meta's User Profile API.
+ * Returns [name|null, picture|null].
+ */
+function leads_fb_fetch_profile(string $psid): array
+{
+    $token = leads_fb_setting('page_access_token');
+    if ($token === '') return [null, null];
+
+    $url = 'https://graph.facebook.com/v19.0/' . urlencode($psid)
+         . '?fields=first_name,last_name,name,profile_pic&access_token=' . urlencode($token);
+    $ch  = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 5,
+    ]);
+    $resp = curl_exec($ch);
+    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($resp === false || $code !== 200) return [null, null];
+
+    $profile = json_decode($resp, true);
+    if (!is_array($profile)) return [null, null];
+
+    $name = trim((string)($profile['name'] ?? ''));
+    if ($name === '') {
+        $name = trim(trim((string)($profile['first_name'] ?? '')) . ' ' . trim((string)($profile['last_name'] ?? '')));
+    }
+
+    return [$name !== '' ? $name : null, $profile['profile_pic'] ?? null];
+}
+
 // ── Fetch helpers ─────────────────────────────────────────────────────────────
 
 function leads_get(int $id): array

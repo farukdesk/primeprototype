@@ -7,6 +7,35 @@ $page_title = 'Facebook Messenger Inbox';
 $user       = auth_user();
 $is_staff   = leads_is_staff();
 
+// ── POST: backfill missing profile names from Meta's User Profile API ───────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'refresh_names' && $is_staff) {
+    csrf_check();
+    if (leads_fb_setting('page_access_token') === '') {
+        flash_set('error', 'Page Access Token is not configured. Set it in FB Settings first.');
+    } else {
+        $pending = db()->query(
+            "SELECT id, psid FROM lead_fb_contacts WHERE fb_name IS NULL OR fb_name = '' ORDER BY last_message_at DESC LIMIT 50"
+        )->fetchAll();
+        $updated = 0;
+        foreach ($pending as $row) {
+            [$name, $picture] = leads_fb_fetch_profile($row['psid']);
+            if ($name !== null) {
+                db()->prepare('UPDATE lead_fb_contacts SET fb_name=?, fb_picture=COALESCE(?, fb_picture) WHERE id=?')
+                    ->execute([$name, $picture, (int)$row['id']]);
+                $updated++;
+            }
+        }
+        if (count($pending) === 0) {
+            flash_set('success', 'All contacts already have names.');
+        } elseif ($updated > 0) {
+            flash_set('success', 'Fetched names for ' . $updated . ' of ' . count($pending) . ' contact(s).');
+        } else {
+            flash_set('error', 'Could not fetch any names. Check that the Page Access Token is valid and has the pages_messaging permission.');
+        }
+    }
+    redirect(APP_URL . '/leads/fb-inbox.php');
+}
+
 // ── Search / filter ───────────────────────────────────────────────────────────
 $search   = trim($_GET['search'] ?? '');
 $f_linked = $_GET['linked'] ?? '';   // 'yes' | 'no' | ''
@@ -68,6 +97,15 @@ require_once __DIR__ . '/../includes/header.php';
         </ol></nav>
     </div>
     <div class="d-flex gap-2 flex-wrap">
+        <?php if ($is_staff): ?>
+        <form method="post" class="d-inline">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="refresh_names">
+            <button type="submit" class="btn btn-outline-primary btn-sm" title="Fetch missing contact names from Facebook">
+                <i class="fas fa-sync-alt me-1"></i> Refresh Names
+            </button>
+        </form>
+        <?php endif; ?>
         <?php if (is_super_admin()): ?>
         <a href="<?= APP_URL ?>/leads/fb-settings.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-cog me-1"></i> FB Settings</a>
         <?php endif; ?>
@@ -162,7 +200,7 @@ require_once __DIR__ . '/../includes/header.php';
             <!-- Info -->
             <div class="flex-grow-1 overflow-hidden">
                 <div class="d-flex justify-content-between align-items-center">
-                    <span class="fw-semibold text-truncate"><?= h($c['fb_name'] ?? 'Unknown User') ?></span>
+                    <span class="fw-semibold text-truncate"><?= h($c['fb_name'] ?: 'Facebook User #' . substr((string)$c['psid'], -6)) ?></span>
                     <small class="text-muted flex-shrink-0 ms-2">
                         <?= $c['last_message_at'] ? date('d M Y', strtotime($c['last_message_at'])) : date('d M Y', strtotime($c['first_seen'])) ?>
                     </small>

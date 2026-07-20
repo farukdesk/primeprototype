@@ -161,6 +161,39 @@ function fb_setting(string $key): string
     }
 }
 
+/**
+ * Fetch a user's profile (name + picture) from Meta's User Profile API.
+ * Returns [name|null, picture|null].
+ */
+function fb_fetch_profile(string $psid): array
+{
+    $token = fb_setting('page_access_token');
+    if ($token === '') return [null, null];
+
+    $url = 'https://graph.facebook.com/v19.0/' . urlencode($psid)
+         . '?fields=first_name,last_name,name,profile_pic&access_token=' . urlencode($token);
+    $ch  = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 5,
+    ]);
+    $resp = curl_exec($ch);
+    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($resp === false || $code !== 200) return [null, null];
+
+    $profile = json_decode($resp, true);
+    if (!is_array($profile)) return [null, null];
+
+    $name = trim((string)($profile['name'] ?? ''));
+    if ($name === '') {
+        $name = trim(trim((string)($profile['first_name'] ?? '')) . ' ' . trim((string)($profile['last_name'] ?? '')));
+    }
+
+    return [$name !== '' ? $name : null, $profile['profile_pic'] ?? null];
+}
+
 function fb_upsert_contact(string $psid): int
 {
     $stmt = db()->prepare('SELECT id, fb_name FROM lead_fb_contacts WHERE psid = ?');
@@ -168,29 +201,19 @@ function fb_upsert_contact(string $psid): int
     $existing = $stmt->fetch();
 
     if ($existing) {
+        // Name still missing (token was absent/invalid when first seen) – retry now
+        if (empty($existing['fb_name'])) {
+            [$name, $picture] = fb_fetch_profile($psid);
+            if ($name !== null) {
+                db()->prepare('UPDATE lead_fb_contacts SET fb_name=?, fb_picture=COALESCE(?, fb_picture) WHERE id=?')
+                    ->execute([$name, $picture, (int)$existing['id']]);
+            }
+        }
         return (int)$existing['id'];
     }
 
-    // New contact – try to fetch profile from Graph API
-    $name    = null;
-    $picture = null;
-    $token   = fb_setting('page_access_token');
-    if ($token !== '') {
-        $url = 'https://graph.facebook.com/' . urlencode($psid)
-             . '?fields=name,profile_pic&access_token=' . urlencode($token);
-        $ch  = curl_init($url);
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT        => 5,
-        ]);
-        $resp = curl_exec($ch);
-        curl_close($ch);
-        if ($resp) {
-            $profile = json_decode($resp, true);
-            $name    = $profile['name']        ?? null;
-            $picture = $profile['profile_pic'] ?? null;
-        }
-    }
+    // New contact – fetch profile from the Graph API
+    [$name, $picture] = fb_fetch_profile($psid);
 
     db()->prepare(
         'INSERT INTO lead_fb_contacts (psid, fb_name, fb_picture, last_message_at) VALUES (?,?,?,NOW())'
