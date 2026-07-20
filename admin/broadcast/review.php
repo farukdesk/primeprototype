@@ -67,7 +67,8 @@ $recipients = bc_resolve_recipients(
     $broadcast['student_dept_id']    ? (int)$broadcast['student_dept_id']    : null,
     $broadcast['student_program_id'] ? (int)$broadcast['student_program_id'] : null,
     $broadcast['student_status']     ?: null,
-    $broadcast['student_semester']   ?: null
+    $broadcast['student_semester']   ?: null,
+    ($broadcast['employee_type'] ?? '') ?: null
 );
 
 if (empty($recipients)) {

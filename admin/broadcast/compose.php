@@ -54,7 +54,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                           ? $_POST['student_status'] : null;
     $student_semester   = trim($_POST['student_semester'] ?? '') ?: null;
 
-    $valid_types = ['individual', 'group', 'all', 'students'];
+    // Employee-type filter (staff_profiles.department_type)
+    $employee_type = array_key_exists($_POST['employee_type'] ?? '', BC_EMPLOYEE_TYPES)
+                     ? $_POST['employee_type'] : null;
+
+    $valid_types = ['individual', 'group', 'all', 'students', 'employee_type'];
     if (!in_array($recipient_type, $valid_types, true)) $recipient_type = 'all';
 
     if ($subject === '')                             $errors[] = 'Subject is required.';
@@ -62,6 +66,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (trim(strip_tags($body_html)) === '')         $errors[] = 'Email body is required.';
     if ($recipient_type === 'individual' && !$user_id)  $errors[] = 'Please select a recipient user.';
     if ($recipient_type === 'group'      && !$group_id) $errors[] = 'Please select a recipient group.';
+    if ($recipient_type === 'employee_type' && !$employee_type) $errors[] = 'Please choose an employee type.';
 
     // Process attachments
     $attach_stored = [];
@@ -102,7 +107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo = db();
 
         // Resolve recipients first so we can bail if none
-        $recipients = bc_resolve_recipients($recipient_type, $user_id, $group_id, $student_dept_id, $student_program_id, $student_status, $student_semester);
+        $recipients = bc_resolve_recipients($recipient_type, $user_id, $group_id, $student_dept_id, $student_program_id, $student_status, $student_semester, $employee_type);
         if (empty($recipients)) {
             $errors[] = 'No active users found for the selected recipient.';
         }
@@ -120,12 +125,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'INSERT INTO broadcasts
                     (subject, body_html, recipient_type, recipient_user_id, recipient_group_id,
                      student_dept_id, student_program_id, student_status, student_semester,
-                     sent_by, status, ack_required)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
+                     employee_type, sent_by, status, ack_required)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)'
             )->execute([
                 $subject, $body_html, $recipient_type, $user_id, $group_id,
                 $student_dept_id, $student_program_id, $student_status, $student_semester,
-                $user['id'], $initial_status, $ack_required,
+                $employee_type, $user['id'], $initial_status, $ack_required,
             ]);
             $broadcast_id = (int)$pdo->lastInsertId();
 
@@ -284,6 +289,14 @@ require_once __DIR__ . '/../includes/header.php';
                                 </label>
                             </div>
                             <div class="form-check">
+                                <input class="form-check-input" type="radio" name="recipient_type" id="rt_employee_type"
+                                       value="employee_type" <?= old('recipient_type') === 'employee_type' ? 'checked' : '' ?>
+                                       onchange="toggleRecipientFields(this.value)">
+                                <label class="form-check-label" for="rt_employee_type">
+                                    <i class="fas fa-id-badge text-danger me-1"></i> Employee type
+                                </label>
+                            </div>
+                            <div class="form-check">
                                 <input class="form-check-input" type="radio" name="recipient_type" id="rt_individual"
                                        value="individual" <?= old('recipient_type') === 'individual' ? 'checked' : '' ?>
                                        onchange="toggleRecipientFields(this.value)">
@@ -305,6 +318,23 @@ require_once __DIR__ . '/../includes/header.php';
                             </option>
                             <?php endforeach; ?>
                         </select>
+                    </div>
+
+                    <!-- Employee type picker -->
+                    <div id="field_employee_type" class="mb-3" style="display:none">
+                        <label class="form-label" for="employee_type">Select Employee Type</label>
+                        <select name="employee_type" id="employee_type" class="form-select">
+                            <option value="">— Choose employee type —</option>
+                            <?php foreach (BC_EMPLOYEE_TYPES as $et_val => $et_label): ?>
+                            <option value="<?= h($et_val) ?>" <?= old('employee_type') === $et_val ? 'selected' : '' ?>>
+                                <?= h($et_label) ?>
+                            </option>
+                            <?php endforeach; ?>
+                        </select>
+                        <div class="form-text small">
+                            Sends to every active user whose Employee Profile type matches
+                            (Administrative or Faculty). Requires admin approval before sending.
+                        </div>
                     </div>
 
                     <!-- Individual user picker -->
@@ -472,6 +502,7 @@ function toggleRecipientFields(val) {
     document.getElementById('field_group').style.display    = (val === 'group')      ? '' : 'none';
     document.getElementById('field_user').style.display     = (val === 'individual') ? '' : 'none';
     document.getElementById('field_students').style.display = (val === 'students')   ? '' : 'none';
+    document.getElementById('field_employee_type').style.display = (val === 'employee_type') ? '' : 'none';
     // Sync Tom Select layout after display change
     if (val === 'group')      tsGroup.sync();
     if (val === 'individual') tsUser.sync();

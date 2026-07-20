@@ -23,6 +23,12 @@ const BC_MAX_FILE_SIZE  = 5 * 1024 * 1024;  // 5 MB per file
 const BC_MAX_TOTAL_SIZE = 20 * 1024 * 1024; // 20 MB total
 const BC_UPLOAD_SUBDIR  = 'broadcast';
 
+// ── Employee types (staff_profiles.department_type => display label) ────────
+const BC_EMPLOYEE_TYPES = [
+    'administrative' => 'Administrative',
+    'educational'    => 'Faculty',
+];
+
 // ── Permission helpers ────────────────────────────────────────────────────────
 
 /**
@@ -65,13 +71,14 @@ function bc_upload_file(array $file): string|false
 /**
  * Resolve the list of recipient rows [id, email, full_name] for a broadcast.
  *
- * @param  string      $type             'individual' | 'group' | 'all' | 'students'
+ * @param  string      $type             'individual' | 'group' | 'all' | 'students' | 'employee_type'
  * @param  int|null    $user_id          required when $type === 'individual'
  * @param  int|null    $group_id         required when $type === 'group'
  * @param  int|null    $student_dept_id    optional dept filter for 'students'
  * @param  int|null    $student_program_id optional program filter for 'students'
  * @param  string|null $student_status     optional status filter for 'students' (Active/Inactive/Graduated/Dropped)
  * @param  string|null $student_semester   optional admitted_semester filter for 'students'
+ * @param  string|null $employee_type      required when $type === 'employee_type' ('administrative'|'educational')
  * @return array[]
  */
 function bc_resolve_recipients(
@@ -81,9 +88,24 @@ function bc_resolve_recipients(
     ?int    $student_dept_id    = null,
     ?int    $student_program_id = null,
     ?string $student_status     = null,
-    ?string $student_semester   = null
+    ?string $student_semester   = null,
+    ?string $employee_type      = null
 ): array {
     $pdo = db();
+
+    if ($type === 'employee_type') {
+        // All active users whose Employee Profile type matches (staff_profiles.department_type)
+        if (!$employee_type || !array_key_exists($employee_type, BC_EMPLOYEE_TYPES)) return [];
+        $stmt = $pdo->prepare(
+            'SELECT u.id, u.email, u.full_name
+               FROM users u
+               JOIN staff_profiles sp ON sp.user_id = u.id
+              WHERE sp.department_type = ? AND u.is_active = 1 AND u.email != ""
+           ORDER BY u.full_name'
+        );
+        $stmt->execute([$employee_type]);
+        return $stmt->fetchAll();
+    }
 
     if ($type === 'individual' && $user_id) {
         $stmt = $pdo->prepare(
@@ -296,6 +318,9 @@ function bc_recipient_label(array $broadcast): string
     if ($broadcast['recipient_type'] === 'all') return 'All Users';
     if ($broadcast['recipient_type'] === 'group') {
         return 'Group: ' . h($broadcast['group_name'] ?? '—');
+    }
+    if ($broadcast['recipient_type'] === 'employee_type') {
+        return 'Employee Type: ' . h(BC_EMPLOYEE_TYPES[$broadcast['employee_type'] ?? ''] ?? '—');
     }
     if ($broadcast['recipient_type'] === 'students') {
         $parts = [];
