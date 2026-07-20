@@ -64,9 +64,26 @@ $norm_numeric = static function (string $s): ?string {
     $s = ltrim($s, '0');
     return $s === '' ? '0' : $s;
 };
+// Case/format-insensitive: letters lower-cased and separators removed, so
+// "EMP-0123" matches "emp 0123". Matching stays ID-only – names are never used.
+$norm_alnum = static function (string $s): ?string {
+    $s = strtolower((string)preg_replace('/[^A-Za-z0-9]+/', '', trim($s)));
+    return $s === '' ? null : $s;
+};
+// As above, but every digit run also loses its leading zeros, so
+// "E028620" matches "e28620" and "EMP-0101" matches "emp101".
+$norm_alnum_nz = static function (string $s) use ($norm_alnum): ?string {
+    $s = $norm_alnum($s);
+    if ($s === null) return null;
+    return (string)preg_replace_callback(
+        '/\d+/',
+        static fn($m) => ltrim($m[0], '0') === '' ? '0' : ltrim($m[0], '0'),
+        $s
+    );
+};
 
-$build_employee_index = static function () use ($norm_exact, $norm_numeric): array {
-    $exact = $numeric = [];
+$build_employee_index = static function () use ($norm_exact, $norm_numeric, $norm_alnum, $norm_alnum_nz): array {
+    $exact = $numeric = $alnum = $alnum_nz = [];
     $staff = []; // id => ['full_name'=>, 'employee_id'=>]
     foreach (att_mappable_users() as $u) {
         $eid = trim((string)($u['employee_id'] ?? ''));
@@ -78,8 +95,12 @@ $build_employee_index = static function () use ($norm_exact, $norm_numeric): arr
         if ($ek !== '') $exact[$ek][$id] = true;
         $nk = $norm_numeric($eid);
         if ($nk !== null) $numeric[$nk][$id] = true;
+        $ak = $norm_alnum($eid);
+        if ($ak !== null) $alnum[$ak][$id] = true;
+        $zk = $norm_alnum_nz($eid);
+        if ($zk !== null) $alnum_nz[$zk][$id] = true;
     }
-    return [$exact, $numeric, $staff];
+    return [$exact, $numeric, $alnum, $alnum_nz, $staff];
 };
 
 $preview = null; // populated after a scan (step 1)
@@ -180,7 +201,7 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 's
     csrf_check();
     $target_device = (int)($_POST['map_device_id'] ?? 0); // 0 = all devices
 
-    [$idx_exact, $idx_numeric, $staff_by_id] = $build_employee_index();
+    [$idx_exact, $idx_numeric, $idx_alnum, $idx_alnum_nz, $staff_by_id] = $build_employee_index();
 
     $rows = [];
     try {
@@ -219,11 +240,26 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 's
         if ($ek !== '' && isset($idx_exact[$ek])) {
             $ids   = array_keys($idx_exact[$ek]);
             $mtype = 'Employee ID (exact)';
-        } else {
+        }
+        if ($ids === null) {
             $nk = $norm_numeric($pin);
             if ($nk !== null && isset($idx_numeric[$nk])) {
                 $ids   = array_keys($idx_numeric[$nk]);
                 $mtype = 'Employee ID (numeric)';
+            }
+        }
+        if ($ids === null) {
+            $ak = $norm_alnum($pin);
+            if ($ak !== null && isset($idx_alnum[$ak])) {
+                $ids   = array_keys($idx_alnum[$ak]);
+                $mtype = 'Employee ID (case/format)';
+            }
+        }
+        if ($ids === null) {
+            $zk = $norm_alnum_nz($pin);
+            if ($zk !== null && isset($idx_alnum_nz[$zk])) {
+                $ids   = array_keys($idx_alnum_nz[$zk]);
+                $mtype = 'Employee ID (format, zero-tolerant)';
             }
         }
 
@@ -373,8 +409,10 @@ $render_sections = static function (array $data, array $sections) use ($labels, 
             <div class="card-body p-4">
                 <p class="mb-2 small">No file upload needed. This scans <strong>Recent Punches</strong> marked
                     <span class="badge bg-warning text-dark">Unmapped</span> and matches each Device User ID
-                    straight to a staff member's <strong>Employee ID</strong> — exact match, or numeric match
-                    ignoring leading zeros (e.g. <code>0101</code> ≈ <code>101</code>).</p>
+                    straight to a staff member's <strong>Employee ID</strong> — only the ID is checked, never
+                    the name. Matching ignores letter case, separators and leading zeros
+                    (e.g. <code>0101</code> ≈ <code>101</code>, <code>EMP-0123</code> ≈ <code>emp 0123</code>,
+                    <code>E028620</code> ≈ <code>e28620</code>).</p>
                 <p class="mb-0 small text-muted">Nothing is saved until you review the preview and click
                     Confirm. IDs that don't match any Employee ID are listed separately — map those with the
                     single mapper or <a href="<?= APP_URL ?>/staff-attendance/devices-bulk-map.php">CSV Bulk Map</a>.</p>
