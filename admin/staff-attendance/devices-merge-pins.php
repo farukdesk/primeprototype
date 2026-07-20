@@ -56,8 +56,11 @@ $build_groups = static function () use ($db): array {
     }
 
     // Only purely numeric IDs can differ by leading zeros.
+    // Note: PHP converts numeric string array keys (e.g. "28620") to integers,
+    // so cast every pin back to string before using it as a string.
     $by_norm = [];
     foreach (array_keys($pins) as $p) {
+        $p = (string)$p;
         if (!preg_match('/^\d+$/', $p)) continue;
         $norm = ltrim($p, '0');
         if ($norm === '') $norm = '0';
@@ -94,7 +97,7 @@ $build_groups = static function () use ($db): array {
         } catch (Throwable $e) { /* table missing */ }
 
         // The kept (canonical) ID is the one that starts with zero.
-        $zero = array_values(array_filter($variants, static fn($v) => $v[0] === '0'));
+        $zero = array_values(array_filter($variants, static fn($v) => ((string)$v)[0] === '0'));
         if (count($zero) === 1) {
             $canonical = $zero[0];
             $status    = count($users) > 1 ? 'user_conflict' : 'ready';
