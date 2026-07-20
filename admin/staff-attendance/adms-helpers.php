@@ -151,6 +151,17 @@ function adms_system_user_id(): int
     return max(0, (int)adms_setting('adms_system_user_id', '0'));
 }
 
+/**
+ * Duplicate-punch window in minutes (default 15). Punches falling within this
+ * many minutes of the FIRST punch of the day are all treated as one clock-in
+ * event (see adms_fold_day). Configurable on the Attendance Settings page via
+ * the punch_dedup_minutes setting; clamped to 0–240.
+ */
+function adms_punch_dedup_minutes(): int
+{
+    return max(0, min(240, (int)adms_setting('punch_dedup_minutes', '15')));
+}
+
 // ── PIN → user resolution ───────────────────────────────────────────────────
 
 /**
@@ -265,25 +276,34 @@ function adms_store_punch(array $device, array $rec, ?int $user_id): bool
  * Recompute att_records for a user/day from the raw punch log: earliest punch of
  * the day becomes in_time, latest becomes out_time. This is order-independent,
  * so out-of-order or re-sent punches always converge to the correct row.
+ *
+ * Duplicate-punch rule: repeated punches within the duplicate window (default
+ * 15 minutes, see adms_punch_dedup_minutes) of the first punch of the day are
+ * all part of the same clock-in event — the day keeps its in_time but gets no
+ * out_time. Double clock-outs need no special case: the LAST punch of the day
+ * always wins as out_time via MAX().
  */
 function adms_fold_day(int $user_id, string $work_date): void
 {
     if ($user_id < 1) return;
     try {
         $stmt = db()->prepare(
-            'SELECT TIME(MIN(punch_time)) AS in_t, TIME(MAX(punch_time)) AS out_t
+            'SELECT MIN(punch_time) AS first_p, MAX(punch_time) AS last_p
                FROM att_punch_log
               WHERE user_id = ? AND work_date = ?'
         );
         $stmt->execute([$user_id, $work_date]);
         $row = $stmt->fetch();
-        if (!$row || $row['in_t'] === null) return;
+        if (!$row || $row['first_p'] === null) return;
 
-        $in_t  = substr((string)$row['in_t'], 0, 5);   // HH:MM
-        $out_t = substr((string)$row['out_t'], 0, 5);
-        // A single punch day has in == out: keep in_time, leave out_time empty
-        // so the status shows "No Out Time" rather than a bogus 0-minute day.
-        if ($in_t === $out_t) $out_t = null;
+        $in_t  = substr((string)$row['first_p'], 11, 5); // HH:MM
+        $out_t = substr((string)$row['last_p'],  11, 5);
+        // When ALL punches of the day fall within the duplicate window of the
+        // first punch, they are one clock-in event: keep in_time, leave
+        // out_time empty so the status shows "No Out Time" rather than a bogus
+        // few-minute working day. A single-punch day (gap 0) is covered too.
+        $gap_min = (int)floor((strtotime((string)$row['last_p']) - strtotime((string)$row['first_p'])) / 60);
+        if ($gap_min <= adms_punch_dedup_minutes()) $out_t = null;
 
         $upd = db()->prepare(
             'INSERT INTO att_records (user_id, work_date, in_time, out_time, created_by)
