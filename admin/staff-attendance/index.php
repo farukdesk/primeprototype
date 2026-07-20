@@ -29,9 +29,12 @@ if ($report === 'daily') {
     $range_label = date('l, d M Y', strtotime($date));
 } elseif ($report === 'weekly') {
     $anchor = att_normalize_date($_GET['date'] ?? $today);
-    // ISO week: Monday → Sunday containing the anchor date.
-    $from = date('Y-m-d', strtotime('monday this week', strtotime($anchor)));
-    $to   = date('Y-m-d', strtotime('sunday this week', strtotime($anchor)));
+    // ISO week: Monday → Sunday containing the anchor date. Derived from the
+    // ISO weekday number because strtotime('monday this week') on a Sunday
+    // jumps to the FOLLOWING Monday, which showed the wrong week.
+    $anchor_ts = strtotime($anchor);
+    $from = date('Y-m-d', strtotime('-' . ((int)date('N', $anchor_ts) - 1) . ' days', $anchor_ts));
+    $to   = date('Y-m-d', strtotime($from . ' +6 days'));
     $range_label = date('d M', strtotime($from)) . ' – ' . date('d M Y', strtotime($to));
 } elseif ($report === 'range') {
     // Custom From – To range. Reversed dates are swapped; capped at 366 days.
@@ -163,14 +166,17 @@ $weekday = ['1' => 'Mon', '2' => 'Tue', '3' => 'Wed', '4' => 'Thu', '5' => 'Fri'
 $staff_month = date('Y-m', strtotime($from));
 
 /** URL to a staff member's calendar drill-down, preserving the report filters. */
-$staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $search): string {
-    return APP_URL . '/staff-attendance/staff.php?' . http_build_query([
+$staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $search, $from, $to): string {
+    $params = [
         'user_id' => $uid,
         'month'   => $staff_month,
         'report'  => $report,
         'dept'    => $dept_id,
         'q'       => $search,
-    ]);
+    ];
+    // Carry the custom range through so "Back to report" restores it.
+    if ($report === 'range') { $params['from'] = $from; $params['to'] = $to; }
+    return APP_URL . '/staff-attendance/staff.php?' . http_build_query($params);
 };
 ?>
 

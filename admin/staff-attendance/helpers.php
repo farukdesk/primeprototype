@@ -395,18 +395,35 @@ function att_staff_list(int $dept_id = 0, string $search = ''): array
     ];
     $params = [];
 
+    // Employee ID: the staff profile value, falling back to the member's
+    // active device PIN (Devices page mapping) when the profile has none.
+    // Staff punched via a ZKTeco device therefore always show an id.
+    $has_pins = att_device_users_table_exists();
+    $emp_expr = $has_pins
+        ? "COALESCE(NULLIF(sp.employee_id, ''),
+              (SELECT du2.pin FROM att_device_users du2
+                WHERE du2.user_id = u.id AND du2.is_active = 1
+                ORDER BY du2.id ASC LIMIT 1))"
+        : 'sp.employee_id';
+
     if ($dept_id > 0) {
         $where[]  = 'sp.staff_dept_id = ?';
         $params[] = $dept_id;
     }
     if ($search !== '') {
-        $like     = '%' . $search . '%';
-        $where[]  = '(u.full_name LIKE ? OR u.username LIKE ? OR sp.employee_id LIKE ?)';
+        $like   = '%' . $search . '%';
+        $cond   = '(u.full_name LIKE ? OR u.username LIKE ? OR sp.employee_id LIKE ?';
         $params[] = $like; $params[] = $like; $params[] = $like;
+        if ($has_pins) {
+            $cond .= ' OR EXISTS (SELECT 1 FROM att_device_users du3
+                        WHERE du3.user_id = u.id AND du3.is_active = 1 AND du3.pin LIKE ?)';
+            $params[] = $like;
+        }
+        $where[] = $cond . ')';
     }
 
     $sql = 'SELECT u.id, u.full_name, u.username,
-                   sp.employee_id, sp.staff_dept_id, sd.name AS dept_name
+                   ' . $emp_expr . ' AS employee_id, sp.staff_dept_id, sd.name AS dept_name
               FROM users u
               JOIN user_groups ug ON ug.id = u.group_id
          LEFT JOIN staff_profiles sp ON sp.user_id = u.id

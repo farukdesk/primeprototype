@@ -31,7 +31,9 @@ foreach ($staff as $s) {
 $dept_id = (int)($_GET['dept'] ?? 0);
 $search  = trim($_GET['q'] ?? '');
 $report  = $_GET['report'] ?? 'monthly';
-if (!in_array($report, ['daily', 'weekly', 'monthly'], true)) $report = 'monthly';
+if (!in_array($report, ['daily', 'weekly', 'monthly', 'range'], true)) $report = 'monthly';
+$r_from  = $report === 'range' ? att_normalize_date($_GET['from'] ?? '') : null;
+$r_to    = $report === 'range' ? att_normalize_date($_GET['to'] ?? '')   : null;
 
 // ── Resolve the calendar month ──────────────────────────────────────────────
 $month = $_GET['month'] ?? date('Y-m');
@@ -48,6 +50,8 @@ require_once __DIR__ . '/../includes/header.php';
 $report_qs = http_build_query(array_filter([
     'report' => $report,
     'month'  => $report === 'monthly' ? $month : null,
+    'from'   => $r_from,
+    'to'     => $r_to,
     'dept'   => $dept_id ?: null,
     'q'      => $search ?: null,
 ]));
