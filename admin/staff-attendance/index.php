@@ -124,7 +124,7 @@ if (($_GET['export'] ?? '') === 'csv') {
                   'leave' => 0, 'minutes' => 0, 'working_days' => 0];
             foreach ($dates as $d) {
                 $on_leave = $leave_by_date[$d] ?? [];
-                $off      = isset($holidays[$d]) || att_is_weekly_off($d);
+                $off      = isset($holidays[$d]) || att_is_weekly_off_for($sched, $d);
                 $rec      = $records[$uid . '|' . $d] ?? null;
                 $status   = att_compute_status($rec, $uid, $d, $sched, $holidays, $on_leave);
                 if (!$off) $x['working_days']++;
@@ -361,13 +361,15 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
                 $summ[$uid] = ['present' => 0, 'late' => 0, 'early' => 0, 'absent' => 0, 'leave' => 0, 'minutes' => 0, 'working_days' => 0];
             }
             foreach ($dates as $d) {
-                $on_leave = $leave_by_date[$d] ?? [];
-                $off      = isset($holidays[$d]) || att_is_weekly_off($d);
+                $on_leave    = $leave_by_date[$d] ?? [];
+                $holiday_off = isset($holidays[$d]);
                 foreach ($staff as $s) {
                     $uid    = (int)$s['id'];
                     $rec    = $records[$uid . '|' . $d] ?? null;
                     $sched  = att_effective_schedule($uid);
                     $status = att_compute_status($rec, $uid, $d, $sched, $holidays, $on_leave);
+                    // Off days are per staff member (weekly-off override aware).
+                    $off = $holiday_off || att_is_weekly_off_for($sched, $d);
                     if (!$off) $summ[$uid]['working_days']++;
                     switch ($status) {
                         case 'present':                          $summ[$uid]['present']++; break;
