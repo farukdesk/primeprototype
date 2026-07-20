@@ -21,6 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $close   = att_normalize_time($_POST['office_close_time'] ?? '');
     $in_buf  = max(0, min(600, (int)($_POST['in_buffer_minutes']  ?? 0)));
     $out_buf = max(0, min(600, (int)($_POST['out_buffer_minutes'] ?? 0)));
+    $dedup   = max(0, min(240, (int)($_POST['punch_dedup_minutes'] ?? 15)));
 
     $off = [];
     foreach ((array)($_POST['weekly_off_days'] ?? []) as $d) {
@@ -38,16 +39,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         att_save_setting('office_close_time',  $close);
         att_save_setting('in_buffer_minutes',  (string)$in_buf);
         att_save_setting('out_buffer_minutes', (string)$out_buf);
+        att_save_setting('punch_dedup_minutes', (string)$dedup);
         att_save_setting('weekly_off_days',    implode(',', $off));
         log_change('staff-attendance', 'UPDATE', null, 'Global settings', null, null,
-            "start=$start, close=$close, in_buf=$in_buf, out_buf=$out_buf, off=" . implode(',', $off));
+            "start=$start, close=$close, in_buf=$in_buf, out_buf=$out_buf, dedup=$dedup, off=" . implode(',', $off));
         flash_set('success', 'Attendance settings saved.');
     }
     redirect(APP_URL . '/staff-attendance/settings.php');
 }
 
-$g   = att_global_schedule();
-$off = att_weekly_off_days();
+$g     = att_global_schedule();
+$off   = att_weekly_off_days();
+$dedup = max(0, min(240, (int)att_get_setting('punch_dedup_minutes', '15')));
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -90,6 +93,11 @@ require_once __DIR__ . '/../includes/header.php';
                         <label class="form-label fw-semibold small mb-1">Out-Time Buffer (minutes)</label>
                         <input type="number" name="out_buffer_minutes" class="form-control" min="0" max="600" value="<?= (int)$g['out_buffer_minutes'] ?>">
                         <div class="form-text">Leaving within this many minutes before close is not counted as early-out.</div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold small mb-1">Duplicate Punch Window (minutes)</label>
+                        <input type="number" name="punch_dedup_minutes" class="form-control" min="0" max="240" value="<?= (int)$dedup ?>">
+                        <div class="form-text">Repeated punches within this many minutes of the first punch of the day count as a single clock-in (day shows "No Out Time"). For clock-out, the last punch of the day always wins.</div>
                     </div>
                     <div class="col-12">
                         <label class="form-label fw-semibold small mb-1">Weekly Off Days</label>
