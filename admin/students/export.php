@@ -38,6 +38,7 @@ $filter     = sm_build_list_filter($_GET, $dept_scope);
 
 $sql = 'SELECT s.full_name,
                s.student_id,
+               s.phone,
                d.name AS dept_name,
                p.program_name
         FROM students s
@@ -82,8 +83,9 @@ if ($format === 'excel') {
     // Column widths.
     $sheet->getColumnDimension('A')->setWidth(32);
     $sheet->getColumnDimension('B')->setWidth(18);
-    $sheet->getColumnDimension('C')->setWidth(30);
+    $sheet->getColumnDimension('C')->setWidth(20);
     $sheet->getColumnDimension('D')->setWidth(30);
+    $sheet->getColumnDimension('E')->setWidth(30);
 
     // Logo (rows are made tall enough for the header block).
     if ($logo_uri !== '' && is_file($logo_path)) {
@@ -97,12 +99,12 @@ if ($format === 'excel') {
         $drawing->setWorksheet($sheet);
     }
 
-    // Header block (centered across B:D so the logo stays in column A).
-    $sheet->mergeCells('B1:D1');
+    // Header block (centered across B:E so the logo stays in column A).
+    $sheet->mergeCells('B1:E1');
     $sheet->setCellValue('B1', $university);
-    $sheet->mergeCells('B2:D2');
+    $sheet->mergeCells('B2:E2');
     $sheet->setCellValue('B2', $doc_title);
-    $sheet->mergeCells('B3:D3');
+    $sheet->mergeCells('B3:E3');
     $sheet->setCellValue('B3', $filter_summary);
 
     $sheet->getStyle('B1')->getFont()->setBold(true)->setSize(16);
@@ -117,7 +119,7 @@ if ($format === 'excel') {
 
     // Column headings.
     $head_row = 5;
-    $headings = ['Student Name', 'Student ID', 'Department', 'Program'];
+    $headings = ['Student Name', 'Student ID', 'Phone', 'Department', 'Program'];
     foreach ($headings as $i => $text) {
         $col  = chr(ord('A') + $i);
         $cell = $col . $head_row;
@@ -135,9 +137,11 @@ if ($format === 'excel') {
             \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
         $sheet->setCellValueExplicit('B' . $r, (string)$row['student_id'],
             \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-        $sheet->setCellValueExplicit('C' . $r, (string)$row['dept_name'],
+        $sheet->setCellValueExplicit('C' . $r, (string)($row['phone'] ?? ''),
             \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-        $sheet->setCellValueExplicit('D' . $r, (string)($row['program_name'] ?? ''),
+        $sheet->setCellValueExplicit('D' . $r, (string)$row['dept_name'],
+            \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+        $sheet->setCellValueExplicit('E' . $r, (string)($row['program_name'] ?? ''),
             \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
         $r++;
     }
@@ -145,13 +149,13 @@ if ($format === 'excel') {
     // Borders around the table.
     $last_data_row = $r - 1;
     if ($last_data_row >= $head_row) {
-        $sheet->getStyle('A' . $head_row . ':D' . $last_data_row)
+        $sheet->getStyle('A' . $head_row . ':E' . $last_data_row)
               ->getBorders()->getAllBorders()
               ->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
     }
 
     // Total row.
-    $sheet->mergeCells('A' . $r . ':D' . $r);
+    $sheet->mergeCells('A' . $r . ':E' . $r);
     $sheet->setCellValue('A' . $r, 'Total: ' . $total . ' student' . ($total === 1 ? '' : 's'));
     $sheet->getStyle('A' . $r)->getFont()->setBold(true);
     $sheet->getStyle('A' . $r)->getAlignment()
@@ -175,12 +179,13 @@ if ($rows) {
         $body_rows .= '<tr>'
             . '<td>' . h($row['full_name']) . '</td>'
             . '<td>' . h($row['student_id']) . '</td>'
+            . '<td>' . h($row['phone'] ?? '') . '</td>'
             . '<td>' . h($row['dept_name']) . '</td>'
             . '<td>' . h($row['program_name'] ?? '') . '</td>'
             . '</tr>';
     }
 } else {
-    $body_rows = '<tr><td colspan="4" style="text-align:center;color:#777;">No students match the selected filters.</td></tr>';
+    $body_rows = '<tr><td colspan="5" style="text-align:center;color:#777;">No students match the selected filters.</td></tr>';
 }
 
 $logo_html = $logo_uri !== ''
@@ -229,10 +234,11 @@ $html = '<!DOCTYPE html>
     <table class="data">
         <thead>
             <tr>
-                <th style="width:34%;">Student Name</th>
-                <th style="width:18%;">Student ID</th>
-                <th style="width:24%;">Department</th>
-                <th style="width:24%;">Program</th>
+                <th style="width:28%;">Student Name</th>
+                <th style="width:15%;">Student ID</th>
+                <th style="width:15%;">Phone</th>
+                <th style="width:21%;">Department</th>
+                <th style="width:21%;">Program</th>
             </tr>
         </thead>
         <tbody>' . $body_rows . '</tbody>
