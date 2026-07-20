@@ -89,10 +89,9 @@ function att_global_schedule(): array
     ];
 }
 
-/** Weekly-off day numbers (PHP date('N'): 1=Mon … 7=Sun) as an int array. */
-function att_weekly_off_days(): array
+/** Parse a comma-separated weekly-off string into day numbers (1=Mon … 7=Sun). */
+function att_parse_off_days(string $raw): array
 {
-    $raw = (string)att_get_setting('weekly_off_days', ATT_DEFAULT_WEEKLY_OFF);
     if (trim($raw) === '') return [];
     $days = [];
     foreach (explode(',', $raw) as $d) {
@@ -100,6 +99,12 @@ function att_weekly_off_days(): array
         if ($d >= 1 && $d <= 7) $days[] = $d;
     }
     return array_values(array_unique($days));
+}
+
+/** GLOBAL weekly-off day numbers (PHP date('N'): 1=Mon … 7=Sun) as an int array. */
+function att_weekly_off_days(): array
+{
+    return att_parse_off_days((string)att_get_setting('weekly_off_days', ATT_DEFAULT_WEEKLY_OFF));
 }
 
 // ── Per-staff effective schedule ────────────────────────────────────────────
@@ -111,13 +116,24 @@ function att_all_overrides(): array
     if ($cache !== null) return $cache;
     $cache = [];
     try {
+        // Preferred query includes the per-staff weekly-off column.
         $rows = db()->query(
-            'SELECT user_id, start_time, close_time, in_buffer_minutes, out_buffer_minutes
+            'SELECT user_id, start_time, close_time, in_buffer_minutes, out_buffer_minutes, weekly_off_days
                FROM att_staff_schedule WHERE is_active = 1'
         )->fetchAll();
         foreach ($rows as $r) $cache[(int)$r['user_id']] = $r;
     } catch (Throwable $e) {
-        // ignore – overrides table may not exist yet
+        // weekly_off_days column (or the whole table) may not exist yet –
+        // fall back to the legacy column list so existing overrides keep working.
+        try {
+            $rows = db()->query(
+                'SELECT user_id, start_time, close_time, in_buffer_minutes, out_buffer_minutes
+                   FROM att_staff_schedule WHERE is_active = 1'
+            )->fetchAll();
+            foreach ($rows as $r) $cache[(int)$r['user_id']] = $r;
+        } catch (Throwable $e2) {
+            // ignore – overrides table may not exist yet
+        }
     }
     return $cache;
 }
@@ -131,13 +147,17 @@ function att_effective_schedule(int $user_id): array
     $global    = att_global_schedule();
     $overrides = att_all_overrides();
     $o         = $overrides[$user_id] ?? null;
-    if (!$o) return $global + ['custom' => false];
+    if (!$o) return $global + ['custom' => false, 'weekly_off_days' => att_weekly_off_days(), 'weekly_off_custom' => false];
 
+    $own_off = trim((string)($o['weekly_off_days'] ?? ''));
     return [
         'start_time'         => att_normalize_time($o['start_time']) ?? $global['start_time'],
         'close_time'         => att_normalize_time($o['close_time']) ?? $global['close_time'],
         'in_buffer_minutes'  => $o['in_buffer_minutes']  !== null ? max(0, (int)$o['in_buffer_minutes'])  : $global['in_buffer_minutes'],
         'out_buffer_minutes' => $o['out_buffer_minutes'] !== null ? max(0, (int)$o['out_buffer_minutes']) : $global['out_buffer_minutes'],
+        // Per-staff weekly-off days: empty → inherit the global setting.
+        'weekly_off_days'    => $own_off !== '' ? att_parse_off_days($own_off) : att_weekly_off_days(),
+        'weekly_off_custom'  => $own_off !== '',
         'custom'             => true,
     ];
 }
@@ -239,11 +259,22 @@ function att_prime_month_range(string $month): array
     return ['from' => $from, 'to' => $to, 'label' => $label, 'month' => $month];
 }
 
-/** Whether a given Y-m-d date is a weekly-off day. */
+/** Whether a given Y-m-d date is a GLOBAL weekly-off day. */
 function att_is_weekly_off(string $date): bool
 {
     $n = (int)date('N', strtotime($date));
     return in_array($n, att_weekly_off_days(), true);
+}
+
+/**
+ * Whether a date is an off day under a staff member's EFFECTIVE schedule:
+ * their own weekly-off override when set, otherwise the global off days.
+ * Pass the array returned by att_effective_schedule().
+ */
+function att_is_weekly_off_for(array $sched, string $date): bool
+{
+    $days = $sched['weekly_off_days'] ?? att_weekly_off_days();
+    return in_array((int)date('N', strtotime($date)), $days, true);
 }
 
 /**
@@ -287,7 +318,7 @@ function att_compute_status(?array $record, int $user_id, string $date, array $s
     $has_out = !empty($record['out_time']);
 
     if (isset($holidays[$date]))            return $has_in ? 'present' : 'holiday';
-    if (att_is_weekly_off($date))           return $has_in ? 'present' : 'weekly_off';
+    if (att_is_weekly_off_for($sched, $date)) return $has_in ? 'present' : 'weekly_off';
     if (!$has_in && in_array($user_id, $on_leave, true)) return 'leave';
     if (!$has_in && $date > date('Y-m-d')) return 'upcoming';
     if (!$has_in)                           return 'absent';

@@ -13,6 +13,19 @@ $page_title = 'Staff Schedules';
 $db         = db();
 $search     = trim($_GET['q'] ?? '');
 
+// Self-applying migration: per-staff weekly-off days (comma-separated ISO day
+// numbers 1=Mon … 7=Sun; NULL/empty = inherit the global Weekly Off setting).
+try {
+    $db->query('SELECT weekly_off_days FROM att_staff_schedule LIMIT 1');
+} catch (Throwable $e) {
+    try {
+        $db->exec('ALTER TABLE att_staff_schedule ADD COLUMN weekly_off_days VARCHAR(20) NULL DEFAULT NULL');
+    } catch (Throwable $e2) {
+        // Table missing or no ALTER permission – the module keeps working with
+        // global weekly-off days only.
+    }
+}
+
 // ── Save handler ─────────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
@@ -22,28 +35,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $in_buf  = ($_POST['in_buffer_minutes']  ?? '') === '' ? null : max(0, min(600, (int)$_POST['in_buffer_minutes']));
     $out_buf = ($_POST['out_buffer_minutes'] ?? '') === '' ? null : max(0, min(600, (int)$_POST['out_buffer_minutes']));
 
+    // Per-staff weekly-off days: none checked → NULL (inherit global setting).
+    $off_sel = [];
+    foreach ((array)($_POST['weekly_off_days'] ?? []) as $d) {
+        $d = (int)$d;
+        if ($d >= 1 && $d <= 7) $off_sel[] = $d;
+    }
+    $off_sel = array_values(array_unique($off_sel));
+    sort($off_sel);
+    $off_val = $off_sel ? implode(',', $off_sel) : null;
+
     $valid_ids = array_map(fn($s) => (int)$s['id'], att_staff_list());
 
     if ($uid < 1 || !in_array($uid, $valid_ids, true)) {
         flash_set('error', 'Invalid staff member.');
     } elseif ($start !== null && $close !== null && att_time_to_minutes($close) <= att_time_to_minutes($start)) {
         flash_set('error', 'Close time must be later than the start time.');
-    } elseif ($start === null && $close === null && $in_buf === null && $out_buf === null) {
+    } elseif ($start === null && $close === null && $in_buf === null && $out_buf === null && $off_val === null) {
         // All blank → remove any existing override so the staff uses global hours.
         $db->prepare('DELETE FROM att_staff_schedule WHERE user_id = ?')->execute([$uid]);
         log_change('staff-attendance', 'UPDATE', $uid, 'Schedule override', null, null, 'cleared (uses global)');
         flash_set('success', 'Override cleared; staff now uses the global schedule.');
     } else {
-        $stmt = $db->prepare(
-            'INSERT INTO att_staff_schedule (user_id, start_time, close_time, in_buffer_minutes, out_buffer_minutes, is_active)
-             VALUES (?,?,?,?,?,1)
-             ON DUPLICATE KEY UPDATE start_time = VALUES(start_time), close_time = VALUES(close_time),
-                                     in_buffer_minutes = VALUES(in_buffer_minutes),
-                                     out_buffer_minutes = VALUES(out_buffer_minutes), is_active = 1'
-        );
-        $stmt->execute([$uid, $start, $close, $in_buf, $out_buf]);
+        try {
+            $stmt = $db->prepare(
+                'INSERT INTO att_staff_schedule (user_id, start_time, close_time, in_buffer_minutes, out_buffer_minutes, weekly_off_days, is_active)
+                 VALUES (?,?,?,?,?,?,1)
+                 ON DUPLICATE KEY UPDATE start_time = VALUES(start_time), close_time = VALUES(close_time),
+                                         in_buffer_minutes = VALUES(in_buffer_minutes),
+                                         out_buffer_minutes = VALUES(out_buffer_minutes),
+                                         weekly_off_days = VALUES(weekly_off_days), is_active = 1'
+            );
+            $stmt->execute([$uid, $start, $close, $in_buf, $out_buf, $off_val]);
+        } catch (Throwable $e) {
+            // weekly_off_days column unavailable – save the rest of the override.
+            $stmt = $db->prepare(
+                'INSERT INTO att_staff_schedule (user_id, start_time, close_time, in_buffer_minutes, out_buffer_minutes, is_active)
+                 VALUES (?,?,?,?,?,1)
+                 ON DUPLICATE KEY UPDATE start_time = VALUES(start_time), close_time = VALUES(close_time),
+                                         in_buffer_minutes = VALUES(in_buffer_minutes),
+                                         out_buffer_minutes = VALUES(out_buffer_minutes), is_active = 1'
+            );
+            $stmt->execute([$uid, $start, $close, $in_buf, $out_buf]);
+        }
         log_change('staff-attendance', 'UPDATE', $uid, 'Schedule override', null, null,
-            "start=" . ($start ?? '—') . ", close=" . ($close ?? '—'));
+            "start=" . ($start ?? '—') . ", close=" . ($close ?? '—') . ", off=" . ($off_val ?? 'global'));
         flash_set('success', 'Individual schedule saved.');
     }
     redirect(APP_URL . '/staff-attendance/schedules.php' . ($search !== '' ? '?q=' . urlencode($search) : ''));
@@ -52,6 +88,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $staff     = att_staff_list(0, $search);
 $overrides = att_all_overrides();
 $g         = att_global_schedule();
+$g_off     = att_weekly_off_days();
+$day_abbr  = [1 => 'Mo', 2 => 'Tu', 3 => 'We', 4 => 'Th', 5 => 'Fr', 6 => 'Sa', 7 => 'Su'];
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -104,12 +142,13 @@ require_once __DIR__ . '/../includes/header.php';
                         <th style="width:130px;">Close</th>
                         <th style="width:120px;">In Buffer</th>
                         <th style="width:120px;">Out Buffer</th>
+                        <th style="width:230px;">Weekly Off <span class="fw-normal text-muted">(blank = global)</span></th>
                         <th style="width:120px;"></th>
                     </tr>
                 </thead>
                 <tbody>
                 <?php if (empty($staff)): ?>
-                    <tr><td colspan="6" class="text-center text-muted py-4">No staff found.</td></tr>
+                    <tr><td colspan="7" class="text-center text-muted py-4">No staff found.</td></tr>
                 <?php else: foreach ($staff as $s):
                     $uid = (int)$s['id'];
                     $o   = $overrides[$uid] ?? null;
@@ -131,6 +170,24 @@ require_once __DIR__ . '/../includes/header.php';
                                    value="<?= $o && $o['in_buffer_minutes'] !== null ? (int)$o['in_buffer_minutes'] : '' ?>" placeholder="<?= (int)$g['in_buffer_minutes'] ?>"></td>
                         <td><input type="number" form="<?= $ff ?>" name="out_buffer_minutes" min="0" max="600" class="form-control form-control-sm"
                                    value="<?= $o && $o['out_buffer_minutes'] !== null ? (int)$o['out_buffer_minutes'] : '' ?>" placeholder="<?= (int)$g['out_buffer_minutes'] ?>"></td>
+                        <td>
+                            <?php $own_off = att_parse_off_days((string)($o['weekly_off_days'] ?? '')); ?>
+                            <div class="d-flex flex-wrap gap-1">
+                                <?php foreach ($day_abbr as $n => $ab): ?>
+                                <label class="form-check form-check-inline m-0 me-1 small" title="<?= $ab ?>">
+                                    <input class="form-check-input" type="checkbox" form="<?= $ff ?>"
+                                           name="weekly_off_days[]" value="<?= $n ?>"
+                                           <?= in_array($n, $own_off, true) ? 'checked' : '' ?>>
+                                    <span class="form-check-label"><?= $ab ?></span>
+                                </label>
+                                <?php endforeach; ?>
+                            </div>
+                            <?php if (empty($own_off)): ?>
+                                <div class="text-muted" style="font-size:.7rem;">Global: <?= h(implode(', ', array_map(fn($n) => $day_abbr[$n], $g_off)) ?: 'none') ?></div>
+                            <?php else: ?>
+                                <div style="font-size:.7rem;"><span class="badge bg-info text-dark">Own off days</span></div>
+                            <?php endif; ?>
+                        </td>
                         <td><button type="submit" form="<?= $ff ?>" class="btn btn-sm btn-success" style="border-radius:8px;"><i class="fas fa-save"></i></button></td>
                     </tr>
                 <?php endforeach; endif; ?>
@@ -142,7 +199,10 @@ require_once __DIR__ . '/../includes/header.php';
 <p class="text-muted small mt-2">
     Blank fields inherit the global schedule (shown as placeholders: <?= h($g['start_time']) ?>–<?= h($g['close_time']) ?>,
     buffers <?= (int)$g['in_buffer_minutes'] ?>/<?= (int)$g['out_buffer_minutes'] ?> min).
-    Clearing every field for a staff member removes their override.
+    Weekly Off with no day ticked inherits the global off days
+    (<?= h(implode(', ', array_map(fn($n) => $day_abbr[$n], $g_off)) ?: 'none') ?>); ticked days replace them for that staff member
+    and are used for their absence counts and working-day totals.
+    Clearing every field (and every off day) for a staff member removes their override.
 </p>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
