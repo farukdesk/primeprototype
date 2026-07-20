@@ -101,6 +101,35 @@ foreach (att_mappable_users() as $u) {
     $emp_index[$key][] = ['id' => (int)$u['id'], 'name' => (string)$u['full_name'], 'eid' => $eid];
 }
 
+// Also index the device PIN mappings from the Devices page (att_device_users)
+// so a CSV exported from the punch machine resolves even when the staff
+// profile has no Employee ID (or a different one). A PIN never overrides a
+// profile match for the same user; a PIN colliding with a DIFFERENT user's id
+// becomes a multi-entry list and is flagged as Ambiguous, never guessed.
+try {
+    $pin_rows = $db->query(
+        'SELECT pin, user_id FROM att_device_users WHERE is_active = 1'
+    )->fetchAll();
+    foreach ($pin_rows as $r) {
+        $uid = (int)$r['user_id'];
+        if (!isset($valid_users[$uid])) continue; // inactive / student accounts
+        $pin = trim((string)$r['pin']);
+        if ($pin === '') continue;
+        $key = $canon_emp($pin);
+        if ($key === '') continue;
+        $dup = false;
+        foreach ($emp_index[$key] ?? [] as $m) {
+            if ($m['id'] === $uid) { $dup = true; break; }
+        }
+        if (!$dup) {
+            $emp_index[$key][] = ['id' => $uid, 'name' => $valid_users[$uid], 'eid' => $pin];
+        }
+    }
+} catch (Throwable $e) {
+    // att_device_users may not exist yet (ADMS migration not applied) –
+    // profile Employee IDs still resolve as before.
+}
+
 $preview = null;
 $report  = null;
 
