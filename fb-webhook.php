@@ -105,6 +105,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 db()->prepare('UPDATE lead_fb_contacts SET last_message_at=NOW() WHERE id=?')
                     ->execute([$contact_id]);
 
+                // Off-hours auto-responder
+                fb_maybe_auto_reply($contact_id, $psid);
+
                 // If contact is already linked to a lead, log it
                 $contact = db()->prepare('SELECT lead_id FROM lead_fb_contacts WHERE id=?');
                 $contact->execute([$contact_id]);
@@ -220,4 +223,83 @@ function fb_upsert_contact(string $psid): int
     )->execute([$psid, $name, $picture]);
 
     return (int)db()->lastInsertId();
+}
+
+/**
+ * Send a plain-text message to a PSID via the Send API (webhook-local).
+ */
+function fb_send_text(string $psid, string $text): bool
+{
+    $token = fb_setting('page_access_token');
+    if ($token === '') return false;
+
+    $payload = json_encode([
+        'recipient'      => ['id' => $psid],
+        'message'        => ['text' => $text],
+        'messaging_type' => 'RESPONSE',
+    ]);
+
+    $ch = curl_init('https://graph.facebook.com/v19.0/me/messages?access_token=' . urlencode($token));
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => $payload,
+        CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 10,
+    ]);
+    $resp = curl_exec($ch);
+    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($code === 200) {
+        $body = json_decode($resp, true);
+        return !empty($body['message_id']);
+    }
+    return false;
+}
+
+/**
+ * Working-hours auto-responder.
+ * Sends a configurable automatic reply when a message arrives outside
+ * office hours. Throttled to one auto-reply per contact per 6 hours.
+ * Settings (lead_fb_settings): auto_reply_enabled ('1'/'0'),
+ * auto_reply_message, office_days (CSV, 0=Sun), office_start, office_end (H:i).
+ */
+function fb_maybe_auto_reply(int $contact_id, string $psid): void
+{
+    if (fb_setting('auto_reply_enabled') !== '1') return;
+    $message = trim(fb_setting('auto_reply_message'));
+    if ($message === '') return;
+
+    $days  = fb_setting('office_days')  !== '' ? fb_setting('office_days')  : '0,1,2,3,4';
+    $start = fb_setting('office_start') !== '' ? fb_setting('office_start') : '09:00';
+    $end   = fb_setting('office_end')   !== '' ? fb_setting('office_end')   : '17:00';
+
+    $day_list = array_map('trim', explode(',', $days));
+    $inside   = in_array(date('w'), $day_list, true)
+             && date('H:i') >= $start
+             && date('H:i') < $end;
+    if ($inside) return; // office is open – humans will reply
+
+    // Throttle: max one auto-reply per contact per 6 hours
+    try {
+        $stmt = db()->prepare('SELECT last_auto_reply_at FROM lead_fb_contacts WHERE id = ?');
+        $stmt->execute([$contact_id]);
+        $last = $stmt->fetchColumn();
+        if ($last && strtotime($last) > time() - 6 * 3600) return;
+    } catch (Exception $e) {
+        return; // column missing – run admin/leads/fb-inbox-upgrade.sql
+    }
+
+    if (fb_send_text($psid, $message)) {
+        try {
+            db()->prepare('INSERT INTO lead_fb_messages (contact_id, direction, message_text, status) VALUES (?,?,?,?)')
+                ->execute([$contact_id, 'out', $message, 'sent']);
+        } catch (Exception $e) {
+            db()->prepare('INSERT INTO lead_fb_messages (contact_id, direction, message_text) VALUES (?,?,?)')
+                ->execute([$contact_id, 'out', $message]);
+        }
+        db()->prepare('UPDATE lead_fb_contacts SET last_auto_reply_at = NOW(), last_message_at = NOW() WHERE id = ?')
+            ->execute([$contact_id]);
+    }
 }

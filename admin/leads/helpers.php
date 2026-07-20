@@ -300,6 +300,24 @@ function leads_fb_fetch_profile(string $psid): array
     return [$name !== '' ? $name : null, $profile['profile_pic'] ?? null];
 }
 
+/**
+ * Human-friendly relative timestamp:
+ * "Just now", "5m ago", "3h ago", "Yesterday at 3:15 PM", "Mon at 9:02 AM", "12 Jan 2026, 3:15 PM"
+ */
+function leads_time_ago(?string $dt): string
+{
+    if (!$dt) return '–';
+    $ts   = strtotime($dt);
+    if ($ts === false) return h($dt);
+    $diff = time() - $ts;
+    if ($diff < 60)   return 'Just now';
+    if ($diff < 3600) return floor($diff / 60) . 'm ago';
+    if (date('Y-m-d', $ts) === date('Y-m-d'))                       return floor($diff / 3600) . 'h ago';
+    if (date('Y-m-d', $ts) === date('Y-m-d', strtotime('-1 day')))  return 'Yesterday at ' . date('g:i A', $ts);
+    if ($diff < 7 * 86400) return date('D', $ts) . ' at ' . date('g:i A', $ts);
+    return date('d M Y, g:i A', $ts);
+}
+
 // ── Fetch helpers ─────────────────────────────────────────────────────────────
 
 function leads_get(int $id): array

@@ -81,6 +81,25 @@ $contacts_q = db()->prepare(
 $contacts_q->execute($params);
 $contacts = $contacts_q->fetchAll();
 
+// Unread counts per contact (requires fb-inbox-upgrade.sql; degrades to none)
+$unread_map = [];
+try {
+    $ids = array_column($contacts, 'id');
+    if ($ids) {
+        $in_list = implode(',', array_map('intval', $ids));
+        $unread_map = db()->query(
+            "SELECT c.id, COUNT(m.id) AS unread
+             FROM lead_fb_contacts c
+             JOIN lead_fb_messages m ON m.contact_id = c.id AND m.direction = 'in'
+                  AND (c.last_read_at IS NULL OR m.created_at > c.last_read_at)
+             WHERE c.id IN ($in_list)
+             GROUP BY c.id"
+        )->fetchAll(PDO::FETCH_KEY_PAIR);
+    }
+} catch (Exception $e) {
+    $unread_map = [];
+}
+
 $total_contacts  = (int)db()->query('SELECT COUNT(*) FROM lead_fb_contacts')->fetchColumn();
 $total_unlinked  = (int)db()->query('SELECT COUNT(*) FROM lead_fb_contacts WHERE lead_id IS NULL')->fetchColumn();
 
@@ -106,6 +125,7 @@ require_once __DIR__ . '/../includes/header.php';
             </button>
         </form>
         <?php endif; ?>
+        <a href="<?= APP_URL ?>/leads/fb-analytics.php" class="btn btn-outline-info btn-sm"><i class="fas fa-chart-line me-1"></i> Analytics</a>
         <?php if (is_super_admin()): ?>
         <a href="<?= APP_URL ?>/leads/fb-settings.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-cog me-1"></i> FB Settings</a>
         <?php endif; ?>
@@ -215,6 +235,9 @@ require_once __DIR__ . '/../includes/header.php';
                     <span class="badge bg-warning text-dark"><i class="fas fa-unlink me-1"></i>Not linked</span>
                     <?php endif; ?>
                     <span class="badge bg-light text-dark border"><i class="fas fa-comments me-1"></i><?= number_format($c['msg_count']) ?> msgs</span>
+                    <?php $u_cnt = (int)($unread_map[$c['id']] ?? 0); if ($u_cnt > 0): ?>
+                    <span class="badge bg-danger"><i class="fas fa-envelope me-1"></i><?= $u_cnt ?> new</span>
+                    <?php endif; ?>
                 </div>
             </div>
             <i class="fas fa-chevron-right text-muted flex-shrink-0"></i>
