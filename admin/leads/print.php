@@ -14,9 +14,17 @@ $f_user     = (int)($_GET['user_id'] ?? 0);
 $f_sort     = $_GET['sort'] ?? 'date_desc';
 $f_followup = $_GET['followup'] ?? '';
 
+// Date range filter (created vs updated)
+$f_datefield = ($_GET['date_field'] ?? 'created') === 'updated' ? 'updated' : 'created';
+$f_from      = trim($_GET['date_from'] ?? '');
+$f_to        = trim($_GET['date_to']   ?? '');
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $f_from)) $f_from = '';
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $f_to))   $f_to   = '';
+if ($f_from !== '' && $f_to !== '' && $f_from > $f_to) { [$f_from, $f_to] = [$f_to, $f_from]; }
+
 $valid_statuses = array_keys(leads_all_statuses());
 $valid_sources  = ['online', 'campus_visit', 'agent', 'f2f_marketing', 'facebook'];
-$valid_sorts    = ['date_desc', 'date_asc', 'name_asc', 'name_desc', 'status_asc', 'followup_asc'];
+$valid_sorts    = ['date_desc', 'date_asc', 'updated_desc', 'name_asc', 'name_desc', 'status_asc', 'followup_asc'];
 
 $where  = [];
 $params = [];
@@ -56,11 +64,21 @@ if ($f_followup === 'today') {
 if ($f_followup === 'overdue') {
     $where[] = "(l.next_followup_date < CURDATE() AND l.status NOT IN ('converted','not_interested'))";
 }
+$date_col = $f_datefield === 'updated' ? 'l.updated_at' : 'l.created_at';
+if ($f_from !== '') {
+    $where[]  = 'DATE(' . $date_col . ') >= ?';
+    $params[] = $f_from;
+}
+if ($f_to !== '') {
+    $where[]  = 'DATE(' . $date_col . ') <= ?';
+    $params[] = $f_to;
+}
 
 $where_sql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
 
 $sort_sql = match (in_array($f_sort, $valid_sorts, true) ? $f_sort : 'date_desc') {
     'date_asc'     => 'l.created_at ASC',
+    'updated_desc' => 'l.updated_at DESC',
     'name_asc'     => 'l.first_name ASC, l.last_name ASC',
     'name_desc'    => 'l.first_name DESC, l.last_name DESC',
     'status_asc'   => 'l.status ASC',
@@ -91,6 +109,7 @@ $staff_users = db()->query('SELECT id, full_name FROM users ORDER BY full_name A
 $sort_labels = [
     'date_desc'    => 'Date: Newest',
     'date_asc'     => 'Date: Oldest',
+    'updated_desc' => 'Recently Updated',
     'name_asc'     => 'Name: A–Z',
     'name_desc'    => 'Name: Z–A',
     'status_asc'   => 'By Status',
@@ -122,6 +141,19 @@ if ($f_user > 0 && isset($staff_users[$f_user])) {
 if ($f_followup !== '') {
     $active_filters['Follow-up'] = $f_followup === 'today' ? "Today's Follow-ups" : 'Overdue Follow-ups';
 }
+if ($f_from !== '' || $f_to !== '') {
+    $range_label = ($f_datefield === 'updated' ? 'Updated' : 'Created') . ' Date';
+    if ($f_from !== '' && $f_to !== '') {
+        $range_value = $f_from === $f_to
+            ? date('d M Y', strtotime($f_from))
+            : date('d M Y', strtotime($f_from)) . ' – ' . date('d M Y', strtotime($f_to));
+    } elseif ($f_from !== '') {
+        $range_value = 'From ' . date('d M Y', strtotime($f_from));
+    } else {
+        $range_value = 'Up to ' . date('d M Y', strtotime($f_to));
+    }
+    $active_filters[$range_label] = $range_value;
+}
 $active_filters['Sort'] = $sort_labels[$f_sort] ?? $sort_labels['date_desc'];
 
 $filter_qs = http_build_query(array_filter([
@@ -134,6 +166,9 @@ $filter_qs = http_build_query(array_filter([
     'user_id'  => $f_user ?: '',
     'sort'     => $f_sort !== 'date_desc' ? $f_sort : '',
     'followup' => $f_followup,
+    'date_field' => $f_datefield === 'updated' ? 'updated' : '',
+    'date_from'  => $f_from,
+    'date_to'    => $f_to,
 ]));
 
 $back_url = APP_URL . '/leads/index.php' . ($filter_qs !== '' ? '?' . $filter_qs : '');
