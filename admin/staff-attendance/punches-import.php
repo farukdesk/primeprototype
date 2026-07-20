@@ -74,15 +74,31 @@ $parse_time = static function (string $s): ?string {
     return null;
 };
 
-// Staff pool indexed by employee id (case-insensitive). Ambiguous ids are kept
-// as multi-entry lists and flagged rather than guessed.
+// Canonicalise an employee id for matching: strip invisible characters
+// (NBSP, zero-width, BOM), trim, lower-case, and drop leading zeros on purely
+// numeric ids so a profile id of "028620" matches "28620" in the CSV (Excel
+// strips leading zeros from numeric cells) and vice-versa.
+$canon_emp = static function (string $s): string {
+    $s = preg_replace('/[\x{00A0}\x{200B}\x{200C}\x{200D}\x{FEFF}]/u', '', $s) ?? $s;
+    $s = strtolower(trim($s));
+    if ($s !== '' && ctype_digit($s)) {
+        $s = ltrim($s, '0');
+        if ($s === '') $s = '0';
+    }
+    return $s;
+};
+
+// Staff pool indexed by canonical employee id. Ambiguous ids are kept as
+// multi-entry lists and flagged rather than guessed.
 $emp_index   = [];
 $valid_users = []; // uid => full_name (for re-validating the confirmed plan)
 foreach (att_mappable_users() as $u) {
     $valid_users[(int)$u['id']] = (string)$u['full_name'];
     $eid = trim((string)($u['employee_id'] ?? ''));
     if ($eid === '') continue;
-    $emp_index[strtolower($eid)][] = ['id' => (int)$u['id'], 'name' => (string)$u['full_name']];
+    $key = $canon_emp($eid);
+    if ($key === '') continue;
+    $emp_index[$key][] = ['id' => (int)$u['id'], 'name' => (string)$u['full_name'], 'eid' => $eid];
 }
 
 $preview = null;
@@ -265,12 +281,12 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             // Exact duplicate CSV lines: first occurrence wins.
-            $line_key = strtolower($raw_emp) . '|' . $date . '|' . $in . '|' . $out;
+            $line_key = $canon_emp($raw_emp) . '|' . $date . '|' . $in . '|' . $out;
             if (isset($seen_rows[$line_key])) { $dup_skipped++; continue; }
             $seen_rows[$line_key] = true;
 
-            // Resolve the employee id.
-            $matches = $emp_index[strtolower($raw_emp)] ?? [];
+            // Resolve the employee id (case- and leading-zero-tolerant).
+            $matches = $emp_index[$canon_emp($raw_emp)] ?? [];
             if (empty($matches)) {
                 $missing[] = ['row' => $row_no, 'emp' => $raw_emp, 'date' => date('d/m/Y', strtotime($date))];
                 continue;
@@ -281,7 +297,10 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $uid  = $matches[0]['id'];
             $name = $matches[0]['name'];
-            $pin  = mb_substr($raw_emp, 0, 32);
+            // Use the staff profile's employee id as the punch PIN (not the raw
+            // CSV value) so re-imports stay idempotent even when the CSV drops
+            // leading zeros.
+            $pin  = mb_substr($matches[0]['eid'], 0, 32);
 
             // Which of this row's punches already exist?
             $new_parts = [];
