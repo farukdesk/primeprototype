@@ -1696,6 +1696,29 @@ if (is_portal_student()) {
     </div>
     <?php endif; ?>
 
+    <!-- ── My Attendance (self-service for Administrative & Faculty employee types
+            WITHOUT Staff Attendance module access; read-only own page) ── -->
+    <?php
+    $_att_self_nav = false;
+    if (!is_super_admin() && !can_access('staff-attendance')) {
+        try {
+            $_att_st = db()->prepare('SELECT department_type FROM staff_profiles WHERE user_id = ?');
+            $_att_st->execute([(int)$user['id']]);
+            $_att_self_nav = in_array((string)$_att_st->fetchColumn(), ['administrative', 'educational'], true);
+        } catch (Throwable $_att_e) { $_att_self_nav = false; }
+    }
+    ?>
+    <?php if ($_att_self_nav): ?>
+    <ul class="nav flex-column mt-2">
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/staff-attendance/staff.php"
+               class="<?= strpos($current_path, '/staff-attendance/staff') !== false ? 'active' : '' ?>">
+                <i class="fas fa-user-clock"></i> My Attendance
+            </a>
+        </li>
+    </ul>
+    <?php endif; ?>
+
     <!-- ── Communication ── -->
     <?php if (is_super_admin() || can_access('contact') || can_access('support-tickets') || can_access('knowledge-base') || can_access('broadcast') || can_access('app-notifications')): ?>
     <button class="nav-group-toggle <?= $is_comms_active ? '' : 'collapsed' ?>"

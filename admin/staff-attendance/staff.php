@@ -13,18 +13,52 @@
  * plus dept & q so the "Back to report" link preserves the report filters.
  */
 require_once __DIR__ . '/../includes/auth.php';
-require_access('staff-attendance');
 require_once __DIR__ . '/helpers.php';
 
-$page_title = 'Staff Attendance – Calendar';
-$can_edit   = att_can_edit();
+// Access: users with Staff Attendance module access get the full report
+// experience per their access level. Otherwise, staff whose Employee Type is
+// Administrative or Faculty may view ONLY their own page, strictly read-only
+// (no editing/adding records, no other module pages).
+auth_check();
+$self_only = false;
+if (!att_can_view()) {
+    if (att_self_service_allowed()) {
+        $self_only = true;
+    } else {
+        $_SESSION['flash_error'] = 'You do not have permission to access this section.';
+        redirect(APP_URL . '/index.php');
+    }
+}
+
+$page_title = $self_only ? 'My Attendance' : 'Staff Attendance – Calendar';
+$can_edit   = !$self_only && att_can_edit();
 
 // ── Resolve the staff member ────────────────────────────────────────────────
-$user_id = (int)($_GET['user_id'] ?? 0);
-$staff   = att_staff_list();
+// Self-service viewers are ALWAYS locked to their own user id — any user_id in
+// the query string is ignored so they cannot open another member's page.
+$user_id = $self_only ? (int)auth_user()['id'] : (int)($_GET['user_id'] ?? 0);
 $member  = null;
-foreach ($staff as $s) {
-    if ((int)$s['id'] === $user_id) { $member = $s; break; }
+if ($self_only) {
+    // Their group may lack module access, so they may not appear in
+    // att_staff_list() — load their directory row directly instead.
+    try {
+        $stmt = db()->prepare(
+            'SELECT u.id, u.full_name, u.username, sp.employee_id, sp.staff_dept_id, sd.name AS dept_name
+               FROM users u
+          LEFT JOIN staff_profiles sp ON sp.user_id = u.id
+          LEFT JOIN staff_departments sd ON sd.id = sp.staff_dept_id
+              WHERE u.id = ? AND u.is_active = 1'
+        );
+        $stmt->execute([$user_id]);
+        $member = $stmt->fetch() ?: null;
+    } catch (Throwable $e) {
+        $member = null;
+    }
+} else {
+    $staff = att_staff_list();
+    foreach ($staff as $s) {
+        if ((int)$s['id'] === $user_id) { $member = $s; break; }
+    }
 }
 
 // Filters to carry back to the report.
@@ -59,7 +93,7 @@ $report_qs = http_build_query(array_filter([
 if (!$member):
 ?>
 <div class="alert alert-warning">Staff member not found or not visible on the attendance report.</div>
-<a href="<?= APP_URL ?>/staff-attendance/index.php" class="btn btn-secondary btn-sm">Back to Attendance</a>
+<a href="<?= $self_only ? APP_URL . '/index.php' : APP_URL . '/staff-attendance/index.php' ?>" class="btn btn-secondary btn-sm"><?= $self_only ? 'Back to Dashboard' : 'Back to Attendance' ?></a>
 <?php
 require_once __DIR__ . '/../includes/footer.php';
 return;
@@ -161,12 +195,18 @@ $weekday_abbr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     <nav aria-label="breadcrumb" class="no-print">
         <ol class="breadcrumb mb-0">
             <li class="breadcrumb-item"><a href="<?= APP_URL ?>/index.php">Dashboard</a></li>
+            <?php if (!$self_only): ?>
             <li class="breadcrumb-item"><a href="<?= APP_URL ?>/staff-attendance/index.php?<?= h($report_qs) ?>">Staff Attendance</a></li>
             <li class="breadcrumb-item active"><?= h($member['full_name']) ?></li>
+            <?php else: ?>
+            <li class="breadcrumb-item active">My Attendance</li>
+            <?php endif; ?>
         </ol>
     </nav>
     <div class="d-flex gap-2 no-print">
+        <?php if (!$self_only): ?>
         <a href="<?= APP_URL ?>/staff-attendance/index.php?<?= h($report_qs) ?>" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left me-1"></i> Back to report</a>
+        <?php endif; ?>
         <button onclick="window.print()" class="btn btn-outline-secondary btn-sm"><i class="fas fa-print me-1"></i> Print</button>
     </div>
 </div>

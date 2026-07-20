@@ -49,6 +49,28 @@ function att_is_admin(): bool
     return att_can_edit();
 }
 
+/**
+ * Self-service: staff whose Employee Type (staff_profiles.department_type) is
+ * Administrative ('administrative') or Faculty ('educational') may view their
+ * OWN attendance page (staff.php) read-only, even without Staff Attendance
+ * module access. They cannot add/edit records or open any other module page;
+ * anyone granted module access via the Module Access page keeps the full
+ * experience based on their access level.
+ */
+function att_self_service_allowed(): bool
+{
+    $user = auth_user();
+    if (!$user) return false;
+    try {
+        $stmt = db()->prepare('SELECT department_type FROM staff_profiles WHERE user_id = ?');
+        $stmt->execute([(int)$user['id']]);
+        $type = (string)$stmt->fetchColumn();
+        return in_array($type, ['administrative', 'educational'], true);
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
 // ── Settings (key / value) ──────────────────────────────────────────────────
 
 /** Read a single global setting, falling back to $default. */
