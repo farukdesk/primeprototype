@@ -20,6 +20,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $verify_token      = trim($_POST['verify_token']      ?? '');
     $app_secret        = trim($_POST['app_secret']        ?? '');
 
+    $auto_reply_enabled = isset($_POST['auto_reply_enabled']) ? '1' : '0';
+    $auto_reply_message = trim($_POST['auto_reply_message'] ?? '');
+    $office_days        = implode(',', array_map('intval', (array)($_POST['office_days'] ?? [])));
+    $office_start       = preg_match('/^\d{2}:\d{2}$/', $_POST['office_start'] ?? '') ? $_POST['office_start'] : '09:00';
+    $office_end         = preg_match('/^\d{2}:\d{2}$/', $_POST['office_end']   ?? '') ? $_POST['office_end']   : '17:00';
+
     if ($verify_token === '') $errors[] = 'Verify Token is required.';
 
     if (empty($errors)) {
@@ -27,6 +33,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         leads_fb_setting_set('page_access_token', $page_access_token);
         leads_fb_setting_set('verify_token',      $verify_token);
         leads_fb_setting_set('app_secret',        $app_secret);
+        leads_fb_setting_set('auto_reply_enabled', $auto_reply_enabled);
+        leads_fb_setting_set('auto_reply_message', $auto_reply_message);
+        leads_fb_setting_set('office_days',        $office_days);
+        leads_fb_setting_set('office_start',       $office_start);
+        leads_fb_setting_set('office_end',         $office_end);
         flash_set('success', 'Facebook settings saved.');
         redirect(APP_URL . '/leads/fb-settings.php');
     }
@@ -38,6 +49,11 @@ $cur = [
     'page_access_token' => leads_fb_setting('page_access_token'),
     'verify_token'      => leads_fb_setting('verify_token'),
     'app_secret'        => leads_fb_setting('app_secret'),
+    'auto_reply_enabled'=> leads_fb_setting('auto_reply_enabled'),
+    'auto_reply_message'=> leads_fb_setting('auto_reply_message'),
+    'office_days'       => leads_fb_setting('office_days')  !== '' ? leads_fb_setting('office_days')  : '0,1,2,3,4',
+    'office_start'      => leads_fb_setting('office_start') !== '' ? leads_fb_setting('office_start') : '09:00',
+    'office_end'        => leads_fb_setting('office_end')   !== '' ? leads_fb_setting('office_end')   : '17:00',
 ];
 
 $webhook_url = SITE_URL . '/fb-webhook.php';
@@ -92,6 +108,40 @@ require_once __DIR__ . '/../includes/header.php';
                         <label class="form-label fw-semibold">App Secret</label>
                         <input type="text" name="app_secret" class="form-control font-monospace" value="<?= h($cur['app_secret']) ?>" placeholder="Facebook App Secret (optional but recommended)" autocomplete="off">
                         <div class="form-text">Used to verify the <code>X-Hub-Signature-256</code> header on incoming webhooks. Leave blank to skip verification.</div>
+                    </div>
+                    <hr class="my-4">
+                    <h6 class="fw-semibold mb-3"><i class="fas fa-robot me-2 text-warning"></i>Off-Hours Auto-Responder</h6>
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" name="auto_reply_enabled" id="auto_reply_enabled" value="1" <?= $cur['auto_reply_enabled'] === '1' ? 'checked' : '' ?>>
+                        <label class="form-check-label" for="auto_reply_enabled">Automatically reply when messages arrive outside working hours</label>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Auto-Reply Message</label>
+                        <textarea name="auto_reply_message" class="form-control" rows="3" placeholder="Thanks for reaching out! Our admission team is currently offline. We will reply during office hours (Sun–Thu, 9 AM–5 PM)."><?= h($cur['auto_reply_message']) ?></textarea>
+                        <div class="form-text">Sent at most once per contact every 6 hours.</div>
+                    </div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Office Start</label>
+                            <input type="time" name="office_start" class="form-control" value="<?= h($cur['office_start']) ?>">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Office End</label>
+                            <input type="time" name="office_end" class="form-control" value="<?= h($cur['office_end']) ?>">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Working Days</label>
+                        <div class="d-flex flex-wrap gap-3">
+                            <?php $day_names = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']; $sel_days = explode(',', $cur['office_days']); ?>
+                            <?php foreach ($day_names as $di => $dn): ?>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="office_days[]" id="day<?= $di ?>" value="<?= $di ?>" <?= in_array((string)$di, $sel_days, true) ? 'checked' : '' ?>>
+                                <label class="form-check-label small" for="day<?= $di ?>"><?= $dn ?></label>
+                            </div>
+                            <?php endforeach; ?>
+                        </div>
+                        <div class="form-text">Auto-replies are only sent outside the selected days/hours. Requires <code>admin/leads/fb-inbox-upgrade.sql</code>.</div>
                     </div>
                     <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i> Save Settings</button>
                 </form>
