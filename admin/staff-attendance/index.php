@@ -212,6 +212,11 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
 
 <?= flash_show() ?>
 
+<details class="mb-3" open>
+    <summary class="text-muted small mb-1" style="cursor:pointer"><i class="fas fa-scale-balanced me-1"></i>Attendance policy (effective 01 Jun 2026) — click to show/hide</summary>
+    <?= att_policy_rules_html() ?>
+</details>
+
 <!-- ── Filters ── -->
 <div class="card mb-4" style="border-radius:12px;">
     <div class="card-body py-3">

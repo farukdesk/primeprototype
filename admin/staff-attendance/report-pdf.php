@@ -228,6 +228,7 @@ ob_start();
                 <?= $date_head ?>
                 <th class="tt">Total<br>Late</th>
                 <th class="tt">Total<br>Absent</th>
+                <th class="tt">Penalty<br>Absent</th>
             </tr>
         </thead>
         <tbody>

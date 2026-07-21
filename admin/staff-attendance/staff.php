@@ -219,6 +219,8 @@ $weekday_abbr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 <?= flash_show() ?>
 
+<?= att_policy_rules_html() ?>
+
 <div class="card mb-3" style="border-radius:12px;">
     <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-3">
         <div>
