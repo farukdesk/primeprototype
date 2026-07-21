@@ -79,7 +79,8 @@ if (($_GET['export'] ?? '') === 'csv') {
         'present' => 'Present', 'late_in' => 'Late In', 'early_out' => 'Early Out',
         'late_and_early' => 'Late In + Early Out', 'incomplete' => 'Incomplete',
         'leave' => 'On Leave', 'absent' => 'Absent', 'holiday' => 'Holiday',
-        'weekly_off' => 'Weekly Off', 'off' => 'Off',
+        'weekly_off' => 'Weekend', 'off' => 'Weekend',
+        'short_hours' => 'Insufficient Hours (Fri < 7h)',
     ];
     $status_text = static fn(string $s): string => $status_labels[$s] ?? ucwords(str_replace('_', ' ', $s));
 

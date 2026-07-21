@@ -199,7 +199,7 @@ require_once __DIR__ . '/../includes/header.php';
 <p class="text-muted small mt-2">
     Blank fields inherit the global schedule (shown as placeholders: <?= h($g['start_time']) ?>–<?= h($g['close_time']) ?>,
     buffers <?= (int)$g['in_buffer_minutes'] ?>/<?= (int)$g['out_buffer_minutes'] ?> min).
-    Weekly Off with no day ticked inherits the global off days
+    Weekend (weekly off) with no day ticked inherits the global off days
     (<?= h(implode(', ', array_map(fn($n) => $day_abbr[$n], $g_off)) ?: 'none') ?>); ticked days replace them for that staff member
     and are used for their absence counts and working-day totals.
     Clearing every field (and every off day) for a staff member removes their override.

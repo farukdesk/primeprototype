@@ -120,6 +120,7 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
     </div>
     <div class="col-lg-4">
+        <?= att_policy_rules_html() ?>
         <div class="card" style="border-radius:12px;">
             <div class="card-body">
                 <h6 class="fw-semibold"><i class="fas fa-circle-info me-2 text-muted"></i>How this is used</h6>

@@ -155,6 +155,7 @@ $status_cell_class = static function (string $status): string {
         'present'                     => 'cal-present',
         'late_in', 'late_and_early'   => 'cal-late',
         'early_out'                   => 'cal-early',
+        'short_hours'                 => 'cal-early',
         'incomplete'                  => 'cal-incomplete',
         'absent'                      => 'cal-absent',
         'upcoming'                    => 'cal-upcoming',

@@ -151,6 +151,12 @@ require_once __DIR__ . '/../includes/header.php';
                     An in-time later than start + buffer is counted as <em>Late In</em>;
                     an out-time earlier than close − buffer is counted as <em>Early Out</em>.
                 </p>
+                <div class="alert alert-info small mt-3 mb-0 py-2">
+                    <strong>From 01 Jun 2026:</strong> Administrative staff get a 15-minute and
+                    Faculty a 20-minute clock-in grace (no clock-out grace); clocking in by
+                    8:30 AM allows leaving from 4:30 PM; faculty Fridays are flexible
+                    (minimum 7 hours); every 4 Late In / Early Out days = 1 Absent day.
+                </div>
             </div>
         </div>
     </div>

@@ -415,20 +415,56 @@ function att_compute_status(?array $record, int $user_id, string $date, array $s
     $has_in  = !empty($record['in_time']);
     $has_out = !empty($record['out_time']);
 
+    $policy = att_policy_active($date);
+    $etype  = $policy ? att_employee_type($user_id) : '';
+
     if (isset($holidays[$date]))            return $has_in ? 'present' : 'holiday';
+
+    // Policy: faculty working on a FRIDAY are fully flexible — any clock in/out
+    // time is fine, never marked Late In or Early Out, but the day must total at
+    // least 7 hours (7–8h expected). Applies whether Friday is their weekend or
+    // a scheduled work day.
+    if ($policy && $etype === 'educational' && (int)date('N', strtotime($date)) === 5 && $has_in) {
+        if (!$has_out) return 'incomplete';
+        return att_worked_minutes($record['in_time'], $record['out_time']) >= ATT_POLICY_FRIDAY_MIN_MINUTES
+            ? 'present'
+            : 'short_hours';
+    }
+
     if (att_is_weekly_off_for($sched, $date)) return $has_in ? 'present' : 'weekly_off';
     if (!$has_in && in_array($user_id, $on_leave, true)) return 'leave';
     if (!$has_in && $date > date('Y-m-d')) return 'upcoming';
     if (!$has_in)                           return 'absent';
 
     // Present with an in-time: check late-in / early-out against the schedule.
-    $start_lim = att_time_to_minutes($sched['start_time']) + (int)$sched['in_buffer_minutes'];
-    $close_lim = att_time_to_minutes($sched['close_time']) - (int)$sched['out_buffer_minutes'];
+    // Policy (from 01 Jun 2026): buffers come from the Employee Type —
+    // Administrative 15 min in / 0 min out, Faculty 20 min in / 0 min out.
+    $in_buffer  = (int)$sched['in_buffer_minutes'];
+    $out_buffer = (int)$sched['out_buffer_minutes'];
+    if ($policy && $etype === 'administrative') {
+        $in_buffer  = ATT_POLICY_ADMIN_IN_BUFFER;
+        $out_buffer = ATT_POLICY_OUT_BUFFER;
+    } elseif ($policy && $etype === 'educational') {
+        $in_buffer  = ATT_POLICY_FACULTY_IN_BUFFER;
+        $out_buffer = ATT_POLICY_OUT_BUFFER;
+    }
+
+    $start_lim = att_time_to_minutes($sched['start_time']) + $in_buffer;
+    $close_lim = att_time_to_minutes($sched['close_time']) - $out_buffer;
     $in_min    = att_time_to_minutes($record['in_time']);
     $out_min   = $has_out ? att_time_to_minutes($record['out_time']) : null;
 
     $late  = $in_min !== null && $in_min > $start_lim;
     $early = $out_min !== null && $out_min < $close_lim;
+
+    // Policy: early birds who clock in by 08:30 may leave from 16:30 without
+    // being counted late or early.
+    if ($policy && $in_min !== null && $out_min !== null
+        && $in_min <= (int)att_time_to_minutes(ATT_POLICY_EARLY_IN)
+        && $out_min >= (int)att_time_to_minutes(ATT_POLICY_EARLY_OUT_OK)) {
+        $late  = false;
+        $early = false;
+    }
 
     if (!$has_out)          return 'incomplete';
     if ($late && $early)    return 'late_and_early';

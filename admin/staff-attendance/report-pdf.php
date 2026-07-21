@@ -100,9 +100,10 @@ foreach ($staff as $s) {
     $sched = att_effective_schedule($uid);
     $sn++;
 
-    $cells       = '';
-    $total_late  = 0;
+    $cells        = '';
+    $total_late   = 0;
     $total_absent = 0;
+    $pen_days     = 0; // late-in/early-out days on/after 01 Jun 2026
 
     foreach ($dates as $d) {
         $rec      = $records[$uid . '|' . $d] ?? null;
