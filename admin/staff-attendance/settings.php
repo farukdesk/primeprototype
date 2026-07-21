@@ -110,7 +110,7 @@ require_once __DIR__ . '/../includes/header.php';
                             </div>
                             <?php endforeach; ?>
                         </div>
-                        <div class="form-text">Off days are excluded from absence counts.</div>
+                        <div class="form-text">Weekend days are excluded from absence counts and are shown as “Weekend” on all reports.</div>
                     </div>
                     <div class="col-12">
                         <button class="btn btn-primary"><i class="fas fa-save me-1"></i> Save Settings</button>

@@ -453,7 +453,11 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
     Click any staff member (name or count) to open their monthly calendar with in/out
     times and a day-by-day breakdown. Statuses are derived from each staff member's
     effective schedule (individual override or the global office hours) and the
-    configured grace buffers. Holidays and weekly-off days are excluded from absence counts.
+    configured grace buffers. Holidays and Weekend days are excluded from absence counts.
+    From <strong>01 Jun 2026</strong>: Administrative staff get a 15-minute and Faculty a 20-minute
+    clock-in grace with <strong>no clock-out grace</strong>; faculty Fridays are flexible (minimum 7 hours,
+    never marked Late/Early); clocking in by 8:30 AM allows leaving from 4:30 PM; and every
+    <strong>4 Late In / Early Out days count as 1 Absent day</strong> (Penalty Absent column — salary may be deducted).
 </p>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
