@@ -107,6 +107,12 @@ if (($_GET['ajax'] ?? '') === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $mid = (int)db()->lastInsertId();
     if ($sent) {
         db()->prepare('UPDATE lead_fb_contacts SET last_message_at = NOW() WHERE id = ?')->execute([$contact_id]);
+        $qa_id = (int)($_POST['qa_id'] ?? 0);
+        if ($qa_id > 0) {
+            try {
+                db()->prepare('UPDATE lead_fb_qa SET use_count = use_count + 1 WHERE id = ?')->execute([$qa_id]);
+            } catch (Exception $e) { /* run fb-inbox-upgrade-3.sql */ }
+        }
         if ($contact['lead_id']) {
             leads_log((int)$contact['lead_id'], 'fb_message_sent', null, null, null,
                 'Facebook reply sent by ' . $user['full_name'] . ': ' . mb_substr($text, 0, 100));
@@ -404,6 +410,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } catch (Exception $e) { /* ignore */ }
         redirect(APP_URL . '/leads/fb-conversation.php?contact_id=' . $contact_id);
     }
+
+    // ── Saved Q&A (smart answer suggestions) ──────────────────────────────────
+    if ($action === 'add_qa' && $is_staff) {
+        $qa_question = trim($_POST['qa_question'] ?? '');
+        $qa_keywords = trim($_POST['qa_keywords'] ?? '');
+        $qa_answer   = trim($_POST['qa_answer'] ?? '');
+        if ($qa_question === '' || $qa_answer === '') {
+            flash_set('error', 'Question and answer are both required.');
+        } else {
+            try {
+                db()->prepare('INSERT INTO lead_fb_qa (question, keywords, answer, created_by) VALUES (?,?,?,?)')
+                    ->execute([$qa_question, $qa_keywords !== '' ? $qa_keywords : null, $qa_answer, $user['id']]);
+                flash_set('success', 'Q&A saved. Matching customer questions will now show this answer as a suggestion.');
+            } catch (Exception $e) {
+                flash_set('error', 'Q&A table missing – run admin/leads/fb-inbox-upgrade-3.sql first.');
+            }
+        }
+        redirect(APP_URL . '/leads/fb-conversation.php?contact_id=' . $contact_id);
+    }
+    if ($action === 'delete_qa' && $is_staff) {
+        try {
+            db()->prepare('DELETE FROM lead_fb_qa WHERE id = ?')->execute([(int)($_POST['qa_id'] ?? 0)]);
+            flash_set('success', 'Q&A deleted.');
+        } catch (Exception $e) { /* ignore */ }
+        redirect(APP_URL . '/leads/fb-conversation.php?contact_id=' . $contact_id);
+    }
 }
 
 // ── Fetch messages ───────────────────────────────────────────────────────
@@ -437,6 +469,21 @@ try {
 } catch (Exception $e) { $upgrade_needed = true; }
 $canned_map = [];
 foreach ($canned as $cr) { $canned_map[$cr['shortcut']] = $cr['body']; }
+
+// Saved Q&A for smart answer suggestions
+$qa_list = [];
+try {
+    $qa_list = db()->query('SELECT id, question, keywords, answer, use_count FROM lead_fb_qa WHERE is_active = 1 ORDER BY use_count DESC, id DESC')->fetchAll();
+} catch (Exception $e) { /* run fb-inbox-upgrade-3.sql */ }
+
+// Last incoming customer message (used to suggest answers on page load)
+$last_incoming_text = '';
+foreach (array_reverse($messages) as $m_row) {
+    if ($m_row['direction'] === 'in' && (string)($m_row['message_text'] ?? '') !== '') {
+        $last_incoming_text = (string)$m_row['message_text'];
+        break;
+    }
+}
 
 // Internal notes
 $contact_notes = [];
@@ -512,6 +559,10 @@ require_once __DIR__ . '/../includes/header.php';
 .contact-item.active{background:#1877F2;border-color:#1877F2}
 .tag-toggle{cursor:pointer}
 .fb-phone-hit{background:#ffe58a;color:#7a5b00;font-weight:600;padding:0 3px;border-radius:4px}
+#qa-suggest{animation:qaFade .25s ease}
+.qa-chip{background:linear-gradient(90deg,#f8f5ff,#f0f7ff);border-color:#e3d9f7!important;transition:box-shadow .15s}
+.qa-chip:hover{box-shadow:0 2px 8px rgba(111,66,193,.18)}
+@keyframes qaFade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 </style>
 
 <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
@@ -685,6 +736,14 @@ require_once __DIR__ . '/../includes/header.php';
 
             <?php if ($is_staff): ?>
             <div class="card-footer bg-white border-top-0 pt-2">
+                <div id="qa-suggest" class="d-none mb-2">
+                    <div class="d-flex align-items-center gap-1 mb-1">
+                        <span class="small fw-semibold" style="color:#6f42c1"><i class="fas fa-lightbulb me-1 text-warning"></i>Suggested answers</span>
+                        <span class="text-muted" style="font-size:.65rem">based on the customer's question</span>
+                        <button type="button" id="qa-suggest-close" class="btn btn-link btn-sm text-muted p-0 ms-auto" style="font-size:.65rem">hide</button>
+                    </div>
+                    <div id="qa-suggest-list" class="d-flex flex-column gap-1"></div>
+                </div>
                 <div class="position-relative">
                     <div id="canned-panel" class="card shadow border position-absolute d-none" style="bottom:100%;left:0;width:330px;max-height:320px;overflow-y:auto;z-index:50">
                         <div class="p-2 border-bottom bg-white position-sticky top-0">
@@ -828,6 +887,48 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
         </div>
 
+        <!-- Smart answer suggestions (saved Q&A) -->
+        <?php if ($is_staff): ?>
+        <details class="card border-0 shadow-sm mb-3">
+            <summary class="card-header bg-white fw-semibold py-2" style="cursor:pointer;list-style:none">
+                <i class="fas fa-lightbulb me-2 text-warning"></i>Smart Answer Suggestions
+                <span class="badge bg-light text-muted border ms-1" style="font-size:.6rem"><?= count($qa_list) ?> saved</span>
+            </summary>
+            <div class="card-body p-3">
+                <p class="text-muted mb-2" style="font-size:.72rem">Save common questions with their answers. When a customer asks a similar question, the matching answer appears above the reply box – one click to use or send it.</p>
+                <?php if ($qa_list): ?>
+                <div style="max-height:220px;overflow-y:auto" class="mb-2">
+                    <?php foreach ($qa_list as $qa): ?>
+                    <div class="border rounded p-2 mb-1 bg-light">
+                        <div class="small fw-semibold" style="font-size:.75rem"><i class="fas fa-question-circle text-primary me-1"></i><?= h($qa['question']) ?></div>
+                        <div class="text-muted text-truncate" style="font-size:.7rem"><?= h(mb_substr($qa['answer'], 0, 70)) ?></div>
+                        <div class="d-flex justify-content-between align-items-center mt-1">
+                            <small class="text-muted" style="font-size:.62rem"><i class="fas fa-paper-plane me-1"></i>used <?= (int)$qa['use_count'] ?>×</small>
+                            <form method="post" class="d-inline">
+                                <?= csrf_field() ?>
+                                <input type="hidden" name="action" value="delete_qa">
+                                <input type="hidden" name="qa_id" value="<?= (int)$qa['id'] ?>">
+                                <button type="submit" class="btn btn-link btn-sm text-danger p-0" style="font-size:.65rem" onclick="return confirm('Delete this Q&A?')">delete</button>
+                            </form>
+                        </div>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+                <?php else: ?>
+                <p class="text-muted small">No saved Q&A yet – add your first one below.</p>
+                <?php endif; ?>
+                <form method="post">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="action" value="add_qa">
+                    <input type="text" name="qa_question" class="form-control form-control-sm mb-2" placeholder="Customer question (e.g. What is the tuition fee?)" required>
+                    <input type="text" name="qa_keywords" class="form-control form-control-sm mb-2" placeholder="Extra keywords, comma separated (optional)">
+                    <textarea name="qa_answer" class="form-control form-control-sm mb-2" rows="3" placeholder="Answer to send…" required></textarea>
+                    <button type="submit" class="btn btn-sm btn-warning w-100"><i class="fas fa-plus me-1"></i> Save Q&A</button>
+                </form>
+            </div>
+        </details>
+        <?php endif; ?>
+
         <!-- Canned replies management (unlimited) -->
         <?php if ($is_staff): ?>
         <details class="card border-0 shadow-sm mb-3">
@@ -873,6 +974,14 @@ require_once __DIR__ . '/../includes/header.php';
     const CONTACT_PIC = <?= json_encode((string)($contact['fb_picture'] ?? ''), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
     const STAFF_NAME  = <?= json_encode((string)($user['full_name'] ?? 'Staff'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
     const CANNED      = <?= json_encode($canned_map, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+    const QA_LIST     = <?= json_encode(array_map(static fn($r) => [
+        'id' => (int)$r['id'],
+        'q'  => (string)$r['question'],
+        'k'  => (string)($r['keywords'] ?? ''),
+        'a'  => (string)$r['answer'],
+    ], $qa_list), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+    const LAST_IN_TEXT = <?= json_encode($last_incoming_text, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+    let   pendingQaId  = 0;
     let   lastId      = <?= $last_msg_id ?>;
 
     function scrollBottom() { if (thread) thread.scrollTop = thread.scrollHeight; }
@@ -991,6 +1100,70 @@ require_once __DIR__ . '/../includes/header.php';
         if (ph) ph.remove();
     }
 
+    // ── Smart answer suggestions (saved Q&A) ──
+    const qaBox    = document.getElementById('qa-suggest');
+    const qaListEl = document.getElementById('qa-suggest-list');
+    const qaClose  = document.getElementById('qa-suggest-close');
+    const QA_STOP  = new Set(['the','and','for','are','you','your','what','how','can','will','with','this','that','about','have','please','from','when','where','which','there','would','could','should','is','to','of','in','my','me','do','it','on','at','be','or','if','we','us','our','know','tell','want','need','like','ki','kina','ache','ase','koto','kemon','apni','ami','amar','apnar','vai','bhai','কি','কত','আমি','আমার','আপনি','আপনার','ভাই']);
+    function qaTokens(s) {
+        return String(s || '').toLowerCase()
+            .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+            .split(/\s+/)
+            .filter(function (w) { return w.length > 1 && !QA_STOP.has(w); });
+    }
+    function qaScore(msgTokens, msgLower, qa) {
+        const base = qaTokens(qa.q).concat(qaTokens(qa.k));
+        if (!base.length) return 0;
+        let hits = 0;
+        const seen = new Set();
+        base.forEach(function (t) {
+            if (seen.has(t)) return;
+            seen.add(t);
+            if (msgTokens.indexOf(t) !== -1 || msgLower.indexOf(t) !== -1) hits++;
+        });
+        let score = hits / seen.size;
+        // Strong boost when the whole saved question appears in the message
+        if (msgLower.indexOf(String(qa.q).toLowerCase()) !== -1) score += 1;
+        return score;
+    }
+    function qaSuggestFor(text) {
+        if (!qaBox || !qaListEl || !QA_LIST.length || !text) return;
+        const msgLower  = String(text).toLowerCase();
+        const msgTokens = qaTokens(text);
+        const ranked = QA_LIST
+            .map(function (qa) { return { qa: qa, s: qaScore(msgTokens, msgLower, qa) }; })
+            .filter(function (r) { return r.s >= 0.34; })
+            .sort(function (a, b) { return b.s - a.s; })
+            .slice(0, 3);
+        qaListEl.innerHTML = '';
+        if (!ranked.length) { qaBox.classList.add('d-none'); return; }
+        ranked.forEach(function (r) {
+            const row = document.createElement('div');
+            row.className = 'd-flex align-items-center gap-2 border rounded-3 px-2 py-1 qa-chip';
+            row.innerHTML =
+                '<div class="flex-grow-1 overflow-hidden" style="cursor:pointer" title="Click to insert into the reply box">' +
+                '<div class="fw-semibold text-truncate" style="font-size:.72rem;color:#6f42c1">' + escHtml(r.qa.q) + '</div>' +
+                '<div class="text-muted text-truncate" style="font-size:.72rem">' + escHtml(r.qa.a) + '</div>' +
+                '</div>' +
+                '<button type="button" class="btn btn-sm btn-outline-secondary flex-shrink-0 qa-insert" title="Insert into reply box"><i class="fas fa-pen"></i></button>' +
+                '<button type="button" class="btn btn-sm text-white flex-shrink-0 qa-send" style="background:#1877F2" title="Send this answer now"><i class="fas fa-paper-plane"></i></button>';
+            function qaInsert() {
+                const taEl = document.getElementById('fb_reply');
+                if (taEl) { taEl.value = r.qa.a; pendingQaId = r.qa.id; taEl.focus(); }
+            }
+            row.querySelector('.flex-grow-1').addEventListener('click', qaInsert);
+            row.querySelector('.qa-insert').addEventListener('click', qaInsert);
+            row.querySelector('.qa-send').addEventListener('click', function () {
+                qaInsert();
+                const f = document.getElementById('reply-form');
+                if (f) { f.requestSubmit ? f.requestSubmit() : f.dispatchEvent(new Event('submit', { cancelable: true })); }
+            });
+            qaListEl.appendChild(row);
+        });
+        qaBox.classList.remove('d-none');
+    }
+    if (qaClose) qaClose.addEventListener('click', function () { qaBox.classList.add('d-none'); });
+
     // ── AJAX polling every 4 seconds (new messages + seen receipts) ──
     setInterval(function () {
         fetch('?contact_id=<?= $contact_id ?>&ajax=poll&after_id=' + lastId, { headers: { 'Accept': 'application/json' } })
@@ -1005,7 +1178,11 @@ require_once __DIR__ . '/../includes/header.php';
                     lastId = m.id;
                     if (m.direction === 'in') gotIncoming = true;
                 });
-                if (gotIncoming) { scrollBottom(); chime(); }
+                if (gotIncoming) {
+                    scrollBottom(); chime();
+                    const lastIn = (d.messages || []).filter(function (m) { return m.direction === 'in' && m.text; }).pop();
+                    if (lastIn) qaSuggestFor(lastIn.text);
+                }
                 (d.seen_ids || []).forEach(function (id) {
                     const st = document.querySelector('.msg-status[data-msg-id="' + id + '"]');
                     if (st && !st.querySelector('.fa-check-double') && !st.querySelector('.fa-exclamation-circle')) {
@@ -1030,6 +1207,8 @@ require_once __DIR__ . '/../includes/header.php';
             scrollBottom();
             const fd = new FormData(form);
             fd.set('fb_reply', text);
+            if (pendingQaId) { fd.set('qa_id', String(pendingQaId)); pendingQaId = 0; }
+            if (qaBox) qaBox.classList.add('d-none');
             ta.value = '';
             ta.focus();
             fetch('?contact_id=<?= $contact_id ?>&ajax=send', { method: 'POST', body: fd })
@@ -1176,6 +1355,9 @@ require_once __DIR__ . '/../includes/header.php';
             applyFilter();
         });
     });
+
+    // Suggest answers for the customer's most recent question on page load
+    if (LAST_IN_TEXT) qaSuggestFor(LAST_IN_TEXT);
 })();
 </script>
 

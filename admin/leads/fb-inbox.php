@@ -67,6 +67,8 @@ $search    = trim($_GET['search'] ?? '');
 $f_linked  = $_GET['linked'] ?? '';   // 'yes' | 'no' | ''
 $f_state   = $_GET['state']  ?? '';   // '' | 'waiting' | 'responded' | 'converted'
 $f_tag     = (int)($_GET['tag'] ?? 0);
+$f_phone   = $_GET['phone'] ?? '';    // '' | 'yes' | 'no'
+if ($f_phone !== 'yes' && $f_phone !== 'no') $f_phone = '';
 $date_from = trim($_GET['date_from'] ?? '');
 $date_to   = trim($_GET['date_to'] ?? '');
 if ($date_from !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_from)) $date_from = '';
@@ -100,6 +102,13 @@ if ($f_tag > 0) {
     $where[]  = 'c.id IN (SELECT ct.contact_id FROM lead_fb_contact_tags ct WHERE ct.tag_id = ?)';
     $params[] = $f_tag;
 }
+$phone_exists_sql = "EXISTS(SELECT 1 FROM lead_fb_messages mp WHERE mp.contact_id = c.id AND mp.direction = 'in'
+                    AND mp.message_text REGEXP '01[3-9][0-9]{8}')";
+if ($f_phone === 'yes') {
+    $where[] = $phone_exists_sql;
+} elseif ($f_phone === 'no') {
+    $where[] = 'NOT ' . $phone_exists_sql;
+}
 if ($date_from !== '') {
     $where[]  = 'DATE(COALESCE(c.last_message_at, c.first_seen)) >= ?';
     $params[] = $date_from;
@@ -110,7 +119,7 @@ if ($date_to !== '') {
 }
 
 $where_sql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
-$filters_active = ($search !== '' || $f_linked !== '' || $f_state !== '' || $f_tag > 0 || $date_from !== '' || $date_to !== '');
+$filters_active = ($search !== '' || $f_linked !== '' || $f_state !== '' || $f_tag > 0 || $f_phone !== '' || $date_from !== '' || $date_to !== '');
 
 $count_q = db()->prepare(
     'SELECT COUNT(*) FROM lead_fb_contacts c LEFT JOIN leads l ON l.id = c.lead_id ' . $where_sql
@@ -203,6 +212,7 @@ $qs_base = array_filter([
     'linked'    => $f_linked,
     'state'     => $f_state,
     'tag'       => $f_tag ?: null,
+    'phone'     => $f_phone,
     'date_from' => $date_from,
     'date_to'   => $date_to,
 ], static fn($v) => $v !== null && $v !== '');
@@ -228,6 +238,9 @@ require_once __DIR__ . '/../includes/header.php';
                 <i class="fas fa-sync-alt me-1"></i> Refresh Names
             </button>
         </form>
+        <?php endif; ?>
+        <?php if ($is_staff): ?>
+        <a href="<?= APP_URL ?>/leads/fb-broadcast.php" class="btn btn-sm text-white" style="background:#1877F2"><i class="fas fa-bullhorn me-1"></i> Broadcast</a>
         <?php endif; ?>
         <a href="<?= APP_URL ?>/leads/fb-analytics.php" class="btn btn-outline-info btn-sm"><i class="fas fa-chart-line me-1"></i> Analytics</a>
         <?php if (is_super_admin()): ?>
@@ -324,6 +337,14 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
             <?php endif; ?>
             <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Phone Number</label>
+                <select name="phone" class="form-select form-select-sm">
+                    <option value="" <?= $f_phone === '' ? 'selected' : '' ?>>All</option>
+                    <option value="yes" <?= $f_phone === 'yes' ? 'selected' : '' ?>>Has phone number</option>
+                    <option value="no" <?= $f_phone === 'no' ? 'selected' : '' ?>>No phone number</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
                 <label class="form-label small text-muted mb-1">From date</label>
                 <input type="date" name="date_from" class="form-control form-control-sm" value="<?= h($date_from) ?>">
             </div>
@@ -348,6 +369,18 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
             <?php endif; ?>
         </form>
+        <?php if ($all_tags): ?>
+        <div class="d-flex flex-wrap gap-1 align-items-center mt-2 pt-2 border-top">
+            <span class="text-muted small me-1"><i class="fas fa-tags me-1"></i>Quick tags:</span>
+            <a href="?<?= h(http_build_query(array_diff_key($qs_base, ['tag' => 1, 'page' => 1]))) ?>" class="badge text-decoration-none <?= $f_tag === 0 ? 'bg-dark' : 'bg-light text-dark border' ?>">All</a>
+            <?php foreach ($all_tags as $tg): $tag_on = $f_tag === (int)$tg['id']; ?>
+            <a href="?<?= h(http_build_query(array_diff_key($qs_base, ['tag' => 1, 'page' => 1]) + ['tag' => (int)$tg['id']])) ?>" class="badge text-decoration-none"
+               style="<?= $tag_on ? 'background:' . h($tg['color']) . ';color:#fff' : 'background:#fff;color:' . h($tg['color']) . ';border:1px solid ' . h($tg['color']) ?>">
+                <?= $tag_on ? '<i class="fas fa-check me-1"></i>' : '' ?><?= h($tg['name']) ?>
+            </a>
+            <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
     </div>
 </div>
 
