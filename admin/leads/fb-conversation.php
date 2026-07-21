@@ -410,6 +410,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } catch (Exception $e) { /* ignore */ }
         redirect(APP_URL . '/leads/fb-conversation.php?contact_id=' . $contact_id);
     }
+
+    // ── Saved Q&A (smart answer suggestions) ──────────────────────────────────
+    if ($action === 'add_qa' && $is_staff) {
+        $qa_question = trim($_POST['qa_question'] ?? '');
+        $qa_keywords = trim($_POST['qa_keywords'] ?? '');
+        $qa_answer   = trim($_POST['qa_answer'] ?? '');
+        if ($qa_question === '' || $qa_answer === '') {
+            flash_set('error', 'Question and answer are both required.');
+        } else {
+            try {
+                db()->prepare('INSERT INTO lead_fb_qa (question, keywords, answer, created_by) VALUES (?,?,?,?)')
+                    ->execute([$qa_question, $qa_keywords !== '' ? $qa_keywords : null, $qa_answer, $user['id']]);
+                flash_set('success', 'Q&A saved. Matching customer questions will now show this answer as a suggestion.');
+            } catch (Exception $e) {
+                flash_set('error', 'Q&A table missing – run admin/leads/fb-inbox-upgrade-3.sql first.');
+            }
+        }
+        redirect(APP_URL . '/leads/fb-conversation.php?contact_id=' . $contact_id);
+    }
+    if ($action === 'delete_qa' && $is_staff) {
+        try {
+            db()->prepare('DELETE FROM lead_fb_qa WHERE id = ?')->execute([(int)($_POST['qa_id'] ?? 0)]);
+            flash_set('success', 'Q&A deleted.');
+        } catch (Exception $e) { /* ignore */ }
+        redirect(APP_URL . '/leads/fb-conversation.php?contact_id=' . $contact_id);
+    }
 }
 
 // ── Fetch messages ───────────────────────────────────────────────────────

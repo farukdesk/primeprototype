@@ -102,6 +102,13 @@ if ($f_tag > 0) {
     $where[]  = 'c.id IN (SELECT ct.contact_id FROM lead_fb_contact_tags ct WHERE ct.tag_id = ?)';
     $params[] = $f_tag;
 }
+$phone_exists_sql = "EXISTS(SELECT 1 FROM lead_fb_messages mp WHERE mp.contact_id = c.id AND mp.direction = 'in'
+                    AND mp.message_text REGEXP '01[3-9][0-9]{8}')";
+if ($f_phone === 'yes') {
+    $where[] = $phone_exists_sql;
+} elseif ($f_phone === 'no') {
+    $where[] = 'NOT ' . $phone_exists_sql;
+}
 if ($date_from !== '') {
     $where[]  = 'DATE(COALESCE(c.last_message_at, c.first_seen)) >= ?';
     $params[] = $date_from;
