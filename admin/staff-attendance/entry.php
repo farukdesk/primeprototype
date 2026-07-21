@@ -59,6 +59,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'in=' . ($in_t ?? '—') . ', out=' . ($out_t ?? '—')
         );
         flash_set('success', 'Attendance saved for ' . date('d M Y', strtotime($wdate)) . '.');
+        if ($return_to === 'staff') {
+            // Came from the member's calendar page – go back to that user's
+            // page, opened on the month of the saved date.
+            redirect(APP_URL . '/staff-attendance/staff.php?user_id=' . $uid . '&month=' . urlencode(substr($wdate, 0, 7)));
+        }
         redirect(APP_URL . '/staff-attendance/index.php?report=daily&date=' . urlencode($wdate));
     }
     // Fall through on error, preserving selection.

@@ -382,7 +382,7 @@ $weekday_abbr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
                         ?></td>
                         <?php if ($can_edit): ?>
                         <td class="text-end pe-3 no-print">
-                            <a href="<?= APP_URL ?>/staff-attendance/entry.php?user_id=<?= $user_id ?>&date=<?= urlencode($d) ?>"
+                            <a href="<?= APP_URL ?>/staff-attendance/entry.php?user_id=<?= $user_id ?>&date=<?= urlencode($d) ?>&return=staff"
                                class="btn btn-sm btn-outline-primary" style="border-radius:8px;">
                                 <i class="fas fa-<?= $rec ? 'edit' : 'plus' ?>"></i>
                             </a>
