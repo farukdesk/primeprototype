@@ -100,9 +100,10 @@ foreach ($staff as $s) {
     $sched = att_effective_schedule($uid);
     $sn++;
 
-    $cells       = '';
-    $total_late  = 0;
+    $cells        = '';
+    $total_late   = 0;
     $total_absent = 0;
+    $pen_days     = 0; // late-in/early-out days on/after 01 Jun 2026
 
     foreach ($dates as $d) {
         $rec      = $records[$uid . '|' . $d] ?? null;
@@ -115,7 +116,7 @@ foreach ($staff as $s) {
             case 'holiday':
             case 'weekly_off':
                 $cls .= ' off';
-                $html = '<span class="tag">Off</span>';
+                $html = '<span class="tag">' . ($status === 'holiday' ? 'HOL' : 'WE') . '</span>';
                 break;
             case 'leave':
                 $cls .= ' leave';
@@ -126,13 +127,17 @@ foreach ($staff as $s) {
                 $html = '<span class="tag">A</span>';
                 $total_absent++;
                 break;
-            default: // present / late_in / early_out / late_and_early / incomplete
+            default: // present / late_in / early_out / late_and_early / short_hours / incomplete
                 $mins  = $rec ? att_worked_minutes($rec['in_time'] ?? null, $rec['out_time'] ?? null) : 0;
                 $in    = att_display_time($rec['in_time'] ?? null);
                 $out   = att_display_time($rec['out_time'] ?? null);
                 $hours = att_format_hours($mins);
                 $is_late = in_array($status, ['late_in', 'late_and_early'], true);
                 if ($is_late) { $cls .= ' late'; $total_late++; }
+                // Policy (from 01 Jun 2026): each late-in/early-out day feeds the penalty.
+                if (att_policy_active($d) && in_array($status, ['late_in', 'early_out', 'late_and_early'], true)) {
+                    $pen_days++;
+                }
                 $html = '<span class="t">' . h($in) . '</span>'
                       . '<span class="t">' . h($out) . '</span>'
                       . '<span class="hh">' . h($hours) . '</span>';
@@ -141,6 +146,7 @@ foreach ($staff as $s) {
         $cells .= '<td class="' . $cls . '">' . $html . '</td>';
     }
 
+    $pen_abs = att_late_penalty_days($pen_days);
     $body .= '<tr>'
         . '<td class="sn">' . $sn . '</td>'
         . '<td class="nm">' . h($s['full_name']) . '</td>'
@@ -148,11 +154,12 @@ foreach ($staff as $s) {
         . $cells
         . '<td class="tot ' . ($total_late ? 'has' : '') . '">' . $total_late . '</td>'
         . '<td class="tot ' . ($total_absent ? 'hasa' : '') . '">' . $total_absent . '</td>'
+        . '<td class="tot ' . ($pen_abs ? 'hasa' : '') . '">' . $pen_abs . '</td>'
         . '</tr>';
 }
 
 if ($body === '') {
-    $colspan = 5 + count($dates);
+    $colspan = 6 + count($dates);
     $body = '<tr><td colspan="' . $colspan . '" style="text-align:center;padding:20px;color:#777;">'
           . 'No staff found for the selected filters.</td></tr>';
 }
@@ -221,6 +228,7 @@ ob_start();
                 <?= $date_head ?>
                 <th class="tt">Total<br>Late</th>
                 <th class="tt">Total<br>Absent</th>
+                <th class="tt">Penalty<br>Absent</th>
             </tr>
         </thead>
         <tbody>
@@ -233,7 +241,10 @@ ob_start();
         <span class="lg-late">Late</span>
         <span class="lg-absent">Absent (A)</span>
         <span class="lg-leave">On Leave</span>
-        <span class="lg-off">Holiday / Weekly Off</span>
+        <span class="lg-off">HOL = Holiday &middot; WE = Weekend</span>
+        <br>Policy effective 01 Jun 2026: Administrative clock-in grace 15 min, Faculty 20 min (no clock-out grace);
+        faculty Fridays are flexible (minimum 7 hours); clock-in by 8:30 AM allows leaving from 4:30 PM;
+        every 4 Late In / Early Out days count as 1 Absent day (Penalty Absent column).
     </div>
 </body>
 </html>

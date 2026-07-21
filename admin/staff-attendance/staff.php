@@ -113,7 +113,7 @@ foreach ($dates as $d) $leave_by_date[$d] = att_on_leave_user_ids($d);
 
 // Per-day computed rows + running summary.
 $days = [];
-$sum  = ['present' => 0, 'late' => 0, 'early' => 0, 'absent' => 0, 'leave' => 0, 'off' => 0, 'working_days' => 0, 'minutes' => 0];
+$sum  = ['present' => 0, 'late' => 0, 'early' => 0, 'absent' => 0, 'leave' => 0, 'off' => 0, 'working_days' => 0, 'minutes' => 0, 'pen' => 0];
 foreach ($dates as $d) {
     $rec      = $records[$user_id . '|' . $d] ?? null;
     $on_leave = $leave_by_date[$d] ?? [];
@@ -127,11 +127,16 @@ foreach ($dates as $d) {
         case 'late_in':        $sum['present']++; $sum['late']++;  break;
         case 'early_out':      $sum['present']++; $sum['early']++; break;
         case 'late_and_early': $sum['present']++; $sum['late']++; $sum['early']++; break;
+        case 'short_hours':    $sum['present']++; break;
         case 'incomplete':     $sum['present']++; break;
         case 'leave':          $sum['leave']++;   break;
         case 'absent':         $sum['absent']++;  break;
         case 'holiday':
         case 'weekly_off':     $sum['off']++;     break;
+    }
+    // Policy (from 01 Jun 2026): each late-in/early-out day counts toward the penalty.
+    if (att_policy_active($d) && in_array($status, ['late_in', 'early_out', 'late_and_early'], true)) {
+        $sum['pen']++;
     }
     $sum['minutes'] += $mins;
 
@@ -150,6 +155,7 @@ $status_cell_class = static function (string $status): string {
         'present'                     => 'cal-present',
         'late_in', 'late_and_early'   => 'cal-late',
         'early_out'                   => 'cal-early',
+        'short_hours'                 => 'cal-early',
         'incomplete'                  => 'cal-incomplete',
         'absent'                      => 'cal-absent',
         'upcoming'                    => 'cal-upcoming',
@@ -213,6 +219,8 @@ $weekday_abbr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 <?= flash_show() ?>
 
+<?= att_policy_rules_html() ?>
+
 <div class="card mb-3" style="border-radius:12px;">
     <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-3">
         <div>
@@ -242,6 +250,7 @@ $weekday_abbr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
         ['Early Out',    (int)$sum['early'],        'bg-warning text-dark'],
         ['On Leave',     (int)$sum['leave'],        'bg-primary'],
         ['Absent',       (int)$sum['absent'],       'bg-danger'],
+        ['Penalty Absent', att_late_penalty_days((int)($sum['pen'] ?? 0)), 'bg-danger'],
     ];
     foreach ($tiles as [$lbl, $val, $cls]): ?>
     <div class="col-6 col-md">
@@ -273,7 +282,7 @@ $weekday_abbr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
             <span class="badge cal-early text-dark">Early</span>
             <span class="badge cal-leave text-dark">Leave</span>
             <span class="badge cal-absent text-dark">Absent</span>
-            <span class="badge cal-off">Off</span>
+            <span class="badge cal-off">Weekend</span>
         </div>
     </div>
     <div class="card-body p-2">
@@ -299,7 +308,7 @@ $weekday_abbr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
                 $link = APP_URL . '/staff-attendance/entry.php?user_id=' . $user_id . '&date=' . urlencode($d);
                 $tag  = '';
                 if (in_array($status, ['holiday', 'weekly_off'], true)) {
-                    $tag = '<span class="cal-tag">' . ($info['holiday'] ? 'Holiday' : 'Off') . '</span>';
+                    $tag = '<span class="cal-tag">' . ($info['holiday'] ? 'Holiday' : 'Weekend') . '</span>';
                 } elseif ($status === 'absent') {
                     $tag = '<span class="cal-tag text-danger">Absent</span>';
                 } elseif ($status === 'leave') {
@@ -319,6 +328,7 @@ $weekday_abbr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
                     if ($info['minutes'] > 0) echo '<div class="cal-hh">' . h(att_format_hours((int)$info['minutes'])) . '</div>';
                     if (in_array($status, ['late_in', 'late_and_early'], true)) echo '<span class="cal-tag text-warning">Late</span>';
                     elseif ($status === 'early_out') echo '<span class="cal-tag text-warning">Early</span>';
+                    elseif ($status === 'short_hours') echo '<span class="cal-tag text-warning">&lt;7h</span>';
                     elseif ($status === 'incomplete') echo '<span class="cal-tag text-info">No out</span>';
                 } elseif ($tag !== '') {
                     echo '<div class="cal-io">' . $tag . '</div>';

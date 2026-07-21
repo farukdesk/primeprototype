@@ -25,6 +25,82 @@ const ATT_DEFAULT_IN_BUFFER  = 15;
 const ATT_DEFAULT_OUT_BUFFER = 15;
 const ATT_DEFAULT_WEEKLY_OFF = '5'; // Friday (PHP date('N'): 1=Mon … 7=Sun)
 
+// ── Attendance policy effective 1 June 2026 ─────────────────────────────────
+// From this date: employee-type based clock-in buffers (no clock-out buffer),
+// faculty flexible Fridays (minimum 7 hours), early-bird 8:30→16:30 flexibility
+// and the "4 late/early days = 1 absent" salary-deduction rule.
+const ATT_POLICY_EFFECTIVE          = '2026-06-01';
+const ATT_POLICY_ADMIN_IN_BUFFER    = 15;      // administrative clock-in grace (min)
+const ATT_POLICY_FACULTY_IN_BUFFER  = 20;      // faculty clock-in grace (min)
+const ATT_POLICY_OUT_BUFFER         = 0;       // no clock-out grace for both types
+const ATT_POLICY_EARLY_IN           = '08:30'; // earliest counted clock-in
+const ATT_POLICY_EARLY_OUT_OK       = '16:30'; // early birds may leave from here
+const ATT_POLICY_FRIDAY_MIN_MINUTES = 420;     // faculty Friday minimum (7 hours)
+const ATT_POLICY_LATE_PER_ABSENT    = 4;       // 4 late-in/early-out days = 1 absent
+
+/** Whether the June-2026 attendance policy applies to a date. */
+function att_policy_active(string $date): bool
+{
+    return $date >= ATT_POLICY_EFFECTIVE;
+}
+
+/**
+ * Employee Type from the staff profile: 'administrative', 'educational'
+ * (faculty) or '' when unknown. Cached for the request.
+ */
+function att_employee_type(int $user_id): string
+{
+    static $map = null;
+    if ($map === null) {
+        $map = [];
+        try {
+            foreach (db()->query('SELECT user_id, department_type FROM staff_profiles')->fetchAll() as $r) {
+                $map[(int)$r['user_id']] = (string)$r['department_type'];
+            }
+        } catch (Throwable $e) {
+            // staff_profiles missing – schedule buffers apply unchanged.
+        }
+    }
+    return $map[$user_id] ?? '';
+}
+
+/** Penalty absents: every 4 late-in / early-out days count as 1 absent day. */
+function att_late_penalty_days(int $late_early_days): int
+{
+    return intdiv(max(0, $late_early_days), ATT_POLICY_LATE_PER_ABSENT);
+}
+
+/** Reusable card describing the attendance policy (shown to staff and admins). */
+function att_policy_rules_html(): string
+{
+    $eff = date('d M Y', strtotime(ATT_POLICY_EFFECTIVE));
+    return '
+    <div class="card mb-3" style="border-radius:12px;border-left:4px solid #0d6efd;">
+        <div class="card-body py-3">
+            <h6 class="fw-semibold mb-2">
+                <i class="fas fa-scale-balanced me-2 text-primary"></i>Attendance Policy
+                <span class="badge bg-primary ms-1">Effective from ' . h($eff) . '</span>
+            </h6>
+            <div class="row small g-2">
+                <div class="col-md-6">
+                    <ul class="mb-0 ps-3">
+                        <li><strong>Weekend:</strong> weekly off days are marked as <em>Weekend</em>.</li>
+                        <li><strong>Administrative staff:</strong> clock-in grace of <strong>15 minutes</strong> after office start; <strong>no clock-out grace</strong>.</li>
+                        <li><strong>Faculty:</strong> clock-in grace of <strong>20 minutes</strong> after office start; <strong>no clock-out grace</strong>.</li>
+                    </ul>
+                </div>
+                <div class="col-md-6">
+                    <ul class="mb-0 ps-3">
+                        <li><strong>Faculty on Friday:</strong> flexible clock in/out — must complete <strong>7–8 hours</strong> in total; never marked Late In or Early Out.</li>
+                        <li><strong>Early birds:</strong> clock in by <strong>8:30 AM</strong> → may leave from <strong>4:30 PM</strong> without Early Out.</li>
+                        <li><strong>Penalty:</strong> every <strong>4 Late In / Early Out days</strong> count as <strong>1 Absent day</strong> (salary may be deducted).</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>';
+}
+
 // ── Permission helpers ──────────────────────────────────────────────────────
 
 /** Anyone with view access can open the module. */
@@ -339,20 +415,56 @@ function att_compute_status(?array $record, int $user_id, string $date, array $s
     $has_in  = !empty($record['in_time']);
     $has_out = !empty($record['out_time']);
 
+    $policy = att_policy_active($date);
+    $etype  = $policy ? att_employee_type($user_id) : '';
+
     if (isset($holidays[$date]))            return $has_in ? 'present' : 'holiday';
+
+    // Policy: faculty working on a FRIDAY are fully flexible — any clock in/out
+    // time is fine, never marked Late In or Early Out, but the day must total at
+    // least 7 hours (7–8h expected). Applies whether Friday is their weekend or
+    // a scheduled work day.
+    if ($policy && $etype === 'educational' && (int)date('N', strtotime($date)) === 5 && $has_in) {
+        if (!$has_out) return 'incomplete';
+        return att_worked_minutes($record['in_time'], $record['out_time']) >= ATT_POLICY_FRIDAY_MIN_MINUTES
+            ? 'present'
+            : 'short_hours';
+    }
+
     if (att_is_weekly_off_for($sched, $date)) return $has_in ? 'present' : 'weekly_off';
     if (!$has_in && in_array($user_id, $on_leave, true)) return 'leave';
     if (!$has_in && $date > date('Y-m-d')) return 'upcoming';
     if (!$has_in)                           return 'absent';
 
     // Present with an in-time: check late-in / early-out against the schedule.
-    $start_lim = att_time_to_minutes($sched['start_time']) + (int)$sched['in_buffer_minutes'];
-    $close_lim = att_time_to_minutes($sched['close_time']) - (int)$sched['out_buffer_minutes'];
+    // Policy (from 01 Jun 2026): buffers come from the Employee Type —
+    // Administrative 15 min in / 0 min out, Faculty 20 min in / 0 min out.
+    $in_buffer  = (int)$sched['in_buffer_minutes'];
+    $out_buffer = (int)$sched['out_buffer_minutes'];
+    if ($policy && $etype === 'administrative') {
+        $in_buffer  = ATT_POLICY_ADMIN_IN_BUFFER;
+        $out_buffer = ATT_POLICY_OUT_BUFFER;
+    } elseif ($policy && $etype === 'educational') {
+        $in_buffer  = ATT_POLICY_FACULTY_IN_BUFFER;
+        $out_buffer = ATT_POLICY_OUT_BUFFER;
+    }
+
+    $start_lim = att_time_to_minutes($sched['start_time']) + $in_buffer;
+    $close_lim = att_time_to_minutes($sched['close_time']) - $out_buffer;
     $in_min    = att_time_to_minutes($record['in_time']);
     $out_min   = $has_out ? att_time_to_minutes($record['out_time']) : null;
 
     $late  = $in_min !== null && $in_min > $start_lim;
     $early = $out_min !== null && $out_min < $close_lim;
+
+    // Policy: early birds who clock in by 08:30 may leave from 16:30 without
+    // being counted late or early.
+    if ($policy && $in_min !== null && $out_min !== null
+        && $in_min <= (int)att_time_to_minutes(ATT_POLICY_EARLY_IN)
+        && $out_min >= (int)att_time_to_minutes(ATT_POLICY_EARLY_OUT_OK)) {
+        $late  = false;
+        $early = false;
+    }
 
     if (!$has_out)          return 'incomplete';
     if ($late && $early)    return 'late_and_early';
@@ -370,11 +482,12 @@ function att_status_label(string $status): string
         'early_out'      => 'Early Out',
         'late_and_early' => 'Late In & Early Out',
         'incomplete'     => 'No Out Time',
+        'short_hours'    => 'Insufficient Hours (<7h)',
         'absent'         => 'Absent',
         'upcoming'       => 'Upcoming',
         'leave'          => 'On Leave',
         'holiday'        => 'Holiday',
-        'weekly_off'     => 'Weekly Off',
+        'weekly_off'     => 'Weekend',
         default          => ucfirst(str_replace('_', ' ', $status)),
     };
 }
@@ -388,6 +501,7 @@ function att_status_badge(string $status): string
         'early_out'      => 'bg-warning text-dark',
         'late_and_early' => 'bg-warning text-dark',
         'incomplete'     => 'bg-info text-dark',
+        'short_hours'    => 'bg-warning text-dark',
         'absent'         => 'bg-danger',
         'upcoming'       => 'bg-light text-muted border',
         'leave'          => 'bg-primary',

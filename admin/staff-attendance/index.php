@@ -79,7 +79,8 @@ if (($_GET['export'] ?? '') === 'csv') {
         'present' => 'Present', 'late_in' => 'Late In', 'early_out' => 'Early Out',
         'late_and_early' => 'Late In + Early Out', 'incomplete' => 'Incomplete',
         'leave' => 'On Leave', 'absent' => 'Absent', 'holiday' => 'Holiday',
-        'weekly_off' => 'Weekly Off', 'off' => 'Off',
+        'weekly_off' => 'Weekend', 'off' => 'Weekend',
+        'short_hours' => 'Insufficient Hours (Fri < 7h)',
     ];
     $status_text = static fn(string $s): string => $status_labels[$s] ?? ucwords(str_replace('_', ' ', $s));
 
@@ -116,12 +117,13 @@ if (($_GET['export'] ?? '') === 'csv') {
         }
     } else {
         fputcsv($out, ['Employee Name', 'Employee ID', 'Department', 'Working Days',
-                       'Present', 'Late In', 'Early Out', 'On Leave', 'Absent', 'Total Working Hours']);
+                       'Present', 'Late In', 'Early Out', 'On Leave', 'Absent',
+                       'Penalty Absent (4 Late/Early = 1)', 'Total Absent (incl. Penalty)', 'Total Working Hours']);
         foreach ($staff as $s) {
             $uid   = (int)$s['id'];
             $sched = att_effective_schedule($uid);
             $x = ['present' => 0, 'late' => 0, 'early' => 0, 'absent' => 0,
-                  'leave' => 0, 'minutes' => 0, 'working_days' => 0];
+                  'leave' => 0, 'minutes' => 0, 'working_days' => 0, 'pen' => 0];
             foreach ($dates as $d) {
                 $on_leave = $leave_by_date[$d] ?? [];
                 $off      = isset($holidays[$d]) || att_is_weekly_off_for($sched, $d);
@@ -133,12 +135,18 @@ if (($_GET['export'] ?? '') === 'csv') {
                     case 'late_in':        $x['present']++; $x['late']++;  break;
                     case 'early_out':      $x['present']++; $x['early']++; break;
                     case 'late_and_early': $x['present']++; $x['late']++; $x['early']++; break;
+                    case 'short_hours':                          $x['present']++; break;
                     case 'incomplete':                           $x['present']++; break;
                     case 'leave':                                $x['leave']++;   break;
                     case 'absent':                               $x['absent']++;  break;
                 }
+                // Policy (from 01 Jun 2026): each late-in/early-out day counts toward the penalty.
+                if (att_policy_active($d) && in_array($status, ['late_in', 'early_out', 'late_and_early'], true)) {
+                    $x['pen']++;
+                }
                 if ($rec) $x['minutes'] += att_worked_minutes($rec['in_time'], $rec['out_time']);
             }
+            $pen_abs = att_late_penalty_days((int)$x['pen']);
             fputcsv($out, [
                 (string)$s['full_name'],
                 (string)($s['employee_id'] ?? ''),
@@ -149,6 +157,8 @@ if (($_GET['export'] ?? '') === 'csv') {
                 $x['early'],
                 $x['leave'],
                 $x['absent'],
+                $pen_abs,
+                $x['absent'] + $pen_abs,
                 att_format_hours((int)$x['minutes']),
             ]);
         }
@@ -201,6 +211,11 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
 </div>
 
 <?= flash_show() ?>
+
+<details class="mb-3" open>
+    <summary class="text-muted small mb-1" style="cursor:pointer"><i class="fas fa-scale-balanced me-1"></i>Attendance policy (effective 01 Jun 2026) — click to show/hide</summary>
+    <?= att_policy_rules_html() ?>
+</details>
 
 <!-- ── Filters ── -->
 <div class="card mb-4" style="border-radius:12px;">
@@ -305,7 +320,7 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
             </div>
             <?php elseif (att_is_weekly_off($date)): ?>
             <div class="alert alert-light mb-0 rounded-0 border-0 border-bottom">
-                <i class="fas fa-couch me-1"></i> Weekly off day.
+                <i class="fas fa-couch me-1"></i> Weekend.
             </div>
             <?php endif; ?>
             <div class="table-responsive">
@@ -358,7 +373,7 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
             $summ = [];
             foreach ($staff as $s) {
                 $uid = (int)$s['id'];
-                $summ[$uid] = ['present' => 0, 'late' => 0, 'early' => 0, 'absent' => 0, 'leave' => 0, 'minutes' => 0, 'working_days' => 0];
+                $summ[$uid] = ['present' => 0, 'late' => 0, 'early' => 0, 'absent' => 0, 'leave' => 0, 'minutes' => 0, 'working_days' => 0, 'pen' => 0];
             }
             foreach ($dates as $d) {
                 $on_leave    = $leave_by_date[$d] ?? [];
@@ -376,9 +391,14 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
                         case 'late_in':      $summ[$uid]['present']++; $summ[$uid]['late']++;  break;
                         case 'early_out':    $summ[$uid]['present']++; $summ[$uid]['early']++; break;
                         case 'late_and_early': $summ[$uid]['present']++; $summ[$uid]['late']++; $summ[$uid]['early']++; break;
+                        case 'short_hours':                      $summ[$uid]['present']++; break;
                         case 'incomplete':                       $summ[$uid]['present']++; break;
                         case 'leave':                            $summ[$uid]['leave']++;   break;
                         case 'absent':                           $summ[$uid]['absent']++;  break;
+                    }
+                    // Policy (from 01 Jun 2026): each late-in/early-out day counts toward the penalty.
+                    if (att_policy_active($d) && in_array($status, ['late_in', 'early_out', 'late_and_early'], true)) {
+                        $summ[$uid]['pen']++;
                     }
                     if ($rec) $summ[$uid]['minutes'] += att_worked_minutes($rec['in_time'], $rec['out_time']);
                 }
@@ -397,6 +417,7 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
                             <th>Early Out</th>
                             <th>On Leave</th>
                             <th>Absent</th>
+                            <th title="Every 4 Late In / Early Out days = 1 Absent day (effective 01 Jun 2026)">Penalty Absent</th>
                             <th>Total Working Hours</th>
                         </tr>
                     </thead>
@@ -416,6 +437,8 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
                             <td><a href="<?= $slink ?>" class="text-decoration-none"><?= $x['early'] ? '<span class="badge bg-warning text-dark">' . (int)$x['early'] . '</span>' : '<span class="text-muted">0</span>' ?></a></td>
                             <td><a href="<?= $slink ?>" class="text-decoration-none"><?= $x['leave'] ? '<span class="badge bg-primary">' . (int)$x['leave'] . '</span>' : '<span class="text-muted">0</span>' ?></a></td>
                             <td><a href="<?= $slink ?>" class="text-decoration-none"><?= $x['absent'] ? '<span class="badge bg-danger">' . (int)$x['absent'] . '</span>' : '<span class="text-muted">0</span>' ?></a></td>
+                            <?php $pen_abs = att_late_penalty_days((int)($x['pen'] ?? 0)); ?>
+                            <td><a href="<?= $slink ?>" class="text-decoration-none" title="<?= (int)($x['pen'] ?? 0) ?> Late In / Early Out day(s) since 01 Jun 2026 — every 4 = 1 Absent"><?= $pen_abs ? '<span class="badge bg-danger">' . $pen_abs . '</span>' : '<span class="text-muted">0</span>' ?></a></td>
                             <td><a href="<?= $slink ?>" class="text-decoration-none text-reset"><strong><?= h(att_format_hours((int)$x['minutes'])) ?></strong></a></td>
                         </tr>
                     <?php endforeach; ?>
@@ -430,7 +453,11 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
     Click any staff member (name or count) to open their monthly calendar with in/out
     times and a day-by-day breakdown. Statuses are derived from each staff member's
     effective schedule (individual override or the global office hours) and the
-    configured grace buffers. Holidays and weekly-off days are excluded from absence counts.
+    configured grace buffers. Holidays and Weekend days are excluded from absence counts.
+    From <strong>01 Jun 2026</strong>: Administrative staff get a 15-minute and Faculty a 20-minute
+    clock-in grace with <strong>no clock-out grace</strong>; faculty Fridays are flexible (minimum 7 hours,
+    never marked Late/Early); clocking in by 8:30 AM allows leaving from 4:30 PM; and every
+    <strong>4 Late In / Early Out days count as 1 Absent day</strong> (Penalty Absent column — salary may be deducted).
 </p>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
