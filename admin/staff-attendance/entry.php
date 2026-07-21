@@ -136,7 +136,11 @@ require_once __DIR__ . '/../includes/header.php';
                     </div>
                     <div class="col-12 d-flex gap-2">
                         <button class="btn btn-primary"><i class="fas fa-save me-1"></i> Save Attendance</button>
+                        <?php if ($return_to === 'staff' && $sel_user > 0): ?>
+                        <a href="<?= APP_URL ?>/staff-attendance/staff.php?user_id=<?= $sel_user ?>&month=<?= urlencode(substr($sel_date, 0, 7)) ?>" class="btn btn-secondary">Cancel</a>
+                        <?php else: ?>
                         <a href="<?= APP_URL ?>/staff-attendance/index.php?report=daily&date=<?= urlencode($sel_date) ?>" class="btn btn-secondary">Cancel</a>
+                        <?php endif; ?>
                     </div>
                 </form>
             </div>
