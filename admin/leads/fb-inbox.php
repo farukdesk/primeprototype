@@ -67,6 +67,8 @@ $search    = trim($_GET['search'] ?? '');
 $f_linked  = $_GET['linked'] ?? '';   // 'yes' | 'no' | ''
 $f_state   = $_GET['state']  ?? '';   // '' | 'waiting' | 'responded' | 'converted'
 $f_tag     = (int)($_GET['tag'] ?? 0);
+$f_phone   = $_GET['phone'] ?? '';    // '' | 'yes' | 'no'
+if ($f_phone !== 'yes' && $f_phone !== 'no') $f_phone = '';
 $date_from = trim($_GET['date_from'] ?? '');
 $date_to   = trim($_GET['date_to'] ?? '');
 if ($date_from !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_from)) $date_from = '';

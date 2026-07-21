@@ -107,6 +107,12 @@ if (($_GET['ajax'] ?? '') === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $mid = (int)db()->lastInsertId();
     if ($sent) {
         db()->prepare('UPDATE lead_fb_contacts SET last_message_at = NOW() WHERE id = ?')->execute([$contact_id]);
+        $qa_id = (int)($_POST['qa_id'] ?? 0);
+        if ($qa_id > 0) {
+            try {
+                db()->prepare('UPDATE lead_fb_qa SET use_count = use_count + 1 WHERE id = ?')->execute([$qa_id]);
+            } catch (Exception $e) { /* run fb-inbox-upgrade-3.sql */ }
+        }
         if ($contact['lead_id']) {
             leads_log((int)$contact['lead_id'], 'fb_message_sent', null, null, null,
                 'Facebook reply sent by ' . $user['full_name'] . ': ' . mb_substr($text, 0, 100));
