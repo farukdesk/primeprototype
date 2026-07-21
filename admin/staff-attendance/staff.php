@@ -282,7 +282,7 @@ $weekday_abbr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
             <span class="badge cal-early text-dark">Early</span>
             <span class="badge cal-leave text-dark">Leave</span>
             <span class="badge cal-absent text-dark">Absent</span>
-            <span class="badge cal-off">Off</span>
+            <span class="badge cal-off">Weekend</span>
         </div>
     </div>
     <div class="card-body p-2">

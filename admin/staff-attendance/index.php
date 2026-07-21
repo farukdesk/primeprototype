@@ -437,6 +437,8 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
                             <td><a href="<?= $slink ?>" class="text-decoration-none"><?= $x['early'] ? '<span class="badge bg-warning text-dark">' . (int)$x['early'] . '</span>' : '<span class="text-muted">0</span>' ?></a></td>
                             <td><a href="<?= $slink ?>" class="text-decoration-none"><?= $x['leave'] ? '<span class="badge bg-primary">' . (int)$x['leave'] . '</span>' : '<span class="text-muted">0</span>' ?></a></td>
                             <td><a href="<?= $slink ?>" class="text-decoration-none"><?= $x['absent'] ? '<span class="badge bg-danger">' . (int)$x['absent'] . '</span>' : '<span class="text-muted">0</span>' ?></a></td>
+                            <?php $pen_abs = att_late_penalty_days((int)($x['pen'] ?? 0)); ?>
+                            <td><a href="<?= $slink ?>" class="text-decoration-none" title="<?= (int)($x['pen'] ?? 0) ?> Late In / Early Out day(s) since 01 Jun 2026 — every 4 = 1 Absent"><?= $pen_abs ? '<span class="badge bg-danger">' . $pen_abs . '</span>' : '<span class="text-muted">0</span>' ?></a></td>
                             <td><a href="<?= $slink ?>" class="text-decoration-none text-reset"><strong><?= h(att_format_hours((int)$x['minutes'])) ?></strong></a></td>
                         </tr>
                     <?php endforeach; ?>
