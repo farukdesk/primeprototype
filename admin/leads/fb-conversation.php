@@ -1355,6 +1355,9 @@ require_once __DIR__ . '/../includes/header.php';
             applyFilter();
         });
     });
+
+    // Suggest answers for the customer's most recent question on page load
+    if (LAST_IN_TEXT) qaSuggestFor(LAST_IN_TEXT);
 })();
 </script>
 
