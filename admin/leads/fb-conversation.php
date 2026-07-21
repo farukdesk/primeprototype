@@ -1207,6 +1207,8 @@ require_once __DIR__ . '/../includes/header.php';
             scrollBottom();
             const fd = new FormData(form);
             fd.set('fb_reply', text);
+            if (pendingQaId) { fd.set('qa_id', String(pendingQaId)); pendingQaId = 0; }
+            if (qaBox) qaBox.classList.add('d-none');
             ta.value = '';
             ta.focus();
             fetch('?contact_id=<?= $contact_id ?>&ajax=send', { method: 'POST', body: fd })
