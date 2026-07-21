@@ -106,6 +106,7 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="card-body">
                 <form method="POST" class="row g-3">
                     <?= csrf_field() ?>
+                    <?php if ($return_to === 'staff'): ?><input type="hidden" name="return_to" value="staff"><?php endif; ?>
                     <div class="col-md-7">
                         <label class="form-label fw-semibold small mb-1">Employee</label>
                         <select name="user_id" class="form-select" required>
