@@ -887,6 +887,48 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
         </div>
 
+        <!-- Smart answer suggestions (saved Q&A) -->
+        <?php if ($is_staff): ?>
+        <details class="card border-0 shadow-sm mb-3">
+            <summary class="card-header bg-white fw-semibold py-2" style="cursor:pointer;list-style:none">
+                <i class="fas fa-lightbulb me-2 text-warning"></i>Smart Answer Suggestions
+                <span class="badge bg-light text-muted border ms-1" style="font-size:.6rem"><?= count($qa_list) ?> saved</span>
+            </summary>
+            <div class="card-body p-3">
+                <p class="text-muted mb-2" style="font-size:.72rem">Save common questions with their answers. When a customer asks a similar question, the matching answer appears above the reply box – one click to use or send it.</p>
+                <?php if ($qa_list): ?>
+                <div style="max-height:220px;overflow-y:auto" class="mb-2">
+                    <?php foreach ($qa_list as $qa): ?>
+                    <div class="border rounded p-2 mb-1 bg-light">
+                        <div class="small fw-semibold" style="font-size:.75rem"><i class="fas fa-question-circle text-primary me-1"></i><?= h($qa['question']) ?></div>
+                        <div class="text-muted text-truncate" style="font-size:.7rem"><?= h(mb_substr($qa['answer'], 0, 70)) ?></div>
+                        <div class="d-flex justify-content-between align-items-center mt-1">
+                            <small class="text-muted" style="font-size:.62rem"><i class="fas fa-paper-plane me-1"></i>used <?= (int)$qa['use_count'] ?>×</small>
+                            <form method="post" class="d-inline">
+                                <?= csrf_field() ?>
+                                <input type="hidden" name="action" value="delete_qa">
+                                <input type="hidden" name="qa_id" value="<?= (int)$qa['id'] ?>">
+                                <button type="submit" class="btn btn-link btn-sm text-danger p-0" style="font-size:.65rem" onclick="return confirm('Delete this Q&A?')">delete</button>
+                            </form>
+                        </div>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+                <?php else: ?>
+                <p class="text-muted small">No saved Q&A yet – add your first one below.</p>
+                <?php endif; ?>
+                <form method="post">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="action" value="add_qa">
+                    <input type="text" name="qa_question" class="form-control form-control-sm mb-2" placeholder="Customer question (e.g. What is the tuition fee?)" required>
+                    <input type="text" name="qa_keywords" class="form-control form-control-sm mb-2" placeholder="Extra keywords, comma separated (optional)">
+                    <textarea name="qa_answer" class="form-control form-control-sm mb-2" rows="3" placeholder="Answer to send…" required></textarea>
+                    <button type="submit" class="btn btn-sm btn-warning w-100"><i class="fas fa-plus me-1"></i> Save Q&A</button>
+                </form>
+            </div>
+        </details>
+        <?php endif; ?>
+
         <!-- Canned replies management (unlimited) -->
         <?php if ($is_staff): ?>
         <details class="card border-0 shadow-sm mb-3">

@@ -337,6 +337,14 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
             <?php endif; ?>
             <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Phone Number</label>
+                <select name="phone" class="form-select form-select-sm">
+                    <option value="" <?= $f_phone === '' ? 'selected' : '' ?>>All</option>
+                    <option value="yes" <?= $f_phone === 'yes' ? 'selected' : '' ?>>Has phone number</option>
+                    <option value="no" <?= $f_phone === 'no' ? 'selected' : '' ?>>No phone number</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
                 <label class="form-label small text-muted mb-1">From date</label>
                 <input type="date" name="date_from" class="form-control form-control-sm" value="<?= h($date_from) ?>">
             </div>
