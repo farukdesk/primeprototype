@@ -974,6 +974,14 @@ require_once __DIR__ . '/../includes/header.php';
     const CONTACT_PIC = <?= json_encode((string)($contact['fb_picture'] ?? ''), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
     const STAFF_NAME  = <?= json_encode((string)($user['full_name'] ?? 'Staff'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
     const CANNED      = <?= json_encode($canned_map, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+    const QA_LIST     = <?= json_encode(array_map(static fn($r) => [
+        'id' => (int)$r['id'],
+        'q'  => (string)$r['question'],
+        'k'  => (string)($r['keywords'] ?? ''),
+        'a'  => (string)$r['answer'],
+    ], $qa_list), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+    const LAST_IN_TEXT = <?= json_encode($last_incoming_text, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+    let   pendingQaId  = 0;
     let   lastId      = <?= $last_msg_id ?>;
 
     function scrollBottom() { if (thread) thread.scrollTop = thread.scrollHeight; }

@@ -369,6 +369,18 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
             <?php endif; ?>
         </form>
+        <?php if ($all_tags): ?>
+        <div class="d-flex flex-wrap gap-1 align-items-center mt-2 pt-2 border-top">
+            <span class="text-muted small me-1"><i class="fas fa-tags me-1"></i>Quick tags:</span>
+            <a href="?<?= h(http_build_query(array_diff_key($qs_base, ['tag' => 1, 'page' => 1]))) ?>" class="badge text-decoration-none <?= $f_tag === 0 ? 'bg-dark' : 'bg-light text-dark border' ?>">All</a>
+            <?php foreach ($all_tags as $tg): $tag_on = $f_tag === (int)$tg['id']; ?>
+            <a href="?<?= h(http_build_query(array_diff_key($qs_base, ['tag' => 1, 'page' => 1]) + ['tag' => (int)$tg['id']])) ?>" class="badge text-decoration-none"
+               style="<?= $tag_on ? 'background:' . h($tg['color']) . ';color:#fff' : 'background:#fff;color:' . h($tg['color']) . ';border:1px solid ' . h($tg['color']) ?>">
+                <?= $tag_on ? '<i class="fas fa-check me-1"></i>' : '' ?><?= h($tg['name']) ?>
+            </a>
+            <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
     </div>
 </div>
 
