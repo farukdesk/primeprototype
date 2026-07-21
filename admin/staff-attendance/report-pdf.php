@@ -127,13 +127,17 @@ foreach ($staff as $s) {
                 $html = '<span class="tag">A</span>';
                 $total_absent++;
                 break;
-            default: // present / late_in / early_out / late_and_early / incomplete
+            default: // present / late_in / early_out / late_and_early / short_hours / incomplete
                 $mins  = $rec ? att_worked_minutes($rec['in_time'] ?? null, $rec['out_time'] ?? null) : 0;
                 $in    = att_display_time($rec['in_time'] ?? null);
                 $out   = att_display_time($rec['out_time'] ?? null);
                 $hours = att_format_hours($mins);
                 $is_late = in_array($status, ['late_in', 'late_and_early'], true);
                 if ($is_late) { $cls .= ' late'; $total_late++; }
+                // Policy (from 01 Jun 2026): each late-in/early-out day feeds the penalty.
+                if (att_policy_active($d) && in_array($status, ['late_in', 'early_out', 'late_and_early'], true)) {
+                    $pen_days++;
+                }
                 $html = '<span class="t">' . h($in) . '</span>'
                       . '<span class="t">' . h($out) . '</span>'
                       . '<span class="hh">' . h($hours) . '</span>';
@@ -142,6 +146,7 @@ foreach ($staff as $s) {
         $cells .= '<td class="' . $cls . '">' . $html . '</td>';
     }
 
+    $pen_abs = att_late_penalty_days($pen_days);
     $body .= '<tr>'
         . '<td class="sn">' . $sn . '</td>'
         . '<td class="nm">' . h($s['full_name']) . '</td>'
@@ -149,6 +154,7 @@ foreach ($staff as $s) {
         . $cells
         . '<td class="tot ' . ($total_late ? 'has' : '') . '">' . $total_late . '</td>'
         . '<td class="tot ' . ($total_absent ? 'hasa' : '') . '">' . $total_absent . '</td>'
+        . '<td class="tot ' . ($pen_abs ? 'hasa' : '') . '">' . $pen_abs . '</td>'
         . '</tr>';
 }
 

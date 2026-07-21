@@ -482,11 +482,12 @@ function att_status_label(string $status): string
         'early_out'      => 'Early Out',
         'late_and_early' => 'Late In & Early Out',
         'incomplete'     => 'No Out Time',
+        'short_hours'    => 'Insufficient Hours (<7h)',
         'absent'         => 'Absent',
         'upcoming'       => 'Upcoming',
         'leave'          => 'On Leave',
         'holiday'        => 'Holiday',
-        'weekly_off'     => 'Weekly Off',
+        'weekly_off'     => 'Weekend',
         default          => ucfirst(str_replace('_', ' ', $status)),
     };
 }
@@ -500,6 +501,7 @@ function att_status_badge(string $status): string
         'early_out'      => 'bg-warning text-dark',
         'late_and_early' => 'bg-warning text-dark',
         'incomplete'     => 'bg-info text-dark',
+        'short_hours'    => 'bg-warning text-dark',
         'absent'         => 'bg-danger',
         'upcoming'       => 'bg-light text-muted border',
         'leave'          => 'bg-primary',

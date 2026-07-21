@@ -315,7 +315,7 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
             </div>
             <?php elseif (att_is_weekly_off($date)): ?>
             <div class="alert alert-light mb-0 rounded-0 border-0 border-bottom">
-                <i class="fas fa-couch me-1"></i> Weekly off day.
+                <i class="fas fa-couch me-1"></i> Weekend.
             </div>
             <?php endif; ?>
             <div class="table-responsive">

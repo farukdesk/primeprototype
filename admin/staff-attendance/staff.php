@@ -248,6 +248,7 @@ $weekday_abbr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
         ['Early Out',    (int)$sum['early'],        'bg-warning text-dark'],
         ['On Leave',     (int)$sum['leave'],        'bg-primary'],
         ['Absent',       (int)$sum['absent'],       'bg-danger'],
+        ['Penalty Absent', att_late_penalty_days((int)($sum['pen'] ?? 0)), 'bg-danger'],
     ];
     foreach ($tiles as [$lbl, $val, $cls]): ?>
     <div class="col-6 col-md">
