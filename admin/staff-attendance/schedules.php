@@ -142,7 +142,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <th style="width:130px;">Close</th>
                         <th style="width:120px;">In Buffer</th>
                         <th style="width:120px;">Out Buffer</th>
-                        <th style="width:230px;">Weekly Off <span class="fw-normal text-muted">(blank = global)</span></th>
+                        <th style="width:230px;">Weekend (Weekly Off) <span class="fw-normal text-muted">(blank = global)</span></th>
                         <th style="width:120px;"></th>
                     </tr>
                 </thead>

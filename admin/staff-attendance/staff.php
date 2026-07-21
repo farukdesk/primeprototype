@@ -113,7 +113,7 @@ foreach ($dates as $d) $leave_by_date[$d] = att_on_leave_user_ids($d);
 
 // Per-day computed rows + running summary.
 $days = [];
-$sum  = ['present' => 0, 'late' => 0, 'early' => 0, 'absent' => 0, 'leave' => 0, 'off' => 0, 'working_days' => 0, 'minutes' => 0];
+$sum  = ['present' => 0, 'late' => 0, 'early' => 0, 'absent' => 0, 'leave' => 0, 'off' => 0, 'working_days' => 0, 'minutes' => 0, 'pen' => 0];
 foreach ($dates as $d) {
     $rec      = $records[$user_id . '|' . $d] ?? null;
     $on_leave = $leave_by_date[$d] ?? [];
@@ -127,11 +127,16 @@ foreach ($dates as $d) {
         case 'late_in':        $sum['present']++; $sum['late']++;  break;
         case 'early_out':      $sum['present']++; $sum['early']++; break;
         case 'late_and_early': $sum['present']++; $sum['late']++; $sum['early']++; break;
+        case 'short_hours':    $sum['present']++; break;
         case 'incomplete':     $sum['present']++; break;
         case 'leave':          $sum['leave']++;   break;
         case 'absent':         $sum['absent']++;  break;
         case 'holiday':
         case 'weekly_off':     $sum['off']++;     break;
+    }
+    // Policy (from 01 Jun 2026): each late-in/early-out day counts toward the penalty.
+    if (att_policy_active($d) && in_array($status, ['late_in', 'early_out', 'late_and_early'], true)) {
+        $sum['pen']++;
     }
     $sum['minutes'] += $mins;
 

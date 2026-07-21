@@ -116,12 +116,13 @@ if (($_GET['export'] ?? '') === 'csv') {
         }
     } else {
         fputcsv($out, ['Employee Name', 'Employee ID', 'Department', 'Working Days',
-                       'Present', 'Late In', 'Early Out', 'On Leave', 'Absent', 'Total Working Hours']);
+                       'Present', 'Late In', 'Early Out', 'On Leave', 'Absent',
+                       'Penalty Absent (4 Late/Early = 1)', 'Total Absent (incl. Penalty)', 'Total Working Hours']);
         foreach ($staff as $s) {
             $uid   = (int)$s['id'];
             $sched = att_effective_schedule($uid);
             $x = ['present' => 0, 'late' => 0, 'early' => 0, 'absent' => 0,
-                  'leave' => 0, 'minutes' => 0, 'working_days' => 0];
+                  'leave' => 0, 'minutes' => 0, 'working_days' => 0, 'pen' => 0];
             foreach ($dates as $d) {
                 $on_leave = $leave_by_date[$d] ?? [];
                 $off      = isset($holidays[$d]) || att_is_weekly_off_for($sched, $d);
@@ -133,12 +134,18 @@ if (($_GET['export'] ?? '') === 'csv') {
                     case 'late_in':        $x['present']++; $x['late']++;  break;
                     case 'early_out':      $x['present']++; $x['early']++; break;
                     case 'late_and_early': $x['present']++; $x['late']++; $x['early']++; break;
+                    case 'short_hours':                          $x['present']++; break;
                     case 'incomplete':                           $x['present']++; break;
                     case 'leave':                                $x['leave']++;   break;
                     case 'absent':                               $x['absent']++;  break;
                 }
+                // Policy (from 01 Jun 2026): each late-in/early-out day counts toward the penalty.
+                if (att_policy_active($d) && in_array($status, ['late_in', 'early_out', 'late_and_early'], true)) {
+                    $x['pen']++;
+                }
                 if ($rec) $x['minutes'] += att_worked_minutes($rec['in_time'], $rec['out_time']);
             }
+            $pen_abs = att_late_penalty_days((int)$x['pen']);
             fputcsv($out, [
                 (string)$s['full_name'],
                 (string)($s['employee_id'] ?? ''),
@@ -149,6 +156,8 @@ if (($_GET['export'] ?? '') === 'csv') {
                 $x['early'],
                 $x['leave'],
                 $x['absent'],
+                $pen_abs,
+                $x['absent'] + $pen_abs,
                 att_format_hours((int)$x['minutes']),
             ]);
         }

@@ -100,7 +100,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <div class="form-text">Repeated punches within this many minutes of the first punch of the day count as a single clock-in (day shows "No Out Time"). For clock-out, the last punch of the day always wins.</div>
                     </div>
                     <div class="col-12">
-                        <label class="form-label fw-semibold small mb-1">Weekly Off Days</label>
+                        <label class="form-label fw-semibold small mb-1">Weekend Days (Weekly Off)</label>
                         <div class="d-flex flex-wrap gap-3">
                             <?php foreach ($weekday_names as $n => $name): ?>
                             <div class="form-check">

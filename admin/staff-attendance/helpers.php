@@ -25,6 +25,82 @@ const ATT_DEFAULT_IN_BUFFER  = 15;
 const ATT_DEFAULT_OUT_BUFFER = 15;
 const ATT_DEFAULT_WEEKLY_OFF = '5'; // Friday (PHP date('N'): 1=Mon … 7=Sun)
 
+// ── Attendance policy effective 1 June 2026 ─────────────────────────────────
+// From this date: employee-type based clock-in buffers (no clock-out buffer),
+// faculty flexible Fridays (minimum 7 hours), early-bird 8:30→16:30 flexibility
+// and the "4 late/early days = 1 absent" salary-deduction rule.
+const ATT_POLICY_EFFECTIVE          = '2026-06-01';
+const ATT_POLICY_ADMIN_IN_BUFFER    = 15;      // administrative clock-in grace (min)
+const ATT_POLICY_FACULTY_IN_BUFFER  = 20;      // faculty clock-in grace (min)
+const ATT_POLICY_OUT_BUFFER         = 0;       // no clock-out grace for both types
+const ATT_POLICY_EARLY_IN           = '08:30'; // earliest counted clock-in
+const ATT_POLICY_EARLY_OUT_OK       = '16:30'; // early birds may leave from here
+const ATT_POLICY_FRIDAY_MIN_MINUTES = 420;     // faculty Friday minimum (7 hours)
+const ATT_POLICY_LATE_PER_ABSENT    = 4;       // 4 late-in/early-out days = 1 absent
+
+/** Whether the June-2026 attendance policy applies to a date. */
+function att_policy_active(string $date): bool
+{
+    return $date >= ATT_POLICY_EFFECTIVE;
+}
+
+/**
+ * Employee Type from the staff profile: 'administrative', 'educational'
+ * (faculty) or '' when unknown. Cached for the request.
+ */
+function att_employee_type(int $user_id): string
+{
+    static $map = null;
+    if ($map === null) {
+        $map = [];
+        try {
+            foreach (db()->query('SELECT user_id, department_type FROM staff_profiles')->fetchAll() as $r) {
+                $map[(int)$r['user_id']] = (string)$r['department_type'];
+            }
+        } catch (Throwable $e) {
+            // staff_profiles missing – schedule buffers apply unchanged.
+        }
+    }
+    return $map[$user_id] ?? '';
+}
+
+/** Penalty absents: every 4 late-in / early-out days count as 1 absent day. */
+function att_late_penalty_days(int $late_early_days): int
+{
+    return intdiv(max(0, $late_early_days), ATT_POLICY_LATE_PER_ABSENT);
+}
+
+/** Reusable card describing the attendance policy (shown to staff and admins). */
+function att_policy_rules_html(): string
+{
+    $eff = date('d M Y', strtotime(ATT_POLICY_EFFECTIVE));
+    return '
+    <div class="card mb-3" style="border-radius:12px;border-left:4px solid #0d6efd;">
+        <div class="card-body py-3">
+            <h6 class="fw-semibold mb-2">
+                <i class="fas fa-scale-balanced me-2 text-primary"></i>Attendance Policy
+                <span class="badge bg-primary ms-1">Effective from ' . h($eff) . '</span>
+            </h6>
+            <div class="row small g-2">
+                <div class="col-md-6">
+                    <ul class="mb-0 ps-3">
+                        <li><strong>Weekend:</strong> weekly off days are marked as <em>Weekend</em>.</li>
+                        <li><strong>Administrative staff:</strong> clock-in grace of <strong>15 minutes</strong> after office start; <strong>no clock-out grace</strong>.</li>
+                        <li><strong>Faculty:</strong> clock-in grace of <strong>20 minutes</strong> after office start; <strong>no clock-out grace</strong>.</li>
+                    </ul>
+                </div>
+                <div class="col-md-6">
+                    <ul class="mb-0 ps-3">
+                        <li><strong>Faculty on Friday:</strong> flexible clock in/out — must complete <strong>7–8 hours</strong> in total; never marked Late In or Early Out.</li>
+                        <li><strong>Early birds:</strong> clock in by <strong>8:30 AM</strong> → may leave from <strong>4:30 PM</strong> without Early Out.</li>
+                        <li><strong>Penalty:</strong> every <strong>4 Late In / Early Out days</strong> count as <strong>1 Absent day</strong> (salary may be deducted).</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>';
+}
+
 // ── Permission helpers ──────────────────────────────────────────────────────
 
 /** Anyone with view access can open the module. */
