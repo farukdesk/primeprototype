@@ -1178,7 +1178,11 @@ require_once __DIR__ . '/../includes/header.php';
                     lastId = m.id;
                     if (m.direction === 'in') gotIncoming = true;
                 });
-                if (gotIncoming) { scrollBottom(); chime(); }
+                if (gotIncoming) {
+                    scrollBottom(); chime();
+                    const lastIn = (d.messages || []).filter(function (m) { return m.direction === 'in' && m.text; }).pop();
+                    if (lastIn) qaSuggestFor(lastIn.text);
+                }
                 (d.seen_ids || []).forEach(function (id) {
                     const st = document.querySelector('.msg-status[data-msg-id="' + id + '"]');
                     if (st && !st.querySelector('.fa-check-double') && !st.querySelector('.fa-exclamation-circle')) {
