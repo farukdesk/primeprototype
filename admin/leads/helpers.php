@@ -343,3 +343,121 @@ function leads_get(int $id): array
     }
     return $lead;
 }
+
+// ── FB inbox extended features ────────────────────────────────────────────────
+
+if (!defined('LEADS_FB_FOLLOWUP_TEXT')) {
+    define('LEADS_FB_FOLLOWUP_TEXT', 'আপনি কি আছেন?');
+}
+
+/**
+ * Escape a message and wrap any Bangladeshi phone number in a highlight span.
+ */
+function leads_fb_highlight_phones(?string $text): string
+{
+    $safe = h((string)$text);
+    $out  = preg_replace(
+        '/((?:\+?88)?01[3-9]\d{8})/u',
+        '<span class="fb-phone-hit" title="Phone number detected">$1</span>',
+        $safe
+    );
+    return $out !== null ? $out : $safe;
+}
+
+/**
+ * Send a local file to a Facebook user via the Send API (multipart upload).
+ * $fb_type must be one of: image, video, audio, file.
+ */
+function leads_fb_send_attachment(string $psid, string $file_path, string $mime, string $fb_type): bool
+{
+    $token = leads_fb_setting('page_access_token');
+    if ($token === '' || !is_file($file_path)) return false;
+
+    $ch = curl_init('https://graph.facebook.com/v19.0/me/messages?access_token=' . urlencode($token));
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => [
+            'recipient'      => json_encode(['id' => $psid]),
+            'message'        => json_encode(['attachment' => ['type' => $fb_type, 'payload' => ['is_reusable' => false]]]),
+            'messaging_type' => 'RESPONSE',
+            'filedata'       => new CURLFile($file_path, $mime, basename($file_path)),
+        ],
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 60,
+    ]);
+    $resp = curl_exec($ch);
+    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($code === 200) {
+        $body = json_decode((string)$resp, true);
+        return !empty($body['message_id']);
+    }
+    return false;
+}
+
+/**
+ * One-time auto follow-up: when the LAST message in a conversation is a staff
+ * reply (not an auto message) older than 10 minutes and the customer has not
+ * answered, send "আপনি কি আছেন?" exactly once per staff response.
+ * Requires admin/leads/fb-inbox-upgrade-2.sql. Returns number sent.
+ */
+function leads_fb_run_followups(): int
+{
+    try {
+        $rows = db()->query(
+            "SELECT c.id, c.psid, m.created_at AS staff_msg_at
+             FROM lead_fb_contacts c
+             JOIN lead_fb_messages m ON m.id = (
+                 SELECT m2.id FROM lead_fb_messages m2
+                 WHERE m2.contact_id = c.id ORDER BY m2.id DESC LIMIT 1
+             )
+             WHERE m.direction = 'out'
+               AND m.is_auto = 0
+               AND m.sent_by IS NOT NULL
+               AND m.status = 'sent'
+               AND m.created_at <= (NOW() - INTERVAL 10 MINUTE)
+               AND (c.followup_sent_at IS NULL OR c.followup_sent_at < m.created_at)
+             LIMIT 20"
+        )->fetchAll();
+    } catch (Exception $e) {
+        return 0; // columns missing – run admin/leads/fb-inbox-upgrade-2.sql
+    }
+
+    $sent = 0;
+    foreach ($rows as $r) {
+        // Claim first so two concurrent pollers never double-send
+        $claim = db()->prepare(
+            'UPDATE lead_fb_contacts SET followup_sent_at = NOW()
+             WHERE id = ? AND (followup_sent_at IS NULL OR followup_sent_at < ?)'
+        );
+        $claim->execute([(int)$r['id'], $r['staff_msg_at']]);
+        if ($claim->rowCount() === 0) continue;
+
+        if (leads_fb_send($r['psid'], LEADS_FB_FOLLOWUP_TEXT)) {
+            db()->prepare(
+                'INSERT INTO lead_fb_messages (contact_id, direction, message_text, status, is_auto)
+                 VALUES (?,?,?,?,1)'
+            )->execute([(int)$r['id'], 'out', LEADS_FB_FOLLOWUP_TEXT, 'sent']);
+            db()->prepare('UPDATE lead_fb_contacts SET last_message_at = NOW() WHERE id = ?')
+                ->execute([(int)$r['id']]);
+            $sent++;
+        }
+    }
+    return $sent;
+}
+
+/**
+ * Throttled wrapper – safe to call from frequently-polled AJAX endpoints.
+ */
+function leads_fb_run_followups_throttled(int $min_interval = 60): void
+{
+    try {
+        $last = leads_fb_setting('followup_last_run');
+        if ($last !== '' && (time() - (int)$last) < $min_interval) return;
+        leads_fb_setting_set('followup_last_run', (string)time());
+    } catch (Exception $e) {
+        return;
+    }
+    leads_fb_run_followups();
+}
