@@ -417,6 +417,7 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
                             <th>Early Out</th>
                             <th>On Leave</th>
                             <th>Absent</th>
+                            <th title="Every 4 Late In / Early Out days = 1 Absent day (effective 01 Jun 2026)">Penalty Absent</th>
                             <th>Total Working Hours</th>
                         </tr>
                     </thead>

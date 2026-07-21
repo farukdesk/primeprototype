@@ -328,6 +328,7 @@ $weekday_abbr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
                     if ($info['minutes'] > 0) echo '<div class="cal-hh">' . h(att_format_hours((int)$info['minutes'])) . '</div>';
                     if (in_array($status, ['late_in', 'late_and_early'], true)) echo '<span class="cal-tag text-warning">Late</span>';
                     elseif ($status === 'early_out') echo '<span class="cal-tag text-warning">Early</span>';
+                    elseif ($status === 'short_hours') echo '<span class="cal-tag text-warning">&lt;7h</span>';
                     elseif ($status === 'incomplete') echo '<span class="cal-tag text-info">No out</span>';
                 } elseif ($tag !== '') {
                     echo '<div class="cal-io">' . $tag . '</div>';
