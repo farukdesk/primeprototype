@@ -1100,6 +1100,70 @@ require_once __DIR__ . '/../includes/header.php';
         if (ph) ph.remove();
     }
 
+    // ── Smart answer suggestions (saved Q&A) ──
+    const qaBox    = document.getElementById('qa-suggest');
+    const qaListEl = document.getElementById('qa-suggest-list');
+    const qaClose  = document.getElementById('qa-suggest-close');
+    const QA_STOP  = new Set(['the','and','for','are','you','your','what','how','can','will','with','this','that','about','have','please','from','when','where','which','there','would','could','should','is','to','of','in','my','me','do','it','on','at','be','or','if','we','us','our','know','tell','want','need','like','ki','kina','ache','ase','koto','kemon','apni','ami','amar','apnar','vai','bhai','কি','কত','আমি','আমার','আপনি','আপনার','ভাই']);
+    function qaTokens(s) {
+        return String(s || '').toLowerCase()
+            .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+            .split(/\s+/)
+            .filter(function (w) { return w.length > 1 && !QA_STOP.has(w); });
+    }
+    function qaScore(msgTokens, msgLower, qa) {
+        const base = qaTokens(qa.q).concat(qaTokens(qa.k));
+        if (!base.length) return 0;
+        let hits = 0;
+        const seen = new Set();
+        base.forEach(function (t) {
+            if (seen.has(t)) return;
+            seen.add(t);
+            if (msgTokens.indexOf(t) !== -1 || msgLower.indexOf(t) !== -1) hits++;
+        });
+        let score = hits / seen.size;
+        // Strong boost when the whole saved question appears in the message
+        if (msgLower.indexOf(String(qa.q).toLowerCase()) !== -1) score += 1;
+        return score;
+    }
+    function qaSuggestFor(text) {
+        if (!qaBox || !qaListEl || !QA_LIST.length || !text) return;
+        const msgLower  = String(text).toLowerCase();
+        const msgTokens = qaTokens(text);
+        const ranked = QA_LIST
+            .map(function (qa) { return { qa: qa, s: qaScore(msgTokens, msgLower, qa) }; })
+            .filter(function (r) { return r.s >= 0.34; })
+            .sort(function (a, b) { return b.s - a.s; })
+            .slice(0, 3);
+        qaListEl.innerHTML = '';
+        if (!ranked.length) { qaBox.classList.add('d-none'); return; }
+        ranked.forEach(function (r) {
+            const row = document.createElement('div');
+            row.className = 'd-flex align-items-center gap-2 border rounded-3 px-2 py-1 qa-chip';
+            row.innerHTML =
+                '<div class="flex-grow-1 overflow-hidden" style="cursor:pointer" title="Click to insert into the reply box">' +
+                '<div class="fw-semibold text-truncate" style="font-size:.72rem;color:#6f42c1">' + escHtml(r.qa.q) + '</div>' +
+                '<div class="text-muted text-truncate" style="font-size:.72rem">' + escHtml(r.qa.a) + '</div>' +
+                '</div>' +
+                '<button type="button" class="btn btn-sm btn-outline-secondary flex-shrink-0 qa-insert" title="Insert into reply box"><i class="fas fa-pen"></i></button>' +
+                '<button type="button" class="btn btn-sm text-white flex-shrink-0 qa-send" style="background:#1877F2" title="Send this answer now"><i class="fas fa-paper-plane"></i></button>';
+            function qaInsert() {
+                const taEl = document.getElementById('fb_reply');
+                if (taEl) { taEl.value = r.qa.a; pendingQaId = r.qa.id; taEl.focus(); }
+            }
+            row.querySelector('.flex-grow-1').addEventListener('click', qaInsert);
+            row.querySelector('.qa-insert').addEventListener('click', qaInsert);
+            row.querySelector('.qa-send').addEventListener('click', function () {
+                qaInsert();
+                const f = document.getElementById('reply-form');
+                if (f) { f.requestSubmit ? f.requestSubmit() : f.dispatchEvent(new Event('submit', { cancelable: true })); }
+            });
+            qaListEl.appendChild(row);
+        });
+        qaBox.classList.remove('d-none');
+    }
+    if (qaClose) qaClose.addEventListener('click', function () { qaBox.classList.add('d-none'); });
+
     // ── AJAX polling every 4 seconds (new messages + seen receipts) ──
     setInterval(function () {
         fetch('?contact_id=<?= $contact_id ?>&ajax=poll&after_id=' + lastId, { headers: { 'Accept': 'application/json' } })
