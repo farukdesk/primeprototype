@@ -26,7 +26,7 @@ if (!$contact) {
 $user     = auth_user();
 $is_staff = leads_is_staff();
 
-// ── Resolve missing profile name / picture on the fly ────────────────────
+// ── Resolve missing profile name / picture on the fly ────────────────────────
 if (empty($contact['fb_name'])) {
     [$fb_name, $fb_picture] = leads_fb_fetch_profile($contact['psid']);
     if ($fb_name !== null) {
@@ -40,7 +40,7 @@ if (empty($contact['fb_name'])) {
 $display_name = $contact['fb_name'] ?: 'Facebook User #' . substr((string)$contact['psid'], -6);
 $page_title   = 'Messenger – ' . $display_name;
 
-// ── JSON shape for a message row ──────────────────────────────────────
+// ── JSON shape for a message row ──────────────────────────────────────────
 function fbconv_msg_json(array $m): array
 {
     return [
@@ -50,15 +50,17 @@ function fbconv_msg_json(array $m): array
         'attachment_type' => $m['attachment_type'] ?? null,
         'attachment_url'  => $m['attachment_url'] ?? null,
         'status'          => $m['status'] ?? 'sent',
+        'seen'            => !empty($m['seen_at']),
         'sender'          => $m['sender_name'] ?? null,
         'time'            => leads_time_ago($m['created_at']),
         'time_full'       => date('d M Y, h:i A', strtotime($m['created_at'])),
     ];
 }
 
-// ── AJAX: poll for new messages ───────────────────────────────────────
+// ── AJAX: poll for new messages (also returns seen receipts) ────────────────
 if (($_GET['ajax'] ?? '') === 'poll') {
     header('Content-Type: application/json');
+    leads_fb_run_followups_throttled();
     $after = (int)($_GET['after_id'] ?? 0);
     $q = db()->prepare(
         'SELECT m.*, u.full_name AS sender_name
@@ -71,11 +73,21 @@ if (($_GET['ajax'] ?? '') === 'poll') {
     try {
         db()->prepare('UPDATE lead_fb_contacts SET last_read_at = NOW() WHERE id = ?')->execute([$contact_id]);
     } catch (Exception $e) { /* run fb-inbox-upgrade.sql */ }
-    echo json_encode(['messages' => array_map('fbconv_msg_json', $rows)]);
+    $seen_ids = [];
+    try {
+        $sq = db()->prepare(
+            "SELECT id FROM lead_fb_messages
+             WHERE contact_id = ? AND direction = 'out' AND seen_at IS NOT NULL
+             ORDER BY id DESC LIMIT 30"
+        );
+        $sq->execute([$contact_id]);
+        $seen_ids = array_map('intval', $sq->fetchAll(PDO::FETCH_COLUMN));
+    } catch (Exception $e) { /* run fb-inbox-upgrade-2.sql */ }
+    echo json_encode(['messages' => array_map('fbconv_msg_json', $rows), 'seen_ids' => $seen_ids]);
     exit;
 }
 
-// ── AJAX: send reply ────────────────────────────────────────────────
+// ── AJAX: send reply ──────────────────────────────────────────────────────
 if (($_GET['ajax'] ?? '') === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');
     if (!$is_staff) { echo json_encode(['ok' => false, 'error' => 'Permission denied.']); exit; }
@@ -109,7 +121,82 @@ if (($_GET['ajax'] ?? '') === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     exit;
 }
 
-// ── Export transcript as .txt ─────────────────────────────────────────
+// ── AJAX: send attachment directly from the ERP ─────────────────────────────
+if (($_GET['ajax'] ?? '') === 'send_file' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    header('Content-Type: application/json');
+    if (!$is_staff) { echo json_encode(['ok' => false, 'error' => 'Permission denied.']); exit; }
+    csrf_check();
+
+    if (empty($_FILES['fb_file']) || ($_FILES['fb_file']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+        echo json_encode(['ok' => false, 'error' => 'No file uploaded or upload failed.']); exit;
+    }
+    $f = $_FILES['fb_file'];
+    if ((int)$f['size'] > 25 * 1024 * 1024) {
+        echo json_encode(['ok' => false, 'error' => 'Maximum file size is 25 MB.']); exit;
+    }
+
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $mime  = (string)$finfo->file($f['tmp_name']);
+    $allowed = [
+        'image/jpeg' => 'jpg',  'image/png' => 'png',  'image/gif' => 'gif', 'image/webp' => 'webp',
+        'application/pdf' => 'pdf',
+        'application/msword' => 'doc',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document' => 'docx',
+        'application/vnd.ms-excel' => 'xls',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' => 'xlsx',
+        'video/mp4' => 'mp4', 'audio/mpeg' => 'mp3',
+        'text/plain' => 'txt', 'application/zip' => 'zip',
+    ];
+    if (!isset($allowed[$mime])) {
+        echo json_encode(['ok' => false, 'error' => 'File type not allowed. Allowed: images, PDF, Word, Excel, MP4, MP3, TXT, ZIP.']); exit;
+    }
+    $fb_type = 'file';
+    if (str_starts_with($mime, 'image/')) $fb_type = 'image';
+    elseif (str_starts_with($mime, 'video/')) $fb_type = 'video';
+    elseif (str_starts_with($mime, 'audio/')) $fb_type = 'audio';
+
+    $dir = UPLOAD_DIR . '/fb-attachments';
+    if (!is_dir($dir) && !@mkdir($dir, 0755, true)) {
+        echo json_encode(['ok' => false, 'error' => 'Could not create the upload directory.']); exit;
+    }
+    $name = 'fb_' . $contact_id . '_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $allowed[$mime];
+    $path = $dir . '/' . $name;
+    if (!move_uploaded_file($f['tmp_name'], $path)) {
+        echo json_encode(['ok' => false, 'error' => 'Could not save the uploaded file.']); exit;
+    }
+    $url = UPLOAD_URL . '/fb-attachments/' . $name;
+
+    $sent   = leads_fb_send_attachment($contact['psid'], $path, $mime, $fb_type);
+    $status = $sent ? 'sent' : 'failed';
+    try {
+        db()->prepare('INSERT INTO lead_fb_messages (contact_id, direction, message_text, attachment_type, attachment_url, sent_by, status) VALUES (?,?,?,?,?,?,?)')
+            ->execute([$contact_id, 'out', null, $fb_type, $url, $user['id'], $status]);
+    } catch (Exception $e) {
+        db()->prepare('INSERT INTO lead_fb_messages (contact_id, direction, message_text, attachment_type, attachment_url, sent_by) VALUES (?,?,?,?,?,?)')
+            ->execute([$contact_id, 'out', null, $fb_type, $url, $user['id']]);
+    }
+    $mid = (int)db()->lastInsertId();
+    if ($sent) {
+        db()->prepare('UPDATE lead_fb_contacts SET last_message_at = NOW() WHERE id = ?')->execute([$contact_id]);
+        if ($contact['lead_id']) {
+            leads_log((int)$contact['lead_id'], 'fb_message_sent', null, null, null,
+                'Facebook attachment sent by ' . $user['full_name'] . ': ' . $f['name']);
+        }
+    }
+    echo json_encode([
+        'ok'      => $sent,
+        'message' => fbconv_msg_json([
+            'id' => $mid, 'direction' => 'out', 'message_text' => null,
+            'attachment_type' => $fb_type, 'attachment_url' => $url,
+            'status' => $status, 'sender_name' => $user['full_name'] ?? 'Staff',
+            'created_at' => date('Y-m-d H:i:s'),
+        ]),
+        'error'   => $sent ? null : 'Facebook rejected the attachment. Check FB Settings and the 24-hour messaging window.',
+    ]);
+    exit;
+}
+
+// ── Export transcript as .txt ──────────────────────────────────────────────
 if (($_GET['export'] ?? '') === 'txt') {
     $eq = db()->prepare(
         'SELECT m.*, u.full_name AS sender_name
@@ -138,7 +225,7 @@ if (($_GET['export'] ?? '') === 'txt') {
     exit;
 }
 
-// ── POST handler ──────────────────────────────────────────────────────
+// ── POST handler ──────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     $action = $_POST['action'] ?? '';
@@ -202,7 +289,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect(APP_URL . '/leads/fb-conversation.php?contact_id=' . $contact_id);
     }
 
-    // ── 1-click convert conversation to a lead ────────────────────────────
+    // ── Mark conversation as unread / read ───────────────────────────────
+    if ($action === 'mark_unread' && $is_staff) {
+        try {
+            db()->prepare('UPDATE lead_fb_contacts SET marked_unread = 1, last_read_at = NULL WHERE id = ?')
+                ->execute([$contact_id]);
+            flash_set('success', 'Conversation marked as unread.');
+        } catch (Exception $e) {
+            flash_set('error', 'Run admin/leads/fb-inbox-upgrade-2.sql first to enable read/unread.');
+        }
+        redirect(APP_URL . '/leads/fb-inbox.php');
+    }
+    if ($action === 'mark_read' && $is_staff) {
+        try {
+            db()->prepare('UPDATE lead_fb_contacts SET marked_unread = 0, last_read_at = NOW() WHERE id = ?')
+                ->execute([$contact_id]);
+            flash_set('success', 'Conversation marked as read.');
+        } catch (Exception $e) {
+            flash_set('error', 'Run admin/leads/fb-inbox-upgrade-2.sql first to enable read/unread.');
+        }
+        redirect(APP_URL . '/leads/fb-conversation.php?contact_id=' . $contact_id);
+    }
+
+    // ── 1-click convert conversation to a lead ────────────────────────────────
     if ($action === 'convert_lead' && leads_can_create() && empty($contact['lead_id'])) {
         $name_parts = preg_split('/\s+/', trim((string)($contact['fb_name'] ?? '')), 2);
         $first = ($name_parts[0] ?? '') !== '' ? $name_parts[0] : 'Facebook';
@@ -248,7 +357,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect(APP_URL . '/leads/fb-conversation.php?contact_id=' . $contact_id);
     }
 
-    // ── Toggle conversation tag ────────────────────────────────────────
+    // ── Toggle conversation tag ──────────────────────────────────────────
     if ($action === 'toggle_tag' && $is_staff) {
         $tag_id = (int)($_POST['tag_id'] ?? 0);
         try {
@@ -267,7 +376,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect(APP_URL . '/leads/fb-conversation.php?contact_id=' . $contact_id);
     }
 
-    // ── Canned responses management ──────────────────────────────────────
+    // ── Canned responses management (unlimited) ────────────────────────────────
     if ($action === 'add_canned' && $is_staff) {
         $shortcut = strtolower(trim($_POST['shortcut'] ?? ''));
         $title    = trim($_POST['title'] ?? '');
@@ -297,7 +406,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// ── Fetch messages ─────────────────────────────────────────────────────
+// ── Fetch messages ───────────────────────────────────────────────────────
 $msgs_q = db()->prepare(
     'SELECT m.*, u.full_name AS sender_name
      FROM lead_fb_messages m
@@ -312,12 +421,16 @@ $last_msg_id = $last_row ? (int)$last_row['id'] : 0;
 
 $upgrade_needed = false;
 
-// Mark conversation as read
+// Mark conversation as read (and clear any manual "unread" flag)
 try {
-    db()->prepare('UPDATE lead_fb_contacts SET last_read_at = NOW() WHERE id = ?')->execute([$contact_id]);
-} catch (Exception $e) { $upgrade_needed = true; }
+    db()->prepare('UPDATE lead_fb_contacts SET last_read_at = NOW(), marked_unread = 0 WHERE id = ?')->execute([$contact_id]);
+} catch (Exception $e) {
+    try {
+        db()->prepare('UPDATE lead_fb_contacts SET last_read_at = NOW() WHERE id = ?')->execute([$contact_id]);
+    } catch (Exception $e2) { $upgrade_needed = true; }
+}
 
-// Canned responses
+// Canned responses (unlimited – searchable in the UI)
 $canned = [];
 try {
     $canned = db()->query('SELECT * FROM lead_fb_canned_responses WHERE is_active = 1 ORDER BY shortcut ASC')->fetchAll();
@@ -346,6 +459,21 @@ try {
     $contact_tag_ids = array_map('intval', $tq->fetchAll(PDO::FETCH_COLUMN));
 } catch (Exception $e) { $upgrade_needed = true; }
 $active_tags = array_values(array_filter($all_tags, fn($t) => in_array((int)$t['id'], $contact_tag_ids, true)));
+
+// Phone number detection (customer provided a phone number at any point)
+$phone_found = null;
+try {
+    $pq = db()->prepare(
+        "SELECT message_text FROM lead_fb_messages
+         WHERE contact_id = ? AND direction = 'in' AND message_text REGEXP '01[3-9][0-9]{8}'
+         ORDER BY id DESC LIMIT 1"
+    );
+    $pq->execute([$contact_id]);
+    $ptext = $pq->fetchColumn();
+    if ($ptext && preg_match('/(?:\+?88)?01[3-9]\d{8}/', $ptext, $pm)) {
+        $phone_found = $pm[0];
+    }
+} catch (Exception $e) { /* ignore */ }
 
 // Contact sidebar (50 most recent, with unread counts when available)
 try {
@@ -383,6 +511,7 @@ require_once __DIR__ . '/../includes/header.php';
 .msg-in{background:#fff;color:#111;border:1px solid #e4e6eb;border-bottom-left-radius:6px}
 .contact-item.active{background:#1877F2;border-color:#1877F2}
 .tag-toggle{cursor:pointer}
+.fb-phone-hit{background:#ffe58a;color:#7a5b00;font-weight:600;padding:0 3px;border-radius:4px}
 </style>
 
 <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
@@ -392,6 +521,9 @@ require_once __DIR__ . '/../includes/header.php';
             <?php foreach ($active_tags as $tg): ?>
             <span class="badge ms-1" style="background:<?= h($tg['color']) ?>;font-size:.6rem;vertical-align:middle"><?= h($tg['name']) ?></span>
             <?php endforeach; ?>
+            <?php if ($phone_found): ?>
+            <span class="badge bg-success ms-1" style="font-size:.65rem;vertical-align:middle" title="The customer shared a phone number in this chat"><i class="fas fa-phone me-1"></i>Has phone: <?= h($phone_found) ?></span>
+            <?php endif; ?>
         </h4>
         <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small">
             <li class="breadcrumb-item"><a href="<?= APP_URL ?>">Dashboard</a></li>
@@ -400,6 +532,18 @@ require_once __DIR__ . '/../includes/header.php';
         </ol></nav>
     </div>
     <div class="d-flex gap-2 flex-wrap">
+        <?php if ($is_staff): ?>
+        <form method="post" class="d-inline">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="mark_unread">
+            <button type="submit" class="btn btn-outline-warning btn-sm" title="Mark as unread and return to inbox"><i class="fas fa-envelope me-1"></i> Mark Unread</button>
+        </form>
+        <form method="post" class="d-inline">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="mark_read">
+            <button type="submit" class="btn btn-outline-success btn-sm" title="Mark this conversation as read"><i class="fas fa-envelope-open me-1"></i> Mark Read</button>
+        </form>
+        <?php endif; ?>
         <a href="?contact_id=<?= $contact_id ?>&export=txt" class="btn btn-outline-dark btn-sm"><i class="fas fa-file-download me-1"></i> Export Chat</a>
         <a href="<?= APP_URL ?>/leads/fb-analytics.php" class="btn btn-outline-info btn-sm"><i class="fas fa-chart-line me-1"></i> Analytics</a>
         <a href="<?= APP_URL ?>/leads/fb-inbox.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left me-1"></i> Back</a>
@@ -411,8 +555,8 @@ require_once __DIR__ . '/../includes/header.php';
 <?php if ($upgrade_needed && is_super_admin()): ?>
 <div class="alert alert-warning py-2 small">
     <i class="fas fa-database me-1"></i>
-    Some inbox features (unread tracking, canned replies, notes, tags) are disabled.
-    Run <code>admin/leads/fb-inbox-upgrade.sql</code> once to enable them.
+    Some inbox features (unread tracking, canned replies, notes, tags, seen receipts, auto follow-up) are disabled.
+    Run <code>admin/leads/fb-inbox-upgrade.sql</code> and <code>admin/leads/fb-inbox-upgrade-2.sql</code> once to enable them.
 </div>
 <?php endif; ?>
 
@@ -499,7 +643,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <div style="max-width:75%">
                         <div class="px-3 py-2 msg-bubble <?= $is_out ? 'msg-out' : 'msg-in' ?>">
                             <?php if ($msg['message_text'] !== null && $msg['message_text'] !== ''): ?>
-                            <div style="font-size:.9rem;line-height:1.45;white-space:pre-wrap;word-break:break-word"><?= h($msg['message_text']) ?></div>
+                            <div style="font-size:.9rem;line-height:1.45;white-space:pre-wrap;word-break:break-word"><?= $is_out ? h($msg['message_text']) : leads_fb_highlight_phones($msg['message_text']) ?></div>
                             <?php endif; ?>
                             <?php if (!empty($msg['attachment_url'])): ?>
                             <div class="mt-1">
@@ -518,7 +662,15 @@ require_once __DIR__ . '/../includes/header.php';
                         <div class="mt-1 px-1 text-muted d-flex gap-1 align-items-center <?= $is_out ? 'justify-content-end' : '' ?>" style="font-size:.68rem">
                             <span title="<?= h(date('d M Y, h:i A', strtotime($msg['created_at']))) ?>"><?= $is_out ? h(($msg['sender_name'] ?? 'Auto-reply')) . ' · ' : '' ?><?= h(leads_time_ago($msg['created_at'])) ?></span>
                             <?php if ($is_out): ?>
-                            <span class="msg-status"><?= $m_status === 'failed' ? '<i class="fas fa-exclamation-circle text-danger" title="Failed to send"></i>' : '<i class="fas fa-check" title="Sent"></i>' ?></span>
+                            <span class="msg-status" data-msg-id="<?= (int)$msg['id'] ?>"><?php
+                                if ($m_status === 'failed') {
+                                    echo '<i class="fas fa-exclamation-circle text-danger" title="Failed to send"></i>';
+                                } elseif (!empty($msg['seen_at'])) {
+                                    echo '<i class="fas fa-check-double" style="color:#1877F2" title="Seen by customer"></i>';
+                                } else {
+                                    echo '<i class="fas fa-check" title="Sent"></i>';
+                                }
+                            ?></span>
                             <?php endif; ?>
                         </div>
                     </div>
@@ -534,10 +686,13 @@ require_once __DIR__ . '/../includes/header.php';
             <?php if ($is_staff): ?>
             <div class="card-footer bg-white border-top-0 pt-2">
                 <div class="position-relative">
-                    <div id="canned-panel" class="card shadow border position-absolute d-none" style="bottom:100%;left:0;width:330px;max-height:260px;overflow-y:auto;z-index:50">
+                    <div id="canned-panel" class="card shadow border position-absolute d-none" style="bottom:100%;left:0;width:330px;max-height:320px;overflow-y:auto;z-index:50">
+                        <div class="p-2 border-bottom bg-white position-sticky top-0">
+                            <input type="text" id="canned-search" class="form-control form-control-sm" placeholder="Search canned replies…" autocomplete="off">
+                        </div>
                         <div class="list-group list-group-flush">
                             <?php foreach ($canned as $cr): ?>
-                            <button type="button" class="list-group-item list-group-item-action py-2 canned-item" data-body="<?= h($cr['body']) ?>">
+                            <button type="button" class="list-group-item list-group-item-action py-2 canned-item" data-body="<?= h($cr['body']) ?>" data-search="<?= h(mb_strtolower($cr['shortcut'] . ' ' . $cr['title'] . ' ' . $cr['body'])) ?>">
                                 <code class="small"><?= h($cr['shortcut']) ?></code>
                                 <span class="small fw-semibold ms-1"><?= h($cr['title']) ?></span>
                                 <div class="text-muted text-truncate" style="font-size:.72rem"><?= h(mb_substr($cr['body'], 0, 64)) ?></div>
@@ -552,6 +707,8 @@ require_once __DIR__ . '/../includes/header.php';
                         <?= csrf_field() ?>
                         <input type="hidden" name="action" value="send_reply">
                         <button type="button" id="canned-toggle" class="btn btn-light border flex-shrink-0" title="Canned replies" style="height:56px"><i class="fas fa-bolt text-warning"></i></button>
+                        <button type="button" id="attach-btn" class="btn btn-light border flex-shrink-0" title="Send attachment (max 25 MB)" style="height:56px"><i class="fas fa-paperclip text-primary"></i></button>
+                        <input type="file" id="fb_file" class="d-none" accept="image/*,video/mp4,audio/mpeg,application/pdf,.doc,.docx,.xls,.xlsx,.txt,.zip">
                         <textarea name="fb_reply" id="fb_reply" class="form-control" rows="2" placeholder="Type a message… (/shortcut + Tab for canned reply, Ctrl+Enter to send)" required style="resize:none"></textarea>
                         <button type="submit" class="btn text-white flex-shrink-0" style="background:#1877F2;height:56px"><i class="fas fa-paper-plane"></i></button>
                     </form>
@@ -671,15 +828,18 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
         </div>
 
-        <!-- Canned replies management -->
+        <!-- Canned replies management (unlimited) -->
         <?php if ($is_staff): ?>
         <details class="card border-0 shadow-sm mb-3">
             <summary class="card-header bg-white fw-semibold py-2" style="cursor:pointer;list-style:none">
                 <i class="fas fa-bolt me-2 text-warning"></i>Manage Canned Replies
+                <span class="badge bg-light text-muted border ms-1" style="font-size:.6rem"><?= count($canned) ?> saved · unlimited</span>
             </summary>
             <div class="card-body p-3">
+                <input type="text" id="canned-manage-search" class="form-control form-control-sm mb-2" placeholder="Search saved replies…" autocomplete="off">
+                <div id="canned-manage-list" style="max-height:240px;overflow-y:auto">
                 <?php foreach ($canned as $cr): ?>
-                <div class="d-flex justify-content-between align-items-center border-bottom py-1">
+                <div class="d-flex justify-content-between align-items-center border-bottom py-1 canned-manage-item" data-search="<?= h(mb_strtolower($cr['shortcut'] . ' ' . $cr['title'] . ' ' . $cr['body'])) ?>">
                     <div class="overflow-hidden">
                         <code class="small"><?= h($cr['shortcut']) ?></code>
                         <span class="small ms-1"><?= h($cr['title']) ?></span>
@@ -692,6 +852,7 @@ require_once __DIR__ . '/../includes/header.php';
                     </form>
                 </div>
                 <?php endforeach; ?>
+                </div>
                 <form method="post" class="mt-3">
                     <?= csrf_field() ?>
                     <input type="hidden" name="action" value="add_canned">
@@ -734,6 +895,16 @@ require_once __DIR__ . '/../includes/header.php';
         } catch (e) { /* audio blocked */ }
     }
 
+    // ── Highlight phone numbers in customer messages ──
+    function escHtml(s) {
+        return String(s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+    function phoneHighlight(s) {
+        return escHtml(s).replace(/((?:\+?88)?01[3-9]\d{8})/g, '<span class="fb-phone-hit" title="Phone number detected">$1</span>');
+    }
+
     // ── Build a message bubble ──
     function renderMsg(m) {
         const wrap = document.createElement('div');
@@ -764,7 +935,11 @@ require_once __DIR__ . '/../includes/header.php';
         if (m.text) {
             const t = document.createElement('div');
             t.style.cssText = 'font-size:.9rem;line-height:1.45;white-space:pre-wrap;word-break:break-word';
-            t.textContent = m.text;
+            if (m.direction === 'out') {
+                t.textContent = m.text;
+            } else {
+                t.innerHTML = phoneHighlight(m.text);
+            }
             bubble.appendChild(t);
         }
         if (m.attachment_url) {
@@ -796,11 +971,14 @@ require_once __DIR__ . '/../includes/header.php';
         if (m.direction === 'out') {
             const st = document.createElement('span');
             st.className = 'msg-status';
+            if (m.id) st.dataset.msgId = m.id;
             st.innerHTML = m.status === 'sending'
                 ? '<i class="far fa-clock" title="Sending…"></i>'
                 : (m.status === 'failed'
                     ? '<i class="fas fa-exclamation-circle text-danger" title="Failed to send"></i>'
-                    : '<i class="fas fa-check" title="Sent"></i>');
+                    : (m.seen
+                        ? '<i class="fas fa-check-double" style="color:#1877F2" title="Seen by customer"></i>'
+                        : '<i class="fas fa-check" title="Sent"></i>'));
             meta.appendChild(st);
         }
         box.appendChild(meta);
@@ -813,7 +991,7 @@ require_once __DIR__ . '/../includes/header.php';
         if (ph) ph.remove();
     }
 
-    // ── AJAX polling every 4 seconds ──
+    // ── AJAX polling every 4 seconds (new messages + seen receipts) ──
     setInterval(function () {
         fetch('?contact_id=<?= $contact_id ?>&ajax=poll&after_id=' + lastId, { headers: { 'Accept': 'application/json' } })
             .then(function (r) { return r.json(); })
@@ -828,6 +1006,12 @@ require_once __DIR__ . '/../includes/header.php';
                     if (m.direction === 'in') gotIncoming = true;
                 });
                 if (gotIncoming) { scrollBottom(); chime(); }
+                (d.seen_ids || []).forEach(function (id) {
+                    const st = document.querySelector('.msg-status[data-msg-id="' + id + '"]');
+                    if (st && !st.querySelector('.fa-check-double') && !st.querySelector('.fa-exclamation-circle')) {
+                        st.innerHTML = '<i class="fas fa-check-double" style="color:#1877F2" title="Seen by customer"></i>';
+                    }
+                });
             })
             .catch(function () { /* network hiccup – retry next tick */ });
     }, 4000);
@@ -857,6 +1041,7 @@ require_once __DIR__ . '/../includes/header.php';
                         if (icon) icon.innerHTML = '<i class="fas fa-check" title="Sent"></i>';
                         if (span) span.textContent = STAFF_NAME + ' · Just now';
                         bubble.dataset.id = res.id;
+                        if (icon) icon.dataset.msgId = res.id;
                         lastId = Math.max(lastId, res.id);
                     } else {
                         if (icon) icon.innerHTML = '<i class="fas fa-exclamation-circle text-danger" title="Failed"></i>';
@@ -888,11 +1073,71 @@ require_once __DIR__ . '/../includes/header.php';
         });
     }
 
+    // ── Attachment upload (send directly from the ERP) ──
+    const attachBtn = document.getElementById('attach-btn');
+    const fileInput = document.getElementById('fb_file');
+    if (attachBtn && fileInput && form) {
+        attachBtn.addEventListener('click', function () { fileInput.click(); });
+        fileInput.addEventListener('change', function () {
+            const file = fileInput.files && fileInput.files[0];
+            if (!file) return;
+            if (file.size > 25 * 1024 * 1024) { alert('Maximum file size is 25 MB.'); fileInput.value = ''; return; }
+            removeEmptyPlaceholder();
+            const bubble = renderMsg({ direction: 'out', text: '📎 Uploading ' + file.name + '…', status: 'sending', sender: STAFF_NAME, time: 'Uploading…' });
+            thread.appendChild(bubble);
+            scrollBottom();
+            const fd = new FormData();
+            form.querySelectorAll('input[type="hidden"]').forEach(function (inp) { fd.append(inp.name, inp.value); });
+            fd.append('fb_file', file);
+            fileInput.value = '';
+            fetch('?contact_id=<?= $contact_id ?>&ajax=send_file', { method: 'POST', body: fd })
+                .then(function (r) { return r.json(); })
+                .then(function (res) {
+                    if (res.ok && res.message) {
+                        bubble.replaceWith(renderMsg(res.message));
+                        lastId = Math.max(lastId, res.message.id || 0);
+                        scrollBottom();
+                    } else {
+                        const icon = bubble.querySelector('.msg-status');
+                        if (icon) icon.innerHTML = '<i class="fas fa-exclamation-circle text-danger" title="Failed"></i>';
+                        alert(res.error || 'Failed to send attachment.');
+                    }
+                })
+                .catch(function () {
+                    const icon = bubble.querySelector('.msg-status');
+                    if (icon) icon.innerHTML = '<i class="fas fa-exclamation-circle text-danger" title="Failed"></i>';
+                });
+        });
+    }
+
+    // ── Canned reply search (quick panel + manage list) ──
+    const cannedSearch = document.getElementById('canned-search');
+    if (cannedSearch) {
+        cannedSearch.addEventListener('input', function () {
+            const q = cannedSearch.value.toLowerCase();
+            document.querySelectorAll('.canned-item').forEach(function (it) {
+                it.style.display = (it.dataset.search || '').indexOf(q) !== -1 ? '' : 'none';
+            });
+        });
+    }
+    const cannedManageSearch = document.getElementById('canned-manage-search');
+    if (cannedManageSearch) {
+        cannedManageSearch.addEventListener('input', function () {
+            const q = cannedManageSearch.value.toLowerCase();
+            document.querySelectorAll('.canned-manage-item').forEach(function (it) {
+                it.style.display = (it.dataset.search || '').indexOf(q) !== -1 ? '' : 'none';
+            });
+        });
+    }
+
     // ── Canned replies quick panel ──
     const cannedToggle = document.getElementById('canned-toggle');
     const cannedPanel  = document.getElementById('canned-panel');
     if (cannedToggle && cannedPanel) {
-        cannedToggle.addEventListener('click', function () { cannedPanel.classList.toggle('d-none'); });
+        cannedToggle.addEventListener('click', function () {
+            cannedPanel.classList.toggle('d-none');
+            if (!cannedPanel.classList.contains('d-none') && cannedSearch) cannedSearch.focus();
+        });
         document.querySelectorAll('.canned-item').forEach(function (btn) {
             btn.addEventListener('click', function () {
                 if (ta) {
