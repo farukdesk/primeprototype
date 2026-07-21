@@ -736,6 +736,14 @@ require_once __DIR__ . '/../includes/header.php';
 
             <?php if ($is_staff): ?>
             <div class="card-footer bg-white border-top-0 pt-2">
+                <div id="qa-suggest" class="d-none mb-2">
+                    <div class="d-flex align-items-center gap-1 mb-1">
+                        <span class="small fw-semibold" style="color:#6f42c1"><i class="fas fa-lightbulb me-1 text-warning"></i>Suggested answers</span>
+                        <span class="text-muted" style="font-size:.65rem">based on the customer's question</span>
+                        <button type="button" id="qa-suggest-close" class="btn btn-link btn-sm text-muted p-0 ms-auto" style="font-size:.65rem">hide</button>
+                    </div>
+                    <div id="qa-suggest-list" class="d-flex flex-column gap-1"></div>
+                </div>
                 <div class="position-relative">
                     <div id="canned-panel" class="card shadow border position-absolute d-none" style="bottom:100%;left:0;width:330px;max-height:320px;overflow-y:auto;z-index:50">
                         <div class="p-2 border-bottom bg-white position-sticky top-0">

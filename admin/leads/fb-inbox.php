@@ -239,6 +239,9 @@ require_once __DIR__ . '/../includes/header.php';
             </button>
         </form>
         <?php endif; ?>
+        <?php if ($is_staff): ?>
+        <a href="<?= APP_URL ?>/leads/fb-broadcast.php" class="btn btn-sm text-white" style="background:#1877F2"><i class="fas fa-bullhorn me-1"></i> Broadcast</a>
+        <?php endif; ?>
         <a href="<?= APP_URL ?>/leads/fb-analytics.php" class="btn btn-outline-info btn-sm"><i class="fas fa-chart-line me-1"></i> Analytics</a>
         <?php if (is_super_admin()): ?>
         <a href="<?= APP_URL ?>/leads/fb-settings.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-cog me-1"></i> FB Settings</a>
