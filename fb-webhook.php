@@ -71,6 +71,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Skip echoes (messages sent by the page itself)
             if (!empty($event['message']['is_echo'])) continue;
 
+            // ── Read receipt: customer has seen our messages up to watermark ──
+            // (requires the 'message_reads' webhook subscription and
+            //  admin/leads/fb-inbox-upgrade-2.sql)
+            if (isset($event['read']['watermark'])) {
+                $rc = db()->prepare('SELECT id FROM lead_fb_contacts WHERE psid = ?');
+                $rc->execute([$psid]);
+                $rcid = (int)$rc->fetchColumn();
+                if ($rcid) {
+                    try {
+                        db()->prepare(
+                            "UPDATE lead_fb_messages SET seen_at = NOW()
+                             WHERE contact_id = ? AND direction = 'out' AND seen_at IS NULL
+                               AND created_at <= FROM_UNIXTIME(?)"
+                        )->execute([$rcid, (int)floor(((float)$event['read']['watermark']) / 1000)]);
+                    } catch (Exception $e) { /* run admin/leads/fb-inbox-upgrade-2.sql */ }
+                }
+                continue;
+            }
+
             // ── Text / attachment message ──────────────────────────────────
             if (isset($event['message'])) {
                 $msg     = $event['message'];
