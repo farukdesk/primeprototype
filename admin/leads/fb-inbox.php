@@ -119,7 +119,7 @@ if ($date_to !== '') {
 }
 
 $where_sql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
-$filters_active = ($search !== '' || $f_linked !== '' || $f_state !== '' || $f_tag > 0 || $date_from !== '' || $date_to !== '');
+$filters_active = ($search !== '' || $f_linked !== '' || $f_state !== '' || $f_tag > 0 || $f_phone !== '' || $date_from !== '' || $date_to !== '');
 
 $count_q = db()->prepare(
     'SELECT COUNT(*) FROM lead_fb_contacts c LEFT JOIN leads l ON l.id = c.lead_id ' . $where_sql

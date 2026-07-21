@@ -470,6 +470,21 @@ try {
 $canned_map = [];
 foreach ($canned as $cr) { $canned_map[$cr['shortcut']] = $cr['body']; }
 
+// Saved Q&A for smart answer suggestions
+$qa_list = [];
+try {
+    $qa_list = db()->query('SELECT id, question, keywords, answer, use_count FROM lead_fb_qa WHERE is_active = 1 ORDER BY use_count DESC, id DESC')->fetchAll();
+} catch (Exception $e) { /* run fb-inbox-upgrade-3.sql */ }
+
+// Last incoming customer message (used to suggest answers on page load)
+$last_incoming_text = '';
+foreach (array_reverse($messages) as $m_row) {
+    if ($m_row['direction'] === 'in' && (string)($m_row['message_text'] ?? '') !== '') {
+        $last_incoming_text = (string)$m_row['message_text'];
+        break;
+    }
+}
+
 // Internal notes
 $contact_notes = [];
 try {
