@@ -16,6 +16,10 @@ $me         = auth_user();
 $sel_user = (int)($_GET['user_id'] ?? $_POST['user_id'] ?? 0);
 $sel_date = att_normalize_date($_GET['date'] ?? $_POST['work_date'] ?? date('Y-m-d'));
 
+// Where to go after saving: 'staff' → back to that member's calendar page
+// (staff.php?user_id=…), otherwise the daily report as before.
+$return_to = (($_GET['return'] ?? $_POST['return_to'] ?? '') === 'staff') ? 'staff' : '';
+
 // ── Save handler ─────────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();

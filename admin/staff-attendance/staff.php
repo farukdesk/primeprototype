@@ -305,7 +305,7 @@ $weekday_abbr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
                 $status = $info['status'];
                 $cls    = $status_cell_class($status);
                 $is_today = ($d === date('Y-m-d')) ? ' cal-today' : '';
-                $link = APP_URL . '/staff-attendance/entry.php?user_id=' . $user_id . '&date=' . urlencode($d);
+                $link = APP_URL . '/staff-attendance/entry.php?user_id=' . $user_id . '&date=' . urlencode($d) . '&return=staff';
                 $tag  = '';
                 if (in_array($status, ['holiday', 'weekly_off'], true)) {
                     $tag = '<span class="cal-tag">' . ($info['holiday'] ? 'Holiday' : 'Weekend') . '</span>';
