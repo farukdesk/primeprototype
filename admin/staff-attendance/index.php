@@ -373,7 +373,7 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
             $summ = [];
             foreach ($staff as $s) {
                 $uid = (int)$s['id'];
-                $summ[$uid] = ['present' => 0, 'late' => 0, 'early' => 0, 'absent' => 0, 'leave' => 0, 'minutes' => 0, 'working_days' => 0];
+                $summ[$uid] = ['present' => 0, 'late' => 0, 'early' => 0, 'absent' => 0, 'leave' => 0, 'minutes' => 0, 'working_days' => 0, 'pen' => 0];
             }
             foreach ($dates as $d) {
                 $on_leave    = $leave_by_date[$d] ?? [];
@@ -391,9 +391,14 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
                         case 'late_in':      $summ[$uid]['present']++; $summ[$uid]['late']++;  break;
                         case 'early_out':    $summ[$uid]['present']++; $summ[$uid]['early']++; break;
                         case 'late_and_early': $summ[$uid]['present']++; $summ[$uid]['late']++; $summ[$uid]['early']++; break;
+                        case 'short_hours':                      $summ[$uid]['present']++; break;
                         case 'incomplete':                       $summ[$uid]['present']++; break;
                         case 'leave':                            $summ[$uid]['leave']++;   break;
                         case 'absent':                           $summ[$uid]['absent']++;  break;
+                    }
+                    // Policy (from 01 Jun 2026): each late-in/early-out day counts toward the penalty.
+                    if (att_policy_active($d) && in_array($status, ['late_in', 'early_out', 'late_and_early'], true)) {
+                        $summ[$uid]['pen']++;
                     }
                     if ($rec) $summ[$uid]['minutes'] += att_worked_minutes($rec['in_time'], $rec['out_time']);
                 }

@@ -308,7 +308,7 @@ $weekday_abbr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
                 $link = APP_URL . '/staff-attendance/entry.php?user_id=' . $user_id . '&date=' . urlencode($d);
                 $tag  = '';
                 if (in_array($status, ['holiday', 'weekly_off'], true)) {
-                    $tag = '<span class="cal-tag">' . ($info['holiday'] ? 'Holiday' : 'Off') . '</span>';
+                    $tag = '<span class="cal-tag">' . ($info['holiday'] ? 'Holiday' : 'Weekend') . '</span>';
                 } elseif ($status === 'absent') {
                     $tag = '<span class="cal-tag text-danger">Absent</span>';
                 } elseif ($status === 'leave') {

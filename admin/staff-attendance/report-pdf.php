@@ -159,7 +159,7 @@ foreach ($staff as $s) {
 }
 
 if ($body === '') {
-    $colspan = 5 + count($dates);
+    $colspan = 6 + count($dates);
     $body = '<tr><td colspan="' . $colspan . '" style="text-align:center;padding:20px;color:#777;">'
           . 'No staff found for the selected filters.</td></tr>';
 }
