@@ -559,6 +559,10 @@ require_once __DIR__ . '/../includes/header.php';
 .contact-item.active{background:#1877F2;border-color:#1877F2}
 .tag-toggle{cursor:pointer}
 .fb-phone-hit{background:#ffe58a;color:#7a5b00;font-weight:600;padding:0 3px;border-radius:4px}
+#qa-suggest{animation:qaFade .25s ease}
+.qa-chip{background:linear-gradient(90deg,#f8f5ff,#f0f7ff);border-color:#e3d9f7!important;transition:box-shadow .15s}
+.qa-chip:hover{box-shadow:0 2px 8px rgba(111,66,193,.18)}
+@keyframes qaFade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 </style>
 
 <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">

@@ -212,6 +212,7 @@ $qs_base = array_filter([
     'linked'    => $f_linked,
     'state'     => $f_state,
     'tag'       => $f_tag ?: null,
+    'phone'     => $f_phone,
     'date_from' => $date_from,
     'date_to'   => $date_to,
 ], static fn($v) => $v !== null && $v !== '');
