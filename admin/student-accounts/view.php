@@ -194,7 +194,7 @@ foreach ($semester_fees as $sf) {
     $total_fixed_all       += $sem_fixed_payable;
     $total_english_all     += $sem_english_payable;
 }
-$total_cost = $total_tuition_payable + $total_fixed_all + $total_english_all + $total_reg_fees + $admission_fee + $form_id_fee;
+$total_cost = $total_tuition_payable + $total_fixed_all + $total_english_all + $total_reg_fees + $admission_fee + $form_id_fee + $project_fee_one_time;
 
 require_once __DIR__ . '/../includes/header.php';
 ?>

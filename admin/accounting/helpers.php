@@ -2827,6 +2827,7 @@ function acc_fee_type_label(string $fee_type): string
         'semester_tuition' => 'Semester Tuition Fee',
         'fixed_fee'        => 'Fixed Institutional Fee',
         'english_fee'      => 'English Course Fee',
+        'project_fee'      => 'Project Fee',
         'retake_fee'           => 'Re-Take Fee',
         'improvement_fee'      => 'Improvement Fee',
         'special_exam_midterm' => 'Special Examination (Mid Term)',
