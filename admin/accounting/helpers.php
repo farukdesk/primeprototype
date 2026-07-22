@@ -1772,6 +1772,8 @@ function acc_student_fee_summary(int $student_id): ?array
             'admission'    => ['due' => $admission_base_due, 'paid' => $admission_base_paid, 'out' => max(0.0, $admission_base_due - $admission_base_paid)],
             'form_fee'     => ['due' => $form_fee_due,       'paid' => $form_fee_paid,       'out' => max(0.0, $form_fee_due - $form_fee_paid)],
             'id_card_fee'  => ['due' => $id_card_fee_due,    'paid' => $id_card_fee_paid,    'out' => max(0.0, $id_card_fee_due - $id_card_fee_paid)],
+            // One-time Project Fee (0.00 due unless assigned on the package, e.g. batch 261)
+            'project_fee'  => ['due' => $project_fee_due,    'paid' => $project_fee_paid,    'out' => max(0.0, $project_fee_due - $project_fee_paid)],
             // Combined admission obligation retained for backwards compatibility.
             'admission_combined' => ['due' => $admission_due, 'paid' => $admission_paid, 'out' => max(0.0, $admission_due - $admission_paid)],
             'admission_breakdown' => [

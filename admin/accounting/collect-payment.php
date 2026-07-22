@@ -1645,6 +1645,27 @@ require_once __DIR__ . '/../includes/header.php';
                 });
             }
         }
+
+        // 3. One-time Project Fee — falls due with the final semester, so it is
+        //    ordered after every scheduled monthly obligation. Its calendar slot
+        //    mirrors the last month of the final semester.
+        const pf = t.project_fee;
+        if (pf && pf.out > 0) {
+            const lastSf = s.semesters[s.semesters.length - 1];
+            const lastMr = lastSf && lastSf.monthly_rows && lastSf.monthly_rows.length
+                ? lastSf.monthly_rows[lastSf.monthly_rows.length - 1] : null;
+            items.push({
+                fee_type:          'project_fee',
+                semester_fee_id:   null,
+                semester_number:   null,
+                month_number:      null,
+                out:               pf.out,
+                label:             'Project Fee (one-time)',
+                income_account_id: incomeAccountsMap['project_fee'] ?? 0,
+                cal_month:         lastMr ? (Number(lastMr.cal_month) || null) : null,
+                cal_year:          lastMr ? (Number(lastMr.cal_year)  || null) : null,
+            });
+        }
         return items;
     }
 
