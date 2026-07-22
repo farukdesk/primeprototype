@@ -698,9 +698,15 @@ require_once __DIR__ . '/../includes/header.php';
                         <td colspan="8" class="text-end">ID Card Fee (one-time) →</td>
                         <td class="text-end text-warning-emphasis fs-6"><?= sfp_money($id_card_fee_one_time) ?></td>
                     </tr>
+                    <?php if ($project_fee_one_time > 0): ?>
+                    <tr class="table-warning">
+                        <td colspan="8" class="text-end">Project Fee (one-time) →</td>
+                        <td class="text-end text-warning-emphasis fs-6"><?= sfp_money($project_fee_one_time) ?></td>
+                    </tr>
+                    <?php endif; ?>
                     <tr class="table-success">
-                        <td colspan="8" class="text-end fw-bold">Grand Total (incl. Admission, Form & ID Card Fees) →</td>
-                        <td class="text-end fw-bold text-success fs-5"><?= sfp_money($grand_total + $admission_fee + $form_id_fee) ?></td>
+                        <td colspan="8" class="text-end fw-bold">Grand Total (incl. Admission, Form & ID Card<?= $project_fee_one_time > 0 ? ' & Project' : '' ?> Fees) →</td>
+                        <td class="text-end fw-bold text-success fs-5"><?= sfp_money($grand_total + $admission_fee + $form_id_fee + $project_fee_one_time) ?></td>
                     </tr>
                 </tfoot>
             </table>

@@ -3224,6 +3224,7 @@ function acc_total_outstanding(int $package_id): float
     $package_form_id_fee = acc_package_form_id_fee($pkg);
     $total_due = (float)$pkg['admission_fees']
                + $package_form_id_fee
+               + acc_package_project_fee($pkg)
                + ($reg_fee * $num_sems)
                + (float)$pkg['fixed_institutional_fees']
                + (float)$pkg['english_course_fee']
