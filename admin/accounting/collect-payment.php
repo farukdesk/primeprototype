@@ -71,7 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
     $reference       = trim($_POST['reference']          ?? '');
     $narration       = trim($_POST['narration']          ?? '');
 
-    $valid_types = ['admission','form_fee','id_card_fee','registration','semester_tuition','fixed_fee','english_fee','retake_fee','improvement_fee','special_exam_midterm','special_exam_final','other'];
+    $valid_types = ['admission','form_fee','id_card_fee','registration','semester_tuition','fixed_fee','english_fee','project_fee','retake_fee','improvement_fee','special_exam_midterm','special_exam_final','other'];
 
     if (!$student_id)                          $errors[] = 'Invalid student.';
     if (!$package_id)                          $errors[] = 'Student has no fee package.';

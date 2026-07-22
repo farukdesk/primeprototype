@@ -56,6 +56,8 @@ $form_id_fee         = acc_package_form_id_fee($pkg);
 $split_form_id_fee   = acc_split_form_id_fee($form_id_fee);
 $form_fee_one_time   = (float)$split_form_id_fee['form_fee'];
 $id_card_fee_one_time = (float)$split_form_id_fee['id_card_fee'];
+// One-time Project Fee snapshotted on the package (0.00 unless assigned, e.g. batch 261)
+$project_fee_one_time = acc_package_project_fee($pkg);
 
 $pending_requests_by_id          = [];
 $pending_projection_by_sem       = [];

@@ -1452,6 +1452,17 @@ function acc_split_form_id_fee(float $total_fee): array
     ];
 }
 
+/**
+ * One-time Project Fee snapshotted on the package (sfp_packages.project_fee).
+ * 0.00 for packages without a project fee (all batches except those explicitly
+ * assigned one, e.g. batch 261 = 3000.00). Null-safe so the code keeps working
+ * if the project-fee-v1.sql migration has not been applied yet.
+ */
+function acc_package_project_fee(array $pkg): float
+{
+    return max(0.0, (float)($pkg['project_fee'] ?? 0));
+}
+
 function acc_package_payment_start(array $pkg, array $semester_fees = []): array
 {
     $note = (string)($pkg['note'] ?? '');
