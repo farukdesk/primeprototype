@@ -71,7 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
     $reference       = trim($_POST['reference']          ?? '');
     $narration       = trim($_POST['narration']          ?? '');
 
-    $valid_types = ['admission','form_fee','id_card_fee','registration','semester_tuition','fixed_fee','english_fee','retake_fee','improvement_fee','special_exam_midterm','special_exam_final','other'];
+    $valid_types = ['admission','form_fee','id_card_fee','registration','semester_tuition','fixed_fee','english_fee','project_fee','retake_fee','improvement_fee','special_exam_midterm','special_exam_final','other'];
 
     if (!$student_id)                          $errors[] = 'Invalid student.';
     if (!$package_id)                          $errors[] = 'Student has no fee package.';
@@ -108,6 +108,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
                 $outstanding_lookup['admission|||'] = (float)($tot['admission']['out'] ?? 0);
                 $outstanding_lookup['form_fee|||'] = (float)($tot['form_fee']['out'] ?? 0);
                 $outstanding_lookup['id_card_fee|||'] = (float)($tot['id_card_fee']['out'] ?? 0);
+                $outstanding_lookup['project_fee|||'] = (float)($tot['project_fee']['out'] ?? 0);
                 foreach (($summary['semesters'] ?? []) as $sf) {
                     $key_reg = 'registration|' . (int)$sf['id'] . '|' . (int)$sf['semester_number'] . '|';
                     $outstanding_lookup[$key_reg] = (float)($sf['reg_out'] ?? 0);
@@ -1437,6 +1438,7 @@ require_once __DIR__ . '/../includes/header.php';
             semester_tuition: 'Semester Tuition',
             fixed_fee:        'Fixed Institutional Fee',
             english_fee:      'English Course Fee',
+            project_fee:      'Project Fee',
             retake_fee:           'Re-Take Fee',
             improvement_fee:      'Improvement Fee',
             special_exam_midterm: 'Special Examination (Mid Term)',
@@ -1642,6 +1644,27 @@ require_once __DIR__ . '/../includes/header.php';
                     cal_year:          parsed ? parsed.year  : null,
                 });
             }
+        }
+
+        // 3. One-time Project Fee — falls due with the final semester, so it is
+        //    ordered after every scheduled monthly obligation. Its calendar slot
+        //    mirrors the last month of the final semester.
+        const pf = t.project_fee;
+        if (pf && pf.out > 0) {
+            const lastSf = s.semesters[s.semesters.length - 1];
+            const lastMr = lastSf && lastSf.monthly_rows && lastSf.monthly_rows.length
+                ? lastSf.monthly_rows[lastSf.monthly_rows.length - 1] : null;
+            items.push({
+                fee_type:          'project_fee',
+                semester_fee_id:   null,
+                semester_number:   null,
+                month_number:      null,
+                out:               pf.out,
+                label:             'Project Fee (one-time)',
+                income_account_id: incomeAccountsMap['project_fee'] ?? 0,
+                cal_month:         lastMr ? (Number(lastMr.cal_month) || null) : null,
+                cal_year:          lastMr ? (Number(lastMr.cal_year)  || null) : null,
+            });
         }
         return items;
     }
@@ -2217,6 +2240,20 @@ require_once __DIR__ . '/../includes/header.php';
                 );
             });
         });
+
+        // ── One-time Project Fee — last row of the final semester ─────────────
+        // Snapshotted on the package (0.00 unless assigned, e.g. batch 261), so
+        // the row only appears for students who actually owe / paid it.
+        const pfTot = t.project_fee;
+        if (pfTot && (pfTot.due > 0 || pfTot.paid > 0)) {
+            const lastSf  = s.semesters[s.semesters.length - 1];
+            const lastLbl = lastSf ? (lastSf.semester_label || ('Semester ' + lastSf.semester_number)) : '';
+            addRow(
+                (lastLbl ? lastLbl + ' – ' : '') + 'Project Fee (one-time)',
+                pfTot.due, pfTot.paid, pfTot.out,
+                'project_fee', null, null, lastLbl || null, null, null
+            );
+        }
 
         // Schedule-only paid total, captured before the Additional / Examination
         // rows below add to grandPaid — used for the Additional Payment card's

@@ -1452,6 +1452,17 @@ function acc_split_form_id_fee(float $total_fee): array
     ];
 }
 
+/**
+ * One-time Project Fee snapshotted on the package (sfp_packages.project_fee).
+ * 0.00 for packages without a project fee (all batches except those explicitly
+ * assigned one, e.g. batch 261 = 3000.00). Null-safe so the code keeps working
+ * if the project-fee-v1.sql migration has not been applied yet.
+ */
+function acc_package_project_fee(array $pkg): float
+{
+    return max(0.0, (float)($pkg['project_fee'] ?? 0));
+}
+
 function acc_package_payment_start(array $pkg, array $semester_fees = []): array
 {
     $note = (string)($pkg['note'] ?? '');
@@ -1558,6 +1569,8 @@ function acc_student_fee_summary(int $student_id): ?array
     $split_form_id_fee = acc_split_form_id_fee($form_id_total_fee);
     $form_fee_due      = (float)$split_form_id_fee['form_fee'];
     $id_card_fee_due   = (float)$split_form_id_fee['id_card_fee'];
+    // One-time Project Fee snapshotted on the package (0.00 unless assigned, e.g. batch 261)
+    $project_fee_due   = acc_package_project_fee($pkg);
 
     // Semester fee rows
     $sf_stmt = $db->prepare(
@@ -1630,6 +1643,9 @@ function acc_student_fee_summary(int $student_id): ?array
     // Registration totals (per-semester distribution handled in the loop below)
     $reg_due  = $reg_fee * $num_semesters;
     $reg_paid = $total_paid_for('registration');
+
+    // One-time Project Fee (snapshotted on the package; falls due with the final semester)
+    $project_fee_paid = $total_paid_for('project_fee');
 
     // Per-semester tuition + monthly breakdown
     $months     = (float)($pkg['total_months'] ?? 0);
@@ -1756,6 +1772,8 @@ function acc_student_fee_summary(int $student_id): ?array
             'admission'    => ['due' => $admission_base_due, 'paid' => $admission_base_paid, 'out' => max(0.0, $admission_base_due - $admission_base_paid)],
             'form_fee'     => ['due' => $form_fee_due,       'paid' => $form_fee_paid,       'out' => max(0.0, $form_fee_due - $form_fee_paid)],
             'id_card_fee'  => ['due' => $id_card_fee_due,    'paid' => $id_card_fee_paid,    'out' => max(0.0, $id_card_fee_due - $id_card_fee_paid)],
+            // One-time Project Fee (0.00 due unless assigned on the package, e.g. batch 261)
+            'project_fee'  => ['due' => $project_fee_due,    'paid' => $project_fee_paid,    'out' => max(0.0, $project_fee_due - $project_fee_paid)],
             // Combined admission obligation retained for backwards compatibility.
             'admission_combined' => ['due' => $admission_due, 'paid' => $admission_paid, 'out' => max(0.0, $admission_due - $admission_paid)],
             'admission_breakdown' => [
@@ -2099,7 +2117,7 @@ function acc_income_account_id_by_code(string $code): int
 function acc_student_fee_types(): array
 {
     return array_merge(
-        ['admission', 'form_fee', 'id_card_fee', 'registration', 'semester_tuition', 'fixed_fee', 'english_fee'],
+        ['admission', 'form_fee', 'id_card_fee', 'registration', 'semester_tuition', 'fixed_fee', 'english_fee', 'project_fee'],
         acc_additional_fee_types(),
         ['other']
     );
@@ -2120,6 +2138,7 @@ function acc_default_income_code_for_fee_type(string $fee_type): string
         'semester_tuition' => '4100', // Tuition Fees
         'fixed_fee'        => '4100', // Tuition Fees
         'english_fee'      => '4100', // Tuition Fees
+        'project_fee'      => '4700', // Project Fee (one-time) – remappable via income_account_project_fee setting
         'retake_fee'           => '4700', // Miscellaneous Income
         'improvement_fee'      => '4700', // Miscellaneous Income
         'special_exam_midterm' => '4700', // Miscellaneous Income
@@ -2808,6 +2827,7 @@ function acc_fee_type_label(string $fee_type): string
         'semester_tuition' => 'Semester Tuition Fee',
         'fixed_fee'        => 'Fixed Institutional Fee',
         'english_fee'      => 'English Course Fee',
+        'project_fee'      => 'Project Fee',
         'retake_fee'           => 'Re-Take Fee',
         'improvement_fee'      => 'Improvement Fee',
         'special_exam_midterm' => 'Special Examination (Mid Term)',
@@ -3127,6 +3147,11 @@ function acc_outstanding_through_current_month(int $package_id): float
         // Registration is due at the start of each semester
         $total_due += $reg_fee;
 
+        // One-time Project Fee falls due with the final semester
+        if ($sem_num === $num_semesters) {
+            $total_due += acc_package_project_fee($pkg);
+        }
+
         // Per-semester portions of fixed institutional + English fees (after discounts)
         $fixed_per_sem   = ($months > 0 && $mps > 0)
             ? round((float)$pkg['fixed_institutional_fees'] / $months * $mps, 2) : 0.0;
@@ -3204,6 +3229,7 @@ function acc_total_outstanding(int $package_id): float
     $package_form_id_fee = acc_package_form_id_fee($pkg);
     $total_due = (float)$pkg['admission_fees']
                + $package_form_id_fee
+               + acc_package_project_fee($pkg)
                + ($reg_fee * $num_sems)
                + (float)$pkg['fixed_institutional_fees']
                + (float)$pkg['english_course_fee']
