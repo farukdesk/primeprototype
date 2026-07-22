@@ -48,6 +48,12 @@ $page_title = 'Old ERP Bulk CSV Merge';
 // monthly tuition (the latter supplied per row as a month name, Jan–Dec).
 const OEBM_FEE_TYPES = ['admission', 'form_fee', 'id_card_fee', 'registration', 'semester_tuition'];
 
+// Amounts within this many BDT of each other are treated as EQUAL. Old-ERP CSV
+// exports frequently carry tiny 1–5 BDT rounding differences; such rows are
+// counted as correct instead of being flagged as mismatches. Never raise this
+// without accounting sign-off — it directly affects financial reconciliation.
+const OEBM_AMOUNT_TOLERANCE = 5.0;
+
 // ── Sample CSV template download ────────────────────────────────────────────
 if (isset($_GET['sample'])) {
     header('Content-Type: text/csv; charset=utf-8');
@@ -566,6 +572,13 @@ function oebm_validate_rows(array $rows): array
     $tuition_remaining = [];   // SID => outstanding tuition pool, decremented as rows consume it
     $shift_offset      = [];   // SID => uniform forward shift (months) for pre-start schedules
 
+    // Per-student state for one-time heads and registration across the batch,
+    // so a re-run or an in-file duplicate row (e.g. admission fee written twice)
+    // is reconciled against BOTH the current ERP and rows merged earlier in
+    // this same file — a head can never be inserted twice.
+    $head_state = [];   // SID => fee_type => ['due','paid','out','erp_paid']
+    $reg_state  = [];   // SID => cumulative registration timeline + semester slots
+
     // ── Pre-scan: earliest monthly payment per student ──────────────────────
     // Some students' old-ERP payments begin BEFORE their current schedule's
     // payment start month (e.g. payments start in December while the package
@@ -627,6 +640,7 @@ function oebm_validate_rows(array $rows): array
             'semester_fee_id'   => null,
             'semester_number'   => null,
             'month_number'      => null,
+            'reg_allocations'   => null,
         ];
 
         // Skip a completely blank line.
@@ -774,9 +788,11 @@ function oebm_validate_rows(array $rows): array
             $ff_due  = (float)($summary['totals']['form_fee']['due'] ?? 0);
             $ic_due  = (float)($summary['totals']['id_card_fee']['due'] ?? 0);
             $remapped = null;
-            if ($ff_due > 0 && abs($amt - $ff_due) < 0.001 && abs($amt - $adm_due) > 0.001) {
+            // Amount matching uses the CSV-rounding tolerance so a form fee
+            // exported as e.g. 498 or 503 still re-classifies correctly.
+            if ($ff_due > 0 && abs($amt - $ff_due) <= OEBM_AMOUNT_TOLERANCE && abs($amt - $adm_due) > OEBM_AMOUNT_TOLERANCE) {
                 $remapped = 'form_fee';
-            } elseif ($ic_due > 0 && abs($amt - $ic_due) < 0.001 && abs($amt - $adm_due) > 0.001) {
+            } elseif ($ic_due > 0 && abs($amt - $ic_due) <= OEBM_AMOUNT_TOLERANCE && abs($amt - $adm_due) > OEBM_AMOUNT_TOLERANCE) {
                 $remapped = 'id_card_fee';
             }
             if ($remapped !== null) {
@@ -853,8 +869,14 @@ function oebm_validate_rows(array $rows): array
                             . ' shifted forward ' . $offset . ' month(s) to '
                             . oebm_format_month_label($match_month, $match_year) . '.';
                     } else {
-                        $notes[] = 'Pre-start shift is active for this student but the year of "'
-                            . $fee_raw . '" could not be resolved — matched without shifting.';
+                        // The year could not be resolved, but the pre-start shift must
+                        // push EVERY month of the student's series forward uniformly —
+                        // shift the calendar month and match it year-insensitively so
+                        // no month is ever left behind on a pre-start slot.
+                        $match_month = (($month_num - 1 + $offset) % 12) + 1;
+                        $match_year  = null;
+                        $notes[] = 'Old-ERP payments start before this schedule: ' . oebm_month_name($month_num)
+                            . ' shifted forward ' . $offset . ' month(s) to ' . oebm_month_name($match_month) . '.';
                     }
                 }
 
@@ -886,29 +908,71 @@ function oebm_validate_rows(array $rows): array
                     $resolved['semester_number'] = $slot['semester_number'];
                     $resolved['month_number']    = $slot['month_number'];
 
+                    $csv_amt = (float)$resolved['amount'];
                     if ($slot['out'] <= 0.001 && $slot['paid'] > 0.001) {
-                        // This installment is already paid in the current ERP.
+                        // This installment is already fully paid in the current ERP.
                         $status = 'duplicate';
                         $resolved['existing_amount'] = $slot['paid'];
                         $slots[$target]['consumed'] = true;
-                        if (abs($slot['paid'] - (float)$resolved['amount']) > 0.001) {
+                        if (abs((float)$slot['paid'] - $csv_amt) <= OEBM_AMOUNT_TOLERANCE) {
+                            // Identical, or off by a few BDT of CSV rounding — correct.
                             $notes[] = $slot['label'] . ' tuition is already paid in current ERP ('
-                                . acc_currency() . ' ' . number_format($slot['paid'], 2)
-                                . '), but CSV amount is ' . acc_currency() . ' ' . number_format((float)$resolved['amount'], 2)
-                                . ' — amount mismatch, manual correction needed.';
+                                . acc_fmt((float)$slot['paid'])
+                                . (abs((float)$slot['paid'] - $csv_amt) > 0.001
+                                    ? ', CSV ' . acc_fmt($csv_amt) . ' — within the ' . acc_fmt(OEBM_AMOUNT_TOLERANCE) . ' tolerance, counted as correct'
+                                    : '')
+                                . ') — skipped.';
                         } else {
-                            $notes[] = $slot['label'] . ' tuition is already paid in current ERP — skipped.';
+                            $notes[] = $slot['label'] . ' tuition is already paid in current ERP ('
+                                . acc_fmt((float)$slot['paid'])
+                                . '), but CSV amount is ' . acc_fmt($csv_amt)
+                                . ' — mismatch beyond the ' . acc_fmt(OEBM_AMOUNT_TOLERANCE)
+                                . ' tolerance, manual correction needed.';
                         }
-                    } elseif ((float)$resolved['amount'] > ($tuition_remaining[$sid] ?? 0) + 0.001) {
-                        // Would push tuition paid beyond the total tuition due.
-                        $status  = 'invalid';
-                        $notes[] = 'Amount ' . acc_currency() . ' ' . number_format((float)$resolved['amount'], 2)
-                            . ' exceeds the outstanding tuition of '
-                            . acc_currency() . ' ' . number_format((float)($tuition_remaining[$sid] ?? 0), 2) . '.';
-                    } else {
+                    } elseif ((float)$slot['paid'] > 0.001 && $csv_amt <= (float)$slot['paid'] + OEBM_AMOUNT_TOLERANCE) {
+                        // Partially paid, and the CSV amount adds nothing beyond the
+                        // tolerance — this installment is already up to date.
+                        $status = 'duplicate';
+                        $resolved['existing_amount'] = $slot['paid'];
                         $slots[$target]['consumed'] = true;
-                        $tuition_remaining[$sid]    = max(0.0, ($tuition_remaining[$sid] ?? 0) - (float)$resolved['amount']);
-                        $notes[] = 'Applied to ' . $slot['label'] . ' tuition installment.';
+                        $notes[] = $slot['label'] . ' tuition already has ' . acc_fmt((float)$slot['paid'])
+                            . ' in the current ERP, covering this row\'s ' . acc_fmt($csv_amt) . ' — skipped.';
+                    } else {
+                        // Push forward only what is still missing on this installment,
+                        // so a re-run brings the ERP up to the CSV (the latest data)
+                        // without ever double-counting the part already recorded.
+                        $already   = max(0.0, (float)$slot['paid']);
+                        $merge_amt = round($csv_amt - $already, 2);
+                        $pool      = (float)($tuition_remaining[$sid] ?? 0);
+                        if ($merge_amt > $pool + OEBM_AMOUNT_TOLERANCE) {
+                            // Would push tuition paid beyond the total tuition due.
+                            $status  = 'invalid';
+                            $notes[] = 'Amount ' . acc_fmt($merge_amt)
+                                . ' exceeds the outstanding tuition of ' . acc_fmt($pool) . '.';
+                        } else {
+                            if ($merge_amt > $pool) {
+                                // Over by a few BDT of CSV rounding — clamp, count as correct.
+                                $notes[] = 'CSV amount exceeds the outstanding tuition by '
+                                    . acc_fmt($merge_amt - $pool) . ' (within tolerance) — clamped to ' . acc_fmt($pool) . '.';
+                                $merge_amt = round($pool, 2);
+                            }
+                            if ($merge_amt <= 0.001) {
+                                $status = 'duplicate';
+                                $slots[$target]['consumed'] = true;
+                                $notes[] = 'Nothing left outstanding for ' . $slot['label'] . ' tuition — skipped.';
+                            } else {
+                                if ($already > 0.001) {
+                                    $resolved['existing_amount'] = $already;
+                                    $notes[] = acc_fmt($already) . ' is already recorded for ' . $slot['label']
+                                        . ' — merging only the missing ' . acc_fmt($merge_amt)
+                                        . ' to match the CSV total of ' . acc_fmt($csv_amt) . '.';
+                                }
+                                $resolved['amount'] = $merge_amt;
+                                $slots[$target]['consumed'] = true;
+                                $tuition_remaining[$sid]    = max(0.0, $pool - $merge_amt);
+                                $notes[] = 'Applied to ' . $slot['label'] . ' tuition installment.';
+                            }
+                        }
                     }
                 }
                 unset($slots);
@@ -919,53 +983,189 @@ function oebm_validate_rows(array $rows): array
                 // per-head duplicate guard — merge them as-is. Duplicate receipt
                 // numbers remain allowed, so a matching receipt is only noted.
                 $notes[] = 'Additional fee — will be recorded as ' . $resolved['fee_type_label'] . '.';
-            } elseif ($summary && $fee_type !== null) {
-                // One-time / registration head — validate against this head's
-                // own obligation in the current ERP (admission, form fee, ID card
-                // fee or registration). The grand-total per head lives under
-                // $summary['totals'][$fee_type] as due / paid / out.
-                $head        = $summary['totals'][$fee_type] ?? null;
-                $due         = (float)($head['due'] ?? 0);
-                $paid        = (float)($head['paid'] ?? 0);
-                $outstanding = (float)($head['out'] ?? 0);
-
-                if ($outstanding <= 0.001 && $paid > 0.001) {
-                    // This fee head is already (fully) paid in the current ERP.
-                    $status = 'duplicate';
-                    $resolved['existing_amount'] = $paid;
-                    if (abs($paid - (float)$resolved['amount']) > 0.001) {
-                        $notes[] = $resolved['fee_type_label'] . ' is already paid in current ERP ('
-                            . acc_currency() . ' ' . number_format($paid, 2)
-                            . '), but CSV amount is ' . acc_currency() . ' ' . number_format((float)$resolved['amount'], 2)
-                            . ' — amount mismatch, manual correction needed.';
-                    } else {
-                        $notes[] = $resolved['fee_type_label'] . ' is already paid in current ERP — skipped.';
-                    }
-                } elseif ($resolved['amount'] > $due + 0.001) {
-                    // Amount exceeds the obligation for this head → invalid old-ERP figure.
-                    $status  = 'invalid';
-                    $notes[] = 'Amount ' . acc_currency() . ' ' . number_format((float)$resolved['amount'], 2)
-                        . ' exceeds the ' . $resolved['fee_type_label'] . ' due of '
-                        . acc_currency() . ' ' . number_format($due, 2) . '.';
-                } elseif ($resolved['amount'] > $outstanding + 0.001) {
-                    // Part of this head is already paid; the CSV amount would overpay.
-                    $status  = 'invalid';
-                    $notes[] = 'Amount ' . acc_currency() . ' ' . number_format((float)$resolved['amount'], 2)
-                        . ' exceeds the outstanding ' . $resolved['fee_type_label'] . ' of '
-                        . acc_currency() . ' ' . number_format($outstanding, 2)
-                        . ' (' . acc_currency() . ' ' . number_format($paid, 2) . ' already paid in current ERP).';
-                } elseif ($fee_type === 'registration') {
-                    // Registration is tracked per semester. Pin the payment to the
-                    // first semester that still has an outstanding registration fee
-                    // so sfp_payments carries a sensible semester reference.
+            } elseif ($summary && $fee_type === 'registration') {
+                // ── Registration fee — placed by cumulative total per semester ──
+                // Registration is a fixed per-semester fee (e.g. 1,000 BDT, or 500
+                // BDT for masters programmes — always read from this student's own
+                // package, never assumed). The TOTAL collected decides exactly
+                // which semesters are covered: at 1,000/semester, 1,000 collected
+                // means semester 1 is paid, 2,000 means semesters 1–2, and so on.
+                // Each CSV registration row is placed on that cumulative timeline
+                // — behind whatever the current ERP already holds plus earlier
+                // registration rows of this same file — so on a re-run a 2nd/3rd
+                // registration payment can never slip onto the wrong semester:
+                // rows the ERP total already covers are skipped, a partially
+                // covered row merges only the missing difference, and new rows
+                // fill the next unpaid semester(s) in order.
+                if (!isset($reg_state[$sid])) {
+                    $reg_slots     = [];
+                    $reg_due_total = 0.0;
                     foreach (($summary['semesters'] ?? []) as $sem) {
-                        if ((float)($sem['reg_out'] ?? 0) > 0.001) {
-                            $resolved['semester_fee_id'] = (int)$sem['id'];
-                            $resolved['semester_number'] = (int)$sem['semester_number'];
-                            break;
+                        $sem_reg_due = (float)($sem['reg_fee'] ?? 0);
+                        if ($sem_reg_due <= 0.001) {
+                            continue;
+                        }
+                        $reg_slots[] = [
+                            'semester_fee_id' => (int)$sem['id'],
+                            'semester_number' => (int)$sem['semester_number'],
+                            'cum_start'       => $reg_due_total,
+                            'cum_end'         => $reg_due_total + $sem_reg_due,
+                        ];
+                        $reg_due_total += $sem_reg_due;
+                    }
+                    $erp_reg_paid = (float)($summary['totals']['registration']['paid'] ?? 0);
+                    $reg_state[$sid] = [
+                        'slots'     => $reg_slots,
+                        'due_total' => $reg_due_total,
+                        'erp_paid'  => $erp_reg_paid,
+                        'paid_eff'  => $erp_reg_paid,   // ERP + rows merged earlier in this file
+                        'csv_cum'   => 0.0,
+                    ];
+                }
+                $rs         =& $reg_state[$sid];
+                $csv_amt    = (float)$resolved['amount'];
+                $span_start = (float)$rs['csv_cum'];
+                $span_end   = $span_start + $csv_amt;
+                $rs['csv_cum'] = $span_end;
+
+                if ($rs['due_total'] <= 0.001) {
+                    $status  = 'invalid';
+                    $notes[] = 'This student has no registration fee obligation in the current system.';
+                } elseif ($span_end > (float)$rs['due_total'] + OEBM_AMOUNT_TOLERANCE) {
+                    $status  = 'invalid';
+                    $notes[] = 'With this row the registration total in the CSV reaches ' . acc_fmt($span_end)
+                        . ', which exceeds the total registration due of ' . acc_fmt((float)$rs['due_total'])
+                        . ' — check for a duplicated registration row.';
+                } elseif ($span_end <= (float)$rs['paid_eff'] + OEBM_AMOUNT_TOLERANCE) {
+                    // Everything up to and including this row is already collected
+                    // (in the current ERP or earlier in this file) — up to date.
+                    $status = 'duplicate';
+                    $resolved['existing_amount'] = $rs['erp_paid'];
+                    $notes[] = 'Registration of ' . acc_fmt((float)$rs['paid_eff'])
+                        . ' is already collected — this row\'s ' . acc_fmt($csv_amt)
+                        . ' is already accounted for, skipped.';
+                } else {
+                    $merge_start = max($span_start, (float)$rs['paid_eff']);
+                    $merge_end   = min($span_end, (float)$rs['due_total']);
+                    $merge_amt   = round($merge_end - $merge_start, 2);
+
+                    // Split the merged span across the semester(s) it falls on.
+                    $allocs = [];
+                    foreach ($rs['slots'] as $rslot) {
+                        $a = max($merge_start, (float)$rslot['cum_start']);
+                        $b = min($merge_end, (float)$rslot['cum_end']);
+                        if ($b - $a > 0.001) {
+                            $allocs[] = [
+                                'semester_fee_id' => $rslot['semester_fee_id'],
+                                'semester_number' => $rslot['semester_number'],
+                                'amount'          => round($b - $a, 2),
+                            ];
+                        }
+                    }
+                    if (!$allocs || $merge_amt <= 0.001) {
+                        $status = 'duplicate';
+                        $resolved['existing_amount'] = $rs['erp_paid'];
+                        $notes[] = 'Registration is already fully allocated — skipped.';
+                    } else {
+                        $rs['paid_eff'] = max((float)$rs['paid_eff'], $merge_end);
+                        $resolved['amount']          = $merge_amt;
+                        $resolved['reg_allocations'] = $allocs;
+                        $resolved['semester_fee_id'] = $allocs[0]['semester_fee_id'];
+                        $resolved['semester_number'] = $allocs[0]['semester_number'];
+                        $sem_list = implode(', ', array_map(
+                            static fn(array $a2): int => (int)$a2['semester_number'],
+                            $allocs
+                        ));
+                        if ($merge_amt < $csv_amt - 0.001) {
+                            $resolved['existing_amount'] = $rs['erp_paid'];
+                            $notes[] = 'Part of this registration row is already collected ('
+                                . acc_fmt((float)$rs['erp_paid']) . ' in total) — merging only the missing '
+                                . acc_fmt($merge_amt) . ', applied to semester ' . $sem_list . '.';
+                        } else {
+                            $notes[] = 'Registration applied to semester ' . $sem_list . '.';
                         }
                     }
                 }
+                unset($rs);
+            } elseif ($summary && $fee_type !== null) {
+                // ── One-time admission-day head (admission / form / ID card) ────
+                // Reconciled against BOTH the current ERP and the rows already
+                // merged earlier in this same file, so an admission fee written
+                // twice in the CSV can never be inserted twice. Amounts within the
+                // CSV-rounding tolerance are counted as correct, and when the ERP
+                // holds only part of the head, just the missing difference is
+                // pushed forward so the total ends up matching the CSV (the
+                // latest, authoritative figure).
+                if (!isset($head_state[$sid][$fee_type])) {
+                    $head = $summary['totals'][$fee_type] ?? null;
+                    $head_state[$sid][$fee_type] = [
+                        'due'      => (float)($head['due'] ?? 0),
+                        'paid'     => (float)($head['paid'] ?? 0),
+                        'out'      => (float)($head['out'] ?? 0),
+                        'erp_paid' => (float)($head['paid'] ?? 0),
+                    ];
+                }
+                $hs          =& $head_state[$sid][$fee_type];
+                $due         = (float)$hs['due'];
+                $paid        = (float)$hs['paid'];
+                $outstanding = (float)$hs['out'];
+                $csv_amt     = (float)$resolved['amount'];
+
+                if ($outstanding <= 0.001 && $paid > 0.001) {
+                    // Already (fully) paid — in the current ERP or by an earlier
+                    // row of this same file (e.g. admission fee listed twice).
+                    $status = 'duplicate';
+                    $resolved['existing_amount'] = $paid;
+                    if (abs($paid - $csv_amt) <= OEBM_AMOUNT_TOLERANCE) {
+                        $notes[] = $resolved['fee_type_label'] . ' is already paid ('
+                            . acc_fmt($paid)
+                            . (abs($paid - $csv_amt) > 0.001
+                                ? ', CSV ' . acc_fmt($csv_amt) . ' — within the ' . acc_fmt(OEBM_AMOUNT_TOLERANCE) . ' tolerance, counted as correct'
+                                : '')
+                            . ') — skipped.';
+                    } else {
+                        $notes[] = $resolved['fee_type_label'] . ' is already paid ('
+                            . acc_fmt($paid) . '), but CSV amount is ' . acc_fmt($csv_amt)
+                            . ' — mismatch beyond the ' . acc_fmt(OEBM_AMOUNT_TOLERANCE)
+                            . ' tolerance, manual correction needed.';
+                    }
+                } elseif ($csv_amt > $due + OEBM_AMOUNT_TOLERANCE) {
+                    // Amount exceeds the obligation for this head → invalid figure.
+                    $status  = 'invalid';
+                    $notes[] = 'Amount ' . acc_fmt($csv_amt)
+                        . ' exceeds the ' . $resolved['fee_type_label'] . ' due of '
+                        . acc_fmt($due) . '.';
+                } elseif ($paid > 0.001 && $csv_amt <= $paid + OEBM_AMOUNT_TOLERANCE) {
+                    // Already covered (within the CSV-rounding tolerance).
+                    $status = 'duplicate';
+                    $resolved['existing_amount'] = $paid;
+                    $notes[] = $resolved['fee_type_label'] . ' already has ' . acc_fmt($paid)
+                        . ' recorded, covering this row\'s ' . acc_fmt($csv_amt) . ' — skipped.';
+                } else {
+                    // Push forward only the part still missing so the head ends up
+                    // matching the CSV total without ever double-counting.
+                    $merge_amt = round(min($csv_amt - $paid, $outstanding), 2);
+                    if ($merge_amt <= 0.001) {
+                        $status = 'duplicate';
+                        $resolved['existing_amount'] = $paid;
+                        $notes[] = $resolved['fee_type_label'] . ' has nothing left outstanding — skipped.';
+                    } else {
+                        if ($paid > 0.001) {
+                            $resolved['existing_amount'] = $paid;
+                            $notes[] = acc_fmt($paid) . ' is already recorded for '
+                                . $resolved['fee_type_label'] . ' — merging only the missing '
+                                . acc_fmt($merge_amt) . ' to match the CSV total of ' . acc_fmt($csv_amt) . '.';
+                        } elseif ($merge_amt < $csv_amt - 0.001) {
+                            $notes[] = 'CSV amount exceeds the outstanding by '
+                                . acc_fmt($csv_amt - $merge_amt)
+                                . ' (within tolerance) — clamped to ' . acc_fmt($merge_amt) . '.';
+                        }
+                        $resolved['amount'] = $merge_amt;
+                        $hs['paid'] = $paid + $merge_amt;
+                        $hs['out']  = max(0.0, $outstanding - $merge_amt);
+                    }
+                }
+                unset($hs);
             }
         }
 
@@ -1206,24 +1406,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             if ($income_account_id <= 0) {
                                 throw new RuntimeException('No income account mapped for ' . $res['fee_type_label'] . '.');
                             }
-                            acc_collect_student_fee(
-                                (int)$res['student_pk'],
-                                (int)$res['package_id'],
-                                $res['fee_type'],
-                                $res['semester_fee_id'] !== null ? (int)$res['semester_fee_id'] : null,
-                                $res['semester_number'] !== null ? (int)$res['semester_number'] : null,
-                                $res['month_number'] !== null ? (int)$res['month_number'] : null,
-                                'old_erp',
-                                null,
-                                $res['receipt'],
-                                (float)$res['amount'],
-                                $cash_account_id,
-                                $income_account_id,
-                                $res['date'],
-                                'Old ERP bulk merge',
-                                'Old ERP receipt ' . $res['receipt'],
-                                true // allow duplicate receipt numbers in bulk merge
-                            );
+                            // A registration row may cover several semesters (one
+                            // cumulative payment paying e.g. semesters 2 and 3);
+                            // record one payment per semester so each semester's
+                            // registration is attributed correctly. All other rows
+                            // are a single portion.
+                            $portions = !empty($res['reg_allocations'])
+                                ? $res['reg_allocations']
+                                : [[
+                                    'semester_fee_id' => $res['semester_fee_id'],
+                                    'semester_number' => $res['semester_number'],
+                                    'amount'          => (float)$res['amount'],
+                                ]];
+                            foreach ($portions as $portion) {
+                                acc_collect_student_fee(
+                                    (int)$res['student_pk'],
+                                    (int)$res['package_id'],
+                                    $res['fee_type'],
+                                    $portion['semester_fee_id'] !== null ? (int)$portion['semester_fee_id'] : null,
+                                    $portion['semester_number'] !== null ? (int)$portion['semester_number'] : null,
+                                    $res['month_number'] !== null ? (int)$res['month_number'] : null,
+                                    'old_erp',
+                                    null,
+                                    $res['receipt'],
+                                    (float)$portion['amount'],
+                                    $cash_account_id,
+                                    $income_account_id,
+                                    $res['date'],
+                                    'Old ERP bulk merge',
+                                    'Old ERP receipt ' . $res['receipt'],
+                                    true // allow duplicate receipt numbers in bulk merge
+                                );
+                            }
                             $merged++;
                         } catch (Throwable $e) {
                             $failed[] = 'Row ' . $r['row_no'] . ' (receipt ' . $res['receipt'] . '): ' . $e->getMessage();
@@ -1284,7 +1498,8 @@ require_once __DIR__ . '/../includes/header.php';
                 <li>Upload it to preview. Every row is validated and colour-coded before anything is saved.</li>
                 <li><strong>Duplicate receipt numbers are allowed</strong> — one historical receipt often covers several fee heads, so the same number may repeat across rows.</li>
                 <li><strong>A single row may carry several receipt numbers</strong> — list them comma separated in the Receipt Number cell (e.g. <code>OLD-RCPT-1002, OLD-RCPT-1003</code>).</li>
-                <li>Rows whose fee head or month is already paid in the current ERP are <strong>highlighted for manual correction</strong> — including any amount mismatch — and are never re-inserted.</li>
+                <li><strong>Safe to re-run.</strong> Rows already in the current ERP are skipped, and amounts differing by up to <strong>5 BDT</strong> (CSV rounding) are counted as correct. When only part of a row's amount is recorded, just the <strong>missing difference is pushed forward</strong> so totals match the CSV (the latest data). Bigger mismatches are <strong>highlighted for manual correction</strong> and never re-inserted — a fee head written twice in the file (e.g. Admission Fee) is merged once, never twice.</li>
+                <li><strong>Registration fees are placed by cumulative total.</strong> Registration is a fixed per-semester fee read from the student's own package (e.g. 1,000 BDT, or 500 BDT for masters). The total already collected decides which semester comes next (1,000 = semester 1 paid, 2,000 = semesters 1–2, …), so 2nd/3rd registration rows land on the correct semester even on a re-run, and a single row spanning several semesters is split across them.</li>
                 <li><strong>Summary and zero-amount rows are ignored.</strong> Old-ERP export lines such as <code>Monthly Payment Old Data</code> or <code>Current Dues</code>, and any row with an amount of <code>0</code>, are skipped automatically (shown in grey). Student IDs are matched with or without leading zeros.</li>
                 <li>Confirm to merge only the valid rows. Each is stored as an <em>Old ERP</em> payment (a memo voucher), so dues update without double-counting income.</li>
             </ol>
