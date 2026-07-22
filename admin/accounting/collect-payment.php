@@ -108,6 +108,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
                 $outstanding_lookup['admission|||'] = (float)($tot['admission']['out'] ?? 0);
                 $outstanding_lookup['form_fee|||'] = (float)($tot['form_fee']['out'] ?? 0);
                 $outstanding_lookup['id_card_fee|||'] = (float)($tot['id_card_fee']['out'] ?? 0);
+                $outstanding_lookup['project_fee|||'] = (float)($tot['project_fee']['out'] ?? 0);
                 foreach (($summary['semesters'] ?? []) as $sf) {
                     $key_reg = 'registration|' . (int)$sf['id'] . '|' . (int)$sf['semester_number'] . '|';
                     $outstanding_lookup[$key_reg] = (float)($sf['reg_out'] ?? 0);

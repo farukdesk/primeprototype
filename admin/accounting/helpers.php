@@ -1569,6 +1569,8 @@ function acc_student_fee_summary(int $student_id): ?array
     $split_form_id_fee = acc_split_form_id_fee($form_id_total_fee);
     $form_fee_due      = (float)$split_form_id_fee['form_fee'];
     $id_card_fee_due   = (float)$split_form_id_fee['id_card_fee'];
+    // One-time Project Fee snapshotted on the package (0.00 unless assigned, e.g. batch 261)
+    $project_fee_due   = acc_package_project_fee($pkg);
 
     // Semester fee rows
     $sf_stmt = $db->prepare(
