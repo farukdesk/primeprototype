@@ -258,6 +258,46 @@ function oebm_format_month_label(int $month, ?int $year): string
     return oebm_month_name($month) . ($year !== null ? ' ' . $year : '');
 }
 
+/**
+ * Absolute calendar-month index (year * 12 + month) used to compare and
+ * shift calendar months across year boundaries.
+ */
+function oebm_month_index(int $year, int $month): int
+{
+    return $year * 12 + $month;
+}
+
+/**
+ * Infer the calendar year of a month-name cell that carries no explicit year,
+ * using the row's payment date: of the candidate years (date year ± 1), the
+ * one whose month falls closest to the payment date is chosen. A December
+ * installment paid in early January therefore resolves to the PREVIOUS year,
+ * and a January installment paid in late December to the NEXT year.
+ */
+function oebm_infer_month_year(int $month_num, ?string $date): ?int
+{
+    if ($date === null || $date === '') {
+        return null;
+    }
+    $ts = strtotime($date);
+    if ($ts === false) {
+        return null;
+    }
+    $dy = (int)date('Y', $ts);
+    $dm = (int)date('n', $ts);
+    $date_idx  = oebm_month_index($dy, $dm);
+    $best_year = null;
+    $best_dist = PHP_INT_MAX;
+    foreach ([$dy - 1, $dy, $dy + 1] as $y) {
+        $dist = abs(oebm_month_index($y, $month_num) - $date_idx);
+        if ($dist < $best_dist) {
+            $best_dist = $dist;
+            $best_year = $y;
+        }
+    }
+    return $best_year;
+}
+
 
 function oebm_parse_date(string $raw): ?string
 {
@@ -524,6 +564,45 @@ function oebm_validate_rows(array $rows): array
     // Per-student state for monthly tuition allocation across the batch.
     $slot_state        = [];   // SID => mutable month-slot list (oebm_build_month_slots)
     $tuition_remaining = [];   // SID => outstanding tuition pool, decremented as rows consume it
+    $shift_offset      = [];   // SID => uniform forward shift (months) for pre-start schedules
+
+    // ── Pre-scan: earliest monthly payment per student ──────────────────────
+    // Some students' old-ERP payments begin BEFORE their current schedule's
+    // payment start month (e.g. payments start in December while the package
+    // schedule starts in January). Find each student's earliest CSV month
+    // (explicit year suffix, or the year inferred from the payment date) so
+    // those students' monthly rows can be shifted forward uniformly onto the
+    // schedule from the start month onward, keeping their original order.
+    $earliest_month_idx = [];  // SID => smallest calendar-month index among monthly rows
+    foreach ($rows as $pre_row) {
+        $pre_sid = trim((string)($pre_row['student_id'] ?? ''));
+        $pre_fee = (string)($pre_row['fee_type'] ?? '');
+        if ($pre_sid === '' || oebm_is_ignored_fee_type($pre_fee) || oebm_normalize_fee_type($pre_fee) !== null) {
+            continue;
+        }
+        $pre_month = oebm_parse_month_year($pre_fee);
+        if ($pre_month === null) {
+            continue;
+        }
+        $pre_year = $pre_month['year'];
+        if ($pre_year === null) {
+            $pre_date = null;
+            foreach (oebm_split_dates((string)($pre_row['date'] ?? '')) as $dp) {
+                $pre_date = oebm_parse_date($dp);
+                if ($pre_date !== null) {
+                    break;
+                }
+            }
+            $pre_year = oebm_infer_month_year((int)$pre_month['month'], $pre_date);
+        }
+        if ($pre_year === null) {
+            continue;
+        }
+        $pre_idx = oebm_month_index($pre_year, (int)$pre_month['month']);
+        if (!isset($earliest_month_idx[$pre_sid]) || $pre_idx < $earliest_month_idx[$pre_sid]) {
+            $earliest_month_idx[$pre_sid] = $pre_idx;
+        }
+    }
 
     foreach ($rows as $idx => $row) {
         $row_no   = $idx + 2; // +1 header, +1 to be 1-based for humans
@@ -740,14 +819,48 @@ function oebm_validate_rows(array $rows): array
                 if (!isset($slot_state[$sid])) {
                     $slot_state[$sid]        = oebm_build_month_slots($summary);
                     $tuition_remaining[$sid] = (float)($summary['totals']['tuition']['out'] ?? 0);
+
+                    // Pre-start shift: when this student's earliest CSV month falls
+                    // BEFORE the first installment of their schedule (e.g. payments
+                    // begin in December but the schedule starts in January), every
+                    // monthly row is shifted forward by the same number of months so
+                    // the payments fill the schedule from the start month onward,
+                    // keeping their original order.
+                    $shift_offset[$sid] = 0;
+                    $first_slot = $slot_state[$sid][0] ?? null;
+                    if ($first_slot && isset($earliest_month_idx[$sid])) {
+                        $first_idx = oebm_month_index((int)$first_slot['cal_year'], (int)$first_slot['cal_month']);
+                        if ($earliest_month_idx[$sid] < $first_idx) {
+                            $shift_offset[$sid] = $first_idx - $earliest_month_idx[$sid];
+                        }
+                    }
                 }
                 $slots =& $slot_state[$sid];
 
                 $month_label = oebm_format_month_label($month_num, $month_year);
 
+                // Apply the student's uniform pre-start shift (0 for most students).
+                $match_month = $month_num;
+                $match_year  = $month_year;
+                $offset      = (int)($shift_offset[$sid] ?? 0);
+                if ($offset > 0) {
+                    $row_year = $month_year ?? oebm_infer_month_year($month_num, $resolved['date']);
+                    if ($row_year !== null) {
+                        $shifted_idx = oebm_month_index($row_year, $month_num) + $offset;
+                        $match_month = (($shifted_idx - 1) % 12) + 1;
+                        $match_year  = (int)(($shifted_idx - $match_month) / 12);
+                        $notes[] = 'Old-ERP payments start before this schedule: ' . oebm_format_month_label($month_num, $row_year)
+                            . ' shifted forward ' . $offset . ' month(s) to '
+                            . oebm_format_month_label($match_month, $match_year) . '.';
+                    } else {
+                        $notes[] = 'Pre-start shift is active for this student but the year of "'
+                            . $fee_raw . '" could not be resolved — matched without shifting.';
+                    }
+                }
+
                 $target = null;
                 foreach ($slots as $k => $slot) {
-                    if (!$slot['consumed'] && oebm_slot_matches($slot, $month_num, $month_year)) {
+                    if (!$slot['consumed'] && oebm_slot_matches($slot, $match_month, $match_year)) {
                         $target = $k;
                         break;
                     }
@@ -756,7 +869,7 @@ function oebm_validate_rows(array $rows): array
                 if ($target === null) {
                     $has_month = false;
                     foreach ($slots as $slot) {
-                        if (oebm_slot_matches($slot, $month_num, $month_year)) { $has_month = true; break; }
+                        if (oebm_slot_matches($slot, $match_month, $match_year)) { $has_month = true; break; }
                     }
                     if ($has_month) {
                         $status  = 'duplicate';
@@ -1167,6 +1280,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <li>Prepare a CSV with the columns <code>Student ID</code>, <code>Fee Type</code>, <code>Date</code>, <code>Amount Paid</code>, <code>Receipt Number</code>. Dates use the <strong>DD/MM/YYYY</strong> format (e.g. <code>15/01/2023</code>). If a cell carries <strong>two dates</strong> (e.g. <code>17/06/2026, 06/04/2026</code>) the first valid date is used.</li>
                 <li><code>Fee Type</code> may be <strong>Admission Fee</strong>, <strong>Form Fee</strong>, <strong>ID Card Fee</strong> or <strong>Registration Fee</strong>, a <strong>month name</strong> (<code>Jan</code>, <code>February</code>, …) for a monthly tuition installment (add a year to target a specific one, e.g. <code>Jan-26</code> = January 2026), or an <strong>additional fee</strong> — <strong>Re-Take</strong>, <strong>Improvement</strong>, <strong>Special Exam (Mid Term / Final)</strong>, <strong>Remedial / Miscellaneous</strong> or <strong>Other</strong> (these are recorded at the amount given, with no schedule check).</li>
                 <li><strong>Monthly payments don't need to be in order.</strong> Each month is matched to the installment with the same calendar month in the student's own schedule, so out-of-order months from the old ERP are placed on the correct slot automatically.</li>
+                <li><strong>Payments that start before the schedule are shifted automatically.</strong> If a student's old-ERP payments begin before their schedule's payment start month (e.g. December while the schedule starts in January), the whole monthly series is shifted forward onto the schedule from the start month onward, keeping its original order. Rows merged onto wrong slots by an earlier version can be repaired with the <a class="alert-link" href="<?= APP_URL ?>/accounting/old-erp-remap.php">Old ERP remap tool</a>.</li>
                 <li>Upload it to preview. Every row is validated and colour-coded before anything is saved.</li>
                 <li><strong>Duplicate receipt numbers are allowed</strong> — one historical receipt often covers several fee heads, so the same number may repeat across rows.</li>
                 <li><strong>A single row may carry several receipt numbers</strong> — list them comma separated in the Receipt Number cell (e.g. <code>OLD-RCPT-1002, OLD-RCPT-1003</code>).</li>
