@@ -1438,6 +1438,7 @@ require_once __DIR__ . '/../includes/header.php';
             semester_tuition: 'Semester Tuition',
             fixed_fee:        'Fixed Institutional Fee',
             english_fee:      'English Course Fee',
+            project_fee:      'Project Fee',
             retake_fee:           'Re-Take Fee',
             improvement_fee:      'Improvement Fee',
             special_exam_midterm: 'Special Examination (Mid Term)',

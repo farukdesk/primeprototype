@@ -1644,6 +1644,9 @@ function acc_student_fee_summary(int $student_id): ?array
     $reg_due  = $reg_fee * $num_semesters;
     $reg_paid = $total_paid_for('registration');
 
+    // One-time Project Fee (snapshotted on the package; falls due with the final semester)
+    $project_fee_paid = $total_paid_for('project_fee');
+
     // Per-semester tuition + monthly breakdown
     $months     = (float)($pkg['total_months'] ?? 0);
     $mps        = (float)($pkg['months_per_semester'] ?? 0);
