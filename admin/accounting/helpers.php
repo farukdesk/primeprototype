@@ -2117,7 +2117,7 @@ function acc_income_account_id_by_code(string $code): int
 function acc_student_fee_types(): array
 {
     return array_merge(
-        ['admission', 'form_fee', 'id_card_fee', 'registration', 'semester_tuition', 'fixed_fee', 'english_fee'],
+        ['admission', 'form_fee', 'id_card_fee', 'registration', 'semester_tuition', 'fixed_fee', 'english_fee', 'project_fee'],
         acc_additional_fee_types(),
         ['other']
     );

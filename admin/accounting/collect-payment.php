@@ -2241,6 +2241,20 @@ require_once __DIR__ . '/../includes/header.php';
             });
         });
 
+        // ── One-time Project Fee — last row of the final semester ─────────────
+        // Snapshotted on the package (0.00 unless assigned, e.g. batch 261), so
+        // the row only appears for students who actually owe / paid it.
+        const pfTot = t.project_fee;
+        if (pfTot && (pfTot.due > 0 || pfTot.paid > 0)) {
+            const lastSf  = s.semesters[s.semesters.length - 1];
+            const lastLbl = lastSf ? (lastSf.semester_label || ('Semester ' + lastSf.semester_number)) : '';
+            addRow(
+                (lastLbl ? lastLbl + ' – ' : '') + 'Project Fee (one-time)',
+                pfTot.due, pfTot.paid, pfTot.out,
+                'project_fee', null, null, lastLbl || null, null, null
+            );
+        }
+
         // Schedule-only paid total, captured before the Additional / Examination
         // rows below add to grandPaid — used for the Additional Payment card's
         // "Grand Total Paid (Schedule + Additional)" figure.
