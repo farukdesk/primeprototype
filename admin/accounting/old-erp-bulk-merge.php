@@ -819,14 +819,48 @@ function oebm_validate_rows(array $rows): array
                 if (!isset($slot_state[$sid])) {
                     $slot_state[$sid]        = oebm_build_month_slots($summary);
                     $tuition_remaining[$sid] = (float)($summary['totals']['tuition']['out'] ?? 0);
+
+                    // Pre-start shift: when this student's earliest CSV month falls
+                    // BEFORE the first installment of their schedule (e.g. payments
+                    // begin in December but the schedule starts in January), every
+                    // monthly row is shifted forward by the same number of months so
+                    // the payments fill the schedule from the start month onward,
+                    // keeping their original order.
+                    $shift_offset[$sid] = 0;
+                    $first_slot = $slot_state[$sid][0] ?? null;
+                    if ($first_slot && isset($earliest_month_idx[$sid])) {
+                        $first_idx = oebm_month_index((int)$first_slot['cal_year'], (int)$first_slot['cal_month']);
+                        if ($earliest_month_idx[$sid] < $first_idx) {
+                            $shift_offset[$sid] = $first_idx - $earliest_month_idx[$sid];
+                        }
+                    }
                 }
                 $slots =& $slot_state[$sid];
 
                 $month_label = oebm_format_month_label($month_num, $month_year);
 
+                // Apply the student's uniform pre-start shift (0 for most students).
+                $match_month = $month_num;
+                $match_year  = $month_year;
+                $offset      = (int)($shift_offset[$sid] ?? 0);
+                if ($offset > 0) {
+                    $row_year = $month_year ?? oebm_infer_month_year($month_num, $resolved['date']);
+                    if ($row_year !== null) {
+                        $shifted_idx = oebm_month_index($row_year, $month_num) + $offset;
+                        $match_month = (($shifted_idx - 1) % 12) + 1;
+                        $match_year  = (int)(($shifted_idx - $match_month) / 12);
+                        $notes[] = 'Old-ERP payments start before this schedule: ' . oebm_format_month_label($month_num, $row_year)
+                            . ' shifted forward ' . $offset . ' month(s) to '
+                            . oebm_format_month_label($match_month, $match_year) . '.';
+                    } else {
+                        $notes[] = 'Pre-start shift is active for this student but the year of "'
+                            . $fee_raw . '" could not be resolved — matched without shifting.';
+                    }
+                }
+
                 $target = null;
                 foreach ($slots as $k => $slot) {
-                    if (!$slot['consumed'] && oebm_slot_matches($slot, $month_num, $month_year)) {
+                    if (!$slot['consumed'] && oebm_slot_matches($slot, $match_month, $match_year)) {
                         $target = $k;
                         break;
                     }
@@ -835,7 +869,7 @@ function oebm_validate_rows(array $rows): array
                 if ($target === null) {
                     $has_month = false;
                     foreach ($slots as $slot) {
-                        if (oebm_slot_matches($slot, $month_num, $month_year)) { $has_month = true; break; }
+                        if (oebm_slot_matches($slot, $match_month, $match_year)) { $has_month = true; break; }
                     }
                     if ($has_month) {
                         $status  = 'duplicate';
