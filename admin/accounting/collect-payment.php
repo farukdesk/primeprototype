@@ -71,7 +71,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
     $reference       = trim($_POST['reference']          ?? '');
     $narration       = trim($_POST['narration']          ?? '');
 
-    $valid_types = ['admission','form_fee','id_card_fee','registration','semester_tuition','fixed_fee','english_fee','project_fee','retake_fee','improvement_fee','special_exam_midterm','special_exam_final','other'];
+    // Single source of truth: scheduled heads + all additional fee types + 'other'.
+    $valid_types = acc_student_fee_types();
 
     if (!$student_id)                          $errors[] = 'Invalid student.';
     if (!$package_id)                          $errors[] = 'Student has no fee package.';
@@ -872,10 +873,27 @@ require_once __DIR__ . '/../includes/header.php';
                         <div class="col-12">
                             <label class="form-label small mb-1" for="addlFeeType">Fee Type</label>
                             <select id="addlFeeType" class="form-select form-select-sm">
-                                <option value="retake_fee">Re-Take Fee</option>
+                                <option value="advocateship_training_fee">Advocateship Training Fee</option>
+                                <option value="appeared_certificate_fee">Appeared Certificate Fee</option>
+                                <option value="convocation_registration_fee">Convocation Registration Fee</option>
+                                <option value="english_language_fee">English Language Fee</option>
+                                <option value="id_card_replacement_fee">ID Card Fee (Replacement)</option>
                                 <option value="improvement_fee">Improvement Fee</option>
-                                <option value="special_exam_midterm">Special Examination (Mid Term)</option>
+                                <option value="late_fine">Late Fine</option>
+                                <option value="library_late_fine">Library Late Fine</option>
+                                <option value="miscellaneous_fee">Miscellaneous (Remedial Course)</option>
+                                <option value="original_certificate_fee">Original Certificate Fee</option>
+                                <option value="provisional_certificate_fee">Provisional Certificate Fee</option>
+                                <option value="re_admission_fee">Re-Admission Fee</option>
+                                <option value="re_exam_fee">Re-Exam Fee</option>
+                                <option value="re_registration_fee">Re-Registration Fee</option>
+                                <option value="retake_fee">Re-Take Fee</option>
+                                <option value="remedial_course_fee">Remedial Course Fee</option>
                                 <option value="special_exam_final">Special Examination (Final)</option>
+                                <option value="special_exam_midterm">Special Examination (Mid Term)</option>
+                                <option value="syllabus_sale">Syllabus Sale</option>
+                                <option value="testimonial_fee">Testimonial Fee</option>
+                                <option value="transcript_fee">Transcript Fee</option>
                             </select>
                         </div>
                         <div class="col-7">
@@ -1437,6 +1455,23 @@ require_once __DIR__ . '/../includes/header.php';
             improvement_fee:      'Improvement Fee',
             special_exam_midterm: 'Special Examination (Mid Term)',
             special_exam_final:   'Special Examination (Final)',
+            transcript_fee:               'Transcript Fee',
+            testimonial_fee:              'Testimonial Fee',
+            syllabus_sale:                'Syllabus Sale',
+            remedial_course_fee:          'Remedial Course Fee',
+            re_registration_fee:          'Re-Registration Fee',
+            re_exam_fee:                  'Re-Exam Fee',
+            re_admission_fee:             'Re-Admission Fee',
+            provisional_certificate_fee:  'Provisional Certificate Fee',
+            original_certificate_fee:     'Original Certificate Fee',
+            miscellaneous_fee:            'Miscellaneous (Remedial Course)',
+            library_late_fine:            'Library Late Fine',
+            late_fine:                    'Late Fine',
+            id_card_replacement_fee:      'ID Card Fee (Replacement)',
+            english_language_fee:         'English Language Fee',
+            convocation_registration_fee: 'Convocation Registration Fee',
+            appeared_certificate_fee:     'Appeared Certificate Fee',
+            advocateship_training_fee:    'Advocateship Training Fee',
             other:            'Other',
         };
         return map[type] || type;

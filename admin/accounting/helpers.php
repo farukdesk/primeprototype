@@ -2832,6 +2832,23 @@ function acc_fee_type_label(string $fee_type): string
         'improvement_fee'      => 'Improvement Fee',
         'special_exam_midterm' => 'Special Examination (Mid Term)',
         'special_exam_final'   => 'Special Examination (Final)',
+        'transcript_fee'               => 'Transcript Fee',
+        'testimonial_fee'              => 'Testimonial Fee',
+        'syllabus_sale'                => 'Syllabus Sale',
+        'remedial_course_fee'          => 'Remedial Course Fee',
+        're_registration_fee'          => 'Re-Registration Fee',
+        're_exam_fee'                  => 'Re-Exam Fee',
+        're_admission_fee'             => 'Re-Admission Fee',
+        'provisional_certificate_fee'  => 'Provisional Certificate Fee',
+        'original_certificate_fee'     => 'Original Certificate Fee',
+        'miscellaneous_fee'            => 'Miscellaneous (Remedial Course)',
+        'library_late_fine'            => 'Library Late Fine',
+        'late_fine'                    => 'Late Fine',
+        'id_card_replacement_fee'      => 'ID Card Fee (Replacement)',
+        'english_language_fee'         => 'English Language Fee',
+        'convocation_registration_fee' => 'Convocation Registration Fee',
+        'appeared_certificate_fee'     => 'Appeared Certificate Fee',
+        'advocateship_training_fee'    => 'Advocateship Training Fee',
         'other'            => 'Other Fee',
         default            => ucfirst(str_replace('_', ' ', $fee_type)),
     };
@@ -2847,7 +2864,32 @@ function acc_fee_type_label(string $fee_type): string
  */
 function acc_additional_fee_types(): array
 {
-    return ['retake_fee', 'improvement_fee', 'special_exam_midterm', 'special_exam_final'];
+    return [
+        'retake_fee',
+        'improvement_fee',
+        'special_exam_midterm',
+        'special_exam_final',
+        'transcript_fee',
+        'testimonial_fee',
+        'syllabus_sale',
+        'remedial_course_fee',
+        're_registration_fee',
+        're_exam_fee',
+        're_admission_fee',
+        'provisional_certificate_fee',
+        'original_certificate_fee',
+        'miscellaneous_fee',
+        'library_late_fine',
+        'late_fine',
+        // Variable replacement/service heads — deliberately distinct from the
+        // scheduled one-time 'id_card_fee' and 'english_fee' obligations so
+        // collecting them never distorts the fee-schedule dues.
+        'id_card_replacement_fee',
+        'english_language_fee',
+        'convocation_registration_fee',
+        'appeared_certificate_fee',
+        'advocateship_training_fee',
+    ];
 }
 
 /**
