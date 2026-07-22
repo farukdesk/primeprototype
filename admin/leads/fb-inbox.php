@@ -7,62 +7,7 @@ $page_title = 'Facebook Messenger Inbox';
 $user       = auth_user();
 $is_staff   = leads_is_staff();
 
-// ── AJAX: real-time check (new messages + live stats) ───────────────────────
-if (($_GET['ajax'] ?? '') === 'check') {
-    header('Content-Type: application/json');
-    leads_fb_run_followups_throttled();
-    $latest = (int)db()->query('SELECT COALESCE(MAX(id), 0) FROM lead_fb_messages')->fetchColumn();
-    $s = db()->query(
-        "SELECT COUNT(*) AS total,
-                COALESCE(SUM(t.last_dir = 'out'), 0) AS responded,
-                COALESCE(SUM(t.last_dir = 'in'), 0)  AS waiting,
-                COALESCE(SUM(t.has_lead), 0)         AS converted
-         FROM (SELECT (c.lead_id IS NOT NULL) AS has_lead,
-                      (SELECT m.direction FROM lead_fb_messages m WHERE m.contact_id = c.id ORDER BY m.id DESC LIMIT 1) AS last_dir
-               FROM lead_fb_contacts c) t"
-    )->fetch();
-    echo json_encode([
-        'latest_id' => $latest,
-        'stats'     => [
-            'total'     => (int)$s['total'],
-            'responded' => (int)$s['responded'],
-            'waiting'   => (int)$s['waiting'],
-            'converted' => (int)$s['converted'],
-        ],
-    ]);
-    exit;
-}
-
-// ── POST: backfill missing profile names from Meta's User Profile API ───────
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'refresh_names' && $is_staff) {
-    csrf_check();
-    if (leads_fb_setting('page_access_token') === '') {
-        flash_set('error', 'Page Access Token is not configured. Set it in FB Settings first.');
-    } else {
-        $pending = db()->query(
-            "SELECT id, psid FROM lead_fb_contacts WHERE fb_name IS NULL OR fb_name = '' ORDER BY last_message_at DESC LIMIT 50"
-        )->fetchAll();
-        $updated = 0;
-        foreach ($pending as $row) {
-            [$name, $picture] = leads_fb_fetch_profile($row['psid']);
-            if ($name !== null) {
-                db()->prepare('UPDATE lead_fb_contacts SET fb_name=?, fb_picture=COALESCE(?, fb_picture) WHERE id=?')
-                    ->execute([$name, $picture, (int)$row['id']]);
-                $updated++;
-            }
-        }
-        if (count($pending) === 0) {
-            flash_set('success', 'All contacts already have names.');
-        } elseif ($updated > 0) {
-            flash_set('success', 'Fetched names for ' . $updated . ' of ' . count($pending) . ' contact(s).');
-        } else {
-            flash_set('error', 'Could not fetch any names. Check that the Page Access Token is valid and has the pages_messaging permission.');
-        }
-    }
-    redirect(APP_URL . '/leads/fb-inbox.php');
-}
-
-// ── Search / filter ───────────────────────────────────────────────────────────
+// ── Search / filter (parsed early so live stats honour the active filters) ──
 $search    = trim($_GET['search'] ?? '');
 $f_linked  = $_GET['linked'] ?? '';   // 'yes' | 'no' | ''
 $f_state   = $_GET['state']  ?? '';   // '' | 'waiting' | 'responded' | 'converted'
@@ -120,6 +65,66 @@ if ($date_to !== '') {
 
 $where_sql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 $filters_active = ($search !== '' || $f_linked !== '' || $f_state !== '' || $f_tag > 0 || $f_phone !== '' || $date_from !== '' || $date_to !== '');
+
+// Stats query that honours the active filters (used by the page and the AJAX check)
+$stats_sql =
+    "SELECT COUNT(*) AS total,
+            COALESCE(SUM(t.last_dir = 'out'), 0) AS responded,
+            COALESCE(SUM(t.last_dir = 'in'), 0)  AS waiting,
+            COALESCE(SUM(t.has_lead), 0)         AS converted
+     FROM (SELECT (c.lead_id IS NOT NULL) AS has_lead,
+                  $last_dir_sql AS last_dir
+           FROM lead_fb_contacts c
+           LEFT JOIN leads l ON l.id = c.lead_id
+           $where_sql) t";
+
+// ── AJAX: real-time check (new messages + live stats, filter-aware) ─────────
+if (($_GET['ajax'] ?? '') === 'check') {
+    header('Content-Type: application/json');
+    $latest = (int)db()->query('SELECT COALESCE(MAX(id), 0) FROM lead_fb_messages')->fetchColumn();
+    $sq = db()->prepare($stats_sql);
+    $sq->execute($params);
+    $s = $sq->fetch();
+    echo json_encode([
+        'latest_id' => $latest,
+        'stats'     => [
+            'total'     => (int)$s['total'],
+            'responded' => (int)$s['responded'],
+            'waiting'   => (int)$s['waiting'],
+            'converted' => (int)$s['converted'],
+        ],
+    ]);
+    exit;
+}
+
+// ── POST: backfill missing profile names from Meta's User Profile API ───────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'refresh_names' && $is_staff) {
+    csrf_check();
+    if (leads_fb_setting('page_access_token') === '') {
+        flash_set('error', 'Page Access Token is not configured. Set it in FB Settings first.');
+    } else {
+        $pending = db()->query(
+            "SELECT id, psid FROM lead_fb_contacts WHERE fb_name IS NULL OR fb_name = '' ORDER BY last_message_at DESC LIMIT 50"
+        )->fetchAll();
+        $updated = 0;
+        foreach ($pending as $row) {
+            [$name, $picture] = leads_fb_fetch_profile($row['psid']);
+            if ($name !== null) {
+                db()->prepare('UPDATE lead_fb_contacts SET fb_name=?, fb_picture=COALESCE(?, fb_picture) WHERE id=?')
+                    ->execute([$name, $picture, (int)$row['id']]);
+                $updated++;
+            }
+        }
+        if (count($pending) === 0) {
+            flash_set('success', 'All contacts already have names.');
+        } elseif ($updated > 0) {
+            flash_set('success', 'Fetched names for ' . $updated . ' of ' . count($pending) . ' contact(s).');
+        } else {
+            flash_set('error', 'Could not fetch any names. Check that the Page Access Token is valid and has the pages_messaging permission.');
+        }
+    }
+    redirect(APP_URL . '/leads/fb-inbox.php');
+}
 
 $count_q = db()->prepare(
     'SELECT COUNT(*) FROM lead_fb_contacts c LEFT JOIN leads l ON l.id = c.lead_id ' . $where_sql
@@ -190,16 +195,10 @@ try {
     }
 } catch (Exception $e) { /* ignore */ }
 
-// ── Headline stats ───────────────────────────────────────────────────────────
-$stats_row = db()->query(
-    "SELECT COUNT(*) AS total,
-            COALESCE(SUM(t.last_dir = 'out'), 0) AS responded,
-            COALESCE(SUM(t.last_dir = 'in'), 0)  AS waiting,
-            COALESCE(SUM(t.has_lead), 0)         AS converted
-     FROM (SELECT (c.lead_id IS NOT NULL) AS has_lead,
-                  (SELECT m.direction FROM lead_fb_messages m WHERE m.contact_id = c.id ORDER BY m.id DESC LIMIT 1) AS last_dir
-           FROM lead_fb_contacts c) t"
-)->fetch();
+// ── Headline stats (respect the active filters) ──────────────────────────────
+$stats_q = db()->prepare($stats_sql);
+$stats_q->execute($params);
+$stats_row = $stats_q->fetch();
 
 $total_contacts  = (int)$stats_row['total'];
 $total_responded = (int)$stats_row['responded'];
@@ -407,8 +406,9 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="flex-grow-1 overflow-hidden">
                 <div class="d-flex justify-content-between align-items-center">
                     <span class="fw-semibold text-truncate"><?= h($c['fb_name'] ?: 'Facebook User #' . substr((string)$c['psid'], -6)) ?></span>
-                    <small class="text-muted flex-shrink-0 ms-2">
-                        <?= $c['last_message_at'] ? date('d M Y', strtotime($c['last_message_at'])) : date('d M Y', strtotime($c['first_seen'])) ?>
+                    <small class="text-muted flex-shrink-0 ms-2 text-end" style="line-height:1.4">
+                        <span class="d-block" title="Contact created"><i class="fas fa-user-plus me-1"></i>Created: <?= date('d M Y, h:i A', strtotime($c['first_seen'])) ?></span>
+                        <span class="d-block" title="Last message (from us or the customer)"><i class="fas fa-comment-dots me-1"></i>Last msg: <?= $c['last_message_at'] ? date('d M Y, h:i A', strtotime($c['last_message_at'])) : '—' ?></span>
                     </small>
                 </div>
                 <div class="d-flex align-items-center gap-2 mt-1 flex-wrap">
@@ -469,7 +469,7 @@ require_once __DIR__ . '/../includes/header.php';
 (function () {
     let latest = <?= $latest_msg_id ?>;
     setInterval(function () {
-        fetch('<?= APP_URL ?>/leads/fb-inbox.php?ajax=check', { headers: { 'Accept': 'application/json' } })
+        fetch('<?= APP_URL ?>/leads/fb-inbox.php?<?= http_build_query($qs_base + ['ajax' => 'check']) ?>', { headers: { 'Accept': 'application/json' } })
             .then(function (r) { return r.json(); })
             .then(function (d) {
                 if (d.stats) {

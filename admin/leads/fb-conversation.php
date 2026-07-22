@@ -60,7 +60,6 @@ function fbconv_msg_json(array $m): array
 // ── AJAX: poll for new messages (also returns seen receipts) ────────────────
 if (($_GET['ajax'] ?? '') === 'poll') {
     header('Content-Type: application/json');
-    leads_fb_run_followups_throttled();
     $after = (int)($_GET['after_id'] ?? 0);
     $q = db()->prepare(
         'SELECT m.*, u.full_name AS sender_name
@@ -606,7 +605,7 @@ require_once __DIR__ . '/../includes/header.php';
 <?php if ($upgrade_needed && is_super_admin()): ?>
 <div class="alert alert-warning py-2 small">
     <i class="fas fa-database me-1"></i>
-    Some inbox features (unread tracking, canned replies, notes, tags, seen receipts, auto follow-up) are disabled.
+    Some inbox features (unread tracking, canned replies, notes, tags, seen receipts) are disabled.
     Run <code>admin/leads/fb-inbox-upgrade.sql</code> and <code>admin/leads/fb-inbox-upgrade-2.sql</code> once to enable them.
 </div>
 <?php endif; ?>
