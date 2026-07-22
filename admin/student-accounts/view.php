@@ -338,6 +338,7 @@ require_once __DIR__ . '/../includes/header.php';
                     'Admission Fee (one-time)'        => sfp_money((float)($pkg['admission_fees'] ?? 0)),
                     'Form Fee (one-time)'        => sfp_money($form_fee_one_time),
                     'ID Card Fee (one-time)'     => sfp_money($id_card_fee_one_time),
+                    'Project Fee (one-time)'     => sfp_money($project_fee_one_time),
                     'Fixed Institutional Fees'   => sfp_money((float)$pkg['fixed_institutional_fees']),
                     'English Course Fee'         => sfp_money((float)$pkg['english_course_fee']),
                 ];

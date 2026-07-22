@@ -2138,6 +2138,7 @@ function acc_default_income_code_for_fee_type(string $fee_type): string
         'semester_tuition' => '4100', // Tuition Fees
         'fixed_fee'        => '4100', // Tuition Fees
         'english_fee'      => '4100', // Tuition Fees
+        'project_fee'      => '4700', // Project Fee (one-time) – remappable via income_account_project_fee setting
         'retake_fee'           => '4700', // Miscellaneous Income
         'improvement_fee'      => '4700', // Miscellaneous Income
         'special_exam_midterm' => '4700', // Miscellaneous Income
