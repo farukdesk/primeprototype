@@ -1612,7 +1612,12 @@ require_once __DIR__ . '/../includes/header.php';
             const semLabel = sf.semester_label || ('Semester ' + sf.semester_number);
             const semN     = sf.semester_number;
 
-            // Registration for this semester
+            // Registration for this semester — anchored to the semester's
+            // FIRST calendar month so it is classified past/current/future
+            // like the monthly rows. Only the current and previous semesters'
+            // registration counts as "due now"; a future semester's
+            // registration is an upcoming due, not a current one.
+            const regFirstMr = (sf.monthly_rows && sf.monthly_rows.length) ? sf.monthly_rows[0] : null;
             if (sf.reg_out > 0) {
                 items.push({
                     fee_type:          'registration',
@@ -1622,7 +1627,8 @@ require_once __DIR__ . '/../includes/header.php';
                     out:               sf.reg_out,
                     label:             semLabel + ' — Registration Fee',
                     income_account_id: incomeAccountsMap['registration'] ?? 0,
-                    cal_month:         null, cal_year: null,
+                    cal_month:         regFirstMr ? (Number(regFirstMr.cal_month) || null) : null,
+                    cal_year:          regFirstMr ? (Number(regFirstMr.cal_year)  || null) : null,
                 });
             }
 
@@ -1698,9 +1704,11 @@ require_once __DIR__ . '/../includes/header.php';
             if (period === 'past')         past    += item.out;
             else if (period === 'current') current += item.out;
             else if (period === 'future')  future  += item.out;
-            else                           other   += item.out; // one-time fees (admission, registration)
+            else                           other   += item.out; // admission-day one-time fees only (owed immediately)
         }
-        // due_now = everything owed up to today (past + current + one-time); excludes future advance months
+        // due_now = current month dues + all previous dues + admission-day fees.
+        // Future months AND future semesters' registration fees are excluded —
+        // they are upcoming dues, not owed yet.
         return {past, current, future, other, total, due_now: past + current + other};
     }
 
@@ -1866,10 +1874,11 @@ require_once __DIR__ . '/../includes/header.php';
         spAmount.dispatchEvent(new Event('input'));
     });
 
-    /** "Due Now" quick button (past + current only) */
+    /** "Due Now" quick button — same figure as the Dues badge:
+     *  previous dues + current month + admission-day one-time fees. */
     document.getElementById('spBtnDueNow').addEventListener('click', () => {
         const stats = getSmartPayStats();
-        const due = stats.past + stats.current;
+        const due = stats.due_now;
         if (due <= 0) return;
         spAmount.value = Math.ceil(due);
         spAmount.dispatchEvent(new Event('input'));
