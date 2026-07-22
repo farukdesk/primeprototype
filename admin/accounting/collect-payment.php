@@ -743,10 +743,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <span class="badge rounded-pill bg-danger px-3 py-2 small" id="spPastDue" style="display:none;">
                         <i class="fas fa-exclamation-triangle me-1"></i>Past Due: <span id="spPastDueAmt">—</span>
                     </span>
-                    <span class="badge rounded-pill bg-warning text-dark px-3 py-2 small" id="spCurrentDue" style="display:none;">
-                        <i class="fas fa-calendar-day me-1"></i>Current: <span id="spCurrentDueAmt">—</span>
-                    </span>
-                    <span class="small text-primary fw-semibold">Dues: <span class="badge bg-danger px-3 py-2 fs-6" id="spTotalOut">—</span></span>
+                    <span class="small text-primary fw-semibold">Current Dues: <span class="badge bg-danger px-3 py-2 fs-6" id="spTotalOut">—</span></span>
                 </div>
             </div>
             <div class="card-body p-4">
@@ -1814,13 +1811,6 @@ require_once __DIR__ . '/../includes/header.php';
             document.getElementById('spPastDue').style.display  = '';
         } else {
             document.getElementById('spPastDue').style.display  = 'none';
-        }
-        // Current-month pill
-        if (stats.current > 0) {
-            document.getElementById('spCurrentDueAmt').textContent = fmt(stats.current);
-            document.getElementById('spCurrentDue').style.display   = '';
-        } else {
-            document.getElementById('spCurrentDue').style.display   = 'none';
         }
         spAmount.value = '';
         spDistBody.innerHTML = '';
