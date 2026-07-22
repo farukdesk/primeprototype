@@ -258,6 +258,46 @@ function oebm_format_month_label(int $month, ?int $year): string
     return oebm_month_name($month) . ($year !== null ? ' ' . $year : '');
 }
 
+/**
+ * Absolute calendar-month index (year * 12 + month) used to compare and
+ * shift calendar months across year boundaries.
+ */
+function oebm_month_index(int $year, int $month): int
+{
+    return $year * 12 + $month;
+}
+
+/**
+ * Infer the calendar year of a month-name cell that carries no explicit year,
+ * using the row's payment date: of the candidate years (date year ± 1), the
+ * one whose month falls closest to the payment date is chosen. A December
+ * installment paid in early January therefore resolves to the PREVIOUS year,
+ * and a January installment paid in late December to the NEXT year.
+ */
+function oebm_infer_month_year(int $month_num, ?string $date): ?int
+{
+    if ($date === null || $date === '') {
+        return null;
+    }
+    $ts = strtotime($date);
+    if ($ts === false) {
+        return null;
+    }
+    $dy = (int)date('Y', $ts);
+    $dm = (int)date('n', $ts);
+    $date_idx  = oebm_month_index($dy, $dm);
+    $best_year = null;
+    $best_dist = PHP_INT_MAX;
+    foreach ([$dy - 1, $dy, $dy + 1] as $y) {
+        $dist = abs(oebm_month_index($y, $month_num) - $date_idx);
+        if ($dist < $best_dist) {
+            $best_dist = $dist;
+            $best_year = $y;
+        }
+    }
+    return $best_year;
+}
+
 
 function oebm_parse_date(string $raw): ?string
 {
