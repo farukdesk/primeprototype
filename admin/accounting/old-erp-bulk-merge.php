@@ -564,6 +564,45 @@ function oebm_validate_rows(array $rows): array
     // Per-student state for monthly tuition allocation across the batch.
     $slot_state        = [];   // SID => mutable month-slot list (oebm_build_month_slots)
     $tuition_remaining = [];   // SID => outstanding tuition pool, decremented as rows consume it
+    $shift_offset      = [];   // SID => uniform forward shift (months) for pre-start schedules
+
+    // ── Pre-scan: earliest monthly payment per student ──────────────────────
+    // Some students' old-ERP payments begin BEFORE their current schedule's
+    // payment start month (e.g. payments start in December while the package
+    // schedule starts in January). Find each student's earliest CSV month
+    // (explicit year suffix, or the year inferred from the payment date) so
+    // those students' monthly rows can be shifted forward uniformly onto the
+    // schedule from the start month onward, keeping their original order.
+    $earliest_month_idx = [];  // SID => smallest calendar-month index among monthly rows
+    foreach ($rows as $pre_row) {
+        $pre_sid = trim((string)($pre_row['student_id'] ?? ''));
+        $pre_fee = (string)($pre_row['fee_type'] ?? '');
+        if ($pre_sid === '' || oebm_is_ignored_fee_type($pre_fee) || oebm_normalize_fee_type($pre_fee) !== null) {
+            continue;
+        }
+        $pre_month = oebm_parse_month_year($pre_fee);
+        if ($pre_month === null) {
+            continue;
+        }
+        $pre_year = $pre_month['year'];
+        if ($pre_year === null) {
+            $pre_date = null;
+            foreach (oebm_split_dates((string)($pre_row['date'] ?? '')) as $dp) {
+                $pre_date = oebm_parse_date($dp);
+                if ($pre_date !== null) {
+                    break;
+                }
+            }
+            $pre_year = oebm_infer_month_year((int)$pre_month['month'], $pre_date);
+        }
+        if ($pre_year === null) {
+            continue;
+        }
+        $pre_idx = oebm_month_index($pre_year, (int)$pre_month['month']);
+        if (!isset($earliest_month_idx[$pre_sid]) || $pre_idx < $earliest_month_idx[$pre_sid]) {
+            $earliest_month_idx[$pre_sid] = $pre_idx;
+        }
+    }
 
     foreach ($rows as $idx => $row) {
         $row_no   = $idx + 2; // +1 header, +1 to be 1-based for humans
