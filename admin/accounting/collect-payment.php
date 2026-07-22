@@ -746,9 +746,6 @@ require_once __DIR__ . '/../includes/header.php';
                     <span class="badge rounded-pill bg-warning text-dark px-3 py-2 small" id="spCurrentDue" style="display:none;">
                         <i class="fas fa-calendar-day me-1"></i>Current: <span id="spCurrentDueAmt">—</span>
                     </span>
-                    <span class="badge rounded-pill bg-info px-3 py-2 small" id="spFutureDue" style="display:none;">
-                        <i class="fas fa-calendar-alt me-1"></i>Upcoming: <span id="spFutureDueAmt">—</span>
-                    </span>
                     <span class="small text-primary fw-semibold">Dues: <span class="badge bg-danger px-3 py-2 fs-6" id="spTotalOut">—</span></span>
                 </div>
             </div>
@@ -1825,14 +1822,6 @@ require_once __DIR__ . '/../includes/header.php';
         } else {
             document.getElementById('spCurrentDue').style.display   = 'none';
         }
-        // Future pill
-        if (stats.future > 0) {
-            document.getElementById('spFutureDueAmt').textContent = fmt(stats.future);
-            document.getElementById('spFutureDue').style.display   = '';
-        } else {
-            document.getElementById('spFutureDue').style.display   = 'none';
-        }
-
         spAmount.value = '';
         spDistBody.innerHTML = '';
         spDistWrap.style.display   = 'none';
