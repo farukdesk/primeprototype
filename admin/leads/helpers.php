@@ -346,10 +346,6 @@ function leads_get(int $id): array
 
 // ── FB inbox extended features ────────────────────────────────────────────────
 
-if (!defined('LEADS_FB_FOLLOWUP_TEXT')) {
-    define('LEADS_FB_FOLLOWUP_TEXT', 'আপনি কি আছেন?');
-}
-
 /**
  * Escape a message and wrap any Bangladeshi phone number in a highlight span.
  */
@@ -394,70 +390,4 @@ function leads_fb_send_attachment(string $psid, string $file_path, string $mime,
         return !empty($body['message_id']);
     }
     return false;
-}
-
-/**
- * One-time auto follow-up: when the LAST message in a conversation is a staff
- * reply (not an auto message) older than 10 minutes and the customer has not
- * answered, send "আপনি কি আছেন?" exactly once per staff response.
- * Requires admin/leads/fb-inbox-upgrade-2.sql. Returns number sent.
- */
-function leads_fb_run_followups(): int
-{
-    try {
-        $rows = db()->query(
-            "SELECT c.id, c.psid, m.created_at AS staff_msg_at
-             FROM lead_fb_contacts c
-             JOIN lead_fb_messages m ON m.id = (
-                 SELECT m2.id FROM lead_fb_messages m2
-                 WHERE m2.contact_id = c.id ORDER BY m2.id DESC LIMIT 1
-             )
-             WHERE m.direction = 'out'
-               AND m.is_auto = 0
-               AND m.sent_by IS NOT NULL
-               AND m.status = 'sent'
-               AND m.created_at <= (NOW() - INTERVAL 10 MINUTE)
-               AND (c.followup_sent_at IS NULL OR c.followup_sent_at < m.created_at)
-             LIMIT 20"
-        )->fetchAll();
-    } catch (Exception $e) {
-        return 0; // columns missing – run admin/leads/fb-inbox-upgrade-2.sql
-    }
-
-    $sent = 0;
-    foreach ($rows as $r) {
-        // Claim first so two concurrent pollers never double-send
-        $claim = db()->prepare(
-            'UPDATE lead_fb_contacts SET followup_sent_at = NOW()
-             WHERE id = ? AND (followup_sent_at IS NULL OR followup_sent_at < ?)'
-        );
-        $claim->execute([(int)$r['id'], $r['staff_msg_at']]);
-        if ($claim->rowCount() === 0) continue;
-
-        if (leads_fb_send($r['psid'], LEADS_FB_FOLLOWUP_TEXT)) {
-            db()->prepare(
-                'INSERT INTO lead_fb_messages (contact_id, direction, message_text, status, is_auto)
-                 VALUES (?,?,?,?,1)'
-            )->execute([(int)$r['id'], 'out', LEADS_FB_FOLLOWUP_TEXT, 'sent']);
-            db()->prepare('UPDATE lead_fb_contacts SET last_message_at = NOW() WHERE id = ?')
-                ->execute([(int)$r['id']]);
-            $sent++;
-        }
-    }
-    return $sent;
-}
-
-/**
- * Throttled wrapper – safe to call from frequently-polled AJAX endpoints.
- */
-function leads_fb_run_followups_throttled(int $min_interval = 60): void
-{
-    try {
-        $last = leads_fb_setting('followup_last_run');
-        if ($last !== '' && (time() - (int)$last) < $min_interval) return;
-        leads_fb_setting_set('followup_last_run', (string)time());
-    } catch (Exception $e) {
-        return;
-    }
-    leads_fb_run_followups();
 }

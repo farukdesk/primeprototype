@@ -124,6 +124,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 db()->prepare('UPDATE lead_fb_contacts SET last_message_at=NOW() WHERE id=?')
                     ->execute([$contact_id]);
 
+                // Contact shared a phone number → remove "Follow Up",
+                // apply "Converted to Lead"
+                if ($text !== null && preg_match('/01[3-9][0-9]{8}/', $text)) {
+                    fb_remove_tag($contact_id, 'Follow Up');
+                    fb_add_tag($contact_id, 'Converted to Lead', '#198754');
+                }
+
                 // Off-hours auto-responder
                 fb_maybe_auto_reply($contact_id, $psid);
 
@@ -241,7 +248,12 @@ function fb_upsert_contact(string $psid): int
         'INSERT INTO lead_fb_contacts (psid, fb_name, fb_picture, last_message_at) VALUES (?,?,?,NOW())'
     )->execute([$psid, $name, $picture]);
 
-    return (int)db()->lastInsertId();
+    $new_id = (int)db()->lastInsertId();
+
+    // Automatically apply the "Follow Up" tag to every new contact
+    fb_add_tag($new_id, 'Follow Up', '#fd7e14');
+
+    return $new_id;
 }
 
 /**
@@ -321,4 +333,44 @@ function fb_maybe_auto_reply(int $contact_id, string $psid): void
         db()->prepare('UPDATE lead_fb_contacts SET last_auto_reply_at = NOW(), last_message_at = NOW() WHERE id = ?')
             ->execute([$contact_id]);
     }
+}
+
+// ── Automatic tagging helpers ─────────────────────────────────────────────────
+
+/**
+ * Get (or create) a tag id by name. Returns 0 when the tags tables are missing.
+ */
+function fb_tag_id(string $name, string $color = '#6c757d'): int
+{
+    try {
+        $stmt = db()->prepare('SELECT id FROM lead_fb_tags WHERE name = ?');
+        $stmt->execute([$name]);
+        $id = (int)$stmt->fetchColumn();
+        if ($id) return $id;
+        db()->prepare('INSERT INTO lead_fb_tags (name, color) VALUES (?,?)')->execute([$name, $color]);
+        return (int)db()->lastInsertId();
+    } catch (Exception $e) {
+        return 0; // run admin/leads/fb-inbox-upgrade.sql first
+    }
+}
+
+function fb_add_tag(int $contact_id, string $name, string $color = '#6c757d'): void
+{
+    $tag_id = fb_tag_id($name, $color);
+    if ($tag_id <= 0) return;
+    try {
+        db()->prepare('INSERT IGNORE INTO lead_fb_contact_tags (contact_id, tag_id) VALUES (?,?)')
+            ->execute([$contact_id, $tag_id]);
+    } catch (Exception $e) { /* ignore */ }
+}
+
+function fb_remove_tag(int $contact_id, string $name): void
+{
+    try {
+        db()->prepare(
+            'DELETE ct FROM lead_fb_contact_tags ct
+             JOIN lead_fb_tags t ON t.id = ct.tag_id
+             WHERE ct.contact_id = ? AND t.name = ?'
+        )->execute([$contact_id, $name]);
+    } catch (Exception $e) { /* ignore */ }
 }
