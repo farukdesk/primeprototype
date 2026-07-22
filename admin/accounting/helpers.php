@@ -3147,6 +3147,11 @@ function acc_outstanding_through_current_month(int $package_id): float
         // Registration is due at the start of each semester
         $total_due += $reg_fee;
 
+        // One-time Project Fee falls due with the final semester
+        if ($sem_num === $num_semesters) {
+            $total_due += acc_package_project_fee($pkg);
+        }
+
         // Per-semester portions of fixed institutional + English fees (after discounts)
         $fixed_per_sem   = ($months > 0 && $mps > 0)
             ? round((float)$pkg['fixed_institutional_fees'] / $months * $mps, 2) : 0.0;
