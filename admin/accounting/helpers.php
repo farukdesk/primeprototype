@@ -703,7 +703,9 @@ function acc_voucher_list_filter(array $f): array
                         SELECT 1
                         FROM adm_admission_fee_payments ap
                         JOIN admissions_applications a ON a.id = ap.application_id
-                        JOIN students sb ON sb.student_id = a.assigned_student_id
+                        JOIN students sb
+                          ON sb.student_id COLLATE utf8mb4_unicode_ci
+                           = a.assigned_student_id COLLATE utf8mb4_unicode_ci
                         WHERE ap.voucher_id = v.id
                           AND sb.batch_id = ?
                     ))';
