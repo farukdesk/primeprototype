@@ -12,47 +12,29 @@ $f_type    = $_GET['type']          ?? '';
 $f_status  = $_GET['status']        ?? '';
 $f_created_by = (int)($_GET['created_by'] ?? 0);
 $f_student_sid = trim((string)($_GET['student_sid'] ?? ''));
+$f_batch   = (int)($_GET['batch_id'] ?? 0);
+$f_method  = $_GET['payment_method'] ?? '';
 $f_from    = $_GET['date_from']     ?? '';
 $f_to      = $_GET['date_to']       ?? '';
 $page      = max(1, (int)($_GET['page'] ?? 1));
 $per_page  = 20;
 
-$valid_types   = ['receipt','payment','contra','journal'];
-$valid_statuses = ['posted','reversed','memo'];
+$valid_types = ['receipt','payment','contra','journal'];
+$pay_methods = ['cash' => 'Cash', 'bank' => 'Bank', 'mobile_banking' => 'Mobile Banking', 'old_erp' => 'Old ERP'];
 
-$where  = ['v.is_deleted = 0'];
-$params = [];
-
-if ($search !== '') {
-    $like    = '%' . $search . '%';
-    $where[] = '(v.voucher_number LIKE ? OR v.narration LIKE ? OR v.reference LIKE ?)';
-    array_push($params, $like, $like, $like);
-}
-if (in_array($f_type,   $valid_types,    true)) { $where[] = 'v.voucher_type = ?'; $params[] = $f_type; }
-if (in_array($f_status, $valid_statuses, true)) { $where[] = 'v.status = ?';       $params[] = $f_status; }
-if ($f_created_by > 0) { $where[] = 'v.created_by = ?'; $params[] = $f_created_by; }
-if ($f_student_sid !== '') {
-    $sid_value = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $f_student_sid);
-    $sid_like = '%' . $sid_value . '%';
-    $where[] = "(EXISTS (
-                    SELECT 1
-                    FROM sfp_payments sp
-                    JOIN students s ON s.id = sp.student_id
-                    WHERE sp.voucher_id = v.id
-                      AND s.student_id LIKE ? ESCAPE '\\\\'
-                ) OR EXISTS (
-                    SELECT 1
-                    FROM adm_admission_fee_payments ap
-                    JOIN admissions_applications a ON a.id = ap.application_id
-                    WHERE ap.voucher_id = v.id
-                      AND a.assigned_student_id LIKE ? ESCAPE '\\\\'
-                ))";
-    array_push($params, $sid_like, $sid_like);
-}
-if ($f_from) { $where[] = 'v.voucher_date >= ?'; $params[] = $f_from; }
-if ($f_to)   { $where[] = 'v.voucher_date <= ?'; $params[] = $f_to; }
-
-$where_sql = 'WHERE ' . implode(' AND ', $where);
+// Shared with voucher-delete.php so "select all filtered" resolves the exact
+// same voucher set server-side (across every page, not just this one).
+[$where_sql, $params] = acc_voucher_list_filter([
+    'search'         => $search,
+    'type'           => $f_type,
+    'status'         => $f_status,
+    'created_by'     => $f_created_by,
+    'student_sid'    => $f_student_sid,
+    'batch_id'       => $f_batch,
+    'payment_method' => $f_method,
+    'date_from'      => $f_from,
+    'date_to'        => $f_to,
+]);
 
 $count_stmt = db()->prepare("SELECT COUNT(*) FROM acc_vouchers v $where_sql");
 $count_stmt->execute($params);
@@ -90,12 +72,19 @@ $created_by_stmt = db()->query(
 );
 $created_by_users = $created_by_stmt->fetchAll();
 
+// University batches (students.batch_id → student_batches)
+$batches_list = db()->query(
+    'SELECT id, name FROM student_batches WHERE is_active = 1 ORDER BY sort_order, name ASC'
+)->fetchAll();
+
 $filter_qs = http_build_query(array_filter([
     'search'    => $search,
     'type'      => $f_type,
     'status'    => $f_status,
     'created_by'=> $f_created_by ?: null,
     'student_sid' => $f_student_sid,
+    'batch_id'  => $f_batch ?: null,
+    'payment_method' => $f_method,
     'date_from' => $f_from,
     'date_to'   => $f_to,
 ]));
@@ -137,7 +126,7 @@ require_once __DIR__ . '/../includes/header.php';
     <?php
     $tabs = ['' => 'All'] + array_combine($valid_types, ['Receipt','Payment','Transfer','Journal']);
     foreach ($tabs as $tv => $tl):
-        $q = http_build_query(array_filter(array_merge(['search'=>$search,'status'=>$f_status,'created_by'=>$f_created_by ?: null,'student_sid'=>$f_student_sid,'date_from'=>$f_from,'date_to'=>$f_to],['type'=>$tv])));
+        $q = http_build_query(array_filter(array_merge(['search'=>$search,'status'=>$f_status,'created_by'=>$f_created_by ?: null,'student_sid'=>$f_student_sid,'batch_id'=>$f_batch ?: null,'payment_method'=>$f_method,'date_from'=>$f_from,'date_to'=>$f_to],['type'=>$tv])));
     ?>
     <li class="nav-item">
         <a class="nav-link <?= $f_type === $tv ? 'active' : '' ?>" href="?<?= $q ?>"><?= h($tl) ?></a>
@@ -157,6 +146,22 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="col-6 col-md-2">
                 <input type="text" name="student_sid" class="form-control form-control-sm"
                        placeholder="Student ID" value="<?= h($f_student_sid) ?>">
+            </div>
+            <div class="col-6 col-md-2">
+                <select name="batch_id" class="form-select form-select-sm">
+                    <option value="0">All Batches</option>
+                    <?php foreach ($batches_list as $b): ?>
+                    <option value="<?= (int)$b['id'] ?>" <?= $f_batch === (int)$b['id'] ? 'selected' : '' ?>><?= h($b['name']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <select name="payment_method" class="form-select form-select-sm">
+                    <option value="">All Payment Methods</option>
+                    <?php foreach ($pay_methods as $pmv => $pml): ?>
+                    <option value="<?= h($pmv) ?>" <?= $f_method === $pmv ? 'selected' : '' ?>><?= h($pml) ?></option>
+                    <?php endforeach; ?>
+                </select>
             </div>
             <div class="col-6 col-md-2">
                 <select name="status" class="form-select form-select-sm">
@@ -194,6 +199,18 @@ require_once __DIR__ . '/../includes/header.php';
             <p class="mb-0">No vouchers found.</p>
         </div>
         <?php else: ?>
+        <?php if ($can_bulk_delete && $total_rows > count($vouchers)): ?>
+        <div class="alert alert-info py-2 small d-none mb-2" id="vdAllFilteredBar" data-total="<?= (int)$total_rows ?>">
+            <span id="vdAllFilteredOff">
+                All <strong><?= count($vouchers) ?></strong> voucher(s) on this page are selected.
+                <a href="#" id="vdSelectAllFiltered" class="fw-semibold">Select all <?= number_format($total_rows) ?> voucher(s) matching the current filter</a>
+            </span>
+            <span id="vdAllFilteredOn" class="d-none">
+                All <strong><?= number_format($total_rows) ?></strong> voucher(s) matching the current filter are selected (across all pages).
+                <a href="#" id="vdClearAllFiltered" class="fw-semibold">Clear selection</a>
+            </span>
+        </div>
+        <?php endif; ?>
         <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
                 <thead class="table-light">
@@ -375,13 +392,23 @@ document.querySelectorAll('.js-voucher-delete').forEach(function (btn) {
         <form method="post" action="<?= APP_URL ?>/accounting/voucher-delete.php" enctype="multipart/form-data" class="modal-content" id="bulkDeleteForm">
             <?= csrf_field() ?>
             <input type="hidden" name="bulk" value="1">
+            <input type="hidden" name="select_all_filtered" value="" id="vdSelectAllFilteredInput">
+            <input type="hidden" name="f_search" value="<?= h($search) ?>">
+            <input type="hidden" name="f_type" value="<?= h($f_type) ?>">
+            <input type="hidden" name="f_status" value="<?= h($f_status) ?>">
+            <input type="hidden" name="f_created_by" value="<?= (int)$f_created_by ?>">
+            <input type="hidden" name="f_student_sid" value="<?= h($f_student_sid) ?>">
+            <input type="hidden" name="f_batch_id" value="<?= (int)$f_batch ?>">
+            <input type="hidden" name="f_payment_method" value="<?= h($f_method) ?>">
+            <input type="hidden" name="f_date_from" value="<?= h($f_from) ?>">
+            <input type="hidden" name="f_date_to" value="<?= h($f_to) ?>">
             <div class="modal-header">
                 <h5 class="modal-title"><i class="fas fa-trash-alt me-2 text-danger"></i>Delete Selected Vouchers</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 <div class="alert alert-danger small">
-                    You are about to delete <strong><span class="js-bulk-count">0</span></strong> selected voucher(s) with one shared note.
+                    You are about to delete <strong><span class="js-bulk-count">0</span></strong> selected voucher(s)<span id="vdBulkAllNote" class="d-none"> — <strong>every page</strong> matching the current filter, not just this page —</span> with one shared note.
                     This clears each entry and its calculations from every report. This is logged permanently and cannot be undone.
                 </div>
                 <div class="mb-3">
@@ -410,23 +437,63 @@ document.querySelectorAll('.js-voucher-delete').forEach(function (btn) {
     var checks    = Array.prototype.slice.call(document.querySelectorAll('.js-voucher-check'));
     var bulkBtn   = document.querySelector('.js-bulk-delete-open');
     var countEls  = Array.prototype.slice.call(document.querySelectorAll('.js-bulk-count'));
+    var bar       = document.getElementById('vdAllFilteredBar');
+    var pickAll   = document.getElementById('vdSelectAllFiltered');
+    var clearAll  = document.getElementById('vdClearAllFiltered');
+    var stateOff  = document.getElementById('vdAllFilteredOff');
+    var stateOn   = document.getElementById('vdAllFilteredOn');
+    var safInput  = document.getElementById('vdSelectAllFilteredInput');
+    var allNote   = document.getElementById('vdBulkAllNote');
+    var totalRows = bar ? parseInt(bar.dataset.total || '0', 10) : 0;
+    var allFiltered = false;
 
     function selectedCount() {
         return checks.filter(function (c) { return c.checked; }).length;
     }
     function refresh() {
-        var n = selectedCount();
+        var pageCount = selectedCount();
+        var n = allFiltered ? totalRows : pageCount;
         countEls.forEach(function (el) { el.textContent = n; });
         if (bulkBtn) { bulkBtn.disabled = n === 0; }
-        if (selectAll) { selectAll.checked = n > 0 && n === checks.length; }
+        if (selectAll) { selectAll.checked = pageCount > 0 && pageCount === checks.length; }
+        if (safInput) { safInput.value = allFiltered ? '1' : ''; }
+        if (allNote)  { allNote.classList.toggle('d-none', !allFiltered); }
+        if (bar) {
+            var allPage = checks.length > 0 && pageCount === checks.length;
+            bar.classList.toggle('d-none', !(allPage || allFiltered));
+            if (stateOff) { stateOff.classList.toggle('d-none', allFiltered); }
+            if (stateOn)  { stateOn.classList.toggle('d-none', !allFiltered); }
+        }
     }
     if (selectAll) {
         selectAll.addEventListener('change', function () {
             checks.forEach(function (c) { c.checked = selectAll.checked; });
+            if (!selectAll.checked) { allFiltered = false; }
             refresh();
         });
     }
-    checks.forEach(function (c) { c.addEventListener('change', refresh); });
+    checks.forEach(function (c) {
+        c.addEventListener('change', function () {
+            allFiltered = false;
+            refresh();
+        });
+    });
+    if (pickAll) {
+        pickAll.addEventListener('click', function (e) {
+            e.preventDefault();
+            allFiltered = true;
+            refresh();
+        });
+    }
+    if (clearAll) {
+        clearAll.addEventListener('click', function (e) {
+            e.preventDefault();
+            allFiltered = false;
+            checks.forEach(function (c) { c.checked = false; });
+            if (selectAll) { selectAll.checked = false; }
+            refresh();
+        });
+    }
     refresh();
 })();
 </script>

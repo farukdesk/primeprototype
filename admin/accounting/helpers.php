@@ -635,6 +635,96 @@ function acc_get_voucher_items(int $voucher_id): array
     return $stmt->fetchAll();
 }
 
+// ── Voucher list filter builder ───────────────────────────────────────────────
+
+/**
+ * Build the WHERE clause + bound params for the voucher list from a filter set.
+ * Shared by vouchers.php (listing/pagination) and voucher-delete.php (bulk
+ * deletion of "all vouchers matching the current filter" across every page).
+ *
+ * Recognised keys: search, type, status, created_by, student_sid, batch_id,
+ * payment_method, date_from, date_to.
+ *
+ * @return array{0:string,1:array} [$where_sql (starts with WHERE), $params]
+ */
+function acc_voucher_list_filter(array $f): array
+{
+    $valid_types    = ['receipt', 'payment', 'contra', 'journal'];
+    $valid_statuses = ['posted', 'reversed', 'memo'];
+    $valid_methods  = ['cash', 'bank', 'mobile_banking', 'old_erp'];
+
+    $search      = trim((string)($f['search'] ?? ''));
+    $type        = (string)($f['type'] ?? '');
+    $status      = (string)($f['status'] ?? '');
+    $created_by  = (int)($f['created_by'] ?? 0);
+    $student_sid = trim((string)($f['student_sid'] ?? ''));
+    $batch_id    = (int)($f['batch_id'] ?? 0);
+    $pay_method  = (string)($f['payment_method'] ?? '');
+    $date_from   = trim((string)($f['date_from'] ?? ''));
+    $date_to     = trim((string)($f['date_to'] ?? ''));
+
+    $where  = ['v.is_deleted = 0'];
+    $params = [];
+
+    if ($search !== '') {
+        $like    = '%' . $search . '%';
+        $where[] = '(v.voucher_number LIKE ? OR v.narration LIKE ? OR v.reference LIKE ?)';
+        array_push($params, $like, $like, $like);
+    }
+    if (in_array($type,   $valid_types,    true)) { $where[] = 'v.voucher_type = ?'; $params[] = $type; }
+    if (in_array($status, $valid_statuses, true)) { $where[] = 'v.status = ?';       $params[] = $status; }
+    if ($created_by > 0) { $where[] = 'v.created_by = ?'; $params[] = $created_by; }
+    if ($student_sid !== '') {
+        $sid_value = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $student_sid);
+        $sid_like  = '%' . $sid_value . '%';
+        $where[] = "(EXISTS (
+                        SELECT 1
+                        FROM sfp_payments sp
+                        JOIN students s ON s.id = sp.student_id
+                        WHERE sp.voucher_id = v.id
+                          AND s.student_id LIKE ? ESCAPE '\\\\'
+                    ) OR EXISTS (
+                        SELECT 1
+                        FROM adm_admission_fee_payments ap
+                        JOIN admissions_applications a ON a.id = ap.application_id
+                        WHERE ap.voucher_id = v.id
+                          AND a.assigned_student_id LIKE ? ESCAPE '\\\\'
+                    ))";
+        array_push($params, $sid_like, $sid_like);
+    }
+    if ($batch_id > 0) {
+        $where[] = '(EXISTS (
+                        SELECT 1
+                        FROM sfp_payments sp
+                        JOIN students s ON s.id = sp.student_id
+                        WHERE sp.voucher_id = v.id
+                          AND s.batch_id = ?
+                    ) OR EXISTS (
+                        SELECT 1
+                        FROM adm_admission_fee_payments ap
+                        JOIN admissions_applications a ON a.id = ap.application_id
+                        JOIN students sb ON sb.student_id = a.assigned_student_id
+                        WHERE ap.voucher_id = v.id
+                          AND sb.batch_id = ?
+                    ))';
+        array_push($params, $batch_id, $batch_id);
+    }
+    if (in_array($pay_method, $valid_methods, true)) {
+        $where[] = '(EXISTS (
+                        SELECT 1 FROM sfp_payments spm
+                        WHERE spm.voucher_id = v.id AND spm.payment_method = ?
+                    ) OR EXISTS (
+                        SELECT 1 FROM adm_admission_fee_payments apm
+                        WHERE apm.voucher_id = v.id AND apm.payment_method = ?
+                    ))';
+        array_push($params, $pay_method, $pay_method);
+    }
+    if ($date_from !== '') { $where[] = 'v.voucher_date >= ?'; $params[] = $date_from; }
+    if ($date_to   !== '') { $where[] = 'v.voucher_date <= ?'; $params[] = $date_to;   }
+
+    return ['WHERE ' . implode(' AND ', $where), $params];
+}
+
 // ── Voucher type label/badge ──────────────────────────────────────────────────
 
 function acc_voucher_type_badge(string $type): string
