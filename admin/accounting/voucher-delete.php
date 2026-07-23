@@ -16,7 +16,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['bulk'])) {
         redirect(APP_URL . '/accounting/vouchers.php');
     }
 
-    $ids    = array_map('intval', (array)($_POST['ids'] ?? []));
+    // "Select all filtered" mode: resolve the voucher ids server-side from the
+    // same filters used on the vouchers list, so the selection covers every
+    // page of results — not only the checkboxes rendered on the current page.
+    if (!empty($_POST['select_all_filtered'])) {
+        [$flt_where, $flt_params] = acc_voucher_list_filter([
+            'search'         => trim((string)($_POST['f_search'] ?? '')),
+            'type'           => (string)($_POST['f_type'] ?? ''),
+            'status'         => (string)($_POST['f_status'] ?? ''),
+            'created_by'     => (int)($_POST['f_created_by'] ?? 0),
+            'student_sid'    => trim((string)($_POST['f_student_sid'] ?? '')),
+            'batch_id'       => (int)($_POST['f_batch_id'] ?? 0),
+            'payment_method' => (string)($_POST['f_payment_method'] ?? ''),
+            'date_from'      => (string)($_POST['f_date_from'] ?? ''),
+            'date_to'        => (string)($_POST['f_date_to'] ?? ''),
+        ]);
+        $stmt = db()->prepare("SELECT v.id FROM acc_vouchers v $flt_where");
+        $stmt->execute($flt_params);
+        $ids = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+    } else {
+        $ids = array_map('intval', (array)($_POST['ids'] ?? []));
+    }
     $ids    = array_values(array_filter($ids, static fn(int $id): bool => $id > 0));
     $reason = trim($_POST['reason'] ?? '');
     $errors = [];
