@@ -594,6 +594,14 @@ function oebm_validate_rows(array $rows): array
         if ($pre_sid === '' || oebm_is_ignored_fee_type($pre_fee) || oebm_normalize_fee_type($pre_fee) !== null) {
             continue;
         }
+        // Zero-amount placeholder rows are ignored by the validator, so they
+        // must not anchor the earliest-month alignment either — otherwise an
+        // unpaid "Jan 0" line would shift the student's real payments off
+        // their correct installments.
+        $pre_amt = oebm_parse_amount((string)($pre_row['amount'] ?? ''));
+        if ($pre_amt !== null && abs($pre_amt) < 0.001) {
+            continue;
+        }
         $pre_month = oebm_parse_month_year($pre_fee);
         if ($pre_month === null) {
             continue;
@@ -849,7 +857,27 @@ function oebm_validate_rows(array $rows): array
                     //     start month — February pays January's slot, March pays
                     //     February's, and so on.
                     $shift_offset[$sid] = 0;
-                    $first_slot = $slot_state[$sid][0] ?? null;
+                    // Anchor the alignment on the first installment that is still
+                    // UNPAID in the current ERP — not blindly on the schedule's
+                    // first installment. Payments already collected in THIS ERP
+                    // (cash / bank / mobile banking, or an earlier merge) are
+                    // authoritative and must be kept: when e.g. January and
+                    // February are already settled here, an old-ERP series that
+                    // starts in March is already on its correct months and must
+                    // NOT be dragged backward onto the slots this ERP covered.
+                    $first_slot = null;
+                    foreach ($slot_state[$sid] as $sl) {
+                        if ((float)$sl['out'] > 0.001) {
+                            $first_slot = $sl;
+                            break;
+                        }
+                    }
+                    if ($first_slot === null) {
+                        // Every installment is already settled — fall back to the
+                        // schedule start so rows are validated (and skipped as
+                        // duplicates) against sensible slots.
+                        $first_slot = $slot_state[$sid][0] ?? null;
+                    }
                     if ($first_slot && isset($earliest_month_idx[$sid])) {
                         $first_idx = oebm_month_index((int)$first_slot['cal_year'], (int)$first_slot['cal_month']);
                         $shift_offset[$sid] = $first_idx - $earliest_month_idx[$sid];
@@ -1704,7 +1732,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <li>Prepare a CSV with the columns <code>Student ID</code>, <code>Fee Type</code>, <code>Date</code>, <code>Amount Paid</code>, <code>Receipt Number</code>. Dates use the <strong>DD/MM/YYYY</strong> format (e.g. <code>15/01/2023</code>). If a cell carries <strong>two dates</strong> (e.g. <code>17/06/2026, 06/04/2026</code>) the first valid date is used.</li>
                 <li><code>Fee Type</code> may be <strong>Admission Fee</strong>, <strong>Form Fee</strong>, <strong>ID Card Fee</strong> or <strong>Registration Fee</strong>, a <strong>month name</strong> (<code>Jan</code>, <code>February</code>, …) for a monthly tuition installment (add a year to target a specific one, e.g. <code>Jan-26</code> = January 2026), or an <strong>additional fee</strong> — <strong>Re-Take</strong>, <strong>Improvement</strong>, <strong>Special Exam (Mid Term / Final)</strong>, <strong>Remedial / Miscellaneous</strong> or <strong>Other</strong> (these are recorded at the amount given, with no schedule check).</li>
                 <li><strong>Monthly payments don't need to be in order.</strong> Each month is matched to the installment with the same calendar month in the student's own schedule, so out-of-order months from the old ERP are placed on the correct slot automatically.</li>
-                <li><strong>Misaligned payment series are shifted automatically — in both directions.</strong> If a student's old-ERP payments begin before their schedule's payment start month (e.g. December while the schedule starts in January), the whole monthly series is shifted <strong>forward</strong>; if they begin after it (e.g. the CSV starts in February with no trace of January), the whole series is shifted <strong>backward</strong> so payments fill the schedule serially from the start month, keeping their original order. Rows merged onto wrong slots by an earlier version can be repaired with the <a class="alert-link" href="<?= APP_URL ?>/accounting/old-erp-remap.php">Old ERP remap tool</a>.</li>
+                <li><strong>Misaligned payment series are shifted automatically — in both directions.</strong> If a student's old-ERP payments begin before their schedule's payment start month (e.g. December while the schedule starts in January), the whole monthly series is shifted <strong>forward</strong>; if they begin after it (e.g. the CSV starts in February with no trace of January), the whole series is shifted <strong>backward</strong> so payments fill the schedule serially from the start month, keeping their original order. <strong>Months already settled in this ERP are always respected:</strong> the series aligns to the first installment still unpaid here, so payments collected in this ERP (cash / bank / mobile banking) are kept and never overlapped. Rows merged onto wrong slots by an earlier version can be repaired with the <a class="alert-link" href="<?= APP_URL ?>/accounting/old-erp-remap.php">Old ERP remap tool</a>.</li>
                 <li><strong>Old ERP payment audit on every upload.</strong> After the preview, every payment already stored with the <em>Old ERP</em> method is compared against the CSV; anything extra (receipt missing from the CSV, or more collected than the CSV shows) is flagged so a Super Administrator can delete it. Payments collected in this ERP (cash / bank / mobile banking) are trusted and never flagged.</li>
                 <li>Upload it to preview. Every row is validated and colour-coded before anything is saved.</li>
                 <li><strong>Duplicate receipt numbers are allowed</strong> — one historical receipt often covers several fee heads, so the same number may repeat across rows.</li>
