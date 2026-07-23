@@ -570,7 +570,7 @@ function oebm_validate_rows(array $rows): array
     // Per-student state for monthly tuition allocation across the batch.
     $slot_state        = [];   // SID => mutable month-slot list (oebm_build_month_slots)
     $tuition_remaining = [];   // SID => outstanding tuition pool, decremented as rows consume it
-    $shift_offset      = [];   // SID => uniform forward shift (months) for pre-start schedules
+    $shift_offset      = [];   // SID => uniform shift (months): + forward (pre-start) / - backward (post-start)
 
     // Per-student state for one-time heads and registration across the batch,
     // so a re-run or an in-file duplicate row (e.g. admission fee written twice)
@@ -580,12 +580,13 @@ function oebm_validate_rows(array $rows): array
     $reg_state  = [];   // SID => cumulative registration timeline + semester slots
 
     // ── Pre-scan: earliest monthly payment per student ──────────────────────
-    // Some students' old-ERP payments begin BEFORE their current schedule's
-    // payment start month (e.g. payments start in December while the package
-    // schedule starts in January). Find each student's earliest CSV month
-    // (explicit year suffix, or the year inferred from the payment date) so
-    // those students' monthly rows can be shifted forward uniformly onto the
-    // schedule from the start month onward, keeping their original order.
+    // A student's old-ERP payments may begin BEFORE their schedule's payment
+    // start month (e.g. payments start in December while the schedule starts
+    // in January) or AFTER it (e.g. the CSV starts in February with no trace
+    // of January). Find each student's earliest CSV month (explicit year
+    // suffix, or the year inferred from the payment date) so the whole monthly
+    // series can be shifted uniformly — forward or backward — onto the
+    // schedule from the start month onward, keeping its original order.
     $earliest_month_idx = [];  // SID => smallest calendar-month index among monthly rows
     foreach ($rows as $pre_row) {
         $pre_sid = trim((string)($pre_row['student_id'] ?? ''));
@@ -836,47 +837,54 @@ function oebm_validate_rows(array $rows): array
                     $slot_state[$sid]        = oebm_build_month_slots($summary);
                     $tuition_remaining[$sid] = (float)($summary['totals']['tuition']['out'] ?? 0);
 
-                    // Pre-start shift: when this student's earliest CSV month falls
-                    // BEFORE the first installment of their schedule (e.g. payments
-                    // begin in December but the schedule starts in January), every
-                    // monthly row is shifted forward by the same number of months so
-                    // the payments fill the schedule from the start month onward,
-                    // keeping their original order.
+                    // Schedule-alignment shift: the student's EARLIEST CSV month is
+                    // aligned onto the FIRST installment of their schedule, and every
+                    // monthly row is shifted by that same number of months, keeping
+                    // the original order.
+                    //   • Payments starting BEFORE the schedule (e.g. December while
+                    //     the schedule starts in January) shift FORWARD (+offset).
+                    //   • Payments starting AFTER the schedule (e.g. the CSV starts
+                    //     in February with no trace of January) shift BACKWARD
+                    //     (-offset) so they fill the schedule serially from the
+                    //     start month — February pays January's slot, March pays
+                    //     February's, and so on.
                     $shift_offset[$sid] = 0;
                     $first_slot = $slot_state[$sid][0] ?? null;
                     if ($first_slot && isset($earliest_month_idx[$sid])) {
                         $first_idx = oebm_month_index((int)$first_slot['cal_year'], (int)$first_slot['cal_month']);
-                        if ($earliest_month_idx[$sid] < $first_idx) {
-                            $shift_offset[$sid] = $first_idx - $earliest_month_idx[$sid];
-                        }
+                        $shift_offset[$sid] = $first_idx - $earliest_month_idx[$sid];
                     }
                 }
                 $slots =& $slot_state[$sid];
 
                 $month_label = oebm_format_month_label($month_num, $month_year);
 
-                // Apply the student's uniform pre-start shift (0 for most students).
+                // Apply the student's uniform schedule-alignment shift (0 for most
+                // students; positive = forward for pre-start series, negative =
+                // backward for a series that starts after the schedule).
                 $match_month = $month_num;
                 $match_year  = $month_year;
                 $offset      = (int)($shift_offset[$sid] ?? 0);
-                if ($offset > 0) {
+                if ($offset !== 0) {
+                    $direction = $offset > 0 ? 'before' : 'after';
+                    $dir_word  = $offset > 0 ? 'forward' : 'backward';
                     $row_year = $month_year ?? oebm_infer_month_year($month_num, $resolved['date']);
                     if ($row_year !== null) {
                         $shifted_idx = oebm_month_index($row_year, $month_num) + $offset;
-                        $match_month = (($shifted_idx - 1) % 12) + 1;
+                        $match_month = ((($shifted_idx - 1) % 12) + 12) % 12 + 1;
                         $match_year  = (int)(($shifted_idx - $match_month) / 12);
-                        $notes[] = 'Old-ERP payments start before this schedule: ' . oebm_format_month_label($month_num, $row_year)
-                            . ' shifted forward ' . $offset . ' month(s) to '
+                        $notes[] = 'Old-ERP payments start ' . $direction . ' this schedule: ' . oebm_format_month_label($month_num, $row_year)
+                            . ' shifted ' . $dir_word . ' ' . abs($offset) . ' month(s) to '
                             . oebm_format_month_label($match_month, $match_year) . '.';
                     } else {
-                        // The year could not be resolved, but the pre-start shift must
-                        // push EVERY month of the student's series forward uniformly —
-                        // shift the calendar month and match it year-insensitively so
-                        // no month is ever left behind on a pre-start slot.
-                        $match_month = (($month_num - 1 + $offset) % 12) + 1;
+                        // The year could not be resolved, but the alignment shift must
+                        // move EVERY month of the student's series uniformly — shift
+                        // the calendar month and match it year-insensitively so no
+                        // month is ever left behind on a misaligned slot.
+                        $match_month = ((($month_num - 1 + $offset) % 12) + 12) % 12 + 1;
                         $match_year  = null;
-                        $notes[] = 'Old-ERP payments start before this schedule: ' . oebm_month_name($month_num)
-                            . ' shifted forward ' . $offset . ' month(s) to ' . oebm_month_name($match_month) . '.';
+                        $notes[] = 'Old-ERP payments start ' . $direction . ' this schedule: ' . oebm_month_name($month_num)
+                            . ' shifted ' . $dir_word . ' ' . abs($offset) . ' month(s) to ' . oebm_month_name($match_month) . '.';
                     }
                 }
 
@@ -1310,6 +1318,151 @@ function oebm_failed_report_html(array $failed_rows, string $generated_label): s
         . '</body></html>';
 }
 
+/**
+ * Audit existing Old ERP payments against the uploaded CSV.
+ *
+ * The CSV is the authoritative old-ERP statement, so every payment stored with
+ * payment method `old_erp` must be supported by it. Payments made through any
+ * OTHER method (cash / bank / mobile banking) were collected in THIS ERP and
+ * are always correct — they are never audited or flagged.
+ *
+ * A stored old-ERP payment is flagged when, for its student:
+ *   • none of its receipt number(s) appear anywhere in the CSV, or
+ *   • the ERP holds more against a receipt than the CSV supports (beyond the
+ *     CSV-rounding tolerance).
+ *
+ * @param array<int,array<string,mixed>> $results Validated CSV rows.
+ * @return array{flagged:array<int,array<string,mixed>>, students_checked:int, erp_total:float, csv_total:float}
+ */
+function oebm_audit_old_erp(array $results): array
+{
+    // Per-student CSV receipts and totals. The ORIGINAL CSV amounts are used
+    // (not the merged top-up deltas) so already-merged rows still count as
+    // fully supported.
+    $students = [];
+    foreach ($results as $r) {
+        if ($r['status'] === 'ignored') {
+            continue;
+        }
+        $res = $r['resolved'];
+        $pk  = $res['student_pk'] ?? null;
+        if (!$pk) {
+            continue;
+        }
+        $raw_amt = oebm_parse_amount((string)($r['input']['amount'] ?? ''));
+        $amt = $raw_amt !== null ? max(0.0, (float)$raw_amt) : max(0.0, (float)($res['amount'] ?? 0));
+        if (!isset($students[$pk])) {
+            $students[$pk] = [
+                'sid'            => (string)($r['input']['student_id'] ?? ''),
+                'name'           => (string)($res['student_name'] ?? ''),
+                'csv_total'      => 0.0,
+                'receipts'       => [],
+                'receipt_totals' => [],
+            ];
+        }
+        $students[$pk]['csv_total'] += $amt;
+        foreach (oebm_split_receipts((string)$res['receipt']) as $rc) {
+            $students[$pk]['receipts'][$rc] = true;
+            $students[$pk]['receipt_totals'][$rc] = ($students[$pk]['receipt_totals'][$rc] ?? 0.0) + $amt;
+        }
+    }
+
+    if (!$students) {
+        return ['flagged' => [], 'students_checked' => 0, 'erp_total' => 0.0, 'csv_total' => 0.0];
+    }
+
+    $flagged   = [];
+    $erp_total = 0.0;
+    $csv_total = 0.0;
+
+    $stmt = db()->prepare(
+        "SELECT sp.id, sp.voucher_id, sp.fee_type, sp.semester_number, sp.month_number,
+                sp.amount, sp.transaction_number,
+                v.voucher_number, v.voucher_date, v.status AS voucher_status
+         FROM sfp_payments sp
+         JOIN acc_vouchers v ON v.id = sp.voucher_id
+         WHERE sp.student_id = ?
+           AND sp.payment_method = 'old_erp'
+           AND v.is_deleted = 0
+           AND v.status IN ('posted','memo')
+         ORDER BY sp.id ASC"
+    );
+
+    foreach ($students as $pk => $info) {
+        $csv_total += (float)$info['csv_total'];
+        $stmt->execute([(int)$pk]);
+        $pays = $stmt->fetchAll();
+
+        // ERP totals per receipt for the over-collection check.
+        $erp_receipt_totals = [];
+        foreach ($pays as $p) {
+            $erp_total += (float)$p['amount'];
+            foreach (oebm_split_receipts((string)($p['transaction_number'] ?? '')) as $rc) {
+                $erp_receipt_totals[$rc] = ($erp_receipt_totals[$rc] ?? 0.0) + (float)$p['amount'];
+            }
+        }
+
+        foreach ($pays as $p) {
+            $p_receipts = oebm_split_receipts((string)($p['transaction_number'] ?? ''));
+            $reason = null;
+
+            $matched = false;
+            foreach ($p_receipts as $rc) {
+                if (isset($info['receipts'][$rc])) {
+                    $matched = true;
+                    break;
+                }
+            }
+            if (!$matched) {
+                $reason = $p_receipts
+                    ? 'Receipt ' . implode(', ', $p_receipts) . ' does not appear anywhere in the uploaded CSV for this student.'
+                    : 'Payment has no receipt number and cannot be matched to any CSV row.';
+            } else {
+                // Receipt exists in the CSV — flag only when the ERP holds more
+                // against it than the CSV supports (beyond the tolerance).
+                foreach ($p_receipts as $rc) {
+                    if (!isset($info['receipt_totals'][$rc])) {
+                        continue;
+                    }
+                    $erp_rc = (float)($erp_receipt_totals[$rc] ?? 0);
+                    $csv_rc = (float)$info['receipt_totals'][$rc];
+                    if ($erp_rc > $csv_rc + OEBM_AMOUNT_TOLERANCE) {
+                        $reason = 'ERP holds ' . acc_fmt($erp_rc) . ' against receipt ' . $rc
+                            . ' but the CSV supports only ' . acc_fmt($csv_rc)
+                            . ' — over-collected by ' . acc_fmt($erp_rc - $csv_rc) . '.';
+                        break;
+                    }
+                }
+            }
+
+            if ($reason !== null) {
+                $flagged[] = [
+                    'student_sid'    => $info['sid'],
+                    'student_name'   => $info['name'],
+                    'payment_id'     => (int)$p['id'],
+                    'voucher_id'     => (int)$p['voucher_id'],
+                    'voucher_number' => (string)$p['voucher_number'],
+                    'voucher_status' => (string)$p['voucher_status'],
+                    'voucher_date'   => (string)$p['voucher_date'],
+                    'fee_type_label' => acc_fee_type_label((string)$p['fee_type']),
+                    'semester'       => $p['semester_number'] !== null ? (int)$p['semester_number'] : null,
+                    'month'          => $p['month_number'] !== null ? (int)$p['month_number'] : null,
+                    'amount'         => (float)$p['amount'],
+                    'receipt'        => (string)($p['transaction_number'] ?? ''),
+                    'reason'         => $reason,
+                ];
+            }
+        }
+    }
+
+    return [
+        'flagged'          => $flagged,
+        'students_checked' => count($students),
+        'erp_total'        => $erp_total,
+        'csv_total'        => $csv_total,
+    ];
+}
+
 $errors   = [];
 $results  = null;
 $counts   = null;
@@ -1342,7 +1495,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($csv_text === '') {
             $errors[] = 'The merge session expired. Please upload the CSV again.';
         }
-    } elseif ($action === 'report_pdf') {
+    } elseif ($action === 'report_pdf' || $action === 'audit_cleanup') {
         $csv_text = base64_decode((string)($_POST['csv_data'] ?? ''), true) ?: '';
         if ($csv_text === '') {
             $errors[] = 'The merge session expired. Please upload the CSV again.';
@@ -1358,6 +1511,63 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (!$parsed['rows']) {
             $errors[] = 'No data rows were found in the CSV (only a header was present).';
         } else {
+            if ($action === 'audit_cleanup') {
+                // ── Delete extra old-ERP payments picked in the audit ──────────
+                // Only old-ERP MEMO vouchers where every linked payment row uses
+                // the old_erp method can be removed here. Payments collected in
+                // THIS ERP (cash / bank / mobile banking) are never touchable
+                // through this tool. Deletion happens BEFORE re-validation so
+                // the preview and audit below reflect the cleaned state.
+                $audit_ids = array_values(array_unique(array_filter(
+                    array_map('intval', (array)($_POST['audit_voucher_ids'] ?? [])),
+                    static fn(int $v): bool => $v > 0
+                )));
+
+                if (!acc_can_delete_voucher_directly()) {
+                    $errors[] = 'Only a Super Administrator can delete extra old-ERP payments.';
+                } elseif (!$audit_ids) {
+                    $errors[] = 'No audited payments were selected for deletion.';
+                } else {
+                    $chk = db()->prepare(
+                        "SELECT v.status,
+                                COUNT(sp.id) AS total_rows,
+                                SUM(sp.payment_method = 'old_erp') AS old_erp_rows
+                         FROM acc_vouchers v
+                         LEFT JOIN sfp_payments sp ON sp.voucher_id = v.id
+                         WHERE v.id = ? AND v.is_deleted = 0
+                         GROUP BY v.id, v.status"
+                    );
+                    $audit_deleted  = 0;
+                    $cleanup_errors = [];
+                    foreach ($audit_ids as $vid) {
+                        try {
+                            $chk->execute([$vid]);
+                            $vrow = $chk->fetch();
+                            if (!$vrow) {
+                                throw new RuntimeException('Voucher not found or already deleted.');
+                            }
+                            if ((string)$vrow['status'] !== 'memo'
+                                || (int)$vrow['total_rows'] < 1
+                                || (int)$vrow['old_erp_rows'] !== (int)$vrow['total_rows']) {
+                                throw new RuntimeException('Not an old-ERP memo payment — refusing to delete.');
+                            }
+                            acc_direct_delete_voucher(
+                                $vid,
+                                'Old ERP bulk-merge audit: payment not supported by the latest old-ERP CSV.'
+                            );
+                            $audit_deleted++;
+                        } catch (Throwable $e) {
+                            $cleanup_errors[] = 'Voucher #' . $vid . ': ' . $e->getMessage();
+                        }
+                    }
+                    $msg = $audit_deleted . ' extra old-ERP payment(s) deleted after audit.';
+                    if ($cleanup_errors) {
+                        $msg .= ' ' . count($cleanup_errors) . ' could not be deleted: ' . implode(' ', $cleanup_errors);
+                    }
+                    flash_set($cleanup_errors ? 'warning' : 'success', $msg);
+                }
+            }
+
             $validated = oebm_validate_rows($parsed['rows']);
             $results = $validated['results'];
             $counts  = $validated['counts'];
@@ -1494,7 +1704,8 @@ require_once __DIR__ . '/../includes/header.php';
                 <li>Prepare a CSV with the columns <code>Student ID</code>, <code>Fee Type</code>, <code>Date</code>, <code>Amount Paid</code>, <code>Receipt Number</code>. Dates use the <strong>DD/MM/YYYY</strong> format (e.g. <code>15/01/2023</code>). If a cell carries <strong>two dates</strong> (e.g. <code>17/06/2026, 06/04/2026</code>) the first valid date is used.</li>
                 <li><code>Fee Type</code> may be <strong>Admission Fee</strong>, <strong>Form Fee</strong>, <strong>ID Card Fee</strong> or <strong>Registration Fee</strong>, a <strong>month name</strong> (<code>Jan</code>, <code>February</code>, …) for a monthly tuition installment (add a year to target a specific one, e.g. <code>Jan-26</code> = January 2026), or an <strong>additional fee</strong> — <strong>Re-Take</strong>, <strong>Improvement</strong>, <strong>Special Exam (Mid Term / Final)</strong>, <strong>Remedial / Miscellaneous</strong> or <strong>Other</strong> (these are recorded at the amount given, with no schedule check).</li>
                 <li><strong>Monthly payments don't need to be in order.</strong> Each month is matched to the installment with the same calendar month in the student's own schedule, so out-of-order months from the old ERP are placed on the correct slot automatically.</li>
-                <li><strong>Payments that start before the schedule are shifted automatically.</strong> If a student's old-ERP payments begin before their schedule's payment start month (e.g. December while the schedule starts in January), the whole monthly series is shifted forward onto the schedule from the start month onward, keeping its original order. Rows merged onto wrong slots by an earlier version can be repaired with the <a class="alert-link" href="<?= APP_URL ?>/accounting/old-erp-remap.php">Old ERP remap tool</a>.</li>
+                <li><strong>Misaligned payment series are shifted automatically — in both directions.</strong> If a student's old-ERP payments begin before their schedule's payment start month (e.g. December while the schedule starts in January), the whole monthly series is shifted <strong>forward</strong>; if they begin after it (e.g. the CSV starts in February with no trace of January), the whole series is shifted <strong>backward</strong> so payments fill the schedule serially from the start month, keeping their original order. Rows merged onto wrong slots by an earlier version can be repaired with the <a class="alert-link" href="<?= APP_URL ?>/accounting/old-erp-remap.php">Old ERP remap tool</a>.</li>
+                <li><strong>Old ERP payment audit on every upload.</strong> After the preview, every payment already stored with the <em>Old ERP</em> method is compared against the CSV; anything extra (receipt missing from the CSV, or more collected than the CSV shows) is flagged so a Super Administrator can delete it. Payments collected in this ERP (cash / bank / mobile banking) are trusted and never flagged.</li>
                 <li>Upload it to preview. Every row is validated and colour-coded before anything is saved.</li>
                 <li><strong>Duplicate receipt numbers are allowed</strong> — one historical receipt often covers several fee heads, so the same number may repeat across rows.</li>
                 <li><strong>A single row may carry several receipt numbers</strong> — list them comma separated in the Receipt Number cell (e.g. <code>OLD-RCPT-1002, OLD-RCPT-1003</code>).</li>
@@ -1687,6 +1898,101 @@ require_once __DIR__ . '/../includes/header.php';
                 </tbody>
             </table>
         </div>
+        <?php endif; ?>
+    </div>
+</div>
+
+<?php
+    // ── Old ERP payment audit ──────────────────────────────────────────────
+    // Compare the old-ERP payments already stored in this ERP against the
+    // uploaded CSV (the authoritative statement). Only payments recorded with
+    // the old_erp method are audited — anything collected in this ERP (cash /
+    // bank / mobile banking) is trusted and never flagged.
+    $audit            = oebm_audit_old_erp($results);
+    $audit_flagged    = $audit['flagged'];
+    $can_audit_delete = acc_can_delete_voucher_directly();
+?>
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span class="fw-semibold">
+            <i class="fas fa-scale-balanced me-2 text-warning"></i>Old ERP Payment Audit
+            <span class="badge <?= $audit_flagged ? 'bg-warning text-dark' : 'bg-success' ?> ms-1"><?= count($audit_flagged) ?> flagged</span>
+        </span>
+        <span class="small text-muted">
+            <?= (int)$audit['students_checked'] ?> student(s) checked &nbsp;|&nbsp;
+            Old-ERP payments in ERP: <strong><?= h(acc_fmt((float)$audit['erp_total'])) ?></strong> &nbsp;|&nbsp;
+            CSV total: <strong><?= h(acc_fmt((float)$audit['csv_total'])) ?></strong>
+        </span>
+    </div>
+    <div class="card-body p-0">
+        <?php if (!$audit_flagged): ?>
+        <div class="alert alert-success m-3 mb-3">
+            <i class="fas fa-check-circle me-1"></i> Every old-ERP payment stored for these students is supported by the uploaded CSV — nothing extra found.
+        </div>
+        <?php else: ?>
+        <div class="px-4 pt-3 small text-muted">
+            The payments below are stored with the <strong>Old ERP</strong> method but are <strong>not supported by the uploaded CSV</strong>
+            (receipt missing from the CSV, or more collected than the CSV shows). Payments collected in this ERP
+            (cash / bank / mobile banking) are trusted and never listed here. Review each line carefully — this is financial data —
+            then delete the extras: deletion soft-removes the memo voucher (a permanent snapshot and change-log entry are kept)
+            and the student's dues update immediately.
+        </div>
+        <form method="post" onsubmit="return confirm('Delete the selected extra old-ERP payment(s)? The memo vouchers will be soft-removed (audit trail kept) and dues will update.');">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="audit_cleanup">
+            <input type="hidden" name="csv_data" value="<?= h($csv_b64) ?>">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width:36px;" class="text-center"><?= $can_audit_delete ? '<i class="fas fa-check-square"></i>' : '' ?></th>
+                            <th>Student ID</th>
+                            <th>Student</th>
+                            <th>Fee Type</th>
+                            <th>Sem / Month</th>
+                            <th>Date</th>
+                            <th>Receipt</th>
+                            <th>Voucher</th>
+                            <th class="text-end">Amount</th>
+                            <th>Why flagged</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($audit_flagged as $fp): ?>
+                        <tr class="table-warning">
+                            <td class="text-center">
+                                <?php if ($can_audit_delete): ?>
+                                <input type="checkbox" class="form-check-input" name="audit_voucher_ids[]" value="<?= (int)$fp['voucher_id'] ?>">
+                                <?php endif; ?>
+                            </td>
+                            <td class="fw-semibold"><?= h($fp['student_sid']) ?></td>
+                            <td><?= h($fp['student_name'] !== '' ? $fp['student_name'] : '—') ?></td>
+                            <td><?= h($fp['fee_type_label']) ?></td>
+                            <td class="small"><?= $fp['semester'] !== null ? 'S' . (int)$fp['semester'] : '—' ?><?= $fp['month'] !== null ? ' / M' . (int)$fp['month'] : '' ?></td>
+                            <td class="small"><?= h($fp['voucher_date']) ?></td>
+                            <td class="small"><?= h($fp['receipt'] !== '' ? $fp['receipt'] : '—') ?></td>
+                            <td class="small"><a href="<?= APP_URL ?>/accounting/voucher-view.php?id=<?= (int)$fp['voucher_id'] ?>" target="_blank" rel="noopener noreferrer"><?= h($fp['voucher_number']) ?></a></td>
+                            <td class="text-end fw-semibold"><?= h(number_format((float)$fp['amount'], 2)) ?></td>
+                            <td class="small"><?= h($fp['reason']) ?></td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+            <div class="card-footer py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <span class="small text-muted">
+                    Deleting removes the <em>memo</em> voucher only (old-ERP payments are never counted in this ERP's books);
+                    every deletion is recorded in the change log with a permanent snapshot.
+                </span>
+                <?php if ($can_audit_delete): ?>
+                <button type="submit" class="btn btn-outline-danger">
+                    <i class="fas fa-trash-can me-1"></i> Delete Selected Extra Payment(s)
+                </button>
+                <?php else: ?>
+                <span class="badge bg-secondary">Only a Super Administrator can delete these</span>
+                <?php endif; ?>
+            </div>
+        </form>
         <?php endif; ?>
     </div>
 </div>
