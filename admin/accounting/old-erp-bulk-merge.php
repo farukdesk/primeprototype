@@ -1066,11 +1066,31 @@ function oebm_validate_rows(array $rows): array
                         $reg_due_total += $sem_reg_due;
                     }
                     $erp_reg_paid = (float)($summary['totals']['registration']['paid'] ?? 0);
+                    // Reconcile against OLD-ERP registration records ONLY.
+                    // Registration is due PER SEMESTER, so a semester's
+                    // registration collected in THIS ERP (cash / bank / mobile
+                    // banking) must never absorb the old-ERP registration row
+                    // for a DIFFERENT semester — that silently dropped one
+                    // registration fee from the student's total.
+                    $oe_reg_stmt = db()->prepare(
+                        "SELECT COALESCE(SUM(sp.amount), 0)
+                         FROM sfp_payments sp
+                         JOIN acc_vouchers v ON v.id = sp.voucher_id
+                         WHERE sp.student_id = ?
+                           AND sp.fee_type = 'registration'
+                           AND sp.payment_method = 'old_erp'
+                           AND v.is_deleted = 0
+                           AND v.status IN ('posted','memo')"
+                    );
+                    $oe_reg_stmt->execute([(int)$resolved['student_pk']]);
+                    $erp_reg_paid_old = (float)$oe_reg_stmt->fetchColumn();
+                    $erp_reg_paid_cur = max(0.0, $erp_reg_paid - $erp_reg_paid_old);
                     $reg_state[$sid] = [
                         'slots'     => $reg_slots,
                         'due_total' => $reg_due_total,
                         'erp_paid'  => $erp_reg_paid,
-                        'paid_eff'  => $erp_reg_paid,   // ERP + rows merged earlier in this file
+                        'cur_paid'  => $erp_reg_paid_cur, // collected in this ERP — always kept
+                        'paid_eff'  => $erp_reg_paid_old, // old-ERP records + rows merged earlier in this file
                         'csv_cum'   => 0.0,
                     ];
                 }
@@ -1089,16 +1109,25 @@ function oebm_validate_rows(array $rows): array
                         . ', which exceeds the total registration due of ' . acc_fmt((float)$rs['due_total'])
                         . ' — check for a duplicated registration row.';
                 } elseif ($span_end <= (float)$rs['paid_eff'] + OEBM_AMOUNT_TOLERANCE) {
-                    // Everything up to and including this row is already collected
-                    // (in the current ERP or earlier in this file) — up to date.
+                    // Everything up to and including this row is already merged
+                    // from the old ERP (or earlier in this file) — up to date.
+                    // Registration collected in THIS ERP is intentionally NOT
+                    // counted here: it belongs to a later semester and must never
+                    // absorb an old-ERP registration row.
                     $status = 'duplicate';
                     $resolved['existing_amount'] = $rs['erp_paid'];
-                    $notes[] = 'Registration of ' . acc_fmt((float)$rs['paid_eff'])
-                        . ' is already collected — this row\'s ' . acc_fmt($csv_amt)
+                    $notes[] = 'Old-ERP registration of ' . acc_fmt((float)$rs['paid_eff'])
+                        . ' is already recorded — this row\'s ' . acc_fmt($csv_amt)
                         . ' is already accounted for, skipped.';
                 } else {
+                    // Old-ERP registration fills the START of the cumulative
+                    // timeline; registration collected in THIS ERP (cash / bank /
+                    // mobile banking) is kept and occupies the END of it. The cap
+                    // below guarantees old + current never exceeds the total
+                    // registration due, while no old-ERP row is silently dropped.
+                    $reg_available = max(0.0, (float)$rs['due_total'] - (float)($rs['cur_paid'] ?? 0));
                     $merge_start = max($span_start, (float)$rs['paid_eff']);
-                    $merge_end   = min($span_end, (float)$rs['due_total']);
+                    $merge_end   = min($span_end, $reg_available);
                     $merge_amt   = round($merge_end - $merge_start, 2);
 
                     // Split the merged span across the semester(s) it falls on.
@@ -1117,7 +1146,8 @@ function oebm_validate_rows(array $rows): array
                     if (!$allocs || $merge_amt <= 0.001) {
                         $status = 'duplicate';
                         $resolved['existing_amount'] = $rs['erp_paid'];
-                        $notes[] = 'Registration is already fully allocated — skipped.';
+                        $notes[] = 'The remaining registration is already covered by payments collected in this ERP ('
+                            . acc_fmt((float)($rs['cur_paid'] ?? 0)) . ' — kept) — nothing left to merge for this row.';
                     } else {
                         $rs['paid_eff'] = max((float)$rs['paid_eff'], $merge_end);
                         $resolved['amount']          = $merge_amt;
@@ -1130,8 +1160,9 @@ function oebm_validate_rows(array $rows): array
                         ));
                         if ($merge_amt < $csv_amt - 0.001) {
                             $resolved['existing_amount'] = $rs['erp_paid'];
-                            $notes[] = 'Part of this registration row is already collected ('
-                                . acc_fmt((float)$rs['erp_paid']) . ' in total) — merging only the missing '
+                            $notes[] = 'Part of this registration row is already covered ('
+                                . acc_fmt((float)$rs['erp_paid']) . ' collected in total, of which '
+                                . acc_fmt((float)($rs['cur_paid'] ?? 0)) . ' in this ERP is kept) — merging only the missing '
                                 . acc_fmt($merge_amt) . ', applied to semester ' . $sem_list . '.';
                         } else {
                             $notes[] = 'Registration applied to semester ' . $sem_list . '.';
@@ -1754,7 +1785,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <li><strong>Duplicate receipt numbers are allowed</strong> — one historical receipt often covers several fee heads, so the same number may repeat across rows.</li>
                 <li><strong>A single row may carry several receipt numbers</strong> — list them comma separated in the Receipt Number cell (e.g. <code>OLD-RCPT-1002, OLD-RCPT-1003</code>).</li>
                 <li><strong>Safe to re-run.</strong> Rows already in the current ERP are skipped, and amounts differing by up to <strong>5 BDT</strong> (CSV rounding) are counted as correct. When only part of a row's amount is recorded, just the <strong>missing difference is pushed forward</strong> so totals match the CSV (the latest data). Bigger mismatches are <strong>highlighted for manual correction</strong> and never re-inserted — a fee head written twice in the file (e.g. Admission Fee) is merged once, never twice.</li>
-                <li><strong>Registration fees are placed by cumulative total.</strong> Registration is a fixed per-semester fee read from the student's own package (e.g. 1,000 BDT, or 500 BDT for masters). The total already collected decides which semester comes next (1,000 = semester 1 paid, 2,000 = semesters 1–2, …), so 2nd/3rd registration rows land on the correct semester even on a re-run, and a single row spanning several semesters is split across them.</li>
+                <li><strong>Registration fees are placed by cumulative total.</strong> Registration is a fixed per-semester fee read from the student's own package (e.g. 1,000 BDT, or 500 BDT for masters). The total already collected decides which semester comes next (1,000 = semester 1 paid, 2,000 = semesters 1–2, …), so 2nd/3rd registration rows land on the correct semester even on a re-run, and a single row spanning several semesters is split across them. Registration collected in this ERP is always kept — it occupies the end of the timeline and never absorbs an old-ERP registration row.</li>
                 <li><strong>Summary and zero-amount rows are ignored.</strong> Old-ERP export lines such as <code>Monthly Payment Old Data</code> or <code>Current Dues</code>, and any row with an amount of <code>0</code>, are skipped automatically (shown in grey). Student IDs are matched with or without leading zeros.</li>
                 <li>Confirm to merge only the valid rows. Each is stored as an <em>Old ERP</em> payment (a memo voucher), so dues update without double-counting income.</li>
             </ol>
