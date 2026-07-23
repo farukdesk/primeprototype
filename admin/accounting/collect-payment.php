@@ -2102,6 +2102,37 @@ require_once __DIR__ . '/../includes/header.php';
 
         let grandDue  = 0, grandPaid = 0, grandOut = 0;
 
+        // ── Per-row payment details ──────────────────────────────────────
+        // Map fee_type|semester|month → payments so every paid row can show its
+        // payment method directly and link straight to the voucher.
+        function escHtml(v) {
+            return String(v ?? '').replace(/[&<>"']/g, c => (
+                {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+            ));
+        }
+        const paymentsByKey = {};
+        (data.payments || []).forEach(p => {
+            const key = p.fee_type + '|' + (p.semester_number ?? '') + '|' + (p.month_number ?? '');
+            (paymentsByKey[key] = paymentsByKey[key] || []).push(p);
+        });
+        function paidNotesHtml(feeType, semNumber, monthNumber) {
+            const list = paymentsByKey[feeType + '|' + (semNumber ?? '') + '|' + (monthNumber ?? '')] || [];
+            if (!list.length) return '';
+            const MAX_NOTES = 3;
+            let html = list.slice(0, MAX_NOTES).map(p => `
+                <div class="text-muted mt-1" style="font-size:.68rem;line-height:1.25;white-space:nowrap">
+                    <a href="${APP_URL}/accounting/voucher-view.php?id=${Number(p.voucher_id)}" target="_blank"
+                       class="text-decoration-none" title="Open voucher ${escHtml(p.voucher_number)}">
+                        <i class="fas fa-file-invoice me-1"></i>${escHtml(p.voucher_number)}
+                    </a>
+                    <span class="badge bg-light text-dark border ms-1">${escHtml(p.payment_method_label || p.payment_method || '')}</span>
+                </div>`).join('');
+            if (list.length > MAX_NOTES) {
+                html += `<div class="text-muted mt-1" style="font-size:.66rem">+${list.length - MAX_NOTES} more payment${list.length - MAX_NOTES > 1 ? 's' : ''} (see history below)</div>`;
+            }
+            return html;
+        }
+
         // Add a thin section-header row to visually group rows
         function addSectionRow(label) {
             const tr = document.createElement('tr');
@@ -2177,7 +2208,7 @@ require_once __DIR__ . '/../includes/header.php';
                         : ''}
                 </td>
                 <td class="text-end small">${due > 0 ? fmt(due) : '—'}</td>
-                <td class="text-end small text-success">${paid > 0 ? fmt(paid) : '—'}</td>
+                <td class="text-end small text-success">${paid > 0 ? fmt(paid) : '—'}${paid > 0 ? paidNotesHtml(feeType, semNumber, monthNumber) : ''}</td>
                 <td class="text-end small fw-semibold ${out > 0 ? 'text-danger' : 'text-success'}">${out > 0 ? fmt(out) : (due > 0 ? '<i class="fas fa-check-circle"></i> Paid' : '—')}</td>
                 <td class="text-center">
                     ${out > 0
