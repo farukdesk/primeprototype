@@ -845,6 +845,37 @@ function oebm_validate_rows(array $rows): array
                     $slot_state[$sid]        = oebm_build_month_slots($summary);
                     $tuition_remaining[$sid] = (float)($summary['totals']['tuition']['out'] ?? 0);
 
+                    // Attach the OLD-ERP amounts already recorded per installment.
+                    // Reconciliation must compare the CSV (the authoritative
+                    // old-ERP statement) against old-ERP records ONLY: the fee
+                    // summary spreads ALL tuition money (including cash / bank /
+                    // mobile-banking collected in THIS ERP) sequentially from
+                    // month 1, so current-ERP money would otherwise mask the
+                    // earliest months and wrongly block the old-ERP rows for them.
+                    $oe_stmt = db()->prepare(
+                        "SELECT COALESCE(sp.semester_fee_id, 0) AS sfid,
+                                COALESCE(sp.month_number, 0)    AS mno,
+                                COALESCE(SUM(sp.amount), 0)     AS paid
+                         FROM sfp_payments sp
+                         JOIN acc_vouchers v ON v.id = sp.voucher_id
+                         WHERE sp.student_id = ?
+                           AND sp.fee_type = 'semester_tuition'
+                           AND sp.payment_method = 'old_erp'
+                           AND v.is_deleted = 0
+                           AND v.status IN ('posted','memo')
+                         GROUP BY sp.semester_fee_id, sp.month_number"
+                    );
+                    $oe_stmt->execute([(int)$resolved['student_pk']]);
+                    $oe_map = [];
+                    foreach ($oe_stmt->fetchAll() as $oe_row) {
+                        $oe_map[(int)$oe_row['sfid'] . ':' . (int)$oe_row['mno']] = (float)$oe_row['paid'];
+                    }
+                    foreach ($slot_state[$sid] as $slot_k => $slot_v) {
+                        $slot_state[$sid][$slot_k]['old_erp_paid'] = (float)($oe_map[
+                            (int)$slot_v['semester_fee_id'] . ':' . (int)$slot_v['month_number']
+                        ] ?? 0.0);
+                    }
+
                     // Schedule-alignment shift: the student's EARLIEST CSV month is
                     // aligned onto the FIRST installment of their schedule, and every
                     // monthly row is shifted by that same number of months, keeping
@@ -857,27 +888,15 @@ function oebm_validate_rows(array $rows): array
                     //     start month — February pays January's slot, March pays
                     //     February's, and so on.
                     $shift_offset[$sid] = 0;
-                    // Anchor the alignment on the first installment that is still
-                    // UNPAID in the current ERP — not blindly on the schedule's
-                    // first installment. Payments already collected in THIS ERP
-                    // (cash / bank / mobile banking, or an earlier merge) are
-                    // authoritative and must be kept: when e.g. January and
-                    // February are already settled here, an old-ERP series that
-                    // starts in March is already on its correct months and must
-                    // NOT be dragged backward onto the slots this ERP covered.
-                    $first_slot = null;
-                    foreach ($slot_state[$sid] as $sl) {
-                        if ((float)$sl['out'] > 0.001) {
-                            $first_slot = $sl;
-                            break;
-                        }
-                    }
-                    if ($first_slot === null) {
-                        // Every installment is already settled — fall back to the
-                        // schedule start so rows are validated (and skipped as
-                        // duplicates) against sensible slots.
-                        $first_slot = $slot_state[$sid][0] ?? null;
-                    }
+                    // Anchor the alignment on the schedule's FIRST installment.
+                    // This is deterministic across re-runs (an anchor based on
+                    // paid/unpaid slots would move after every merge and shift a
+                    // re-uploaded CSV onto different months). Reconciliation
+                    // below compares each month against the OLD-ERP amounts
+                    // recorded for that installment only, so months settled in
+                    // THIS ERP (cash / bank / mobile banking) never block or
+                    // displace the old-ERP series.
+                    $first_slot = $slot_state[$sid][0] ?? null;
                     if ($first_slot && isset($earliest_month_idx[$sid])) {
                         $first_idx = oebm_month_index((int)$first_slot['cal_year'], (int)$first_slot['cal_month']);
                         $shift_offset[$sid] = $first_idx - $earliest_month_idx[$sid];
@@ -945,46 +964,43 @@ function oebm_validate_rows(array $rows): array
                     $resolved['month_number']    = $slot['month_number'];
 
                     $csv_amt = (float)$resolved['amount'];
-                    if ($slot['out'] <= 0.001 && $slot['paid'] > 0.001) {
-                        // This installment is already fully paid in the current ERP.
+                    // Reconcile against OLD-ERP records ONLY. The CSV is the
+                    // authoritative old-ERP statement for this installment, and
+                    // payments collected in THIS ERP (cash / bank / mobile
+                    // banking) are kept as-is — they never block an old-ERP
+                    // month. The outstanding-tuition pool below (which already
+                    // includes current-ERP money) still caps the total merged,
+                    // so nothing is ever double-counted beyond the due.
+                    $oe_paid = max(0.0, (float)($slot['old_erp_paid'] ?? 0));
+                    if ($oe_paid > 0.001 && $csv_amt <= $oe_paid + OEBM_AMOUNT_TOLERANCE) {
+                        // This old-ERP month is already merged (within tolerance).
                         $status = 'duplicate';
-                        $resolved['existing_amount'] = $slot['paid'];
+                        $resolved['existing_amount'] = $oe_paid;
                         $slots[$target]['consumed'] = true;
-                        if (abs((float)$slot['paid'] - $csv_amt) <= OEBM_AMOUNT_TOLERANCE) {
-                            // Identical, or off by a few BDT of CSV rounding — correct.
-                            $notes[] = $slot['label'] . ' tuition is already paid in current ERP ('
-                                . acc_fmt((float)$slot['paid'])
-                                . (abs((float)$slot['paid'] - $csv_amt) > 0.001
+                        if ($oe_paid > $csv_amt + OEBM_AMOUNT_TOLERANCE) {
+                            $notes[] = $slot['label'] . ' tuition already holds ' . acc_fmt($oe_paid)
+                                . ' from the old ERP, but the CSV shows only ' . acc_fmt($csv_amt)
+                                . ' — over-collected; review it in the Old ERP Payment Audit below.';
+                        } else {
+                            $notes[] = $slot['label'] . ' tuition is already recorded from the old ERP ('
+                                . acc_fmt($oe_paid)
+                                . (abs($oe_paid - $csv_amt) > 0.001
                                     ? ', CSV ' . acc_fmt($csv_amt) . ' — within the ' . acc_fmt(OEBM_AMOUNT_TOLERANCE) . ' tolerance, counted as correct'
                                     : '')
                                 . ') — skipped.';
-                        } else {
-                            $notes[] = $slot['label'] . ' tuition is already paid in current ERP ('
-                                . acc_fmt((float)$slot['paid'])
-                                . '), but CSV amount is ' . acc_fmt($csv_amt)
-                                . ' — mismatch beyond the ' . acc_fmt(OEBM_AMOUNT_TOLERANCE)
-                                . ' tolerance, manual correction needed.';
                         }
-                    } elseif ((float)$slot['paid'] > 0.001 && $csv_amt <= (float)$slot['paid'] + OEBM_AMOUNT_TOLERANCE) {
-                        // Partially paid, and the CSV amount adds nothing beyond the
-                        // tolerance — this installment is already up to date.
-                        $status = 'duplicate';
-                        $resolved['existing_amount'] = $slot['paid'];
-                        $slots[$target]['consumed'] = true;
-                        $notes[] = $slot['label'] . ' tuition already has ' . acc_fmt((float)$slot['paid'])
-                            . ' in the current ERP, covering this row\'s ' . acc_fmt($csv_amt) . ' — skipped.';
                     } else {
-                        // Push forward only what is still missing on this installment,
-                        // so a re-run brings the ERP up to the CSV (the latest data)
-                        // without ever double-counting the part already recorded.
-                        $already   = max(0.0, (float)$slot['paid']);
-                        $merge_amt = round($csv_amt - $already, 2);
+                        // Push forward only what the old-ERP record is missing for
+                        // this installment, so a re-run brings the ERP up to the
+                        // CSV without touching payments collected in this ERP.
+                        $merge_amt = round($csv_amt - $oe_paid, 2);
                         $pool      = (float)($tuition_remaining[$sid] ?? 0);
                         if ($merge_amt > $pool + OEBM_AMOUNT_TOLERANCE) {
                             // Would push tuition paid beyond the total tuition due.
                             $status  = 'invalid';
                             $notes[] = 'Amount ' . acc_fmt($merge_amt)
-                                . ' exceeds the outstanding tuition of ' . acc_fmt($pool) . '.';
+                                . ' exceeds the outstanding tuition of ' . acc_fmt($pool)
+                                . ' (payments collected in this ERP are kept and count toward the total due).';
                         } else {
                             if ($merge_amt > $pool) {
                                 // Over by a few BDT of CSV rounding — clamp, count as correct.
@@ -997,9 +1013,9 @@ function oebm_validate_rows(array $rows): array
                                 $slots[$target]['consumed'] = true;
                                 $notes[] = 'Nothing left outstanding for ' . $slot['label'] . ' tuition — skipped.';
                             } else {
-                                if ($already > 0.001) {
-                                    $resolved['existing_amount'] = $already;
-                                    $notes[] = acc_fmt($already) . ' is already recorded for ' . $slot['label']
+                                if ($oe_paid > 0.001) {
+                                    $resolved['existing_amount'] = $oe_paid;
+                                    $notes[] = acc_fmt($oe_paid) . ' is already recorded from the old ERP for ' . $slot['label']
                                         . ' — merging only the missing ' . acc_fmt($merge_amt)
                                         . ' to match the CSV total of ' . acc_fmt($csv_amt) . '.';
                                 }
@@ -1732,7 +1748,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <li>Prepare a CSV with the columns <code>Student ID</code>, <code>Fee Type</code>, <code>Date</code>, <code>Amount Paid</code>, <code>Receipt Number</code>. Dates use the <strong>DD/MM/YYYY</strong> format (e.g. <code>15/01/2023</code>). If a cell carries <strong>two dates</strong> (e.g. <code>17/06/2026, 06/04/2026</code>) the first valid date is used.</li>
                 <li><code>Fee Type</code> may be <strong>Admission Fee</strong>, <strong>Form Fee</strong>, <strong>ID Card Fee</strong> or <strong>Registration Fee</strong>, a <strong>month name</strong> (<code>Jan</code>, <code>February</code>, …) for a monthly tuition installment (add a year to target a specific one, e.g. <code>Jan-26</code> = January 2026), or an <strong>additional fee</strong> — <strong>Re-Take</strong>, <strong>Improvement</strong>, <strong>Special Exam (Mid Term / Final)</strong>, <strong>Remedial / Miscellaneous</strong> or <strong>Other</strong> (these are recorded at the amount given, with no schedule check).</li>
                 <li><strong>Monthly payments don't need to be in order.</strong> Each month is matched to the installment with the same calendar month in the student's own schedule, so out-of-order months from the old ERP are placed on the correct slot automatically.</li>
-                <li><strong>Misaligned payment series are shifted automatically — in both directions.</strong> If a student's old-ERP payments begin before their schedule's payment start month (e.g. December while the schedule starts in January), the whole monthly series is shifted <strong>forward</strong>; if they begin after it (e.g. the CSV starts in February with no trace of January), the whole series is shifted <strong>backward</strong> so payments fill the schedule serially from the start month, keeping their original order. <strong>Months already settled in this ERP are always respected:</strong> the series aligns to the first installment still unpaid here, so payments collected in this ERP (cash / bank / mobile banking) are kept and never overlapped. Rows merged onto wrong slots by an earlier version can be repaired with the <a class="alert-link" href="<?= APP_URL ?>/accounting/old-erp-remap.php">Old ERP remap tool</a>.</li>
+                <li><strong>Misaligned payment series are shifted automatically — in both directions.</strong> If a student's old-ERP payments begin before their schedule's payment start month (e.g. December while the schedule starts in January), the whole monthly series is shifted <strong>forward</strong>; if they begin after it (e.g. the CSV starts in February with no trace of January), the whole series is shifted <strong>backward</strong> so payments fill the schedule serially from the start month, keeping their original order. <strong>Payments collected in this ERP are always kept:</strong> each old-ERP month is reconciled only against the old-ERP amounts already recorded for that installment, so cash / bank / mobile-banking collections in this ERP never block or displace the old-ERP series — and the outstanding-total cap still prevents any double counting. Rows merged onto wrong slots by an earlier version can be repaired with the <a class="alert-link" href="<?= APP_URL ?>/accounting/old-erp-remap.php">Old ERP remap tool</a>.</li>
                 <li><strong>Old ERP payment audit on every upload.</strong> After the preview, every payment already stored with the <em>Old ERP</em> method is compared against the CSV; anything extra (receipt missing from the CSV, or more collected than the CSV shows) is flagged so a Super Administrator can delete it. Payments collected in this ERP (cash / bank / mobile banking) are trusted and never flagged.</li>
                 <li>Upload it to preview. Every row is validated and colour-coded before anything is saved.</li>
                 <li><strong>Duplicate receipt numbers are allowed</strong> — one historical receipt often covers several fee heads, so the same number may repeat across rows.</li>
