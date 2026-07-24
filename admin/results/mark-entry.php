@@ -1708,4 +1708,97 @@ foreach ($creatable as $cr) {
 })();
 </script>
 
+<script>
+// ── Draft persistence: keep unsaved mark entries across page reloads ──────────
+// Entered marks and per-segment absent flags are autosaved to localStorage
+// (keyed by sheet + exam + subject and each student's ID) and restored after a
+// reload. The cache is cleared when the sheet is actually saved/submitted.
+(function () {
+    var form    = document.getElementById('markEntryForm');
+    var tbody   = document.getElementById('marks_tbody');
+    var examSel = document.getElementById('exam_select');
+    var currSel = document.getElementById('curriculum_select');
+    if (!form || !tbody) return;
+
+    function storeKey() {
+        return 'me_draft_<?= (int)$sheet_id ?>_'
+             + (examSel ? examSel.value : '') + '_'
+             + (currSel ? currSel.value : '');
+    }
+
+    function collect() {
+        var data = {};
+        Array.from(tbody.querySelectorAll('tr.grade-row')).forEach(function (tr) {
+            if (tr.hasAttribute('data-marked-by')) return;
+            var sidInp = tr.querySelector('[name="student_sid[]"]');
+            var sid    = sidInp ? sidInp.value.trim() : '';
+            if (!sid) return;
+            var row = { marks: {}, absent: {} };
+            Array.from(tr.querySelectorAll('.marks-input')).forEach(function (inp) {
+                if (!inp.disabled && inp.value !== '') row.marks[inp.getAttribute('data-dist-idx')] = inp.value;
+            });
+            Array.from(tr.querySelectorAll('.dist-absent-flag')).forEach(function (f) {
+                if (f.value === '1') row.absent[f.getAttribute('data-dist-idx')] = '1';
+            });
+            if (Object.keys(row.marks).length || Object.keys(row.absent).length) data[sid] = row;
+        });
+        return data;
+    }
+
+    function save() {
+        try { localStorage.setItem(storeKey(), JSON.stringify(collect())); } catch (e) {}
+    }
+
+    function restore() {
+        var raw = null;
+        try { raw = localStorage.getItem(storeKey()); } catch (e) {}
+        if (!raw) return;
+        var data = null;
+        try { data = JSON.parse(raw); } catch (e) { return; }
+        if (!data) return;
+        Array.from(tbody.querySelectorAll('tr.grade-row')).forEach(function (tr) {
+            if (tr.hasAttribute('data-marked-by')) return;
+            var sidInp = tr.querySelector('[name="student_sid[]"]');
+            var sid    = sidInp ? sidInp.value.trim() : '';
+            var row    = sid ? data[sid] : null;
+            if (!row) return;
+            Object.keys(row.marks || {}).forEach(function (i) {
+                var inp = tr.querySelector('.marks-input[data-dist-idx="' + i + '"]');
+                if (inp && !inp.disabled && inp.value === '') {
+                    inp.value = row.marks[i];
+                    inp.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+            });
+            Object.keys(row.absent || {}).forEach(function (i) {
+                var chk = tr.querySelector('.dist-absent-chk[data-dist-idx="' + i + '"]');
+                if (chk && !chk.disabled && !chk.checked) {
+                    chk.checked = true;
+                    chk.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            });
+        });
+    }
+
+    // Autosave on every mark input / absent toggle (event delegation)
+    tbody.addEventListener('input', function (e) {
+        if (e.target.classList && e.target.classList.contains('marks-input')) save();
+    });
+    tbody.addEventListener('change', function (e) {
+        if (e.target.classList && e.target.classList.contains('dist-absent-chk')) save();
+    });
+
+    // Rows and mark cells load asynchronously — retry restore for a few seconds.
+    var tries = 0;
+    var timer = setInterval(function () {
+        restore();
+        if (++tries >= 20) clearInterval(timer);
+    }, 500);
+
+    // Server save/submit succeeded → draft cache no longer needed
+    form.addEventListener('submit', function () {
+        try { localStorage.removeItem(storeKey()); } catch (e) {}
+    });
+})();
+</script>
+
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
