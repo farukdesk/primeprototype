@@ -80,6 +80,23 @@ if ($batch_filter !== '') {
     $batch_label = $batch_filter;
 }
 
+// ── Shift / Section of the marked students (printed only when available) ────
+$shift_label = '';
+$section_label = '';
+foreach (['shift' => 'shift_label', 'section' => 'section_label'] as $_col => $_var) {
+    try {
+        $_sql    = "SELECT DISTINCT s.`$_col` AS v
+                      FROM result_sheet_grades g
+                      JOIN students s ON s.id = g.student_id
+                     WHERE g.sheet_id = ? AND s.`$_col` IS NOT NULL AND s.`$_col` <> ''";
+        $_params = [$id];
+        if ($batch_filter !== '') { $_sql .= ' AND s.batch = ?'; $_params[] = $batch_filter; }
+        $_q = db()->prepare($_sql . ' ORDER BY v ASC');
+        $_q->execute($_params);
+        $$_var = implode(', ', array_column($_q->fetchAll(PDO::FETCH_ASSOC), 'v'));
+    } catch (Throwable $_e) {}
+}
+
 // ── Mark distribution: prefer curriculum config, fall back to legacy defaults ─
 $mark_distribution = [];
 if (!empty($sheet['curriculum_id'])) {
@@ -242,10 +259,16 @@ $page_title      = h($sheet['subject_title']);
         <div class="info-col">
             <div class="info-row"><span class="lbl">Credit:</span><span><?= h($sheet['credits'] ?: '—') ?></span></div>
             <div class="info-row"><span class="lbl">Course Teacher:</span><span><?= h($sheet['creator_name'] ?? '—') ?></span></div>
+            <?php if ($shift_label !== ''): ?>
+            <div class="info-row"><span class="lbl">Shift:</span><span><?= h($shift_label) ?></span></div>
+            <?php endif; ?>
         </div>
         <div class="info-col">
             <div class="info-row"><span class="lbl">Semester:</span><span><?= h($sheet['semester']) ?></span></div>
             <div class="info-row"><span class="lbl">Exam Date:</span><span class="blank-line">&nbsp;</span></div>
+            <?php if ($section_label !== ''): ?>
+            <div class="info-row"><span class="lbl">Section:</span><span><?= h($section_label) ?></span></div>
+            <?php endif; ?>
         </div>
     </div>
 
