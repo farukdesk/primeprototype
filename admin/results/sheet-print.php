@@ -2,6 +2,12 @@
 /**
  * Print view for a workflow mark sheet.
  * Admin-only; no published-status restriction (staff can print any stage).
+ *
+ * Layout: compact single-A4-page design, 12px Arial.
+ * - Header: Prime University > Faculty > Department > Program > Batch(es).
+ * - Mid Term exams print only the Mid Term mark columns and hide letter
+ *   grades / grade points (the result is not final until the final exam).
+ * - Final (or unspecified) exams print the full distribution with grades.
  */
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/workflow-helpers.php';
@@ -11,7 +17,40 @@ $sheet    = wf_get_sheet($id);
 $grades   = wf_get_grades($id);
 $signoffs = wf_get_sheet_signoffs($id);
 
-// Mark distribution: prefer curriculum config, fall back to legacy defaults
+// ── Exam name + exam mode (mid / final / all) ───────────────────────────
+$exam_label = '';
+if (!empty($sheet['exam_id'])) {
+    try {
+        $eq = db()->prepare('SELECT exam_name, exam_year FROM ei_exams WHERE id = ? LIMIT 1');
+        $eq->execute([(int)$sheet['exam_id']]);
+        if ($erow = $eq->fetch()) {
+            $exam_label = trim($erow['exam_name'] . ' ' . $erow['exam_year']);
+        }
+    } catch (Throwable $_e) {}
+}
+$_exam_lc  = strtolower($exam_label);
+$_has_mid  = (bool)preg_match('/mid\s*-?\s*term|midterm/', $_exam_lc);
+$_has_fin  = (strpos($_exam_lc, 'final') !== false);
+$exam_mode = ($_has_mid && !$_has_fin) ? 'mid' : (($_has_fin && !$_has_mid) ? 'final' : 'all');
+// Mid Term only → no letter grade / grade point yet (result not final)
+$show_grades = ($exam_mode !== 'mid');
+
+// ── Batches of the marked students (comma separated) ───────────────────────
+$batches = [];
+try {
+    $bq = db()->prepare(
+        "SELECT DISTINCT s.batch
+           FROM result_sheet_grades g
+           JOIN students s ON s.id = g.student_id
+          WHERE g.sheet_id = ? AND s.batch IS NOT NULL AND s.batch <> ''
+          ORDER BY s.batch ASC"
+    );
+    $bq->execute([$id]);
+    $batches = array_column($bq->fetchAll(PDO::FETCH_ASSOC), 'batch');
+} catch (Throwable $_e) {}
+$batch_label = implode(', ', $batches);
+
+// ── Mark distribution: prefer curriculum config, fall back to legacy defaults ─
 $mark_distribution = [];
 if (!empty($sheet['curriculum_id'])) {
     try {
@@ -33,7 +72,6 @@ if (empty($mark_distribution)) {
         ['distribution_name' => 'Final Exam',  'max_marks' => 50],
     ];
 }
-$dist_total = array_sum(array_column($mark_distribution, 'max_marks'));
 
 // Guard against distribution drift: if any grade stored more mark components than
 // the resolved distribution defines (e.g. the curriculum's mark distribution was
@@ -55,7 +93,18 @@ while (count($mark_distribution) < $max_marks_len) {
     ];
 }
 
-$page_title = h($sheet['subject_title']);
+// ── Visible columns ────────────────────────────────────────────────────
+// Mid Term exam → only Mid Term components; Final / other → full distribution.
+// Keys preserve the original distribution index so marks_json lines up.
+$visible_dist = [];
+foreach ($mark_distribution as $di => $d) {
+    if ($exam_mode === 'mid' && !preg_match('/mid/i', (string)$d['distribution_name'])) continue;
+    $visible_dist[$di] = $d;
+}
+if (empty($visible_dist)) $visible_dist = $mark_distribution; // safety net
+
+$sheet_title_txt = ($exam_mode === 'mid') ? 'MID TERM MARK SHEET' : 'MARK SHEET';
+$page_title      = h($sheet['subject_title']);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -66,58 +115,51 @@ $page_title = h($sheet['subject_title']);
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: Arial, sans-serif; font-size: 12px; color: #000; background: #fff; }
-        .page { max-width: 1140px; margin: 0 auto; padding: 20px; }
+        .page { max-width: 1140px; margin: 0 auto; padding: 16px; }
 
         /* ── Header ── */
-        .header { position: relative; display: flex; align-items: center; justify-content: center; border-bottom: 2px solid #002147; padding-bottom: 12px; margin-bottom: 14px; min-height: 80px; }
-        .header-logo { position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 180px; height: auto; object-fit: contain; }
-        .header-text { text-align: center; line-height: 1.6; }
-        .header-text h2 { font-size: 20px; color: #002147; margin-bottom: 4px; font-weight: bold; }
-        .header-text p  { font-size: 13px; color: #333; margin: 2px 0; }
-        .header-text .sheet-title { font-size: 15px; font-weight: bold; margin-top: 8px; letter-spacing: 1px; color: #002147; text-transform: uppercase; }
+        .header { position: relative; display: flex; align-items: center; justify-content: center; border-bottom: 2px solid #002147; padding-bottom: 8px; margin-bottom: 8px; min-height: 64px; }
+        .header-logo { position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 140px; height: auto; object-fit: contain; }
+        .header-text { text-align: center; line-height: 1.4; }
+        .header-text h2 { font-size: 20px; color: #002147; margin-bottom: 2px; font-weight: bold; }
+        .header-text p  { font-size: 12px; color: #333; margin: 1px 0; }
+        .header-text .sheet-title { font-size: 14px; font-weight: bold; margin-top: 5px; letter-spacing: 1px; color: #002147; text-transform: uppercase; }
 
         /* ── Info grid ── */
-        .info-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px 16px; margin-bottom: 10px; font-size: 11px; }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2px 14px; margin-bottom: 8px; font-size: 12px; }
         .info-row  { display: flex; gap: 5px; }
-        .info-row .lbl { font-weight: bold; min-width: 100px; color: #002147; }
+        .info-row .lbl { font-weight: bold; min-width: 92px; color: #002147; }
 
-        /* ── Reference tables (grading + distribution side-by-side) ── */
-        .ref-row { display: flex; gap: 14px; margin-bottom: 12px; align-items: flex-start; }
-        .ref-block { flex: 1; }
-        .ref-block-title { font-weight: bold; font-size: 11px; margin-bottom: 3px; color: #002147; border-left: 3px solid #002147; padding-left: 5px; }
-        .ref-table { width: 100%; border-collapse: collapse; font-size: 10px; }
-        .ref-table th, .ref-table td { border: 1px solid #ccc; padding: 2px 6px; text-align: center; }
-        .ref-table th { background: #002147; color: #fff; }
-        .ref-table td.left { text-align: left; }
-        .dist-total-row td { background: #e8f0ff; font-weight: bold; }
-
-        /* ── Teacher info bar ── */
-        .teacher-bar { background: #f0f4ff; border: 1px solid #c9d9f8; border-radius: 4px; padding: 5px 10px; margin-bottom: 10px; font-size: 11px; }
-        .teacher-bar strong { color: #002147; }
+        /* ── Grading scale strip (horizontal, only when grades are printed) ── */
+        .scale-strip { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 8px; }
+        .scale-strip th, .scale-strip td { border: 1px solid #ccc; padding: 1px 3px; text-align: center; }
+        .scale-strip th { background: #002147; color: #fff; font-weight: bold; }
 
         /* ── Marks table ── */
-        .marks-table { width: 100%; border-collapse: collapse; font-size: 11px; }
-        .marks-table th, .marks-table td { border: 1px solid #bbb; padding: 3px 5px; text-align: center; vertical-align: middle; }
-        .marks-table thead tr:first-child th { background: #002147; color: #fff; }
-        .marks-table thead tr:last-child th  { background: #eef2fa; color: #000; font-size: 10px; }
+        .marks-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .marks-table th, .marks-table td { border: 1px solid #bbb; padding: 2px 4px; text-align: center; vertical-align: middle; }
+        .marks-table thead th { background: #002147; color: #fff; }
+        .marks-table thead th small { font-weight: normal; font-size: 10px; }
         .marks-table tbody tr:nth-child(even) { background: #f9f9f9; }
         .marks-table td.left { text-align: left; }
         .marks-table td.mono { font-family: monospace; }
         .absent-row td { background: #fff3cd !important; }
-        .abs-cell { color: #c0392b; font-weight: bold; font-size: 10px; }
+        .abs-cell { color: #c0392b; font-weight: bold; font-size: 11px; }
 
-        /* ── Signoff ── */
-        .signoff { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; font-size: 11px; }
-        .signoff-box { border-top: 1px solid #999; padding-top: 6px; text-align: center; }
+        /* ── Signatures ── */
+        .signoff { margin-top: 34px; display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; font-size: 12px; }
+        .signoff-box { border-top: 1px solid #999; padding-top: 5px; text-align: center; }
         .signoff-box .lbl { font-weight: bold; color: #002147; }
 
-        .footer { margin-top: 12px; border-top: 1px solid #ccc; padding-top: 6px; font-size: 10px; color: #666; text-align: right; }
+        .footer { margin-top: 10px; border-top: 1px solid #ccc; padding-top: 4px; font-size: 10px; color: #666; text-align: right; }
 
         @media print {
-            @page { size: A4; margin: 12mm 12mm 12mm 12mm; }
-            body { font-size: 10.5px; }
+            @page { size: A4 portrait; margin: 10mm; }
+            body { font-size: 12px; }
             .no-print { display: none !important; }
             .page { max-width: 100%; padding: 0; }
+            .header, .marks-table thead th, .scale-strip th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .marks-table tr, .signoff { page-break-inside: avoid; }
         }
     </style>
 </head>
@@ -145,7 +187,10 @@ $page_title = h($sheet['subject_title']);
             <?php if ($sheet['program_name']): ?>
             <p><?= h($sheet['program_name']) ?></p>
             <?php endif; ?>
-            <div class="sheet-title">MARK SHEET</div>
+            <?php if ($batch_label !== ''): ?>
+            <p><strong>Batch:</strong> <?= h($batch_label) ?></p>
+            <?php endif; ?>
+            <div class="sheet-title"><?= h($sheet_title_txt) ?></div>
         </div>
     </div>
 
@@ -154,69 +199,58 @@ $page_title = h($sheet['subject_title']);
         <div class="info-row"><span class="lbl">Subject:</span>
             <span><?= $sheet['subject_code'] ? h($sheet['subject_code']) . ' – ' : '' ?><?= h($sheet['subject_title']) ?></span>
         </div>
-        <div class="info-row"><span class="lbl">Semester:</span><span><?= h($sheet['semester']) ?></span></div>
-        <?php if ($sheet['academic_year']): ?>
-        <div class="info-row"><span class="lbl">Academic Year:</span><span><?= h($sheet['academic_year']) ?></span></div>
+        <?php if ($exam_label !== ''): ?>
+        <div class="info-row"><span class="lbl">Exam:</span><span><?= h($exam_label) ?></span></div>
         <?php endif; ?>
+        <div class="info-row"><span class="lbl">Semester:</span><span><?= h($sheet['semester']) ?></span></div>
         <?php if ($sheet['credits']): ?>
         <div class="info-row"><span class="lbl">Credits:</span><span><?= h($sheet['credits']) ?></span></div>
         <?php endif; ?>
-        <div class="info-row"><span class="lbl">Status:</span><span><?= ucfirst(str_replace('_', ' ', $sheet['workflow_status'])) ?></span></div>
+        <div class="info-row"><span class="lbl">Course Teacher:</span><span><?= h($sheet['creator_name'] ?? '—') ?></span></div>
         <div class="info-row"><span class="lbl">Date:</span><span><?= date('d M Y') ?></span></div>
     </div>
 
-    <!-- Teacher / Course Instructor bar -->
-    <div class="teacher-bar">
-        <strong>Course Teacher / Marks Entered By:</strong> <?= h($sheet['creator_name'] ?? '—') ?>
-    </div>
-
-    <!-- Grading Scale + Mark Distribution side-by-side -->
-    <div class="ref-row">
-        <div class="ref-block">
-            <div class="ref-block-title">Grading Scale</div>
-            <table class="ref-table">
-                <thead><tr><th>Marks Range</th><th>Grade</th><th>Point</th></tr></thead>
-                <tbody>
-                <?php foreach (wf_grading_scale() as [$min, $max, $letter, $point]):
-                    $range = ($max === PHP_INT_MAX) ? '&ge;' . $min . '%' : $min . '% &ndash; &lt;' . $max . '%';
-                ?>
-                <tr><td><?= $range ?></td><td><strong><?= h($letter) ?></strong></td><td><?= number_format($point, 2) ?></td></tr>
-                <?php endforeach; ?>
-                </tbody>
-            </table>
-        </div>
-        <div class="ref-block">
-            <div class="ref-block-title">Mark Distribution</div>
-            <table class="ref-table">
-                <thead><tr><th class="left">Component</th><th>Max Marks</th></tr></thead>
-                <tbody>
-                    <?php foreach ($mark_distribution as $dist): ?>
-                    <tr><td class="left"><?= h($dist['distribution_name']) ?></td><td><?= h($dist['max_marks']) ?></td></tr>
-                    <?php endforeach; ?>
-                    <tr class="dist-total-row"><td class="left">Total</td><td><?= $dist_total ?></td></tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
+    <?php if ($show_grades): ?>
+    <!-- Grading scale (compact horizontal strip) -->
+    <table class="scale-strip">
+        <tr>
+            <th style="text-align:left;padding-left:5px;">Grade</th>
+            <?php foreach (wf_grading_scale() as [$min, $max, $letter, $point]): ?>
+            <td><strong><?= h($letter) ?></strong> (<?= number_format($point, 2) ?>)</td>
+            <?php endforeach; ?>
+        </tr>
+        <tr>
+            <th style="text-align:left;padding-left:5px;">Marks %</th>
+            <?php foreach (wf_grading_scale() as [$min, $max, $letter, $point]): ?>
+            <td><?= ($max === PHP_INT_MAX) ? '&ge;' . $min : $min . ' &ndash; &lt;' . $max ?></td>
+            <?php endforeach; ?>
+        </tr>
+    </table>
+    <?php else: ?>
+    <p style="font-size:11px;color:#555;margin-bottom:8px;font-style:italic;">
+        Mid Term result — letter grades and grade points will be issued after the final examination.
+    </p>
+    <?php endif; ?>
 
     <!-- Student Marks -->
-    <div style="font-weight:bold;font-size:11px;margin-bottom:4px;color:#002147;border-left:3px solid #002147;padding-left:5px;">Student Performance Records</div>
     <?php if (empty($grades)): ?>
     <p style="color:#888; font-style:italic;">No grades recorded.</p>
     <?php else: ?>
     <table class="marks-table">
         <thead>
             <tr>
-                <th rowspan="2" style="width:30px;">SL</th>
-                <th rowspan="2" style="min-width:100px;">Student ID</th>
-                <th rowspan="2" style="min-width:140px;">Name</th>
-                <?php foreach ($mark_distribution as $_pd): ?>
+                <th style="width:28px;">SL</th>
+                <th style="min-width:95px;">Student ID</th>
+                <th style="min-width:135px;">Name</th>
+                <?php foreach ($visible_dist as $_pd): ?>
                 <th><?= h($_pd['distribution_name']) ?><?php if ($_pd['max_marks'] !== '' && $_pd['max_marks'] !== null): ?><br><small>/<?= h($_pd['max_marks']) ?></small><?php endif; ?></th>
                 <?php endforeach; ?>
-                <th rowspan="2" style="width:48px;">Total</th>
-                <th rowspan="2" style="width:48px;">Grade</th>
-                <th rowspan="2" style="width:40px;">Point</th>
-                <th rowspan="2" style="min-width:120px;">Remarks</th>
+                <th style="width:46px;">Total</th>
+                <?php if ($show_grades): ?>
+                <th style="width:46px;">Grade</th>
+                <th style="width:40px;">Point</th>
+                <?php endif; ?>
+                <th style="min-width:110px;">Remarks</th>
             </tr>
         </thead>
         <tbody>
@@ -254,7 +288,7 @@ $page_title = h($sheet['subject_title']);
             <td><?= $idx + 1 ?></td>
             <td class="mono"><?= h($g['s_student_id'] ?? $g['student_sid']) ?></td>
             <td class="left"><?= h($g['s_full_name'] ?? $g['student_name']) ?></td>
-            <?php foreach ($mark_distribution as $di => $_pd): ?>
+            <?php foreach ($visible_dist as $di => $_pd): ?>
             <td><?php
                 if (!empty($_abs_flags[$di])) {
                     echo '<span class="abs-cell">Abs</span>';
@@ -269,32 +303,39 @@ $page_title = h($sheet['subject_title']);
                 $is_fully_absent = $g['is_absent'] && empty($_abs_flags);
                 echo $is_fully_absent ? '&mdash;' : h($g['total_marks'] ?? '—');
             ?></td>
+            <?php if ($show_grades): ?>
             <td><strong><?= h($g['letter_grade'] ?? '—') ?></strong></td>
             <td><?= $g['grade_point'] !== null ? number_format((float)$g['grade_point'], 2) : '—' ?></td>
-            <td style="text-align:left;font-size:10px;color:#c0392b;"><?= $_remarks ?></td>
+            <?php endif; ?>
+            <td style="text-align:left;font-size:11px;color:#c0392b;"><?= $_remarks ?></td>
         </tr>
         <?php endforeach; ?>
         </tbody>
     </table>
     <?php endif; ?>
 
-    <!-- Signoff trail -->
+    <!-- Signatures -->
     <div class="signoff">
         <div class="signoff-box">
-            <div style="height:35px;"></div>
+            <div style="height:34px;"></div>
             <div class="lbl">Course Teacher</div>
             <div style="margin-top:3px;"><?= h($sheet['creator_name'] ?? '') ?></div>
         </div>
         <div class="signoff-box">
-            <div style="height:35px;"></div>
-            <div class="lbl">Head of Department</div>
+            <div style="height:34px;"></div>
+            <div class="lbl">Head of the Department</div>
             <div style="margin-top:3px;"><?= h($signoffs['hod_name'] ?? '') ?></div>
             <?php if ($signoffs['hod_approved_at'] ?? null): ?>
             <div style="color:#555;font-size:10px;"><?= date('d M Y', strtotime($signoffs['hod_approved_at'])) ?></div>
             <?php endif; ?>
         </div>
         <div class="signoff-box">
-            <div style="height:35px;"></div>
+            <div style="height:34px;"></div>
+            <div class="lbl">Dean</div>
+            <div style="margin-top:3px;"><?= h($signoffs['dean_name'] ?? '') ?></div>
+        </div>
+        <div class="signoff-box">
+            <div style="height:34px;"></div>
             <div class="lbl">Controller of Examinations</div>
             <div style="margin-top:3px;"><?= h($signoffs['publisher_name'] ?? '') ?></div>
             <?php if ($signoffs['published_at'] ?? null): ?>
