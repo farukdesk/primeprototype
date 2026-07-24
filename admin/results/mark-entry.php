@@ -156,6 +156,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($offer_subject_id <= 0 || !$offer_row) $errors[] = 'Please select a subject from the course offers.';
     if ($subject_title === '') $errors[] = 'Subject title is required.';
 
+    // Marks entry must be OPEN for the selected exam. A sheet that already has
+    // this exam (draft/returned being revised) is exempt so it can be re-submitted.
+    if ($exam_id > 0 && !($sheet && (int)$sheet['exam_id'] === $exam_id)) {
+        try {
+            $open_chk = db()->prepare('SELECT COUNT(*) FROM ei_exams WHERE id = ? AND is_active = 1 AND marks_entry_open = 1');
+            $open_chk->execute([$exam_id]);
+            if ((int)$open_chk->fetchColumn() === 0) {
+                $errors[] = 'Marks entry for the selected exam is currently closed. '
+                          . 'Please contact the Controller of Examinations to open marks entry.';
+            }
+        } catch (Throwable $_e) { /* marks_entry_open column not migrated yet */ }
+    }
+
     // Faculty: server-side check that they are assigned to teach this offered subject.
     if ($offer_subject_id > 0 && !is_super_admin() && !rm_can_create() && !rm_is_staff()) {
         $fac_uid = (int)$user['id'];
@@ -425,13 +438,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 require_once __DIR__ . '/../includes/header.php';
 
-// Active exams for the "Select Exam" dropdown (from the Exam Invigilation module).
-$exam_options = db()->query(
-    'SELECT id, exam_name, exam_year
-       FROM ei_exams
-      WHERE is_active = 1
-      ORDER BY exam_year DESC, exam_name ASC'
-)->fetchAll();
+// Exams open for marks entry (from the Exam Invigilation module). Exams whose
+// marks entry has been closed are hidden from the "Select Exam" dropdown.
+try {
+    $exam_options = db()->query(
+        'SELECT id, exam_name, exam_year
+           FROM ei_exams
+          WHERE is_active = 1 AND marks_entry_open = 1
+          ORDER BY exam_year DESC, exam_name ASC'
+    )->fetchAll();
+} catch (Throwable $_e) {
+    // marks_entry_open column not migrated yet — fall back to active exams
+    $exam_options = db()->query(
+        'SELECT id, exam_name, exam_year
+           FROM ei_exams
+          WHERE is_active = 1
+          ORDER BY exam_year DESC, exam_name ASC'
+    )->fetchAll();
+}
+// Edit mode: keep the sheet's own exam selectable even if its entry window has
+// since closed, so a draft/returned sheet can still be revised and re-submitted.
+if ($sheet && $sheet['exam_id']) {
+    $sheet_exam_listed = false;
+    foreach ($exam_options as $eo) {
+        if ((int)$eo['id'] === (int)$sheet['exam_id']) { $sheet_exam_listed = true; break; }
+    }
+    if (!$sheet_exam_listed) {
+        $exam_options[] = [
+            'id'        => (int)$sheet['exam_id'],
+            'exam_name' => ($sheet['exam_name'] ?? ('Exam #' . $sheet['exam_id'])) . ' (entry closed)',
+            'exam_year' => $sheet['exam_year'] ?? '',
+        ];
+    }
+}
 
 $v_dept_id          = $sheet ? $sheet['dept_id']          : (old('dept_id') ?: ($faculty_dept_id ?: null));
 $v_program_id       = $sheet ? $sheet['program_id']        : old('program_id');
@@ -461,6 +500,21 @@ $is_edit            = $sheet !== null;
 </div>
 <?php endif; ?>
 <?php flash_show(); ?>
+
+<?php if (empty($exam_options)): ?>
+<div class="alert alert-info d-flex align-items-start gap-3" role="alert" style="border-radius:12px;">
+    <i class="fas fa-hourglass-half fa-lg mt-1"></i>
+    <div>
+        <strong>No exam is open for marks entry yet.</strong>
+        <div class="mt-1" style="font-size:.9rem;">
+            Marks entry has not been opened for any examination at the moment, or it has been
+            closed after the submission deadline. As soon as the Controller of Examinations
+            opens marks entry for an exam, it will appear here automatically. Please check
+            back later, or contact the Exam Office if you believe this is an error.
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 
 <div id="dup_warning" class="alert alert-warning d-none" role="alert">
     <strong><i class="fas fa-exclamation-triangle me-1"></i> Marks already submitted</strong>
@@ -530,9 +584,9 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
                             </select>
                             <div class="form-text">
                                 <?php if (empty($exam_options)): ?>
-                                <span class="text-danger">No active exams. Create one in the Exam Invigilation module first.</span>
+                                <span class="text-danger">Marks entry is not open for any exam right now.</span>
                                 <?php else: ?>
-                                Pulled from the Exam module.
+                                Only exams currently open for marks entry are listed.
                                 <?php endif; ?>
                             </div>
                         </div>
@@ -688,7 +742,9 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
     <!-- Student Marks Table -->
     <div class="card mb-4" style="border-radius:12px;">
         <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center">
-            <h6 class="mb-0 fw-semibold"><i class="fas fa-list me-2 text-muted"></i>Student Marks</h6>
+            <h6 class="mb-0 fw-semibold"><i class="fas fa-list me-2 text-muted"></i>Student Marks
+                <span id="exam_mode_hint" class="badge d-none ms-2" style="font-weight:500;"></span>
+            </h6>
             <div class="d-flex gap-2">
                 <button type="button" id="btn_reload_students" class="btn btn-sm btn-outline-primary"
                         style="border-radius:8px;" disabled title="Reload registered students for the selected subject">
@@ -860,6 +916,85 @@ foreach ($creatable as $cr) {
     ];
     var currentDist = defaultDist.slice();
 
+    // ── Exam-type mode (mid / final / all) ────────────────────────────────────
+    // 'mid'   → only Mid Term columns editable; no letter grade (result not final)
+    // 'final' → Mid Term columns locked (marks already given & published)
+    // 'all'   → no restriction
+    var examMode = 'all';
+
+    function detectExamMode() {
+        var txt = '';
+        if (examSel && examSel.value && examSel.selectedIndex >= 0) {
+            txt = (examSel.options[examSel.selectedIndex].textContent || '').toLowerCase();
+        }
+        var hasMid   = /mid\s*-?\s*term|midterm/.test(txt);
+        var hasFinal = /final/.test(txt);
+        if (hasMid && !hasFinal)  return 'mid';
+        if (hasFinal && !hasMid)  return 'final';
+        return 'all';
+    }
+
+    function isMidDist(name) {
+        return /mid/.test(String(name || '').toLowerCase());
+    }
+
+    /** Whether a distribution column is editable under the current exam mode. */
+    function distAllowed(name) {
+        if (examMode === 'mid')   return isMidDist(name);
+        if (examMode === 'final') return !isMidDist(name);
+        return true;
+    }
+
+    /**
+     * Apply the exam mode to the whole table: lock/unlock mark columns,
+     * dim locked headers, update the hint badge, and recompute totals.
+     */
+    function applyExamMode() {
+        examMode = detectExamMode();
+
+        // Hint badge in the Student Marks card header
+        var hint = document.getElementById('exam_mode_hint');
+        if (hint) {
+            if (examMode === 'mid') {
+                hint.textContent = 'Mid Term entry — only Mid Term columns are editable; letter grades appear after the final exam';
+                hint.className   = 'badge bg-warning text-dark ms-2';
+            } else if (examMode === 'final') {
+                hint.textContent = 'Final entry — Mid Term columns are locked (marks already published)';
+                hint.className   = 'badge bg-info text-dark ms-2';
+            } else {
+                hint.textContent = '';
+                hint.className   = 'badge d-none ms-2';
+            }
+        }
+
+        // Dim locked header columns
+        Array.from(document.querySelectorAll('#marks_thead th.mark-col')).forEach(function(th, i) {
+            var d = currentDist[i];
+            th.style.opacity = (d && !distAllowed(d.name)) ? '0.45' : '';
+        });
+
+        // Lock/unlock inputs on every row and recompute the display
+        Array.from(tbody.querySelectorAll('tr.grade-row')).forEach(function(tr) {
+            currentDist.forEach(function(d, i) {
+                var locked  = !distAllowed(d.name);
+                var inp     = tr.querySelector('.marks-input[data-dist-idx="' + i + '"]');
+                var chk     = tr.querySelector('.dist-absent-chk[data-dist-idx="' + i + '"]');
+                var segFlag = tr.querySelector('.dist-absent-flag[data-dist-idx="' + i + '"]');
+                var segAbs  = segFlag && segFlag.value === '1';
+                if (inp) {
+                    inp.disabled    = locked || segAbs;
+                    inp.placeholder = locked ? (examMode === 'final' ? 'Published' : 'Locked')
+                                             : (segAbs ? 'Abs' : '');
+                    var td = inp.closest('td');
+                    if (td) td.style.background = locked ? '#f8f9fa' : '';
+                }
+                if (chk) chk.disabled = locked;
+            });
+            var first = tr.querySelector('.marks-input');
+            if (first) first.dispatchEvent(new Event('input', { bubbles: false }));
+        });
+    }
+
     var scale = [[80,Infinity,'A+'],[75,80,'A'],[70,75,'A-'],[65,70,'B+'],
                  [60,65,'B'],[55,60,'B-'],[50,55,'C+'],[45,50,'C'],[40,45,'D'],[0,40,'F']];
     function grade(t) { for (var i=0;i<scale.length;i++) if (t>=scale[i][0]&&t<scale[i][1]) return scale[i][2]; return 'F'; }
@@ -917,6 +1052,8 @@ foreach ($creatable as $cr) {
             var isSegAbsent = (absentFlags !== null && absentFlags !== undefined)
                 ? !!(absentFlags[i])
                 : isGlobalAbsent;
+            // Column locked by exam mode (mid-term-only / final entry)
+            var isLocked = !distAllowed(d.name);
             var td = document.createElement('td');
             td.style.cssText = 'vertical-align:middle;padding:.2rem .25rem;';
 
@@ -958,6 +1095,12 @@ foreach ($creatable as $cr) {
             if (isSegAbsent) {
                 inp.disabled = true;
                 inp.placeholder = 'Abs';
+            }
+            if (isLocked) {
+                inp.disabled        = true;
+                inp.placeholder     = (examMode === 'final') ? 'Published' : 'Locked';
+                segChk.disabled     = true;
+                td.style.background = '#f8f9fa';
             }
             // Enforce max: clamp value to [0, d.max] on input
             (function(maxVal) {
@@ -1036,6 +1179,7 @@ foreach ($creatable as $cr) {
         // Rebuild table header and existing row cells
         rebuildTableHeader();
         rebuildRowMarkCells();
+        applyExamMode();
     }
 
     function loadMarkDistribution(curriculumId) {
@@ -1164,6 +1308,7 @@ foreach ($creatable as $cr) {
                 }
                 data.forEach(function(s) { appendRow(s.student_id, s.full_name, s.id, null, null, true); });
                 renumber();
+                applyExamMode();
             });
     }
 
@@ -1226,7 +1371,7 @@ foreach ($creatable as $cr) {
             });
     }
 
-    if (examSel) examSel.addEventListener('change', checkDuplicate);
+    if (examSel) examSel.addEventListener('change', function() { checkDuplicate(); applyExamMode(); });
     currSel.addEventListener('change', checkDuplicate);
 
 
@@ -1353,7 +1498,12 @@ foreach ($creatable as $cr) {
             });
             if (!hasAnyData) { total.textContent = '—'; grd.textContent = '—'; return; }
             total.textContent = hasEnteredMark ? sum.toFixed(1) : '0.0';
-            grd.textContent   = grade(sum);
+            if (examMode === 'mid') {
+                // Mid Term only: no letter grade until the final marks are submitted
+                grd.innerHTML = '<span class="text-muted" title="Grade appears after final marks are submitted">—</span>';
+            } else {
+                grd.textContent = grade(sum);
+            }
         }
 
         // Global absent checkbox: removed from UI; handler kept for safety (chk is null for new rows)
@@ -1455,7 +1605,12 @@ foreach ($creatable as $cr) {
             });
             if (!hasAnyData) { total.textContent = '—'; grd.textContent = '—'; return; }
             total.textContent = hasEnteredMark ? sum.toFixed(1) : '0.0';
-            grd.textContent   = grade(sum);
+            if (examMode === 'mid') {
+                // Mid Term only: no letter grade until the final marks are submitted
+                grd.innerHTML = '<span class="text-muted" title="Grade appears after final marks are submitted">—</span>';
+            } else {
+                grd.textContent = grade(sum);
+            }
         }
         Array.from(tr.querySelectorAll('.marks-input')).forEach(function(inp) {
             inp.addEventListener('input', updateTotal);

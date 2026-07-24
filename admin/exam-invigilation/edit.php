@@ -23,6 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $start_date = trim($_POST['start_date'] ?? '');
     $end_date   = trim($_POST['end_date'] ?? '');
     $is_active  = isset($_POST['is_active']) ? 1 : 0;
+    $marks_entry_open = isset($_POST['marks_entry_open']) ? 1 : 0;
 
     if ($exam_name === '') $errors[] = 'Exam name is required.';
     if ($exam_year < 2000 || $exam_year > 2100) $errors[] = 'Please enter a valid year (2000–2100).';
@@ -31,12 +32,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($start_date !== '' && $end_date !== '' && $end_date < $start_date) $errors[] = 'End date must be on or after start date.';
 
     if (empty($errors)) {
-        db()->prepare('UPDATE ei_exams SET exam_name=?, exam_year=?, start_date=?, end_date=?, is_active=? WHERE id=?')
-           ->execute([$exam_name, $exam_year, $start_date ?: null, $end_date ?: null, $is_active, $id]);
+        try {
+            db()->prepare('UPDATE ei_exams SET exam_name=?, exam_year=?, start_date=?, end_date=?, is_active=?, marks_entry_open=? WHERE id=?')
+               ->execute([$exam_name, $exam_year, $start_date ?: null, $end_date ?: null, $is_active, $marks_entry_open, $id]);
+        } catch (Throwable $_e) {
+            // `marks_entry_open` column not migrated yet — legacy update
+            db()->prepare('UPDATE ei_exams SET exam_name=?, exam_year=?, start_date=?, end_date=?, is_active=? WHERE id=?')
+               ->execute([$exam_name, $exam_year, $start_date ?: null, $end_date ?: null, $is_active, $id]);
+        }
         flash_set('success', 'Exam updated.');
         redirect(APP_URL . '/exam-invigilation/view.php?id=' . $id);
     }
-    save_old(compact('exam_name','exam_year','start_date','end_date','is_active'));
+    save_old(compact('exam_name','exam_year','start_date','end_date','is_active','marks_entry_open'));
 }
 
 require_once __DIR__ . '/../includes/header.php';
@@ -79,11 +86,16 @@ require_once __DIR__ . '/../includes/header.php';
                     <input type="number" name="exam_year" class="form-control" style="border-radius:10px;"
                            value="<?= old('exam_year', $exam['exam_year']) ?>" required min="2000" max="2100">
                 </div>
-                <div class="col-md-6 d-flex align-items-end pb-1">
+                <div class="col-md-6 d-flex flex-column justify-content-end pb-1">
                     <div class="form-check form-switch">
                         <input class="form-check-input" type="checkbox" id="is_active" name="is_active" value="1"
                                <?= (array_key_exists('is_active', $_SESSION['old'] ?? []) ? $_SESSION['old']['is_active'] : $exam['is_active']) ? 'checked' : '' ?>>
                         <label class="form-check-label" for="is_active">Active</label>
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="marks_entry_open" name="marks_entry_open" value="1"
+                               <?= (array_key_exists('marks_entry_open', $_SESSION['old'] ?? []) ? $_SESSION['old']['marks_entry_open'] : ($exam['marks_entry_open'] ?? 1)) ? 'checked' : '' ?>>
+                        <label class="form-check-label" for="marks_entry_open">Marks Entry Open</label>
                     </div>
                 </div>
                 <div class="col-md-6">

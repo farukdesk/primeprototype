@@ -14,6 +14,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $start_date = trim($_POST['start_date'] ?? '');
     $end_date   = trim($_POST['end_date'] ?? '');
     $is_active  = isset($_POST['is_active']) ? 1 : 0;
+    $marks_entry_open = isset($_POST['marks_entry_open']) ? 1 : 0;
 
     if ($exam_name === '') $errors[] = 'Exam name is required.';
     if ($exam_year < 2000 || $exam_year > 2100) $errors[] = 'Please enter a valid year (2000–2100).';
@@ -22,13 +23,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($start_date !== '' && $end_date !== '' && $end_date < $start_date) $errors[] = 'End date must be on or after start date.';
 
     if (empty($errors)) {
-        db()->prepare('INSERT INTO ei_exams (exam_name, exam_year, start_date, end_date, is_active) VALUES (?,?,?,?,?)')
-           ->execute([$exam_name, $exam_year, $start_date ?: null, $end_date ?: null, $is_active]);
+        try {
+            db()->prepare('INSERT INTO ei_exams (exam_name, exam_year, start_date, end_date, is_active, marks_entry_open) VALUES (?,?,?,?,?,?)')
+               ->execute([$exam_name, $exam_year, $start_date ?: null, $end_date ?: null, $is_active, $marks_entry_open]);
+        } catch (Throwable $_e) {
+            // `marks_entry_open` column not migrated yet — legacy insert
+            db()->prepare('INSERT INTO ei_exams (exam_name, exam_year, start_date, end_date, is_active) VALUES (?,?,?,?,?)')
+               ->execute([$exam_name, $exam_year, $start_date ?: null, $end_date ?: null, $is_active]);
+        }
         $new_id = (int)db()->lastInsertId();
         flash_set('success', 'Exam <strong>' . h($exam_name) . '</strong> created.');
         redirect(APP_URL . '/exam-invigilation/view.php?id=' . $new_id);
     }
-    save_old(compact('exam_name','exam_year','start_date','end_date','is_active'));
+    save_old(compact('exam_name','exam_year','start_date','end_date','is_active','marks_entry_open'));
 }
 
 require_once __DIR__ . '/../includes/header.php';
@@ -72,11 +79,16 @@ require_once __DIR__ . '/../includes/header.php';
                            value="<?= old('exam_year', date('Y')) ?>" required min="2000" max="2100"
                            placeholder="<?= date('Y') ?>">
                 </div>
-                <div class="col-md-6 d-flex align-items-end pb-1">
+                <div class="col-md-6 d-flex flex-column justify-content-end pb-1">
                     <div class="form-check form-switch">
                         <input class="form-check-input" type="checkbox" id="is_active" name="is_active" value="1"
                                <?= (old('is_active','1')) ? 'checked' : '' ?>>
                         <label class="form-check-label" for="is_active">Active</label>
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="marks_entry_open" name="marks_entry_open" value="1"
+                               <?= (old('marks_entry_open','1')) ? 'checked' : '' ?>>
+                        <label class="form-check-label" for="marks_entry_open">Marks Entry Open</label>
                     </div>
                 </div>
                 <div class="col-md-6">
