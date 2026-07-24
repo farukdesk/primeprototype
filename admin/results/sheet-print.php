@@ -133,8 +133,12 @@ foreach ($mark_distribution as $di => $d) {
 }
 if (empty($visible_dist)) $visible_dist = $mark_distribution; // safety net
 
-// Full exam title + "Mark Sheet", e.g. "Mid Term Examination Summer 2026 Mark Sheet"
-$sheet_title_txt = ($exam_label !== '') ? $exam_label . ' Mark Sheet' : 'Mark Sheet';
+// Exam title + "Mark Sheet", e.g. "Mid Term Examination Mark Sheet".
+// The trailing semester/year (e.g. "Summer 2026") is stripped — the Semester
+// is already shown in the info section below.
+$_exam_title = preg_replace('/\s*\b(spring|summer|fall|autumn|winter)\b\s*-?\s*(\d{4})?\s*$/i', '', $exam_label);
+$_exam_title = trim((string)preg_replace('/\s*\b\d{4}\b\s*$/', '', (string)$_exam_title));
+$sheet_title_txt = ($_exam_title !== '') ? $_exam_title . ' Mark Sheet' : 'Mark Sheet';
 $page_title      = h($sheet['subject_title']);
 ?>
 <!DOCTYPE html>
