@@ -138,7 +138,11 @@ function _wf_render_my_sheets(int $user_id, ?array $dept_scope): void
                     c.name          AS chain_name,
                     s.step_label    AS current_step_label,
                     g.name          AS current_group_name,
-                    (SELECT COUNT(*) FROM result_sheet_grades sg WHERE sg.sheet_id = ms.id) AS student_count
+                    (SELECT COUNT(*) FROM result_sheet_grades sg WHERE sg.sheet_id = ms.id) AS student_count,
+                    (SELECT GROUP_CONCAT(DISTINCT st.batch ORDER BY st.batch SEPARATOR '||')
+                       FROM result_sheet_grades sg2
+                       JOIN students st ON st.id = sg2.student_id
+                      WHERE sg2.sheet_id = ms.id AND st.batch IS NOT NULL AND st.batch <> '') AS batch_list
              FROM result_mark_sheets ms
              JOIN dept_departments d              ON d.id  = ms.dept_id
              LEFT JOIN dept_academic_programs p   ON p.id  = ms.program_id
@@ -229,10 +233,23 @@ function _wf_render_my_sheets(int $user_id, ?array $dept_scope): void
                                         <i class="fas fa-edit"></i>
                                     </a>
                                     <?php endif; ?>
+                                    <?php
+                                    // Students from a different batch registered in this course offer
+                                    // → one print button per batch (each batch prints separately).
+                                    $_batches = array_values(array_filter(explode('||', (string)($s['batch_list'] ?? ''))));
+                                    if (count($_batches) > 1): ?>
+                                        <?php foreach ($_batches as $_b): ?>
+                                        <a href="<?= APP_URL ?>/results/sheet-print.php?id=<?= $s['id'] ?>&batch=<?= urlencode($_b) ?>" target="_blank"
+                                           class="btn btn-sm btn-outline-secondary" title="Print — Batch <?= h($_b) ?>" style="border-radius:7px;white-space:nowrap;">
+                                            <i class="fas fa-print me-1"></i><?= h($_b) ?>
+                                        </a>
+                                        <?php endforeach; ?>
+                                    <?php else: ?>
                                     <a href="<?= APP_URL ?>/results/sheet-print.php?id=<?= $s['id'] ?>" target="_blank"
                                        class="btn btn-sm btn-outline-secondary" title="Print" style="border-radius:7px;">
                                         <i class="fas fa-print"></i>
                                     </a>
+                                    <?php endif; ?>
                                 </div>
                             </td>
                         </tr>
@@ -277,7 +294,11 @@ function _wf_render_published(?array $dept_scope, int $user_id = 0): void
                     u.username      AS creator_name,
                     e.exam_name,
                     e.exam_year,
-                    (SELECT COUNT(*) FROM result_sheet_grades sg WHERE sg.sheet_id = ms.id) AS student_count
+                    (SELECT COUNT(*) FROM result_sheet_grades sg WHERE sg.sheet_id = ms.id) AS student_count,
+                    (SELECT GROUP_CONCAT(DISTINCT st.batch ORDER BY st.batch SEPARATOR '||')
+                       FROM result_sheet_grades sg2
+                       JOIN students st ON st.id = sg2.student_id
+                      WHERE sg2.sheet_id = ms.id AND st.batch IS NOT NULL AND st.batch <> '') AS batch_list
              FROM result_mark_sheets ms
              JOIN dept_departments d              ON d.id  = ms.dept_id
              LEFT JOIN dept_academic_programs p   ON p.id  = ms.program_id
@@ -343,10 +364,23 @@ function _wf_render_published(?array $dept_scope, int $user_id = 0): void
                             <td><?= h($s['creator_name'] ?? '—') ?></td>
                             <td class="text-center"><span class="badge bg-secondary"><?= (int)$s['student_count'] ?></span></td>
                             <td class="text-end pe-4">
-                                <a href="<?= APP_URL ?>/results/sheet-print.php?id=<?= $s['id'] ?>" target="_blank"
-                                   class="btn btn-sm btn-outline-secondary" style="border-radius:7px;" title="Print">
-                                    <i class="fas fa-print"></i>
-                                </a>
+                                <div class="d-flex gap-1 justify-content-end flex-wrap">
+                                    <?php
+                                    $_batches = array_values(array_filter(explode('||', (string)($s['batch_list'] ?? ''))));
+                                    if (count($_batches) > 1): ?>
+                                        <?php foreach ($_batches as $_b): ?>
+                                        <a href="<?= APP_URL ?>/results/sheet-print.php?id=<?= $s['id'] ?>&batch=<?= urlencode($_b) ?>" target="_blank"
+                                           class="btn btn-sm btn-outline-secondary" style="border-radius:7px;white-space:nowrap;" title="Print — Batch <?= h($_b) ?>">
+                                            <i class="fas fa-print me-1"></i><?= h($_b) ?>
+                                        </a>
+                                        <?php endforeach; ?>
+                                    <?php else: ?>
+                                    <a href="<?= APP_URL ?>/results/sheet-print.php?id=<?= $s['id'] ?>" target="_blank"
+                                       class="btn btn-sm btn-outline-secondary" style="border-radius:7px;" title="Print">
+                                        <i class="fas fa-print"></i>
+                                    </a>
+                                    <?php endif; ?>
+                                </div>
                             </td>
                         </tr>
                         <?php endforeach; ?>
