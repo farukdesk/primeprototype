@@ -150,10 +150,11 @@ $page_title      = h($sheet['subject_title']);
         .header-text p  { font-size: 14px; color: #333; margin: 2px 0; }
         .header-text .sheet-title { font-size: 14px; font-weight: bold; margin-top: 6px; letter-spacing: 1px; color: #002147; }
 
-        /* ── Info grid ── */
-        .info-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px 14px; margin-bottom: 10px; font-size: 12px; line-height: 1.6; }
+        /* ── Info grid: course details grouped left, exam details right ── */
+        .info-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 0 30px; margin-bottom: 10px; font-size: 12px; line-height: 1.6; align-items: start; }
+        .info-col  { display: flex; flex-direction: column; gap: 5px; }
         .info-row  { display: flex; gap: 5px; }
-        .info-row .lbl { font-weight: bold; min-width: 92px; color: #002147; }
+        .info-row .lbl { font-weight: bold; min-width: 100px; color: #002147; flex-shrink: 0; }
         .blank-line { display: inline-block; min-width: 130px; border-bottom: 1px dotted #555; }
 
         /* ── Grading scale strip (horizontal, only when grades are printed) ── */
@@ -221,15 +222,19 @@ $page_title      = h($sheet['subject_title']);
         </div>
     </div>
 
-    <!-- Sheet Info -->
+    <!-- Sheet Info: Batch / Course Title / Course Code grouped together -->
     <div class="info-grid">
-        <div class="info-row"><span class="lbl">Batch:</span><span><?= h($batch_label !== '' ? $batch_label : '—') ?></span></div>
-        <div class="info-row"><span class="lbl">Course Teacher:</span><span><?= h($sheet['creator_name'] ?? '—') ?></span></div>
-        <div class="info-row"><span class="lbl">Course Title:</span><span><?= h($sheet['subject_title']) ?></span></div>
-        <div class="info-row"><span class="lbl">Course Code:</span><span><?= h($sheet['subject_code'] ?: '—') ?></span></div>
-        <div class="info-row"><span class="lbl">Credit:</span><span><?= h($sheet['credits'] ?: '—') ?></span></div>
-        <div class="info-row"><span class="lbl">Semester:</span><span><?= h($sheet['semester']) ?></span></div>
-        <div class="info-row"><span class="lbl">Exam Date:</span><span class="blank-line">&nbsp;</span></div>
+        <div class="info-col">
+            <div class="info-row"><span class="lbl">Batch:</span><span><?= h($batch_label !== '' ? $batch_label : '—') ?></span></div>
+            <div class="info-row"><span class="lbl">Course Title:</span><span><?= h($sheet['subject_title']) ?></span></div>
+            <div class="info-row"><span class="lbl">Course Code:</span><span><?= h($sheet['subject_code'] ?: '—') ?></span></div>
+        </div>
+        <div class="info-col">
+            <div class="info-row"><span class="lbl">Course Teacher:</span><span><?= h($sheet['creator_name'] ?? '—') ?></span></div>
+            <div class="info-row"><span class="lbl">Credit:</span><span><?= h($sheet['credits'] ?: '—') ?></span></div>
+            <div class="info-row"><span class="lbl">Semester:</span><span><?= h($sheet['semester']) ?></span></div>
+            <div class="info-row"><span class="lbl">Exam Date:</span><span class="blank-line">&nbsp;</span></div>
+        </div>
     </div>
 
     <?php if ($show_grades): ?>
