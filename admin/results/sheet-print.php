@@ -345,7 +345,7 @@ $page_title      = h($sheet['subject_title']);
     </div>
 
     <div class="footer">
-        Printed on <?= date('d M Y, h:i A') ?> &nbsp;|&nbsp; Prime University – Controller of Examinations
+        Printed on <?= date('d M Y') ?>
     </div>
 
 </div>
