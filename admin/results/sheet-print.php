@@ -49,24 +49,30 @@ try {
 } catch (Throwable $_e) {}
 $batch_label = implode(', ', $batches);
 
+// ── Per-grade batch map + main (predominant) batch of the sheet ────────────
+$grade_batches = [];
+try {
+    $sbq = db()->prepare(
+        'SELECT g.id AS grade_id, s.batch
+           FROM result_sheet_grades g
+           LEFT JOIN students s ON s.id = g.student_id
+          WHERE g.sheet_id = ?'
+    );
+    $sbq->execute([$id]);
+    foreach ($sbq->fetchAll(PDO::FETCH_ASSOC) as $_row) {
+        $grade_batches[(int)$_row['grade_id']] = (string)($_row['batch'] ?? '');
+    }
+} catch (Throwable $_e) {}
+// The sheet's own batch = the batch with the most students on the sheet.
+$_batch_counts = array_count_values(array_filter($grade_batches, fn($b) => $b !== ''));
+arsort($_batch_counts);
+$main_batch = $_batch_counts ? (string)array_key_first($_batch_counts) : '';
+
 // ── Optional batch filter (?batch=) ────────────────────────────────────────
 // When students from a different batch were registered in this course offer,
 // each batch is printed on its own separate sheet.
 $batch_filter = trim((string)($_GET['batch'] ?? ''));
 if ($batch_filter !== '') {
-    $grade_batches = [];
-    try {
-        $sbq = db()->prepare(
-            'SELECT g.id AS grade_id, s.batch
-               FROM result_sheet_grades g
-               LEFT JOIN students s ON s.id = g.student_id
-              WHERE g.sheet_id = ?'
-        );
-        $sbq->execute([$id]);
-        foreach ($sbq->fetchAll(PDO::FETCH_ASSOC) as $_row) {
-            $grade_batches[(int)$_row['grade_id']] = (string)($_row['batch'] ?? '');
-        }
-    } catch (Throwable $_e) {}
     $grades = array_values(array_filter(
         $grades,
         fn($g) => ($grade_batches[(int)$g['id']] ?? '') === $batch_filter
@@ -150,8 +156,8 @@ $page_title      = h($sheet['subject_title']);
         .header-text p  { font-size: 14px; color: #333; margin: 2px 0; }
         .header-text .sheet-title { font-size: 14px; font-weight: bold; margin-top: 6px; letter-spacing: 1px; color: #002147; }
 
-        /* ── Info grid: course details grouped left, exam details right ── */
-        .info-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 0 30px; margin-bottom: 10px; font-size: 12px; line-height: 1.6; align-items: start; }
+        /* ── Info grid: 3 columns ── */
+        .info-grid { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 0 24px; margin-bottom: 10px; font-size: 12px; line-height: 1.6; align-items: start; }
         .info-col  { display: flex; flex-direction: column; gap: 5px; }
         .info-row  { display: flex; gap: 5px; }
         .info-row .lbl { font-weight: bold; min-width: 100px; color: #002147; flex-shrink: 0; }
@@ -222,7 +228,7 @@ $page_title      = h($sheet['subject_title']);
         </div>
     </div>
 
-    <!-- Sheet Info: Batch / Course Title / Course Code grouped together -->
+    <!-- Sheet Info: 3 columns -->
     <div class="info-grid">
         <div class="info-col">
             <div class="info-row"><span class="lbl">Batch:</span><span><?= h($batch_label !== '' ? $batch_label : '—') ?></span></div>
@@ -230,8 +236,10 @@ $page_title      = h($sheet['subject_title']);
             <div class="info-row"><span class="lbl">Course Code:</span><span><?= h($sheet['subject_code'] ?: '—') ?></span></div>
         </div>
         <div class="info-col">
-            <div class="info-row"><span class="lbl">Course Teacher:</span><span><?= h($sheet['creator_name'] ?? '—') ?></span></div>
             <div class="info-row"><span class="lbl">Credit:</span><span><?= h($sheet['credits'] ?: '—') ?></span></div>
+            <div class="info-row"><span class="lbl">Course Teacher:</span><span><?= h($sheet['creator_name'] ?? '—') ?></span></div>
+        </div>
+        <div class="info-col">
             <div class="info-row"><span class="lbl">Semester:</span><span><?= h($sheet['semester']) ?></span></div>
             <div class="info-row"><span class="lbl">Exam Date:</span><span class="blank-line">&nbsp;</span></div>
         </div>
@@ -272,7 +280,9 @@ $page_title      = h($sheet['subject_title']);
                 <?php foreach ($visible_dist as $_pd): ?>
                 <th><?= h($_pd['distribution_name']) ?><?php if ($_pd['max_marks'] !== '' && $_pd['max_marks'] !== null): ?><br><small>/<?= h($_pd['max_marks']) ?></small><?php endif; ?></th>
                 <?php endforeach; ?>
+                <?php if ($exam_mode !== 'mid'): ?>
                 <th style="width:46px;">Total</th>
+                <?php endif; ?>
                 <?php if ($show_grades): ?>
                 <th style="width:46px;">Grade</th>
                 <th style="width:40px;">Point</th>
@@ -313,7 +323,12 @@ $page_title      = h($sheet['subject_title']);
         ?>
         <tr class="<?= $g['is_absent'] ? 'absent-row' : '' ?>">
             <td><?= $idx + 1 ?></td>
-            <td class="mono"><?= h($g['s_student_id'] ?? $g['student_sid']) ?></td>
+            <?php
+                // Student registered from a different batch → show "ID (Batch: name)"
+                $_row_batch  = $grade_batches[(int)$g['id']] ?? '';
+                $_diff_batch = ($_row_batch !== '' && $main_batch !== '' && $_row_batch !== $main_batch);
+            ?>
+            <td class="mono"><?= h($g['s_student_id'] ?? $g['student_sid']) ?><?php if ($_diff_batch): ?> <small>(Batch: <?= h($_row_batch) ?>)</small><?php endif; ?></td>
             <td class="left"><?= h($g['s_full_name'] ?? $g['student_name']) ?></td>
             <?php foreach ($visible_dist as $di => $_pd): ?>
             <td><?php
@@ -326,10 +341,12 @@ $page_title      = h($sheet['subject_title']);
                 }
             ?></td>
             <?php endforeach; ?>
+            <?php if ($exam_mode !== 'mid'): ?>
             <td><?php
                 $is_fully_absent = $g['is_absent'] && empty($_abs_flags);
                 echo $is_fully_absent ? '&mdash;' : h($g['total_marks'] ?? '—');
             ?></td>
+            <?php endif; ?>
             <?php if ($show_grades): ?>
             <td><strong><?= h($g['letter_grade'] ?? '—') ?></strong></td>
             <td><?= $g['grade_point'] !== null ? number_format((float)$g['grade_point'], 2) : '—' ?></td>
