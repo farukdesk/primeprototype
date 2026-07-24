@@ -204,23 +204,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // ── Duplicate guard ───────────────────────────────────────────────────────
-    // A batch's marks for a given exam may only be entered once. If a sheet for
-    // the same exam + offered subject has already been submitted (pending review)
-    // or published, block re-entry. A sheet that was *returned* to the teacher
-    // does not block, so it can be revised and re-submitted.
+    // Multiple teachers may share one subject: each STUDENT's marks for a given
+    // exam may only be entered once. Students already marked in another
+    // submitted (pending) or published sheet are rejected; the remaining
+    // students can still be marked by this teacher. A *returned* sheet does not
+    // block (it can be revised and re-submitted).
     if (empty($errors) && $exam_id > 0 && $offer_subject_id > 0) {
-        $dup = db()->prepare(
-            "SELECT workflow_status FROM result_mark_sheets
-              WHERE exam_id = ? AND offer_subject_id = ?
-                AND workflow_status IN ('pending', 'published')
-                AND id <> ?
-              LIMIT 1"
-        );
-        $dup->execute([$exam_id, $offer_subject_id, $sheet_id]);
-        if ($dup->fetchColumn() !== false) {
-            $errors[] = 'The marks for this batch for this exam have already been submitted. '
-                      . 'You cannot mark again. If you want to mark again, please contact the '
-                      . 'Controller of Examinations with the permission of the Department Head.';
+        $already_marked = []; // student_sid => faculty name
+        try {
+            $dup = db()->prepare(
+                "SELECT g.student_sid, u.full_name AS marked_by
+                   FROM result_mark_sheets ms
+                   JOIN result_sheet_grades g ON g.sheet_id = ms.id
+                   LEFT JOIN users u ON u.id = ms.created_by
+                  WHERE ms.exam_id = ? AND ms.offer_subject_id = ?
+                    AND ms.workflow_status IN ('pending', 'published')
+                    AND ms.id <> ?
+                    AND (g.marks_json IS NOT NULL OR g.is_absent = 1)"
+            );
+            $dup->execute([$exam_id, $offer_subject_id, $sheet_id]);
+            foreach ($dup->fetchAll(PDO::FETCH_ASSOC) as $mrow) {
+                $msid = trim((string)$mrow['student_sid']);
+                if ($msid !== '') {
+                    $already_marked[$msid] = trim((string)($mrow['marked_by'] ?? '')) ?: 'another faculty member';
+                }
+            }
+        } catch (Throwable $_e) {}
+
+        if ($already_marked) {
+            foreach ((array)($_POST['student_sid'] ?? []) as $psid) {
+                $psid = trim((string)$psid);
+                if ($psid !== '' && isset($already_marked[$psid])) {
+                    $errors[] = 'Student ' . h($psid) . ' has already been marked by '
+                              . h($already_marked[$psid]) . ' for this exam. You can only submit '
+                              . 'marks for the remaining students. Please reload the registered '
+                              . 'list and try again.';
+                }
+            }
         }
     }
 
@@ -517,7 +537,7 @@ $is_edit            = $sheet !== null;
 <?php endif; ?>
 
 <div id="dup_warning" class="alert alert-warning d-none" role="alert">
-    <strong><i class="fas fa-exclamation-triangle me-1"></i> Marks already submitted</strong>
+    <strong><i class="fas fa-exclamation-triangle me-1"></i> <span id="dup_warning_title">Marks already submitted</span></strong>
     <div id="dup_warning_text" class="mt-1"></div>
 </div>
 
@@ -975,6 +995,7 @@ foreach ($creatable as $cr) {
 
         // Lock/unlock inputs on every row and recompute the display
         Array.from(tbody.querySelectorAll('tr.grade-row')).forEach(function(tr) {
+            if (tr.hasAttribute('data-marked-by')) return; // marked by another faculty: stays locked
             currentDist.forEach(function(d, i) {
                 var locked  = !distAllowed(d.name);
                 var inp     = tr.querySelector('.marks-input[data-dist-idx="' + i + '"]');
@@ -1293,9 +1314,14 @@ foreach ($creatable as $cr) {
     }
 
     // ── Load active registered students of the selected offer subject ─────────
+    // Passes the selected exam so students already marked by another faculty
+    // member (in a submitted/published sheet) come back with `marked_by` set.
     function loadRegisteredStudents(offerSubjectId, showAlert) {
         if (!offerSubjectId) return;
-        fetch(APP_URL + '/results/get-offer-students.php?offer_subject_id=' + encodeURIComponent(offerSubjectId))
+        var rosterUrl = APP_URL + '/results/get-offer-students.php?offer_subject_id=' + encodeURIComponent(offerSubjectId)
+                      + (examSel && examSel.value ? '&exam_id=' + encodeURIComponent(examSel.value) : '')
+                      + '&exclude_sheet_id=' + encodeURIComponent(currentSheetId);
+        fetch(rosterUrl)
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 // Intentional: always reset the table so it reflects only the
@@ -1306,7 +1332,7 @@ foreach ($creatable as $cr) {
                     if (showAlert) alert('No active registered students found for this course.');
                     return;
                 }
-                data.forEach(function(s) { appendRow(s.student_id, s.full_name, s.id, null, null, true); });
+                data.forEach(function(s) { appendRow(s.student_id, s.full_name, s.id, null, null, true, s.marked_by || null); });
                 renumber();
                 applyExamMode();
             });
@@ -1352,7 +1378,9 @@ foreach ($creatable as $cr) {
                       + '&exclude_id=' + encodeURIComponent(currentSheetId))
             .then(function(r) { return r.json(); })
             .then(function(data) {
+                var dupTitle = document.getElementById('dup_warning_title');
                 if (data && data.duplicate) {
+                    if (dupTitle) dupTitle.textContent = 'Marks already submitted';
                     if (dupWarningText) {
                         dupWarningText.textContent =
                             'The marks for this batch for this exam have already been submitted. '
@@ -1361,6 +1389,19 @@ foreach ($creatable as $cr) {
                     }
                     if (dupWarning) dupWarning.classList.remove('d-none');
                     setActionsDisabled(true);
+                } else if (data && data.partial) {
+                    // Some students already marked by another teacher: entry stays open
+                    if (dupTitle) dupTitle.textContent = 'Some students already marked';
+                    if (dupWarningText) {
+                        var names = (data.marked_by && data.marked_by.length)
+                            ? data.marked_by.join(', ') : 'another faculty member';
+                        dupWarningText.textContent =
+                            data.marked_count + ' of ' + data.total_registered
+                          + ' students have already been marked by ' + names
+                          + '. Those rows are locked below. You can enter and submit marks for the remaining students only.';
+                    }
+                    if (dupWarning) dupWarning.classList.remove('d-none');
+                    setActionsDisabled(false);
                 } else {
                     if (dupWarning) dupWarning.classList.add('d-none');
                     setActionsDisabled(false);
@@ -1371,7 +1412,12 @@ foreach ($creatable as $cr) {
             });
     }
 
-    if (examSel) examSel.addEventListener('change', function() { checkDuplicate(); applyExamMode(); });
+    if (examSel) examSel.addEventListener('change', function() {
+        checkDuplicate();
+        applyExamMode();
+        // Refresh the roster so students already marked for the newly selected exam get locked
+        if (currSel.value && !isEditMode) loadRegisteredStudents(currSel.value, false);
+    });
     currSel.addEventListener('change', checkDuplicate);
 
 
@@ -1398,6 +1444,26 @@ foreach ($creatable as $cr) {
     }
 
     /**
+     * Fully lock a row whose student was already marked by another faculty
+     * member (multi-teacher subject). Nothing in the row is submitted.
+     */
+    function lockMarkedRow(tr) {
+        var by = tr.getAttribute('data-marked-by') || 'another faculty member';
+        tr.classList.add('table-secondary');
+        tr.style.opacity = '0.75';
+        tr.querySelectorAll('input').forEach(function(el) { el.disabled = true; });
+        var rm = tr.querySelector('.btn-remove-row');
+        if (rm) rm.remove();
+        var remarks = tr.querySelector('.remarks-cell');
+        if (remarks) {
+            remarks.innerHTML = '<small class="text-success"><i class="fas fa-check-circle me-1"></i>Marks entered by '
+                              + escHtml(by) + '</small>';
+        }
+        var total = tr.querySelector('.total-cell'); if (total) total.textContent = '—';
+        var grd   = tr.querySelector('.grade-cell'); if (grd)   grd.textContent   = '—';
+    }
+
+    /**
      * Append a student row with mark cells for the current distribution.
      * @param {string}      sid
      * @param {string}      name
@@ -1405,7 +1471,7 @@ foreach ($creatable as $cr) {
      * @param {Array|null}  savedMarks    pre-filled mark values
      * @param {Array|null}  absentFlags   per-segment absent flags
      */
-    function appendRow(sid, name, idPk, savedMarks, absentFlags, isRegistered) {
+    function appendRow(sid, name, idPk, savedMarks, absentFlags, isRegistered, markedBy) {
         if (emptyRow) emptyRow.style.display = 'none';
         var clone = template.content.cloneNode(true);
         var tr    = clone.querySelector('tr');
@@ -1428,6 +1494,12 @@ foreach ($creatable as $cr) {
 
         wireRow(tr);
         tbody.appendChild(tr);
+
+        // Student already marked by another faculty for this exam: lock the row
+        if (markedBy) {
+            tr.setAttribute('data-marked-by', markedBy);
+            lockMarkedRow(tr);
+        }
     }
 
     btnAdd.addEventListener('click', function() {
@@ -1451,6 +1523,7 @@ foreach ($creatable as $cr) {
         }
 
         function updateTotal() {
+            if (tr.hasAttribute('data-marked-by')) return; // locked row: keep "marked by" note
             var inputs = getMarkInputs();
             var remarksCell = tr.querySelector('.remarks-cell');
 
@@ -1556,6 +1629,7 @@ foreach ($creatable as $cr) {
      * Also triggers an immediate updateTotal so Remarks/Grade cells are up-to-date.
      */
     function wireMarkInputs(tr) {
+        if (tr.hasAttribute('data-marked-by')) { lockMarkedRow(tr); return; }
         var total = tr.querySelector('.total-cell');
         var grd   = tr.querySelector('.grade-cell');
         var chk   = tr.querySelector('.absent-chk');
