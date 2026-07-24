@@ -145,13 +145,13 @@ $page_title      = h($sheet['subject_title']);
         /* ── Header ── */
         .header { position: relative; display: flex; align-items: center; justify-content: center; border-bottom: 2px solid #002147; padding-bottom: 8px; margin-bottom: 8px; min-height: 64px; }
         .header-logo { position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 140px; height: auto; object-fit: contain; }
-        .header-text { text-align: center; line-height: 1.4; }
-        .header-text h2 { font-size: 20px; color: #002147; margin-bottom: 2px; font-weight: bold; }
-        .header-text p  { font-size: 12px; color: #333; margin: 1px 0; }
-        .header-text .sheet-title { font-size: 14px; font-weight: bold; margin-top: 5px; letter-spacing: 1px; color: #002147; }
+        .header-text { text-align: center; line-height: 1.5; }
+        .header-text h2 { font-size: 22px; color: #002147; margin-bottom: 3px; font-weight: bold; }
+        .header-text p  { font-size: 14px; color: #333; margin: 2px 0; }
+        .header-text .sheet-title { font-size: 14px; font-weight: bold; margin-top: 6px; letter-spacing: 1px; color: #002147; }
 
         /* ── Info grid ── */
-        .info-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2px 14px; margin-bottom: 8px; font-size: 12px; }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px 14px; margin-bottom: 10px; font-size: 12px; line-height: 1.6; }
         .info-row  { display: flex; gap: 5px; }
         .info-row .lbl { font-weight: bold; min-width: 92px; color: #002147; }
         .blank-line { display: inline-block; min-width: 130px; border-bottom: 1px dotted #555; }
@@ -162,8 +162,8 @@ $page_title      = h($sheet['subject_title']);
         .scale-strip th { background: #002147; color: #fff; font-weight: bold; }
 
         /* ── Marks table ── */
-        .marks-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-        .marks-table th, .marks-table td { border: 1px solid #bbb; padding: 2px 4px; text-align: center; vertical-align: middle; }
+        .marks-table { width: 100%; border-collapse: collapse; font-size: 12px; line-height: 1.6; }
+        .marks-table th, .marks-table td { border: 1px solid #bbb; padding: 4px 6px; text-align: center; vertical-align: middle; }
         .marks-table thead th { background: #002147; color: #fff; }
         .marks-table thead th small { font-weight: normal; font-size: 10px; }
         .marks-table tbody tr:nth-child(even) { background: #f9f9f9; }
@@ -209,7 +209,11 @@ $page_title      = h($sheet['subject_title']);
             <?php if ($sheet['faculty_label'] ?? ''): ?>
             <p><?= h($sheet['faculty_label']) ?></p>
             <?php endif; ?>
-            <p><strong>Department of <?= h($sheet['dept_name']) ?></strong></p>
+            <?php // Avoid "Department of Department of ..." when dept name already has the prefix
+            $dept_line = preg_match('/^\s*(department|dept\.?)\b/i', (string)$sheet['dept_name'])
+                ? $sheet['dept_name']
+                : 'Department of ' . $sheet['dept_name']; ?>
+            <p><strong><?= h($dept_line) ?></strong></p>
             <?php if ($sheet['program_name']): ?>
             <p><?= h($sheet['program_name']) ?></p>
             <?php endif; ?>
@@ -245,7 +249,7 @@ $page_title      = h($sheet['subject_title']);
         </tr>
     </table>
     <?php else: ?>
-    <p style="font-size:11px;color:#555;margin-bottom:8px;font-style:italic;">
+    <p style="font-size:12px;color:#555;margin-bottom:8px;line-height:1.6;font-style:italic;">
         Mid Term result — letter grades and grade points will be issued after the final examination.
     </p>
     <?php endif; ?>
