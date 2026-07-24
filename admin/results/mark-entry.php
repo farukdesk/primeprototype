@@ -1332,7 +1332,18 @@ foreach ($creatable as $cr) {
                     if (showAlert) alert('No active registered students found for this course.');
                     return;
                 }
-                data.forEach(function(s) { appendRow(s.student_id, s.full_name, s.id, null, null, true, s.marked_by || null); });
+                // Detect the course's main batch (the most common one) so students
+                // registered from a different batch get a batch tag under their ID.
+                var batchCounts = {};
+                data.forEach(function(s) { if (s.batch) batchCounts[s.batch] = (batchCounts[s.batch] || 0) + 1; });
+                var mainBatch = '';
+                Object.keys(batchCounts).forEach(function(b) {
+                    if (mainBatch === '' || batchCounts[b] > batchCounts[mainBatch]) mainBatch = b;
+                });
+                data.forEach(function(s) {
+                    var diffBatch = (s.batch && mainBatch && s.batch !== mainBatch) ? s.batch : null;
+                    appendRow(s.student_id, s.full_name, s.id, null, null, true, s.marked_by || null, diffBatch);
+                });
                 renumber();
                 applyExamMode();
             });
@@ -1471,13 +1482,25 @@ foreach ($creatable as $cr) {
      * @param {Array|null}  savedMarks    pre-filled mark values
      * @param {Array|null}  absentFlags   per-segment absent flags
      */
-    function appendRow(sid, name, idPk, savedMarks, absentFlags, isRegistered, markedBy) {
+    function appendRow(sid, name, idPk, savedMarks, absentFlags, isRegistered, markedBy, diffBatch) {
         if (emptyRow) emptyRow.style.display = 'none';
         var clone = template.content.cloneNode(true);
         var tr    = clone.querySelector('tr');
         tr.querySelector('[name="student_id_pk[]"]').value = idPk || 0;
         tr.querySelector('[name="student_sid[]"]').value   = sid  || '';
         tr.querySelector('[name="student_name[]"]').value  = name || '';
+
+        // Student registered from a different batch → show their batch under the ID
+        if (diffBatch) {
+            var sidTd = tr.querySelector('[name="student_sid[]"]').closest('td');
+            if (sidTd) {
+                var badge = document.createElement('small');
+                badge.className = 'text-danger d-block mt-1 fw-semibold';
+                badge.style.fontSize = '.68rem';
+                badge.textContent = 'Batch: ' + diffBatch;
+                sidTd.appendChild(badge);
+            }
+        }
 
         // Registered students may only be removed by administrators.
         if (isRegistered && !CAN_REMOVE_ROWS) {

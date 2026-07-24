@@ -327,12 +327,7 @@ $page_title      = h($sheet['subject_title']);
         ?>
         <tr class="<?= $g['is_absent'] ? 'absent-row' : '' ?>">
             <td><?= $idx + 1 ?></td>
-            <?php
-                // Student registered from a different batch → show "ID (Batch: name)"
-                $_row_batch  = $grade_batches[(int)$g['id']] ?? '';
-                $_diff_batch = ($_row_batch !== '' && $main_batch !== '' && $_row_batch !== $main_batch);
-            ?>
-            <td class="mono"><?= h($g['s_student_id'] ?? $g['student_sid']) ?><?php if ($_diff_batch): ?> <small>(Batch: <?= h($_row_batch) ?>)</small><?php endif; ?></td>
+            <td class="mono"><?= h($g['s_student_id'] ?? $g['student_sid']) ?></td>
             <td class="left"><?= h($g['s_full_name'] ?? $g['student_name']) ?></td>
             <?php foreach ($visible_dist as $di => $_pd): ?>
             <td><?php
