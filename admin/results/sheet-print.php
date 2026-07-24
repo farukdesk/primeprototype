@@ -12,10 +12,9 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/workflow-helpers.php';
 
-$id       = (int)($_GET['id'] ?? 0);
-$sheet    = wf_get_sheet($id);
-$grades   = wf_get_grades($id);
-$signoffs = wf_get_sheet_signoffs($id);
+$id     = (int)($_GET['id'] ?? 0);
+$sheet  = wf_get_sheet($id);
+$grades = wf_get_grades($id);
 
 // ── Exam name + exam mode (mid / final / all) ───────────────────────────
 $exam_label = '';
@@ -49,6 +48,31 @@ try {
     $batches = array_column($bq->fetchAll(PDO::FETCH_ASSOC), 'batch');
 } catch (Throwable $_e) {}
 $batch_label = implode(', ', $batches);
+
+// ── Optional batch filter (?batch=) ────────────────────────────────────────
+// When students from a different batch were registered in this course offer,
+// each batch is printed on its own separate sheet.
+$batch_filter = trim((string)($_GET['batch'] ?? ''));
+if ($batch_filter !== '') {
+    $grade_batches = [];
+    try {
+        $sbq = db()->prepare(
+            'SELECT g.id AS grade_id, s.batch
+               FROM result_sheet_grades g
+               LEFT JOIN students s ON s.id = g.student_id
+              WHERE g.sheet_id = ?'
+        );
+        $sbq->execute([$id]);
+        foreach ($sbq->fetchAll(PDO::FETCH_ASSOC) as $_row) {
+            $grade_batches[(int)$_row['grade_id']] = (string)($_row['batch'] ?? '');
+        }
+    } catch (Throwable $_e) {}
+    $grades = array_values(array_filter(
+        $grades,
+        fn($g) => ($grade_batches[(int)$g['id']] ?? '') === $batch_filter
+    ));
+    $batch_label = $batch_filter;
+}
 
 // ── Mark distribution: prefer curriculum config, fall back to legacy defaults ─
 $mark_distribution = [];
@@ -103,7 +127,8 @@ foreach ($mark_distribution as $di => $d) {
 }
 if (empty($visible_dist)) $visible_dist = $mark_distribution; // safety net
 
-$sheet_title_txt = ($exam_mode === 'mid') ? 'MID TERM MARK SHEET' : 'MARK SHEET';
+// Full exam title + "Mark Sheet", e.g. "Mid Term Examination Summer 2026 Mark Sheet"
+$sheet_title_txt = ($exam_label !== '') ? $exam_label . ' Mark Sheet' : 'Mark Sheet';
 $page_title      = h($sheet['subject_title']);
 ?>
 <!DOCTYPE html>
@@ -123,12 +148,13 @@ $page_title      = h($sheet['subject_title']);
         .header-text { text-align: center; line-height: 1.4; }
         .header-text h2 { font-size: 20px; color: #002147; margin-bottom: 2px; font-weight: bold; }
         .header-text p  { font-size: 12px; color: #333; margin: 1px 0; }
-        .header-text .sheet-title { font-size: 14px; font-weight: bold; margin-top: 5px; letter-spacing: 1px; color: #002147; text-transform: uppercase; }
+        .header-text .sheet-title { font-size: 14px; font-weight: bold; margin-top: 5px; letter-spacing: 1px; color: #002147; }
 
         /* ── Info grid ── */
         .info-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2px 14px; margin-bottom: 8px; font-size: 12px; }
         .info-row  { display: flex; gap: 5px; }
         .info-row .lbl { font-weight: bold; min-width: 92px; color: #002147; }
+        .blank-line { display: inline-block; min-width: 130px; border-bottom: 1px dotted #555; }
 
         /* ── Grading scale strip (horizontal, only when grades are printed) ── */
         .scale-strip { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 8px; }
@@ -147,7 +173,7 @@ $page_title      = h($sheet['subject_title']);
         .abs-cell { color: #c0392b; font-weight: bold; font-size: 11px; }
 
         /* ── Signatures ── */
-        .signoff { margin-top: 34px; display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; font-size: 12px; }
+        .signoff { margin-top: 48px; display: grid; grid-template-columns: 1fr 1fr; column-gap: 160px; font-size: 12px; }
         .signoff-box { border-top: 1px solid #999; padding-top: 5px; text-align: center; }
         .signoff-box .lbl { font-weight: bold; color: #002147; }
 
@@ -187,27 +213,19 @@ $page_title      = h($sheet['subject_title']);
             <?php if ($sheet['program_name']): ?>
             <p><?= h($sheet['program_name']) ?></p>
             <?php endif; ?>
-            <?php if ($batch_label !== ''): ?>
-            <p><strong>Batch:</strong> <?= h($batch_label) ?></p>
-            <?php endif; ?>
             <div class="sheet-title"><?= h($sheet_title_txt) ?></div>
         </div>
     </div>
 
     <!-- Sheet Info -->
     <div class="info-grid">
-        <div class="info-row"><span class="lbl">Subject:</span>
-            <span><?= $sheet['subject_code'] ? h($sheet['subject_code']) . ' – ' : '' ?><?= h($sheet['subject_title']) ?></span>
-        </div>
-        <?php if ($exam_label !== ''): ?>
-        <div class="info-row"><span class="lbl">Exam:</span><span><?= h($exam_label) ?></span></div>
-        <?php endif; ?>
-        <div class="info-row"><span class="lbl">Semester:</span><span><?= h($sheet['semester']) ?></span></div>
-        <?php if ($sheet['credits']): ?>
-        <div class="info-row"><span class="lbl">Credits:</span><span><?= h($sheet['credits']) ?></span></div>
-        <?php endif; ?>
+        <div class="info-row"><span class="lbl">Batch:</span><span><?= h($batch_label !== '' ? $batch_label : '—') ?></span></div>
         <div class="info-row"><span class="lbl">Course Teacher:</span><span><?= h($sheet['creator_name'] ?? '—') ?></span></div>
-        <div class="info-row"><span class="lbl">Date:</span><span><?= date('d M Y') ?></span></div>
+        <div class="info-row"><span class="lbl">Course Title:</span><span><?= h($sheet['subject_title']) ?></span></div>
+        <div class="info-row"><span class="lbl">Course Code:</span><span><?= h($sheet['subject_code'] ?: '—') ?></span></div>
+        <div class="info-row"><span class="lbl">Credit:</span><span><?= h($sheet['credits'] ?: '—') ?></span></div>
+        <div class="info-row"><span class="lbl">Semester:</span><span><?= h($sheet['semester']) ?></span></div>
+        <div class="info-row"><span class="lbl">Exam Date:</span><span class="blank-line">&nbsp;</span></div>
     </div>
 
     <?php if ($show_grades): ?>
@@ -314,33 +332,15 @@ $page_title      = h($sheet['subject_title']);
     </table>
     <?php endif; ?>
 
-    <!-- Signatures -->
+    <!-- Signatures (manual signing – no digital names) -->
     <div class="signoff">
         <div class="signoff-box">
             <div style="height:34px;"></div>
             <div class="lbl">Course Teacher</div>
-            <div style="margin-top:3px;"><?= h($sheet['creator_name'] ?? '') ?></div>
         </div>
         <div class="signoff-box">
             <div style="height:34px;"></div>
             <div class="lbl">Head of the Department</div>
-            <div style="margin-top:3px;"><?= h($signoffs['hod_name'] ?? '') ?></div>
-            <?php if ($signoffs['hod_approved_at'] ?? null): ?>
-            <div style="color:#555;font-size:10px;"><?= date('d M Y', strtotime($signoffs['hod_approved_at'])) ?></div>
-            <?php endif; ?>
-        </div>
-        <div class="signoff-box">
-            <div style="height:34px;"></div>
-            <div class="lbl">Dean</div>
-            <div style="margin-top:3px;"><?= h($signoffs['dean_name'] ?? '') ?></div>
-        </div>
-        <div class="signoff-box">
-            <div style="height:34px;"></div>
-            <div class="lbl">Controller of Examinations</div>
-            <div style="margin-top:3px;"><?= h($signoffs['publisher_name'] ?? '') ?></div>
-            <?php if ($signoffs['published_at'] ?? null): ?>
-            <div style="color:#555;font-size:10px;"><?= date('d M Y', strtotime($signoffs['published_at'])) ?></div>
-            <?php endif; ?>
         </div>
     </div>
 
