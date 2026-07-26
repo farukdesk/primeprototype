@@ -91,7 +91,7 @@ function att_policy_rules_html(): string
                 </div>
                 <div class="col-md-6">
                     <ul class="mb-0 ps-3">
-                        <li><strong>Faculty on Friday:</strong> flexible clock in/out — must complete <strong>7–8 hours</strong> in total; never marked Late In or Early Out.</li>
+                        <li><strong>Faculty on Friday:</strong> flexible clock in/out — must complete a strict <strong>8 hours</strong> in total; never marked Late In or Early Out.</li>
                         <li><strong>Early birds:</strong> clock in by <strong>8:30 AM</strong> → may leave from <strong>4:30 PM</strong> without Early Out.</li>
                         <li><strong>Penalty:</strong> every <strong>4 Late In / Early Out days</strong> count as <strong>1 Absent day</strong> (salary may be deducted).</li>
                     </ul>
