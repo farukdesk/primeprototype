@@ -513,7 +513,7 @@ function att_status_label(string $status): string
         'early_out'      => 'Early Out',
         'late_and_early' => 'Late In & Early Out',
         'incomplete'     => 'No Out Time',
-        'short_hours'    => 'Insufficient Hours (<7h)',
+        'short_hours'    => 'Insufficient Hours (<8h)',
         'absent'         => 'Absent',
         'upcoming'       => 'Upcoming',
         'leave'          => 'On Leave',
