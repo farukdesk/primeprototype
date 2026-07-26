@@ -209,9 +209,13 @@ $weekday_abbr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
             <?php endif; ?>
         </ol>
     </nav>
-    <div class="d-flex gap-2 no-print">
+    <div class="d-flex gap-2 no-print flex-wrap">
         <?php if (!$self_only): ?>
         <a href="<?= APP_URL ?>/staff-attendance/index.php?<?= h($report_qs) ?>" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left me-1"></i> Back to report</a>
+        <?php endif; ?>
+        <?php if ($self_only || (int)auth_user()['id'] === $user_id): ?>
+        <a href="<?= APP_URL ?>/staff-attendance/my-schedule.php" class="btn btn-outline-primary btn-sm"><i class="fas fa-calendar-week me-1"></i> My Schedule</a>
+        <a href="<?= APP_URL ?>/leave-management/index.php" class="btn btn-outline-primary btn-sm"><i class="fas fa-plane-departure me-1"></i> Leave Management</a>
         <?php endif; ?>
         <button onclick="window.print()" class="btn btn-outline-secondary btn-sm"><i class="fas fa-print me-1"></i> Print</button>
     </div>

@@ -53,13 +53,37 @@ const LM_MAX_DAYS = [
 /** Anyone with view access can see the module (their own leaves). */
 function lm_can_view(): bool
 {
-    return is_super_admin() || can_access('leave-management', 'can_view');
+    return is_super_admin() || can_access('leave-management', 'can_view') || lm_self_service_allowed();
 }
 
 /** Whether the current user can submit a leave request. */
 function lm_can_request(): bool
 {
-    return is_super_admin() || can_access('leave-management', 'can_create');
+    return is_super_admin() || can_access('leave-management', 'can_create') || lm_self_service_allowed();
+}
+
+/**
+ * Self-service: every employee whose Employee Type (staff_profiles.
+ * department_type) is Administrative ('administrative') or Faculty
+ * ('educational') can manage their OWN leaves from their portal — view their
+ * balance / requests and submit new requests — even without Leave Management
+ * module access. Admin features (Balances, Approval Flow, all requests) still
+ * require module access via the Module Access page.
+ */
+function lm_self_service_allowed(): bool
+{
+    static $allowed = null;
+    if ($allowed !== null) return $allowed;
+    $user = auth_user();
+    if (!$user) return $allowed = false;
+    try {
+        $stmt = db()->prepare('SELECT department_type FROM staff_profiles WHERE user_id = ?');
+        $stmt->execute([(int)$user['id']]);
+        $type = (string)$stmt->fetchColumn();
+        return $allowed = in_array($type, ['administrative', 'educational'], true);
+    } catch (Throwable $e) {
+        return $allowed = false;
+    }
 }
 
 /**

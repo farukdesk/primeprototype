@@ -27,7 +27,7 @@ const ATT_DEFAULT_WEEKLY_OFF = '5'; // Friday (PHP date('N'): 1=Mon … 7=Sun)
 
 // ── Attendance policy effective 1 June 2026 ─────────────────────────────────
 // From this date: employee-type based clock-in buffers (no clock-out buffer),
-// faculty flexible Fridays (minimum 7 hours), early-bird 8:30→16:30 flexibility
+// faculty flexible Fridays (strict 8 hours), early-bird 8:30→16:30 flexibility
 // and the "4 late/early days = 1 absent" salary-deduction rule.
 const ATT_POLICY_EFFECTIVE          = '2026-06-01';
 const ATT_POLICY_ADMIN_IN_BUFFER    = 15;      // administrative clock-in grace (min)
@@ -35,7 +35,7 @@ const ATT_POLICY_FACULTY_IN_BUFFER  = 20;      // faculty clock-in grace (min)
 const ATT_POLICY_OUT_BUFFER         = 0;       // no clock-out grace for both types
 const ATT_POLICY_EARLY_IN           = '08:30'; // earliest counted clock-in
 const ATT_POLICY_EARLY_OUT_OK       = '16:30'; // early birds may leave from here
-const ATT_POLICY_FRIDAY_MIN_MINUTES = 420;     // faculty Friday minimum (7 hours)
+const ATT_POLICY_FRIDAY_MIN_MINUTES = 480;     // faculty Friday minimum (strict 8 hours)
 const ATT_POLICY_LATE_PER_ABSENT    = 4;       // 4 late-in/early-out days = 1 absent
 
 /** Whether the June-2026 attendance policy applies to a date. */
@@ -91,7 +91,7 @@ function att_policy_rules_html(): string
                 </div>
                 <div class="col-md-6">
                     <ul class="mb-0 ps-3">
-                        <li><strong>Faculty on Friday:</strong> flexible clock in/out — must complete <strong>7–8 hours</strong> in total; never marked Late In or Early Out.</li>
+                        <li><strong>Faculty on Friday:</strong> flexible clock in/out — must complete a strict <strong>8 hours</strong> in total; never marked Late In or Early Out.</li>
                         <li><strong>Early birds:</strong> clock in by <strong>8:30 AM</strong> → may leave from <strong>4:30 PM</strong> without Early Out.</li>
                         <li><strong>Penalty:</strong> every <strong>4 Late In / Early Out days</strong> count as <strong>1 Absent day</strong> (salary may be deducted).</li>
                     </ul>
@@ -395,7 +395,16 @@ function att_on_leave_user_ids(string $date): array
     } catch (Throwable $e) {
         // Leave Management module not installed – ignore.
     }
-    return $cache[$date] = $ids;
+    // Days explicitly marked "Approved Leave / Day Off" by an admin / the
+    // Registrar office, or auto-marked when a leave gets its final approval.
+    try {
+        $stmt = db()->prepare('SELECT DISTINCT user_id FROM att_day_status WHERE status_date = ?');
+        $stmt->execute([$date]);
+        foreach ($stmt->fetchAll() as $r) $ids[] = (int)$r['user_id'];
+    } catch (Throwable $e) {
+        // att_day_status migration not applied yet – ignore.
+    }
+    return $cache[$date] = array_values(array_unique($ids));
 }
 
 // ── Status computation ──────────────────────────────────────────────────────
@@ -420,25 +429,21 @@ function att_compute_status(?array $record, int $user_id, string $date, array $s
 
     if (isset($holidays[$date]))            return $has_in ? 'present' : 'holiday';
 
-    // Policy: faculty working on a FRIDAY are fully flexible — any clock in/out
-    // time is fine, never marked Late In or Early Out, but the day must total at
-    // least 7 hours (7–8h expected). Applies whether Friday is their weekend or
-    // a scheduled work day.
-    if ($policy && $etype === 'educational' && (int)date('N', strtotime($date)) === 5 && $has_in) {
-        if (!$has_out) return 'incomplete';
-        return att_worked_minutes($record['in_time'], $record['out_time']) >= ATT_POLICY_FRIDAY_MIN_MINUTES
-            ? 'present'
-            : 'short_hours';
+    // Custom Thursday / Friday slots: when the member defined slots for this
+    // weekday (e.g. a slot On Campus + a slot for Online Class), the combined
+    // slot window (first slot start → last slot end) IS their expected
+    // clock-in/out time for the day, and the day counts as a working day.
+    $slot_win = att_slot_window($user_id, $date);
+    if ($slot_win !== null) {
+        $sched = array_merge($sched, [
+            'start_time' => $slot_win['start_time'],
+            'close_time' => $slot_win['close_time'],
+        ]);
     }
 
-    if (att_is_weekly_off_for($sched, $date)) return $has_in ? 'present' : 'weekly_off';
-    if (!$has_in && in_array($user_id, $on_leave, true)) return 'leave';
-    if (!$has_in && $date > date('Y-m-d')) return 'upcoming';
-    if (!$has_in)                           return 'absent';
-
-    // Present with an in-time: check late-in / early-out against the schedule.
-    // Policy (from 01 Jun 2026): buffers come from the Employee Type —
-    // Administrative 15 min in / 0 min out, Faculty 20 min in / 0 min out.
+    // Effective buffers. Policy (from 01 Jun 2026): buffers come from the
+    // Employee Type — Administrative 15 min in / 0 min out, Faculty 20 min in
+    // / 0 min out.
     $in_buffer  = (int)$sched['in_buffer_minutes'];
     $out_buffer = (int)$sched['out_buffer_minutes'];
     if ($policy && $etype === 'administrative') {
@@ -448,6 +453,32 @@ function att_compute_status(?array $record, int $user_id, string $date, array $s
         $in_buffer  = ATT_POLICY_FACULTY_IN_BUFFER;
         $out_buffer = ATT_POLICY_OUT_BUFFER;
     }
+
+    // Policy: faculty working on a FRIDAY are fully flexible — any clock in/out
+    // time is fine, never marked Late In or Early Out, but the day must total a
+    // strict 8 hours. Applies whether Friday is their weekend or a scheduled
+    // work day. Skipped when the member defined custom slots for the day (the
+    // slot window then defines their expected in/out times instead).
+    if ($slot_win === null && $policy && $etype === 'educational' && (int)date('N', strtotime($date)) === 5 && $has_in) {
+        if (!$has_out) return 'incomplete';
+        return att_worked_minutes($record['in_time'], $record['out_time']) >= ATT_POLICY_FRIDAY_MIN_MINUTES
+            ? 'present'
+            : 'short_hours';
+    }
+
+    if ($slot_win === null && att_is_weekly_off_for($sched, $date)) return $has_in ? 'present' : 'weekly_off';
+    if (!$has_in && in_array($user_id, $on_leave, true)) return 'leave';
+    if (!$has_in && $date > date('Y-m-d')) return 'upcoming';
+    if (!$has_in && $date === date('Y-m-d')) {
+        // Never mark TODAY as Absent before the expected clock-in time plus the
+        // grace period has actually passed.
+        $limit = (int)att_time_to_minutes($sched['start_time']) + $in_buffer;
+        $now   = (int)date('G') * 60 + (int)date('i');
+        if ($now <= $limit) return 'upcoming';
+    }
+    if (!$has_in)                           return 'absent';
+
+    // Present with an in-time: check late-in / early-out against the schedule.
 
     $start_lim = att_time_to_minutes($sched['start_time']) + $in_buffer;
     $close_lim = att_time_to_minutes($sched['close_time']) - $out_buffer;
@@ -482,7 +513,7 @@ function att_status_label(string $status): string
         'early_out'      => 'Early Out',
         'late_and_early' => 'Late In & Early Out',
         'incomplete'     => 'No Out Time',
-        'short_hours'    => 'Insufficient Hours (<7h)',
+        'short_hours'    => 'Insufficient Hours (<8h)',
         'absent'         => 'Absent',
         'upcoming'       => 'Upcoming',
         'leave'          => 'On Leave',
@@ -671,4 +702,214 @@ function att_logo_data_uri(): string
         }
     }
     return '';
+}
+
+// ── Approved Leave / Day Off marks (admin & Registrar office) ─────────────
+
+/**
+ * Whether the current user may mark a day as Approved Leave / Day Off:
+ * module admins (can_edit) and any member of the "Registrar office" user group.
+ */
+function att_can_mark_dayoff(): bool
+{
+    if (att_is_admin()) return true;
+    $user = auth_user();
+    if (!$user) return false;
+    $gids = array_map('intval', $user['group_ids'] ?? [(int)$user['group_id']]);
+    if (empty($gids)) return false;
+    try {
+        $ph   = implode(',', array_fill(0, count($gids), '?'));
+        $stmt = db()->prepare("SELECT name FROM user_groups WHERE id IN ($ph)");
+        $stmt->execute($gids);
+        foreach ($stmt->fetchAll() as $g) {
+            $name = strtolower(trim((string)$g['name']));
+            if (in_array($name, ['registrar office', 'registrar-office', 'office of registrar', 'registrar'], true)) {
+                return true;
+            }
+        }
+    } catch (Throwable $e) {
+        // ignore
+    }
+    return false;
+}
+
+/** All Approved Leave / Day Off marks within a date range (admin listing). */
+function att_day_status_rows(string $from, string $to): array
+{
+    try {
+        $stmt = db()->prepare(
+            'SELECT ds.*, u.full_name, cb.full_name AS created_by_name
+               FROM att_day_status ds
+               JOIN users u ON u.id = ds.user_id
+          LEFT JOIN users cb ON cb.id = ds.created_by
+              WHERE ds.status_date BETWEEN ? AND ?
+           ORDER BY ds.status_date DESC, u.full_name ASC'
+        );
+        $stmt->execute([$from, $to]);
+        return $stmt->fetchAll();
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+/** Mark one day as Approved Leave / Day Off for a staff member (idempotent). */
+function att_mark_dayoff(int $user_id, string $date, string $status, ?string $note, string $source = 'manual', ?int $leave_request_id = null, ?int $created_by = null): void
+{
+    if (!in_array($status, ['approved_leave', 'day_off'], true)) $status = 'approved_leave';
+    db()->prepare(
+        'INSERT INTO att_day_status (user_id, status_date, status, note, source, leave_request_id, created_by)
+         VALUES (?,?,?,?,?,?,?)
+         ON DUPLICATE KEY UPDATE status = VALUES(status), note = VALUES(note),
+                                 source = VALUES(source), leave_request_id = VALUES(leave_request_id)'
+    )->execute([$user_id, $date, $status, $note, $source, $leave_request_id, $created_by]);
+}
+
+// ── Custom Thursday / Friday day slots ────────────────────────────────────
+
+/** All active day slots keyed by user_id → weekday → ordered slot rows. */
+function att_all_slots(): array
+{
+    static $cache = null;
+    if ($cache !== null) return $cache;
+    $cache = [];
+    try {
+        $rows = db()->query(
+            'SELECT * FROM att_day_slots WHERE is_active = 1 ORDER BY user_id, weekday, start_time'
+        )->fetchAll();
+        foreach ($rows as $r) {
+            $cache[(int)$r['user_id']][(int)$r['weekday']][] = $r;
+        }
+    } catch (Throwable $e) {
+        // att_day_slots migration not applied yet.
+    }
+    return $cache;
+}
+
+/** Active Thu/Fri slots for a user, keyed by ISO weekday (4=Thu, 5=Fri). */
+function att_user_slots(int $user_id): array
+{
+    $all = att_all_slots();
+    return $all[$user_id] ?? [];
+}
+
+/**
+ * The combined slot window for a user on a date: first slot start → last slot
+ * end, used as their expected clock-in/out time. Only Thursday (4) and Friday
+ * (5) support custom slots. Returns null when the user has none for the day.
+ */
+function att_slot_window(int $user_id, string $date): ?array
+{
+    $wd = (int)date('N', strtotime($date));
+    if ($wd !== 4 && $wd !== 5) return null;
+    $slots = att_user_slots($user_id)[$wd] ?? [];
+    if (empty($slots)) return null;
+    $start = null;
+    $end   = null;
+    foreach ($slots as $s) {
+        $st = att_normalize_time($s['start_time'] ?? null);
+        $en = att_normalize_time($s['end_time'] ?? null);
+        if ($st === null || $en === null) continue;
+        if ($start === null || $st < $start) $start = $st;
+        if ($end === null || $en > $end)     $end   = $en;
+    }
+    if ($start === null || $end === null) return null;
+    return ['start_time' => $start, 'close_time' => $end, 'slots' => $slots];
+}
+
+// ── Weekend (weekly-off) change requests + approval chain ───────────────────
+
+/**
+ * The ordered approval chain that applies to a requesting user. Reuses the
+ * Leave Management per-group approval flow (leave_approval_flow) so a single
+ * chain configuration drives both leave and weekend approvals. Prefers the
+ * user's primary group when it has a configured chain, otherwise the first of
+ * their groups that does.
+ */
+function att_weekend_flow_for_user(array $user): array
+{
+    $primary    = (int)($user['group_id'] ?? 0);
+    $group_ids  = array_map('intval', $user['group_ids'] ?? ($primary ? [$primary] : []));
+    $candidates = array_values(array_unique(array_merge($primary ? [$primary] : [], $group_ids)));
+    try {
+        $stmt = db()->prepare(
+            'SELECT f.*, g.name AS group_name
+               FROM leave_approval_flow f
+               JOIN user_groups g ON g.id = f.group_id
+              WHERE f.is_active = 1 AND f.requester_group_id = ?
+              ORDER BY f.step_order ASC, f.id ASC'
+        );
+        foreach ($candidates as $gid) {
+            if ($gid < 1) continue;
+            $stmt->execute([$gid]);
+            $rows = $stmt->fetchAll();
+            if (!empty($rows)) return $rows;
+        }
+    } catch (Throwable $e) {
+        // Approval-flow tables not installed.
+    }
+    return [];
+}
+
+/** Snapshot the chain into a weekend request; returns the number of steps. */
+function att_weekend_snapshot_flow(int $request_id, array $flow): int
+{
+    $ins = db()->prepare(
+        'INSERT INTO att_weekend_request_approvals (request_id, step_order, group_id, label)
+         VALUES (?,?,?,?)'
+    );
+    $step = 0;
+    foreach ($flow as $f) {
+        $step++;
+        $ins->execute([$request_id, $step, (int)$f['group_id'], ($f['label'] ?? '') !== '' ? $f['label'] : null]);
+    }
+    return $step;
+}
+
+/** Ordered approval steps of a weekend request, with group/approver names. */
+function att_weekend_request_approvals(int $request_id): array
+{
+    $stmt = db()->prepare(
+        'SELECT a.*, g.name AS group_name, u.full_name AS approver_name
+           FROM att_weekend_request_approvals a
+           JOIN user_groups g ON g.id = a.group_id
+      LEFT JOIN users u ON u.id = a.approver_id
+          WHERE a.request_id = ?
+          ORDER BY a.step_order ASC'
+    );
+    $stmt->execute([$request_id]);
+    return $stmt->fetchAll();
+}
+
+/** The current pending step row of a weekend request, or null. */
+function att_weekend_current_step(int $request_id, int $current_step): ?array
+{
+    $stmt = db()->prepare(
+        'SELECT * FROM att_weekend_request_approvals WHERE request_id = ? AND step_order = ?'
+    );
+    $stmt->execute([$request_id, $current_step]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+/** Whether the user may act on the request's current pending step. */
+function att_weekend_user_can_act(array $request, array $user): bool
+{
+    if (($request['status'] ?? '') !== 'pending') return false;
+    $step = att_weekend_current_step((int)$request['id'], (int)$request['current_step']);
+    if (!$step || $step['status'] !== 'pending') return false;
+    $group_ids = array_map('intval', $user['group_ids'] ?? [(int)$user['group_id']]);
+    return in_array((int)$step['group_id'], $group_ids, true);
+}
+
+/**
+ * Apply an approved weekend request: store the requested days as the member's
+ * per-staff weekly-off override (other override fields stay untouched).
+ */
+function att_apply_weekend(int $user_id, string $off_days): void
+{
+    db()->prepare(
+        'INSERT INTO att_staff_schedule (user_id, weekly_off_days, is_active)
+         VALUES (?,?,1)
+         ON DUPLICATE KEY UPDATE weekly_off_days = VALUES(weekly_off_days), is_active = 1'
+    )->execute([$user_id, $off_days !== '' ? $off_days : null]);
 }

@@ -6,8 +6,13 @@
  *   - Admins (can_edit): all requests + links to Balances and Approval Flow.
  */
 require_once __DIR__ . '/../includes/auth.php';
-require_access('leave-management');
+auth_check();
 require_once __DIR__ . '/helpers.php';
+// Module access OR self-service (Administrative / Faculty employee types).
+if (!lm_can_view()) {
+    $_SESSION['flash_error'] = 'You do not have permission to access this section.';
+    redirect(APP_URL . '/index.php');
+}
 
 $page_title = 'Leave Management';
 $user       = auth_user();

@@ -80,7 +80,7 @@ if (($_GET['export'] ?? '') === 'csv') {
         'late_and_early' => 'Late In + Early Out', 'incomplete' => 'Incomplete',
         'leave' => 'On Leave', 'absent' => 'Absent', 'holiday' => 'Holiday',
         'weekly_off' => 'Weekend', 'off' => 'Weekend',
-        'short_hours' => 'Insufficient Hours (Fri < 7h)',
+        'short_hours' => 'Insufficient Hours (Fri < 8h)',
     ];
     $status_text = static fn(string $s): string => $status_labels[$s] ?? ucwords(str_replace('_', ' ', $s));
 
@@ -201,6 +201,10 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
             <i class="fas fa-plus me-1"></i> Record Attendance
         </a>
         <?php endif; ?>
+        <?php if (att_can_mark_dayoff()): ?>
+        <a href="<?= APP_URL ?>/staff-attendance/day-status.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-umbrella-beach me-1"></i> Approved Leave / Day Off</a>
+        <?php endif; ?>
+        <a href="<?= APP_URL ?>/staff-attendance/weekend-approvals.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-clipboard-check me-1"></i> Weekend Approvals</a>
         <?php if ($is_admin): ?>
         <a href="<?= APP_URL ?>/staff-attendance/settings.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-gear me-1"></i> Settings</a>
         <a href="<?= APP_URL ?>/staff-attendance/schedules.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-user-gear me-1"></i> Staff Schedules</a>
