@@ -703,3 +703,213 @@ function att_logo_data_uri(): string
     }
     return '';
 }
+
+// ── Approved Leave / Day Off marks (admin & Registrar office) ─────────────
+
+/**
+ * Whether the current user may mark a day as Approved Leave / Day Off:
+ * module admins (can_edit) and any member of the "Registrar office" user group.
+ */
+function att_can_mark_dayoff(): bool
+{
+    if (att_is_admin()) return true;
+    $user = auth_user();
+    if (!$user) return false;
+    $gids = array_map('intval', $user['group_ids'] ?? [(int)$user['group_id']]);
+    if (empty($gids)) return false;
+    try {
+        $ph   = implode(',', array_fill(0, count($gids), '?'));
+        $stmt = db()->prepare("SELECT name FROM user_groups WHERE id IN ($ph)");
+        $stmt->execute($gids);
+        foreach ($stmt->fetchAll() as $g) {
+            $name = strtolower(trim((string)$g['name']));
+            if (in_array($name, ['registrar office', 'registrar-office', 'office of registrar', 'registrar'], true)) {
+                return true;
+            }
+        }
+    } catch (Throwable $e) {
+        // ignore
+    }
+    return false;
+}
+
+/** All Approved Leave / Day Off marks within a date range (admin listing). */
+function att_day_status_rows(string $from, string $to): array
+{
+    try {
+        $stmt = db()->prepare(
+            'SELECT ds.*, u.full_name, cb.full_name AS created_by_name
+               FROM att_day_status ds
+               JOIN users u ON u.id = ds.user_id
+          LEFT JOIN users cb ON cb.id = ds.created_by
+              WHERE ds.status_date BETWEEN ? AND ?
+           ORDER BY ds.status_date DESC, u.full_name ASC'
+        );
+        $stmt->execute([$from, $to]);
+        return $stmt->fetchAll();
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+/** Mark one day as Approved Leave / Day Off for a staff member (idempotent). */
+function att_mark_dayoff(int $user_id, string $date, string $status, ?string $note, string $source = 'manual', ?int $leave_request_id = null, ?int $created_by = null): void
+{
+    if (!in_array($status, ['approved_leave', 'day_off'], true)) $status = 'approved_leave';
+    db()->prepare(
+        'INSERT INTO att_day_status (user_id, status_date, status, note, source, leave_request_id, created_by)
+         VALUES (?,?,?,?,?,?,?)
+         ON DUPLICATE KEY UPDATE status = VALUES(status), note = VALUES(note),
+                                 source = VALUES(source), leave_request_id = VALUES(leave_request_id)'
+    )->execute([$user_id, $date, $status, $note, $source, $leave_request_id, $created_by]);
+}
+
+// ── Custom Thursday / Friday day slots ────────────────────────────────────
+
+/** All active day slots keyed by user_id → weekday → ordered slot rows. */
+function att_all_slots(): array
+{
+    static $cache = null;
+    if ($cache !== null) return $cache;
+    $cache = [];
+    try {
+        $rows = db()->query(
+            'SELECT * FROM att_day_slots WHERE is_active = 1 ORDER BY user_id, weekday, start_time'
+        )->fetchAll();
+        foreach ($rows as $r) {
+            $cache[(int)$r['user_id']][(int)$r['weekday']][] = $r;
+        }
+    } catch (Throwable $e) {
+        // att_day_slots migration not applied yet.
+    }
+    return $cache;
+}
+
+/** Active Thu/Fri slots for a user, keyed by ISO weekday (4=Thu, 5=Fri). */
+function att_user_slots(int $user_id): array
+{
+    $all = att_all_slots();
+    return $all[$user_id] ?? [];
+}
+
+/**
+ * The combined slot window for a user on a date: first slot start → last slot
+ * end, used as their expected clock-in/out time. Only Thursday (4) and Friday
+ * (5) support custom slots. Returns null when the user has none for the day.
+ */
+function att_slot_window(int $user_id, string $date): ?array
+{
+    $wd = (int)date('N', strtotime($date));
+    if ($wd !== 4 && $wd !== 5) return null;
+    $slots = att_user_slots($user_id)[$wd] ?? [];
+    if (empty($slots)) return null;
+    $start = null;
+    $end   = null;
+    foreach ($slots as $s) {
+        $st = att_normalize_time($s['start_time'] ?? null);
+        $en = att_normalize_time($s['end_time'] ?? null);
+        if ($st === null || $en === null) continue;
+        if ($start === null || $st < $start) $start = $st;
+        if ($end === null || $en > $end)     $end   = $en;
+    }
+    if ($start === null || $end === null) return null;
+    return ['start_time' => $start, 'close_time' => $end, 'slots' => $slots];
+}
+
+// ── Weekend (weekly-off) change requests + approval chain ───────────────────
+
+/**
+ * The ordered approval chain that applies to a requesting user. Reuses the
+ * Leave Management per-group approval flow (leave_approval_flow) so a single
+ * chain configuration drives both leave and weekend approvals. Prefers the
+ * user's primary group when it has a configured chain, otherwise the first of
+ * their groups that does.
+ */
+function att_weekend_flow_for_user(array $user): array
+{
+    $primary    = (int)($user['group_id'] ?? 0);
+    $group_ids  = array_map('intval', $user['group_ids'] ?? ($primary ? [$primary] : []));
+    $candidates = array_values(array_unique(array_merge($primary ? [$primary] : [], $group_ids)));
+    try {
+        $stmt = db()->prepare(
+            'SELECT f.*, g.name AS group_name
+               FROM leave_approval_flow f
+               JOIN user_groups g ON g.id = f.group_id
+              WHERE f.is_active = 1 AND f.requester_group_id = ?
+              ORDER BY f.step_order ASC, f.id ASC'
+        );
+        foreach ($candidates as $gid) {
+            if ($gid < 1) continue;
+            $stmt->execute([$gid]);
+            $rows = $stmt->fetchAll();
+            if (!empty($rows)) return $rows;
+        }
+    } catch (Throwable $e) {
+        // Approval-flow tables not installed.
+    }
+    return [];
+}
+
+/** Snapshot the chain into a weekend request; returns the number of steps. */
+function att_weekend_snapshot_flow(int $request_id, array $flow): int
+{
+    $ins = db()->prepare(
+        'INSERT INTO att_weekend_request_approvals (request_id, step_order, group_id, label)
+         VALUES (?,?,?,?)'
+    );
+    $step = 0;
+    foreach ($flow as $f) {
+        $step++;
+        $ins->execute([$request_id, $step, (int)$f['group_id'], ($f['label'] ?? '') !== '' ? $f['label'] : null]);
+    }
+    return $step;
+}
+
+/** Ordered approval steps of a weekend request, with group/approver names. */
+function att_weekend_request_approvals(int $request_id): array
+{
+    $stmt = db()->prepare(
+        'SELECT a.*, g.name AS group_name, u.full_name AS approver_name
+           FROM att_weekend_request_approvals a
+           JOIN user_groups g ON g.id = a.group_id
+      LEFT JOIN users u ON u.id = a.approver_id
+          WHERE a.request_id = ?
+          ORDER BY a.step_order ASC'
+    );
+    $stmt->execute([$request_id]);
+    return $stmt->fetchAll();
+}
+
+/** The current pending step row of a weekend request, or null. */
+function att_weekend_current_step(int $request_id, int $current_step): ?array
+{
+    $stmt = db()->prepare(
+        'SELECT * FROM att_weekend_request_approvals WHERE request_id = ? AND step_order = ?'
+    );
+    $stmt->execute([$request_id, $current_step]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+/** Whether the user may act on the request's current pending step. */
+function att_weekend_user_can_act(array $request, array $user): bool
+{
+    if (($request['status'] ?? '') !== 'pending') return false;
+    $step = att_weekend_current_step((int)$request['id'], (int)$request['current_step']);
+    if (!$step || $step['status'] !== 'pending') return false;
+    $group_ids = array_map('intval', $user['group_ids'] ?? [(int)$user['group_id']]);
+    return in_array((int)$step['group_id'], $group_ids, true);
+}
+
+/**
+ * Apply an approved weekend request: store the requested days as the member's
+ * per-staff weekly-off override (other override fields stay untouched).
+ */
+function att_apply_weekend(int $user_id, string $off_days): void
+{
+    db()->prepare(
+        'INSERT INTO att_staff_schedule (user_id, weekly_off_days, is_active)
+         VALUES (?,?,1)
+         ON DUPLICATE KEY UPDATE weekly_off_days = VALUES(weekly_off_days), is_active = 1'
+    )->execute([$user_id, $off_days !== '' ? $off_days : null]);
+}
