@@ -308,6 +308,19 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
                 <i class="fas fa-file-pdf me-1"></i> Download PDF (26th–25th)
             </a>
             <?php endif; ?>
+            <?php
+            // Department-wise Attendance Statement (landscape, one department per
+            // page) for the resolved date range — downloadable as PDF or DOC.
+            $stmt_base = ['from' => $from, 'to' => $to, 'dept' => $dept_id, 'q' => $search];
+            $stmt_pdf  = APP_URL . '/staff-attendance/statement.php?' . http_build_query($stmt_base + ['format' => 'pdf']);
+            $stmt_doc  = APP_URL . '/staff-attendance/statement.php?' . http_build_query($stmt_base + ['format' => 'doc']);
+            ?>
+            <a href="<?= h($stmt_pdf) ?>" class="btn btn-outline-danger btn-sm" target="_blank" rel="noopener">
+                <i class="fas fa-file-pdf me-1"></i> Attendance Statement (PDF)
+            </a>
+            <a href="<?= h($stmt_doc) ?>" class="btn btn-outline-primary btn-sm">
+                <i class="fas fa-file-word me-1"></i> Attendance Statement (DOC)
+            </a>
         </div>
     </div>
     <div class="card-body p-0">
