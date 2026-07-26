@@ -27,7 +27,7 @@ const ATT_DEFAULT_WEEKLY_OFF = '5'; // Friday (PHP date('N'): 1=Mon … 7=Sun)
 
 // ── Attendance policy effective 1 June 2026 ─────────────────────────────────
 // From this date: employee-type based clock-in buffers (no clock-out buffer),
-// faculty flexible Fridays (minimum 7 hours), early-bird 8:30→16:30 flexibility
+// faculty flexible Fridays (strict 8 hours), early-bird 8:30→16:30 flexibility
 // and the "4 late/early days = 1 absent" salary-deduction rule.
 const ATT_POLICY_EFFECTIVE          = '2026-06-01';
 const ATT_POLICY_ADMIN_IN_BUFFER    = 15;      // administrative clock-in grace (min)
@@ -35,7 +35,7 @@ const ATT_POLICY_FACULTY_IN_BUFFER  = 20;      // faculty clock-in grace (min)
 const ATT_POLICY_OUT_BUFFER         = 0;       // no clock-out grace for both types
 const ATT_POLICY_EARLY_IN           = '08:30'; // earliest counted clock-in
 const ATT_POLICY_EARLY_OUT_OK       = '16:30'; // early birds may leave from here
-const ATT_POLICY_FRIDAY_MIN_MINUTES = 420;     // faculty Friday minimum (7 hours)
+const ATT_POLICY_FRIDAY_MIN_MINUTES = 480;     // faculty Friday minimum (strict 8 hours)
 const ATT_POLICY_LATE_PER_ABSENT    = 4;       // 4 late-in/early-out days = 1 absent
 
 /** Whether the June-2026 attendance policy applies to a date. */
