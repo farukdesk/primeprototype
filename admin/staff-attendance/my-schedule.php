@@ -2,12 +2,16 @@
 /**
  * My Schedule (staff self-service).
  *   1. Weekend (weekly-off) change request: staff pick their preferred weekly
- *      off day(s); the request is routed through the approval chain configured
- *      for their user group (shared with Leave Management). On final approval
- *      the days are applied to their attendance schedule automatically.
- *   2. Thursday / Friday day slots: staff may split those days into slots
- *      (On Campus / Online Class); the combined slot window becomes their
- *      expected clock-in/out time for that day.
+ *      off day(s); the request is routed through the SCHEDULE approval chain
+ *      configured for their user group (att_schedule_approval_flow — separate
+ *      from Leave Management). On final approval the days apply FROM the
+ *      approval date onward; earlier days keep the previously approved
+ *      schedule (nothing changes retroactively).
+ *   2. Thursday / Friday day slots (On Campus / Online Class): slot changes go
+ *      through the SAME schedule approval chain. The requested slots must
+ *      cover at least 8 hours in total (On Campus + Online Class combined).
+ *      On final approval the combined slot window becomes the expected
+ *      clock-in/out time from the approval date forward.
  */
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/helpers.php';
@@ -24,7 +28,7 @@ $user_id    = (int)$user['id'];
 $db         = db();
 $day_names  = [1 => 'Monday', 2 => 'Tuesday', 3 => 'Wednesday', 4 => 'Thursday', 5 => 'Friday', 6 => 'Saturday', 7 => 'Sunday'];
 
-// ── POST: submit / cancel weekend request, save Thu/Fri slots ───────────────
+// ── POST: weekend request / cancel, slot request / cancel ─────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     $act = $_POST['action'] ?? '';
@@ -38,14 +42,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $sel = array_values(array_unique($sel));
         sort($sel);
         $reason = trim($_POST['reason'] ?? '');
-        $flow   = att_weekend_flow_for_user($user);
+        $flow   = att_schedule_flow_for_user($user);
 
         if (empty($sel)) {
             flash_set('error', 'Please choose at least one weekend day.');
         } elseif (count($sel) > 2) {
             flash_set('error', 'You can choose at most two weekend days.');
         } elseif (empty($flow)) {
-            flash_set('error', 'No approval chain is configured for your user group yet. Please contact the Registrar office / administrator.');
+            flash_set('error', 'No SCHEDULE approval chain is configured for your user group yet (it is separate from the leave chain). Please contact the Registrar office / administrator.');
         } else {
             $chk = $db->prepare("SELECT COUNT(*) FROM att_weekend_requests WHERE user_id = ? AND status = 'pending'");
             $chk->execute([$user_id]);
@@ -57,7 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $rid = (int)$db->lastInsertId();
                 att_weekend_snapshot_flow($rid, $flow);
                 log_change('staff-attendance', 'CREATE', $rid, 'Weekend request', null, null, implode(',', $sel));
-                flash_set('success', 'Weekend request submitted for approval.');
+                flash_set('success', 'Weekend request submitted for approval. When approved it applies from the approval date onward — earlier days keep your previous schedule.');
             }
         }
         redirect(APP_URL . '/staff-attendance/my-schedule.php');
@@ -75,7 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect(APP_URL . '/staff-attendance/my-schedule.php');
     }
 
-    if ($act === 'save_slots') {
+    if ($act === 'request_slots') {
         $weekday = (int)($_POST['weekday'] ?? 0);
         if (!in_array($weekday, [4, 5], true)) {
             flash_set('error', 'Slots can only be customised for Thursday and Friday.');
@@ -103,27 +107,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($slots[$i]['start'] < $slots[$i - 1]['end']) { $err = 'Slots must not overlap.'; break; }
             }
         }
+        // Slot days must cover a full working day: at least 8 hours in total,
+        // On Campus + Online Class combined.
+        if ($err === '' && !empty($slots) && att_slots_total_minutes($slots) < 480) {
+            $err = 'Your ' . $day_names[$weekday] . ' slots must cover at least 8 hours in total (On Campus + Online Class combined). Currently: '
+                 . att_format_hours(att_slots_total_minutes($slots)) . '.';
+        }
+        $flow = att_schedule_flow_for_user($user);
+        if ($err === '' && empty($flow)) {
+            $err = 'No SCHEDULE approval chain is configured for your user group yet (it is separate from the leave chain). Please contact the Registrar office / administrator.';
+        }
+        if ($err === '') {
+            try {
+                $chk = $db->prepare("SELECT COUNT(*) FROM att_slot_requests WHERE user_id = ? AND weekday = ? AND status = 'pending'");
+                $chk->execute([$user_id, $weekday]);
+                if ((int)$chk->fetchColumn() > 0) {
+                    $err = 'You already have a pending ' . $day_names[$weekday] . ' slot request. Cancel it before submitting a new one.';
+                }
+            } catch (Throwable $e) {
+                $err = 'Slot requests are not available yet (database migration pending). Please contact the administrator.';
+            }
+        }
         if ($err !== '') {
             flash_set('error', $err);
         } else {
-            $db->prepare('DELETE FROM att_day_slots WHERE user_id = ? AND weekday = ?')->execute([$user_id, $weekday]);
-            if (!empty($slots)) {
-                $ins = $db->prepare('INSERT INTO att_day_slots (user_id, weekday, slot_no, location, start_time, end_time, is_active) VALUES (?,?,?,?,?,?,1)');
-                foreach ($slots as $n => $s) {
-                    $ins->execute([$user_id, $weekday, $n + 1, $s['location'], $s['start'], $s['end']]);
-                }
+            $db->prepare('INSERT INTO att_slot_requests (user_id, weekday, slots_json) VALUES (?,?,?)')
+               ->execute([$user_id, $weekday, json_encode($slots)]);
+            $rid = (int)$db->lastInsertId();
+            att_slot_snapshot_flow($rid, $flow);
+            log_change('staff-attendance', 'CREATE', $rid, $day_names[$weekday] . ' slot request', null, null, count($slots) . ' slot(s)');
+            flash_set('success', empty($slots)
+                ? $day_names[$weekday] . ' slot removal submitted for approval.'
+                : $day_names[$weekday] . ' slots submitted for approval. When approved they apply from the approval date onward — earlier days keep your previous schedule.');
+        }
+        redirect(APP_URL . '/staff-attendance/my-schedule.php');
+    }
+
+    if ($act === 'cancel_slots') {
+        $rid = (int)($_POST['id'] ?? 0);
+        try {
+            $stmt = $db->prepare("UPDATE att_slot_requests SET status = 'cancelled' WHERE id = ? AND user_id = ? AND status = 'pending'");
+            $stmt->execute([$rid, $user_id]);
+            if ($stmt->rowCount()) {
+                flash_set('success', 'Slot request cancelled.');
+            } else {
+                flash_set('error', 'Request not found or no longer pending.');
             }
-            log_change('staff-attendance', 'UPDATE', $user_id, $day_names[$weekday] . ' slots', null, null, count($slots) . ' slot(s)');
-            flash_set('success', $day_names[$weekday] . ' slots saved. The combined slot window is now your expected clock in/out time for that day.');
+        } catch (Throwable $e) {
+            flash_set('error', 'Slot requests are not available yet (database migration pending).');
         }
         redirect(APP_URL . '/staff-attendance/my-schedule.php');
     }
 }
 
-// ── Data ─────────────────────────────────────────────────────────────────────
-$sched    = att_effective_schedule($user_id);
-$flow     = att_weekend_flow_for_user($user);
-$requests = [];
+// ── Data ───────────────────────────────────────────────────────────────────────
+$sched       = att_effective_schedule($user_id);
+$current_off = att_weekly_off_days_for($user_id, date('Y-m-d')) ?? ($sched['weekly_off_days'] ?? []);
+$flow        = att_schedule_flow_for_user($user);
+$requests    = [];
 try {
     $stmt = $db->prepare('SELECT * FROM att_weekend_requests WHERE user_id = ? ORDER BY created_at DESC LIMIT 20');
     $stmt->execute([$user_id]);
@@ -131,7 +172,15 @@ try {
 } catch (Throwable $e) {
     // Migration not applied yet.
 }
-$slots_by_day = att_user_slots($user_id);
+$slot_requests = [];
+try {
+    $stmt = $db->prepare('SELECT * FROM att_slot_requests WHERE user_id = ? ORDER BY created_at DESC LIMIT 20');
+    $stmt->execute([$user_id]);
+    $slot_requests = $stmt->fetchAll();
+} catch (Throwable $e) {
+    // Migration not applied yet.
+}
+$slots_by_day = att_user_slots($user_id); // effective TODAY
 
 require_once __DIR__ . '/../includes/header.php';
 
@@ -143,6 +192,16 @@ $wk_badge = static function (string $s): string {
         'cancelled' => '<span class="badge bg-secondary">Cancelled</span>',
         default     => '<span class="badge bg-light text-dark">' . h($s) . '</span>',
     };
+};
+
+$fmt_slots_json = static function (?string $json): string {
+    $arr = json_decode((string)$json, true);
+    if (!is_array($arr) || empty($arr)) return 'Remove custom slots';
+    return implode('; ', array_map(
+        fn($s) => (($s['location'] ?? '') === 'online' ? 'Online Class' : 'On Campus')
+                . ' ' . h((string)($s['start'] ?? '')) . '–' . h((string)($s['end'] ?? '')),
+        $arr
+    ));
 };
 ?>
 
@@ -168,9 +227,10 @@ $wk_badge = static function (string $s): string {
             <div class="card-body">
                 <p class="small text-muted mb-2">
                     Current weekend:
-                    <strong><?= h(implode(', ', array_map(fn($n) => $day_names[$n], $sched['weekly_off_days'] ?? [])) ?: 'none') ?></strong>
+                    <strong><?= h(implode(', ', array_map(fn($n) => $day_names[$n], $current_off)) ?: 'none') ?></strong>
                     <?php if (!empty($sched['weekly_off_custom'])): ?><span class="badge bg-info text-dark ms-1">Own</span><?php else: ?><span class="badge bg-light text-dark border ms-1">Global</span><?php endif; ?>
                 </p>
+                <p class="small text-muted mb-2"><i class="fas fa-circle-info me-1"></i>An approved change applies <strong>from the approval date onward</strong>; your earlier days and months keep the schedule that was approved for them.</p>
                 <form method="POST" class="border-top pt-3">
                     <?= csrf_field() ?>
                     <input type="hidden" name="action" value="request_weekend">
@@ -179,17 +239,17 @@ $wk_badge = static function (string $s): string {
                         <?php foreach ($day_names as $n => $nm): ?>
                         <label class="form-check form-check-inline m-0">
                             <input class="form-check-input" type="checkbox" name="weekly_off_days[]" value="<?= $n ?>"
-                                   <?= in_array($n, $sched['weekly_off_days'] ?? [], true) ? 'checked' : '' ?>>
+                                   <?= in_array($n, $current_off, true) ? 'checked' : '' ?>>
                             <span class="form-check-label small"><?= h($nm) ?></span>
                         </label>
                         <?php endforeach; ?>
                     </div>
                     <textarea name="reason" class="form-control form-control-sm mb-2" rows="2" placeholder="Reason (optional)"></textarea>
                     <?php if (empty($flow)): ?>
-                        <div class="alert alert-warning small py-2 mb-2">No approval chain is configured for your user group yet — please contact the Registrar office / administrator.</div>
+                        <div class="alert alert-warning small py-2 mb-2">No <strong>schedule</strong> approval chain is configured for your user group yet (it is separate from the leave chain) — please contact the Registrar office / administrator.</div>
                     <?php else: ?>
                         <div class="small text-muted mb-2">
-                            Approval chain:
+                            Schedule approval chain:
                             <?php foreach ($flow as $i => $f): ?>
                                 <?= $i > 0 ? '<i class="fas fa-arrow-right mx-1"></i>' : '' ?>
                                 <span class="badge bg-light text-dark border"><?= h($f['label'] ?: $f['group_name']) ?></span>
@@ -255,17 +315,26 @@ $wk_badge = static function (string $s): string {
         <?php foreach ([4, 5] as $wd): $rows = $slots_by_day[$wd] ?? []; ?>
         <div class="card mb-3" style="border-radius:12px;">
             <div class="card-header py-3 px-4">
-                <h6 class="mb-0 fw-semibold"><i class="fas fa-clock me-2 text-primary"></i><?= h($day_names[$wd]) ?> Slots (Campus / Online Class)</h6>
+                <h6 class="mb-0 fw-semibold"><i class="fas fa-clock me-2 text-primary"></i><?= h($day_names[$wd]) ?> Slots (On Campus / Online Class)</h6>
             </div>
             <div class="card-body">
                 <p class="small text-muted mb-2">
                     Split your <?= h($day_names[$wd]) ?> into up to 3 slots (e.g. a slot On Campus and a slot for Online Class).
-                    Your first slot start and last slot end become your expected clock in / clock out time for that day.
-                    Leave every row blank to remove the customisation.
+                    Slot changes need <strong>approval through the schedule chain</strong> and your slots must cover
+                    <strong>at least 8 hours in total</strong> (On Campus + Online Class combined).
+                    Once approved, your first slot start and last slot end become your expected clock in / clock out time
+                    <strong>from the approval date onward</strong>. Leave every row blank to request removing the customisation.
                 </p>
+                <?php if (!empty($rows)): ?>
+                <p class="small mb-2">Currently approved:
+                    <?php foreach ($rows as $s): ?>
+                        <span class="badge bg-light text-dark border"><?= ($s['location'] ?? '') === 'online' ? 'Online Class' : 'On Campus' ?> <?= h(att_normalize_time($s['start_time'] ?? '') ?? '') ?>–<?= h(att_normalize_time($s['end_time'] ?? '') ?? '') ?></span>
+                    <?php endforeach; ?>
+                </p>
+                <?php endif; ?>
                 <form method="POST">
                     <?= csrf_field() ?>
-                    <input type="hidden" name="action" value="save_slots">
+                    <input type="hidden" name="action" value="request_slots">
                     <input type="hidden" name="weekday" value="<?= $wd ?>">
                     <?php for ($i = 0; $i < 3; $i++): $s = $rows[$i] ?? null; ?>
                     <div class="row g-2 align-items-center mb-2">
@@ -279,11 +348,61 @@ $wk_badge = static function (string $s): string {
                         <div class="col-4"><input type="time" name="slot_end[<?= $i ?>]" class="form-control form-control-sm" value="<?= h(att_normalize_time($s['end_time'] ?? '') ?? '') ?>"></div>
                     </div>
                     <?php endfor; ?>
-                    <button class="btn btn-primary btn-sm"><i class="fas fa-save me-1"></i> Save <?= h($day_names[$wd]) ?> Slots</button>
+                    <button class="btn btn-primary btn-sm" <?= empty($flow) ? 'disabled' : '' ?>><i class="fas fa-paper-plane me-1"></i> Submit <?= h($day_names[$wd]) ?> Slots for Approval</button>
                 </form>
             </div>
         </div>
         <?php endforeach; ?>
+
+        <div class="card" style="border-radius:12px;">
+            <div class="card-header py-3 px-4"><h6 class="mb-0 fw-semibold"><i class="fas fa-list me-2 text-primary"></i>My Slot Requests</h6></div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light"><tr>
+                            <th class="px-3">Requested Slots</th><th>Status</th><th>Progress</th><th></th>
+                        </tr></thead>
+                        <tbody>
+                        <?php if (empty($slot_requests)): ?>
+                            <tr><td colspan="4" class="text-center text-muted py-4">No slot requests yet.</td></tr>
+                        <?php else: foreach ($slot_requests as $r):
+                            $steps = att_slot_request_approvals((int)$r['id']);
+                        ?>
+                            <tr>
+                                <td class="px-3">
+                                    <strong><?= h($day_names[(int)$r['weekday']] ?? '?') ?></strong>
+                                    <div class="small"><?= $fmt_slots_json((string)($r['slots_json'] ?? '')) ?></div>
+                                    <div class="text-muted small"><?= h(date('d M Y', strtotime($r['created_at']))) ?></div>
+                                </td>
+                                <td><?= $wk_badge((string)$r['status']) ?></td>
+                                <td class="small">
+                                    <?php foreach ($steps as $st): ?>
+                                        <div>
+                                            <?php if ($st['status'] === 'approved'): ?><i class="fas fa-check text-success me-1"></i>
+                                            <?php elseif ($st['status'] === 'rejected'): ?><i class="fas fa-times text-danger me-1"></i>
+                                            <?php else: ?><i class="far fa-clock text-muted me-1"></i><?php endif; ?>
+                                            <?= h($st['label'] ?: $st['group_name']) ?>
+                                            <?php if (!empty($st['approver_name'])): ?><span class="text-muted">— <?= h($st['approver_name']) ?></span><?php endif; ?>
+                                        </div>
+                                    <?php endforeach; ?>
+                                </td>
+                                <td class="text-end pe-3">
+                                    <?php if ($r['status'] === 'pending'): ?>
+                                    <form method="POST" onsubmit="return confirm('Cancel this slot request?');">
+                                        <?= csrf_field() ?>
+                                        <input type="hidden" name="action" value="cancel_slots">
+                                        <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
+                                        <button class="btn btn-sm btn-outline-secondary">Cancel</button>
+                                    </form>
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
