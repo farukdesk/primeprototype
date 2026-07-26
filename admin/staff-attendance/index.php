@@ -204,8 +204,9 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
         <?php if (att_can_mark_dayoff()): ?>
         <a href="<?= APP_URL ?>/staff-attendance/day-status.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-umbrella-beach me-1"></i> Approved Leave / Day Off</a>
         <?php endif; ?>
-        <a href="<?= APP_URL ?>/staff-attendance/weekend-approvals.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-clipboard-check me-1"></i> Weekend Approvals</a>
+        <a href="<?= APP_URL ?>/staff-attendance/weekend-approvals.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-clipboard-check me-1"></i> Schedule Approvals</a>
         <?php if ($is_admin): ?>
+        <a href="<?= APP_URL ?>/staff-attendance/schedule-flow.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-diagram-project me-1"></i> Schedule Approval Flow</a>
         <a href="<?= APP_URL ?>/staff-attendance/settings.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-gear me-1"></i> Settings</a>
         <a href="<?= APP_URL ?>/staff-attendance/schedules.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-user-gear me-1"></i> Staff Schedules</a>
         <a href="<?= APP_URL ?>/staff-attendance/holidays.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-calendar-day me-1"></i> Holidays</a>

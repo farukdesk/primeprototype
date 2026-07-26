@@ -245,7 +245,7 @@ function att_effective_schedule(int $user_id): array
     $global    = att_global_schedule();
     $overrides = att_all_overrides();
     $o         = $overrides[$user_id] ?? null;
-    if (!$o) return $global + ['custom' => false, 'weekly_off_days' => att_weekly_off_days(), 'weekly_off_custom' => false];
+    if (!$o) return $global + ['custom' => false, 'weekly_off_days' => att_weekly_off_days(), 'weekly_off_custom' => false, 'user_id' => $user_id];
 
     $own_off = trim((string)($o['weekly_off_days'] ?? ''));
     return [
@@ -257,6 +257,7 @@ function att_effective_schedule(int $user_id): array
         'weekly_off_days'    => $own_off !== '' ? att_parse_off_days($own_off) : att_weekly_off_days(),
         'weekly_off_custom'  => $own_off !== '',
         'custom'             => true,
+        'user_id'            => $user_id,
     ];
 }
 
@@ -368,11 +369,52 @@ function att_is_weekly_off(string $date): bool
  * Whether a date is an off day under a staff member's EFFECTIVE schedule:
  * their own weekly-off override when set, otherwise the global off days.
  * Pass the array returned by att_effective_schedule().
+ *
+ * Weekend changes are EFFECTIVE-DATED: an approved change only applies from
+ * its approval date forward (att_weekly_off_history). Earlier dates keep the
+ * weekend that was approved for them at the time, so past days/months never
+ * change retroactively.
  */
 function att_is_weekly_off_for(array $sched, string $date): bool
 {
     $days = $sched['weekly_off_days'] ?? att_weekly_off_days();
+    if (!empty($sched['user_id'])) {
+        $hist = att_weekly_off_days_for((int)$sched['user_id'], $date);
+        if ($hist !== null) $days = $hist;
+    }
     return in_array((int)date('N', strtotime($date)), $days, true);
+}
+
+/** All weekly-off history rows keyed by user_id, newest effective_from first. */
+function att_weekly_off_history_map(): array
+{
+    static $cache = null;
+    if ($cache !== null) return $cache;
+    $cache = [];
+    try {
+        $rows = db()->query(
+            'SELECT user_id, weekly_off_days, effective_from
+               FROM att_weekly_off_history ORDER BY effective_from DESC'
+        )->fetchAll();
+        foreach ($rows as $r) $cache[(int)$r['user_id']][] = $r;
+    } catch (Throwable $e) {
+        // Migration not applied yet – current schedule applies to all dates.
+    }
+    return $cache;
+}
+
+/**
+ * The weekly-off days effective for a user ON a given date, or null when the
+ * user has no effective-dated history (the current schedule then applies).
+ */
+function att_weekly_off_days_for(int $user_id, string $date): ?array
+{
+    foreach (att_weekly_off_history_map()[$user_id] ?? [] as $r) { // newest first
+        if ((string)$r['effective_from'] <= $date) {
+            return att_parse_off_days((string)$r['weekly_off_days']);
+        }
+    }
+    return null;
 }
 
 /**
@@ -785,11 +827,47 @@ function att_all_slots(): array
     return $cache;
 }
 
-/** Active Thu/Fri slots for a user, keyed by ISO weekday (4=Thu, 5=Fri). */
-function att_user_slots(int $user_id): array
+/** Only the slot rows effective on a given date (effective_from/effective_to). */
+function att_slots_effective_on(array $rows, string $date): array
 {
-    $all = att_all_slots();
-    return $all[$user_id] ?? [];
+    $out = [];
+    foreach ($rows as $r) {
+        $from = (string)($r['effective_from'] ?? '');
+        $to   = (string)($r['effective_to'] ?? '');
+        if ($from !== '' && $from !== '0000-00-00' && $date < $from) continue;
+        if ($to !== '' && $to !== '0000-00-00' && $date > $to) continue;
+        $out[] = $r;
+    }
+    return $out;
+}
+
+/**
+ * Active Thu/Fri slots for a user, keyed by ISO weekday (4=Thu, 5=Fri),
+ * limited to the rows EFFECTIVE on the given date (defaults to today). An
+ * approved slot change is effective-dated, so past days keep the slot windows
+ * that were approved for them.
+ */
+function att_user_slots(int $user_id, ?string $date = null): array
+{
+    $date = $date ?: date('Y-m-d');
+    $out  = [];
+    foreach ((att_all_slots()[$user_id] ?? []) as $wd => $rows) {
+        $eff = att_slots_effective_on($rows, $date);
+        if (!empty($eff)) $out[(int)$wd] = $eff;
+    }
+    return $out;
+}
+
+/** Total minutes covered by a set of slots (On Campus + Online Class combined). */
+function att_slots_total_minutes(array $slots): int
+{
+    $total = 0;
+    foreach ($slots as $s) {
+        $st = att_time_to_minutes($s['start'] ?? ($s['start_time'] ?? null));
+        $en = att_time_to_minutes($s['end']   ?? ($s['end_time']   ?? null));
+        if ($st !== null && $en !== null && $en > $st) $total += $en - $st;
+    }
+    return $total;
 }
 
 /**
@@ -801,7 +879,7 @@ function att_slot_window(int $user_id, string $date): ?array
 {
     $wd = (int)date('N', strtotime($date));
     if ($wd !== 4 && $wd !== 5) return null;
-    $slots = att_user_slots($user_id)[$wd] ?? [];
+    $slots = att_slots_effective_on(att_all_slots()[$user_id][$wd] ?? [], $date);
     if (empty($slots)) return null;
     $start = null;
     $end   = null;
@@ -819,13 +897,14 @@ function att_slot_window(int $user_id, string $date): ?array
 // ── Weekend (weekly-off) change requests + approval chain ───────────────────
 
 /**
- * The ordered approval chain that applies to a requesting user. Reuses the
- * Leave Management per-group approval flow (leave_approval_flow) so a single
- * chain configuration drives both leave and weekend approvals. Prefers the
- * user's primary group when it has a configured chain, otherwise the first of
- * their groups that does.
+ * The ordered SCHEDULE approval chain that applies to a requesting user.
+ * Schedule changes (weekend + Thu/Fri slots) use their OWN chain
+ * (att_schedule_approval_flow) — completely separate from the Leave
+ * Management chain — configured per requester group on the Schedule Approval
+ * Flow page. Prefers the user's primary group when it has a configured chain,
+ * otherwise the first of their groups that does.
  */
-function att_weekend_flow_for_user(array $user): array
+function att_schedule_flow_for_user(array $user): array
 {
     $primary    = (int)($user['group_id'] ?? 0);
     $group_ids  = array_map('intval', $user['group_ids'] ?? ($primary ? [$primary] : []));
@@ -833,7 +912,7 @@ function att_weekend_flow_for_user(array $user): array
     try {
         $stmt = db()->prepare(
             'SELECT f.*, g.name AS group_name
-               FROM leave_approval_flow f
+               FROM att_schedule_approval_flow f
                JOIN user_groups g ON g.id = f.group_id
               WHERE f.is_active = 1 AND f.requester_group_id = ?
               ORDER BY f.step_order ASC, f.id ASC'
@@ -845,9 +924,15 @@ function att_weekend_flow_for_user(array $user): array
             if (!empty($rows)) return $rows;
         }
     } catch (Throwable $e) {
-        // Approval-flow tables not installed.
+        // Schedule approval-flow table not installed yet.
     }
     return [];
+}
+
+/** Backwards-compatible alias: weekend requests use the schedule chain. */
+function att_weekend_flow_for_user(array $user): array
+{
+    return att_schedule_flow_for_user($user);
 }
 
 /** Snapshot the chain into a weekend request; returns the number of steps. */
@@ -902,14 +987,143 @@ function att_weekend_user_can_act(array $request, array $user): bool
 }
 
 /**
- * Apply an approved weekend request: store the requested days as the member's
- * per-staff weekly-off override (other override fields stay untouched).
+ * Apply an approved weekend request EFFECTIVE-DATED: the new days apply from
+ * $effective_from (default: today) onward; every earlier day keeps the
+ * weekend that was approved for it at the time (att_weekly_off_history), so
+ * past days/months never change. The current override (att_staff_schedule)
+ * is still updated so the rest of the module shows the new weekend.
  */
-function att_apply_weekend(int $user_id, string $off_days): void
+function att_apply_weekend(int $user_id, string $off_days, ?string $effective_from = null): void
 {
+    $effective_from = $effective_from ?: date('Y-m-d');
+    try {
+        // First change ever: freeze the PREVIOUS days for all earlier dates so
+        // the history fallback never exposes the new value to the past.
+        $chk = db()->prepare('SELECT COUNT(*) FROM att_weekly_off_history WHERE user_id = ?');
+        $chk->execute([$user_id]);
+        if ((int)$chk->fetchColumn() === 0) {
+            $current = implode(',', att_effective_schedule($user_id)['weekly_off_days'] ?? []);
+            db()->prepare(
+                'INSERT INTO att_weekly_off_history (user_id, weekly_off_days, effective_from)
+                 VALUES (?,?,?)
+                 ON DUPLICATE KEY UPDATE weekly_off_days = VALUES(weekly_off_days)'
+            )->execute([$user_id, $current, '1000-01-01']);
+        }
+        db()->prepare(
+            'INSERT INTO att_weekly_off_history (user_id, weekly_off_days, effective_from)
+             VALUES (?,?,?)
+             ON DUPLICATE KEY UPDATE weekly_off_days = VALUES(weekly_off_days)'
+        )->execute([$user_id, $off_days, $effective_from]);
+    } catch (Throwable $e) {
+        // History table missing (migration pending) – legacy behaviour below.
+    }
     db()->prepare(
         'INSERT INTO att_staff_schedule (user_id, weekly_off_days, is_active)
          VALUES (?,?,1)
          ON DUPLICATE KEY UPDATE weekly_off_days = VALUES(weekly_off_days), is_active = 1'
     )->execute([$user_id, $off_days !== '' ? $off_days : null]);
+}
+
+// ── Thu/Fri slot change requests (schedule approval chain) ─────────────────
+
+/** Snapshot the schedule chain into a slot request; returns the step count. */
+function att_slot_snapshot_flow(int $request_id, array $flow): int
+{
+    $ins = db()->prepare(
+        'INSERT INTO att_slot_request_approvals (request_id, step_order, group_id, label)
+         VALUES (?,?,?,?)'
+    );
+    $step = 0;
+    foreach ($flow as $f) {
+        $step++;
+        $ins->execute([$request_id, $step, (int)$f['group_id'], ($f['label'] ?? '') !== '' ? $f['label'] : null]);
+    }
+    return $step;
+}
+
+/** Ordered approval steps of a slot request, with group/approver names. */
+function att_slot_request_approvals(int $request_id): array
+{
+    $stmt = db()->prepare(
+        'SELECT a.*, g.name AS group_name, u.full_name AS approver_name
+           FROM att_slot_request_approvals a
+           JOIN user_groups g ON g.id = a.group_id
+      LEFT JOIN users u ON u.id = a.approver_id
+          WHERE a.request_id = ?
+          ORDER BY a.step_order ASC'
+    );
+    $stmt->execute([$request_id]);
+    return $stmt->fetchAll();
+}
+
+/** The current pending step row of a slot request, or null. */
+function att_slot_current_step(int $request_id, int $current_step): ?array
+{
+    $stmt = db()->prepare(
+        'SELECT * FROM att_slot_request_approvals WHERE request_id = ? AND step_order = ?'
+    );
+    $stmt->execute([$request_id, $current_step]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+/** Whether the user may act on the slot request's current pending step. */
+function att_slot_user_can_act(array $request, array $user): bool
+{
+    if (($request['status'] ?? '') !== 'pending') return false;
+    $step = att_slot_current_step((int)$request['id'], (int)$request['current_step']);
+    if (!$step || $step['status'] !== 'pending') return false;
+    $group_ids = array_map('intval', $user['group_ids'] ?? [(int)$user['group_id']]);
+    return in_array((int)$step['group_id'], $group_ids, true);
+}
+
+/**
+ * Apply an approved slot request EFFECTIVE-DATED: the new slots take effect
+ * from $effective_from; rows effective before that date are closed the day
+ * before, so already-elapsed days keep the slot windows that were approved
+ * for them. An empty $slots array removes the customisation from that date.
+ */
+function att_apply_slots(int $user_id, int $weekday, array $slots, string $effective_from): void
+{
+    $db = db();
+    try {
+        $db->prepare(
+            'UPDATE att_day_slots
+                SET effective_to = DATE_SUB(?, INTERVAL 1 DAY)
+              WHERE user_id = ? AND weekday = ? AND is_active = 1
+                AND effective_from < ?
+                AND (effective_to IS NULL OR effective_to >= ?)'
+        )->execute([$effective_from, $user_id, $weekday, $effective_from, $effective_from]);
+        $db->prepare('DELETE FROM att_day_slots WHERE user_id = ? AND weekday = ? AND effective_from = ?')
+           ->execute([$user_id, $weekday, $effective_from]);
+        if (!empty($slots)) {
+            $ins = $db->prepare(
+                'INSERT INTO att_day_slots (user_id, weekday, slot_no, location, start_time, end_time, is_active, effective_from)
+                 VALUES (?,?,?,?,?,?,1,?)'
+            );
+            foreach (array_values($slots) as $n => $s) {
+                $ins->execute([
+                    $user_id, $weekday, $n + 1,
+                    ($s['location'] ?? '') === 'online' ? 'online' : 'campus',
+                    (string)($s['start'] ?? ''), (string)($s['end'] ?? ''), $effective_from,
+                ]);
+            }
+        }
+    } catch (Throwable $e) {
+        // effective_from columns missing (migration pending) – legacy replace.
+        $db->prepare('DELETE FROM att_day_slots WHERE user_id = ? AND weekday = ?')->execute([$user_id, $weekday]);
+        if (!empty($slots)) {
+            $ins = $db->prepare(
+                'INSERT INTO att_day_slots (user_id, weekday, slot_no, location, start_time, end_time, is_active)
+                 VALUES (?,?,?,?,?,?,1)'
+            );
+            foreach (array_values($slots) as $n => $s) {
+                $ins->execute([
+                    $user_id, $weekday, $n + 1,
+                    ($s['location'] ?? '') === 'online' ? 'online' : 'campus',
+                    (string)($s['start'] ?? ''), (string)($s['end'] ?? ''),
+                ]);
+            }
+        }
+    }
 }
