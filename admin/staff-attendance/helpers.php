@@ -395,7 +395,16 @@ function att_on_leave_user_ids(string $date): array
     } catch (Throwable $e) {
         // Leave Management module not installed – ignore.
     }
-    return $cache[$date] = $ids;
+    // Days explicitly marked "Approved Leave / Day Off" by an admin / the
+    // Registrar office, or auto-marked when a leave gets its final approval.
+    try {
+        $stmt = db()->prepare('SELECT DISTINCT user_id FROM att_day_status WHERE status_date = ?');
+        $stmt->execute([$date]);
+        foreach ($stmt->fetchAll() as $r) $ids[] = (int)$r['user_id'];
+    } catch (Throwable $e) {
+        // att_day_status migration not applied yet – ignore.
+    }
+    return $cache[$date] = array_values(array_unique($ids));
 }
 
 // ── Status computation ──────────────────────────────────────────────────────

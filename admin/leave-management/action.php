@@ -4,8 +4,12 @@
  */
 require_once __DIR__ . '/../includes/auth.php';
 auth_check();
-require_access('leave-management');
 require_once __DIR__ . '/helpers.php';
+// Module access OR self-service (Administrative / Faculty employee types).
+if (!lm_can_view()) {
+    $_SESSION['flash_error'] = 'You do not have permission to access this section.';
+    redirect(APP_URL . '/index.php');
+}
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     redirect(APP_URL . '/leave-management/index.php');
