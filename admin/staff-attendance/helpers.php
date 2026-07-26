@@ -429,25 +429,21 @@ function att_compute_status(?array $record, int $user_id, string $date, array $s
 
     if (isset($holidays[$date]))            return $has_in ? 'present' : 'holiday';
 
-    // Policy: faculty working on a FRIDAY are fully flexible — any clock in/out
-    // time is fine, never marked Late In or Early Out, but the day must total at
-    // least 7 hours (7–8h expected). Applies whether Friday is their weekend or
-    // a scheduled work day.
-    if ($policy && $etype === 'educational' && (int)date('N', strtotime($date)) === 5 && $has_in) {
-        if (!$has_out) return 'incomplete';
-        return att_worked_minutes($record['in_time'], $record['out_time']) >= ATT_POLICY_FRIDAY_MIN_MINUTES
-            ? 'present'
-            : 'short_hours';
+    // Custom Thursday / Friday slots: when the member defined slots for this
+    // weekday (e.g. a slot On Campus + a slot for Online Class), the combined
+    // slot window (first slot start → last slot end) IS their expected
+    // clock-in/out time for the day, and the day counts as a working day.
+    $slot_win = att_slot_window($user_id, $date);
+    if ($slot_win !== null) {
+        $sched = array_merge($sched, [
+            'start_time' => $slot_win['start_time'],
+            'close_time' => $slot_win['close_time'],
+        ]);
     }
 
-    if (att_is_weekly_off_for($sched, $date)) return $has_in ? 'present' : 'weekly_off';
-    if (!$has_in && in_array($user_id, $on_leave, true)) return 'leave';
-    if (!$has_in && $date > date('Y-m-d')) return 'upcoming';
-    if (!$has_in)                           return 'absent';
-
-    // Present with an in-time: check late-in / early-out against the schedule.
-    // Policy (from 01 Jun 2026): buffers come from the Employee Type —
-    // Administrative 15 min in / 0 min out, Faculty 20 min in / 0 min out.
+    // Effective buffers. Policy (from 01 Jun 2026): buffers come from the
+    // Employee Type — Administrative 15 min in / 0 min out, Faculty 20 min in
+    // / 0 min out.
     $in_buffer  = (int)$sched['in_buffer_minutes'];
     $out_buffer = (int)$sched['out_buffer_minutes'];
     if ($policy && $etype === 'administrative') {
@@ -457,6 +453,32 @@ function att_compute_status(?array $record, int $user_id, string $date, array $s
         $in_buffer  = ATT_POLICY_FACULTY_IN_BUFFER;
         $out_buffer = ATT_POLICY_OUT_BUFFER;
     }
+
+    // Policy: faculty working on a FRIDAY are fully flexible — any clock in/out
+    // time is fine, never marked Late In or Early Out, but the day must total a
+    // strict 8 hours. Applies whether Friday is their weekend or a scheduled
+    // work day. Skipped when the member defined custom slots for the day (the
+    // slot window then defines their expected in/out times instead).
+    if ($slot_win === null && $policy && $etype === 'educational' && (int)date('N', strtotime($date)) === 5 && $has_in) {
+        if (!$has_out) return 'incomplete';
+        return att_worked_minutes($record['in_time'], $record['out_time']) >= ATT_POLICY_FRIDAY_MIN_MINUTES
+            ? 'present'
+            : 'short_hours';
+    }
+
+    if ($slot_win === null && att_is_weekly_off_for($sched, $date)) return $has_in ? 'present' : 'weekly_off';
+    if (!$has_in && in_array($user_id, $on_leave, true)) return 'leave';
+    if (!$has_in && $date > date('Y-m-d')) return 'upcoming';
+    if (!$has_in && $date === date('Y-m-d')) {
+        // Never mark TODAY as Absent before the expected clock-in time plus the
+        // grace period has actually passed.
+        $limit = (int)att_time_to_minutes($sched['start_time']) + $in_buffer;
+        $now   = (int)date('G') * 60 + (int)date('i');
+        if ($now <= $limit) return 'upcoming';
+    }
+    if (!$has_in)                           return 'absent';
+
+    // Present with an in-time: check late-in / early-out against the schedule.
 
     $start_lim = att_time_to_minutes($sched['start_time']) + $in_buffer;
     $close_lim = att_time_to_minutes($sched['close_time']) - $out_buffer;

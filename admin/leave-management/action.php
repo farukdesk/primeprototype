@@ -126,6 +126,26 @@ if ($action === 'approve' || $action === 'reject') {
         redirect($view_url);
     }
 
+    // Final approval: mark every day of the leave as "Approved Leave / Day Off"
+    // on the Staff Attendance calendar (skipped for same-day short leave).
+    if ($result === 'approved' && $req['category'] !== 'short') {
+        try {
+            $mark = $db->prepare(
+                "INSERT INTO att_day_status (user_id, status_date, status, note, source, leave_request_id, created_by)
+                 VALUES (?,?,'approved_leave',?,'leave',?,?)
+                 ON DUPLICATE KEY UPDATE status = VALUES(status), source = VALUES(source),
+                                         leave_request_id = VALUES(leave_request_id)"
+            );
+            $note_txt = lm_category_label($req['category']) . ' (request #' . $id . ')';
+            for ($d = strtotime($req['start_date']); $d !== false && $d <= strtotime($req['end_date']); $d = strtotime('+1 day', $d)) {
+                $mark->execute([(int)$req['user_id'], date('Y-m-d', $d), $note_txt, $id, (int)$user['id']]);
+            }
+        } catch (Throwable $ex) {
+            // att_day_status table not installed – the calendar still shows the
+            // day as On Leave via the approved leave request itself.
+        }
+    }
+
     log_change('leave-management', 'UPDATE', $id, lm_category_label($req['category']), 'approval', 'pending', $result);
 
     flash_set('success', match ($result) {
