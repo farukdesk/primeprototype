@@ -268,6 +268,23 @@ function cv_save_profiles(int $user_id, string $emp_type, array $post, array $fi
         $sp_val('emergency_contact_address'),
     ]);
 
+    // Section (administrative employees only). Validated against the option
+    // list; saved via a guarded UPDATE because the `section` column is added
+    // by admin/staff-profiles-section.sql and may not exist yet.
+    $section = $sp_val('section');
+    if ($section !== null && !in_array($section, SP_SECTIONS, true)) {
+        $section = null;
+    }
+    if ($emp_type !== 'administrative') {
+        $section = null;
+    }
+    try {
+        $db->prepare('UPDATE staff_profiles SET section = ? WHERE user_id = ?')
+           ->execute([$section, $user_id]);
+    } catch (Throwable $e) {
+        // Migration not applied yet – ignore.
+    }
+
     // Academic qualifications & work experiences (shared by all employees).
     sp_save_qualifications($user_id, $post);
     sp_save_experiences($user_id, $post);
