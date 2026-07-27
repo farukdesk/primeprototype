@@ -222,6 +222,13 @@ function cv_save_profiles(int $user_id, string $emp_type, array $post, array $fi
         $employee_status = 'Active';
     }
 
+    // For faculty the Designation field is not repeated in Employment Details;
+    // mirror the Faculty Information designation into the staff profile.
+    $sp_designation = $sp_val('designation');
+    if ($emp_type === 'educational' && $sp_designation === null) {
+        $sp_designation = trim($post['fp_designation'] ?? '') ?: null;
+    }
+
     $db->prepare(
         'INSERT INTO staff_profiles
             (user_id, department_type, photo, employee_id, staff_dept_id, designation,
@@ -252,7 +259,7 @@ function cv_save_profiles(int $user_id, string $emp_type, array $post, array $fi
             emergency_contact_relation = VALUES(emergency_contact_relation),
             emergency_contact_address = VALUES(emergency_contact_address)'
     )->execute([
-        $user_id, $emp_type, $photo, $sp_val('employee_id'), $staff_dept_id, $sp_val('designation'),
+        $user_id, $emp_type, $photo, $sp_val('employee_id'), $staff_dept_id, $sp_designation,
         $sp_val('finger_id'), $sp_val('father_name'), $sp_val('mother_name'), $job_type, $gender,
         $sp_val('religion'), $sp_val('blood_group'), $sp_val('national_id'),
         $sp_val('date_of_birth'), $sp_val('joining_date'), $sp_val('nationality'),
@@ -278,16 +285,26 @@ function cv_save_faculty(int $user_id, array $post, array $files): void
 {
     $db = db();
 
-    $fp = $db->prepare('SELECT photo, cv_file FROM faculty_profiles WHERE user_id = ?');
+    $fp = $db->prepare('SELECT * FROM faculty_profiles WHERE user_id = ?');
     $fp->execute([$user_id]);
-    $current = $fp->fetch() ?: ['photo' => null, 'cv_file' => null];
+    $current = $fp->fetch() ?: [];
 
     $data = [];
     foreach (CV_FACULTY_FIELDS as $f) {
         $data[$f] = trim($post['fp_' . $f] ?? '') ?: null;
     }
 
-    $photo = $current['photo'] ?: null;
+    // Official email and phone are not repeated on the user form – they come
+    // from the account Email / Phone fields, keeping the stored value as a
+    // fallback so existing data is never wiped.
+    if ($data['official_email'] === null) {
+        $data['official_email'] = trim($post['email'] ?? '') ?: ($current['official_email'] ?? null);
+    }
+    if ($data['phone'] === null) {
+        $data['phone'] = trim($post['phone'] ?? '') ?: ($current['phone'] ?? null);
+    }
+
+    $photo = ($current['photo'] ?? null) ?: null;
     if (!empty($files['fp_photo']['name'])) {
         $uploaded = fp_upload_file(
             $files['fp_photo'],
@@ -303,7 +320,7 @@ function cv_save_faculty(int $user_id, array $post, array $files): void
         }
     }
 
-    $cv_file = $current['cv_file'] ?: null;
+    $cv_file = ($current['cv_file'] ?? null) ?: null;
     if (!empty($files['fp_cv_file']['name'])) {
         $uploaded_cv = fp_upload_file($files['fp_cv_file'], ['pdf'], ['application/pdf']);
         if ($uploaded_cv !== false) {
@@ -483,7 +500,8 @@ function cv_render_section(string $emp_type, array $sp, array $quals, array $exp
             </div>
             <div class="card-body p-3">
                 <div class="row g-3">
-                    <div class="col-md-4">
+                    <!-- Faculty users manage their photo in Faculty Information – no need to repeat it here. -->
+                    <div class="col-md-4 cv-fac-hide" <?= $show_fac ? 'hidden' : '' ?>>
                         <label class="form-label fw-medium">Profile Photo</label>
                         <?php if (!empty($sp['photo'])): ?>
                         <div class="mb-2">
@@ -515,7 +533,12 @@ function cv_render_section(string $emp_type, array $sp, array $quals, array $exp
             <div class="card-body p-3">
                 <div class="row g-3">
                     <?= cv_sp_input('employee_id', 'Employee ID', $sp, 'text', 'maxlength="100"') ?>
-                    <?= cv_sp_input('designation', 'Designation', $sp, 'text', 'maxlength="200"') ?>
+                    <!-- Faculty designation lives in Faculty Information and is mirrored on save. -->
+                    <div class="col-md-4 cv-fac-hide" <?= $show_fac ? 'hidden' : '' ?>>
+                        <label class="form-label fw-medium">Designation</label>
+                        <input type="text" name="sp_designation" class="form-control" style="border-radius:10px;"
+                               maxlength="200" value="<?= h($sp['sp_designation'] ?? $sp['designation'] ?? '') ?>">
+                    </div>
                     <div class="col-md-4">
                         <label class="form-label fw-medium">Department</label>
                         <select name="sp_staff_dept_id" class="form-select" style="border-radius:10px;">
@@ -643,9 +666,14 @@ function cv_render_section(string $emp_type, array $sp, array $quals, array $exp
                     </div>
                     <?= cv_fp_input('designation', 'Designation', $fp, 'text', 'maxlength="200"') ?>
                     <?= cv_fp_textarea('qualification', 'Qualifications', $fp, 3, 'e.g. PhD (Computer Science), MSc (Software Engineering)') ?>
-                    <?= cv_fp_input('official_email', 'Official Email', $fp, 'email', 'maxlength="200"') ?>
+                    <div class="col-12">
+                        <small class="text-muted">
+                            <i class="fas fa-info-circle me-1"></i>Official email and phone are taken
+                            automatically from the account <strong>Email</strong> and <strong>Phone</strong>
+                            fields above &ndash; no need to repeat them here.
+                        </small>
+                    </div>
                     <?= cv_fp_input('personal_email', 'Personal Email', $fp, 'email', 'maxlength="200"') ?>
-                    <?= cv_fp_input('phone', 'Phone', $fp, 'text', 'maxlength="50"') ?>
                     <?= cv_fp_input('languages', 'Languages', $fp, 'text', 'maxlength="500"') ?>
                     <?= cv_fp_textarea('bio', 'Bio / About', $fp, 4) ?>
                     <?= cv_fp_textarea('research_interest', 'Research Interests', $fp, 3) ?>
@@ -703,6 +731,10 @@ function cv_render_script(): void
         if (admin) admin.hidden = !showAdmin;
         if (fac)   fac.hidden   = (v !== 'educational');
         if (hint)  hint.hidden  = showAdmin;
+        // Hide fields that would repeat faculty-profile data for faculty users.
+        document.querySelectorAll('.cv-fac-hide').forEach(function (el) {
+            el.hidden = (v === 'educational');
+        });
     }
     function cvAddRow(containerId) {
         var c = document.getElementById(containerId);
