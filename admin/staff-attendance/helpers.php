@@ -605,6 +605,40 @@ function att_device_users_table_exists(): bool
     return $exists;
 }
 
+/** Whether a table exists in the current database (cached per request). */
+function att_table_exists(string $table): bool
+{
+    static $cache = [];
+    if (!array_key_exists($table, $cache)) {
+        try {
+            db()->query('SELECT 1 FROM `' . str_replace('`', '', $table) . '` LIMIT 1');
+            $cache[$table] = true;
+        } catch (Throwable $e) {
+            $cache[$table] = false;
+        }
+    }
+    return $cache[$table];
+}
+
+/** Normalize a department name for matching (case, punctuation, "Department of" prefix). */
+function att_normalize_dept_name(string $name): string
+{
+    $n = strtolower(trim($name));
+    $n = preg_replace('/^(department|dept\.?)\s+of\s+/', '', $n);
+    $n = preg_replace('/\(.*?\)/', ' ', $n);
+    $n = preg_replace('/[^a-z0-9]+/', ' ', $n);
+    return trim(preg_replace('/\s+/', ' ', $n));
+}
+
+/** Whether two department names refer to the same department (fuzzy match). */
+function att_dept_names_match(?string $a, ?string $b): bool
+{
+    $na = att_normalize_dept_name((string)$a);
+    $nb = att_normalize_dept_name((string)$b);
+    if ($na === '' || $nb === '') return false;
+    return $na === $nb || str_contains($na, $nb) || str_contains($nb, $na);
+}
+
 /**
  * Active staff to show on the attendance report. This is anyone whose primary
  * group can view the Staff Attendance module OR who is mapped to a device on the
@@ -646,10 +680,9 @@ function att_staff_list(int $dept_id = 0, string $search = ''): array
                 ORDER BY du2.id ASC LIMIT 1))"
         : 'sp.employee_id';
 
-    if ($dept_id > 0) {
-        $where[]  = 'sp.staff_dept_id = ?';
-        $params[] = $dept_id;
-    }
+    // NOTE: the department filter is applied in PHP below, so members whose
+    // staff profile has no department are still matched through the academic
+    // department auto-synced from their user / faculty profile.
     if ($search !== '') {
         $like   = '%' . $search . '%';
         $cond   = '(u.full_name LIKE ? OR u.username LIKE ? OR sp.employee_id LIKE ?';
@@ -662,8 +695,27 @@ function att_staff_list(int $dept_id = 0, string $search = ''): array
         $where[] = $cond . ')';
     }
 
+    // Academic department from the user's profile (faculty_profiles.dept_id,
+    // falling back to their active dept_faculty record). Used to auto-sync the
+    // department when the staff profile has none. Guarded per table so the
+    // query still works when a module's tables are missing.
+    $acad_parts = [];
+    if (att_table_exists('faculty_profiles')) {
+        $acad_parts[] = '(SELECT dd1.name FROM faculty_profiles fp1
+                            JOIN dept_departments dd1 ON dd1.id = fp1.dept_id
+                           WHERE fp1.user_id = u.id LIMIT 1)';
+    }
+    if (att_table_exists('dept_faculty')) {
+        $acad_parts[] = '(SELECT dd2.name FROM dept_faculty df2
+                            JOIN dept_departments dd2 ON dd2.id = df2.dept_id
+                           WHERE df2.user_id = u.id AND df2.is_active = 1
+                           ORDER BY df2.is_head DESC, df2.id ASC LIMIT 1)';
+    }
+    $acad_expr = $acad_parts ? 'COALESCE(' . implode(', ', $acad_parts) . ')' : 'NULL';
+
     $sql = 'SELECT u.id, u.full_name, u.username,
-                   ' . $emp_expr . ' AS employee_id, sp.staff_dept_id, sd.name AS dept_name
+                   ' . $emp_expr . ' AS employee_id, sp.staff_dept_id, sd.name AS dept_name,
+                   ' . $acad_expr . ' AS academic_dept_name
               FROM users u
               JOIN user_groups ug ON ug.id = u.group_id
          LEFT JOIN staff_profiles sp ON sp.user_id = u.id
@@ -673,7 +725,36 @@ function att_staff_list(int $dept_id = 0, string $search = ''): array
 
     $stmt = db()->prepare($sql);
     $stmt->execute($params);
-    return $stmt->fetchAll();
+    $rows = $stmt->fetchAll();
+
+    // Auto-sync: when the staff profile has no department, display the academic
+    // department from the user / faculty profile instead.
+    foreach ($rows as &$r) {
+        if (($r['dept_name'] ?? '') === '' || $r['dept_name'] === null) {
+            if (!empty($r['academic_dept_name'])) {
+                $r['dept_name'] = $r['academic_dept_name'];
+            }
+        }
+    }
+    unset($r);
+
+    // Department filter: an explicitly set staff department must match the
+    // selected one; otherwise fall back to fuzzy-matching the auto-synced
+    // academic department against the selected staff department's name.
+    if ($dept_id > 0) {
+        $sel_name = '';
+        foreach (att_departments() as $d) {
+            if ((int)$d['id'] === $dept_id) { $sel_name = (string)$d['name']; break; }
+        }
+        $rows = array_values(array_filter($rows, static function (array $r) use ($dept_id, $sel_name): bool {
+            $own = (int)($r['staff_dept_id'] ?? 0);
+            if ($own === $dept_id) return true;
+            if ($own > 0) return false; // explicitly assigned to another department
+            return att_dept_names_match($r['academic_dept_name'] ?? '', $sel_name);
+        }));
+    }
+
+    return $rows;
 }
 
 /**
