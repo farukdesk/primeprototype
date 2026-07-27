@@ -268,6 +268,23 @@ function cv_save_profiles(int $user_id, string $emp_type, array $post, array $fi
         $sp_val('emergency_contact_address'),
     ]);
 
+    // Section (administrative employees only). Validated against the option
+    // list; saved via a guarded UPDATE because the `section` column is added
+    // by admin/staff-profiles-section.sql and may not exist yet.
+    $section = $sp_val('section');
+    if ($section !== null && !in_array($section, SP_SECTIONS, true)) {
+        $section = null;
+    }
+    if ($emp_type !== 'administrative') {
+        $section = null;
+    }
+    try {
+        $db->prepare('UPDATE staff_profiles SET section = ? WHERE user_id = ?')
+           ->execute([$section, $user_id]);
+    } catch (Throwable $e) {
+        // Migration not applied yet – ignore.
+    }
+
     // Academic qualifications & work experiences (shared by all employees).
     sp_save_qualifications($user_id, $post);
     sp_save_experiences($user_id, $post);
@@ -554,6 +571,17 @@ function cv_render_section(string $emp_type, array $sp, array $quals, array $exp
                             <i class="fas fa-magic me-1"></i>Auto-matched from the faculty profile department.
                         </small>
                         <?php endif; ?>
+                    </div>
+                    <!-- Section: administrative employees only -->
+                    <div class="col-md-4 cv-fac-hide" <?= $show_fac ? 'hidden' : '' ?>>
+                        <label class="form-label fw-medium">Section</label>
+                        <?php $sec_cur = (string)($sp['sp_section'] ?? $sp['section'] ?? ''); ?>
+                        <select name="sp_section" class="form-select" style="border-radius:10px;">
+                            <option value="">— Select —</option>
+                            <?php foreach (SP_SECTIONS as $sec): ?>
+                            <option value="<?= h($sec) ?>" <?= $sec_cur === $sec ? 'selected' : '' ?>><?= h($sec) ?></option>
+                            <?php endforeach; ?>
+                        </select>
                     </div>
                     <?= cv_sp_select('job_type', 'Job Type / Category', SP_JOB_TYPES, $sp) ?>
                     <?= cv_sp_select('employee_status', 'Employee Status', SP_EMPLOYEE_STATUSES, $sp, 'Active') ?>
