@@ -609,7 +609,7 @@ function co_get_offers_filtered(array $filters = [], int $page = 1, int $per_pag
     $offset_val = (int)max(0, $page - 1) * $limit_val;
     $rowsSt = db()->prepare(
         "SELECT DISTINCT o.id, o.dept_id, o.program_id, o.batch_id,
-                o.status, o.semester, o.academic_intake, o.created_at,
+                o.status, o.semester, o.academic_intake, o.shift, o.section, o.created_at,
                 d.name AS dept_name,
                 p.program_name,
                 b.name AS batch_name
