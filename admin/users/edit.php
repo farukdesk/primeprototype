@@ -45,6 +45,30 @@ $sp_stmt = db()->prepare('SELECT department_type FROM staff_profiles WHERE user_
 $sp_stmt->execute([$id]);
 $employee_type = (string)($sp_stmt->fetchColumn() ?: '');
 
+// Faculty accounts often have a faculty profile but no staff_profiles row yet
+// (created before the standard CV feature). Infer the Faculty employee type
+// from faculty_profiles / dept_faculty so the Standard CV / Profile section is
+// visible to them too; saving the form then creates the staff_profiles row.
+if ($employee_type === '') {
+    $has_fp = db()->prepare('SELECT 1 FROM faculty_profiles WHERE user_id = ? LIMIT 1');
+    $has_fp->execute([$id]);
+    if ($has_fp->fetchColumn()) {
+        $employee_type = 'educational';
+    } else {
+        try {
+            $has_df = db()->prepare(
+                'SELECT 1 FROM dept_faculty WHERE user_id = ? AND is_active = 1 LIMIT 1'
+            );
+            $has_df->execute([$id]);
+            if ($has_df->fetchColumn()) {
+                $employee_type = 'educational';
+            }
+        } catch (Throwable $e) {
+            // dept_faculty not available – ignore.
+        }
+    }
+}
+
 // Only user-managers may set the Employee Type (self-editing users cannot).
 $can_manage_users = is_super_admin() || can_access('users', 'can_edit');
 $is_self          = ($id === (int)$me['id']);

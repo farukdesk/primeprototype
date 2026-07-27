@@ -294,6 +294,12 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                     </a>
                 </li>
                 <li class="nav-item"><a class="nav-link" href="<?= APP_URL ?>/faculty-profiles/files.php"><i class="fas fa-folder-open me-1"></i>Files</a></li>
+                <li class="nav-item">
+                    <a class="nav-link" href="<?= APP_URL ?>/users/edit.php?id=<?= (int)$user_id ?>"
+                       title="Personal &amp; employment details: father's/mother's name, NID, qualifications, work experience, emergency contact…">
+                        <i class="fas fa-id-card me-1"></i>Standard CV
+                    </a>
+                </li>
             </ul>
 
             <div class="tab-content">
