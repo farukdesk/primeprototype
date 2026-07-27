@@ -44,6 +44,90 @@ function cv_staff_departments(): array
 }
 
 /**
+ * The academic department name already attached to a faculty user's profile.
+ * Looks at faculty_profiles.dept_id first and falls back to the user's active
+ * dept_faculty record. $fp is a faculty_profiles row (may be empty).
+ */
+function cv_faculty_dept_name(array $fp): ?string
+{
+    $db = db();
+
+    $dept_id = (int)($fp['dept_id'] ?? 0);
+    if ($dept_id > 0) {
+        $st = $db->prepare('SELECT name FROM dept_departments WHERE id = ?');
+        $st->execute([$dept_id]);
+        $name = $st->fetchColumn();
+        if ($name) return (string)$name;
+    }
+
+    $user_id = (int)($fp['user_id'] ?? 0);
+    if ($user_id > 0) {
+        try {
+            $st = $db->prepare(
+                'SELECT dd.name
+                   FROM dept_faculty df
+                   JOIN dept_departments dd ON dd.id = df.dept_id
+                  WHERE df.user_id = ? AND df.is_active = 1
+                  ORDER BY df.is_head DESC, df.id ASC
+                  LIMIT 1'
+            );
+            $st->execute([$user_id]);
+            $name = $st->fetchColumn();
+            if ($name) return (string)$name;
+        } catch (Throwable $e) {
+            // dept_faculty not available – ignore.
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Normalize a department name for fuzzy comparison
+ * (lowercase, strip "Department of" / "Dept. of" prefixes and punctuation).
+ */
+function cv_normalize_dept_name(string $name): string
+{
+    $n = strtolower(trim($name));
+    $n = preg_replace('/^(department|dept\.?)\s+of\s+/', '', $n);
+    $n = preg_replace('/\(.*?\)/', ' ', $n);
+    $n = preg_replace('/[^a-z0-9]+/', ' ', $n);
+    return trim(preg_replace('/\s+/', ' ', $n));
+}
+
+/**
+ * Find the staff_departments id matching an academic department name.
+ * Educational-type staff departments are preferred; exact normalized match
+ * first, then a loose contains-match. Returns 0 when nothing matches.
+ */
+function cv_match_staff_dept_id(?string $dept_name): int
+{
+    if ($dept_name === null || trim($dept_name) === '') return 0;
+    $target = cv_normalize_dept_name($dept_name);
+    if ($target === '') return 0;
+
+    $exact_any = 0;
+    $loose_edu = 0;
+    $loose_any = 0;
+
+    foreach (cv_staff_departments() as $d) {
+        $n = cv_normalize_dept_name((string)$d['name']);
+        if ($n === '') continue;
+        $is_edu = (($d['type'] ?? '') === 'educational');
+
+        if ($n === $target) {
+            if ($is_edu) return (int)$d['id'];      // best possible match
+            if (!$exact_any) $exact_any = (int)$d['id'];
+        } elseif (str_contains($n, $target) || str_contains($target, $n)) {
+            if ($is_edu && !$loose_edu) $loose_edu = (int)$d['id'];
+            if (!$loose_any)            $loose_any = (int)$d['id'];
+        }
+    }
+
+    return $exact_any ?: $loose_edu ?: $loose_any;
+}
+
+/**
  * Validate the optional uploaded files (photo + faculty CV PDF) without moving
  * them. Returns a list of human-readable error messages (empty if OK).
  */
@@ -104,6 +188,21 @@ function cv_save_profiles(int $user_id, string $emp_type, array $post, array $fi
     }
 
     $staff_dept_id = (int)($post['sp_staff_dept_id'] ?? 0) ?: null;
+
+    // Faculty users already have a department on their faculty profile –
+    // when none was picked in Employment Details, match it automatically.
+    if ($staff_dept_id === null && $emp_type === 'educational') {
+        $fp_data = ['user_id' => $user_id];
+        try {
+            $fp_row = $db->prepare('SELECT * FROM faculty_profiles WHERE user_id = ?');
+            $fp_row->execute([$user_id]);
+            $fp_data = array_merge($fp_data, $fp_row->fetch() ?: []);
+            $fp_data['user_id'] = $user_id;
+        } catch (Throwable $e) {
+            // ignore – fall back to dept_faculty lookup inside the helper.
+        }
+        $staff_dept_id = cv_match_staff_dept_id(cv_faculty_dept_name($fp_data)) ?: null;
+    }
 
     $sp_val = static function (string $key) use ($post): ?string {
         $v = trim($post['sp_' . $key] ?? '');
@@ -359,6 +458,14 @@ function cv_render_section(string $emp_type, array $sp, array $quals, array $exp
     $show_fac    = ($emp_type === 'educational');
     $sp_dept_cur = (int)($sp['sp_staff_dept_id'] ?? $sp['staff_dept_id'] ?? 0);
 
+    // Faculty users already carry a department on their faculty profile –
+    // pre-select the matching staff department when none is set yet.
+    $dept_auto_matched = false;
+    if ($sp_dept_cur === 0 && $emp_type === 'educational') {
+        $sp_dept_cur       = cv_match_staff_dept_id(cv_faculty_dept_name($fp));
+        $dept_auto_matched = $sp_dept_cur > 0;
+    }
+
     if (empty($quals)) $quals = [[]];
     if (empty($exps))  $exps  = [[]];
     ?>
@@ -419,6 +526,11 @@ function cv_render_section(string $emp_type, array $sp, array $quals, array $exp
                             </option>
                             <?php endforeach; ?>
                         </select>
+                        <?php if ($dept_auto_matched): ?>
+                        <small class="text-success">
+                            <i class="fas fa-magic me-1"></i>Auto-matched from the faculty profile department.
+                        </small>
+                        <?php endif; ?>
                     </div>
                     <?= cv_sp_select('job_type', 'Job Type / Category', SP_JOB_TYPES, $sp) ?>
                     <?= cv_sp_select('employee_status', 'Employee Status', SP_EMPLOYEE_STATUSES, $sp, 'Active') ?>
