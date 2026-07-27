@@ -572,6 +572,17 @@ function cv_render_section(string $emp_type, array $sp, array $quals, array $exp
                         </small>
                         <?php endif; ?>
                     </div>
+                    <!-- Section: administrative employees only -->
+                    <div class="col-md-4 cv-fac-hide" <?= $show_fac ? 'hidden' : '' ?>>
+                        <label class="form-label fw-medium">Section</label>
+                        <?php $sec_cur = (string)($sp['sp_section'] ?? $sp['section'] ?? ''); ?>
+                        <select name="sp_section" class="form-select" style="border-radius:10px;">
+                            <option value="">— Select —</option>
+                            <?php foreach (SP_SECTIONS as $sec): ?>
+                            <option value="<?= h($sec) ?>" <?= $sec_cur === $sec ? 'selected' : '' ?>><?= h($sec) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
                     <?= cv_sp_select('job_type', 'Job Type / Category', SP_JOB_TYPES, $sp) ?>
                     <?= cv_sp_select('employee_status', 'Employee Status', SP_EMPLOYEE_STATUSES, $sp, 'Active') ?>
                     <?= cv_sp_input('joining_date', 'Joining Date', $sp, 'date') ?>
