@@ -68,6 +68,11 @@ const SP_JOB_TYPES = [
     'Permanent', 'Contractual', 'Ad-hoc', 'Master Role', 'Daily Basis', 'Probationary',
 ];
 
+/** Section options for ADMINISTRATIVE employees. */
+const SP_SECTIONS = [
+    'Accounts', 'Admin', 'Admission', 'COE', 'CRHP', 'IQAC', 'IT',
+];
+
 /** Employee Status options. */
 const SP_EMPLOYEE_STATUSES = [
     'Active', 'Inactive', 'On Leave', 'Study Leave', 'Closed',
@@ -424,6 +429,7 @@ function sp_render_cv_html(array $data, bool $for_pdf = false): string
     // ── Employment ──────────────────────────────────────────────────────────
     $employment = $rows([
         'Department'   => h($dept_name),
+        'Section'      => h($sp['section'] ?? ''),
         'Designation'  => h($designation),
         'Job Type'     => h($sp['job_type'] ?? ''),
         'Joining Date' => sp_fmt_date($sp['joining_date'] ?? null),
