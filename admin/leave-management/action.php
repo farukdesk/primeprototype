@@ -148,6 +148,10 @@ if ($action === 'approve' || $action === 'reject') {
 
     log_change('leave-management', 'UPDATE', $id, lm_category_label($req['category']), 'approval', 'pending', $result);
 
+    // Notifications: alert the next approval group, or send the final
+    // approved / rejected notice (in-app + email) to the requester.
+    lm_notify_decision($id, $result, $note);
+
     flash_set('success', match ($result) {
         'rejected' => 'Leave request rejected.',
         'approved' => 'Final approval recorded — the leave request is now approved.',

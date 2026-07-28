@@ -126,6 +126,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $db->commit();
 
             log_change('leave-management', 'CREATE', $rid, lm_category_label($category) . ' (' . $days . 'd)');
+            // In-app + email confirmation to the requester; alert the first approving group.
+            lm_notify_submitted($rid);
             flash_set('success', 'Your leave request has been submitted.');
             redirect(APP_URL . '/leave-management/view.php?id=' . $rid);
         } catch (Throwable $ex) {
