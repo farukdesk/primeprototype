@@ -97,6 +97,24 @@ if (!$valid_group($sel_group)) {
     $sel_group = !empty($groups) ? (int)$groups[0]['id'] : 0;
 }
 
+// All configured flows, grouped by requester group, for the overview list.
+$flows_by_group = [];
+$frows = $db->query(
+    'SELECT f.requester_group_id, rg.name AS requester_group_name,
+            f.step_order, f.label, f.is_active, g.name AS group_name
+       FROM leave_approval_flow f
+       JOIN user_groups rg ON rg.id = f.requester_group_id
+       JOIN user_groups g  ON g.id = f.group_id
+      ORDER BY rg.name ASC, f.step_order ASC, f.id ASC'
+)->fetchAll();
+foreach ($frows as $fr) {
+    $gid = (int)$fr['requester_group_id'];
+    if (!isset($flows_by_group[$gid])) {
+        $flows_by_group[$gid] = ['name' => $fr['requester_group_name'], 'steps' => []];
+    }
+    $flows_by_group[$gid]['steps'][] = $fr;
+}
+
 $steps = [];
 if ($sel_group > 0) {
     $sstmt = $db->prepare(
@@ -126,11 +144,53 @@ require_once __DIR__ . '/../includes/header.php';
 <?= flash_show() ?>
 
 <div class="card mb-4" style="border-radius:12px;">
+    <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h6 class="mb-0 fw-semibold"><i class="fas fa-list me-2 text-primary"></i>Configured Approval Flows</h6>
+        <div style="min-width:260px;">
+            <input type="text" id="flow-list-search" class="form-control form-control-sm" placeholder="Search by requester group...">
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0" id="flow-list-table">
+                <thead class="table-light">
+                    <tr>
+                        <th class="px-3">Requester Group</th>
+                        <th>Approval Steps (in order)</th>
+                        <th style="width:90px;">Steps</th>
+                        <th style="width:110px;"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php if (empty($flows_by_group)): ?>
+                    <tr><td colspan="4" class="text-center text-muted py-4">No approval flows configured yet. Select a requester group below and add the first step.</td></tr>
+                <?php else: foreach ($flows_by_group as $gid => $fg): ?>
+                    <tr class="<?= $gid === $sel_group ? 'table-primary' : '' ?>">
+                        <td class="px-3"><strong><?= h($fg['name']) ?></strong></td>
+                        <td>
+                            <?php foreach ($fg['steps'] as $st): ?>
+                                <span class="badge <?= $st['is_active'] ? 'bg-primary' : 'bg-secondary' ?> me-1 mb-1" title="<?= $st['is_active'] ? 'Active' : 'Inactive' ?>"><?= (int)$st['step_order'] ?>. <?= h($st['group_name']) ?><?= $st['label'] ? ' – ' . h($st['label']) : '' ?></span>
+                            <?php endforeach; ?>
+                        </td>
+                        <td><?= count($fg['steps']) ?></td>
+                        <td>
+                            <a href="<?= APP_URL ?>/leave-management/flow.php?group=<?= $gid ?>#flow-editor" class="btn btn-sm btn-outline-primary" style="border-radius:7px;"><i class="fas fa-pen me-1"></i>Edit</a>
+                        </td>
+                    </tr>
+                <?php endforeach; endif; ?>
+                <tr id="flow-list-empty" class="d-none"><td colspan="4" class="text-center text-muted py-4">No groups match your search.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4" style="border-radius:12px;" id="flow-editor">
     <div class="card-body py-3">
         <form method="get" class="row g-2 align-items-end">
             <div class="col-md-6">
                 <label class="form-label fw-semibold small mb-1">Requester User Group</label>
-                <select name="group" class="form-select" onchange="this.form.submit()">
+                <select name="group" class="form-select" data-searchable data-search-placeholder="Search requester group..." onchange="this.form.submit()">
                     <?php if (empty($groups)): ?>
                         <option value="">No user groups available</option>
                     <?php else: foreach ($groups as $g): ?>
@@ -212,7 +272,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <input type="hidden" name="requester_group_id" value="<?= $sel_group ?>">
                     <div class="mb-3">
                         <label class="form-label fw-medium">Approving User Group</label>
-                        <select name="group_id" class="form-select" required>
+                        <select name="group_id" class="form-select" data-searchable data-search-placeholder="Search approving group..." required>
                             <option value="">— Select a group —</option>
                             <?php foreach ($groups as $g): ?>
                             <option value="<?= (int)$g['id'] ?>"><?= h($g['name']) ?></option>
@@ -236,5 +296,49 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    // Group search: add a filter box above every group <select data-searchable>.
+    document.querySelectorAll('select[data-searchable]').forEach(function (select) {
+        var input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'form-control form-control-sm mb-1';
+        input.placeholder = select.dataset.searchPlaceholder || 'Search group...';
+        input.autocomplete = 'off';
+        select.parentNode.insertBefore(input, select);
+
+        var options = Array.prototype.slice.call(select.options);
+        input.addEventListener('input', function () {
+            var q = input.value.trim().toLowerCase();
+            options.forEach(function (opt) {
+                var match = opt.value === '' || q === '' || opt.text.toLowerCase().indexOf(q) !== -1;
+                opt.hidden = !match;
+                opt.disabled = !match;
+            });
+        });
+    });
+
+    // Flow list search: filter the overview rows by requester group name.
+    var listSearch = document.getElementById('flow-list-search');
+    if (listSearch) {
+        var rows = Array.prototype.slice.call(document.querySelectorAll('#flow-list-table tbody tr')).filter(function (r) {
+            return r.id !== 'flow-list-empty' && r.cells.length > 1;
+        });
+        var emptyRow = document.getElementById('flow-list-empty');
+        listSearch.addEventListener('input', function () {
+            var q = listSearch.value.trim().toLowerCase();
+            var visible = 0;
+            rows.forEach(function (r) {
+                var name = (r.cells[0] ? r.cells[0].textContent : '').toLowerCase();
+                var show = q === '' || name.indexOf(q) !== -1;
+                r.classList.toggle('d-none', !show);
+                if (show) visible++;
+            });
+            if (emptyRow) emptyRow.classList.toggle('d-none', visible !== 0 || rows.length === 0);
+        });
+    }
+});
+</script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
