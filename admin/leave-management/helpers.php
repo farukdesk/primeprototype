@@ -541,3 +541,176 @@ function lm_build_pdf_html(array $req, array $approvals, array $profile = []): s
     <?php
     return (string)ob_get_clean();
 }
+
+// ── Notifications & email alerts ────────────────────────────────────────
+
+require_once __DIR__ . '/../includes/notifications.php';
+
+/** Absolute URL of a leave request's detail / approval page. */
+function lm_request_url(int $request_id): string
+{
+    return APP_URL . '/leave-management/view.php?id=' . $request_id;
+}
+
+/** Short one-line summary, e.g. "Casual Leave, 12 Aug 2026 – 14 Aug 2026 (3 day(s))". */
+function lm_request_summary(array $req): string
+{
+    $start = date('d M Y', strtotime($req['start_date']));
+    $end   = date('d M Y', strtotime($req['end_date']));
+    if (($req['category'] ?? '') === 'short') {
+        return lm_category_label('short') . ' on ' . $start . ' ('
+             . substr((string)$req['start_time'], 0, 5) . '–' . substr((string)$req['end_time'], 0, 5) . ')';
+    }
+    $days = rtrim(rtrim(number_format((float)$req['days'], 1), '0'), '.');
+    return lm_category_label((string)$req['category']) . ', '
+         . $start . ($end !== $start ? ' – ' . $end : '') . ' (' . $days . ' day(s))';
+}
+
+/** Simple branded HTML email body used when no email template is configured. */
+function lm_email_html(string $heading, string $intro, array $req, string $extra = ''): string
+{
+    $url     = lm_request_url((int)$req['id']);
+    $summary = lm_request_summary($req);
+    return '<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;color:#222;">'
+         . '<h2 style="color:#1a1f36;">' . h($heading) . '</h2>'
+         . '<p>' . h($intro) . '</p>'
+         . '<div style="background:#f4f6fb;padding:14px 18px;border-radius:10px;margin:12px 0;">'
+         . '<strong>' . h($summary) . '</strong><br>'
+         . '<span style="color:#555;">' . nl2br(h((string)$req['reason'])) . '</span>'
+         . ($extra !== '' ? '<br><em>' . h($extra) . '</em>' : '')
+         . '</div>'
+         . '<p><a href="' . h($url) . '" style="background:#4f8ef7;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;display:inline-block;">View Leave Request</a></p>'
+         . '<p style="color:#888;font-size:12px;">' . h(APP_NAME) . ' — Leave Management</p>'
+         . '</div>';
+}
+
+/**
+ * Alert every member of the approving group of a given step that a leave
+ * request needs their attention. Clicking the notification opens the
+ * request's approval page. The requester is excluded.
+ */
+function lm_notify_step_group(array $req, int $step_order): void
+{
+    $stmt = db()->prepare(
+        'SELECT a.group_id, a.label, u.full_name AS requester_name
+           FROM leave_request_approvals a
+           JOIN leave_requests r ON r.id = a.request_id
+           JOIN users u ON u.id = r.user_id
+          WHERE a.request_id = ? AND a.step_order = ?'
+    );
+    $stmt->execute([(int)$req['id'], $step_order]);
+    $step = $stmt->fetch();
+    if (!$step) return;
+    $body = $step['requester_name'] . ' — ' . lm_request_summary($req)
+          . ($step['label'] ? ' • Step: ' . $step['label'] : '');
+    notify_group_members(
+        (int)$step['group_id'],
+        'Leave request needs your attention',
+        $body,
+        lm_request_url((int)$req['id']),
+        'leave-approval',
+        (int)$req['user_id']
+    );
+}
+
+/**
+ * After a request is submitted: confirmation (in-app + email) to the
+ * requester and an in-app alert to every member of the first approving group.
+ */
+function lm_notify_submitted(int $request_id): void
+{
+    try {
+        $stmt = db()->prepare(
+            'SELECT r.*, u.full_name AS requester_name, u.email AS requester_email
+               FROM leave_requests r JOIN users u ON u.id = r.user_id
+              WHERE r.id = ?'
+        );
+        $stmt->execute([$request_id]);
+        $req = $stmt->fetch();
+        if (!$req) return;
+
+        $summary = lm_request_summary($req);
+        $url     = lm_request_url($request_id);
+
+        notify_user((int)$req['user_id'], 'You have requested leave', $summary, $url, 'leave-request');
+        notify_send_email(
+            'leave_request_submitted',
+            (string)($req['requester_email'] ?? ''),
+            (string)$req['requester_name'],
+            ['full_name' => $req['requester_name'], 'summary' => $summary, 'reason' => $req['reason'], 'link' => $url],
+            'Leave request submitted — ' . $summary,
+            lm_email_html(
+                'Leave Request Submitted',
+                'Hi ' . $req['requester_name'] . ', your leave request has been submitted and is awaiting approval.',
+                $req
+            )
+        );
+
+        lm_notify_step_group($req, (int)$req['current_step']);
+    } catch (Throwable $e) {
+        error_log('lm_notify_submitted: ' . $e->getMessage());
+    }
+}
+
+/**
+ * After an approval decision:
+ *  - advanced → alert the next approving group (in-app, links to the approval page)
+ *  - approved → final approval notice (in-app + email) to the requester
+ *  - rejected → rejection notice (in-app + email, incl. the approver note) to the requester
+ */
+function lm_notify_decision(int $request_id, string $result, string $note = ''): void
+{
+    try {
+        // Re-read after the update so current_step / status reflect the decision.
+        $stmt = db()->prepare(
+            'SELECT r.*, u.full_name AS requester_name, u.email AS requester_email
+               FROM leave_requests r JOIN users u ON u.id = r.user_id
+              WHERE r.id = ?'
+        );
+        $stmt->execute([$request_id]);
+        $req = $stmt->fetch();
+        if (!$req) return;
+
+        if ($result === 'advanced') {
+            lm_notify_step_group($req, (int)$req['current_step']);
+            return;
+        }
+
+        $summary = lm_request_summary($req);
+        $url     = lm_request_url($request_id);
+
+        if ($result === 'approved') {
+            notify_user((int)$req['user_id'], 'Your leave request has been approved', $summary, $url, 'leave-status');
+            notify_send_email(
+                'leave_request_approved',
+                (string)($req['requester_email'] ?? ''),
+                (string)$req['requester_name'],
+                ['full_name' => $req['requester_name'], 'summary' => $summary, 'reason' => $req['reason'], 'link' => $url],
+                'Leave request approved — ' . $summary,
+                lm_email_html(
+                    'Leave Request Approved',
+                    'Hi ' . $req['requester_name'] . ', your leave request has completed the approval flow and is now approved.',
+                    $req
+                )
+            );
+        } elseif ($result === 'rejected') {
+            $body = $summary . ($note !== '' ? ' • Note: ' . $note : '');
+            notify_user((int)$req['user_id'], 'Your leave request has been rejected', $body, $url, 'leave-status');
+            notify_send_email(
+                'leave_request_rejected',
+                (string)($req['requester_email'] ?? ''),
+                (string)$req['requester_name'],
+                ['full_name' => $req['requester_name'], 'summary' => $summary, 'reason' => $req['reason'], 'note' => $note, 'link' => $url],
+                'Leave request rejected — ' . $summary,
+                lm_email_html(
+                    'Leave Request Rejected',
+                    'Hi ' . $req['requester_name'] . ', unfortunately your leave request has been rejected.',
+                    $req,
+                    $note !== '' ? 'Approver note: ' . $note : ''
+                )
+            );
+        }
+    } catch (Throwable $e) {
+        error_log('lm_notify_decision: ' . $e->getMessage());
+    }
+}

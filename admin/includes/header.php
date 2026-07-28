@@ -1993,6 +1993,60 @@ if (is_portal_student()) {
         </button>
         <div class="page-heading"><?= h($page_title) ?></div>
 
+        <!-- ── Notifications bell ── -->
+        <?php
+        require_once __DIR__ . '/notifications.php';
+        $_notif_uid    = (int)($user['id'] ?? 0);
+        $_notif_unread = $_notif_uid ? notif_unread_count($_notif_uid) : 0;
+        $_notif_items  = $_notif_uid ? notif_recent($_notif_uid, 10) : [];
+        ?>
+        <div class="dropdown" style="margin-right:14px;">
+            <button type="button" data-bs-toggle="dropdown" aria-label="Notifications"
+                    style="background:none;border:none;position:relative;padding:6px 9px;color:#555;font-size:1.15rem;cursor:pointer;">
+                <i class="fas fa-bell"></i>
+                <span id="notif-badge" class="badge rounded-pill bg-danger"
+                      style="position:absolute;top:-2px;right:-4px;font-size:.62rem;<?= $_notif_unread > 0 ? '' : 'display:none;' ?>"><?= $_notif_unread > 99 ? '99+' : $_notif_unread ?></span>
+            </button>
+            <div class="dropdown-menu dropdown-menu-end shadow border-0 p-0"
+                 style="width:360px;max-width:90vw;border-radius:12px;overflow:hidden;">
+                <div class="d-flex justify-content-between align-items-center px-3 py-2 border-bottom bg-light">
+                    <strong style="font-size:.9rem;">Notifications</strong>
+                    <?php if ($_notif_unread > 0): ?>
+                    <form method="POST" action="<?= APP_URL ?>/notifications/mark-read.php" class="m-0">
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="all" value="1">
+                        <input type="hidden" name="back" value="<?= h($_SERVER['REQUEST_URI'] ?? '') ?>">
+                        <button class="btn btn-link btn-sm p-0" style="font-size:.78rem;text-decoration:none;">Mark all read</button>
+                    </form>
+                    <?php endif; ?>
+                </div>
+                <div style="max-height:380px;overflow-y:auto;">
+                    <?php if (empty($_notif_items)): ?>
+                    <div class="text-center text-muted py-4" style="font-size:.85rem;">
+                        <i class="far fa-bell-slash me-1"></i> No notifications yet
+                    </div>
+                    <?php else: foreach ($_notif_items as $_n): ?>
+                    <a href="<?= APP_URL ?>/notifications/read.php?id=<?= (int)$_n['id'] ?>"
+                       class="dropdown-item d-flex gap-2 align-items-start px-3 py-2 border-bottom"
+                       style="white-space:normal;<?= $_n['is_read'] ? '' : 'background:#eef4ff;' ?>">
+                        <i class="fas fa-circle mt-1" style="font-size:.45rem;color:<?= $_n['is_read'] ? '#ccc' : '#4f8ef7' ?>;"></i>
+                        <span style="min-width:0;">
+                            <span class="d-block fw-semibold" style="font-size:.83rem;"><?= h($_n['title']) ?></span>
+                            <?php if (!empty($_n['body'])): ?>
+                            <span class="d-block text-muted" style="font-size:.78rem;"><?= h(notif_excerpt($_n['body'])) ?></span>
+                            <?php endif; ?>
+                            <span class="d-block text-muted" style="font-size:.72rem;"><?= h(notif_time_ago($_n['created_at'])) ?></span>
+                        </span>
+                    </a>
+                    <?php endforeach; endif; ?>
+                </div>
+                <a href="<?= APP_URL ?>/notifications/index.php"
+                   class="d-block text-center py-2 bg-light border-top" style="font-size:.82rem;text-decoration:none;">
+                    View all notifications
+                </a>
+            </div>
+        </div>
+
         <div class="user-menu dropdown">
             <button class="dropdown-toggle" data-bs-toggle="dropdown">
                 <div class="avatar">
@@ -2036,6 +2090,28 @@ if (is_portal_student()) {
             </ul>
         </div>
     </header>
+
+    <script>
+    // Keep the notification bell badge fresh without a page reload.
+    (function () {
+        var badge = document.getElementById('notif-badge');
+        if (!badge || !window.fetch) return;
+        setInterval(function () {
+            fetch('<?= APP_URL ?>/notifications/count.php', { credentials: 'same-origin' })
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (d) {
+                    if (!d) return;
+                    if (d.unread > 0) {
+                        badge.textContent = d.unread > 99 ? '99+' : d.unread;
+                        badge.style.display = '';
+                    } else {
+                        badge.style.display = 'none';
+                    }
+                })
+                .catch(function () {});
+        }, 60000);
+    })();
+    </script>
 
     <!-- Flash messages -->
     <div style="padding: 0 28px; margin-top: 16px;">
