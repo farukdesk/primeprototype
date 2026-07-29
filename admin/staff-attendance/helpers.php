@@ -31,8 +31,9 @@ const ATT_DEFAULT_WEEKLY_OFF = '5'; // Friday (PHP date('N'): 1=Mon … 7=Sun)
 // and the "4 late/early days = 1 absent" salary-deduction rule.
 const ATT_POLICY_EFFECTIVE          = '2026-06-01';
 const ATT_POLICY_ADMIN_IN_BUFFER    = 15;      // administrative clock-in grace (min)
-const ATT_POLICY_FACULTY_IN_BUFFER  = 20;      // faculty clock-in grace (min)
+const ATT_POLICY_FACULTY_IN_BUFFER  = 30;      // faculty clock-in grace (min): 9:00 start → in by 9:30 is on time
 const ATT_POLICY_OUT_BUFFER         = 0;       // no clock-out grace for both types
+const ATT_POLICY_FACULTY_MIN_MINUTES = 450;    // faculty daily minimum working time (7h 30m)
 const ATT_POLICY_EARLY_IN           = '08:30'; // earliest counted clock-in
 const ATT_POLICY_EARLY_OUT_OK       = '16:30'; // early birds may leave from here
 const ATT_POLICY_FRIDAY_MIN_MINUTES = 480;     // faculty Friday minimum (strict 8 hours)
@@ -86,7 +87,8 @@ function att_policy_rules_html(): string
                     <ul class="mb-0 ps-3">
                         <li><strong>Weekend:</strong> weekly off days are marked as <em>Weekend</em>.</li>
                         <li><strong>Administrative staff:</strong> clock-in grace of <strong>15 minutes</strong> after office start; <strong>no clock-out grace</strong>.</li>
-                        <li><strong>Faculty:</strong> clock-in grace of <strong>20 minutes</strong> after office start; <strong>no clock-out grace</strong>.</li>
+                        <li><strong>Faculty:</strong> clock-in grace of <strong>30 minutes</strong> after office start (9:00 start → in by 9:30 is on time).</li>
+                        <li><strong>Faculty minimum hours:</strong> at least <strong>7 hours 30 minutes</strong> in a day — below this the day is marked <em>Insufficient Hours</em>.</li>
                     </ul>
                 </div>
                 <div class="col-md-6">
@@ -540,6 +542,19 @@ function att_compute_status(?array $record, int $user_id, string $date, array $s
     }
 
     if (!$has_out)          return 'incomplete';
+
+    // Policy: faculty must complete a minimum of 7h 30m in a day. Their
+    // clock-out is judged by the total hours worked (not an Early Out time):
+    // below the minimum the day is marked Insufficient Hours. Skipped on
+    // custom-slot days (the slot window defines the expected times instead)
+    // and on Fridays (handled above with the strict 8-hour rule).
+    if ($policy && $etype === 'educational' && $slot_win === null) {
+        if (att_worked_minutes($record['in_time'], $record['out_time']) < ATT_POLICY_FACULTY_MIN_MINUTES) {
+            return $late ? 'late_in' : 'short_hours';
+        }
+        $early = false;
+    }
+
     if ($late && $early)    return 'late_and_early';
     if ($late)              return 'late_in';
     if ($early)             return 'early_out';
@@ -555,7 +570,7 @@ function att_status_label(string $status): string
         'early_out'      => 'Early Out',
         'late_and_early' => 'Late In & Early Out',
         'incomplete'     => 'No Out Time',
-        'short_hours'    => 'Insufficient Hours (<8h)',
+        'short_hours'    => 'Insufficient Hours',
         'absent'         => 'Absent',
         'upcoming'       => 'Upcoming',
         'leave'          => 'On Leave',

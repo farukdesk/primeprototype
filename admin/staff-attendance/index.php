@@ -80,7 +80,7 @@ if (($_GET['export'] ?? '') === 'csv') {
         'late_and_early' => 'Late In + Early Out', 'incomplete' => 'Incomplete',
         'leave' => 'On Leave', 'absent' => 'Absent', 'holiday' => 'Holiday',
         'weekly_off' => 'Weekend', 'off' => 'Weekend',
-        'short_hours' => 'Insufficient Hours (Fri < 8h)',
+        'short_hours' => 'Insufficient Hours',
     ];
     $status_text = static fn(string $s): string => $status_labels[$s] ?? ucwords(str_replace('_', ' ', $s));
 
@@ -472,9 +472,11 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
     times and a day-by-day breakdown. Statuses are derived from each staff member's
     effective schedule (individual override or the global office hours) and the
     configured grace buffers. Holidays and Weekend days are excluded from absence counts.
-    From <strong>01 Jun 2026</strong>: Administrative staff get a 15-minute and Faculty a 20-minute
-    clock-in grace with <strong>no clock-out grace</strong>; faculty Fridays are flexible (minimum 7 hours,
-    never marked Late/Early); clocking in by 8:30 AM allows leaving from 4:30 PM; and every
+    From <strong>01 Jun 2026</strong>: Administrative staff get a 15-minute and Faculty a 30-minute
+    clock-in grace (9:00 start → in by 9:30 is on time); faculty must complete at least
+    <strong>7 hours 30 minutes</strong> in a day (below this shows <em>Insufficient Hours</em>);
+    faculty Fridays are flexible (strict 8 hours, never marked Late/Early); clocking in by
+    8:30 AM allows leaving from 4:30 PM; and every
     <strong>4 Late In / Early Out days count as 1 Absent day</strong> (Penalty Absent column — salary may be deducted).
 </p>
 
