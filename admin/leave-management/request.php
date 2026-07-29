@@ -43,7 +43,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($category === '')      $errors[] = 'Please choose a valid leave category.';
     if ($start === '')         $errors[] = 'Start date is required.';
-    if ($end === '')           $errors[] = 'End date is required.';
+    // Short leave is a single-day leave: the end date is always the start date.
+    if ($end === '' && $category !== 'short') $errors[] = 'End date is required.';
     if ($reason === '')        $errors[] = 'Please provide a reason for the leave.';
 
     // Paid/unpaid: fixed for some categories, chosen by the requester for others.
@@ -182,7 +183,7 @@ require_once __DIR__ . '/../includes/header.php';
                         </select>
                         <div class="form-text">
                             Casual &amp; Sick leave consume your yearly balance. Additional leave is marked Paid/Unpaid.
-                            Short &amp; Maternity &amp; Paternity leave are paid; Study leave is unpaid. Maternity is capped at <?= (int)LM_MATERNITY_DAYS ?> day(s) and Paternity at <?= (int)LM_PATERNITY_DAYS ?> day(s).
+                            Short, Duty, Maternity &amp; Paternity leave are paid; Study &amp; Extra Ordinary leave are unpaid. Maternity is capped at <?= (int)LM_MATERNITY_DAYS ?> day(s) and Paternity at <?= (int)LM_PATERNITY_DAYS ?> day(s).
                         </div>
                     </div>
 
@@ -277,6 +278,8 @@ require_once __DIR__ . '/../includes/header.php';
 <script>
 var LM_NOTES = {
     short:     'Short leave is always <strong>paid</strong>. Choose the date and the start/end time.',
+    duty:      'Duty leave is always <strong>paid</strong>.',
+    extraordinary: 'Extra Ordinary leave is always <strong>unpaid</strong>.',
     study:     'Study leave is always <strong>unpaid</strong>.',
     maternity: 'Maternity leave is <strong>paid</strong> with an entitlement of up to <strong><?= (int)LM_MATERNITY_DAYS ?></strong> day(s).',
     paternity: 'Paternity leave is <strong>paid</strong> with an entitlement of up to <strong><?= (int)LM_PATERNITY_DAYS ?></strong> day(s).'
