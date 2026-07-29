@@ -7,6 +7,8 @@
  *   sick       – consumes the yearly Sick balance (default 10 days)
  *   additional – outside the balance categories, marked paid/unpaid, no balance
  *   short      – always paid, single day with a start/end time, no balance
+ *   duty       – always paid, no balance
+ *   extraordinary – always unpaid, no balance
  *   maternity  – entitlement of 120 days, paid, no balance
  *   paternity  – entitlement of 7 days, paid, no balance
  *   study      – always unpaid, no balance
@@ -30,16 +32,18 @@ define('LM_DEFAULT_SICK',   10.0);
 const LM_MATERNITY_DAYS = 120.0; // Maternity leave entitlement (days)
 const LM_PATERNITY_DAYS = 7.0;   // Paternity leave entitlement (days)
 
-const LM_CATEGORIES = ['casual', 'sick', 'additional', 'short', 'maternity', 'paternity', 'study'];
+const LM_CATEGORIES = ['casual', 'sick', 'additional', 'short', 'duty', 'extraordinary', 'maternity', 'paternity', 'study'];
 const LM_BALANCE_CATEGORIES = ['casual', 'sick'];   // consume a yearly balance
 const LM_PAYTYPE_CATEGORIES = ['additional'];       // user chooses paid/unpaid
 
 // Categories whose paid/unpaid status is fixed (not chosen by the requester).
 const LM_FIXED_PAY = [
-    'short'     => 'paid',
-    'study'     => 'unpaid',
-    'maternity' => 'paid',
-    'paternity' => 'paid',
+    'short'         => 'paid',
+    'duty'          => 'paid',
+    'study'         => 'unpaid',
+    'extraordinary' => 'unpaid',
+    'maternity'     => 'paid',
+    'paternity'     => 'paid',
 ];
 
 // Fixed day entitlement (cap) for certain categories; null = no fixed cap.
@@ -104,6 +108,8 @@ function lm_category_label(string $cat): string
         'sick'       => 'Sick Leave',
         'additional' => 'Additional Leave',
         'short'      => 'Short Leave',
+        'duty'       => 'Duty Leave',
+        'extraordinary' => 'Extra Ordinary Leave',
         'maternity'  => 'Maternity Leave',
         'paternity'  => 'Paternity Leave',
         'study'      => 'Study Leave',
@@ -118,6 +124,8 @@ function lm_category_badge(string $cat): string
         'sick'       => 'bg-warning text-dark',
         'additional' => 'bg-primary',
         'short'      => 'bg-secondary',
+        'duty'       => 'bg-success-subtle text-success border border-success',
+        'extraordinary' => 'bg-danger-subtle text-danger border border-danger',
         'maternity'  => 'bg-danger',
         'paternity'  => 'bg-success',
         'study'      => 'bg-dark',
