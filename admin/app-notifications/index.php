@@ -12,11 +12,14 @@ auth_check();
 require_access('app-notifications');
 require_once __DIR__ . '/helpers.php';
 
-$page_title    = 'App Notification';
-$can_send      = can_access('app-notifications', 'can_create');
-$configured    = apn_fcm_is_configured();
-$device_count  = apn_device_count();
-$notifications = apn_list(100);
+$page_title        = 'App Notification';
+$can_send          = can_access('app-notifications', 'can_create');
+$configured        = apn_fcm_is_configured();
+$device_count      = apn_device_count();
+$user_device_count = apn_user_device_count();
+$groups            = apn_group_options();
+$users             = apn_user_options();
+$notifications     = apn_list(100);
 
 require_once __DIR__ . '/../includes/header.php';
 ?>

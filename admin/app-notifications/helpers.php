@@ -337,3 +337,222 @@ function apn_status_badge(string $status): string
         default   => '<span class="badge bg-danger">Failed</span>',
     };
 }
+
+// ── Audience targeting ─────────────────────────────────────────────────────────
+
+const APN_AUDIENCES = ['students', 'all_users', 'user', 'group', 'employee_type', 'everyone'];
+
+/** Human label for an audience code (recorded in history). */
+function apn_audience_label(string $audience, ?string $detail = null): string
+{
+    $label = match ($audience) {
+        'students'      => 'All students',
+        'all_users'     => 'All users / employees',
+        'user'          => 'Individual user',
+        'group'         => 'User group',
+        'employee_type' => 'Employee type',
+        'everyone'      => 'Everyone (students + users)',
+        default         => ucfirst($audience),
+    };
+    return ($detail !== null && $detail !== '') ? $label . ': ' . $detail : $label;
+}
+
+/**
+ * Collect device tokens for an audience. Student tokens come from
+ * student_push_tokens; employee/user tokens come from api_push_tokens
+ * (registered via admin/api/push/register.php).
+ *
+ * @return array{tokens: array<int, array{id:int, fcm_token:string, source:string}>, detail:string}
+ */
+function apn_collect_tokens(string $audience, int $user_id = 0, int $group_id = 0, string $employee_type = ''): array
+{
+    $tokens = [];
+    $detail = '';
+
+    $addStudents = function () use (&$tokens) {
+        try {
+            $rows = db()->query(
+                "SELECT id, fcm_token FROM student_push_tokens
+                  WHERE fcm_token IS NOT NULL AND fcm_token != ''"
+            )->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($rows as $r) {
+                $tokens[] = ['id' => (int)$r['id'], 'fcm_token' => $r['fcm_token'], 'source' => 'student'];
+            }
+        } catch (Throwable $e) {
+        }
+    };
+
+    $addUsers = function (string $where = '', array $params = []) use (&$tokens) {
+        try {
+            $sql = "SELECT t.id, t.fcm_token FROM api_push_tokens t
+                      JOIN users u ON u.id = t.user_id AND u.is_active = 1
+                     WHERE t.fcm_token IS NOT NULL AND t.fcm_token != ''"
+                 . ($where !== '' ? ' AND ' . $where : '');
+            $stmt = db()->prepare($sql);
+            $stmt->execute($params);
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $tokens[] = ['id' => (int)$r['id'], 'fcm_token' => $r['fcm_token'], 'source' => 'user'];
+            }
+        } catch (Throwable $e) {
+        }
+    };
+
+    switch ($audience) {
+        case 'students':
+            $addStudents();
+            break;
+        case 'all_users':
+            $addUsers();
+            break;
+        case 'user':
+            $addUsers('u.id = ?', [$user_id]);
+            try {
+                $stmt = db()->prepare('SELECT full_name FROM users WHERE id = ?');
+                $stmt->execute([$user_id]);
+                $detail = (string)$stmt->fetchColumn();
+            } catch (Throwable $e) {
+            }
+            break;
+        case 'group':
+            $addUsers('u.group_id = ?', [$group_id]);
+            try {
+                $stmt = db()->prepare('SELECT name FROM user_groups WHERE id = ?');
+                $stmt->execute([$group_id]);
+                $detail = (string)$stmt->fetchColumn();
+            } catch (Throwable $e) {
+            }
+            break;
+        case 'employee_type':
+            $addUsers(
+                'EXISTS (SELECT 1 FROM staff_profiles sp WHERE sp.user_id = u.id AND sp.department_type = ?)',
+                [$employee_type]
+            );
+            $detail = $employee_type === 'educational' ? 'Faculty' : 'Administrative';
+            break;
+        case 'everyone':
+            $addStudents();
+            $addUsers();
+            break;
+    }
+
+    return ['tokens' => $tokens, 'detail' => $detail];
+}
+
+/**
+ * Deliver a notification to a targeted audience (students / users / both).
+ *
+ * @return array{total:int, sent:int, failed:int, status:string, error:?string, detail:string}
+ */
+function apn_send_to_audience(string $audience, string $title, string $body, ?string $url = null, int $user_id = 0, int $group_id = 0, string $employee_type = ''): array
+{
+    $result = ['total' => 0, 'sent' => 0, 'failed' => 0, 'status' => 'failed', 'error' => null, 'detail' => ''];
+
+    $sa = apn_fcm_service_account();
+    if ($sa === null) {
+        $result['error'] = 'FCM is not configured. Add the service-account JSON on the Settings page.';
+        return $result;
+    }
+    $accessToken = apn_fcm_access_token($sa);
+    if ($accessToken === null) {
+        $result['error'] = 'Could not obtain an FCM access token. Check the service-account credential.';
+        return $result;
+    }
+
+    $collected        = apn_collect_tokens($audience, $user_id, $group_id, $employee_type);
+    $tokens           = $collected['tokens'];
+    $result['detail'] = $collected['detail'];
+    $result['total']  = count($tokens);
+    if ($result['total'] === 0) {
+        $result['status'] = 'sent';
+        return $result;
+    }
+
+    $data = ['type' => 'app_notification', 'title' => $title, 'body' => $body];
+    if (!empty($url)) {
+        $data['url'] = $url;
+    }
+
+    $stale = ['student' => [], 'user' => []];
+    foreach ($tokens as $row) {
+        $r = apn_fcm_send_single($accessToken, $sa['project_id'], $row['fcm_token'], $title, $body, $data);
+        if ($r['ok']) {
+            $result['sent']++;
+        } else {
+            $result['failed']++;
+            if ($r['unregister']) {
+                $stale[$row['source']][] = (int)$row['id'];
+            }
+        }
+    }
+
+    // Prune tokens FCM reported as permanently invalid, per source table.
+    foreach (['student' => 'student_push_tokens', 'user' => 'api_push_tokens'] as $src => $table) {
+        if ($stale[$src]) {
+            $ph = implode(',', array_fill(0, count($stale[$src]), '?'));
+            try {
+                db()->prepare("DELETE FROM {$table} WHERE id IN ($ph)")->execute($stale[$src]);
+            } catch (Throwable $e) {
+            }
+        }
+    }
+
+    if ($result['sent'] > 0 && $result['failed'] === 0) {
+        $result['status'] = 'sent';
+    } elseif ($result['sent'] > 0) {
+        $result['status'] = 'partial';
+    } else {
+        $result['status'] = 'failed';
+        $result['error']  = 'All deliveries failed. See the server error log for details.';
+    }
+
+    return $result;
+}
+
+/** Record a notification and stamp the audience label (best-effort column). */
+function apn_record_with_audience(string $title, string $body, ?string $url, ?int $sentBy, array $result, string $audience): int
+{
+    $id = apn_record($title, $body, $url, $sentBy, $result);
+    try {
+        db()->prepare('UPDATE app_notifications SET audience = ? WHERE id = ?')
+           ->execute([apn_audience_label($audience, $result['detail'] ?? null), $id]);
+    } catch (Throwable $e) {
+        // audience column missing (migration not applied yet) – ignore.
+    }
+    return $id;
+}
+
+/** Count of currently registered employee/user devices (api_push_tokens). */
+function apn_user_device_count(): int
+{
+    try {
+        return (int)db()->query(
+            "SELECT COUNT(*) FROM api_push_tokens WHERE fcm_token IS NOT NULL AND fcm_token != ''"
+        )->fetchColumn();
+    } catch (Throwable $e) {
+        return 0;
+    }
+}
+
+/** Active user groups for the audience picker. */
+function apn_group_options(): array
+{
+    try {
+        return db()->query(
+            'SELECT id, name FROM user_groups WHERE is_active = 1 ORDER BY name ASC'
+        )->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+/** Active users for the individual-recipient picker. */
+function apn_user_options(): array
+{
+    try {
+        return db()->query(
+            'SELECT id, full_name, username FROM users WHERE is_active = 1 ORDER BY full_name ASC'
+        )->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        return [];
+    }
+}
