@@ -49,6 +49,12 @@ enum class Feature(
     DUE_TODAY(R.string.feat_due_today, R.drawable.ic_wallet, R.color.error),
     TOTAL_PAID(R.string.feat_total_paid, R.drawable.ic_paid, R.color.cat_profile),
     TRANSACTION_HISTORY(R.string.feat_transaction_history, R.drawable.ic_receipt, R.color.cat_finance),
+
+    // Staff / Employee (Administrative + Faculty)
+    MY_ATTENDANCE(R.string.feat_my_attendance, R.drawable.ic_check_circle, R.color.teal, R.string.feat_my_attendance_desc),
+    LEAVE_MANAGEMENT(R.string.feat_leave_management, R.drawable.ic_event, R.color.cat_campus, R.string.feat_leave_management_desc),
+    STAFF_NOTICES(R.string.feat_notices, R.drawable.ic_notifications, R.color.info),
+    STAFF_PROFILE(R.string.feat_my_profile, R.drawable.ic_person, R.color.cat_profile),
 }
 
 /** A single row in the dashboard list: either a section header or a menu item. */
@@ -92,6 +98,19 @@ fun buildDashboardMenu(): List<MenuRow> = buildList {
 
     add(MenuRow.Header(R.string.section_settings))
     add(MenuRow.Item(Feature.PASSWORD_CHANGE))
+    add(MenuRow.Item(Feature.SETTINGS))
+    add(MenuRow.Item(Feature.THEME))
+}
+
+/** The staff (Administrative / Faculty employee) dashboard menu. */
+fun buildStaffDashboardMenu(): List<MenuRow> = buildList {
+    add(MenuRow.Header(R.string.section_staff_workspace))
+    add(MenuRow.Item(Feature.MY_ATTENDANCE))
+    add(MenuRow.Item(Feature.LEAVE_MANAGEMENT))
+    add(MenuRow.Item(Feature.STAFF_NOTICES))
+    add(MenuRow.Item(Feature.STAFF_PROFILE))
+
+    add(MenuRow.Header(R.string.section_settings))
     add(MenuRow.Item(Feature.SETTINGS))
     add(MenuRow.Item(Feature.THEME))
 }
