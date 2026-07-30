@@ -57,13 +57,60 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="card-body">
                 <div class="d-flex align-items-center gap-2 mb-3 text-muted small">
                     <i class="fas fa-users"></i>
-                    <span><strong><?= (int)$device_count ?></strong> registered device<?= $device_count === 1 ? '' : 's' ?> will receive this notification.</span>
+                    <span>
+                        <strong><?= (int)$device_count ?></strong> student device<?= $device_count === 1 ? '' : 's' ?>
+                        and <strong><?= (int)$user_device_count ?></strong> employee/user device<?= $user_device_count === 1 ? '' : 's' ?> registered.
+                    </span>
                 </div>
 
                 <?php if ($can_send): ?>
                 <form method="post" action="<?= APP_URL ?>/app-notifications/send.php"
-                      onsubmit="return confirm('Send this push notification to all installed app users?');">
+                      onsubmit="return confirm('Send this push notification to the selected audience?');">
                     <?= csrf_field() ?>
+                    <div class="mb-3">
+                        <label class="form-label">Send To <span class="text-danger">*</span></label>
+                        <select name="audience" id="apnAudience" class="form-select" onchange="apnToggleAudience()">
+                            <option value="students">All students</option>
+                            <option value="all_users">All users / employees</option>
+                            <option value="user">Individual user</option>
+                            <option value="group">Individual user group</option>
+                            <option value="employee_type">Employee type</option>
+                            <option value="everyone">Everyone (students + users)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3" id="apnUserWrap" style="display:none;">
+                        <label class="form-label">User <span class="text-danger">*</span></label>
+                        <select name="target_user_id" class="form-select">
+                            <option value="">— Choose a user —</option>
+                            <?php foreach ($users as $u): ?>
+                            <option value="<?= (int)$u['id'] ?>"><?= h($u['full_name']) ?> (<?= h($u['username']) ?>)</option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="mb-3" id="apnGroupWrap" style="display:none;">
+                        <label class="form-label">User Group <span class="text-danger">*</span></label>
+                        <select name="target_group_id" class="form-select">
+                            <option value="">— Choose a group —</option>
+                            <?php foreach ($groups as $g): ?>
+                            <option value="<?= (int)$g['id'] ?>"><?= h($g['name']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="mb-3" id="apnEtypeWrap" style="display:none;">
+                        <label class="form-label">Employee Type <span class="text-danger">*</span></label>
+                        <select name="employee_type" class="form-select">
+                            <option value="administrative">Administrative</option>
+                            <option value="educational">Faculty</option>
+                        </select>
+                    </div>
+                    <script>
+                    function apnToggleAudience() {
+                        var a = document.getElementById('apnAudience').value;
+                        document.getElementById('apnUserWrap').style.display  = (a === 'user')  ? '' : 'none';
+                        document.getElementById('apnGroupWrap').style.display = (a === 'group') ? '' : 'none';
+                        document.getElementById('apnEtypeWrap').style.display = (a === 'employee_type') ? '' : 'none';
+                    }
+                    </script>
                     <div class="mb-3">
                         <label class="form-label">Title <span class="text-danger">*</span></label>
                         <input type="text" name="title" class="form-control" maxlength="150" required
