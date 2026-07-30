@@ -59,6 +59,26 @@
             android:exported="false"
             android:parentActivityName=".ui.main.MainActivity" />
 
+        <!-- Staff / Employee view -->
+        <activity
+            android:name=".ui.staff.StaffMainActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".ui.staff.attendance.StaffAttendanceActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.staff.StaffMainActivity" />
+
+        <activity
+            android:name=".ui.staff.leave.LeaveActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.staff.StaffMainActivity" />
+
+        <activity
+            android:name=".ui.staff.leave.LeaveApplyActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.staff.leave.LeaveActivity" />
+
         <!-- Firebase Cloud Messaging: receives push notifications from the
              admin panel's App Notification module. -->
         <service

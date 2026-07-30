@@ -147,4 +147,54 @@
     <string name="notification_channel_name">Announcements</string>
     <string name="notification_channel_desc">Push notifications published from the university admin panel.</string>
     <string name="notification_open_link">Open</string>
+    <!-- Staff / Employee view -->
+    <string name="employee">Employee</string>
+    <string name="section_staff_workspace">Employee Workspace</string>
+    <string name="feat_my_attendance">My Attendance</string>
+    <string name="feat_my_attendance_desc">Daily clock in/out and monthly summary</string>
+    <string name="feat_leave_management">Leave Management</string>
+    <string name="feat_leave_management_desc">Balance, requests and approvals</string>
+    <string name="feat_my_profile">My Profile</string>
+    <string name="staff_today">Today</string>
+    <string name="staff_leave_balance">Leave Balance</string>
+    <string name="staff_logout">Log Out</string>
+    <string name="staff_logout_confirm">Are you sure you want to log out?</string>
+
+    <!-- Staff: attendance -->
+    <string name="attendance_title">My Attendance</string>
+    <string name="attendance_empty">No attendance records for this period.</string>
+
+    <!-- Staff: leave management -->
+    <string name="leave_title">Leave Management</string>
+    <string name="leave_apply">Apply for Leave</string>
+    <string name="leave_casual">Casual Leave</string>
+    <string name="leave_sick">Sick Leave</string>
+    <string name="leave_category">Leave Category</string>
+    <string name="leave_pay_type">Pay Type</string>
+    <string name="leave_start_date">Start Date</string>
+    <string name="leave_end_date">End Date</string>
+    <string name="leave_start_time">Start Time</string>
+    <string name="leave_end_time">End Time</string>
+    <string name="leave_pick_date">Select date</string>
+    <string name="leave_pick_time">Select time</string>
+    <string name="leave_reason">Reason</string>
+    <string name="leave_reason_hint">Briefly describe the reason for your leave</string>
+    <string name="leave_submit">Submit Request</string>
+    <string name="leave_submitted">Your leave request has been submitted.</string>
+    <string name="leave_empty">No leave requests yet.</string>
+    <string name="leave_err_start">Please select the start date.</string>
+    <string name="leave_err_end">Please select the end date.</string>
+    <string name="leave_err_times">Short leave requires a start and end time.</string>
+    <string name="leave_err_reason">Please provide a reason for the leave.</string>
+
+    <!-- Staff: profile row labels -->
+    <string name="lbl_employee_id">Employee ID</string>
+    <string name="lbl_designation">Designation</string>
+    <string name="lbl_department">Department</string>
+    <string name="lbl_phone">Phone</string>
+    <string name="lbl_email">Email</string>
+    <string name="lbl_blood_group">Blood Group</string>
+    <string name="lbl_job_type">Job Type</string>
+    <string name="lbl_joining_date">Joining Date</string>
+    <string name="lbl_status">Status</string>
 </resources>
