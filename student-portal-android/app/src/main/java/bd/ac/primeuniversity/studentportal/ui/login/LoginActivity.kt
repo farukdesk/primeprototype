@@ -5,11 +5,13 @@ import android.os.Bundle
 import android.view.View
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import bd.ac.primeuniversity.studentportal.data.local.SecureStorage
 import bd.ac.primeuniversity.studentportal.databinding.ActivityLoginBinding
 import bd.ac.primeuniversity.studentportal.ui.main.MainActivity
+import bd.ac.primeuniversity.studentportal.ui.staff.StaffMainActivity
 import java.util.Calendar
 
-/** Student sign-in screen. */
+/** Sign-in screen for students and staff/employees (same form). */
 class LoginActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityLoginBinding
@@ -66,9 +68,14 @@ class LoginActivity : AppCompatActivity() {
                 binding.errorText.text = message
             }
         }
-        viewModel.success.observe(this) { ok ->
-            if (ok) {
-                startActivity(Intent(this, MainActivity::class.java))
+        viewModel.success.observe(this) { role ->
+            if (role != null) {
+                val target = if (role == SecureStorage.ROLE_STAFF) {
+                    StaffMainActivity::class.java
+                } else {
+                    MainActivity::class.java
+                }
+                startActivity(Intent(this, target))
                 finishAffinity()
             }
         }
