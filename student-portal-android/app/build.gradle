@@ -37,6 +37,11 @@ android {
         buildConfigField "String", "API_BASE_URL",
                 "\"https://primeuniversity.ac.bd/admin/api/student/\""
 
+        // Base URL of the staff/employee API (admin API root). Hosts the
+        // auth, staff/* and push/register.php endpoints used by the staff view.
+        buildConfigField "String", "STAFF_API_BASE_URL",
+                "\"https://primeuniversity.ac.bd/admin/api/\""
+
         vectorDrawables.useSupportLibrary = true
     }
 

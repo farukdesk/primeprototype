@@ -31,6 +31,11 @@ class SecureStorage(context: Context) {
             if (value == null) remove(KEY_TOKEN) else putString(KEY_TOKEN, value)
         }.apply()
 
+    /** The signed-in account role: [ROLE_STUDENT] (default) or [ROLE_STAFF]. */
+    var role: String
+        get() = prefs.getString(KEY_ROLE, ROLE_STUDENT) ?: ROLE_STUDENT
+        set(value) = prefs.edit().putString(KEY_ROLE, value).apply()
+
     /** The most recent FCM registration token reported by Firebase. */
     var fcmToken: String?
         get() = prefs.getString(KEY_FCM_TOKEN, null)
@@ -67,7 +72,10 @@ class SecureStorage(context: Context) {
 
     companion object {
         const val PREF_FILE = "pu_secure_prefs"
+        const val ROLE_STUDENT = "student"
+        const val ROLE_STAFF = "staff"
         private const val KEY_TOKEN = "api_token"
+        private const val KEY_ROLE = "account_role"
         private const val KEY_DEVICE_ID = "device_id"
         private const val KEY_FCM_TOKEN = "fcm_token"
         private const val KEY_FCM_REGISTERED = "fcm_registered_token"
