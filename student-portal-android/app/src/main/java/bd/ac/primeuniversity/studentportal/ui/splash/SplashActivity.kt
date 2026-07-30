@@ -7,12 +7,13 @@ import androidx.lifecycle.lifecycleScope
 import bd.ac.primeuniversity.studentportal.PrimeApp
 import bd.ac.primeuniversity.studentportal.ui.login.LoginActivity
 import bd.ac.primeuniversity.studentportal.ui.main.MainActivity
+import bd.ac.primeuniversity.studentportal.ui.staff.StaffMainActivity
 import bd.ac.primeuniversity.studentportal.util.AppResult
 import kotlinx.coroutines.launch
 
 /**
- * Boot screen. Restores the saved session (if any) by calling /auth/me.php,
- * then routes to the dashboard or the login screen.
+ * Boot screen. Restores the saved session (if any) for the stored role
+ * (student or staff), then routes to the right home screen or the login.
  */
 class SplashActivity : AppCompatActivity() {
 
@@ -26,6 +27,21 @@ class SplashActivity : AppCompatActivity() {
                 goTo(LoginActivity::class.java)
                 return@launch
             }
+
+            if (app.repository.isStaff) {
+                when (val result = app.repository.staffMe()) {
+                    is AppResult.Success -> {
+                        app.setStaffSession(result.data)
+                        goTo(StaffMainActivity::class.java)
+                    }
+                    is AppResult.Error -> {
+                        if (result.unauthorized) app.clearSession()
+                        goTo(LoginActivity::class.java)
+                    }
+                }
+                return@launch
+            }
+
             when (val result = app.repository.me()) {
                 is AppResult.Success -> {
                     app.setSession(result.data.student, result.data.stats)

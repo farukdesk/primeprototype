@@ -4,13 +4,19 @@ import android.content.Context
 import android.os.Build
 import bd.ac.primeuniversity.studentportal.data.api.ApiService
 import bd.ac.primeuniversity.studentportal.data.api.RetrofitClient
+import bd.ac.primeuniversity.studentportal.data.api.StaffApiService
 import bd.ac.primeuniversity.studentportal.data.local.SecureStorage
 import bd.ac.primeuniversity.studentportal.data.model.BaseResponse
 import bd.ac.primeuniversity.studentportal.data.model.FinancesResponse
+import bd.ac.primeuniversity.studentportal.data.model.LeaveApplyResponse
 import bd.ac.primeuniversity.studentportal.data.model.LoginResponse
 import bd.ac.primeuniversity.studentportal.data.model.MeResponse
 import bd.ac.primeuniversity.studentportal.data.model.Notice
 import bd.ac.primeuniversity.studentportal.data.model.NoticesResponse
+import bd.ac.primeuniversity.studentportal.data.model.StaffAttendanceResponse
+import bd.ac.primeuniversity.studentportal.data.model.StaffLeavesResponse
+import bd.ac.primeuniversity.studentportal.data.model.StaffLoginResponse
+import bd.ac.primeuniversity.studentportal.data.model.StaffMeResponse
 import bd.ac.primeuniversity.studentportal.util.AppResult
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
@@ -19,8 +25,8 @@ import retrofit2.Response
 import java.io.IOException
 
 /**
- * Single entry point to the student API. Owns the [SecureStorage] token and the
- * in-memory session (current student). Exposes suspend functions returning
+ * Single entry point to the student and staff APIs. Owns the [SecureStorage]
+ * token + role and the in-memory session. Exposes suspend functions returning
  * [AppResult] so the UI never has to touch Retrofit directly.
  */
 class StudentRepository private constructor(context: Context) {
@@ -37,12 +43,19 @@ class StudentRepository private constructor(context: Context) {
         sessionExpired = true
     }
 
+    private val staffApi: StaffApiService = RetrofitClient.staffApi(storage) {
+        sessionExpired = true
+    }
+
     private val deviceName: String
         get() = "${Build.MANUFACTURER} ${Build.MODEL}".trim()
 
     val hasToken: Boolean get() = !storage.token.isNullOrEmpty()
 
-    // ── Auth ────────────────────────────────────────────────────────────────
+    /** Whether the signed-in account is an employee (staff view). */
+    val isStaff: Boolean get() = storage.role == SecureStorage.ROLE_STAFF
+
+    // ── Auth ──────────────────────────────────────────────────────────────────
 
     suspend fun login(login: String, password: String): AppResult<LoginResponse> =
         call {
@@ -51,6 +64,21 @@ class StudentRepository private constructor(context: Context) {
             if (result is AppResult.Success) {
                 result.data.token?.let {
                     storage.token = it
+                    storage.role = SecureStorage.ROLE_STUDENT
+                    sessionExpired = false
+                }
+            }
+        }
+
+    /** Employee sign-in against the staff API (admin/api/auth/login.php). */
+    suspend fun staffLogin(login: String, password: String): AppResult<StaffLoginResponse> =
+        call {
+            staffApi.login(login.trim(), password, storage.deviceId, deviceName)
+        }.also { result ->
+            if (result is AppResult.Success) {
+                result.data.token?.let {
+                    storage.token = it
+                    storage.role = SecureStorage.ROLE_STAFF
                     sessionExpired = false
                 }
             }
@@ -58,10 +86,13 @@ class StudentRepository private constructor(context: Context) {
 
     suspend fun me(): AppResult<MeResponse> = call { api.me() }
 
+    /** Employee profile + leave balance + today's attendance + stats. */
+    suspend fun staffMe(): AppResult<StaffMeResponse> = call { staffApi.me() }
+
     suspend fun logout() {
         withContext(Dispatchers.IO) {
             try {
-                api.logout()
+                if (isStaff) staffApi.logout() else api.logout()
             } catch (_: Exception) {
                 // Best-effort; clear the local session regardless.
             }
@@ -75,13 +106,16 @@ class StudentRepository private constructor(context: Context) {
         sessionExpired = false
     }
 
-    // ── Notices ───────────────────────────────────────────────────────────────
+    // ── Notices (role-aware) ───────────────────────────────────────────────────────
 
     suspend fun getNotices(type: String, page: Int): AppResult<NoticesResponse> =
-        call { api.getNotices(type, page) }
+        call { if (isStaff) staffApi.getNotices(type, page) else api.getNotices(type, page) }
 
     suspend fun getNoticeDetail(id: Int, type: String): AppResult<Notice> {
-        return when (val res = call { api.getNoticeDetail(id, type) }) {
+        val res = call {
+            if (isStaff) staffApi.getNoticeDetail(id, type) else api.getNoticeDetail(id, type)
+        }
+        return when (res) {
             is AppResult.Success -> {
                 val notice = res.data.notice
                 if (notice != null) AppResult.Success(notice)
@@ -91,16 +125,38 @@ class StudentRepository private constructor(context: Context) {
         }
     }
 
-    // ── Finances ──────────────────────────────────────────────────────────────
+    // ── Finances (students only) ───────────────────────────────────────────────────
 
     suspend fun getFinances(): AppResult<FinancesResponse> = call { api.getFinances() }
 
-    // ── Push notifications ────────────────────────────────────────────────────
+    // ── Staff: attendance & leave management ─────────────────────────────────────────
+
+    /** Day-wise attendance for a payroll month (YYYY-MM). */
+    suspend fun getStaffAttendance(month: String): AppResult<StaffAttendanceResponse> =
+        call { staffApi.getAttendance(month) }
+
+    /** Leave balance + the employee's leave requests. */
+    suspend fun getStaffLeaves(): AppResult<StaffLeavesResponse> =
+        call { staffApi.getLeaves() }
+
+    /** Submit a new leave request. */
+    suspend fun applyStaffLeave(
+        category: String,
+        startDate: String,
+        endDate: String,
+        reason: String,
+        payType: String? = null,
+        startTime: String? = null,
+        endTime: String? = null,
+    ): AppResult<LeaveApplyResponse> =
+        call { staffApi.applyLeave(category, startDate, endDate, reason, payType, startTime, endTime) }
+
+    // ── Push notifications ────────────────────────────────────────────────────────────
 
     /**
-     * Remembers the latest FCM token and, when a student is signed in, registers
-     * it with the server so the admin panel can push notifications to this device.
-     * Safe to call repeatedly; it only hits the network when something changed.
+     * Remembers the latest FCM token and, when someone is signed in, registers
+     * it with the server so the admin panel can push notifications to this
+     * device. Safe to call repeatedly; it only hits the network when needed.
      */
     suspend fun cacheAndSyncPushToken(fcmToken: String) {
         if (fcmToken.isBlank()) return
@@ -109,8 +165,10 @@ class StudentRepository private constructor(context: Context) {
     }
 
     /**
-     * Registers the stored FCM token with the server if the student is logged in
-     * and the token has not already been registered. Best-effort: never throws.
+     * Registers the stored FCM token with the server if signed in and the
+     * token has not already been registered. Students register against the
+     * student API; employees against the staff API (api_push_tokens).
+     * Best-effort: never throws.
      */
     suspend fun syncPushToken() {
         val fcmToken = storage.fcmToken
@@ -119,7 +177,11 @@ class StudentRepository private constructor(context: Context) {
 
         withContext(Dispatchers.IO) {
             try {
-                val response = api.registerPushToken(fcmToken, storage.deviceId)
+                val response = if (isStaff) {
+                    staffApi.registerPushToken(fcmToken, storage.deviceId)
+                } else {
+                    api.registerPushToken(fcmToken, storage.deviceId)
+                }
                 if (response.isSuccessful && response.body()?.ok == true) {
                     storage.registeredFcmToken = fcmToken
                 }
@@ -129,7 +191,7 @@ class StudentRepository private constructor(context: Context) {
         }
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    // ── Helpers ─────────────────────────────────────────────────────────────────────
 
     /**
      * Executes a Retrofit call on the IO dispatcher and normalises the outcome
