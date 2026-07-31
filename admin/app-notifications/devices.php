@@ -19,8 +19,9 @@ $q          = trim($_GET['q'] ?? '');
 $student_devices = [];
 try {
     $sql = "SELECT t.id, t.platform, t.device_id, t.created_at, t.updated_at,
-                   u.full_name AS account_name, u.username,
+                   u.full_name AS account_name, u.username, u.email AS account_email,
                    s.student_id, s.full_name AS student_name,
+                   s.email AS student_email, s.phone AS student_phone,
                    d.name AS dept_name, d.code AS dept_code,
                    p.program_name,
                    b.name AS batch_name
@@ -34,9 +35,10 @@ try {
     $params = [];
     if ($q !== '') {
         $sql .= " AND (s.full_name LIKE ? OR s.student_id LIKE ? OR d.name LIKE ?
+                       OR s.email LIKE ? OR s.phone LIKE ?
                        OR u.full_name LIKE ? OR u.username LIKE ?)";
         $like   = '%' . $q . '%';
-        $params = [$like, $like, $like, $like, $like];
+        $params = [$like, $like, $like, $like, $like, $like, $like];
     }
     $sql .= ' ORDER BY t.updated_at DESC, t.id DESC';
     $stmt = db()->prepare($sql);
@@ -50,7 +52,7 @@ try {
 $user_devices = [];
 try {
     $sql = "SELECT t.id, t.platform, t.device_id, t.created_at, t.updated_at,
-                   u.full_name, u.username
+                   u.full_name, u.username, u.email
             FROM api_push_tokens t
             JOIN users u ON u.id = t.user_id AND u.is_active = 1
             WHERE t.fcm_token IS NOT NULL AND t.fcm_token != ''";
@@ -114,6 +116,8 @@ require_once __DIR__ . '/../includes/header.php';
                         <th>Name</th>
                         <th>Student ID</th>
                         <th>Department</th>
+                        <th>Email</th>
+                        <th>Phone</th>
                         <th>Program</th>
                         <th>Batch</th>
                         <th>Platform</th>
@@ -132,6 +136,17 @@ require_once __DIR__ . '/../includes/header.php';
                         <?php if (!empty($r['dept_code'])): ?>
                         <span class="text-muted small">(<?= h($r['dept_code']) ?>)</span>
                         <?php endif; ?>
+                    </td>
+                    <td class="small">
+                        <?php $sd_email = $r['student_email'] ?? $r['account_email'] ?? ''; ?>
+                        <?php if (!empty($sd_email)): ?>
+                        <a href="mailto:<?= h($sd_email) ?>"><?= h($sd_email) ?></a>
+                        <?php else: ?>—<?php endif; ?>
+                    </td>
+                    <td class="small">
+                        <?php if (!empty($r['student_phone'])): ?>
+                        <a href="tel:<?= h($r['student_phone']) ?>"><?= h($r['student_phone']) ?></a>
+                        <?php else: ?>—<?php endif; ?>
                     </td>
                     <td class="small"><?= h($r['program_name'] ?? '—') ?></td>
                     <td class="small"><?= h($r['batch_name'] ?? '—') ?></td>
@@ -166,6 +181,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <th>#</th>
                         <th>Name</th>
                         <th>Username</th>
+                        <th>Email</th>
                         <th>Platform</th>
                         <th>Registered</th>
                         <th>Last Active</th>
@@ -177,6 +193,11 @@ require_once __DIR__ . '/../includes/header.php';
                     <td class="text-muted"><?= $i ?></td>
                     <td class="fw-semibold"><?= h($r['full_name'] ?? '—') ?></td>
                     <td><?= h($r['username'] ?? '—') ?></td>
+                    <td class="small">
+                        <?php if (!empty($r['email'])): ?>
+                        <a href="mailto:<?= h($r['email']) ?>"><?= h($r['email']) ?></a>
+                        <?php else: ?>—<?php endif; ?>
+                    </td>
                     <td><span class="badge bg-light text-dark border"><i class="fab fa-<?= ($r['platform'] ?? '') === 'ios' ? 'apple' : 'android' ?> me-1"></i><?= h(ucfirst($r['platform'] ?? 'android')) ?></span></td>
                     <td class="small text-muted"><?= !empty($r['created_at']) ? h(date('d M Y', strtotime($r['created_at']))) : '—' ?></td>
                     <td class="small text-muted"><?= !empty($r['updated_at']) ? h(date('d M Y H:i', strtotime($r['updated_at']))) : '—' ?></td>
