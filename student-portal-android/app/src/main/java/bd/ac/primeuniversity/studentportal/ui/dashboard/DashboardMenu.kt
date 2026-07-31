@@ -28,6 +28,7 @@ enum class Feature(
 
     // Campus
     NOTICES(R.string.feat_notices, R.drawable.ic_notifications, R.color.cat_campus),
+    ANNOUNCEMENTS(R.string.feat_announcements, R.drawable.ic_notifications, R.color.info, R.string.feat_announcements_desc),
     ACADEMIC_CALENDAR(R.string.feat_academic_calendar, R.drawable.ic_calendar, R.color.cat_campus),
     EVENTS(R.string.feat_events, R.drawable.ic_event, R.color.pink),
     HOLIDAY_LIST(R.string.feat_holiday_list, R.drawable.ic_today, R.color.cat_campus),
@@ -79,6 +80,7 @@ fun buildDashboardMenu(): List<MenuRow> = buildList {
 
     add(MenuRow.Header(R.string.section_campus))
     add(MenuRow.Item(Feature.NOTICES))
+    add(MenuRow.Item(Feature.ANNOUNCEMENTS))
     add(MenuRow.Item(Feature.ACADEMIC_CALENDAR))
     add(MenuRow.Item(Feature.EVENTS))
     add(MenuRow.Item(Feature.HOLIDAY_LIST))

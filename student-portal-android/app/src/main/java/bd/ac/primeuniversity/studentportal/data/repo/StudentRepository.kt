@@ -6,6 +6,7 @@ import bd.ac.primeuniversity.studentportal.data.api.ApiService
 import bd.ac.primeuniversity.studentportal.data.api.RetrofitClient
 import bd.ac.primeuniversity.studentportal.data.api.StaffApiService
 import bd.ac.primeuniversity.studentportal.data.local.SecureStorage
+import bd.ac.primeuniversity.studentportal.data.model.AppNotificationsResponse
 import bd.ac.primeuniversity.studentportal.data.model.BaseResponse
 import bd.ac.primeuniversity.studentportal.data.model.FinancesResponse
 import bd.ac.primeuniversity.studentportal.data.model.LeaveApplyResponse
@@ -128,6 +129,12 @@ class StudentRepository private constructor(context: Context) {
     // ── Finances (students only) ───────────────────────────────────────────────────
 
     suspend fun getFinances(): AppResult<FinancesResponse> = call { api.getFinances() }
+
+    // ── Announcements (push notification history) ─────────────────────────────────────
+
+    /** Announcements published from the admin panel's App Notification module. */
+    suspend fun getAppNotifications(page: Int = 1): AppResult<AppNotificationsResponse> =
+        call { api.getAppNotifications(page) }
 
     // ── Staff: attendance & leave management ─────────────────────────────────────────
 

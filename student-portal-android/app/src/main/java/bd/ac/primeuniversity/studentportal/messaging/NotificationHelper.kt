@@ -20,6 +20,7 @@ object NotificationHelper {
 
     const val CHANNEL_ID = "pu_announcements"
     const val EXTRA_URL = "notification_url"
+    const val EXTRA_OPEN_INBOX = "open_notifications_inbox"
 
     /** Creates the announcements channel (no-op below Android O). */
     fun ensureChannel(context: Context) {
@@ -48,6 +49,8 @@ object NotificationHelper {
         val intent = Intent(context, SplashActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             if (!url.isNullOrBlank()) putExtra(EXTRA_URL, url)
+            // Route the user to the announcements inbox after launch.
+            putExtra(EXTRA_OPEN_INBOX, true)
         }
         var flags = PendingIntent.FLAG_UPDATE_CURRENT
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {

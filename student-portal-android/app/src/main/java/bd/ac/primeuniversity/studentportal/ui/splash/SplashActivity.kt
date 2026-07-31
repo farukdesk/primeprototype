@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import bd.ac.primeuniversity.studentportal.PrimeApp
+import bd.ac.primeuniversity.studentportal.messaging.NotificationHelper
 import bd.ac.primeuniversity.studentportal.ui.login.LoginActivity
 import bd.ac.primeuniversity.studentportal.ui.main.MainActivity
 import bd.ac.primeuniversity.studentportal.ui.staff.StaffMainActivity
@@ -61,7 +62,13 @@ class SplashActivity : AppCompatActivity() {
     }
 
     private fun goTo(target: Class<*>) {
-        startActivity(Intent(this, target))
+        val next = Intent(this, target)
+        // Forward the "open announcements inbox" flag set when the user taps a
+        // push notification, so the home screen can open the inbox on arrival.
+        if (intent.getBooleanExtra(NotificationHelper.EXTRA_OPEN_INBOX, false)) {
+            next.putExtra(NotificationHelper.EXTRA_OPEN_INBOX, true)
+        }
+        startActivity(next)
         finish()
     }
 }
