@@ -1,14 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PU Student Portal</string>
+    <string name="app_name">Prime University Portal</string>
 
     <!-- Branding -->
     <string name="university_name">Prime University</string>
-    <string name="student_portal">STUDENT PORTAL</string>
+    <string name="student_portal">UNIVERSITY PORTAL</string>
+    <string name="login_audience">For Students &amp; Employees</string>
 
     <!-- Login -->
     <string name="sign_in_title">Sign in to your account</string>
-    <string name="sign_in_subtitle">Use your student portal credentials.</string>
+    <string name="sign_in_subtitle">One account for students and employees – your portal adapts to your role.</string>
     <string name="hint_login">Student ID or Username</string>
     <string name="hint_password">Password</string>
     <string name="action_sign_in">Sign In</string>
@@ -72,7 +73,7 @@
     <string name="about_section">About</string>
     <string name="privacy_policy">Privacy Policy</string>
     <string name="about">About</string>
-    <string name="about_version">PU Student Portal v%1$s</string>
+    <string name="about_version">Prime University Portal v%1$s</string>
     <string name="sign_out">Sign Out</string>
     <string name="sign_out_confirm">Are you sure you want to sign out?</string>
     <string name="cancel">Cancel</string>
