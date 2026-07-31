@@ -50,17 +50,126 @@ function csrf_check(): void {
     }
 }
 
+// ── Remember-me (persistent login) ──────────────────────────────────────────
+// Selector/validator token pattern: the cookie holds "selector:validator";
+// only a SHA-256 hash of the validator is stored server-side, so a DB leak
+// cannot be replayed. Tokens are rotated on every auto-login and revoked on
+// logout. Requires the auth_remember_tokens table (admin/remember-me.sql).
+
+const REMEMBER_COOKIE   = 'pumis_remember';
+const REMEMBER_LIFETIME = 60 * 60 * 24 * 30; // 30 days
+
+/** Issue a new remember-me token for a user and set the cookie. */
+function remember_issue(int $user_id): void {
+    try {
+        $selector  = bin2hex(random_bytes(9));
+        $validator = bin2hex(random_bytes(32));
+        db()->prepare(
+            'INSERT INTO auth_remember_tokens (user_id, selector, validator_hash, expires_at)
+             VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL ? SECOND))'
+        )->execute([$user_id, $selector, hash('sha256', $validator), REMEMBER_LIFETIME]);
+        setcookie(REMEMBER_COOKIE, $selector . ':' . $validator, [
+            'expires'  => time() + REMEMBER_LIFETIME,
+            'path'     => '/',
+            'secure'   => isset($_SERVER['HTTPS']),
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+    } catch (Throwable $e) {
+        // Table missing (migration not applied) – fail silently, normal login still works.
+        error_log('Remember-me: could not issue token – ' . $e->getMessage());
+    }
+}
+
+/** Revoke the current remember-me token (if any) and delete the cookie. */
+function remember_clear(): void {
+    $cookie = $_COOKIE[REMEMBER_COOKIE] ?? '';
+    if ($cookie !== '' && str_contains($cookie, ':')) {
+        [$selector] = explode(':', $cookie, 2);
+        try {
+            db()->prepare('DELETE FROM auth_remember_tokens WHERE selector = ?')->execute([$selector]);
+        } catch (Throwable $e) {
+        }
+    }
+    setcookie(REMEMBER_COOKIE, '', [
+        'expires'  => time() - 3600,
+        'path'     => '/',
+        'secure'   => isset($_SERVER['HTTPS']),
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
+    unset($_COOKIE[REMEMBER_COOKIE]);
+}
+
+/**
+ * Try to log the visitor in from the remember-me cookie.
+ * Rotates the token on success. Returns true when a session was established.
+ */
+function remember_attempt(): bool {
+    if (!empty($_SESSION['user_id'])) {
+        return true;
+    }
+    $cookie = $_COOKIE[REMEMBER_COOKIE] ?? '';
+    if ($cookie === '' || !str_contains($cookie, ':')) {
+        return false;
+    }
+    [$selector, $validator] = explode(':', $cookie, 2);
+    if ($selector === '' || $validator === '') {
+        return false;
+    }
+    try {
+        $stmt = db()->prepare(
+            'SELECT t.id, t.user_id, t.validator_hash, u.group_id, g.is_super
+             FROM auth_remember_tokens t
+             JOIN users u       ON u.id = t.user_id AND u.is_active = 1
+             JOIN user_groups g ON g.id = u.group_id
+             WHERE t.selector = ? AND t.expires_at > NOW()
+             LIMIT 1'
+        );
+        $stmt->execute([$selector]);
+        $row = $stmt->fetch();
+
+        if (!$row || !hash_equals($row['validator_hash'], hash('sha256', $validator))) {
+            // Unknown or tampered token – clear it.
+            remember_clear();
+            return false;
+        }
+
+        // Rotate: single-use token, replaced on every auto-login.
+        db()->prepare('DELETE FROM auth_remember_tokens WHERE id = ?')->execute([(int)$row['id']]);
+
+        session_regenerate_id(true);
+        $_SESSION['user_id']       = (int)$row['user_id'];
+        $_SESSION['group_id']      = (int)$row['group_id'];
+        $_SESSION['is_super']      = (int)$row['is_super'];
+        $_SESSION['last_activity'] = time();
+
+        remember_issue((int)$row['user_id']);
+        db()->prepare('UPDATE users SET last_login = NOW() WHERE id = ?')->execute([(int)$row['user_id']]);
+        return true;
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
 // ── Auth helpers ─────────────────────────────────────────────────────────────
 function auth_check(): void {
     if (empty($_SESSION['user_id'])) {
-        redirect(APP_URL . '/login.php');
+        // No session – try the remember-me cookie before bouncing to login.
+        if (!remember_attempt()) {
+            redirect(APP_URL . '/login.php');
+        }
     }
     // Auto logout after IDLE_TIMEOUT seconds of total inactivity
     $last = $_SESSION['last_activity'] ?? time();
     if (time() - $last > IDLE_TIMEOUT) {
         session_unset();
         session_destroy();
-        redirect(APP_URL . '/login.php?timeout=1');
+        session_bootstrap();
+        // Users who opted in to "Keep me signed in" are re-authenticated silently.
+        if (!remember_attempt()) {
+            redirect(APP_URL . '/login.php?timeout=1');
+        }
     }
     $_SESSION['last_activity'] = time();
 }

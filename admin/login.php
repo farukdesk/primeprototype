@@ -6,6 +6,11 @@ if (!empty($_SESSION['user_id'])) {
     redirect(APP_URL . '/index.php');
 }
 
+// Auto-login from the remember-me cookie ("Keep me signed in").
+if (remember_attempt()) {
+    redirect(APP_URL . '/index.php');
+}
+
 $error     = '';
 $timed_out = isset($_GET['timeout']);
 
@@ -39,6 +44,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Update last login timestamp
             db()->prepare('UPDATE users SET last_login = NOW() WHERE id = ?')
                ->execute([$user['id']]);
+
+            // Optional persistent login ("Keep me signed in").
+            if (!empty($_POST['remember'])) {
+                remember_issue((int)$user['id']);
+            }
 
             // Redirect non-dashboard users to their primary area
             if (!$user['is_super'] && !can_access('dashboard')) {
@@ -191,6 +201,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <i class="fas fa-eye" id="pw-eye"></i>
                 </span>
             </div>
+        </div>
+
+        <div class="form-check mb-4">
+            <input class="form-check-input" type="checkbox" id="remember" name="remember" value="1">
+            <label class="form-check-label" for="remember" style="font-size:.85rem;color:#374151;">
+                Keep me signed in for 30 days
+            </label>
         </div>
 
         <button type="submit" class="btn btn-login">
