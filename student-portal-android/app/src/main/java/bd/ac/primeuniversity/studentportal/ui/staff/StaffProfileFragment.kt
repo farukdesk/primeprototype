@@ -57,15 +57,68 @@ class StaffProfileFragment : Fragment() {
 
         binding.rows.removeAllViews()
         val e = me?.employee
-        addRow(getString(R.string.lbl_employee_id), e?.employeeId)
-        addRow(getString(R.string.lbl_designation), e?.designation)
-        addRow(getString(R.string.lbl_department), e?.department)
-        addRow(getString(R.string.lbl_phone), e?.phone)
-        addRow(getString(R.string.lbl_email), user?.email)
-        addRow(getString(R.string.lbl_blood_group), e?.bloodGroup)
-        addRow(getString(R.string.lbl_job_type), e?.jobType)
-        addRow(getString(R.string.lbl_joining_date), e?.joiningDate)
-        addRow(getString(R.string.lbl_status), e?.employeeStatus)
+
+        addSection(getString(R.string.section_employment), listOf(
+            getString(R.string.lbl_employee_id) to e?.employeeId,
+            getString(R.string.lbl_designation) to e?.designation,
+            getString(R.string.lbl_department) to e?.department,
+            getString(R.string.lbl_job_type) to e?.jobType,
+            getString(R.string.lbl_joining_date) to e?.joiningDate,
+            getString(R.string.lbl_status) to e?.employeeStatus,
+        ))
+
+        addSection(getString(R.string.section_contact), listOf(
+            getString(R.string.lbl_phone) to e?.phone,
+            getString(R.string.lbl_email) to user?.email,
+        ))
+
+        addSection(getString(R.string.section_personal), listOf(
+            getString(R.string.lbl_father_name) to e?.fatherName,
+            getString(R.string.lbl_mother_name) to e?.motherName,
+            getString(R.string.lbl_gender) to e?.gender,
+            getString(R.string.lbl_date_of_birth) to e?.dateOfBirth,
+            getString(R.string.lbl_blood_group) to e?.bloodGroup,
+            getString(R.string.lbl_religion) to e?.religion,
+            getString(R.string.lbl_national_id) to e?.nationalId,
+            getString(R.string.lbl_nationality) to e?.nationality,
+            getString(R.string.lbl_birth_place) to e?.birthPlace,
+        ))
+
+        // Faculty employees additionally see their academic profile; for
+        // administrative employees the server sends faculty = null, so only
+        // the options available for their type are shown.
+        val f = me?.faculty
+        if (e?.isFaculty == true && f != null) {
+            addSection(getString(R.string.section_faculty), listOf(
+                getString(R.string.lbl_faculty_designation) to f.designation,
+                getString(R.string.lbl_academic_department) to f.academicDepartment,
+                getString(R.string.lbl_official_email) to f.officialEmail,
+                getString(R.string.lbl_office) to f.office,
+                getString(R.string.lbl_office_hours) to f.officeHours,
+                getString(R.string.lbl_qualification) to f.qualification,
+                getString(R.string.lbl_research_interest) to f.researchInterest,
+            ))
+        }
+    }
+
+    /** Adds a titled group of rows, skipped entirely when every value is blank. */
+    private fun addSection(title: String, rows: List<Pair<String, String?>>) {
+        if (rows.all { it.second.isNullOrBlank() }) return
+        addHeader(title)
+        rows.forEach { (label, value) -> addRow(label, value) }
+    }
+
+    private fun addHeader(title: String) {
+        val ctx = requireContext()
+        binding.rows.addView(TextView(ctx).apply {
+            text = title
+            textSize = 12f
+            isAllCaps = true
+            letterSpacing = 0.08f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTextColor(androidx.core.content.ContextCompat.getColor(ctx, R.color.primary))
+            setPadding(dp(16), dp(18), dp(16), dp(4))
+        })
     }
 
     private fun addRow(label: String, value: String?) {

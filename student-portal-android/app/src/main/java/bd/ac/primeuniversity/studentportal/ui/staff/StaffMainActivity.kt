@@ -128,6 +128,17 @@ class StaffMainActivity : AppCompatActivity() {
             .show(target)
             .commit()
         activeId = id
+        if (id == R.id.nav_notices) markNoticesSeen()
+    }
+
+    /**
+     * Remembers how many notices existed when the employee opened the Notices
+     * tab, so the dashboard bell badge only counts notices published since.
+     */
+    private fun markNoticesSeen() {
+        val total = app.currentStaff.value?.stats?.noticesUniversity ?: return
+        app.repository.storage.seenStaffNotices = total
+        (fragments[R.id.nav_dashboard] as? StaffDashboardFragment)?.refreshBadge()
     }
 
     private fun refreshSession() {

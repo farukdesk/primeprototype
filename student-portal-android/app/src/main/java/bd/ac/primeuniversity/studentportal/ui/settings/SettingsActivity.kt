@@ -27,12 +27,22 @@ class SettingsActivity : AppCompatActivity() {
 
         binding.toolbar.setNavigationOnClickListener { finish() }
 
-        app.currentStudent.value?.let { student ->
-            binding.avatar.text = student.initials
-            binding.accountName.text = student.fullName
-            binding.accountMeta.text = listOfNotNull(
-                student.studentId, student.deptName
-            ).joinToString(" · ")
+        if (app.repository.isStaff) {
+            app.currentStaff.value?.let { me ->
+                binding.avatar.text = me.user?.initials ?: "?"
+                binding.accountName.text = me.user?.fullName.orEmpty()
+                binding.accountMeta.text = listOfNotNull(
+                    me.employee?.designation, me.employee?.department
+                ).joinToString(" · ")
+            }
+        } else {
+            app.currentStudent.value?.let { student ->
+                binding.avatar.text = student.initials
+                binding.accountName.text = student.fullName
+                binding.accountMeta.text = listOfNotNull(
+                    student.studentId, student.deptName
+                ).joinToString(" · ")
+            }
         }
 
         binding.versionText.text = runCatching {
@@ -42,14 +52,20 @@ class SettingsActivity : AppCompatActivity() {
         updateThemeLabel()
         binding.rowTheme.setOnClickListener { showThemeDialog() }
         binding.rowPassword.setOnClickListener {
-            startActivity(
-                FeatureActivity.open(
-                    this,
-                    R.string.feat_password_change,
-                    R.drawable.ic_lock,
-                    R.color.primary,
+            if (app.repository.isStaff) {
+                // Employees have a working change-password flow backed by
+                // admin/api/staff/change-password.php.
+                startActivity(Intent(this, ChangePasswordActivity::class.java))
+            } else {
+                startActivity(
+                    FeatureActivity.open(
+                        this,
+                        R.string.feat_password_change,
+                        R.drawable.ic_lock,
+                        R.color.primary,
+                    )
                 )
-            )
+            }
         }
         binding.rowPrivacy.setOnClickListener { openPrivacyPolicy() }
         binding.btnSignOut.setOnClickListener { confirmSignOut() }

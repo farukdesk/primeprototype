@@ -29,7 +29,16 @@ $page   = max(1, (int)($_GET['page']  ?? 1));
 $limit  = min(100, max(1, (int)($_GET['limit'] ?? 50)));
 $offset = ($page - 1) * $limit;
 
-$where = "status IN ('sent', 'partial') AND audience IN ('users', 'employee_type', 'everyone')";
+// The history table stores a human audience label (see apn_audience_label()),
+// e.g. "All users / employees", "Employee type: Faculty" or
+// "Everyone (students + users)" – not a raw code. Match those labels (plus
+// legacy raw codes) so employee announcements actually appear in the inbox.
+$where = "status IN ('sent', 'partial') AND (
+              audience IN ('users', 'all_users', 'employee_type', 'everyone')
+           OR audience LIKE 'All users%'
+           OR audience LIKE 'Employee type%'
+           OR audience LIKE 'Everyone%'
+          )";
 
 try {
     $total = (int)db()->query(
