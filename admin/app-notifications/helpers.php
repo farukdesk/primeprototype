@@ -514,8 +514,8 @@ function apn_send_to_audience(string $audience, string $title, string $body, ?st
     return $result;
 }
 
-/** Record a notification and stamp the audience label (best-effort column). */
-function apn_record_with_audience(string $title, string $body, ?string $url, ?int $sentBy, array $result, string $audience): int
+/** Record a notification and stamp the audience label + targeting (best-effort columns). */
+function apn_record_with_audience(string $title, string $body, ?string $url, ?int $sentBy, array $result, string $audience, int $target_user_id = 0, int $target_group_id = 0, string $employee_type = ''): int
 {
     $id = apn_record($title, $body, $url, $sentBy, $result);
     try {
@@ -523,6 +523,21 @@ function apn_record_with_audience(string $title, string $body, ?string $url, ?in
            ->execute([apn_audience_label($audience, $result['detail'] ?? null), $id]);
     } catch (Throwable $e) {
         // audience column missing (migration not applied yet) – ignore.
+    }
+    try {
+        db()->prepare(
+            'UPDATE app_notifications
+                SET audience_code = ?, target_user_id = ?, target_group_id = ?, employee_type = ?
+              WHERE id = ?'
+        )->execute([
+            $audience,
+            $target_user_id  > 0 ? $target_user_id  : null,
+            $target_group_id > 0 ? $target_group_id : null,
+            $employee_type !== '' ? $employee_type : null,
+            $id,
+        ]);
+    } catch (Throwable $e) {
+        // targeting columns missing (app-notifications-resend.sql not applied) – ignore.
     }
     return $id;
 }
