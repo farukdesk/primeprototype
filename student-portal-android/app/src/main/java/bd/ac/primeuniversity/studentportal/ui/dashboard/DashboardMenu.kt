@@ -110,6 +110,7 @@ fun buildStaffDashboardMenu(): List<MenuRow> = buildList {
     add(MenuRow.Item(Feature.MY_ATTENDANCE))
     add(MenuRow.Item(Feature.LEAVE_MANAGEMENT))
     add(MenuRow.Item(Feature.STAFF_NOTICES))
+    add(MenuRow.Item(Feature.ANNOUNCEMENTS))
     add(MenuRow.Item(Feature.STAFF_PROFILE))
 
     add(MenuRow.Header(R.string.section_settings))

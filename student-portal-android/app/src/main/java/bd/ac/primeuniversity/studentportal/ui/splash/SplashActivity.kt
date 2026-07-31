@@ -63,9 +63,13 @@ class SplashActivity : AppCompatActivity() {
 
     private fun goTo(target: Class<*>) {
         val next = Intent(this, target)
-        // Forward the "open announcements inbox" flag set when the user taps a
-        // push notification, so the home screen can open the inbox on arrival.
-        if (intent.getBooleanExtra(NotificationHelper.EXTRA_OPEN_INBOX, false)) {
+        // Forward the "open announcements inbox" flag. It is set directly when a
+        // foreground-delivered notification is tapped, and arrives as FCM data
+        // extras ("type" = app_notification) when a background (system-tray)
+        // notification is tapped.
+        val fromPush = intent.getBooleanExtra(NotificationHelper.EXTRA_OPEN_INBOX, false) ||
+            intent.getStringExtra("type") == "app_notification"
+        if (fromPush) {
             next.putExtra(NotificationHelper.EXTRA_OPEN_INBOX, true)
         }
         startActivity(next)

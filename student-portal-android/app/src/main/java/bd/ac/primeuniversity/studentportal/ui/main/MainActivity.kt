@@ -22,6 +22,7 @@ import bd.ac.primeuniversity.studentportal.ui.notices.NoticesFragment
 import bd.ac.primeuniversity.studentportal.ui.notifications.NotificationsActivity
 import bd.ac.primeuniversity.studentportal.ui.profile.ProfileFragment
 import bd.ac.primeuniversity.studentportal.util.AppResult
+import bd.ac.primeuniversity.studentportal.util.UpdateChecker
 import kotlinx.coroutines.launch
 
 /** Host screen with a bottom navigation bar and four tabs. */
@@ -89,6 +90,9 @@ class MainActivity : AppCompatActivity() {
         ) {
             startActivity(Intent(this, NotificationsActivity::class.java))
         }
+
+        // Self-hosted distribution: prompt when the server has a newer APK.
+        UpdateChecker.maybePromptForUpdate(this)
     }
 
     private fun maybeRequestNotificationPermission() {

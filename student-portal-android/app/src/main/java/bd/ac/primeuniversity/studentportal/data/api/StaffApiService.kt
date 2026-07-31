@@ -1,5 +1,7 @@
 package bd.ac.primeuniversity.studentportal.data.api
 
+import bd.ac.primeuniversity.studentportal.data.model.AppNotificationsResponse
+import bd.ac.primeuniversity.studentportal.data.model.AppVersionResponse
 import bd.ac.primeuniversity.studentportal.data.model.LeaveApplyResponse
 import bd.ac.primeuniversity.studentportal.data.model.NoticeDetailResponse
 import bd.ac.primeuniversity.studentportal.data.model.NoticesResponse
@@ -67,6 +69,16 @@ interface StaffApiService {
         @Query("id") id: Int,
         @Query("type") type: String,
     ): Response<NoticeDetailResponse>
+
+    @GET("staff/notifications.php")
+    suspend fun getAppNotifications(
+        @Query("page") page: Int = 1,
+        @Query("limit") limit: Int = 50,
+    ): Response<AppNotificationsResponse>
+
+    // Public endpoint at admin/api/app-version.php (no auth required).
+    @GET("app-version.php")
+    suspend fun getAppVersion(): Response<AppVersionResponse>
 
     @FormUrlEncoded
     @POST("push/register.php")

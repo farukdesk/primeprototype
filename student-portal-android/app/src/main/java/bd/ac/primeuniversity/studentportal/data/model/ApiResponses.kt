@@ -41,6 +41,14 @@ data class AppNotificationsResponse(
     @SerializedName("per_page") val perPage: Int = 50,
 ) : BaseResponse()
 
+data class AppVersionResponse(
+    @SerializedName("version_code") val versionCode: Int = 0,
+    @SerializedName("version_name") val versionName: String = "",
+    @SerializedName("apk_url") val apkUrl: String = "",
+    @SerializedName("notes") val notes: String = "",
+    @SerializedName("force") val force: Boolean = false,
+) : BaseResponse()
+
 data class FinancesResponse(
     @SerializedName("student") val student: Student? = null,
     @SerializedName("summary") val summary: FinanceSummary? = null,

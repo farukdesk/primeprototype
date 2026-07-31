@@ -15,6 +15,7 @@ import bd.ac.primeuniversity.studentportal.databinding.FragmentStaffDashboardBin
 import bd.ac.primeuniversity.studentportal.ui.dashboard.DashboardMenuAdapter
 import bd.ac.primeuniversity.studentportal.ui.dashboard.Feature
 import bd.ac.primeuniversity.studentportal.ui.dashboard.buildStaffDashboardMenu
+import bd.ac.primeuniversity.studentportal.ui.notifications.NotificationsActivity
 import bd.ac.primeuniversity.studentportal.ui.settings.SettingsActivity
 import bd.ac.primeuniversity.studentportal.ui.staff.attendance.StaffAttendanceActivity
 import bd.ac.primeuniversity.studentportal.ui.staff.leave.LeaveActivity
@@ -66,6 +67,8 @@ class StaffDashboardFragment : Fragment() {
                 startActivity(Intent(requireContext(), LeaveActivity::class.java))
             Feature.STAFF_NOTICES ->
                 (activity as? StaffMainActivity)?.selectTab(R.id.nav_notices)
+            Feature.ANNOUNCEMENTS ->
+                startActivity(Intent(requireContext(), NotificationsActivity::class.java))
             Feature.STAFF_PROFILE ->
                 (activity as? StaffMainActivity)?.selectTab(R.id.nav_profile)
             Feature.SETTINGS -> openSettings()

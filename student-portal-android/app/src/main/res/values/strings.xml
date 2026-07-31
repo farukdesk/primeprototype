@@ -157,6 +157,12 @@
     <string name="announcements_open_link">Open Link</string>
     <string name="close">Close</string>
 
+    <!-- Self-hosted app update prompt -->
+    <string name="update_title">Update available</string>
+    <string name="update_body">Version %1$s of Prime University Portal is available. Please update to get the latest features and fixes.</string>
+    <string name="update_now">Update Now</string>
+    <string name="update_later">Later</string>
+
     <!-- Staff / Employee view -->
     <string name="employee">Employee</string>
     <string name="section_staff_workspace">Employee Workspace</string>
