@@ -7,6 +7,7 @@ import bd.ac.primeuniversity.studentportal.data.api.RetrofitClient
 import bd.ac.primeuniversity.studentportal.data.api.StaffApiService
 import bd.ac.primeuniversity.studentportal.data.local.SecureStorage
 import bd.ac.primeuniversity.studentportal.data.model.AppNotificationsResponse
+import bd.ac.primeuniversity.studentportal.data.model.AppVersionResponse
 import bd.ac.primeuniversity.studentportal.data.model.BaseResponse
 import bd.ac.primeuniversity.studentportal.data.model.FinancesResponse
 import bd.ac.primeuniversity.studentportal.data.model.LeaveApplyResponse
@@ -134,7 +135,13 @@ class StudentRepository private constructor(context: Context) {
 
     /** Announcements published from the admin panel's App Notification module. */
     suspend fun getAppNotifications(page: Int = 1): AppResult<AppNotificationsResponse> =
-        call { api.getAppNotifications(page) }
+        call {
+            if (isStaff) staffApi.getAppNotifications(page) else api.getAppNotifications(page)
+        }
+
+    /** Latest published app version, for the self-hosted update prompt. */
+    suspend fun getLatestAppVersion(): AppResult<AppVersionResponse> =
+        call { staffApi.getAppVersion() }
 
     // ── Staff: attendance & leave management ─────────────────────────────────────────
 

@@ -1,38 +1,37 @@
 <?php
 /**
- * Student Portal API – GET /api/student/notifications.php
- * ========================================================
- * Returns the announcements published from the admin panel's "App
- * Notification" module (see admin/app-notifications/), so students can read
- * every push notification inside the app even after dismissing the system
- * notification.
+ * Staff API – GET /api/staff/notifications.php
+ * =============================================
+ * Announcements published from the admin panel's "App Notification" module
+ * whose audience includes employees (all users, an employee type, or
+ * everyone), so staff can read push notifications inside the app.
+ *
+ * Individually targeted sends ('user' / 'group') are excluded because the
+ * history table does not store the target, so they cannot be scoped safely.
  *
  * Query params:
  *   page   = 1, 2, 3 … (default 1)
  *   limit  = 50 (default, max 100)
  *
- * Success response:
+ * Success response (mirrors the student endpoint):
  *   { "ok": true, "notifications": [...], "total": N, "page": N, "per_page": N }
  */
 
-require_once __DIR__ . '/includes/auth_student_api.php';
+require_once __DIR__ . '/includes/auth_staff_api.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-    sp_api_error(405, 'Method Not Allowed. Use GET.');
+    api_error(405, 'Method Not Allowed. Use GET.');
 }
 
-sp_api_auth();
+staff_api_auth();
 
 $page   = max(1, (int)($_GET['page']  ?? 1));
 $limit  = min(100, max(1, (int)($_GET['limit'] ?? 50)));
 $offset = ($page - 1) * $limit;
 
-// Audiences that include students; legacy rows (NULL) were student sends.
-$where = "status IN ('sent', 'partial')
-          AND (audience IS NULL OR audience IN ('students', 'everyone'))";
+$where = "status IN ('sent', 'partial') AND audience IN ('users', 'employee_type', 'everyone')";
 
 try {
-    // Only announcements that actually reached devices (skip failed sends).
     $total = (int)db()->query(
         "SELECT COUNT(*) FROM app_notifications WHERE {$where}"
     )->fetchColumn();
@@ -47,7 +46,7 @@ try {
     $stmt->execute([$limit, $offset]);
     $rows = $stmt->fetchAll();
 
-    sp_api_ok([
+    api_ok([
         'notifications' => array_map(static function (array $n): array {
             return [
                 'id'    => (int)$n['id'],
@@ -62,5 +61,5 @@ try {
         'per_page' => $limit,
     ]);
 } catch (Throwable $e) {
-    sp_api_error(500, 'Failed to load notifications. Please try again.');
+    api_error(500, 'Failed to load notifications. Please try again.');
 }
