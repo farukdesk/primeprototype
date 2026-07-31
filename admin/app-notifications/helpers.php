@@ -340,7 +340,7 @@ function apn_status_badge(string $status): string
 
 // ── Audience targeting ─────────────────────────────────────────────────────────
 
-const APN_AUDIENCES = ['students', 'all_users', 'user', 'group', 'employee_type', 'everyone'];
+const APN_AUDIENCES = ['students', 'all_users', 'all_employees', 'user', 'group', 'employee_type', 'everyone'];
 
 /** Human label for an audience code (recorded in history). */
 function apn_audience_label(string $audience, ?string $detail = null): string
@@ -348,6 +348,7 @@ function apn_audience_label(string $audience, ?string $detail = null): string
     $label = match ($audience) {
         'students'      => 'All students',
         'all_users'     => 'All users / employees',
+        'all_employees' => 'All employees (administrative + faculty)',
         'user'          => 'Individual user',
         'group'         => 'User group',
         'employee_type' => 'Employee type',
@@ -403,6 +404,11 @@ function apn_collect_tokens(string $audience, int $user_id = 0, int $group_id = 
             break;
         case 'all_users':
             $addUsers();
+            break;
+        case 'all_employees':
+            $addUsers(
+                "EXISTS (SELECT 1 FROM staff_profiles sp WHERE sp.user_id = u.id AND sp.department_type IN ('administrative', 'educational'))"
+            );
             break;
         case 'user':
             $addUsers('u.id = ?', [$user_id]);
