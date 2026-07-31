@@ -373,11 +373,11 @@ function apn_collect_tokens(string $audience, int $user_id = 0, int $group_id = 
     $addStudents = function () use (&$tokens) {
         try {
             $rows = db()->query(
-                "SELECT id, fcm_token FROM student_push_tokens
+                "SELECT id, user_id, fcm_token FROM student_push_tokens
                   WHERE fcm_token IS NOT NULL AND fcm_token != ''"
             )->fetchAll(PDO::FETCH_ASSOC);
             foreach ($rows as $r) {
-                $tokens[] = ['id' => (int)$r['id'], 'fcm_token' => $r['fcm_token'], 'source' => 'student'];
+                $tokens[] = ['id' => (int)$r['id'], 'user_id' => (int)$r['user_id'], 'fcm_token' => $r['fcm_token'], 'source' => 'student'];
             }
         } catch (Throwable $e) {
         }
@@ -385,14 +385,14 @@ function apn_collect_tokens(string $audience, int $user_id = 0, int $group_id = 
 
     $addUsers = function (string $where = '', array $params = []) use (&$tokens) {
         try {
-            $sql = "SELECT t.id, t.fcm_token FROM api_push_tokens t
+            $sql = "SELECT t.id, t.user_id, t.fcm_token FROM api_push_tokens t
                       JOIN users u ON u.id = t.user_id AND u.is_active = 1
                      WHERE t.fcm_token IS NOT NULL AND t.fcm_token != ''"
                  . ($where !== '' ? ' AND ' . $where : '');
             $stmt = db()->prepare($sql);
             $stmt->execute($params);
             foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
-                $tokens[] = ['id' => (int)$r['id'], 'fcm_token' => $r['fcm_token'], 'source' => 'user'];
+                $tokens[] = ['id' => (int)$r['id'], 'user_id' => (int)$r['user_id'], 'fcm_token' => $r['fcm_token'], 'source' => 'user'];
             }
         } catch (Throwable $e) {
         }
@@ -451,7 +451,7 @@ function apn_collect_tokens(string $audience, int $user_id = 0, int $group_id = 
  */
 function apn_send_to_audience(string $audience, string $title, string $body, ?string $url = null, int $user_id = 0, int $group_id = 0, string $employee_type = ''): array
 {
-    $result = ['total' => 0, 'sent' => 0, 'failed' => 0, 'status' => 'failed', 'error' => null, 'detail' => ''];
+    $result = ['total' => 0, 'sent' => 0, 'failed' => 0, 'status' => 'failed', 'error' => null, 'detail' => '', 'recipients' => []];
 
     $sa = apn_fcm_service_account();
     if ($sa === null) {
@@ -489,6 +489,11 @@ function apn_send_to_audience(string $audience, string $title, string $body, ?st
                 $stale[$row['source']][] = (int)$row['id'];
             }
         }
+        $result['recipients'][] = [
+            'source'  => $row['source'],
+            'user_id' => (int)($row['user_id'] ?? 0),
+            'ok'      => $r['ok'],
+        ];
     }
 
     // Prune tokens FCM reported as permanently invalid, per source table.
@@ -539,6 +544,24 @@ function apn_record_with_audience(string $title, string $body, ?string $url, ?in
     } catch (Throwable $e) {
         // targeting columns missing (app-notifications-resend.sql not applied) – ignore.
     }
+    try {
+        if (!empty($result['recipients'])) {
+            $ins = db()->prepare(
+                'INSERT INTO app_notification_recipients (notification_id, source, recipient_user_id, fcm_status)
+                 VALUES (?, ?, ?, ?)'
+            );
+            foreach ($result['recipients'] as $r) {
+                $ins->execute([
+                    $id,
+                    $r['source'],
+                    !empty($r['user_id']) ? (int)$r['user_id'] : null,
+                    !empty($r['ok']) ? 'sent' : 'failed',
+                ]);
+            }
+        }
+    } catch (Throwable $e) {
+        // recipients table missing (app-notifications-recipients.sql not applied) – ignore.
+    }
     return $id;
 }
 
@@ -576,4 +599,67 @@ function apn_user_options(): array
     } catch (Throwable $e) {
         return [];
     }
+}
+
+// ── Recipient log (app_notification_recipients table) ───────────────────────
+
+/** Distinct recipients recorded for a notification, per source. */
+function apn_recipient_summary(int $notification_id): array
+{
+    $summary = ['student' => 0, 'user' => 0];
+    $stmt = db()->prepare(
+        'SELECT source, COUNT(DISTINCT COALESCE(recipient_user_id, 0)) AS recipients
+           FROM app_notification_recipients
+          WHERE notification_id = ?
+          GROUP BY source'
+    );
+    $stmt->execute([$notification_id]);
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $summary[$row['source']] = (int)$row['recipients'];
+    }
+    return $summary;
+}
+
+/** Total distinct recipients of a notification (for pagination). */
+function apn_recipients_count(int $notification_id): int
+{
+    $stmt = db()->prepare(
+        'SELECT COUNT(DISTINCT source, COALESCE(recipient_user_id, 0))
+           FROM app_notification_recipients
+          WHERE notification_id = ?'
+    );
+    $stmt->execute([$notification_id]);
+    return (int)$stmt->fetchColumn();
+}
+
+/**
+ * One page of distinct recipients with student / employee details.
+ * Students resolve via students.portal_user_id; employees via users and
+ * staff_profiles.department_type (Administrative / Faculty).
+ */
+function apn_recipients(int $notification_id, int $limit = 25, int $offset = 0): array
+{
+    $limit  = max(1, min(200, $limit));
+    $offset = max(0, $offset);
+    $stmt = db()->prepare(
+        "SELECT r.source, r.recipient_user_id,
+                COUNT(*) AS device_count,
+                SUM(r.fcm_status = 'sent') AS sent_devices,
+                u.full_name AS user_name, u.username, u.email AS user_email,
+                s.id AS student_db_id, s.student_id, s.full_name AS student_name, s.email AS student_email,
+                d.name AS dept_name,
+                sp.department_type
+           FROM app_notification_recipients r
+           LEFT JOIN users u ON u.id = r.recipient_user_id
+           LEFT JOIN students s ON r.source = 'student' AND s.portal_user_id = r.recipient_user_id
+           LEFT JOIN dept_departments d ON d.id = s.dept_id
+           LEFT JOIN staff_profiles sp ON r.source = 'user' AND sp.user_id = r.recipient_user_id
+          WHERE r.notification_id = ?
+          GROUP BY r.source, r.recipient_user_id, u.full_name, u.username, u.email,
+                   s.id, s.student_id, s.full_name, s.email, d.name, sp.department_type
+          ORDER BY r.source ASC, MIN(r.id) ASC
+          LIMIT {$limit} OFFSET {$offset}"
+    );
+    $stmt->execute([$notification_id]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
