@@ -21,6 +21,15 @@ $groups            = apn_group_options();
 $users             = apn_user_options();
 $notifications     = apn_list(100);
 
+// Reuse a previously sent notification (?reuse=ID): prefill the compose form.
+$reuse_id = (int)($_GET['reuse'] ?? 0);
+if ($reuse_id && $can_send) {
+    $reuse = apn_find($reuse_id);
+    if ($reuse) {
+        save_old(['title' => $reuse['title'], 'body' => $reuse['body'], 'url' => (string)($reuse['url'] ?? '')]);
+    }
+}
+
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
@@ -194,6 +203,9 @@ require_once __DIR__ . '/../includes/header.php';
                                 <th>Status</th>
                                 <th>Sent By</th>
                                 <th>Date</th>
+                                <?php if ($can_send): ?>
+                                <th class="text-end">Actions</th>
+                                <?php endif; ?>
                             </tr>
                         </thead>
                         <tbody>
@@ -213,6 +225,23 @@ require_once __DIR__ . '/../includes/header.php';
                             <td><?= apn_status_badge($n['status']) ?></td>
                             <td><?= h($n['sender_name'] ?? '—') ?></td>
                             <td><span title="<?= h($n['created_at']) ?>"><?= h(date('d M Y H:i', strtotime($n['created_at']))) ?></span></td>
+                            <?php if ($can_send): ?>
+                            <td class="text-end text-nowrap">
+                                <form method="post" action="<?= APP_URL ?>/app-notifications/resend.php" class="d-inline"
+                                      onsubmit="return confirm('Resend this notification to its original audience?');">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="id" value="<?= (int)$n['id'] ?>">
+                                    <button type="submit" class="btn btn-sm btn-outline-primary"
+                                            title="Resend to the same audience" <?= $configured ? '' : 'disabled' ?>>
+                                        <i class="fas fa-redo"></i>
+                                    </button>
+                                </form>
+                                <a href="<?= APP_URL ?>/app-notifications/index.php?reuse=<?= (int)$n['id'] ?>#apnAudience"
+                                   class="btn btn-sm btn-outline-secondary" title="Reuse in the compose form">
+                                    <i class="fas fa-copy"></i>
+                                </a>
+                            </td>
+                            <?php endif; ?>
                         </tr>
                         <?php endforeach; ?>
                         </tbody>

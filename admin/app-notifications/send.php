@@ -61,7 +61,10 @@ $result = apn_send_to_audience(
     $target_user_id, $target_group_id, $employee_type
 );
 $user = auth_user();
-apn_record_with_audience($title, $body, $url !== '' ? $url : null, $user['id'] ?? null, $result, $audience);
+apn_record_with_audience(
+    $title, $body, $url !== '' ? $url : null, $user['id'] ?? null,
+    $result, $audience, $target_user_id, $target_group_id, $employee_type
+);
 
 $audience_label = apn_audience_label($audience, $result['detail'] ?? null);
 
