@@ -76,6 +76,13 @@ interface StaffApiService {
         @Query("limit") limit: Int = 50,
     ): Response<AppNotificationsResponse>
 
+    @FormUrlEncoded
+    @POST("staff/change-password.php")
+    suspend fun changePassword(
+        @Field("current_password") currentPassword: String,
+        @Field("new_password") newPassword: String,
+    ): Response<SimpleResponse>
+
     // Public endpoint at admin/api/app-version.php (no auth required).
     @GET("app-version.php")
     suspend fun getAppVersion(): Response<AppVersionResponse>

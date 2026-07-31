@@ -213,4 +213,36 @@
     <string name="lbl_job_type">Job Type</string>
     <string name="lbl_joining_date">Joining Date</string>
     <string name="lbl_status">Status</string>
+
+    <!-- Staff: profile sections & extra labels -->
+    <string name="section_employment">Employment</string>
+    <string name="section_contact">Contact</string>
+    <string name="section_personal">Personal Information</string>
+    <string name="section_faculty">Faculty Profile</string>
+    <string name="lbl_father_name">Father\'s Name</string>
+    <string name="lbl_mother_name">Mother\'s Name</string>
+    <string name="lbl_gender">Gender</string>
+    <string name="lbl_religion">Religion</string>
+    <string name="lbl_national_id">National ID</string>
+    <string name="lbl_date_of_birth">Date of Birth</string>
+    <string name="lbl_nationality">Nationality</string>
+    <string name="lbl_birth_place">Birth Place</string>
+    <string name="lbl_faculty_designation">Academic Designation</string>
+    <string name="lbl_academic_department">Academic Department</string>
+    <string name="lbl_official_email">Official Email</string>
+    <string name="lbl_office">Office</string>
+    <string name="lbl_office_hours">Office Hours</string>
+    <string name="lbl_qualification">Qualification</string>
+    <string name="lbl_research_interest">Research Interests</string>
+
+    <!-- Change password -->
+    <string name="change_password">Change Password</string>
+    <string name="change_password_hint">Choose a strong password of at least 8 characters. You will use it the next time you sign in.</string>
+    <string name="current_password">Current Password</string>
+    <string name="new_password">New Password</string>
+    <string name="confirm_password">Confirm New Password</string>
+    <string name="save_password">Update Password</string>
+    <string name="password_changed">Your password has been changed.</string>
+    <string name="password_mismatch">Passwords do not match.</string>
+    <string name="password_too_short">Password must be at least 8 characters.</string>
 </resources>

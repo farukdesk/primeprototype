@@ -34,6 +34,28 @@ data class EmployeeInfo(
     @SerializedName("job_type") val jobType: String? = null,
     @SerializedName("joining_date") val joiningDate: String? = null,
     @SerializedName("employee_status") val employeeStatus: String? = null,
+    @SerializedName("father_name") val fatherName: String? = null,
+    @SerializedName("mother_name") val motherName: String? = null,
+    @SerializedName("gender") val gender: String? = null,
+    @SerializedName("religion") val religion: String? = null,
+    @SerializedName("national_id") val nationalId: String? = null,
+    @SerializedName("date_of_birth") val dateOfBirth: String? = null,
+    @SerializedName("nationality") val nationality: String? = null,
+    @SerializedName("birth_place") val birthPlace: String? = null,
+) {
+    /** Whether this employee is a Faculty (educational) member. */
+    val isFaculty: Boolean get() = employeeType == "educational"
+}
+
+/** Extended academic profile returned only for Faculty employees. */
+data class FacultyInfo(
+    @SerializedName("designation") val designation: String? = null,
+    @SerializedName("academic_department") val academicDepartment: String? = null,
+    @SerializedName("official_email") val officialEmail: String? = null,
+    @SerializedName("office") val office: String? = null,
+    @SerializedName("office_hours") val officeHours: String? = null,
+    @SerializedName("qualification") val qualification: String? = null,
+    @SerializedName("research_interest") val researchInterest: String? = null,
 )
 
 /** Yearly Casual / Sick leave balance. */
@@ -69,6 +91,7 @@ data class StaffLoginResponse(
 data class StaffMeResponse(
     @SerializedName("user") val user: StaffUser? = null,
     @SerializedName("employee") val employee: EmployeeInfo? = null,
+    @SerializedName("faculty") val faculty: FacultyInfo? = null,
     @SerializedName("leave_balance") val leaveBalance: LeaveBalance? = null,
     @SerializedName("today") val today: TodayAttendance? = null,
     @SerializedName("stats") val stats: StaffStats? = null,

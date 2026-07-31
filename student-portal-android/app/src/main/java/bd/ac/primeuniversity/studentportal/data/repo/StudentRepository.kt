@@ -15,6 +15,7 @@ import bd.ac.primeuniversity.studentportal.data.model.LoginResponse
 import bd.ac.primeuniversity.studentportal.data.model.MeResponse
 import bd.ac.primeuniversity.studentportal.data.model.Notice
 import bd.ac.primeuniversity.studentportal.data.model.NoticesResponse
+import bd.ac.primeuniversity.studentportal.data.model.SimpleResponse
 import bd.ac.primeuniversity.studentportal.data.model.StaffAttendanceResponse
 import bd.ac.primeuniversity.studentportal.data.model.StaffLeavesResponse
 import bd.ac.primeuniversity.studentportal.data.model.StaffLoginResponse
@@ -164,6 +165,13 @@ class StudentRepository private constructor(context: Context) {
         endTime: String? = null,
     ): AppResult<LeaveApplyResponse> =
         call { staffApi.applyLeave(category, startDate, endDate, reason, payType, startTime, endTime) }
+
+    /** Change the signed-in employee's account password. */
+    suspend fun staffChangePassword(
+        currentPassword: String,
+        newPassword: String,
+    ): AppResult<SimpleResponse> =
+        call { staffApi.changePassword(currentPassword, newPassword) }
 
     // ── Push notifications ────────────────────────────────────────────────────────────
 

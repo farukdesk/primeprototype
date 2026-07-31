@@ -77,6 +77,49 @@ try {
 } catch (Throwable $e) {
 }
 
+// ── Faculty academic profile (educational employees only) ────────────────────
+$faculty = null;
+if ($ctx['employee_type'] === 'educational') {
+    $fp = [];
+    try {
+        $stmt = db()->prepare('SELECT * FROM faculty_profiles WHERE user_id = ? LIMIT 1');
+        $stmt->execute([$uid]);
+        $fp = $stmt->fetch() ?: [];
+    } catch (Throwable $e) {
+        $fp = [];
+    }
+
+    $academic_dept = null;
+    try {
+        $stmt = db()->prepare(
+            'SELECT dd.name
+               FROM dept_faculty df
+               JOIN dept_departments dd ON dd.id = df.dept_id
+              WHERE df.user_id = ? AND df.is_active = 1
+              ORDER BY df.is_head DESC, df.id ASC
+              LIMIT 1'
+        );
+        $stmt->execute([$uid]);
+        $academic_dept = $stmt->fetchColumn() ?: null;
+    } catch (Throwable $e) {
+    }
+
+    $office_parts = array_filter([
+        $fp['office_location'] ?? null,
+        !empty($fp['room_number']) ? 'Room ' . $fp['room_number'] : null,
+    ]);
+
+    $faculty = [
+        'designation'         => $fp['designation'] ?? null,
+        'academic_department' => $academic_dept,
+        'official_email'      => $fp['official_email'] ?? null,
+        'office'              => $office_parts ? implode(', ', $office_parts) : null,
+        'office_hours'        => $fp['office_hours'] ?? null,
+        'qualification'       => $fp['qualification'] ?? null,
+        'research_interest'   => $fp['research_interest'] ?? null,
+    ];
+}
+
 api_ok([
     'user' => [
         'id'        => $uid,
@@ -96,7 +139,16 @@ api_ok([
         'job_type'            => $p['job_type']        ?? null,
         'joining_date'        => $p['joining_date']    ?? null,
         'employee_status'     => $p['employee_status'] ?? null,
+        'father_name'         => $p['father_name']     ?? null,
+        'mother_name'         => $p['mother_name']     ?? null,
+        'gender'              => $p['gender']          ?? null,
+        'religion'            => $p['religion']        ?? null,
+        'national_id'         => $p['national_id']     ?? null,
+        'date_of_birth'       => $p['date_of_birth']   ?? null,
+        'nationality'         => $p['nationality']     ?? null,
+        'birth_place'         => $p['birth_place']     ?? null,
     ],
+    'faculty' => $faculty,
     'leave_balance' => [
         'year'             => $year,
         'casual_total'     => $casual_total,

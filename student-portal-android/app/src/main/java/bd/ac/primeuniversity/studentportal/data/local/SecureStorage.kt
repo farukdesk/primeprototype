@@ -50,6 +50,12 @@ class SecureStorage(context: Context) {
             if (value == null) remove(KEY_FCM_REGISTERED) else putString(KEY_FCM_REGISTERED, value)
         }.apply()
 
+    /** Total staff notice count when the employee last opened the Notices tab
+     *  (drives the unread bell badge on the staff dashboard). */
+    var seenStaffNotices: Int
+        get() = prefs.getInt(KEY_SEEN_STAFF_NOTICES, 0)
+        set(value) = prefs.edit().putInt(KEY_SEEN_STAFF_NOTICES, value).apply()
+
     /** A stable per-install device id, generated once and reused. */
     val deviceId: String
         get() {
@@ -67,6 +73,7 @@ class SecureStorage(context: Context) {
         prefs.edit()
             .remove(KEY_TOKEN)
             .remove(KEY_FCM_REGISTERED)
+            .remove(KEY_SEEN_STAFF_NOTICES)
             .apply()
     }
 
@@ -79,5 +86,6 @@ class SecureStorage(context: Context) {
         private const val KEY_DEVICE_ID = "device_id"
         private const val KEY_FCM_TOKEN = "fcm_token"
         private const val KEY_FCM_REGISTERED = "fcm_registered_token"
+        private const val KEY_SEEN_STAFF_NOTICES = "seen_staff_notices"
     }
 }

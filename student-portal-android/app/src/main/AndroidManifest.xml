@@ -55,6 +55,12 @@
             android:parentActivityName=".ui.main.MainActivity" />
 
         <activity
+            android:name=".ui.settings.ChangePasswordActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.settings.SettingsActivity"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
             android:name=".ui.feature.FeatureActivity"
             android:exported="false"
             android:parentActivityName=".ui.main.MainActivity" />

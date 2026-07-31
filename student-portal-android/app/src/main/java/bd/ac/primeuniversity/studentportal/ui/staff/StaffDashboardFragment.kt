@@ -99,9 +99,7 @@ class StaffDashboardFragment : Fragment() {
         binding.staffTypeBadge.visibility =
             if (typeLabel.isNullOrBlank()) View.GONE else View.VISIBLE
 
-        val notices = me?.stats?.noticesUniversity ?: 0
-        binding.bellBadge.text = if (notices > 99) "99+" else notices.toString()
-        binding.bellBadge.visibility = if (notices > 0) View.VISIBLE else View.GONE
+        renderBadge(me?.stats?.noticesUniversity ?: 0)
 
         val dash = getString(R.string.dash)
         val today = me?.today
@@ -115,6 +113,24 @@ class StaffDashboardFragment : Fragment() {
         } else {
             dash
         }
+    }
+
+    /**
+     * Shows only the notices the employee has NOT seen yet. Previously the
+     * badge showed the fixed total notice count forever, even after reading.
+     */
+    private fun renderBadge(total: Int) {
+        val storage = app.repository.storage
+        if (total < storage.seenStaffNotices) storage.seenStaffNotices = total
+        val unread = (total - storage.seenStaffNotices).coerceAtLeast(0)
+        binding.bellBadge.text = if (unread > 99) "99+" else unread.toString()
+        binding.bellBadge.visibility = if (unread > 0) View.VISIBLE else View.GONE
+    }
+
+    /** Re-evaluates the bell badge after the Notices tab marks notices as seen. */
+    fun refreshBadge() {
+        if (_binding == null) return
+        renderBadge(app.currentStaff.value?.stats?.noticesUniversity ?: 0)
     }
 
     private fun fmt(v: Double): String =

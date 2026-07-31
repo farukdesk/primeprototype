@@ -28,8 +28,13 @@ $limit  = min(100, max(1, (int)($_GET['limit'] ?? 50)));
 $offset = ($page - 1) * $limit;
 
 // Audiences that include students; legacy rows (NULL) were student sends.
+// The audience column stores a human label (see apn_audience_label()), e.g.
+// "All students" or "Everyone (students + users)" – match labels and codes.
 $where = "status IN ('sent', 'partial')
-          AND (audience IS NULL OR audience IN ('students', 'everyone'))";
+          AND (audience IS NULL
+               OR audience IN ('students', 'everyone')
+               OR audience LIKE 'All students%'
+               OR audience LIKE 'Everyone%')";
 
 try {
     // Only announcements that actually reached devices (skip failed sends).
