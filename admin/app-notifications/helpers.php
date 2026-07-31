@@ -556,7 +556,7 @@ function apn_user_options(): array
 {
     try {
         return db()->query(
-            'SELECT id, full_name, username FROM users WHERE is_active = 1 ORDER BY full_name ASC'
+            'SELECT id, full_name, username, email, phone FROM users WHERE is_active = 1 ORDER BY full_name ASC'
         )->fetchAll(PDO::FETCH_ASSOC);
     } catch (Throwable $e) {
         return [];
