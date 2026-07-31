@@ -31,6 +31,10 @@
     <color name="cat_settings">#94A3B8</color>
 
     <color name="header_gradient_start">#0B1220</color>
-    <color name="header_gradient_center">#152341</color>
-    <color name="header_gradient_end">#24406E</color>
+    <color name="header_gradient_center">#1E1B4B</color>
+    <color name="header_gradient_end">#4C1D95</color>
+
+    <color name="staff_gradient_start">#0B2E2B</color>
+    <color name="staff_gradient_center">#115E59</color>
+    <color name="staff_gradient_end">#0369A1</color>
 </resources>

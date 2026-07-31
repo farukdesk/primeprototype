@@ -18,7 +18,7 @@
             <RelativeLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:background="@drawable/bg_header_gradient"
+                android:background="@drawable/bg_header_gradient_staff"
                 android:padding="20dp">
 
                 <LinearLayout
@@ -156,8 +156,10 @@
                 android:id="@+id/menuList"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:clipToPadding="false"
+                android:layoutAnimation="@anim/layout_animation_fall_down"
                 android:nestedScrollingEnabled="false"
-                android:paddingBottom="16dp" />
+                android:paddingBottom="24dp" />
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
