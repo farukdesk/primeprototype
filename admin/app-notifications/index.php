@@ -82,10 +82,13 @@ require_once __DIR__ . '/../includes/header.php';
                     </div>
                     <div class="mb-3" id="apnUserWrap" style="display:none;">
                         <label class="form-label">User <span class="text-danger">*</span></label>
-                        <select name="target_user_id" class="form-select">
+                        <input type="text" id="apnUserSearch" class="form-control mb-2" autocomplete="off"
+                               placeholder="Search by name, email or phone…" oninput="apnFilterUsers()">
+                        <select name="target_user_id" id="apnUserSelect" class="form-select">
                             <option value="">— Choose a user —</option>
                             <?php foreach ($users as $u): ?>
-                            <option value="<?= (int)$u['id'] ?>"><?= h($u['full_name']) ?> (<?= h($u['username']) ?>)</option>
+                            <option value="<?= (int)$u['id'] ?>"
+                                    data-search="<?= h(mb_strtolower(trim(($u['full_name'] ?? '') . ' ' . ($u['username'] ?? '') . ' ' . ($u['email'] ?? '') . ' ' . ($u['phone'] ?? '')))) ?>"><?= h($u['full_name']) ?> (<?= h($u['username']) ?>)<?= !empty($u['email']) ? ' – ' . h($u['email']) : '' ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -111,6 +114,35 @@ require_once __DIR__ . '/../includes/header.php';
                         document.getElementById('apnUserWrap').style.display  = (a === 'user')  ? '' : 'none';
                         document.getElementById('apnGroupWrap').style.display = (a === 'group') ? '' : 'none';
                         document.getElementById('apnEtypeWrap').style.display = (a === 'employee_type') ? '' : 'none';
+                    }
+
+                    // Filter the "Individual user" dropdown by name, username, email or phone.
+                    var apnUserOptions = null;
+                    function apnFilterUsers() {
+                        var sel = document.getElementById('apnUserSelect');
+                        var q   = document.getElementById('apnUserSearch').value.trim().toLowerCase();
+                        if (apnUserOptions === null) {
+                            apnUserOptions = Array.prototype.map.call(sel.options, function (o) {
+                                return { value: o.value, text: o.text, search: (o.getAttribute('data-search') || '').toLowerCase() };
+                            });
+                        }
+                        var current = sel.value;
+                        sel.innerHTML = '';
+                        var matches = 0;
+                        apnUserOptions.forEach(function (o) {
+                            if (o.value === '' || q === '' || o.search.indexOf(q) !== -1) {
+                                sel.add(new Option(o.text, o.value));
+                                if (o.value !== '') matches++;
+                            }
+                        });
+                        if (q !== '') {
+                            sel.options[0].text = matches
+                                ? '— ' + matches + ' match' + (matches === 1 ? '' : 'es') + ', choose a user —'
+                                : '— No users match your search —';
+                        }
+                        // Keep the current selection when it still matches the filter.
+                        var keep = Array.prototype.some.call(sel.options, function (o) { return o.value === current; });
+                        sel.value = keep ? current : '';
                     }
                     </script>
                     <div class="mb-3">
