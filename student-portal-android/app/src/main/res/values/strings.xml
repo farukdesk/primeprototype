@@ -147,6 +147,15 @@
     <string name="notification_channel_name">Announcements</string>
     <string name="notification_channel_desc">Push notifications published from the university admin panel.</string>
     <string name="notification_open_link">Open</string>
+
+    <!-- Announcements inbox (push notification history) -->
+    <string name="feat_announcements">Announcements</string>
+    <string name="feat_announcements_desc">Messages pushed to the mobile app</string>
+    <string name="announcements_title">Announcements</string>
+    <string name="announcements_empty">No announcements yet.</string>
+    <string name="announcements_open_link">Open Link</string>
+    <string name="close">Close</string>
+
     <!-- Staff / Employee view -->
     <string name="employee">Employee</string>
     <string name="section_staff_workspace">Employee Workspace</string>

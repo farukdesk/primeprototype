@@ -45,6 +45,11 @@
             android:parentActivityName=".ui.main.MainActivity" />
 
         <activity
+            android:name=".ui.notifications.NotificationsActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.main.MainActivity" />
+
+        <activity
             android:name=".ui.settings.SettingsActivity"
             android:exported="false"
             android:parentActivityName=".ui.main.MainActivity" />

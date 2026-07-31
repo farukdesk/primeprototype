@@ -1,5 +1,6 @@
 package bd.ac.primeuniversity.studentportal.data.api
 
+import bd.ac.primeuniversity.studentportal.data.model.AppNotificationsResponse
 import bd.ac.primeuniversity.studentportal.data.model.FinancesResponse
 import bd.ac.primeuniversity.studentportal.data.model.LoginResponse
 import bd.ac.primeuniversity.studentportal.data.model.MeResponse
@@ -49,6 +50,12 @@ interface ApiService {
 
     @GET("finances.php")
     suspend fun getFinances(): Response<FinancesResponse>
+
+    @GET("notifications.php")
+    suspend fun getAppNotifications(
+        @Query("page") page: Int = 1,
+        @Query("limit") limit: Int = 50,
+    ): Response<AppNotificationsResponse>
 
     @FormUrlEncoded
     @POST("push/register.php")

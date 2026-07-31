@@ -34,6 +34,13 @@ data class NoticeDetailResponse(
     @SerializedName("notice") val notice: Notice? = null,
 ) : BaseResponse()
 
+data class AppNotificationsResponse(
+    @SerializedName("notifications") val notifications: List<AppNotification> = emptyList(),
+    @SerializedName("total") val total: Int = 0,
+    @SerializedName("page") val page: Int = 1,
+    @SerializedName("per_page") val perPage: Int = 50,
+) : BaseResponse()
+
 data class FinancesResponse(
     @SerializedName("student") val student: Student? = null,
     @SerializedName("summary") val summary: FinanceSummary? = null,

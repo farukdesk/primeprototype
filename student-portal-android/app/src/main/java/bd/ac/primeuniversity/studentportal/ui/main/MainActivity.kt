@@ -13,11 +13,13 @@ import androidx.lifecycle.lifecycleScope
 import bd.ac.primeuniversity.studentportal.PrimeApp
 import bd.ac.primeuniversity.studentportal.R
 import bd.ac.primeuniversity.studentportal.databinding.ActivityMainBinding
+import bd.ac.primeuniversity.studentportal.messaging.NotificationHelper
 import bd.ac.primeuniversity.studentportal.messaging.PushRegistrar
 import bd.ac.primeuniversity.studentportal.ui.dashboard.DashboardFragment
 import bd.ac.primeuniversity.studentportal.ui.finances.FinancesFragment
 import bd.ac.primeuniversity.studentportal.ui.login.LoginActivity
 import bd.ac.primeuniversity.studentportal.ui.notices.NoticesFragment
+import bd.ac.primeuniversity.studentportal.ui.notifications.NotificationsActivity
 import bd.ac.primeuniversity.studentportal.ui.profile.ProfileFragment
 import bd.ac.primeuniversity.studentportal.util.AppResult
 import kotlinx.coroutines.launch
@@ -79,6 +81,14 @@ class MainActivity : AppCompatActivity() {
         // for push notifications from the admin panel.
         maybeRequestNotificationPermission()
         PushRegistrar.registerCurrentToken(this)
+
+        // Tapping a push notification (delivered in the foreground) routes the
+        // user straight to the announcements inbox.
+        if (savedInstanceState == null &&
+            intent.getBooleanExtra(NotificationHelper.EXTRA_OPEN_INBOX, false)
+        ) {
+            startActivity(Intent(this, NotificationsActivity::class.java))
+        }
     }
 
     private fun maybeRequestNotificationPermission() {
