@@ -73,6 +73,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <select name="audience" id="apnAudience" class="form-select" onchange="apnToggleAudience()">
                             <option value="students">All students</option>
                             <option value="all_users">All users / employees</option>
+                            <option value="all_employees">All employees (administrative + faculty)</option>
                             <option value="user">Individual user</option>
                             <option value="group">Individual user group</option>
                             <option value="employee_type">Employee type</option>
