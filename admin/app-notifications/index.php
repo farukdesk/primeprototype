@@ -60,6 +60,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <span>
                         <strong><?= (int)$device_count ?></strong> student device<?= $device_count === 1 ? '' : 's' ?>
                         and <strong><?= (int)$user_device_count ?></strong> employee/user device<?= $user_device_count === 1 ? '' : 's' ?> registered.
+                        <a href="<?= APP_URL ?>/app-notifications/devices.php">View devices</a>
                     </span>
                 </div>
 
