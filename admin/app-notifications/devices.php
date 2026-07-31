@@ -20,6 +20,7 @@ $student_devices = [];
 try {
     $sql = "SELECT t.id, t.platform, t.device_id, t.created_at, t.updated_at,
                    u.full_name AS account_name, u.username, u.email AS account_email,
+                   s.id AS student_db_id,
                    s.student_id, s.full_name AS student_name,
                    s.email AS student_email, s.phone AS student_phone,
                    d.name AS dept_name, d.code AS dept_code,
@@ -52,7 +53,7 @@ try {
 $user_devices = [];
 try {
     $sql = "SELECT t.id, t.platform, t.device_id, t.created_at, t.updated_at,
-                   u.full_name, u.username, u.email
+                   u.id AS user_db_id, u.full_name, u.username, u.email
             FROM api_push_tokens t
             JOIN users u ON u.id = t.user_id AND u.is_active = 1
             WHERE t.fcm_token IS NOT NULL AND t.fcm_token != ''";
@@ -129,7 +130,14 @@ require_once __DIR__ . '/../includes/header.php';
                 <?php $i = 0; foreach ($student_devices as $r): $i++; ?>
                 <tr>
                     <td class="text-muted"><?= $i ?></td>
-                    <td class="fw-semibold"><?= h($r['student_name'] ?? $r['account_name'] ?? '—') ?></td>
+                    <td class="fw-semibold">
+                        <?php if (!empty($r['student_db_id'])): ?>
+                        <a href="<?= APP_URL ?>/students/view.php?id=<?= (int)$r['student_db_id'] ?>"
+                           class="text-decoration-none"><?= h($r['student_name'] ?? $r['account_name'] ?? '—') ?></a>
+                        <?php else: ?>
+                        <?= h($r['student_name'] ?? $r['account_name'] ?? '—') ?>
+                        <?php endif; ?>
+                    </td>
                     <td><?= h($r['student_id'] ?? '—') ?></td>
                     <td>
                         <?= h($r['dept_name'] ?? '—') ?>
@@ -191,7 +199,14 @@ require_once __DIR__ . '/../includes/header.php';
                 <?php $i = 0; foreach ($user_devices as $r): $i++; ?>
                 <tr>
                     <td class="text-muted"><?= $i ?></td>
-                    <td class="fw-semibold"><?= h($r['full_name'] ?? '—') ?></td>
+                    <td class="fw-semibold">
+                        <?php if (!empty($r['user_db_id'])): ?>
+                        <a href="<?= APP_URL ?>/users/edit.php?id=<?= (int)$r['user_db_id'] ?>"
+                           class="text-decoration-none"><?= h($r['full_name'] ?? '—') ?></a>
+                        <?php else: ?>
+                        <?= h($r['full_name'] ?? '—') ?>
+                        <?php endif; ?>
+                    </td>
                     <td><?= h($r['username'] ?? '—') ?></td>
                     <td class="small">
                         <?php if (!empty($r['email'])): ?>
