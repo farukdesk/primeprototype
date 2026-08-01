@@ -349,3 +349,113 @@ function adms_options_block(array $device): string
     ];
     return implode("\n", $lines) . "\n";
 }
+
+// ── Punch push notifications (clock-in / clock-out) ──────────────────────
+
+/** Whether automatic clock-in/out push notifications are enabled (default on). */
+function adms_punch_push_enabled(): bool
+{
+    return (string)adms_setting('punch_push_notifications', '1') === '1';
+}
+
+/** "HH:MM" → "9:02 AM" for notification copy. */
+function adms_format_time(string $hhmm): string
+{
+    $ts = strtotime($hhmm);
+    return $ts !== false ? date('g:i A', $ts) : $hhmm;
+}
+
+/** Current in/out times recorded for a user/day, or null when no row exists. */
+function adms_day_times(int $user_id, string $work_date): ?array
+{
+    if ($user_id < 1) return null;
+    try {
+        $stmt = db()->prepare(
+            'SELECT in_time, out_time FROM att_records WHERE user_id = ? AND work_date = ? LIMIT 1'
+        );
+        $stmt->execute([$user_id, $work_date]);
+        $row = $stmt->fetch();
+        return $row ?: null;
+    } catch (Throwable $e) {
+        return null;
+    }
+}
+
+/**
+ * Push a clock-in / clock-out confirmation to the employee's registered app
+ * devices (api_push_tokens) after a punch changed their att_records row.
+ *
+ * Compares the before/after in_time + out_time so that:
+ *  - a first punch of the day → "clocked in" notification;
+ *  - a later punch that sets or moves out_time → "clocked out" notification;
+ *  - device re-sends / duplicate punches (no state change) → no notification.
+ *
+ * Only fires for today's punches, so historical backfill syncs stay silent.
+ * Entirely best-effort: any failure is swallowed so the device protocol
+ * response is never disturbed.
+ */
+function adms_notify_punch(int $user_id, string $work_date, ?array $before, ?array $after): void
+{
+    try {
+        if ($user_id < 1 || $after === null) return;
+        if (!adms_punch_push_enabled()) return;
+        if ($work_date !== date('Y-m-d')) return; // ignore historical syncs
+
+        $norm = static function ($v): ?string {
+            $v = (string)($v ?? '');
+            return $v === '' ? null : substr($v, 0, 5);
+        };
+        $inB  = $norm($before['in_time']  ?? null);
+        $outB = $norm($before['out_time'] ?? null);
+        $inA  = $norm($after['in_time']   ?? null);
+        $outA = $norm($after['out_time']  ?? null);
+
+        $events = [];
+        if ($inA !== null && $inB === null) {
+            $events[] = [
+                'title' => 'Clock-in recorded',
+                'body'  => 'You clocked in successfully at ' . adms_format_time($inA) . '.',
+            ];
+        }
+        if ($outA !== null && $outA !== $outB) {
+            $events[] = [
+                'title' => 'Clock-out recorded',
+                'body'  => 'You clocked out successfully at ' . adms_format_time($outA) . '.',
+            ];
+        }
+        if (!$events) return;
+
+        // Reuse the App Notification module's FCM HTTP v1 sender (self-contained,
+        // pulls in only includes/db.php – safe from the public iclock receiver).
+        require_once __DIR__ . '/../app-notifications/helpers.php';
+
+        $sa = apn_fcm_service_account();
+        if ($sa === null) return;
+        $accessToken = apn_fcm_access_token($sa);
+        if ($accessToken === null) return;
+
+        $stmt = db()->prepare(
+            "SELECT fcm_token FROM api_push_tokens
+              WHERE user_id = ? AND fcm_token IS NOT NULL AND fcm_token != ''"
+        );
+        $stmt->execute([$user_id]);
+        $tokens = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        if (!$tokens) return;
+
+        foreach ($events as $event) {
+            $data = [
+                'type'  => 'attendance_punch',
+                'title' => $event['title'],
+                'body'  => $event['body'],
+            ];
+            foreach ($tokens as $token) {
+                apn_fcm_send_single(
+                    $accessToken, $sa['project_id'], (string)$token,
+                    $event['title'], $event['body'], $data
+                );
+            }
+        }
+    } catch (Throwable $e) {
+        // Never let a notification failure interfere with punch processing.
+    }
+}
