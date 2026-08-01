@@ -173,7 +173,10 @@ if ($endpoint === 'cdata') {
         }
     }
     foreach ($fold as [$uid, $day]) {
+        $before = adms_day_times((int)$uid, $day);
         adms_fold_day((int)$uid, $day);
+        // Automatic clock-in / clock-out push notification (best-effort).
+        adms_notify_punch((int)$uid, $day, $before, adms_day_times((int)$uid, $day));
     }
 
     adms_touch_device($device_id, $ip, $stamp !== '' ? $stamp : null, true);
