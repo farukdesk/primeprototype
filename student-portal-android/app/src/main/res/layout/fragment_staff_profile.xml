@@ -19,12 +19,13 @@
 
             <TextView
                 android:id="@+id/avatar"
-                android:layout_width="72dp"
-                android:layout_height="72dp"
+                android:layout_width="80dp"
+                android:layout_height="80dp"
                 android:background="@drawable/bg_avatar_circle"
+                android:backgroundTint="@color/primary"
                 android:gravity="center"
                 android:textColor="@android:color/white"
-                android:textSize="24sp"
+                android:textSize="26sp"
                 android:textStyle="bold" />
 
             <TextView
