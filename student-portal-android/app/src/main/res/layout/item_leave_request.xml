@@ -62,4 +62,18 @@
         android:layout_marginTop="4dp"
         android:textColor="?android:attr/textColorSecondary"
         android:textSize="12sp" />
+
+    <TextView
+        android:id="@+id/btnCancel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="end"
+        android:layout_marginTop="8dp"
+        android:background="?attr/selectableItemBackground"
+        android:padding="6dp"
+        android:text="@string/leave_cancel_request"
+        android:textColor="@color/error"
+        android:textSize="13sp"
+        android:textStyle="bold"
+        android:visibility="gone" />
 </LinearLayout>

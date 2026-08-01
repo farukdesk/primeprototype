@@ -6,6 +6,8 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -27,7 +29,7 @@ class LeaveActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityLeaveBinding
     private val app: PrimeApp by lazy { application as PrimeApp }
-    private val adapter = LeaveAdapter()
+    private val adapter = LeaveAdapter { request -> confirmCancel(request) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -79,7 +81,36 @@ class LeaveActivity : AppCompatActivity() {
     private fun fmt(v: Double): String =
         if (v % 1.0 == 0.0) v.toInt().toString() else v.toString()
 
-    private class LeaveAdapter : RecyclerView.Adapter<LeaveAdapter.VH>() {
+    private fun confirmCancel(request: LeaveRequest) {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.leave_cancel_request)
+            .setMessage(R.string.leave_cancel_confirm)
+            .setPositiveButton(R.string.leave_cancel_request) { _, _ -> cancelRequest(request) }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun cancelRequest(request: LeaveRequest) {
+        binding.progress.visibility = View.VISIBLE
+        lifecycleScope.launch {
+            when (val result = app.repository.cancelStaffLeave(request.id)) {
+                is AppResult.Success -> {
+                    Toast.makeText(
+                        this@LeaveActivity, R.string.leave_cancelled, Toast.LENGTH_SHORT
+                    ).show()
+                    load()
+                }
+                is AppResult.Error -> {
+                    binding.progress.visibility = View.GONE
+                    Toast.makeText(this@LeaveActivity, result.message, Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    private class LeaveAdapter(
+        private val onCancel: (LeaveRequest) -> Unit,
+    ) : RecyclerView.Adapter<LeaveAdapter.VH>() {
 
         private val items = mutableListOf<LeaveRequest>()
 
@@ -117,6 +148,10 @@ class LeaveActivity : AppCompatActivity() {
                 if (r.reason.isNullOrBlank()) View.GONE else View.VISIBLE
 
             holder.b.approvals.text = approvalsText(r)
+
+            val cancellable = r.status == "pending"
+            holder.b.btnCancel.visibility = if (cancellable) View.VISIBLE else View.GONE
+            holder.b.btnCancel.setOnClickListener { if (cancellable) onCancel(r) }
         }
 
         private fun approvalsText(r: LeaveRequest): String = when (r.status) {
