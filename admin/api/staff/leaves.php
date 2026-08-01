@@ -69,9 +69,36 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     api_error(405, 'Method Not Allowed. Use GET or POST.');
 }
 
-// ── Submit a new leave request ───────────────────────────────────────────────
 $input = json_decode(file_get_contents('php://input'), true) ?? $_POST;
 
+// ── Cancel a pending leave request ───────────────────────────────────────────
+if ((string)($input['action'] ?? '') === 'cancel') {
+    $rid = (int)($input['id'] ?? 0);
+    if ($rid <= 0) api_error(400, 'Invalid request id.');
+
+    $stmt = db()->prepare('SELECT id, status FROM leave_requests WHERE id = ? AND user_id = ?');
+    $stmt->execute([$rid, $uid]);
+    $req = $stmt->fetch();
+    if (!$req) api_error(404, 'Leave request not found.');
+    if ($req['status'] !== 'pending') api_error(400, 'Only pending requests can be cancelled.');
+
+    $upd = db()->prepare(
+        "UPDATE leave_requests SET status = 'cancelled' WHERE id = ? AND user_id = ? AND status = 'pending'"
+    );
+    $upd->execute([$rid, $uid]);
+
+    try {
+        if (function_exists('log_change')) {
+            log_change('leave-management', 'UPDATE', $rid, 'Leave request cancelled via mobile app');
+        }
+    } catch (Throwable $e) {
+    }
+
+    api_ok(['message' => 'Your leave request has been cancelled.']);
+    exit;
+}
+
+// ── Submit a new leave request ───────────────────────────────────────────────
 $category = (string)($input['category'] ?? '');
 $start    = trim((string)($input['start_date'] ?? ''));
 $end      = trim((string)($input['end_date'] ?? ''));

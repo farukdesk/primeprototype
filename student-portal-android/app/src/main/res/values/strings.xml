@@ -202,6 +202,9 @@
     <string name="leave_err_end">Please select the end date.</string>
     <string name="leave_err_times">Short leave requires a start and end time.</string>
     <string name="leave_err_reason">Please provide a reason for the leave.</string>
+    <string name="leave_cancel_request">Cancel Request</string>
+    <string name="leave_cancel_confirm">Cancel this leave request? This cannot be undone.</string>
+    <string name="leave_cancelled">Your leave request has been cancelled.</string>
 
     <!-- Staff: profile row labels -->
     <string name="lbl_employee_id">Employee ID</string>

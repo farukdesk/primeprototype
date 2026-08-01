@@ -68,7 +68,14 @@ class StaffAttendanceActivity : AppCompatActivity() {
                     val data = result.data
                     binding.rangeLabel.text = data.label.orEmpty()
                     binding.summary.text = summaryText(data.summary)
-                    adapter.submit(data.days)
+                    // Latest first: today, then yesterday, then the day before.
+                    // Upcoming days go to the bottom in ascending order.
+                    val today = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                        .format(Calendar.getInstance().time)
+                    val (pastOrToday, upcoming) = data.days.partition { it.date <= today }
+                    adapter.submit(
+                        pastOrToday.sortedByDescending { it.date } + upcoming.sortedBy { it.date }
+                    )
                     if (data.days.isEmpty()) {
                         binding.emptyState.setText(R.string.attendance_empty)
                         binding.emptyState.visibility = View.VISIBLE
@@ -134,10 +141,10 @@ class StaffAttendanceActivity : AppCompatActivity() {
             "present" -> R.color.success
             "absent" -> R.color.error
             "late_in", "early_out", "late_and_early",
-            "incomplete", "short_hours" -> R.color.accent
+            "incomplete", "short_hours" -> R.color.warning
             "leave" -> R.color.info
             "holiday", "weekly_off" -> R.color.purple
-            else -> R.color.teal // upcoming
+            else -> R.color.slate // upcoming
         }
     }
 }

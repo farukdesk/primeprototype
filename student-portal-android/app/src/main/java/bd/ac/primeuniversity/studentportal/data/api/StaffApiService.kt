@@ -57,6 +57,13 @@ interface StaffApiService {
         @Field("end_time") endTime: String?,
     ): Response<LeaveApplyResponse>
 
+    @FormUrlEncoded
+    @POST("staff/leaves.php")
+    suspend fun cancelLeave(
+        @Field("id") id: Int,
+        @Field("action") action: String = "cancel",
+    ): Response<SimpleResponse>
+
     @GET("staff/notices.php")
     suspend fun getNotices(
         @Query("type") type: String,
