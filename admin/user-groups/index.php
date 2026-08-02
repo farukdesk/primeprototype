@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
 require_access('user-groups');
+require_once __DIR__ . '/usage.php';
 
 $page_title = 'User Groups';
 
@@ -152,14 +153,24 @@ require_once __DIR__ . '/../includes/header.php';
                                 </a>
                                 <?php endif; ?>
                                 <?php if ((is_super_admin() || can_access('user-groups', 'can_delete')) && !$g['is_super']): ?>
+                                <?php $usage = ug_group_usage((int)$g['id']); ?>
+                                <?php if (empty($usage)): ?>
                                 <form method="POST" action="<?= APP_URL ?>/user-groups/delete.php"
-                                      onsubmit="return confirm('Delete this group? Users in this group must be reassigned first.');">
+                                      onsubmit="return confirm('Delete this group? This cannot be undone.');">
                                     <?= csrf_field() ?>
                                     <input type="hidden" name="id" value="<?= $g['id'] ?>">
                                     <button class="btn btn-sm btn-outline-danger" title="Delete" style="border-radius:7px;">
                                         <i class="fas fa-trash"></i>
                                     </button>
                                 </form>
+                                <?php else: ?>
+                                <span title="Cannot delete — this group is in use: <?= h(implode('; ', $usage)) ?>">
+                                    <button type="button" class="btn btn-sm btn-outline-danger" disabled
+                                            style="border-radius:7px;opacity:.45;cursor:not-allowed;">
+                                        <i class="fas fa-lock"></i>
+                                    </button>
+                                </span>
+                                <?php endif; ?>
                                 <?php endif; ?>
                             </div>
                         </td>
