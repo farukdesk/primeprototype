@@ -55,9 +55,11 @@ $pending_approvals = [];
 if (!empty($group_ids)) {
     $ph = implode(',', array_fill(0, count($group_ids), '?'));
     $pa_stmt = $db->prepare(
-        "SELECT r.*, u.full_name AS requester_name
+        "SELECT r.*, u.full_name AS requester_name, sd.name AS dept_name
            FROM leave_requests r
            JOIN users u ON u.id = r.user_id
+      LEFT JOIN staff_profiles sp ON sp.user_id = u.id
+      LEFT JOIN staff_departments sd ON sd.id = sp.staff_dept_id
            JOIN leave_request_approvals a
              ON a.request_id = r.id AND a.step_order = r.current_step
           WHERE r.status = 'pending' AND a.status = 'pending'
@@ -71,23 +73,49 @@ if (!empty($group_ids)) {
 
 // ── All requests (admin) ───────────────────────────────────────────────────────
 $all_requests = [];
+$approvals_by_request = [];
 if ($is_admin && $view === 'all') {
     $all_stmt = $db->prepare(
-        "SELECT r.*, u.full_name AS requester_name
+        "SELECT r.*, u.full_name AS requester_name, sp.employee_id, sd.name AS dept_name
            FROM leave_requests r
            JOIN users u ON u.id = r.user_id
+      LEFT JOIN staff_profiles sp ON sp.user_id = u.id
+      LEFT JOIN staff_departments sd ON sd.id = sp.staff_dept_id
           WHERE 1=1$filter_sql
           ORDER BY r.created_at DESC
           LIMIT 200"
     );
     $all_stmt->execute($filter_params);
     $all_requests = $all_stmt->fetchAll();
+
+    // Approval steps for the listed requests, for the Approval Progress column.
+    if (!empty($all_requests)) {
+        $ids = array_map(fn($r) => (int)$r['id'], $all_requests);
+        $ph  = implode(',', array_fill(0, count($ids), '?'));
+        $ap_stmt = $db->prepare(
+            "SELECT a.request_id, a.step_order, a.status, a.label, a.acted_at,
+                    g.name AS group_name, au.full_name AS approver_name
+               FROM leave_request_approvals a
+               JOIN user_groups g ON g.id = a.group_id
+          LEFT JOIN users au ON au.id = a.approver_id
+              WHERE a.request_id IN ($ph)
+              ORDER BY a.request_id ASC, a.step_order ASC"
+        );
+        $ap_stmt->execute($ids);
+        foreach ($ap_stmt->fetchAll() as $ar) {
+            $approvals_by_request[(int)$ar['request_id']][] = $ar;
+        }
+    }
 }
 
 require_once __DIR__ . '/../includes/header.php';
 
-/** Render a table of requests. */
-function lm_render_rows(array $rows, bool $show_user, callable $fmt): void { ?>
+/**
+ * Render a table of requests. Pass $flows (request_id => approval steps) to
+ * add an Approval Progress column showing who approved / where it is stuck.
+ */
+function lm_render_rows(array $rows, bool $show_user, callable $fmt, ?array $flows = null): void {
+    $cols = 7 + ($show_user ? 1 : 0) + ($flows !== null ? 1 : 0); ?>
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
             <thead class="table-light">
@@ -99,16 +127,22 @@ function lm_render_rows(array $rows, bool $show_user, callable $fmt): void { ?>
                     <th>Days</th>
                     <th>Pay</th>
                     <th>Status</th>
+                    <?php if ($flows !== null): ?><th>Approval Progress</th><?php endif; ?>
                     <th></th>
                 </tr>
             </thead>
             <tbody>
             <?php if (empty($rows)): ?>
-                <tr><td colspan="<?= $show_user ? 8 : 7 ?>" class="text-center text-muted py-4">No requests.</td></tr>
+                <tr><td colspan="<?= $cols ?>" class="text-center text-muted py-4">No requests.</td></tr>
             <?php else: foreach ($rows as $r): ?>
                 <tr>
                     <td class="px-3 text-muted">#<?= (int)$r['id'] ?></td>
-                    <?php if ($show_user): ?><td><?= h($r['requester_name'] ?? '') ?></td><?php endif; ?>
+                    <?php if ($show_user): ?>
+                    <td>
+                        <?= h($r['requester_name'] ?? '') ?>
+                        <?php if (!empty($r['dept_name'])): ?><br><span class="small text-muted"><?= h($r['dept_name']) ?></span><?php endif; ?>
+                    </td>
+                    <?php endif; ?>
                     <td><?= lm_category_badge($r['category']) ?></td>
                     <td class="small">
                         <?php if ($r['category'] === 'short'): ?>
@@ -121,6 +155,9 @@ function lm_render_rows(array $rows, bool $show_user, callable $fmt): void { ?>
                     <td><?= $fmt((float)$r['days']) ?></td>
                     <td><?= lm_paytype_badge($r['pay_type']) ?: '<span class="text-muted">—</span>' ?></td>
                     <td><?= lm_status_badge($r['status']) ?></td>
+                    <?php if ($flows !== null): ?>
+                    <td style="max-width:280px;"><?= lm_flow_progress_html($r, $flows[(int)$r['id']] ?? []) ?></td>
+                    <?php endif; ?>
                     <td class="text-end pe-3">
                         <a href="<?= APP_URL ?>/leave-management/view.php?id=<?= (int)$r['id'] ?>" class="btn btn-sm btn-outline-primary" style="border-radius:8px;">View</a>
                     </td>
@@ -235,7 +272,12 @@ function lm_render_rows(array $rows, bool $show_user, callable $fmt): void { ?>
         </form>
     </div>
     <div class="card-body p-0">
-        <?php lm_render_rows($view === 'all' ? $all_requests : $my_requests, $view === 'all', $fmt); ?>
+        <?php lm_render_rows(
+            $view === 'all' ? $all_requests : $my_requests,
+            $view === 'all',
+            $fmt,
+            $view === 'all' ? $approvals_by_request : null
+        ); ?>
     </div>
 </div>
 

@@ -52,6 +52,32 @@ if ($action === 'cancel') {
     redirect($view_url);
 }
 
+// Sync approval flow (admin only). For requests submitted before the
+// requester's approval chain was configured: re-apply the current active
+// flow so the request can move through approvals.
+if ($action === 'sync_flow') {
+    if (!lm_is_admin()) {
+        flash_set('error', 'Only Leave Management administrators can sync the approval flow.');
+        redirect($view_url);
+    }
+    $steps = lm_resync_request_flow($id);
+    if ($steps > 0) {
+        log_change('leave-management', 'UPDATE', $id, 'Approval flow synced (' . $steps . ' step(s))');
+        // Alert the first approving group that the request now awaits them.
+        $fresh_stmt = db()->prepare('SELECT * FROM leave_requests WHERE id = ?');
+        $fresh_stmt->execute([$id]);
+        if ($fresh = $fresh_stmt->fetch()) {
+            lm_notify_step_group($fresh, 1);
+        }
+        flash_set('success', 'Approval flow synced — ' . $steps . ' step(s) applied. The first approval group has been notified.');
+    } elseif ($steps === 0) {
+        flash_set('error', 'No active approval flow is configured for the requester\'s user group yet. Configure it on the Approval Flow page first.');
+    } else {
+        flash_set('error', 'This request cannot be synced: it is not pending, or an approval/rejection has already been recorded.');
+    }
+    redirect($view_url);
+}
+
 // ── Approve / Reject ───────────────────────────────────────────────────────────
 if ($action === 'approve' || $action === 'reject') {
     if ($req['status'] !== 'pending') {

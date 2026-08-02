@@ -369,6 +369,47 @@ function lm_snapshot_flow_for_request(int $request_id, int $requester_group_id):
     return $step;
 }
 
+/**
+ * Re-snapshot the requester's CURRENT active approval flow onto an existing
+ * pending request — for requests submitted before the approval chain was
+ * configured (or after it changed), as long as no step has been acted on.
+ *
+ * Returns the number of steps applied, 0 when the requester's group still has
+ * no active flow configured, or -1 when the request cannot be synced.
+ */
+function lm_resync_request_flow(int $request_id): int
+{
+    $db = db();
+    $stmt = $db->prepare(
+        'SELECT r.*, u.group_id AS requester_group_id
+           FROM leave_requests r JOIN users u ON u.id = r.user_id
+          WHERE r.id = ?'
+    );
+    $stmt->execute([$request_id]);
+    $req = $stmt->fetch();
+    if (!$req || $req['status'] !== 'pending') return -1;
+
+    // Never discard steps that already carry a decision.
+    foreach (lm_request_approvals($request_id) as $a) {
+        if ($a['status'] !== 'pending') return -1;
+    }
+
+    $flow_group = lm_flow_group_for_user(['group_id' => (int)$req['requester_group_id']]);
+    if (!lm_group_has_flow($flow_group)) return 0;
+
+    $db->beginTransaction();
+    try {
+        $db->prepare('DELETE FROM leave_request_approvals WHERE request_id = ?')->execute([$request_id]);
+        $steps = lm_snapshot_flow_for_request($request_id, $flow_group);
+        $db->prepare('UPDATE leave_requests SET current_step = 1 WHERE id = ?')->execute([$request_id]);
+        $db->commit();
+        return $steps;
+    } catch (Throwable $e) {
+        if ($db->inTransaction()) $db->rollBack();
+        return -1;
+    }
+}
+
 /** All approval steps for a request, ordered, with group + approver info. */
 function lm_request_approvals(int $request_id): array
 {
@@ -382,6 +423,40 @@ function lm_request_approvals(int $request_id): array
     );
     $stmt->execute([$request_id]);
     return $stmt->fetchAll();
+}
+
+/**
+ * Compact badge trail showing a request's approval progress: who approved
+ * each step, where it is currently stuck, and any rejection. Hovering a
+ * badge shows the step label, the acting user and the date.
+ */
+function lm_flow_progress_html(array $req, array $steps): string
+{
+    if (empty($steps)) {
+        return '<span class="badge bg-light text-dark border" title="No approval steps — open the request and use Sync Approval Flow">No flow</span>';
+    }
+    $out = '<div class="d-flex flex-wrap align-items-center">';
+    foreach ($steps as $s) {
+        $label      = $s['label'] ?: ($s['group_name'] ?? '');
+        $is_current = ($req['status'] ?? '') === 'pending' && (int)$s['step_order'] === (int)($req['current_step'] ?? 0);
+        $acted      = !empty($s['acted_at']) ? date('d M Y', strtotime($s['acted_at'])) : '';
+        $who        = (string)($s['approver_name'] ?? '');
+        if ($s['status'] === 'approved') {
+            $out .= '<span class="badge bg-success-subtle text-success border border-success me-1 mb-1"'
+                  . ' title="' . h($label . ' — approved by ' . $who . ($acted !== '' ? ' on ' . $acted : '')) . '">'
+                  . '<i class="fas fa-check me-1"></i>' . h($who !== '' ? $who : $label) . '</span>';
+        } elseif ($s['status'] === 'rejected') {
+            $out .= '<span class="badge bg-danger-subtle text-danger border border-danger me-1 mb-1"'
+                  . ' title="' . h($label . ' — rejected by ' . $who . ($acted !== '' ? ' on ' . $acted : '')) . '">'
+                  . '<i class="fas fa-times me-1"></i>' . h($who !== '' ? $who : $label) . '</span>';
+        } elseif ($is_current) {
+            $out .= '<span class="badge bg-warning text-dark me-1 mb-1" title="Currently awaiting this step">'
+                  . '<i class="fas fa-hourglass-half me-1"></i>' . h($label) . '</span>';
+        } else {
+            $out .= '<span class="badge bg-light text-muted border me-1 mb-1" title="Upcoming step">' . h($label) . '</span>';
+        }
+    }
+    return $out . '</div>';
 }
 
 /** The current pending step row for a request, or null if none pending. */
