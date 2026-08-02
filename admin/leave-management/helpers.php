@@ -319,21 +319,113 @@ function lm_group_has_flow(int $requester_group_id): bool
     return (bool)$stmt->fetchColumn();
 }
 
+// ── Flow seniority ────────────────────────────────────────────────────────────
+// When a requester belongs to several user groups that each have an approval
+// flow (e.g. a Head who is also Faculty, a Dean, a Pro-VC), the flow of the
+// MOST SENIOR group is used. Seniority is a per-group rank configured on the
+// Approval Flow page: lower number = more senior (e.g. Pro-VC 10, Dean 20,
+// Head 30, Faculty 100). Unranked groups default to LM_FLOW_DEFAULT_PRIORITY.
+
+const LM_FLOW_DEFAULT_PRIORITY = 100;
+
+/** All configured seniority ranks: [requester_group_id => priority]. */
+function lm_flow_priorities(): array
+{
+    static $map = null;
+    if ($map !== null) return $map;
+    $map = [];
+    try {
+        foreach (db()->query('SELECT requester_group_id, priority FROM leave_flow_priorities') as $r) {
+            $map[(int)$r['requester_group_id']] = (int)$r['priority'];
+        }
+    } catch (Throwable $e) {
+        // Table not installed yet – every group gets the default rank.
+    }
+    return $map;
+}
+
+/** Seniority rank for one group (lower = more senior). */
+function lm_flow_priority(int $group_id): int
+{
+    return lm_flow_priorities()[$group_id] ?? LM_FLOW_DEFAULT_PRIORITY;
+}
+
+/** Save a group's seniority rank (admin, Approval Flow page). */
+function lm_set_flow_priority(int $group_id, int $priority): void
+{
+    db()->prepare(
+        'INSERT INTO leave_flow_priorities (requester_group_id, priority) VALUES (?,?)
+         ON DUPLICATE KEY UPDATE priority = VALUES(priority)'
+    )->execute([$group_id, $priority]);
+}
+
+/** Display name of a user group ('' when not found). */
+function lm_group_name(int $group_id): string
+{
+    if ($group_id < 1) return '';
+    $stmt = db()->prepare('SELECT name FROM user_groups WHERE id = ?');
+    $stmt->execute([$group_id]);
+    return (string)$stmt->fetchColumn();
+}
+
 /**
- * Resolve which of the user's groups drives the approval flow. Prefers the
- * user's primary group when it has a configured flow, otherwise the first of
- * their groups that does; falls back to the primary group id.
+ * All active group ids a user belongs to (multi-group aware, via
+ * user_group_assignments), falling back to the primary users.group_id.
+ */
+function lm_user_group_ids(int $user_id): array
+{
+    $ids = [];
+    try {
+        $stmt = db()->prepare(
+            'SELECT uga.group_id
+               FROM user_group_assignments uga
+               JOIN user_groups g ON g.id = uga.group_id AND g.is_active = 1
+              WHERE uga.user_id = ?'
+        );
+        $stmt->execute([$user_id]);
+        $ids = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+    } catch (Throwable $e) {
+        // Junction table missing (legacy install) – fall back below.
+    }
+    if (empty($ids)) {
+        $stmt = db()->prepare('SELECT group_id FROM users WHERE id = ?');
+        $stmt->execute([$user_id]);
+        $gid = (int)$stmt->fetchColumn();
+        if ($gid > 0) $ids = [$gid];
+    }
+    return $ids;
+}
+
+/**
+ * Resolve which of the user's groups drives the approval flow.
+ *
+ * Among all of the user's groups that have an active flow, the MOST SENIOR
+ * one wins (lowest seniority rank). Ties prefer the primary group, then the
+ * lowest group id, so results are deterministic. When no group has a flow,
+ * falls back to the primary group id.
  */
 function lm_flow_group_for_user(array $user): int
 {
     $primary   = (int)($user['group_id'] ?? 0);
     $group_ids = array_map('intval', $user['group_ids'] ?? ($primary ? [$primary] : []));
+    if ($primary > 0 && !in_array($primary, $group_ids, true)) $group_ids[] = $primary;
 
-    if ($primary > 0 && lm_group_has_flow($primary)) return $primary;
-    foreach ($group_ids as $gid) {
-        if (lm_group_has_flow($gid)) return $gid;
-    }
-    return $primary > 0 ? $primary : (int)($group_ids[0] ?? 0);
+    $candidates = array_values(array_unique(array_filter(
+        $group_ids,
+        fn(int $g): bool => $g > 0 && lm_group_has_flow($g)
+    )));
+    if (empty($candidates)) return $primary > 0 ? $primary : (int)($group_ids[0] ?? 0);
+    if (count($candidates) === 1) return $candidates[0];
+
+    usort($candidates, function (int $a, int $b) use ($primary): int {
+        $pa = lm_flow_priority($a);
+        $pb = lm_flow_priority($b);
+        if ($pa !== $pb) return $pa <=> $pb;   // more senior (lower) first
+        if ($a === $primary) return -1;        // then the primary group
+        if ($b === $primary) return 1;
+        return $a <=> $b;                      // then deterministic by id
+    });
+    return $candidates[0];
 }
 
 /** The active approval steps that apply to the given requesting user. */
@@ -394,7 +486,12 @@ function lm_resync_request_flow(int $request_id): int
         if ($a['status'] !== 'pending') return -1;
     }
 
-    $flow_group = lm_flow_group_for_user(['group_id' => (int)$req['requester_group_id']]);
+    // Consider ALL of the requester's groups (multi-group aware) so a Head
+    // who is also Faculty is synced onto the most senior applicable flow.
+    $flow_group = lm_flow_group_for_user([
+        'group_id'  => (int)$req['requester_group_id'],
+        'group_ids' => lm_user_group_ids((int)$req['user_id']),
+    ]);
     if (!lm_group_has_flow($flow_group)) return 0;
 
     $db->beginTransaction();

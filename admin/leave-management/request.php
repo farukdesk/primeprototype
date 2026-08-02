@@ -274,7 +274,10 @@ require_once __DIR__ . '/../includes/header.php';
 
         <?php if (!empty($flow)): ?>
         <div class="card" style="border-radius:12px;">
-            <div class="card-header py-3 px-4"><h6 class="mb-0 fw-semibold"><i class="fas fa-route me-2 text-muted"></i>Approval Steps</h6></div>
+            <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-1">
+                <h6 class="mb-0 fw-semibold"><i class="fas fa-route me-2 text-muted"></i>Approval Steps</h6>
+                <span class="badge bg-light text-dark border" title="Your most senior group with a configured approval flow"><?= h(lm_group_name($flow_group)) ?> flow</span>
+            </div>
             <div class="card-body p-4">
                 <ol class="mb-0 ps-3 small">
                     <?php foreach ($flow as $f): ?>
