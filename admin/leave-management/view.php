@@ -17,9 +17,12 @@ $id   = (int)($_GET['id'] ?? 0);
 if ($id < 1) { flash_set('error', 'Invalid request.'); redirect(APP_URL . '/leave-management/index.php'); }
 
 $stmt = db()->prepare(
-    'SELECT r.*, u.full_name AS requester_name, u.email AS requester_email
+    'SELECT r.*, u.full_name AS requester_name, u.email AS requester_email,
+            sp.employee_id, sd.name AS dept_name
        FROM leave_requests r
        JOIN users u ON u.id = r.user_id
+  LEFT JOIN staff_profiles sp ON sp.user_id = u.id
+  LEFT JOIN staff_departments sd ON sd.id = sp.staff_dept_id
       WHERE r.id = ?'
 );
 $stmt->execute([$id]);
@@ -43,6 +46,15 @@ if (!$is_owner && !$is_admin && !$in_flow) {
 
 $can_act    = lm_user_can_act($req, $user) || ($is_admin && $req['status'] === 'pending' && !$is_owner);
 $can_cancel = $is_owner && $req['status'] === 'pending';
+
+// Admin may (re-)sync the approval flow while the request is pending and no
+// step has been acted on — covers requests submitted before the approval
+// chain for the requester's group was configured.
+$flow_untouched = true;
+foreach ($approvals as $a) {
+    if ($a['status'] !== 'pending') { $flow_untouched = false; break; }
+}
+$can_sync = $is_admin && $req['status'] === 'pending' && $flow_untouched;
 
 $page_title = 'Leave Request #' . $id;
 require_once __DIR__ . '/../includes/header.php';
@@ -78,6 +90,7 @@ $fmt = fn(float $n) => rtrim(rtrim(number_format($n, 1), '0'), '.');
                 <table class="table table-borderless mb-0">
                     <tbody>
                         <tr><th class="text-muted" style="width:180px;">Requested By</th><td><?= h($req['requester_name']) ?><br><span class="text-muted small"><?= h($req['requester_email']) ?></span></td></tr>
+                        <tr><th class="text-muted">Department</th><td><?= !empty($req['dept_name']) ? h($req['dept_name']) : '<span class="text-muted">—</span>' ?><?php if (!empty($req['employee_id'])): ?> <span class="text-muted small">(Employee ID: <?= h($req['employee_id']) ?>)</span><?php endif; ?></td></tr>
                         <tr><th class="text-muted">Category</th><td><?= lm_category_badge($req['category']) ?></td></tr>
                         <?php if ($req['pay_type']): ?>
                         <tr><th class="text-muted">Pay Type</th><td><?= lm_paytype_badge($req['pay_type']) ?></td></tr>
@@ -188,6 +201,22 @@ $fmt = fn(float $n) => rtrim(rtrim(number_format($n, 1), '0'), '.');
                         </div>
                         <?php endforeach; ?>
                     </div>
+                <?php endif; ?>
+
+                <?php if ($can_sync): ?>
+                <form method="POST" action="<?= APP_URL ?>/leave-management/action.php" class="mt-3 pt-3 border-top"
+                      onsubmit="return confirm('Sync the current approval flow of the requester group to this request?')">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="id" value="<?= $id ?>">
+                    <input type="hidden" name="action" value="sync_flow">
+                    <button type="submit" class="btn <?= empty($approvals) ? 'btn-primary' : 'btn-outline-secondary' ?> btn-sm" style="border-radius:8px;">
+                        <i class="fas fa-sync-alt me-1"></i> Sync Approval Flow
+                    </button>
+                    <div class="form-text mt-1">
+                        Re-applies the current approval chain of the requester's group.
+                        Use this for requests submitted before the approval flow was configured.
+                    </div>
+                </form>
                 <?php endif; ?>
             </div>
         </div>
