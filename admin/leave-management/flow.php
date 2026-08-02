@@ -86,6 +86,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $sid = (int)($_POST['id'] ?? 0);
         $db->prepare('UPDATE leave_approval_flow SET is_active = 1 - is_active WHERE id = ? AND requester_group_id = ?')->execute([$sid, $req_gid]);
         flash_set('success', 'Step status updated.');
+    } elseif ($action === 'priority') {
+        $priority = (int)($_POST['priority'] ?? LM_FLOW_DEFAULT_PRIORITY);
+        if ($priority < 1 || $priority > 999) {
+            flash_set('error', 'Seniority must be a number between 1 and 999.');
+        } else {
+            try {
+                lm_set_flow_priority($req_gid, $priority);
+                log_change('leave-management', 'UPDATE', $req_gid, 'Flow seniority set to ' . $priority);
+                flash_set('success', 'Flow seniority updated.');
+            } catch (Throwable $e) {
+                flash_set('error', 'Could not save seniority — please run the leave-flow-priority-v1.sql migration first.');
+            }
+        }
     }
 
     redirect(APP_URL . '/leave-management/flow.php?group=' . $req_gid);
@@ -158,12 +171,13 @@ require_once __DIR__ . '/../includes/header.php';
                         <th class="px-3">Requester Group</th>
                         <th>Approval Steps (in order)</th>
                         <th style="width:90px;">Steps</th>
+                        <th style="width:160px;" title="Lower number = more senior. When a requester belongs to several groups with flows, the most senior group's flow is used.">Seniority <i class="fas fa-info-circle text-muted"></i></th>
                         <th style="width:110px;"></th>
                     </tr>
                 </thead>
                 <tbody>
                 <?php if (empty($flows_by_group)): ?>
-                    <tr><td colspan="4" class="text-center text-muted py-4">No approval flows configured yet. Select a requester group below and add the first step.</td></tr>
+                    <tr><td colspan="5" class="text-center text-muted py-4">No approval flows configured yet. Select a requester group below and add the first step.</td></tr>
                 <?php else: foreach ($flows_by_group as $gid => $fg): ?>
                     <tr class="<?= $gid === $sel_group ? 'table-primary' : '' ?>">
                         <td class="px-3"><strong><?= h($fg['name']) ?></strong></td>
@@ -174,13 +188,29 @@ require_once __DIR__ . '/../includes/header.php';
                         </td>
                         <td><?= count($fg['steps']) ?></td>
                         <td>
+                            <form method="POST" class="d-flex align-items-center gap-1">
+                                <?= csrf_field() ?>
+                                <input type="hidden" name="action" value="priority">
+                                <input type="hidden" name="requester_group_id" value="<?= $gid ?>">
+                                <input type="number" name="priority" class="form-control form-control-sm" style="width:80px;"
+                                       min="1" max="999" value="<?= lm_flow_priority($gid) ?>" title="Lower number = more senior">
+                                <button class="btn btn-sm btn-outline-secondary" title="Save seniority" style="border-radius:7px;"><i class="fas fa-save"></i></button>
+                            </form>
+                        </td>
+                        <td>
                             <a href="<?= APP_URL ?>/leave-management/flow.php?group=<?= $gid ?>#flow-editor" class="btn btn-sm btn-outline-primary" style="border-radius:7px;"><i class="fas fa-pen me-1"></i>Edit</a>
                         </td>
                     </tr>
                 <?php endforeach; endif; ?>
-                <tr id="flow-list-empty" class="d-none"><td colspan="4" class="text-center text-muted py-4">No groups match your search.</td></tr>
+                <tr id="flow-list-empty" class="d-none"><td colspan="5" class="text-center text-muted py-4">No groups match your search.</td></tr>
                 </tbody>
             </table>
+        </div>
+        <div class="card-footer py-2 px-4 small text-muted">
+            <i class="fas fa-lightbulb me-1"></i>
+            <strong>Seniority</strong> decides which flow applies when a requester belongs to several groups
+            (e.g. a Head who is also Faculty): the group with the <strong>lowest</strong> number wins.
+            Suggested scheme: Pro-VC = 10, Dean = 20, Head = 30, Faculty = 100.
         </div>
     </div>
 </div>
