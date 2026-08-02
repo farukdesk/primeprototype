@@ -18,6 +18,7 @@ $year       = (int)date('Y');
 $balance    = lm_get_balance((int)$user['id'], $year);
 $flow_group = lm_flow_group_for_user($user);
 $flow       = lm_active_flow_for_group($flow_group);
+$is_faculty = lm_is_faculty((int)$user['id']);
 
 // Preserve input on validation error
 $in = [
@@ -28,6 +29,7 @@ $in = [
     'start_time' => $_POST['start_time'] ?? '',
     'end_time'   => $_POST['end_time']   ?? '',
     'reason'     => $_POST['reason']     ?? '',
+    'makeup_plan' => $_POST['makeup_plan'] ?? '',
 ];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -37,6 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $start    = $in['start_date'];
     $end      = $in['end_date'];
     $reason   = trim($in['reason']);
+    $makeup   = $is_faculty ? trim($in['makeup_plan']) : '';
     $pay_type = null;
     $start_t  = null;
     $end_t    = null;
@@ -116,11 +119,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $stmt = $db->prepare(
                 'INSERT INTO leave_requests
-                    (user_id, category, pay_type, start_date, end_date, start_time, end_time, days, reason, status, current_step)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?)'
+                    (user_id, category, pay_type, start_date, end_date, start_time, end_time, days, reason, makeup_plan, status, current_step)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
             );
             $stmt->execute([
-                $user['id'], $category, $pay_type, $start, $end, $start_t, $end_t, $days, $reason, 'pending', 1,
+                $user['id'], $category, $pay_type, $start, $end, $start_t, $end_t, $days, $reason, $makeup !== '' ? $makeup : null, 'pending', 1,
             ]);
             $rid = (int)$db->lastInsertId();
             lm_snapshot_flow_for_request($rid, $flow_group);
@@ -232,6 +235,15 @@ require_once __DIR__ . '/../includes/header.php';
                         <textarea name="reason" class="form-control" rows="3" required
                                   placeholder="Briefly describe the reason for your leave"><?= h($in['reason']) ?></textarea>
                     </div>
+
+                    <?php if ($is_faculty): ?>
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Makeup Class Schedule Plan <span class="text-muted">(optional)</span></label>
+                        <textarea name="makeup_plan" class="form-control" rows="3"
+                                  placeholder="e.g. CSE-101 (Sec A) class of 12 Aug will be made up on 16 Aug, 10:00 AM, Room 402"><?= h($in['makeup_plan']) ?></textarea>
+                        <div class="form-text">Describe how and when you plan to make up the classes affected by this leave. This helps approvers process your request faster.</div>
+                    </div>
+                    <?php endif; ?>
 
                     <div class="d-flex gap-2">
                         <button type="submit" class="btn btn-primary" style="border-radius:10px;">
