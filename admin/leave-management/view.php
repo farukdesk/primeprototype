@@ -91,6 +91,9 @@ $fmt = fn(float $n) => rtrim(rtrim(number_format($n, 1), '0'), '.');
                         <tr><th class="text-muted">Duration</th><td><strong><?= $fmt((float)$req['days']) ?></strong> day(s)</td></tr>
                         <?php endif; ?>
                         <tr><th class="text-muted">Reason</th><td><?= nl2br(h($req['reason'])) ?></td></tr>
+                        <?php if (!empty($req['makeup_plan'])): ?>
+                        <tr><th class="text-muted">Makeup Class Plan</th><td><?= nl2br(h($req['makeup_plan'])) ?></td></tr>
+                        <?php endif; ?>
                         <tr><th class="text-muted">Submitted</th><td><?= h(date('d M Y, g:i A', strtotime($req['created_at']))) ?></td></tr>
                     </tbody>
                 </table>

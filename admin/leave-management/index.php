@@ -25,11 +25,28 @@ $fmt        = fn(float $n) => rtrim(rtrim(number_format($n, 1), '0'), '.');
 $view = $_GET['view'] ?? 'mine';
 if ($view === 'all' && !$is_admin) $view = 'mine';
 
+// ── Filters (status + leave-date range), applied to the requests list ─────────
+$f_status = $_GET['status'] ?? '';
+if (!in_array($f_status, ['pending', 'approved', 'rejected', 'cancelled'], true)) $f_status = '';
+$valid_date = fn(string $d): bool => (bool)preg_match('/^\d{4}-\d{2}-\d{2}$/', $d) && strtotime($d) !== false;
+$f_from = (string)($_GET['from'] ?? '');
+$f_to   = (string)($_GET['to'] ?? '');
+if (!$valid_date($f_from)) $f_from = '';
+if (!$valid_date($f_to))   $f_to   = '';
+$has_filters = ($f_status !== '' || $f_from !== '' || $f_to !== '');
+
+$filter_sql    = '';
+$filter_params = [];
+if ($f_status !== '') { $filter_sql .= ' AND r.status = ?';      $filter_params[] = $f_status; }
+// A request matches the date range when its leave dates overlap the range.
+if ($f_from !== '')   { $filter_sql .= ' AND r.end_date >= ?';   $filter_params[] = $f_from; }
+if ($f_to !== '')     { $filter_sql .= ' AND r.start_date <= ?'; $filter_params[] = $f_to; }
+
 // ── My requests ────────────────────────────────────────────────────────────────
 $mine_stmt = $db->prepare(
-    'SELECT * FROM leave_requests WHERE user_id = ? ORDER BY created_at DESC LIMIT 100'
+    "SELECT r.* FROM leave_requests r WHERE r.user_id = ?$filter_sql ORDER BY r.created_at DESC LIMIT 100"
 );
-$mine_stmt->execute([$user['id']]);
+$mine_stmt->execute(array_merge([$user['id']], $filter_params));
 $my_requests = $mine_stmt->fetchAll();
 
 // ── Awaiting my approval ───────────────────────────────────────────────────────
@@ -55,22 +72,15 @@ if (!empty($group_ids)) {
 // ── All requests (admin) ───────────────────────────────────────────────────────
 $all_requests = [];
 if ($is_admin && $view === 'all') {
-    $f_status = $_GET['status'] ?? '';
-    $where = '1=1';
-    $params = [];
-    if (in_array($f_status, ['pending', 'approved', 'rejected', 'cancelled'], true)) {
-        $where .= ' AND r.status = ?';
-        $params[] = $f_status;
-    }
     $all_stmt = $db->prepare(
         "SELECT r.*, u.full_name AS requester_name
            FROM leave_requests r
            JOIN users u ON u.id = r.user_id
-          WHERE $where
+          WHERE 1=1$filter_sql
           ORDER BY r.created_at DESC
           LIMIT 200"
     );
-    $all_stmt->execute($params);
+    $all_stmt->execute($filter_params);
     $all_requests = $all_stmt->fetchAll();
 }
 
@@ -203,17 +213,26 @@ function lm_render_rows(array $rows, bool $show_user, callable $fmt): void { ?>
             <li class="nav-item"><a class="nav-link <?= $view === 'all' ? 'active' : '' ?>" href="<?= APP_URL ?>/leave-management/index.php?view=all">All Requests</a></li>
             <?php endif; ?>
         </ul>
-        <?php if ($is_admin && $view === 'all'): ?>
-        <form method="get" class="d-flex gap-2">
-            <input type="hidden" name="view" value="all">
-            <select name="status" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
+        <form method="get" class="d-flex gap-2 align-items-center flex-wrap">
+            <input type="hidden" name="view" value="<?= h($view) ?>">
+            <select name="status" class="form-select form-select-sm" style="width:auto;" title="Filter by status" onchange="this.form.submit()">
                 <option value="">All statuses</option>
                 <?php foreach (['pending', 'approved', 'rejected', 'cancelled'] as $s): ?>
-                <option value="<?= $s ?>" <?= ($_GET['status'] ?? '') === $s ? 'selected' : '' ?>><?= ucfirst($s) ?></option>
+                <option value="<?= $s ?>" <?= $f_status === $s ? 'selected' : '' ?>><?= ucfirst($s) ?></option>
                 <?php endforeach; ?>
             </select>
+            <div class="d-flex align-items-center gap-1">
+                <span class="text-muted small">From</span>
+                <input type="date" name="from" class="form-control form-control-sm" style="width:auto;" value="<?= h($f_from) ?>" title="Leave date from" onchange="this.form.submit()">
+            </div>
+            <div class="d-flex align-items-center gap-1">
+                <span class="text-muted small">To</span>
+                <input type="date" name="to" class="form-control form-control-sm" style="width:auto;" value="<?= h($f_to) ?>" title="Leave date to" onchange="this.form.submit()">
+            </div>
+            <?php if ($has_filters): ?>
+            <a href="<?= APP_URL ?>/leave-management/index.php?view=<?= h($view) ?>" class="btn btn-sm btn-outline-secondary" title="Clear filters" style="border-radius:7px;"><i class="fas fa-times me-1"></i>Clear</a>
+            <?php endif; ?>
         </form>
-        <?php endif; ?>
     </div>
     <div class="card-body p-0">
         <?php lm_render_rows($view === 'all' ? $all_requests : $my_requests, $view === 'all', $fmt); ?>

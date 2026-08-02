@@ -91,6 +91,23 @@ function lm_self_service_allowed(): bool
 }
 
 /**
+ * Whether a user is a Faculty member (staff_profiles.department_type =
+ * 'educational'). Faculty members are asked for an optional make-up class
+ * schedule plan when requesting leave.
+ */
+function lm_is_faculty(int $user_id): bool
+{
+    if ($user_id < 1) return false;
+    try {
+        $stmt = db()->prepare('SELECT department_type FROM staff_profiles WHERE user_id = ?');
+        $stmt->execute([$user_id]);
+        return (string)$stmt->fetchColumn() === 'educational';
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+/**
  * Whether the current user is a Leave Management administrator: they configure
  * the approval flow, set per-user balances and can see every request.
  */
@@ -538,6 +555,11 @@ function lm_build_pdf_html(array $req, array $approvals, array $profile = []): s
 
     <div class="lm-section-title">Leave Reason</div>
     <div class="lm-reason"><?= nl2br(h($req['reason'])) ?></div>
+
+    <?php if (!empty($req['makeup_plan'])): ?>
+    <div class="lm-section-title">Makeup Class Schedule Plan</div>
+    <div class="lm-reason"><?= nl2br(h($req['makeup_plan'])) ?></div>
+    <?php endif; ?>
 
     <div class="lm-section-title">Approved By</div>
     <?= $approved_block ?>
