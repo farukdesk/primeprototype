@@ -15,17 +15,39 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <!-- Header -->
+            <!-- Hero header: dark blue gradient drawn behind the transparent
+                 status bar (top inset applied in StaffDashboardFragment). -->
             <RelativeLayout
+                android:id="@+id/header"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:background="@drawable/bg_header_gradient_staff"
                 android:padding="20dp">
 
+                <FrameLayout
+                    android:id="@+id/avatarWrap"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_alignParentStart="true"
+                    android:background="@drawable/bg_avatar_circle"
+                    android:backgroundTint="#33FFFFFF">
+
+                    <ImageView
+                        android:id="@+id/avatarImage"
+                        android:layout_width="26dp"
+                        android:layout_height="26dp"
+                        android:layout_gravity="center"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_person"
+                        app:tint="@android:color/white" />
+                </FrameLayout>
+
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
                     android:layout_toStartOf="@+id/bellWrap"
+                    android:layout_toEndOf="@+id/avatarWrap"
                     android:orientation="vertical">
 
                     <TextView
@@ -69,7 +91,7 @@
                         android:id="@+id/btnBell"
                         android:layout_width="44dp"
                         android:layout_height="44dp"
-                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:background="@drawable/bg_oval_glass"
                         android:contentDescription="@string/tab_notices"
                         android:src="@drawable/ic_notifications"
                         app:tint="@android:color/white" />
@@ -191,6 +213,8 @@
                 android:clipToPadding="false"
                 android:layoutAnimation="@anim/layout_animation_fall_down"
                 android:nestedScrollingEnabled="false"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
                 android:paddingBottom="24dp" />
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>

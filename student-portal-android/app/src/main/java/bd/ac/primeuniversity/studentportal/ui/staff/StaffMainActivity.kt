@@ -3,11 +3,17 @@ package bd.ac.primeuniversity.studentportal.ui.staff
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
+import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import bd.ac.primeuniversity.studentportal.PrimeApp
@@ -31,14 +37,31 @@ class StaffMainActivity : AppCompatActivity() {
     private val fragments = LinkedHashMap<Int, Fragment>()
     private var activeId = R.id.nav_dashboard
 
+    /** Cached status-bar height, applied above tabs without a hero header. */
+    private var statusBarInset = 0
+
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { /* Registration proceeds regardless; user can enable later in settings. */ }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Transparent status bar: the dashboard's hero header draws behind
+        // it; the other tabs are padded below it (see applyStatusBarStyle).
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.statusBarColor = Color.TRANSPARENT
+
         binding = ActivityStaffMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            statusBarInset = bars.top
+            binding.bottomNav.updatePadding(bottom = bars.bottom)
+            applyStatusBarStyle()
+            insets
+        }
 
         val tabIds = listOf(R.id.nav_dashboard, R.id.nav_notices, R.id.nav_profile)
 
@@ -128,7 +151,21 @@ class StaffMainActivity : AppCompatActivity() {
             .show(target)
             .commit()
         activeId = id
+        applyStatusBarStyle()
         if (id == R.id.nav_notices) markNoticesSeen()
+    }
+
+    /**
+     * The dashboard tab slides its hero header under the transparent status
+     * bar (light icons); other tabs get top padding and theme-aware icons.
+     */
+    private fun applyStatusBarStyle() {
+        val onDashboard = activeId == R.id.nav_dashboard
+        binding.fragmentContainer.updatePadding(top = if (onDashboard) 0 else statusBarInset)
+        val night = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+            Configuration.UI_MODE_NIGHT_YES
+        WindowCompat.getInsetsController(window, window.decorView)
+            .isAppearanceLightStatusBars = !onDashboard && !night
     }
 
     /**
