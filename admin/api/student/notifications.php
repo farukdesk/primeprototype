@@ -30,11 +30,25 @@ $offset = ($page - 1) * $limit;
 // Audiences that include students; legacy rows (NULL) were student sends.
 // The audience column stores a human label (see apn_audience_label()), e.g.
 // "All students" or "Everyone (students + users)" – match labels and codes.
-$where = "status IN ('sent', 'partial')
-          AND (audience IS NULL
+// The column is feature-detected so the inbox keeps working (listing every
+// sent announcement) on deployments where the audience migration has not
+// been applied yet – previously this raised a 500 and the app showed an
+// empty inbox.
+$has_audience = false;
+try {
+    db()->query('SELECT `audience` FROM app_notifications LIMIT 1');
+    $has_audience = true;
+} catch (Throwable $e) {
+    // audience column missing (run admin/app-notifications-audience.sql).
+}
+
+$where = "status IN ('sent', 'partial')";
+if ($has_audience) {
+    $where .= " AND (audience IS NULL
                OR audience IN ('students', 'everyone')
                OR audience LIKE 'All students%'
                OR audience LIKE 'Everyone%')";
+}
 
 try {
     // Only announcements that actually reached devices (skip failed sends).
