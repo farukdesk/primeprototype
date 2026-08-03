@@ -215,17 +215,21 @@ class StudentRepository private constructor(context: Context) {
     suspend fun syncPushToken() {
         val fcmToken = storage.fcmToken
         if (fcmToken.isNullOrBlank() || !hasToken) return
-        if (fcmToken == storage.registeredFcmToken) return
+        // Re-register when either the token or the installed app version changes
+        // so the server always knows which version this device is running.
+        val appVersion = BuildConfig.VERSION_NAME
+        val registrationKey = "$fcmToken|$appVersion"
+        if (registrationKey == storage.registeredFcmToken) return
 
         withContext(Dispatchers.IO) {
             try {
                 val response = if (isStaff) {
-                    staffApi.registerPushToken(fcmToken, storage.deviceId)
+                    staffApi.registerPushToken(fcmToken, storage.deviceId, appVersion = appVersion)
                 } else {
-                    api.registerPushToken(fcmToken, storage.deviceId)
+                    api.registerPushToken(fcmToken, storage.deviceId, appVersion = appVersion)
                 }
                 if (response.isSuccessful && response.body()?.ok == true) {
-                    storage.registeredFcmToken = fcmToken
+                    storage.registeredFcmToken = registrationKey
                 }
             } catch (_: Exception) {
                 // Best-effort; will retry on the next app start or token refresh.
