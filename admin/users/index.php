@@ -90,6 +90,12 @@ require_once __DIR__ . '/../includes/header.php';
     </nav>
     <?php if (is_super_admin() || can_access('users', 'can_create')): ?>
     <div class="d-flex gap-2">
+        <?php if (is_super_admin()): ?>
+        <a href="<?= APP_URL ?>/users/merge.php" class="btn btn-outline-secondary" style="border-radius:10px;font-size:.875rem;"
+           title="Merge a duplicate user into another account">
+            <i class="fas fa-people-arrows me-1"></i> Merge Users
+        </a>
+        <?php endif; ?>
         <a href="<?= APP_URL ?>/users/bulk-import.php" class="btn btn-outline-primary" style="border-radius:10px;font-size:.875rem;">
             <i class="fas fa-file-csv me-1"></i> Bulk Import
         </a>
