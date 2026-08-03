@@ -927,6 +927,13 @@ function lm_notify_decision(int $request_id, string $result, string $note = ''):
 
         if ($result === 'approved') {
             notify_user((int)$req['user_id'], 'Your leave request has been approved', $summary, $url, 'leave-status');
+            // Push the final decision to the requester's mobile app devices.
+            lm_push_to_users(
+                [(int)$req['user_id']],
+                'Your leave request has been approved',
+                $summary,
+                ['type' => 'leave-status', 'status' => 'approved', 'request_id' => (string)$request_id]
+            );
             notify_send_email(
                 'leave_request_approved',
                 (string)($req['requester_email'] ?? ''),
@@ -942,6 +949,13 @@ function lm_notify_decision(int $request_id, string $result, string $note = ''):
         } elseif ($result === 'rejected') {
             $body = $summary . ($note !== '' ? ' • Note: ' . $note : '');
             notify_user((int)$req['user_id'], 'Your leave request has been rejected', $body, $url, 'leave-status');
+            // Push the rejection to the requester's mobile app devices.
+            lm_push_to_users(
+                [(int)$req['user_id']],
+                'Your leave request has been rejected',
+                $body,
+                ['type' => 'leave-status', 'status' => 'rejected', 'request_id' => (string)$request_id]
+            );
             notify_send_email(
                 'leave_request_rejected',
                 (string)($req['requester_email'] ?? ''),

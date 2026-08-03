@@ -15,6 +15,18 @@ require_once __DIR__ . '/helpers.php';
 $page_title = 'Registered App Devices';
 $q          = trim($_GET['q'] ?? '');
 
+// Whether the app_version column exists (see admin/app-push-app-version.sql).
+$has_app_version = static function (string $table): bool {
+    try {
+        db()->query("SELECT app_version FROM `$table` LIMIT 1");
+        return true;
+    } catch (Throwable $e) {
+        return false;
+    }
+};
+$spt_ver_col = $has_app_version('student_push_tokens') ? 't.app_version' : 'NULL AS app_version';
+$apt_ver_col = $has_app_version('api_push_tokens')     ? 't.app_version' : 'NULL AS app_version';
+
 // ── Student devices ─────────────────────────────────────────────────────────
 $student_devices = [];
 try {

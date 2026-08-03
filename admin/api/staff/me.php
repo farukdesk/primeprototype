@@ -17,7 +17,7 @@ $u   = $ctx['user'];
 $p   = $ctx['profile'];
 $uid = (int)$u['user_id'];
 
-// ── Leave balance (Casual / Sick) ────────────────────────────────────────────
+// ── Leave balance (Casual / Sick) ────────────────────────────────────
 $year = (int)date('Y');
 $casual_total = 10.0;
 $sick_total   = 10.0;
@@ -47,7 +47,7 @@ $used = function (string $cat) use ($uid, $year): float {
 $casual_used = $used('casual');
 $sick_used   = $used('sick');
 
-// ── Today's clock in/out ─────────────────────────────────────────────────────
+// ── Today's clock in/out ─────────────────────────────────────────────
 $today = ['date' => date('Y-m-d'), 'in_time' => null, 'out_time' => null];
 try {
     $stmt = db()->prepare('SELECT in_time, out_time FROM att_records WHERE user_id = ? AND work_date = ? LIMIT 1');
@@ -60,7 +60,7 @@ try {
     // Staff Attendance migration not applied – no punch data.
 }
 
-// ── Stats ────────────────────────────────────────────────────────────────────
+// ── Stats ────────────────────────────────────────────────────────────
 $notices = 0;
 try {
     $notices = (int)db()->query(
@@ -79,8 +79,8 @@ try {
 
 // ── Faculty academic profile (educational employees only) ────────────────────
 $faculty = null;
+$fp      = [];
 if ($ctx['employee_type'] === 'educational') {
-    $fp = [];
     try {
         $stmt = db()->prepare('SELECT * FROM faculty_profiles WHERE user_id = ? LIMIT 1');
         $stmt->execute([$uid]);
@@ -120,6 +120,64 @@ if ($ctx['employee_type'] === 'educational') {
     ];
 }
 
+// ── Profile photo (staff photo first, then faculty photo) ────────────────────
+$photo_url = null;
+if (!empty($p['photo'])) {
+    $photo_url = UPLOAD_URL . '/staff-profiles/' . rawurlencode($p['photo']);
+} elseif (!empty($fp['photo'])) {
+    $photo_url = UPLOAD_URL . '/faculty-profiles/' . rawurlencode($fp['photo']);
+}
+
+// ── Leave approval access ──────────────────────────────────────────────
+// Employees who belong to a user group that appears in any active leave
+// approval flow can approve / reject requests from the app.
+$can_approve_leaves = false;
+$pending_approvals  = 0;
+try {
+    $gids = [];
+    try {
+        $stmt = db()->prepare(
+            'SELECT uga.group_id
+               FROM user_group_assignments uga
+               JOIN user_groups g ON g.id = uga.group_id AND g.is_active = 1
+              WHERE uga.user_id = ?'
+        );
+        $stmt->execute([$uid]);
+        $gids = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+    } catch (Throwable $e) {
+        // Junction table missing (legacy install) – fall back to primary group.
+    }
+    $stmt = db()->prepare('SELECT group_id FROM users WHERE id = ?');
+    $stmt->execute([$uid]);
+    $primary = (int)$stmt->fetchColumn();
+    if ($primary > 0 && !in_array($primary, $gids, true)) $gids[] = $primary;
+
+    if (!empty($gids)) {
+        $ph   = implode(',', array_fill(0, count($gids), '?'));
+        $stmt = db()->prepare(
+            "SELECT 1 FROM leave_approval_flow WHERE is_active = 1 AND group_id IN ($ph) LIMIT 1"
+        );
+        $stmt->execute($gids);
+        $can_approve_leaves = (bool)$stmt->fetchColumn();
+
+        if ($can_approve_leaves) {
+            $stmt = db()->prepare(
+                "SELECT COUNT(*)
+                   FROM leave_requests r
+                   JOIN leave_request_approvals a
+                     ON a.request_id = r.id AND a.step_order = r.current_step
+                  WHERE r.status = 'pending' AND a.status = 'pending'
+                    AND a.group_id IN ($ph)
+                    AND r.user_id <> ?"
+            );
+            $stmt->execute(array_merge($gids, [$uid]));
+            $pending_approvals = (int)$stmt->fetchColumn();
+        }
+    }
+} catch (Throwable $e) {
+    // Leave Management migration not applied.
+}
+
 api_ok([
     'user' => [
         'id'        => $uid,
@@ -127,6 +185,7 @@ api_ok([
         'username'  => $u['username'],
         'email'     => $u['email'],
         'group'     => $u['group_name'],
+        'photo_url' => $photo_url,
     ],
     'employee' => [
         'employee_type'       => $ctx['employee_type'],
@@ -162,5 +221,9 @@ api_ok([
     'stats' => [
         'notices_university' => $notices,
         'pending_leaves'     => $pending_leaves,
+        'pending_approvals'  => $pending_approvals,
+    ],
+    'permissions' => [
+        'can_approve_leaves' => $can_approve_leaves,
     ],
 ]);
