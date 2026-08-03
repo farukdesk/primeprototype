@@ -54,6 +54,7 @@ enum class Feature(
     // Staff / Employee (Administrative + Faculty)
     MY_ATTENDANCE(R.string.feat_my_attendance, R.drawable.ic_check_circle, R.color.teal, R.string.feat_my_attendance_desc),
     LEAVE_MANAGEMENT(R.string.feat_leave_management, R.drawable.ic_event, R.color.cat_campus, R.string.feat_leave_management_desc),
+    LEAVE_APPROVALS(R.string.feat_leave_approvals, R.drawable.ic_check_circle, R.color.success, R.string.feat_leave_approvals_desc),
     STAFF_NOTICES(R.string.feat_notices, R.drawable.ic_notifications, R.color.info),
     STAFF_PROFILE(R.string.feat_my_profile, R.drawable.ic_person, R.color.cat_profile),
 }

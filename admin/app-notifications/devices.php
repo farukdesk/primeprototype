@@ -30,7 +30,7 @@ $apt_ver_col = $has_app_version('api_push_tokens')     ? 't.app_version' : 'NULL
 // ── Student devices ─────────────────────────────────────────────────────────
 $student_devices = [];
 try {
-    $sql = "SELECT t.id, t.platform, t.device_id, t.created_at, t.updated_at,
+    $sql = "SELECT t.id, t.platform, t.device_id, t.created_at, t.updated_at, $spt_ver_col,
                    u.full_name AS account_name, u.username, u.email AS account_email,
                    s.id AS student_db_id,
                    s.student_id, s.full_name AS student_name,

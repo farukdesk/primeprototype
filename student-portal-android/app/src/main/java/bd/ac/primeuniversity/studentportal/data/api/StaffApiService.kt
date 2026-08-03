@@ -3,6 +3,7 @@ package bd.ac.primeuniversity.studentportal.data.api
 import bd.ac.primeuniversity.studentportal.data.model.AppNotificationsResponse
 import bd.ac.primeuniversity.studentportal.data.model.AppVersionResponse
 import bd.ac.primeuniversity.studentportal.data.model.LeaveApplyResponse
+import bd.ac.primeuniversity.studentportal.data.model.LeaveApprovalsResponse
 import bd.ac.primeuniversity.studentportal.data.model.NoticeDetailResponse
 import bd.ac.primeuniversity.studentportal.data.model.NoticesResponse
 import bd.ac.primeuniversity.studentportal.data.model.SimpleResponse
@@ -64,6 +65,18 @@ interface StaffApiService {
         @Field("action") action: String = "cancel",
     ): Response<SimpleResponse>
 
+    // Leave requests currently awaiting the signed-in approver's decision.
+    @GET("staff/leave-approvals.php")
+    suspend fun getLeaveApprovals(): Response<LeaveApprovalsResponse>
+
+    @FormUrlEncoded
+    @POST("staff/leave-approvals.php")
+    suspend fun actOnLeave(
+        @Field("id") id: Int,
+        @Field("action") action: String,
+        @Field("note") note: String?,
+    ): Response<SimpleResponse>
+
     @GET("staff/notices.php")
     suspend fun getNotices(
         @Query("type") type: String,
@@ -100,5 +113,6 @@ interface StaffApiService {
         @Field("fcm_token") fcmToken: String,
         @Field("device_id") deviceId: String,
         @Field("platform") platform: String = "android",
+        @Field("app_version") appVersion: String = "",
     ): Response<SimpleResponse>
 }

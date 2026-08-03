@@ -9,6 +9,7 @@ data class StaffUser(
     @SerializedName("username") val username: String? = null,
     @SerializedName("email") val email: String? = null,
     @SerializedName("group") val group: String? = null,
+    @SerializedName("photo_url") val photoUrl: String? = null,
 ) {
     /** Two-letter initials derived from the full name for the avatar. */
     val initials: String

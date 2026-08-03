@@ -206,6 +206,24 @@
     <string name="leave_cancel_confirm">Cancel this leave request? This cannot be undone.</string>
     <string name="leave_cancelled">Your leave request has been cancelled.</string>
 
+    <!-- Staff: leave approvals -->
+    <string name="feat_leave_approvals">Leave Approvals</string>
+    <string name="feat_leave_approvals_desc">Approve or reject leave requests awaiting you</string>
+    <string name="approvals_title">Leave Approvals</string>
+    <string name="approvals_empty">No leave requests are waiting for your approval.</string>
+    <string name="approve">Approve</string>
+    <string name="reject">Reject</string>
+    <string name="approvals_step">Step: %1$s</string>
+    <string name="approvals_note_hint">Note (optional)</string>
+    <string name="approvals_approve_title">Approve Leave</string>
+    <string name="approvals_reject_title">Reject Leave</string>
+    <string name="approvals_approve_confirm">Approve this leave request from %1$s?</string>
+    <string name="approvals_reject_confirm">Reject this leave request from %1$s?</string>
+    <string name="approvals_done_approved">Approval recorded.</string>
+    <string name="approvals_done_rejected">Leave request rejected.</string>
+    <string name="approvals_signature_required_title">Signature required</string>
+    <string name="approvals_signature_required">You must upload your signature in the admin panel (My Signature) before you can approve leave requests.</string>
+
     <!-- Staff: profile row labels -->
     <string name="lbl_employee_id">Employee ID</string>
     <string name="lbl_designation">Designation</string>
