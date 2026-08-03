@@ -12,6 +12,7 @@ import bd.ac.primeuniversity.studentportal.data.model.AppVersionResponse
 import bd.ac.primeuniversity.studentportal.data.model.BaseResponse
 import bd.ac.primeuniversity.studentportal.data.model.FinancesResponse
 import bd.ac.primeuniversity.studentportal.data.model.LeaveApplyResponse
+import bd.ac.primeuniversity.studentportal.data.model.LeaveApprovalsResponse
 import bd.ac.primeuniversity.studentportal.data.model.LoginResponse
 import bd.ac.primeuniversity.studentportal.data.model.MeResponse
 import bd.ac.primeuniversity.studentportal.data.model.Notice
