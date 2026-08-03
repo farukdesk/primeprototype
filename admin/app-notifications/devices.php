@@ -209,6 +209,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <th>Username</th>
                         <th>Email</th>
                         <th>Platform</th>
+                        <th>App Version</th>
                         <th>Registered</th>
                         <th>Last Active</th>
                     </tr>
