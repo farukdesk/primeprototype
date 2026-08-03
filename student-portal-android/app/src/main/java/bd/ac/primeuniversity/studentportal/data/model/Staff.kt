@@ -81,6 +81,12 @@ data class TodayAttendance(
 data class StaffStats(
     @SerializedName("notices_university") val noticesUniversity: Int = 0,
     @SerializedName("pending_leaves") val pendingLeaves: Int = 0,
+    @SerializedName("pending_approvals") val pendingApprovals: Int = 0,
+)
+
+/** Feature access flags for the signed-in employee. */
+data class StaffPermissions(
+    @SerializedName("can_approve_leaves") val canApproveLeaves: Boolean = false,
 )
 
 data class StaffLoginResponse(
@@ -96,6 +102,31 @@ data class StaffMeResponse(
     @SerializedName("leave_balance") val leaveBalance: LeaveBalance? = null,
     @SerializedName("today") val today: TodayAttendance? = null,
     @SerializedName("stats") val stats: StaffStats? = null,
+    @SerializedName("permissions") val permissions: StaffPermissions? = null,
+) : BaseResponse()
+
+/** A leave request awaiting the signed-in approver's decision. */
+data class PendingApproval(
+    @SerializedName("id") val id: Int = 0,
+    @SerializedName("requester_name") val requesterName: String? = null,
+    @SerializedName("designation") val designation: String? = null,
+    @SerializedName("department") val department: String? = null,
+    @SerializedName("category") val category: String = "",
+    @SerializedName("category_label") val categoryLabel: String? = null,
+    @SerializedName("pay_type") val payType: String? = null,
+    @SerializedName("start_date") val startDate: String = "",
+    @SerializedName("end_date") val endDate: String = "",
+    @SerializedName("start_time") val startTime: String? = null,
+    @SerializedName("end_time") val endTime: String? = null,
+    @SerializedName("days") val days: Double = 0.0,
+    @SerializedName("reason") val reason: String? = null,
+    @SerializedName("step_label") val stepLabel: String? = null,
+    @SerializedName("created_at") val createdAt: String? = null,
+)
+
+data class LeaveApprovalsResponse(
+    @SerializedName("has_signature") val hasSignature: Boolean = false,
+    @SerializedName("requests") val requests: List<PendingApproval> = emptyList(),
 ) : BaseResponse()
 
 /** One day on the attendance statement. */
