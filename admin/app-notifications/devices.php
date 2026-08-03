@@ -172,6 +172,11 @@ require_once __DIR__ . '/../includes/header.php';
                     <td class="small"><?= h($r['program_name'] ?? '—') ?></td>
                     <td class="small"><?= h($r['batch_name'] ?? '—') ?></td>
                     <td><span class="badge bg-light text-dark border"><i class="fab fa-<?= ($r['platform'] ?? '') === 'ios' ? 'apple' : 'android' ?> me-1"></i><?= h(ucfirst($r['platform'] ?? 'android')) ?></span></td>
+                    <td>
+                        <?php if (!empty($r['app_version'])): ?>
+                        <span class="badge bg-light text-dark border">v<?= h($r['app_version']) ?></span>
+                        <?php else: ?><span class="text-muted small">—</span><?php endif; ?>
+                    </td>
                     <td class="small text-muted"><?= !empty($r['created_at']) ? h(date('d M Y', strtotime($r['created_at']))) : '—' ?></td>
                     <td class="small text-muted"><?= !empty($r['updated_at']) ? h(date('d M Y H:i', strtotime($r['updated_at']))) : '—' ?></td>
                 </tr>
