@@ -563,6 +563,17 @@ function wf_advance_sheet(int $sheet_id, int $user_id, string $remarks = ''): vo
 
         _wf_log($sheet_id, $step_order, $cur_step['step_label'],
                 (int)$cur_step['group_id'], 'published', $user_id, $remarks);
+
+        // Notify the sheet's creator that the results are now published.
+        if ((int)$sheet['created_by'] > 0 && (int)$sheet['created_by'] !== $user_id) {
+            _wf_notify_user(
+                (int)$sheet['created_by'],
+                'Results published: ' . _wf_sheet_label($sheet),
+                'Your mark sheet has completed the approval chain and is now published.'
+                    . ($remarks !== '' ? ' Remarks: ' . $remarks : ''),
+                APP_URL . '/results/view.php?id=' . $sheet_id
+            );
+        }
     } else {
         $next = wf_get_next_step($chain_id, $step_order);
         if (!$next) return; // no next step – shouldn't happen
@@ -575,6 +586,24 @@ function wf_advance_sheet(int $sheet_id, int $user_id, string $remarks = ''): vo
 
         _wf_log($sheet_id, $step_order, $cur_step['step_label'],
                 (int)$cur_step['group_id'], 'approved', $user_id, $remarks);
+
+        // Ask the next step's group to review the sheet.
+        wf_notify_pending_approvers(
+            $sheet_id,
+            $user_id,
+            'Approved at "' . $cur_step['step_label'] . '" and forwarded to you for approval.'
+        );
+
+        // Keep the sheet's creator informed of the progress.
+        if ((int)$sheet['created_by'] > 0 && (int)$sheet['created_by'] !== $user_id) {
+            _wf_notify_user(
+                (int)$sheet['created_by'],
+                'Mark sheet approved: ' . _wf_sheet_label($sheet),
+                'Approved at "' . $cur_step['step_label'] . '" and forwarded to "' . $next['step_label'] . '".'
+                    . ($remarks !== '' ? ' Remarks: ' . $remarks : ''),
+                APP_URL . '/results/view.php?id=' . $sheet_id
+            );
+        }
     }
 }
 
@@ -604,6 +633,34 @@ function wf_return_sheet(int $sheet_id, int $user_id, int $target_step_order, st
 
     _wf_log($sheet_id, $step_order, $cur_step['step_label'],
             (int)$cur_step['group_id'], 'returned', $user_id, $remarks, $target_step_order);
+
+    // Notify the creator (and, for mid-step returns, that step's group).
+    $label = _wf_sheet_label($sheet);
+    $why   = $remarks !== '' ? ' Remarks: ' . $remarks : '';
+    if ($target_step['is_entry']) {
+        if ((int)$sheet['created_by'] > 0 && (int)$sheet['created_by'] !== $user_id) {
+            _wf_notify_user(
+                (int)$sheet['created_by'],
+                'Mark sheet returned for revision: ' . $label,
+                'Returned from "' . $cur_step['step_label'] . '".' . $why,
+                APP_URL . '/results/mark-entry.php?id=' . $sheet_id
+            );
+        }
+    } else {
+        wf_notify_pending_approvers(
+            $sheet_id,
+            $user_id,
+            'Returned from "' . $cur_step['step_label'] . '" for your review.' . $why
+        );
+        if ((int)$sheet['created_by'] > 0 && (int)$sheet['created_by'] !== $user_id) {
+            _wf_notify_user(
+                (int)$sheet['created_by'],
+                'Mark sheet sent back a step: ' . $label,
+                'Returned from "' . $cur_step['step_label'] . '" to "' . $target_step['step_label'] . '".' . $why,
+                APP_URL . '/results/view.php?id=' . $sheet_id
+            );
+        }
+    }
 }
 
 /**
@@ -627,6 +684,9 @@ function wf_resubmit_sheet(int $sheet_id, int $user_id): void
 
     _wf_log($sheet_id, (int)$entry_step['step_order'], $entry_step['step_label'],
             (int)$entry_step['group_id'], 'submitted', $user_id, '');
+
+    // Ask the first approver group to review the resubmitted sheet.
+    wf_notify_pending_approvers($sheet_id, $user_id, 'Resubmitted after revision — awaiting your approval.');
 }
 
 /**
@@ -646,6 +706,62 @@ function _wf_log(
         $action, $acted_by,
         $remarks ?: null, $returned_to,
     ]);
+}
+
+// ── Workflow notifications (bell icon) ───────────────────────────────────────
+
+/** Human-readable label for a sheet in notifications. */
+function _wf_sheet_label(array $sheet): string
+{
+    $label = trim(
+        (!empty($sheet['subject_code']) ? $sheet['subject_code'] . ' — ' : '')
+        . (string)($sheet['subject_title'] ?? '')
+    );
+    if (!empty($sheet['semester'])) $label .= ' (' . $sheet['semester'] . ')';
+    return $label !== '' ? $label : 'Mark Sheet #' . (int)($sheet['id'] ?? 0);
+}
+
+/** Safe wrapper around notify_user() — loads the helpers and never throws. */
+function _wf_notify_user(int $user_id, string $title, string $body, string $link): void
+{
+    try {
+        require_once __DIR__ . '/../includes/notifications.php';
+        notify_user($user_id, $title, $body, $link, 'marks-approval');
+    } catch (Throwable $e) {
+        error_log('_wf_notify_user: ' . $e->getMessage());
+    }
+}
+
+/**
+ * Notify every member of the group responsible for the sheet's CURRENT step
+ * that a marks approval is waiting for them. Safe no-op when the sheet is not
+ * pending or the step/group cannot be resolved, so it never breaks the
+ * workflow action that calls it.
+ */
+function wf_notify_pending_approvers(int $sheet_id, int $exclude_user_id = 0, string $context = ''): void
+{
+    try {
+        require_once __DIR__ . '/../includes/notifications.php';
+
+        $stmt = db()->prepare('SELECT * FROM result_mark_sheets WHERE id = ?');
+        $stmt->execute([$sheet_id]);
+        $sheet = $stmt->fetch();
+        if (!$sheet || $sheet['workflow_status'] !== 'pending' || !$sheet['chain_id']) return;
+
+        $step = wf_get_step((int)$sheet['chain_id'], (int)$sheet['current_step_order']);
+        if (!$step || (int)$step['group_id'] < 1) return;
+
+        notify_group_members(
+            (int)$step['group_id'],
+            'Marks approval required: ' . _wf_sheet_label($sheet),
+            trim($context) !== '' ? $context : 'A mark sheet is awaiting your approval.',
+            APP_URL . '/results/workflow-review.php?id=' . $sheet_id,
+            'marks-approval',
+            $exclude_user_id
+        );
+    } catch (Throwable $e) {
+        error_log('wf_notify_pending_approvers: ' . $e->getMessage());
+    }
 }
 
 // ── UI helpers ────────────────────────────────────────────────────────────────

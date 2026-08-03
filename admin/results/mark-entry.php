@@ -407,6 +407,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $entry_step['step_label'] ?? 'Entry',
                         (int)($entry_step['group_id'] ?? 0),
                         'submitted', (int)$user['id']);
+                // Bell notification for the first approver group.
+                wf_notify_pending_approvers($sheet_id, (int)$user['id'],
+                    'New mark sheet submitted for review.');
             } else {
                 // Chain has only entry step → publish immediately (unusual config but handle it)
                 $db->prepare(
