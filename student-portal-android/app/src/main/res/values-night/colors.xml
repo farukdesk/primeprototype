@@ -35,7 +35,29 @@
     <color name="header_gradient_center">#1E1B4B</color>
     <color name="header_gradient_end">#4C1D95</color>
 
-    <color name="staff_gradient_start">#1E293B</color>
-    <color name="staff_gradient_center">#16213B</color>
-    <color name="staff_gradient_end">#0F172A</color>
+    <color name="staff_gradient_start">#0F172A</color>
+    <color name="staff_gradient_center">#312E81</color>
+    <color name="staff_gradient_end">#4F46E5</color>
+
+    <!-- Vibrant staff dashboard accents (dark surfaces) -->
+    <color name="indigo_soft">#334F46E5</color>
+    <color name="coral">#FB7185</color>
+    <color name="coral_soft">#33F43F5E</color>
+
+    <color name="tint_today">#2610B981</color>
+    <color name="tint_leave_balance">#26F59E0B</color>
+
+    <color name="tint_attendance">#330284C7</color>
+    <color name="tint_leave">#339333EA</color>
+    <color name="tint_approvals">#33059669</color>
+    <color name="tint_notices">#33D97706</color>
+    <color name="tint_announcements">#33E11D48</color>
+    <color name="tint_profile">#332563EB</color>
+
+    <color name="icon_attendance">#38BDF8</color>
+    <color name="icon_leave">#C084FC</color>
+    <color name="icon_approvals">#34D399</color>
+    <color name="icon_notices">#FBBF24</color>
+    <color name="icon_announcements">#FB7185</color>
+    <color name="icon_profile">#60A5FA</color>
 </resources>
