@@ -10,9 +10,11 @@ import android.os.Bundle
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import android.view.ViewGroup
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updateLayoutParams
 import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
@@ -58,7 +60,11 @@ class StaffMainActivity : AppCompatActivity() {
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             statusBarInset = bars.top
-            binding.bottomNav.updatePadding(bottom = bars.bottom)
+            // Keep the floating nav card 16dp above the system navigation bar.
+            val floatMargin = (16 * resources.displayMetrics.density).toInt()
+            binding.bottomNavCard.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+                bottomMargin = floatMargin + bars.bottom
+            }
             applyStatusBarStyle()
             insets
         }
