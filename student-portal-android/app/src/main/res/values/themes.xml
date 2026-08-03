@@ -67,4 +67,9 @@
         <item name="cardBackgroundColor">@color/surface</item>
         <item name="cardElevation">2dp</item>
     </style>
+
+    <!-- Bold label for the active bottom navigation tab. -->
+    <style name="TextAppearance.StudentPortal.NavActive" parent="TextAppearance.Material3.LabelMedium">
+        <item name="android:textStyle">bold</item>
+    </style>
 </resources>

@@ -31,6 +31,7 @@
             app:elevation="0dp"
             app:itemBackground="@drawable/bg_nav_item_pill"
             app:itemIconTint="@color/bottom_nav_color"
+            app:itemTextAppearanceActive="@style/TextAppearance.StudentPortal.NavActive"
             app:itemTextColor="@color/bottom_nav_color"
             app:labelVisibilityMode="labeled"
             app:menu="@menu/staff_bottom_nav_menu" />

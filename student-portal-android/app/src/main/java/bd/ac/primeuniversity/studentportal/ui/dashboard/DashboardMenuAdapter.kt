@@ -47,7 +47,7 @@ class DashboardMenuAdapter(
                 val binding = ItemDashboardMenuGridBinding.inflate(inflater, parent, false)
                 ItemHolder(
                     binding.root, binding.iconContainer, binding.menuIcon,
-                    binding.menuTitle, binding.menuSubtitle,
+                    binding.menuTitle, binding.menuSubtitle, binding.accentBar,
                 )
             }
             else -> {
@@ -87,6 +87,7 @@ class DashboardMenuAdapter(
         private val menuIcon: ImageView,
         private val menuTitle: TextView,
         private val menuSubtitle: TextView,
+        private val accentBar: View? = null,
     ) : RecyclerView.ViewHolder(root) {
         fun bind(feature: Feature) {
             val context = itemView.context
@@ -95,8 +96,16 @@ class DashboardMenuAdapter(
 
             val accent = ContextCompat.getColor(context, feature.colorRes)
             menuIcon.setColorFilter(accent)
-            iconContainer.background?.mutate()
-                ?.setTint(ColorUtils.setAlphaComponent(accent, 40))
+            // Solid pastel chip when the feature defines one; otherwise a
+            // translucent wash of the accent colour.
+            iconContainer.background?.mutate()?.setTint(
+                if (feature.containerRes != 0) {
+                    ContextCompat.getColor(context, feature.containerRes)
+                } else {
+                    ColorUtils.setAlphaComponent(accent, 40)
+                }
+            )
+            accentBar?.setBackgroundColor(accent)
 
             if (feature.subtitleRes != 0) {
                 menuSubtitle.setText(feature.subtitleRes)

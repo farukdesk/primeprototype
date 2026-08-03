@@ -10,16 +10,28 @@
     android:stateListAnimator="@animator/card_lift"
     app:cardBackgroundColor="@color/surface"
     app:cardCornerRadius="16dp"
-    app:cardElevation="1dp"
+    app:cardElevation="3dp"
     app:rippleColor="@color/primary_soft">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="16dp">
+        android:orientation="vertical">
 
-        <FrameLayout
+        <!-- Per-feature coloured accent stripe (tinted by the adapter). -->
+        <View
+            android:id="@+id/accentBar"
+            android:layout_width="match_parent"
+            android:layout_height="4dp"
+            android:background="@color/primary" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <FrameLayout
             android:id="@+id/iconContainer"
             android:layout_width="44dp"
             android:layout_height="44dp"
@@ -58,5 +70,6 @@
             android:visibility="gone"
             tools:text="Daily in / out times"
             tools:visibility="visible" />
+        </LinearLayout>
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

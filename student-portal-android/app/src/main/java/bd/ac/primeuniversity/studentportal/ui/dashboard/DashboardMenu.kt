@@ -13,6 +13,8 @@ enum class Feature(
     @DrawableRes val iconRes: Int,
     @androidx.annotation.ColorRes val colorRes: Int,
     @StringRes val subtitleRes: Int = 0,
+    /** Optional solid pastel background for the icon chip; 0 falls back to a translucent accent. */
+    @androidx.annotation.ColorRes val containerRes: Int = 0,
 ) {
     // Academic
     REGISTERED_COURSES(R.string.feat_registered_courses, R.drawable.ic_school, R.color.cat_academic),
@@ -28,7 +30,7 @@ enum class Feature(
 
     // Campus
     NOTICES(R.string.feat_notices, R.drawable.ic_notifications, R.color.cat_campus),
-    ANNOUNCEMENTS(R.string.feat_announcements, R.drawable.ic_notifications, R.color.info, R.string.feat_announcements_desc),
+    ANNOUNCEMENTS(R.string.feat_announcements, R.drawable.ic_notifications, R.color.icon_announcements, R.string.feat_announcements_desc, R.color.tint_announcements),
     ACADEMIC_CALENDAR(R.string.feat_academic_calendar, R.drawable.ic_calendar, R.color.cat_campus),
     EVENTS(R.string.feat_events, R.drawable.ic_event, R.color.pink),
     HOLIDAY_LIST(R.string.feat_holiday_list, R.drawable.ic_today, R.color.cat_campus),
@@ -52,11 +54,11 @@ enum class Feature(
     TRANSACTION_HISTORY(R.string.feat_transaction_history, R.drawable.ic_receipt, R.color.cat_finance),
 
     // Staff / Employee (Administrative + Faculty)
-    MY_ATTENDANCE(R.string.feat_my_attendance, R.drawable.ic_check_circle, R.color.teal, R.string.feat_my_attendance_desc),
-    LEAVE_MANAGEMENT(R.string.feat_leave_management, R.drawable.ic_event, R.color.cat_campus, R.string.feat_leave_management_desc),
-    LEAVE_APPROVALS(R.string.feat_leave_approvals, R.drawable.ic_check_circle, R.color.success, R.string.feat_leave_approvals_desc),
-    STAFF_NOTICES(R.string.feat_notices, R.drawable.ic_notifications, R.color.info),
-    STAFF_PROFILE(R.string.feat_my_profile, R.drawable.ic_person, R.color.cat_profile),
+    MY_ATTENDANCE(R.string.feat_my_attendance, R.drawable.ic_check_circle, R.color.icon_attendance, R.string.feat_my_attendance_desc, R.color.tint_attendance),
+    LEAVE_MANAGEMENT(R.string.feat_leave_management, R.drawable.ic_event, R.color.icon_leave, R.string.feat_leave_management_desc, R.color.tint_leave),
+    LEAVE_APPROVALS(R.string.feat_leave_approvals, R.drawable.ic_check_circle, R.color.icon_approvals, R.string.feat_leave_approvals_desc, R.color.tint_approvals),
+    STAFF_NOTICES(R.string.feat_notices, R.drawable.ic_notifications, R.color.icon_notices, containerRes = R.color.tint_notices),
+    STAFF_PROFILE(R.string.feat_my_profile, R.drawable.ic_person, R.color.icon_profile, containerRes = R.color.tint_profile),
 }
 
 /** A single row in the dashboard list: either a section header or a menu item. */
