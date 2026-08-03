@@ -40,6 +40,20 @@ class StaffProfileFragment : Fragment() {
     private fun render(me: StaffMeResponse?) {
         val user = me?.user
         binding.avatar.text = user?.initials ?: "?"
+
+        // Employee profile photo (uploaded via Employee/Faculty Profiles in the
+        // admin panel); the initials avatar stays visible as the fallback.
+        val photoUrl = user?.photoUrl
+        if (photoUrl.isNullOrBlank()) {
+            binding.avatarPhoto.visibility = View.GONE
+        } else {
+            binding.avatarPhoto.visibility = View.VISIBLE
+            com.bumptech.glide.Glide.with(this)
+                .load(photoUrl)
+                .circleCrop()
+                .into(binding.avatarPhoto)
+        }
+
         binding.name.text = user?.fullName?.takeIf { it.isNotBlank() }
             ?: getString(R.string.employee)
 

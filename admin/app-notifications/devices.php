@@ -64,7 +64,7 @@ try {
 // ── Employee / user devices ─────────────────────────────────────────────────
 $user_devices = [];
 try {
-    $sql = "SELECT t.id, t.platform, t.device_id, t.created_at, t.updated_at,
+    $sql = "SELECT t.id, t.platform, t.device_id, t.created_at, t.updated_at, $apt_ver_col,
                    u.id AS user_db_id, u.full_name, u.username, u.email
             FROM api_push_tokens t
             JOIN users u ON u.id = t.user_id AND u.is_active = 1
