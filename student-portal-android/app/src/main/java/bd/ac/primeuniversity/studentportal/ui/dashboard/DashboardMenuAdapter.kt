@@ -1,23 +1,37 @@
 package bd.ac.primeuniversity.studentportal.ui.dashboard
 
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
+import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.ColorUtils
+import androidx.core.view.updatePadding
 import androidx.recyclerview.widget.RecyclerView
 import bd.ac.primeuniversity.studentportal.databinding.ItemDashboardMenuBinding
+import bd.ac.primeuniversity.studentportal.databinding.ItemDashboardMenuGridBinding
 import bd.ac.primeuniversity.studentportal.databinding.ItemDashboardSectionBinding
 
 /**
  * Renders the grouped dashboard launcher: section headers interleaved with
- * tappable feature rows. [onClick] fires with the selected [Feature].
+ * tappable feature entries. [onClick] fires with the selected [Feature].
+ *
+ * @param grid when true, feature entries use the compact 2-column card layout
+ * (item_dashboard_menu_grid). Pair it with a
+ * [androidx.recyclerview.widget.GridLayoutManager] whose span size lookup
+ * gives headers the full width – see [isHeader].
  */
 class DashboardMenuAdapter(
     private val rows: List<MenuRow>,
+    private val grid: Boolean = false,
     private val onClick: (Feature) -> Unit,
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     override fun getItemCount(): Int = rows.size
+
+    /** Whether [position] is a section header (spans all grid columns). */
+    fun isHeader(position: Int): Boolean = rows[position] is MenuRow.Header
 
     override fun getItemViewType(position: Int): Int = when (rows[position]) {
         is MenuRow.Header -> TYPE_HEADER
@@ -26,10 +40,23 @@ class DashboardMenuAdapter(
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
         val inflater = LayoutInflater.from(parent.context)
-        return if (viewType == TYPE_HEADER) {
-            HeaderHolder(ItemDashboardSectionBinding.inflate(inflater, parent, false))
-        } else {
-            ItemHolder(ItemDashboardMenuBinding.inflate(inflater, parent, false))
+        return when {
+            viewType == TYPE_HEADER ->
+                HeaderHolder(ItemDashboardSectionBinding.inflate(inflater, parent, false))
+            grid -> {
+                val binding = ItemDashboardMenuGridBinding.inflate(inflater, parent, false)
+                ItemHolder(
+                    binding.root, binding.iconContainer, binding.menuIcon,
+                    binding.menuTitle, binding.menuSubtitle,
+                )
+            }
+            else -> {
+                val binding = ItemDashboardMenuBinding.inflate(inflater, parent, false)
+                ItemHolder(
+                    binding.root, binding.iconContainer, binding.menuIcon,
+                    binding.menuTitle, binding.menuSubtitle,
+                )
+            }
         }
     }
 
@@ -45,30 +72,40 @@ class DashboardMenuAdapter(
     ) : RecyclerView.ViewHolder(binding.root) {
         fun bind(header: MenuRow.Header) {
             binding.sectionTitle.setText(header.titleRes)
+            if (grid) {
+                // The grid list already carries 10dp horizontal padding – trim
+                // the header's built-in 20dp so it keeps the same 20dp indent.
+                val pad = (10 * binding.root.resources.displayMetrics.density).toInt()
+                binding.sectionTitle.updatePadding(left = pad, right = pad)
+            }
         }
     }
 
     inner class ItemHolder(
-        private val binding: ItemDashboardMenuBinding,
-    ) : RecyclerView.ViewHolder(binding.root) {
+        root: View,
+        private val iconContainer: View,
+        private val menuIcon: ImageView,
+        private val menuTitle: TextView,
+        private val menuSubtitle: TextView,
+    ) : RecyclerView.ViewHolder(root) {
         fun bind(feature: Feature) {
-            val context = binding.root.context
-            binding.menuTitle.setText(feature.titleRes)
-            binding.menuIcon.setImageResource(feature.iconRes)
+            val context = itemView.context
+            menuTitle.setText(feature.titleRes)
+            menuIcon.setImageResource(feature.iconRes)
 
             val accent = ContextCompat.getColor(context, feature.colorRes)
-            binding.menuIcon.setColorFilter(accent)
-            binding.iconContainer.background?.mutate()
+            menuIcon.setColorFilter(accent)
+            iconContainer.background?.mutate()
                 ?.setTint(ColorUtils.setAlphaComponent(accent, 40))
 
             if (feature.subtitleRes != 0) {
-                binding.menuSubtitle.setText(feature.subtitleRes)
-                binding.menuSubtitle.visibility = android.view.View.VISIBLE
+                menuSubtitle.setText(feature.subtitleRes)
+                menuSubtitle.visibility = View.VISIBLE
             } else {
-                binding.menuSubtitle.visibility = android.view.View.GONE
+                menuSubtitle.visibility = View.GONE
             }
 
-            binding.root.setOnClickListener { onClick(feature) }
+            itemView.setOnClickListener { onClick(feature) }
         }
     }
 

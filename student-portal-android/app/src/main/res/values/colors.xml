@@ -50,8 +50,8 @@
     <color name="header_gradient_center">#3730A3</color>
     <color name="header_gradient_end">#7C3AED</color>
 
-    <!-- Staff header gradient (brand navy → indigo → sky) -->
-    <color name="staff_gradient_start">#0F2347</color>
-    <color name="staff_gradient_center">#1E40AF</color>
-    <color name="staff_gradient_end">#0EA5E9</color>
+    <!-- Staff hero header gradient (rich dark blue: slate 800 → slate 900) -->
+    <color name="staff_gradient_start">#1E293B</color>
+    <color name="staff_gradient_center">#16213B</color>
+    <color name="staff_gradient_end">#0F172A</color>
 </resources>

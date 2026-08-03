@@ -5,9 +5,12 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.GridLayoutManager
 import bd.ac.primeuniversity.studentportal.PrimeApp
 import bd.ac.primeuniversity.studentportal.R
 import bd.ac.primeuniversity.studentportal.data.model.StaffMeResponse
@@ -49,8 +52,25 @@ class StaffDashboardFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        binding.menuList.layoutManager = LinearLayoutManager(requireContext())
-        binding.menuList.adapter = DashboardMenuAdapter(buildStaffDashboardMenu()) { onFeature(it) }
+        // The hero header draws behind the transparent status bar – pad it
+        // down by the status-bar height so its content stays visible.
+        ViewCompat.setOnApplyWindowInsetsListener(binding.header) { v, insets ->
+            val top = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
+            v.updatePadding(top = v.paddingBottom + top)
+            insets
+        }
+
+        // 2-column launcher grid; section headers span the full width.
+        val layoutManager = GridLayoutManager(requireContext(), 2)
+        layoutManager.spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
+            override fun getSpanSize(position: Int): Int {
+                val adapter = binding.menuList.adapter as? DashboardMenuAdapter
+                return if (adapter?.isHeader(position) != false) 2 else 1
+            }
+        }
+        binding.menuList.layoutManager = layoutManager
+        binding.menuList.adapter =
+            DashboardMenuAdapter(buildStaffDashboardMenu(), grid = true) { onFeature(it) }
 
         binding.btnBell.setOnClickListener {
             (activity as? StaffMainActivity)?.selectTab(R.id.nav_notices)
@@ -112,7 +132,9 @@ class StaffDashboardFragment : Fragment() {
         if (canApprove != menuHasApprovals) {
             menuHasApprovals = canApprove
             binding.menuList.adapter =
-                DashboardMenuAdapter(buildStaffDashboardMenu(canApprove)) { onFeature(it) }
+                DashboardMenuAdapter(buildStaffDashboardMenu(canApprove), grid = true) {
+                    onFeature(it)
+                }
         }
 
         renderBadge(me?.stats?.noticesUniversity ?: 0)
