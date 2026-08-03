@@ -21,6 +21,10 @@ object UpdateChecker {
     private var checkedThisProcess = false
 
     fun maybePromptForUpdate(activity: AppCompatActivity) {
+        // Google Play builds must never self-update outside the Play Store
+        // (Device and Network Abuse policy); only the self-hosted flavor
+        // keeps this prompt.
+        if (!BuildConfig.SELF_UPDATE_ENABLED) return
         if (checkedThisProcess) return
         checkedThisProcess = true
 
