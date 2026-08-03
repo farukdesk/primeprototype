@@ -23,14 +23,14 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace 'bd.ac.primeuniversity.studentportal'
-    compileSdk 34
+    compileSdk 35
 
     defaultConfig {
         applicationId "bd.ac.primeuniversity.studentportal"
         minSdk 24
-        targetSdk 34
-        versionCode 3
-        versionName "1.0.3"
+        targetSdk 35
+        versionCode 4
+        versionName "1.0.4"
 
         // Base URL of the Prime University student API. Override here if your
         // server differs. No trailing slash. Exposed to code as BuildConfig.
@@ -68,6 +68,24 @@ android {
             if (keystorePropertiesFile.exists()) {
                 signingConfig signingConfigs.release
             }
+        }
+    }
+
+    // ── Distribution channels ────────────────────────────────────────────────
+    // 'play'      : Google Play build. The self-hosted APK update prompt is
+    //               compiled out (Play policy forbids self-updating apps).
+    // 'selfhosted': APK distributed from the university server; keeps the
+    //               in-app update prompt driven by admin/api/app-version.php.
+    flavorDimensions = ['distribution']
+
+    productFlavors {
+        play {
+            dimension 'distribution'
+            buildConfigField 'boolean', 'SELF_UPDATE_ENABLED', 'false'
+        }
+        selfhosted {
+            dimension 'distribution'
+            buildConfigField 'boolean', 'SELF_UPDATE_ENABLED', 'true'
         }
     }
 
