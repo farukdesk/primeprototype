@@ -90,6 +90,11 @@
             android:exported="false"
             android:parentActivityName=".ui.staff.leave.LeaveActivity" />
 
+        <activity
+            android:name=".ui.staff.leave.LeaveApprovalsActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.staff.StaffMainActivity" />
+
         <!-- Firebase Cloud Messaging: receives push notifications from the
              admin panel's App Notification module. -->
         <service

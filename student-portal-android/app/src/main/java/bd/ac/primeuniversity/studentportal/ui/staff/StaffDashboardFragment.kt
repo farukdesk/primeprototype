@@ -19,6 +19,7 @@ import bd.ac.primeuniversity.studentportal.ui.notifications.NotificationsActivit
 import bd.ac.primeuniversity.studentportal.ui.settings.SettingsActivity
 import bd.ac.primeuniversity.studentportal.ui.staff.attendance.StaffAttendanceActivity
 import bd.ac.primeuniversity.studentportal.ui.staff.leave.LeaveActivity
+import bd.ac.primeuniversity.studentportal.ui.staff.leave.LeaveApprovalsActivity
 import bd.ac.primeuniversity.studentportal.util.AppResult
 import kotlinx.coroutines.launch
 
@@ -26,6 +27,7 @@ import kotlinx.coroutines.launch
  * Staff home tab: header with the employee's name, type badge and a notices
  * bell (with unread badge), quick Today / Leave Balance cards and the
  * employee launcher menu (My Attendance, Leave Management, Notices, Profile).
+ * Employees with leave approval access additionally see Leave Approvals.
  */
 class StaffDashboardFragment : Fragment() {
 
@@ -33,6 +35,9 @@ class StaffDashboardFragment : Fragment() {
     private val binding get() = _binding!!
 
     private val app: PrimeApp by lazy { requireActivity().application as PrimeApp }
+
+    /** Whether the current menu was built with the Leave Approvals entry. */
+    private var menuHasApprovals = false
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
@@ -65,6 +70,8 @@ class StaffDashboardFragment : Fragment() {
                 startActivity(Intent(requireContext(), StaffAttendanceActivity::class.java))
             Feature.LEAVE_MANAGEMENT ->
                 startActivity(Intent(requireContext(), LeaveActivity::class.java))
+            Feature.LEAVE_APPROVALS ->
+                startActivity(Intent(requireContext(), LeaveApprovalsActivity::class.java))
             Feature.STAFF_NOTICES ->
                 (activity as? StaffMainActivity)?.selectTab(R.id.nav_notices)
             Feature.ANNOUNCEMENTS ->
@@ -98,6 +105,15 @@ class StaffDashboardFragment : Fragment() {
         binding.staffTypeBadge.text = typeLabel ?: ""
         binding.staffTypeBadge.visibility =
             if (typeLabel.isNullOrBlank()) View.GONE else View.VISIBLE
+
+        // Show the Leave Approvals launcher entry only for employees whose
+        // user group is part of an active leave approval flow.
+        val canApprove = me?.permissions?.canApproveLeaves == true
+        if (canApprove != menuHasApprovals) {
+            menuHasApprovals = canApprove
+            binding.menuList.adapter =
+                DashboardMenuAdapter(buildStaffDashboardMenu(canApprove)) { onFeature(it) }
+        }
 
         renderBadge(me?.stats?.noticesUniversity ?: 0)
 

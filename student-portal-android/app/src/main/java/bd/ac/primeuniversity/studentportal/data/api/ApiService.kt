@@ -63,5 +63,6 @@ interface ApiService {
         @Field("fcm_token") fcmToken: String,
         @Field("device_id") deviceId: String,
         @Field("platform") platform: String = "android",
+        @Field("app_version") appVersion: String = "",
     ): Response<SimpleResponse>
 }

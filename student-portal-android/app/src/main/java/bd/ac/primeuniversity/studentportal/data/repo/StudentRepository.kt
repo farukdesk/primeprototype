@@ -2,6 +2,7 @@ package bd.ac.primeuniversity.studentportal.data.repo
 
 import android.content.Context
 import android.os.Build
+import bd.ac.primeuniversity.studentportal.BuildConfig
 import bd.ac.primeuniversity.studentportal.data.api.ApiService
 import bd.ac.primeuniversity.studentportal.data.api.RetrofitClient
 import bd.ac.primeuniversity.studentportal.data.api.StaffApiService
@@ -11,6 +12,7 @@ import bd.ac.primeuniversity.studentportal.data.model.AppVersionResponse
 import bd.ac.primeuniversity.studentportal.data.model.BaseResponse
 import bd.ac.primeuniversity.studentportal.data.model.FinancesResponse
 import bd.ac.primeuniversity.studentportal.data.model.LeaveApplyResponse
+import bd.ac.primeuniversity.studentportal.data.model.LeaveApprovalsResponse
 import bd.ac.primeuniversity.studentportal.data.model.LoginResponse
 import bd.ac.primeuniversity.studentportal.data.model.MeResponse
 import bd.ac.primeuniversity.studentportal.data.model.Notice
@@ -170,6 +172,20 @@ class StudentRepository private constructor(context: Context) {
     suspend fun cancelStaffLeave(id: Int): AppResult<SimpleResponse> =
         call { staffApi.cancelLeave(id = id) }
 
+    /** Leave requests currently awaiting the signed-in approver's decision. */
+    suspend fun getLeaveApprovals(): AppResult<LeaveApprovalsResponse> =
+        call { staffApi.getLeaveApprovals() }
+
+    /** Approve or reject a leave request that awaits the signed-in employee. */
+    suspend fun actOnLeaveApproval(id: Int, approve: Boolean, note: String?): AppResult<SimpleResponse> =
+        call {
+            staffApi.actOnLeave(
+                id = id,
+                action = if (approve) "approve" else "reject",
+                note = note?.takeIf { it.isNotBlank() },
+            )
+        }
+
     /** Change the signed-in employee's account password. */
     suspend fun staffChangePassword(
         currentPassword: String,
@@ -199,17 +215,21 @@ class StudentRepository private constructor(context: Context) {
     suspend fun syncPushToken() {
         val fcmToken = storage.fcmToken
         if (fcmToken.isNullOrBlank() || !hasToken) return
-        if (fcmToken == storage.registeredFcmToken) return
+        // Re-register when either the token or the installed app version changes
+        // so the server always knows which version this device is running.
+        val appVersion = BuildConfig.VERSION_NAME
+        val registrationKey = "$fcmToken|$appVersion"
+        if (registrationKey == storage.registeredFcmToken) return
 
         withContext(Dispatchers.IO) {
             try {
                 val response = if (isStaff) {
-                    staffApi.registerPushToken(fcmToken, storage.deviceId)
+                    staffApi.registerPushToken(fcmToken, storage.deviceId, appVersion = appVersion)
                 } else {
-                    api.registerPushToken(fcmToken, storage.deviceId)
+                    api.registerPushToken(fcmToken, storage.deviceId, appVersion = appVersion)
                 }
                 if (response.isSuccessful && response.body()?.ok == true) {
-                    storage.registeredFcmToken = fcmToken
+                    storage.registeredFcmToken = registrationKey
                 }
             } catch (_: Exception) {
                 // Best-effort; will retry on the next app start or token refresh.

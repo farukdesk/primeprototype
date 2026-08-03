@@ -15,10 +15,22 @@ require_once __DIR__ . '/helpers.php';
 $page_title = 'Registered App Devices';
 $q          = trim($_GET['q'] ?? '');
 
+// Whether the app_version column exists (see admin/app-push-app-version.sql).
+$has_app_version = static function (string $table): bool {
+    try {
+        db()->query("SELECT app_version FROM `$table` LIMIT 1");
+        return true;
+    } catch (Throwable $e) {
+        return false;
+    }
+};
+$spt_ver_col = $has_app_version('student_push_tokens') ? 't.app_version' : 'NULL AS app_version';
+$apt_ver_col = $has_app_version('api_push_tokens')     ? 't.app_version' : 'NULL AS app_version';
+
 // ── Student devices ─────────────────────────────────────────────────────────
 $student_devices = [];
 try {
-    $sql = "SELECT t.id, t.platform, t.device_id, t.created_at, t.updated_at,
+    $sql = "SELECT t.id, t.platform, t.device_id, t.created_at, t.updated_at, $spt_ver_col,
                    u.full_name AS account_name, u.username, u.email AS account_email,
                    s.id AS student_db_id,
                    s.student_id, s.full_name AS student_name,
@@ -52,7 +64,7 @@ try {
 // ── Employee / user devices ─────────────────────────────────────────────────
 $user_devices = [];
 try {
-    $sql = "SELECT t.id, t.platform, t.device_id, t.created_at, t.updated_at,
+    $sql = "SELECT t.id, t.platform, t.device_id, t.created_at, t.updated_at, $apt_ver_col,
                    u.id AS user_db_id, u.full_name, u.username, u.email
             FROM api_push_tokens t
             JOIN users u ON u.id = t.user_id AND u.is_active = 1
@@ -122,6 +134,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <th>Program</th>
                         <th>Batch</th>
                         <th>Platform</th>
+                        <th>App Version</th>
                         <th>Registered</th>
                         <th>Last Active</th>
                     </tr>
@@ -159,6 +172,11 @@ require_once __DIR__ . '/../includes/header.php';
                     <td class="small"><?= h($r['program_name'] ?? '—') ?></td>
                     <td class="small"><?= h($r['batch_name'] ?? '—') ?></td>
                     <td><span class="badge bg-light text-dark border"><i class="fab fa-<?= ($r['platform'] ?? '') === 'ios' ? 'apple' : 'android' ?> me-1"></i><?= h(ucfirst($r['platform'] ?? 'android')) ?></span></td>
+                    <td>
+                        <?php if (!empty($r['app_version'])): ?>
+                        <span class="badge bg-light text-dark border">v<?= h($r['app_version']) ?></span>
+                        <?php else: ?><span class="text-muted small">—</span><?php endif; ?>
+                    </td>
                     <td class="small text-muted"><?= !empty($r['created_at']) ? h(date('d M Y', strtotime($r['created_at']))) : '—' ?></td>
                     <td class="small text-muted"><?= !empty($r['updated_at']) ? h(date('d M Y H:i', strtotime($r['updated_at']))) : '—' ?></td>
                 </tr>
@@ -191,6 +209,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <th>Username</th>
                         <th>Email</th>
                         <th>Platform</th>
+                        <th>App Version</th>
                         <th>Registered</th>
                         <th>Last Active</th>
                     </tr>
@@ -214,6 +233,11 @@ require_once __DIR__ . '/../includes/header.php';
                         <?php else: ?>—<?php endif; ?>
                     </td>
                     <td><span class="badge bg-light text-dark border"><i class="fab fa-<?= ($r['platform'] ?? '') === 'ios' ? 'apple' : 'android' ?> me-1"></i><?= h(ucfirst($r['platform'] ?? 'android')) ?></span></td>
+                    <td>
+                        <?php if (!empty($r['app_version'])): ?>
+                        <span class="badge bg-light text-dark border">v<?= h($r['app_version']) ?></span>
+                        <?php else: ?><span class="text-muted small">—</span><?php endif; ?>
+                    </td>
                     <td class="small text-muted"><?= !empty($r['created_at']) ? h(date('d M Y', strtotime($r['created_at']))) : '—' ?></td>
                     <td class="small text-muted"><?= !empty($r['updated_at']) ? h(date('d M Y H:i', strtotime($r['updated_at']))) : '—' ?></td>
                 </tr>

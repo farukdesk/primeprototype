@@ -787,6 +787,43 @@ function lm_email_html(string $heading, string $intro, array $req, string $extra
 }
 
 /**
+ * Best-effort FCM push to the mobile app devices of the given users
+ * (api_push_tokens, sent via the App Notification module's HTTP v1 sender).
+ * Never throws — push simply does nothing when FCM is not configured.
+ */
+function lm_push_to_users(array $user_ids, string $title, string $body, array $data = []): void
+{
+    $user_ids = array_values(array_unique(array_filter(array_map('intval', $user_ids))));
+    if (empty($user_ids)) return;
+    try {
+        require_once __DIR__ . '/../app-notifications/helpers.php';
+        $sa = apn_fcm_service_account();
+        if ($sa === null) return;
+        $accessToken = apn_fcm_access_token($sa);
+        if ($accessToken === null) return;
+
+        $ph   = implode(',', array_fill(0, count($user_ids), '?'));
+        $stmt = db()->prepare(
+            "SELECT id, fcm_token FROM api_push_tokens
+              WHERE user_id IN ($ph) AND fcm_token IS NOT NULL AND fcm_token != ''"
+        );
+        $stmt->execute($user_ids);
+
+        $stale = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $r = apn_fcm_send_single($accessToken, $sa['project_id'], $row['fcm_token'], $title, $body, $data);
+            if (!$r['ok'] && $r['unregister']) $stale[] = (int)$row['id'];
+        }
+        if ($stale) {
+            $ph2 = implode(',', array_fill(0, count($stale), '?'));
+            db()->prepare("DELETE FROM api_push_tokens WHERE id IN ($ph2)")->execute($stale);
+        }
+    } catch (Throwable $e) {
+        error_log('lm_push_to_users: ' . $e->getMessage());
+    }
+}
+
+/**
  * Alert every member of the approving group of a given step that a leave
  * request needs their attention. Clicking the notification opens the
  * request's approval page. The requester is excluded.
@@ -812,6 +849,13 @@ function lm_notify_step_group(array $req, int $step_order): void
         lm_request_url((int)$req['id']),
         'leave-approval',
         (int)$req['user_id']
+    );
+    // Push the alert to the approvers' mobile app devices too.
+    lm_push_to_users(
+        notif_group_member_ids((int)$step['group_id'], (int)$req['user_id']),
+        'Leave request needs your attention',
+        $body,
+        ['type' => 'leave-approval', 'request_id' => (string)(int)$req['id']]
     );
 }
 
@@ -883,6 +927,13 @@ function lm_notify_decision(int $request_id, string $result, string $note = ''):
 
         if ($result === 'approved') {
             notify_user((int)$req['user_id'], 'Your leave request has been approved', $summary, $url, 'leave-status');
+            // Push the final decision to the requester's mobile app devices.
+            lm_push_to_users(
+                [(int)$req['user_id']],
+                'Your leave request has been approved',
+                $summary,
+                ['type' => 'leave-status', 'status' => 'approved', 'request_id' => (string)$request_id]
+            );
             notify_send_email(
                 'leave_request_approved',
                 (string)($req['requester_email'] ?? ''),
@@ -898,6 +949,13 @@ function lm_notify_decision(int $request_id, string $result, string $note = ''):
         } elseif ($result === 'rejected') {
             $body = $summary . ($note !== '' ? ' • Note: ' . $note : '');
             notify_user((int)$req['user_id'], 'Your leave request has been rejected', $body, $url, 'leave-status');
+            // Push the rejection to the requester's mobile app devices.
+            lm_push_to_users(
+                [(int)$req['user_id']],
+                'Your leave request has been rejected',
+                $body,
+                ['type' => 'leave-status', 'status' => 'rejected', 'request_id' => (string)$request_id]
+            );
             notify_send_email(
                 'leave_request_rejected',
                 (string)($req['requester_email'] ?? ''),
