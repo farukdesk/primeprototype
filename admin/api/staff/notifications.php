@@ -112,7 +112,7 @@ try {
                 'id'    => (int)$n['id'],
                 'title' => $n['title'],
                 'body'  => $n['body'],
-                'url'   => $n['url] ?: null,
+                'url'   => $n['url'] ?: null,
                 'date'  => date('Y-m-d H:i', strtotime($n['created_at'])),
             ];
         }, $rows),
