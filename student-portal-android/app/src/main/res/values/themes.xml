@@ -17,6 +17,10 @@
         <item name="android:navigationBarColor">@color/surface</item>
         <item name="android:windowLightStatusBar">false</item>
 
+        <!-- Android 15 (API 35) enforces edge-to-edge; opt out until all
+             screens handle window insets. Ignored once targetSdk is 36. -->
+        <item name="android:windowOptOutEdgeToEdgeEnforcement" tools:targetApi="35">true</item>
+
         <item name="android:windowAnimationStyle">@style/WindowAnimationSlide</item>
 
         <item name="materialButtonStyle">@style/Widget.StudentPortal.Button</item>
