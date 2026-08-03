@@ -12,6 +12,7 @@
     <color name="success_soft">#3310B981</color>
     <color name="error_soft">#33EF4444</color>
     <color name="primary_soft">#333B82F6</color>
+    <color name="purple_soft">#33A78BFA</color>
 
     <!-- Brighter accents for legibility on dark surfaces -->
     <color name="purple">#A78BFA</color>
@@ -34,7 +35,7 @@
     <color name="header_gradient_center">#1E1B4B</color>
     <color name="header_gradient_end">#4C1D95</color>
 
-    <color name="staff_gradient_start">#0B2E2B</color>
-    <color name="staff_gradient_center">#115E59</color>
-    <color name="staff_gradient_end">#0369A1</color>
+    <color name="staff_gradient_start">#1E293B</color>
+    <color name="staff_gradient_center">#16213B</color>
+    <color name="staff_gradient_end">#0F172A</color>
 </resources>

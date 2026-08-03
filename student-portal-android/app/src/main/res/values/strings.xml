@@ -173,6 +173,10 @@
     <string name="feat_my_profile">My Profile</string>
     <string name="staff_today">Today</string>
     <string name="staff_leave_balance">Leave Balance</string>
+    <string name="clock_in">Clock In</string>
+    <string name="clock_out">Clock Out</string>
+    <string name="leave_pill_casual">Casual %1$s/%2$s</string>
+    <string name="leave_pill_sick">Sick %1$s/%2$s</string>
     <string name="staff_logout">Log Out</string>
     <string name="staff_logout_confirm">Are you sure you want to log out?</string>
 

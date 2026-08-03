@@ -76,6 +76,12 @@ class StaffDashboardFragment : Fragment() {
             (activity as? StaffMainActivity)?.selectTab(R.id.nav_notices)
         }
 
+        // Attendance is recorded by the campus clock devices; the button
+        // opens My Attendance where today's in/out times are listed.
+        binding.btnClock.setOnClickListener {
+            startActivity(Intent(requireContext(), StaffAttendanceActivity::class.java))
+        }
+
         binding.swipeRefresh.setColorSchemeResources(
             R.color.primary, R.color.accent, R.color.info, R.color.cat_campus
         )
@@ -143,14 +149,20 @@ class StaffDashboardFragment : Fragment() {
         val today = me?.today
         binding.todayValue.text =
             "In ${today?.inTime ?: dash} \u00b7 Out ${today?.outTime ?: dash}"
+        val clockedIn = !today?.inTime.isNullOrBlank() && today?.outTime.isNullOrBlank()
+        binding.btnClock.setText(if (clockedIn) R.string.clock_out else R.string.clock_in)
 
         val lb = me?.leaveBalance
-        binding.leaveValue.text = if (lb != null) {
-            "Casual ${fmt(lb.casualRemaining)}/${fmt(lb.casualTotal)} \u00b7 " +
-                "Sick ${fmt(lb.sickRemaining)}/${fmt(lb.sickTotal)}"
-        } else {
-            dash
-        }
+        binding.casualPill.text = getString(
+            R.string.leave_pill_casual,
+            lb?.let { fmt(it.casualRemaining) } ?: dash,
+            lb?.let { fmt(it.casualTotal) } ?: dash,
+        )
+        binding.sickPill.text = getString(
+            R.string.leave_pill_sick,
+            lb?.let { fmt(it.sickRemaining) } ?: dash,
+            lb?.let { fmt(it.sickTotal) } ?: dash,
+        )
     }
 
     /**
