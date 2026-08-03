@@ -172,6 +172,20 @@ class StudentRepository private constructor(context: Context) {
     suspend fun cancelStaffLeave(id: Int): AppResult<SimpleResponse> =
         call { staffApi.cancelLeave(id = id) }
 
+    /** Leave requests currently awaiting the signed-in approver's decision. */
+    suspend fun getLeaveApprovals(): AppResult<LeaveApprovalsResponse> =
+        call { staffApi.getLeaveApprovals() }
+
+    /** Approve or reject a leave request that awaits the signed-in employee. */
+    suspend fun actOnLeaveApproval(id: Int, approve: Boolean, note: String?): AppResult<SimpleResponse> =
+        call {
+            staffApi.actOnLeave(
+                id = id,
+                action = if (approve) "approve" else "reject",
+                note = note?.takeIf { it.isNotBlank() },
+            )
+        }
+
     /** Change the signed-in employee's account password. */
     suspend fun staffChangePassword(
         currentPassword: String,
