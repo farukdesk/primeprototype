@@ -334,6 +334,7 @@ if (is_portal_student()) {
     $is_hr_active = $is_jobs_active || (strpos($current_path, '/staff-profiles/') !== false) || (strpos($current_path, '/leave-management/') !== false) || (strpos($current_path, '/staff-attendance/') !== false);
     $is_coe_active = strpos($current_path, '/results/') !== false
                   || $is_spring_result_active || $is_tabulation_checker_active || $is_transcript_maker_active
+                  || strpos($current_path, '/final-result-publish/') !== false
                   || strpos($current_path, '/student-verification/') !== false
                   || strpos($current_path, '/cert-verifiers/') !== false
                   || $is_exam_invigilation_active || $is_admit_card_active;
@@ -843,7 +844,7 @@ if (is_portal_student()) {
     <?php endif; ?>
 
     <!-- ── Controller of Examinations ── -->
-    <?php if (is_super_admin() || can_access('results') || can_access('results-entry') || can_access('results-chains') || can_access('spring-result') || can_access('tabulation-checker') || can_access('transcript-maker') || can_access('student-verification') || can_access('cert-verifiers') || can_access('exam-invigilation') || can_access('admit-card')): ?>
+    <?php if (is_super_admin() || can_access('results') || can_access('results-entry') || can_access('results-chains') || can_access('spring-result') || can_access('final-result-publish') || can_access('tabulation-checker') || can_access('transcript-maker') || can_access('student-verification') || can_access('cert-verifiers') || can_access('exam-invigilation') || can_access('admit-card')): ?>
     <button class="nav-group-toggle <?= $is_coe_active ? '' : 'collapsed' ?>"
             data-bs-toggle="collapse" data-bs-target="#grp-coe"
             aria-expanded="<?= $is_coe_active ? 'true' : 'false' ?>">
@@ -901,6 +902,14 @@ if (is_portal_student()) {
                 <a href="<?= APP_URL ?>/spring-result/index.php"
                    class="<?= $is_spring_result_active ? 'active' : '' ?>">
                     <i class="fas fa-poll"></i> Spring Result
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('final-result-publish')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/final-result-publish/index.php"
+                   class="<?= strpos($current_path, '/final-result-publish/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-award"></i> Final Result Publish
                 </a>
             </li>
             <?php endif; ?>
