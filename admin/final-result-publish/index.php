@@ -240,6 +240,14 @@ function frp_resolve_batch(string $raw): ?array {
     foreach (sm_batches() as $b) {
         if (strtolower(trim($b['name'])) === $key) return $b;
     }
+    // Ordinal-only values ("60th", "61st", "62nd", "63rd", ...) - the system
+    // stores batches as "60th Batch", so try again with " batch" appended.
+    if (preg_match('/^\d+(st|nd|rd|th)$/', $key)) {
+        $try = $key . ' batch';
+        foreach (sm_batches() as $b) {
+            if (strtolower(trim($b['name'])) === $try) return $b;
+        }
+    }
     if (is_numeric($key)) {
         $n = (int)$key;
         $suffix = ($n % 100 >= 11 && $n % 100 <= 13) ? 'th'
@@ -296,7 +304,9 @@ function frp_validate_row(array $row, PDO $pdo): array {
     $warnings = [];
 
     $name_raw  = trim($row['student_name']        ?? '');
-    $sid_raw   = trim($row['student_id']          ?? '');
+    // Student IDs sometimes contain stray spaces between digits
+    // ("2822200510104 2" becomes "28222005101042") - remove ALL whitespace first.
+    $sid_raw   = preg_replace('/\s+/u', '', trim($row['student_id'] ?? ''));
     $dept_raw  = trim($row['department']          ?? '');
     $prog_raw  = trim($row['program']             ?? '');
     $batch_raw = trim($row['batch']               ?? '');
