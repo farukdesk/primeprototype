@@ -17,7 +17,10 @@
  *   Batch                  – optional (auto-created when unknown)
  *   Enrollment Semester    – optional, e.g. \"Fall 2021\"
  *   Completion Semester    – required, e.g. \"Fall 2024\" (shown as Ending Semester)
- *   CGPA                   – required, 0.01 – 4.00
+ *   CGPA                   – required, 0.01 – 4.00.
+ *                            Rows whose CGPA reads \"incom.\", \"incom\",
+ *                            \"incomplete\" or \"withheld\" are IGNORED and
+ *                            never published.
  *
  * MATCHING RULES
  *   1. Students are looked up by Student ID BOTH with and without leading
@@ -48,6 +51,9 @@ $user       = auth_user();
 
 const FRP_SUBJECT_LABEL = 'Final Result';
 const FRP_FUZZY_MIN_PCT = 60; // minimum similarity % for a fuzzy program/dept match
+
+// CGPA values (letters only, lowercase) that mean \"do not publish this row\"
+const FRP_IGNORED_CGPA = ['incom', 'incomp', 'incomplete', 'inc', 'withheld', 'withhold', 'wh'];
 
 // ── Normalisation helpers ─────────────────────────────────────────────────────
 
@@ -322,9 +328,15 @@ function frp_validate_row(array $row, PDO $pdo): array {
         }
     }
 
-    // CGPA
-    $cgpa = null;
-    if ($cgpa_raw === '') {
+    // CGPA – values like "incom.", "incomplete" or "withheld" mean the result
+    // must NOT be published; those rows are ignored entirely.
+    $cgpa     = null;
+    $ignored  = false;
+    $cgpa_key = preg_replace('/[^a-z]/', '', strtolower($cgpa_raw));
+    if ($cgpa_key !== '' && in_array($cgpa_key, FRP_IGNORED_CGPA, true)) {
+        $ignored    = true;
+        $warnings[] = 'CGPA is "' . h($cgpa_raw) . '" – this result will NOT be published.';
+    } elseif ($cgpa_raw === '') {
         $errors[] = 'CGPA is required.';
     } else {
         $val = filter_var($cgpa_raw, FILTER_VALIDATE_FLOAT);
@@ -391,11 +403,16 @@ function frp_validate_row(array $row, PDO $pdo): array {
         }
     }
 
+    // Incomplete / withheld CGPA overrides everything – never publish.
+    if ($ignored) {
+        $action = 'ignore';
+    }
+
     // Batch
     $batch = null;
     if ($batch_raw !== '') {
         $batch = frp_resolve_batch($batch_raw);
-        if ($batch === null) {
+        if ($batch === null && !$ignored) {
             $warnings[] = 'Batch "' . h($batch_raw) . '" not found – it will be created.';
         }
     }
@@ -434,6 +451,7 @@ function frp_validate_row(array $row, PDO $pdo): array {
         'completion_year'     => $comp_year,
         'completion_semester' => ($comp_season !== '' && $comp_year !== '') ? $comp_season . ' ' . $comp_year : $comp_raw,
         'cgpa'                => $cgpa,
+        'cgpa_raw'            => $cgpa_raw,
     ];
 }
 
@@ -516,8 +534,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'previ
                         $validated['row_num'] = $row_num;
 
                         // Duplicate detection using leading-zero-insensitive key
+                        // (ignored rows are excluded – they are never imported)
                         $sid_norm = ltrim($validated['student_id'], '0') ?: $validated['student_id'];
-                        if ($sid_norm !== '') {
+                        if ($sid_norm !== '' && $validated['action'] !== 'ignore') {
                             if (isset($seen_ids[$sid_norm])) {
                                 $validated['errors'][] = 'Student ID appears twice in this file (first at row '
                                                        . $seen_ids[$sid_norm] . ').';
@@ -572,9 +591,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
     $created      = 0;
     $updated      = 0;
     $skipped      = 0;
+    $ignored      = 0;
     $results      = [];
 
     foreach ($rows as $r) {
+        // Ignored rows: CGPA marked incomplete/withheld – never published.
+        if ($r['action'] === 'ignore') {
+            $results[] = [
+                'row_num'    => $r['row_num'],
+                'status'     => 'ignored',
+                'student_id' => $r['student_id'],
+                'full_name'  => $r['full_name'],
+                'reason'     => 'CGPA "' . h($r['cgpa_raw']) . '" – result not published.',
+            ];
+            $ignored++;
+            continue;
+        }
+
         if (!empty($r['errors']) || $r['action'] === 'skip') {
             $results[] = [
                 'row_num'    => $r['row_num'],
@@ -739,6 +772,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
         'created'  => $created,
         'updated'  => $updated,
         'skipped'  => $skipped,
+        'ignored'  => $ignored,
         'rows'     => $results,
         'settings' => $settings,
     ];
@@ -789,7 +823,9 @@ require_once __DIR__ . '/../includes/header.php';
                 <li><code>Batch</code> – name or number (auto-created when unknown)</li>
                 <li><code>Enrollment Semester</code> – e.g. <em>Fall 2021</em></li>
                 <li><code>Completion Semester</code> <span class="text-danger">*</span> – e.g. <em>Fall 2024</em> (shown as “Ending Semester” on the public page)</li>
-                <li><code>CGPA</code> <span class="text-danger">*</span> – 0.01 to 4.00</li>
+                <li><code>CGPA</code> <span class="text-danger">*</span> – 0.01 to 4.00.
+                    Rows with <code>incom.</code>, <code>incom</code>, <code>incomplete</code> or <code>withheld</code>
+                    are <strong>ignored</strong> and never published.</li>
             </ul>
             <div>
                 Students found by ID are <strong>reused</strong>; unknown IDs get a <strong>new student record</strong>
@@ -845,9 +881,10 @@ require_once __DIR__ . '/../includes/header.php';
 <?php elseif ($step === 'preview' && $preview_rows !== null): ?>
 
 <?php
-$n_create = 0; $n_exist = 0; $n_skip = 0;
+$n_create = 0; $n_exist = 0; $n_skip = 0; $n_ignore = 0;
 foreach ($preview_rows as $pr) {
-    if (!empty($pr['errors']) || $pr['action'] === 'skip') $n_skip++;
+    if ($pr['action'] === 'ignore') $n_ignore++;
+    elseif (!empty($pr['errors']) || $pr['action'] === 'skip') $n_skip++;
     elseif ($pr['action'] === 'create') $n_create++;
     else $n_exist++;
 }
@@ -858,6 +895,7 @@ $n_ok = $n_create + $n_exist;
     <strong><?= count($preview_rows) ?></strong> data row(s):
     <strong><?= $n_exist ?></strong> matched existing student(s),
     <strong><?= $n_create ?></strong> new student(s) will be created,
+    <strong><?= $n_ignore ?></strong> ignored (incomplete/withheld CGPA),
     <strong><?= $n_skip ?></strong> will be skipped.
     <div class="mt-1" style="font-size:.875rem;">
         Publish Date: <strong><?= $settings['publish_date'] !== '' ? h(date('d M Y', strtotime($settings['publish_date']))) : '— (empty)' ?></strong> ·
@@ -907,16 +945,19 @@ $n_ok = $n_create + $n_exist;
                 </thead>
                 <tbody>
                 <?php foreach ($preview_rows as $i => $r):
-                    $has_errors   = !empty($r['errors']) || $r['action'] === 'skip';
+                    $is_ignored   = $r['action'] === 'ignore';
+                    $has_errors   = !$is_ignored && (!empty($r['errors']) || $r['action'] === 'skip');
                     $has_warnings = !empty($r['warnings']);
-                    $row_cls = $has_errors ? 'table-danger' : ($has_warnings ? 'table-warning' : '');
+                    $row_cls = $is_ignored ? 'table-secondary' : ($has_errors ? 'table-danger' : ($has_warnings ? 'table-warning' : ''));
                     $dash    = '<span class="text-muted">—</span>';
                 ?>
                 <tr class="<?= $row_cls ?>">
                     <td class="px-3"><?= $i + 1 ?></td>
                     <td><?= (int)$r['row_num'] ?></td>
                     <td>
-                        <?php if ($has_errors): ?>
+                        <?php if ($is_ignored): ?>
+                            <span class="badge bg-secondary">Ignored</span>
+                        <?php elseif ($has_errors): ?>
                             <span class="badge bg-danger">Skip</span>
                         <?php elseif ($r['action'] === 'existing'): ?>
                             <span class="badge bg-info text-dark">Use Existing</span>
@@ -925,7 +966,9 @@ $n_ok = $n_create + $n_exist;
                         <?php endif; ?>
                     </td>
                     <td>
-                        <?php if ($has_errors): ?>
+                        <?php if ($is_ignored): ?>
+                            <span class="text-secondary fw-semibold"><i class="fas fa-ban me-1"></i>Not published</span>
+                        <?php elseif ($has_errors): ?>
                             <span class="text-danger fw-semibold"><i class="fas fa-times-circle me-1"></i>Error</span>
                         <?php elseif ($has_warnings): ?>
                             <span class="text-warning fw-semibold"><i class="fas fa-exclamation-triangle me-1"></i>Warning</span>
@@ -944,6 +987,8 @@ $n_ok = $n_create + $n_exist;
                         <?php if ($r['existing']): ?>
                             <code style="font-size:.75rem;"><?= h($r['existing']['student_id']) ?></code>
                             <small class="text-muted d-block"><?= h($r['existing']['full_name']) ?> · <?= h($r['existing']['status']) ?></small>
+                        <?php elseif ($is_ignored): ?>
+                            <?= $dash ?>
                         <?php else: ?>
                             <span class="text-muted fst-italic">new record</span>
                         <?php endif; ?>
@@ -990,7 +1035,13 @@ $n_ok = $n_create + $n_exist;
                             <?= $dash ?>
                         <?php endif; ?>
                     </td>
-                    <td><strong><?= $r['cgpa'] !== null ? h($r['cgpa']) : '—' ?></strong></td>
+                    <td>
+                        <?php if ($is_ignored): ?>
+                            <span class="badge bg-secondary" title="Not published"><?= h($r['cgpa_raw']) ?></span>
+                        <?php else: ?>
+                            <strong><?= $r['cgpa'] !== null ? h($r['cgpa']) : '—' ?></strong>
+                        <?php endif; ?>
+                    </td>
                 </tr>
                 <?php endforeach; ?>
                 </tbody>
@@ -1006,6 +1057,7 @@ $n_ok = $n_create + $n_exist;
     <i class="fas fa-award me-2"></i>
     <strong><?= $import_stats['updated'] ?></strong> existing student(s) updated,
     <strong><?= $import_stats['created'] ?></strong> new student(s) created,
+    <strong><?= $import_stats['ignored'] ?></strong> ignored (incomplete/withheld CGPA),
     <strong><?= $import_stats['skipped'] ?></strong> row(s) skipped.
     <?php if ($import_stats['settings']['publish_date'] !== ''): ?>
     <div class="mt-1" style="font-size:.875rem;">
@@ -1040,7 +1092,11 @@ $n_ok = $n_create + $n_exist;
                 </thead>
                 <tbody>
                 <?php foreach ($import_stats['rows'] as $r):
-                    $cls = in_array($r['status'], ['created', 'updated'], true) ? '' : 'table-danger';
+                    $cls = match (true) {
+                        in_array($r['status'], ['created', 'updated'], true) => '',
+                        $r['status'] === 'ignored'                          => 'table-secondary',
+                        default                                             => 'table-danger',
+                    };
                 ?>
                 <tr class="<?= $cls ?>">
                     <td class="px-3"><?= (int)$r['row_num'] ?></td>
@@ -1051,6 +1107,11 @@ $n_ok = $n_create + $n_exist;
                             <span class="text-success"><i class="fas fa-user-plus me-1"></i>Student created &amp; result published</span>
                         <?php elseif ($r['status'] === 'updated'): ?>
                             <span class="text-info"><i class="fas fa-check-circle me-1"></i>Result published</span>
+                        <?php elseif ($r['status'] === 'ignored'): ?>
+                            <span class="text-secondary"><i class="fas fa-ban me-1"></i>Ignored – not published</span>
+                            <?php if ($r['reason']): ?>
+                            <small class="d-block text-muted"><?= $r['reason'] ?></small>
+                            <?php endif; ?>
                         <?php else: ?>
                             <span class="text-danger"><i class="fas fa-times-circle me-1"></i>Skipped</span>
                             <?php if ($r['reason']): ?>
