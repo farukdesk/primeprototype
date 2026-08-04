@@ -240,16 +240,11 @@ function frp_resolve_batch(string $raw): ?array {
     foreach (sm_batches() as $b) {
         if (strtolower(trim($b['name'])) === $key) return $b;
     }
-    // Ordinal-only values ("60th", "61st", "62nd", "63rd", ...) - the system
-    // stores batches as "60th Batch", so try again with " batch" appended.
-    if (preg_match('/^\d+(st|nd|rd|th)$/', $key)) {
-        $try = $key . ' batch';
-        foreach (sm_batches() as $b) {
-            if (strtolower(trim($b['name'])) === $try) return $b;
-        }
-    }
-    if (is_numeric($key)) {
-        $n = (int)$key;
+    // Fall back to the LEADING BATCH NUMBER only: "60th (Evening)", "61st",
+    // "60", "60th - New" ... all resolve to the system batch "60th Batch",
+    // "61st Batch", etc.
+    if (preg_match('/^(\d+)/', $key, $m)) {
+        $n = (int)$m[1];
         $suffix = ($n % 100 >= 11 && $n % 100 <= 13) ? 'th'
                 : match ($n % 10) { 1 => 'st', 2 => 'nd', 3 => 'rd', default => 'th' };
         $try = strtolower($n . $suffix . ' batch');
