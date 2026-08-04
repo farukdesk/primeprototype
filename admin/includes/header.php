@@ -905,6 +905,14 @@ if (is_portal_student()) {
                 </a>
             </li>
             <?php endif; ?>
+            <?php if (is_super_admin() || can_access('final-result-publish')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/final-result-publish/index.php"
+                   class="<?= strpos($current_path, '/final-result-publish/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-award"></i> Final Result Publish
+                </a>
+            </li>
+            <?php endif; ?>
             <?php if (is_super_admin() || can_access('tabulation-checker')): ?>
             <li class="nav-item">
                 <a href="<?= APP_URL ?>/tabulation-checker/index.php"
