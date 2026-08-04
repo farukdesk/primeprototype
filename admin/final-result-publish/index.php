@@ -651,7 +651,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
 
                 $set    = [];
                 $params = [];
-                if ($settings['mark_graduated']) {
+                // A "Dropped" student with a valid final CGPA has actually
+                // graduated – always correct the status to "Graduated".
+                if ($settings['mark_graduated'] || ($existing['status'] ?? '') === 'Dropped') {
                     $set[]    = "status = 'Graduated'";
                 }
                 if ($settings['fill_missing']) {
