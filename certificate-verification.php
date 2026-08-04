@@ -539,19 +539,6 @@ function cert_photo_url(?string $photo): string
       border: 3px solid #e2e8f0;
       flex-shrink: 0;
    }
-   .cv-student-photo-placeholder {
-      width: 110px;
-      height: 130px;
-      border-radius: 14px;
-      background: #e8edf5;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 3rem;
-      color: #9ca3af;
-      flex-shrink: 0;
-      border: 3px solid #e2e8f0;
-   }
    .cv-result-name { font-size: 1.5rem; font-weight: 800; color: #1a2e5a; margin-bottom: 6px; }
    .cv-result-meta { font-size: .88rem; color: #6b7280; margin-bottom: 4px; }
    .cv-result-badge {
@@ -909,10 +896,6 @@ function cert_photo_url(?string $photo): string
                         <img src="<?= fh($photo_url) ?>"
                              alt="Photo of <?= fh($student['full_name']) ?>"
                              class="cv-student-photo">
-                        <?php else: ?>
-                        <div class="cv-student-photo-placeholder">
-                           <i class="fas fa-user-graduate"></i>
-                        </div>
                         <?php endif; ?>
 
                         <div>
@@ -992,15 +975,13 @@ function cert_photo_url(?string $photo): string
                               <?php endif; ?>
                            </div>
                         </div>
+                        <?php $pub_date = $result_info['publish_date'] ?? null; ?>
+                        <?php if ($pub_date): ?>
                         <div class="cv-info-item">
                            <div class="label">Result Publish Date</div>
-                           <div class="value">
-                              <?php
-                              $pub_date = $result_info['publish_date'] ?? null;
-                              echo $pub_date ? fh($pub_date) : '—';
-                              ?>
-                           </div>
+                           <div class="value"><?= fh($pub_date) ?></div>
                         </div>
+                        <?php endif; ?>
                         <div class="cv-info-item">
                            <div class="label">Final CGPA</div>
                            <div class="value">
