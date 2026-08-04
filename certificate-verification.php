@@ -98,7 +98,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $form_errors[] = 'Could not connect to the database. Please try again later.';
                     $submitted = false;
                 } else {
-                    // Fetch student record
+                    // Fetch student record – the ID is matched both with and
+                    // without leading zeros ("0123" matches "123" and vice
+                    // versa); an exact match always wins.
+                    $sid_trimmed = ltrim($fd['student_id'], '0');
+                    if ($sid_trimmed === '') $sid_trimmed = $fd['student_id'];
                     $stmt = $db->prepare(
                         'SELECT s.id, s.student_id, s.full_name, s.batch,
                                 s.admitted_semester, s.status, s.photo,
@@ -108,9 +112,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                          JOIN   dept_departments d ON d.id = s.dept_id
                          LEFT JOIN dept_academic_programs p ON p.id = s.program_id
                          WHERE  s.student_id = ?
+                            OR  s.student_id = ?
+                            OR  TRIM(LEADING \'0\' FROM s.student_id) = ?
+                         ORDER  BY (s.student_id = ?) DESC
                          LIMIT  1'
                     );
-                    $stmt->execute([$fd['student_id']]);
+                    $stmt->execute([$fd['student_id'], $sid_trimmed, $sid_trimmed, $fd['student_id']]);
                     $student = $stmt->fetch() ?: null;
 
                     if ($student) {

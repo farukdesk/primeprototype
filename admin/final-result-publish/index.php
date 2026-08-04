@@ -394,8 +394,9 @@ function frp_validate_row(array $row, PDO $pdo): array {
                 $warnings[] = 'Name in CSV ("' . h($name_raw) . '") differs from the record ("'
                             . h($existing['full_name']) . '"). The existing record is kept.';
             }
-            if (($existing['status'] ?? '') === 'Dropped' && $cgpa !== null) {
-                $warnings[] = 'Status is "Dropped" but a valid CGPA is provided – status will be updated to "Graduated".';
+            $ex_status = $existing['status'] ?? '';
+            if (in_array($ex_status, ['Dropped', 'Active'], true) && $cgpa !== null) {
+                $warnings[] = 'Status is "' . h($ex_status) . '" but a valid CGPA is provided – status will be updated to "Graduated".';
             }
         } else {
             $action = 'create';
@@ -654,9 +655,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
 
                 $set    = [];
                 $params = [];
-                // A "Dropped" student with a valid final CGPA has actually
-                // graduated – always correct the status to "Graduated".
-                if ($settings['mark_graduated'] || ($existing['status'] ?? '') === 'Dropped') {
+                // A "Dropped" or "Active" student with a valid final CGPA has
+                // actually graduated – always correct the status to "Graduated".
+                if ($settings['mark_graduated']
+                    || in_array($existing['status'] ?? '', ['Dropped', 'Active'], true)) {
                     $set[]    = "status = 'Graduated'";
                 }
                 if ($settings['fill_missing']) {
