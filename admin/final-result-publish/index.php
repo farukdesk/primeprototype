@@ -394,6 +394,9 @@ function frp_validate_row(array $row, PDO $pdo): array {
                 $warnings[] = 'Name in CSV ("' . h($name_raw) . '") differs from the record ("'
                             . h($existing['full_name']) . '"). The existing record is kept.';
             }
+            if (($existing['status'] ?? '') === 'Dropped' && $cgpa !== null) {
+                $warnings[] = 'Status is "Dropped" but a valid CGPA is provided – status will be updated to "Graduated".';
+            }
         } else {
             $action = 'create';
             if ($dept === null) {
