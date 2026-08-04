@@ -16,6 +16,7 @@
  *   Program                – required (fuzzy-matched, see alias table below)
  *   Batch                  – optional (auto-created when unknown)
  *   Enrollment Semester    – optional, e.g. \"Fall 2021\"
+ *   Completion Semester    – required, e.g. \"Fall 2024\" (shown as Ending Semester)
  *   CGPA                   – required, 0.01 – 4.00
  *
  * MATCHING RULES
@@ -73,6 +74,7 @@ function frp_columns(): array {
         'department'          => ['label' => 'Department',          'required' => false, 'aliases' => ['department', 'dept', 'dept_name']],
         'program'             => ['label' => 'Program',             'required' => true,  'aliases' => ['program', 'programme', 'degree', 'program_name']],
         'batch'               => ['label' => 'Batch',               'required' => false, 'aliases' => ['batch', 'batch_name', 'batch_no']],
+        'completion_semester' => ['label' => 'Completion Semester', 'required' => true,  'aliases' => ['completion_semester', 'completionsemester', 'ending_semester', 'endingsemester', 'final_semester', 'finalsemester', 'passing_semester', 'passingsemester', 'completion', 'ending']],
         'enrollment_semester' => ['label' => 'Enrollment Semester', 'required' => false, 'aliases' => ['enrollment_semester', 'enrolment_semester', 'admitted_semester', 'enrollmentsemester', 'session', 'semester']],
         'cgpa'                => ['label' => 'CGPA',                'required' => true,  'aliases' => ['cgpa', 'final_cgpa', 'gpa', 'result']],
     ];
@@ -293,6 +295,7 @@ function frp_validate_row(array $row, PDO $pdo): array {
     $prog_raw  = trim($row['program']             ?? '');
     $batch_raw = trim($row['batch']               ?? '');
     $sem_raw   = trim($row['enrollment_semester'] ?? '');
+    $comp_raw  = trim($row['completion_semester'] ?? '');
     $cgpa_raw  = trim($row['cgpa']                ?? '');
 
     if ($name_raw === '') $errors[] = 'Student Name is required.';
@@ -301,6 +304,22 @@ function frp_validate_row(array $row, PDO $pdo): array {
         $errors[] = 'Student ID is required.';
     } elseif (!preg_match('/^[a-zA-Z0-9\-]{1,25}$/', $sid_raw)) {
         $errors[] = 'Student ID "' . h($sid_raw) . '" is invalid (1–25 alphanumeric/hyphen chars).';
+    }
+
+    // Completion (ending) semester – required per row
+    $comp_season = '';
+    $comp_year   = '';
+    if ($comp_raw === '') {
+        $errors[] = 'Completion Semester is required.';
+    } else {
+        $parsed = frp_parse_semester($comp_raw);
+        if (preg_match('/^(Spring|Summer|Fall) ((19|20)\d{2})$/', $parsed, $m)) {
+            $comp_season = $m[1];
+            $comp_year   = $m[2];
+        } else {
+            $errors[] = 'Completion Semester "' . h($comp_raw)
+                      . '" could not be parsed (expected e.g. "Fall 2024").';
+        }
     }
 
     // CGPA
@@ -384,12 +403,12 @@ function frp_validate_row(array $row, PDO $pdo): array {
     $enroll_sem = $sem_raw !== '' ? frp_parse_semester($sem_raw) : '';
 
     return [
-        'errors'          => $errors,
-        'warnings'        => $warnings,
-        'action'          => $action,
-        'student_id'      => $sid_raw,
-        'full_name'       => $name_raw,
-        'existing'        => $existing ? [
+        'errors'              => $errors,
+        'warnings'            => $warnings,
+        'action'              => $action,
+        'student_id'          => $sid_raw,
+        'full_name'           => $name_raw,
+        'existing'            => $existing ? [
             'id'         => (int)$existing['id'],
             'student_id' => $existing['student_id'],
             'full_name'  => $existing['full_name'],
@@ -397,20 +416,24 @@ function frp_validate_row(array $row, PDO $pdo): array {
             'program_id' => $existing['program_id'] !== null ? (int)$existing['program_id'] : null,
             'batch'      => $existing['batch'],
         ] : null,
-        'dept'            => $dept ? ['id' => (int)$dept['id'], 'name' => $dept['name']] : null,
-        'dept_raw'        => $dept_raw,
-        'program'         => $prog_match ? [
+        'dept'                => $dept ? ['id' => (int)$dept['id'], 'name' => $dept['name']] : null,
+        'dept_raw'            => $dept_raw,
+        'program'             => $prog_match ? [
             'id'         => (int)$prog_match['program']['id'],
             'name'       => $prog_match['program']['program_name'],
             'dept_id'    => (int)$prog_match['program']['dept_id'],
             'confidence' => $prog_match['confidence'],
             'method'     => $prog_match['method'],
         ] : null,
-        'program_raw'     => $prog_raw,
-        'batch_row'       => $batch ? ['id' => (int)$batch['id'], 'name' => $batch['name']] : null,
-        'batch_raw'       => $batch_raw,
-        'enroll_semester' => $enroll_sem,
-        'cgpa'            => $cgpa,
+        'program_raw'         => $prog_raw,
+        'batch_row'           => $batch ? ['id' => (int)$batch['id'], 'name' => $batch['name']] : null,
+        'batch_raw'           => $batch_raw,
+        'enroll_semester'     => $enroll_sem,
+        'completion_raw'      => $comp_raw,
+        'completion_season'   => $comp_season,
+        'completion_year'     => $comp_year,
+        'completion_semester' => ($comp_season !== '' && $comp_year !== '') ? $comp_season . ' ' . $comp_year : $comp_raw,
+        'cgpa'                => $cgpa,
     ];
 }
 
@@ -422,25 +445,17 @@ $preview_rows = null;
 $settings     = null;
 $import_stats = [];
 
-$seasons      = ['Spring', 'Summer', 'Fall'];
-
 // ── STEP 1 → 2: Upload, parse & validate ─────────────────────────────────────
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'preview') {
     csrf_check();
 
-    $completion_season = trim($_POST['completion_season'] ?? '');
-    $completion_year   = trim($_POST['completion_year']   ?? '');
-    $publish_date      = trim($_POST['publish_date']      ?? '');
-    $mark_graduated    = !empty($_POST['mark_graduated']);
-    $fill_missing      = !empty($_POST['fill_missing']);
+    $publish_date   = trim($_POST['publish_date'] ?? '');
+    $mark_graduated = !empty($_POST['mark_graduated']);
+    $fill_missing   = !empty($_POST['fill_missing']);
 
-    if (!in_array($completion_season, $seasons, true)) {
-        $parse_error = 'Please choose a valid ending semester season.';
-    } elseif (!preg_match('/^(19|20)\d{2}$/', $completion_year)) {
-        $parse_error = 'Please enter a valid 4-digit ending semester year.';
-    } elseif ($publish_date === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $publish_date) || !strtotime($publish_date)) {
-        $parse_error = 'Please choose a valid result publish date.';
+    if ($publish_date !== '' && (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $publish_date) || !strtotime($publish_date))) {
+        $parse_error = 'The result publish date is invalid – leave it empty or pick a valid date.';
     } elseif (empty($_FILES['csv_file']['name']) || $_FILES['csv_file']['error'] !== UPLOAD_ERR_OK) {
         $parse_error = 'Please choose a file to upload.';
     } else {
@@ -519,12 +534,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'previ
                         $parse_error = 'The file contains no data rows.';
                     } else {
                         $settings = [
-                            'completion_semester' => $completion_season . ' ' . $completion_year,
-                            'completion_season'   => $completion_season,
-                            'completion_year'     => $completion_year,
-                            'publish_date'        => $publish_date,
-                            'mark_graduated'      => $mark_graduated,
-                            'fill_missing'        => $fill_missing,
+                            'publish_date'   => $publish_date,
+                            'mark_graduated' => $mark_graduated,
+                            'fill_missing'   => $fill_missing,
                         ];
                         $_SESSION['frp_rows']     = $preview_rows;
                         $_SESSION['frp_settings'] = $settings;
@@ -555,11 +567,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
         redirect(APP_URL . '/final-result-publish/index.php');
     }
 
-    $pdo      = db();
-    $created  = 0;
-    $updated  = 0;
-    $skipped  = 0;
-    $results  = [];
+    $pdo          = db();
+    $publish_date = ($settings['publish_date'] !== '') ? $settings['publish_date'] : null;
+    $created      = 0;
+    $updated      = 0;
+    $skipped      = 0;
+    $results      = [];
 
     foreach ($rows as $r) {
         if (!empty($r['errors']) || $r['action'] === 'skip') {
@@ -669,7 +682,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
             );
             $chk->execute([
                 $student_pk, FRP_SUBJECT_LABEL,
-                $settings['completion_season'], $settings['completion_year'],
+                $r['completion_season'], $r['completion_year'],
             ]);
             $result_id = $chk->fetchColumn();
 
@@ -678,7 +691,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                     'UPDATE student_results
                      SET cgpa = ?, batch = ?, recorded_date = ?
                      WHERE id = ?'
-                )->execute([$r['cgpa'], $batch_name, $settings['publish_date'], (int)$result_id]);
+                )->execute([$r['cgpa'], $batch_name, $publish_date, (int)$result_id]);
             } else {
                 $pdo->prepare(
                     'INSERT INTO student_results
@@ -686,19 +699,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                      VALUES (?,?,?,?,?,?,?)'
                 )->execute([
                     $student_pk,
-                    $settings['completion_season'],
-                    $settings['completion_year'],
+                    $r['completion_season'],
+                    $r['completion_year'],
                     $batch_name,
                     FRP_SUBJECT_LABEL,
                     $r['cgpa'],
-                    $settings['publish_date'],
+                    $publish_date,
                 ]);
             }
 
             log_change('students', 'UPDATE', $student_pk,
                        $r['full_name'] . ' (' . $student_sid . ')',
                        'final_result', null, $r['cgpa'],
-                       'Final result published (' . $settings['completion_semester']
+                       'Final result published (' . $r['completion_semester']
                        . ', CGPA ' . $r['cgpa'] . ')');
 
             $results[] = [
@@ -775,6 +788,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <li><code>Program</code> <span class="text-danger">*</span> – short names are auto-mapped, e.g. <code>BBA</code>, <code>CSE</code>, <code>MBA (39cr)</code>, <code>LL.M (Regular) (33 Credits)</code></li>
                 <li><code>Batch</code> – name or number (auto-created when unknown)</li>
                 <li><code>Enrollment Semester</code> – e.g. <em>Fall 2021</em></li>
+                <li><code>Completion Semester</code> <span class="text-danger">*</span> – e.g. <em>Fall 2024</em> (shown as “Ending Semester” on the public page)</li>
                 <li><code>CGPA</code> <span class="text-danger">*</span> – 0.01 to 4.00</li>
             </ul>
             <div>
@@ -788,28 +802,16 @@ require_once __DIR__ . '/../includes/header.php';
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="preview">
 
-            <div class="row g-3 mb-3" style="max-width:900px;">
-                <div class="col-md-4">
+            <div class="row g-3 mb-3" style="max-width:760px;">
+                <div class="col-md-6">
                     <label class="form-label fw-semibold">File <span class="text-danger">*</span></label>
                     <input type="file" name="csv_file" class="form-control" accept=".csv,.xlsx,.xls" required>
                     <div class="form-text">.csv (comma or tab), .xlsx, .xls</div>
                 </div>
-                <div class="col-md-3">
-                    <label class="form-label fw-semibold">Ending Semester <span class="text-danger">*</span></label>
-                    <div class="d-flex gap-2">
-                        <select name="completion_season" class="form-select" required>
-                            <?php foreach ($seasons as $s): ?>
-                            <option value="<?= $s ?>"><?= $s ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                        <input type="number" name="completion_year" class="form-control"
-                               min="1990" max="2100" value="<?= date('Y') ?>" required style="max-width:110px;">
-                    </div>
-                    <div class="form-text">Shown as “Ending Semester” on the public page</div>
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label fw-semibold">Result Publish Date <span class="text-danger">*</span></label>
-                    <input type="date" name="publish_date" class="form-control" value="<?= date('Y-m-d') ?>" required>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Result Publish Date <span class="text-muted">(optional)</span></label>
+                    <input type="date" name="publish_date" class="form-control" value="">
+                    <div class="form-text">Leave empty to keep the publish date blank</div>
                 </div>
             </div>
 
@@ -858,8 +860,7 @@ $n_ok = $n_create + $n_exist;
     <strong><?= $n_create ?></strong> new student(s) will be created,
     <strong><?= $n_skip ?></strong> will be skipped.
     <div class="mt-1" style="font-size:.875rem;">
-        Ending Semester: <strong><?= h($settings['completion_semester']) ?></strong> ·
-        Publish Date: <strong><?= h(date('d M Y', strtotime($settings['publish_date']))) ?></strong> ·
+        Publish Date: <strong><?= $settings['publish_date'] !== '' ? h(date('d M Y', strtotime($settings['publish_date']))) : '— (empty)' ?></strong> ·
         Mark Graduated: <strong><?= $settings['mark_graduated'] ? 'Yes' : 'No' ?></strong>
     </div>
 </div>
@@ -900,6 +901,7 @@ $n_ok = $n_create + $n_exist;
                         <th>Program (matched)</th>
                         <th>Batch</th>
                         <th>Enrollment Sem.</th>
+                        <th>Completion Sem.</th>
                         <th>CGPA</th>
                     </tr>
                 </thead>
@@ -979,6 +981,15 @@ $n_ok = $n_create + $n_exist;
                         <?php endif; ?>
                     </td>
                     <td><?= $r['enroll_semester'] !== '' ? h($r['enroll_semester']) : $dash ?></td>
+                    <td>
+                        <?php if ($r['completion_season'] !== ''): ?>
+                            <strong><?= h($r['completion_semester']) ?></strong>
+                        <?php elseif ($r['completion_raw'] !== ''): ?>
+                            <span class="text-danger" title="Could not parse"><?= h($r['completion_raw']) ?></span>
+                        <?php else: ?>
+                            <?= $dash ?>
+                        <?php endif; ?>
+                    </td>
                     <td><strong><?= $r['cgpa'] !== null ? h($r['cgpa']) : '—' ?></strong></td>
                 </tr>
                 <?php endforeach; ?>
@@ -996,10 +1007,11 @@ $n_ok = $n_create + $n_exist;
     <strong><?= $import_stats['updated'] ?></strong> existing student(s) updated,
     <strong><?= $import_stats['created'] ?></strong> new student(s) created,
     <strong><?= $import_stats['skipped'] ?></strong> row(s) skipped.
+    <?php if ($import_stats['settings']['publish_date'] !== ''): ?>
     <div class="mt-1" style="font-size:.875rem;">
-        Results published for <strong><?= h($import_stats['settings']['completion_semester']) ?></strong>
-        (publish date <strong><?= h(date('d M Y', strtotime($import_stats['settings']['publish_date']))) ?></strong>).
+        Publish date: <strong><?= h(date('d M Y', strtotime($import_stats['settings']['publish_date']))) ?></strong>
     </div>
+    <?php endif; ?>
 </div>
 
 <div class="d-flex gap-2 mb-4">
