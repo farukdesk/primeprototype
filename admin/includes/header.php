@@ -334,6 +334,7 @@ if (is_portal_student()) {
     $is_hr_active = $is_jobs_active || (strpos($current_path, '/staff-profiles/') !== false) || (strpos($current_path, '/leave-management/') !== false) || (strpos($current_path, '/staff-attendance/') !== false);
     $is_coe_active = strpos($current_path, '/results/') !== false
                   || $is_spring_result_active || $is_tabulation_checker_active || $is_transcript_maker_active
+                  || strpos($current_path, '/final-result-publish/') !== false
                   || strpos($current_path, '/student-verification/') !== false
                   || strpos($current_path, '/cert-verifiers/') !== false
                   || $is_exam_invigilation_active || $is_admit_card_active;
