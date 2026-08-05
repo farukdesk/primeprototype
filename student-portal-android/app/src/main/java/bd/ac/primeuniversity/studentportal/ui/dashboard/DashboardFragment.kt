@@ -87,9 +87,7 @@ class DashboardFragment : Fragment() {
             Feature.NOTICES -> activity?.selectTab(R.id.nav_notices)
             Feature.ANNOUNCEMENTS ->
                 startActivity(Intent(requireContext(), NotificationsActivity::class.java))
-            Feature.DUE_TODAY,
-            Feature.TOTAL_PAID,
-            Feature.TRANSACTION_HISTORY -> activity?.selectTab(R.id.nav_finances)
+            Feature.MY_FINANCES -> activity?.selectTab(R.id.nav_finances)
             Feature.STUDENT_PROFILE -> activity?.selectTab(R.id.nav_profile)
             Feature.SETTINGS -> openSettings()
             Feature.THEME -> openSettings(openTheme = true)
