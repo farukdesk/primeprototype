@@ -232,6 +232,7 @@ if (isset($_GET['ajax_student_card'])) {
         'student' => [
             'id'               => (int)$sc['id'],
             'student_id'       => $sc['student_id'],
+            'certificate_number' => $cert_no,
             'full_name'        => $sc['full_name'],
             'dept_name'        => $sc['dept_name'],
             'dept_code'        => $sc['dept_code'] ?? '',

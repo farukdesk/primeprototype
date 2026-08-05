@@ -85,9 +85,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($fd['co_phone'] === '') $form_errors[] = 'Phone number is required.';
         }
 
-        // Validate student ID
+        // Validate student ID / certificate number
         if ($fd['student_id'] === '') {
-            $form_errors[] = 'Student ID is required.';
+            $form_errors[] = 'Student ID or Certificate Number is required.';
         }
 
         // Look up student if no errors
