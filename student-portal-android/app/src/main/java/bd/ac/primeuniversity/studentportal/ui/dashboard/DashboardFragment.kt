@@ -82,6 +82,8 @@ class DashboardFragment : Fragment() {
     private fun onFeature(feature: Feature) {
         val activity = activity as? MainActivity
         when (feature) {
+            Feature.REGISTERED_COURSES ->
+                startActivity(Intent(requireContext(), RegisteredCoursesActivity::class.java))
             Feature.NOTICES -> activity?.selectTab(R.id.nav_notices)
             Feature.ANNOUNCEMENTS ->
                 startActivity(Intent(requireContext(), NotificationsActivity::class.java))
