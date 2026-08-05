@@ -74,16 +74,8 @@ class FinancesFragment : Fragment() {
         }
         binding.messageBox.visibility = View.GONE
 
-        // Summary card
+        // Due as of today (obligations up to the current month)
         binding.summaryCard.visibility = View.VISIBLE
-        binding.totalDue.text = Formatters.money(summary.totalDue)
-        binding.totalPaid.text = Formatters.money(summary.totalPaid)
-        binding.outstanding.text = Formatters.money(summary.outstanding)
-        binding.outstanding.setTextColor(
-            if (summary.outstanding > 0) 0xFFFF6B6B.toInt() else 0xFF6EE7B7.toInt()
-        )
-
-        // Balance due right now (obligations up to the current month)
         binding.dueToday.text = Formatters.money(summary.dueAsOfToday)
         binding.dueTodayLabel.text = summary.asOfDate?.let {
             getString(R.string.due_as_of_today_dated, it)
