@@ -135,6 +135,12 @@ class StudentRepository private constructor(context: Context) {
 
     suspend fun getFinances(): AppResult<FinancesResponse> = call { api.getFinances() }
 
+    // ── Courses (students only) ────────────────────────────────────────────────────
+
+    /** Course offers for the student's batch, with per-subject registration status. */
+    suspend fun getCourseOffers(): AppResult<CourseOffersResponse> =
+        call { api.getCourseOffers() }
+
     // ── Announcements (push notification history) ─────────────────────────────────────
 
     /** Announcements published from the admin panel's App Notification module. */
