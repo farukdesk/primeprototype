@@ -48,10 +48,8 @@ enum class Feature(
     SETTINGS(R.string.feat_settings, R.drawable.ic_settings, R.color.cat_settings),
     THEME(R.string.feat_theme, R.drawable.ic_dark_mode, R.color.purple),
 
-    // Finances
-    DUE_TODAY(R.string.feat_due_today, R.drawable.ic_wallet, R.color.error),
-    TOTAL_PAID(R.string.feat_total_paid, R.drawable.ic_paid, R.color.cat_profile),
-    TRANSACTION_HISTORY(R.string.feat_transaction_history, R.drawable.ic_receipt, R.color.cat_finance),
+    // Finances – one entry; the Finances tab shows dues, paid totals and history.
+    MY_FINANCES(R.string.feat_my_finances, R.drawable.ic_wallet, R.color.cat_finance, R.string.feat_my_finances_desc),
 
     // Staff / Employee (Administrative + Faculty)
     MY_ATTENDANCE(R.string.feat_my_attendance, R.drawable.ic_check_circle, R.color.icon_attendance, R.string.feat_my_attendance_desc, R.color.tint_attendance),
@@ -97,9 +95,7 @@ fun buildDashboardMenu(): List<MenuRow> = buildList {
     add(MenuRow.Item(Feature.EMERGENCY_CONTACT))
 
     add(MenuRow.Header(R.string.section_finances))
-    add(MenuRow.Item(Feature.DUE_TODAY))
-    add(MenuRow.Item(Feature.TOTAL_PAID))
-    add(MenuRow.Item(Feature.TRANSACTION_HISTORY))
+    add(MenuRow.Item(Feature.MY_FINANCES))
 
     add(MenuRow.Header(R.string.section_settings))
     add(MenuRow.Item(Feature.PASSWORD_CHANGE))

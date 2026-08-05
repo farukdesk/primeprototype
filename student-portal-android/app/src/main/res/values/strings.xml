@@ -130,9 +130,8 @@
     <string name="feat_theme">Dark / Light Mode</string>
 
     <!-- Finances -->
-    <string name="feat_due_today">Due as of today</string>
-    <string name="feat_total_paid">Total paid as of today</string>
-    <string name="feat_transaction_history">Transaction history</string>
+    <string name="feat_my_finances">My Finances</string>
+    <string name="feat_my_finances_desc">Dues, payments &amp; transaction history</string>
 
     <!-- Feature detail (coming soon) -->
     <string name="coming_soon">Coming soon</string>
