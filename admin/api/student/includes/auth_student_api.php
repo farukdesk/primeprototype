@@ -14,6 +14,11 @@ require_once dirname(__DIR__, 3) . '/includes/config.php';
 require_once dirname(__DIR__, 3) . '/includes/db.php';
 require_once dirname(__DIR__, 2) . '/includes/authorization_header.php';
 
+// API responses must be pure JSON. Never let PHP warnings/notices leak into
+// the output stream: they would corrupt the JSON and make the mobile app's
+// parser fail (surfacing as "No internet connection" to the student).
+ini_set('display_errors', '0');
+
 // ── CORS headers ──────────────────────────────────────────────────────────────
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');

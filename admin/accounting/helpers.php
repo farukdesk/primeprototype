@@ -3252,6 +3252,7 @@ function acc_outstanding_through_current_month(int $package_id): float
         return 0.0;
     }
 
+    $months     = (float)($pkg['total_months'] ?? 0);
     $mps        = (float)($pkg['months_per_semester'] ?? 0);
     $months_int = max(1, (int)round($mps));
     $reg_fee    = (float)($pkg['reg_fee_per_semester'] ?? 0.0);
