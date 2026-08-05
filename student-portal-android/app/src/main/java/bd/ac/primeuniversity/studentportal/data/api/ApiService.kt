@@ -1,6 +1,7 @@
 package bd.ac.primeuniversity.studentportal.data.api
 
 import bd.ac.primeuniversity.studentportal.data.model.AppNotificationsResponse
+import bd.ac.primeuniversity.studentportal.data.model.CourseOffersResponse
 import bd.ac.primeuniversity.studentportal.data.model.FinancesResponse
 import bd.ac.primeuniversity.studentportal.data.model.LoginResponse
 import bd.ac.primeuniversity.studentportal.data.model.MeResponse
@@ -50,6 +51,9 @@ interface ApiService {
 
     @GET("finances.php")
     suspend fun getFinances(): Response<FinancesResponse>
+
+    @GET("course-offers.php")
+    suspend fun getCourseOffers(): Response<CourseOffersResponse>
 
     @GET("notifications.php")
     suspend fun getAppNotifications(

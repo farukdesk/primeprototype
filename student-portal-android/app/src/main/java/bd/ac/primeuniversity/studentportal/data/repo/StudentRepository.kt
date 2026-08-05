@@ -10,6 +10,7 @@ import bd.ac.primeuniversity.studentportal.data.local.SecureStorage
 import bd.ac.primeuniversity.studentportal.data.model.AppNotificationsResponse
 import bd.ac.primeuniversity.studentportal.data.model.AppVersionResponse
 import bd.ac.primeuniversity.studentportal.data.model.BaseResponse
+import bd.ac.primeuniversity.studentportal.data.model.CourseOffersResponse
 import bd.ac.primeuniversity.studentportal.data.model.FinancesResponse
 import bd.ac.primeuniversity.studentportal.data.model.LeaveApplyResponse
 import bd.ac.primeuniversity.studentportal.data.model.LeaveApprovalsResponse
@@ -133,6 +134,12 @@ class StudentRepository private constructor(context: Context) {
     // ── Finances (students only) ───────────────────────────────────────────────────
 
     suspend fun getFinances(): AppResult<FinancesResponse> = call { api.getFinances() }
+
+    // ── Courses (students only) ────────────────────────────────────────────────────
+
+    /** Course offers for the student's batch, with per-subject registration status. */
+    suspend fun getCourseOffers(): AppResult<CourseOffersResponse> =
+        call { api.getCourseOffers() }
 
     // ── Announcements (push notification history) ─────────────────────────────────────
 

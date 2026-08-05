@@ -15,6 +15,7 @@ import bd.ac.primeuniversity.studentportal.R
 import bd.ac.primeuniversity.studentportal.data.model.Stats
 import bd.ac.primeuniversity.studentportal.data.model.Student
 import bd.ac.primeuniversity.studentportal.databinding.FragmentDashboardBinding
+import bd.ac.primeuniversity.studentportal.ui.courses.RegisteredCoursesActivity
 import bd.ac.primeuniversity.studentportal.ui.feature.FeatureActivity
 import bd.ac.primeuniversity.studentportal.ui.idcard.IdCardActivity
 import bd.ac.primeuniversity.studentportal.ui.main.MainActivity
@@ -81,6 +82,8 @@ class DashboardFragment : Fragment() {
     private fun onFeature(feature: Feature) {
         val activity = activity as? MainActivity
         when (feature) {
+            Feature.REGISTERED_COURSES ->
+                startActivity(Intent(requireContext(), RegisteredCoursesActivity::class.java))
             Feature.NOTICES -> activity?.selectTab(R.id.nav_notices)
             Feature.ANNOUNCEMENTS ->
                 startActivity(Intent(requireContext(), NotificationsActivity::class.java))

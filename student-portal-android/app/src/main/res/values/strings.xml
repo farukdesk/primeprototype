@@ -97,6 +97,11 @@
     <string name="feat_course_registration">Course Registration</string>
     <string name="feat_course_modules">Course Modules</string>
 
+    <!-- Registered courses screen -->
+    <string name="registered_courses_empty">You have not registered for any courses yet. Once your course registration is complete, your courses will appear here.</string>
+    <string name="offer_registered_count">%1$d of %2$d courses registered</string>
+    <string name="course_credit">%1$s Credit</string>
+
     <!-- Examination -->
     <string name="feat_results">Results</string>
     <string name="feat_results_desc">Semester-wise &amp; course-wise</string>
