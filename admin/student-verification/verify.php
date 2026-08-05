@@ -805,6 +805,7 @@ function stuCard(s){
     const ph=s.photo_url?`<img src="${ex(s.photo_url)}" class="sv-ph" alt="${ex(s.full_name)}">`:`<div class="sv-ph-ph"><i class="fas fa-user-graduate"></i></div>`;
     const sb=`<span class="badge ${s.status==='Graduated'?'bg-success':'bg-primary'}">${ex(s.status||'Active')}</span>`;
     let rows=`<tr><th class="text-muted fw-normal" style="width:40%;">Department</th><td class="fw-medium">${ex(s.dept_name)}</td></tr>`;
+    if(s.certificate_number) rows+=`<tr><th class="text-muted fw-normal">Certificate No.</th><td><code>${ex(s.certificate_number)}</code></td></tr>`;
     if(s.program_name)      rows+=`<tr><th class="text-muted fw-normal">Obtained Degree</th><td>${ex(s.program_name)}</td></tr>`;
     if(s.admitted_semester) rows+=`<tr><th class="text-muted fw-normal">Enrolled Semester</th><td>${ex(s.admitted_semester)}</td></tr>`;
     if(s.ending_semester)   rows+=`<tr><th class="text-muted fw-normal">Ending Semester</th><td>${ex(s.ending_semester)}</td></tr>`;

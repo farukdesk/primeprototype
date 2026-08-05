@@ -892,18 +892,18 @@ function cert_photo_url(?string $photo): string
 
                      <hr class="cv-divider">
 
-                     <!-- Step 2: Student ID -->
+                     <!-- Step 2: Student ID / Certificate Number -->
                      <div class="cv-section-label">Step 2</div>
-                     <div class="cv-section-title">Enter Student ID</div>
+                     <div class="cv-section-title">Enter Student ID or Certificate Number</div>
 
                      <div class="cv-sid-wrap">
-                        <label for="studentIdInput">Student ID <span style="color:#dc2626;">*</span></label>
+                        <label for="studentIdInput">Student ID / Certificate Number <span style="color:#dc2626;">*</span></label>
                         <div class="cv-sid-row">
                            <input type="text" name="student_id" id="studentIdInput"
                                   class="form-control"
-                                  placeholder="e.g. 230101010001"
+                                  placeholder="e.g. 230101010001 or certificate no."
                                   value="<?= fh($fd['student_id']) ?>"
-                                  maxlength="25"
+                                  maxlength="50"
                                   autocomplete="off"
                                   spellcheck="false">
                            <?php captcha_render_widget(); ?>
