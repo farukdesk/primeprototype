@@ -28,6 +28,7 @@ ini_set('memory_limit', '256M');
 
 require_once __DIR__ . '/../includes/auth.php';
 require_access('final-result-publish');
+require_once __DIR__ . '/../change-log/helpers.php';
 require_once __DIR__ . '/../../vendor/autoload.php';
 
 use PhpOffice\PhpSpreadsheet\IOFactory;
