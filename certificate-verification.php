@@ -985,6 +985,12 @@ function cert_photo_url(?string $photo): string
                            <div class="label">Student ID</div>
                            <div class="value"><?= fh($student['student_id']) ?></div>
                         </div>
+                        <?php if (!empty($certificate_number)): ?>
+                        <div class="cv-info-item">
+                           <div class="label">Certificate Number</div>
+                           <div class="value"><?= fh($certificate_number) ?></div>
+                        </div>
+                        <?php endif; ?>
                         <div class="cv-info-item">
                            <div class="label">Full Name</div>
                            <div class="value"><?= fh($student['full_name']) ?></div>
