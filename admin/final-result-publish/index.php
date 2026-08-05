@@ -803,10 +803,16 @@ require_once __DIR__ . '/../includes/header.php';
             <li class="breadcrumb-item active">Final Result Publish</li>
         </ol>
     </nav>
-    <a href="<?= SITE_URL ?>/certificate-verification.php" target="_blank"
-       class="btn btn-outline-secondary btn-sm" style="border-radius:8px;">
-        <i class="fas fa-external-link-alt me-1"></i> Public Verification Page
-    </a>
+    <div class="d-flex gap-2 flex-wrap">
+        <a href="<?= APP_URL ?>/final-result-publish/certificate-upload.php"
+           class="btn btn-outline-primary btn-sm" style="border-radius:8px;">
+            <i class="fas fa-certificate me-1"></i> Certificate Number Upload
+        </a>
+        <a href="<?= SITE_URL ?>/certificate-verification.php" target="_blank"
+           class="btn btn-outline-secondary btn-sm" style="border-radius:8px;">
+            <i class="fas fa-external-link-alt me-1"></i> Public Verification Page
+        </a>
+    </div>
 </div>
 
 <?php flash_show(); ?>

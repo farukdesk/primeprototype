@@ -18,6 +18,7 @@ $form_errors   = [];
 $submitted      = false;
 $student        = null;
 $result_info    = null; // ['ending_semester', 'publish_date', 'final_cgpa']
+$certificate_number = null;
 
 $fd = [
     'verifier_type'   => '',
@@ -84,9 +85,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($fd['co_phone'] === '') $form_errors[] = 'Phone number is required.';
         }
 
-        // Validate student ID
+        // Validate student ID / certificate number
         if ($fd['student_id'] === '') {
-            $form_errors[] = 'Student ID is required.';
+            $form_errors[] = 'Student ID or Certificate Number is required.';
         }
 
         // Look up student if no errors
@@ -98,27 +99,75 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $form_errors[] = 'Could not connect to the database. Please try again later.';
                     $submitted = false;
                 } else {
-                    // Fetch student record – the ID is matched both with and
-                    // without leading zeros ("0123" matches "123" and vice
-                    // versa); an exact match always wins.
-                    $sid_trimmed = ltrim($fd['student_id'], '0');
-                    if ($sid_trimmed === '') $sid_trimmed = $fd['student_id'];
-                    $stmt = $db->prepare(
-                        'SELECT s.id, s.student_id, s.full_name, s.batch,
-                                s.admitted_semester, s.status, s.photo,
-                                d.name  AS dept_name,
-                                p.program_name
-                         FROM   students s
-                         JOIN   dept_departments d ON d.id = s.dept_id
-                         LEFT JOIN dept_academic_programs p ON p.id = s.program_id
-                         WHERE  s.student_id = ?
-                            OR  s.student_id = ?
-                            OR  TRIM(LEADING \'0\' FROM s.student_id) = ?
-                         ORDER  BY (s.student_id = ?) DESC
-                         LIMIT  1'
-                    );
-                    $stmt->execute([$fd['student_id'], $sid_trimmed, $sid_trimmed, $fd['student_id']]);
-                    $student = $stmt->fetch() ?: null;
+                    // Fetch student record – the query is matched first
+                    // against certificate numbers, then against student IDs
+                    // (with and without leading zeros: "0123" matches "123"
+                    // and vice versa); an exact match always wins.
+                    $lookup      = preg_replace('/\s+/u', '', $fd['student_id']);
+                    $sid_trimmed = ltrim($lookup, '0');
+                    if ($sid_trimmed === '') $sid_trimmed = $lookup;
+
+                    $student            = null;
+                    $certificate_number = null;
+
+                    // 1) Certificate number lookup (table may not exist yet)
+                    try {
+                        $cstmt = $db->prepare(
+                            'SELECT s.id, s.student_id, s.full_name, s.batch,
+                                    s.admitted_semester, s.status, s.photo,
+                                    d.name  AS dept_name,
+                                    p.program_name,
+                                    sc.certificate_number
+                             FROM   student_certificates sc
+                             JOIN   students s ON s.id = sc.student_ref_id
+                             JOIN   dept_departments d ON d.id = s.dept_id
+                             LEFT JOIN dept_academic_programs p ON p.id = s.program_id
+                             WHERE  REPLACE(sc.certificate_number, \' \', \'\') = ?
+                             LIMIT  1'
+                        );
+                        $cstmt->execute([$lookup]);
+                        $student = $cstmt->fetch() ?: null;
+                        if ($student) {
+                            $certificate_number = $student['certificate_number'];
+                        }
+                    } catch (Throwable $cert_ex) {
+                        // student_certificates table not available – ignore
+                    }
+
+                    // 2) Student ID lookup (fallback)
+                    if (!$student) {
+                        $stmt = $db->prepare(
+                            'SELECT s.id, s.student_id, s.full_name, s.batch,
+                                    s.admitted_semester, s.status, s.photo,
+                                    d.name  AS dept_name,
+                                    p.program_name
+                             FROM   students s
+                             JOIN   dept_departments d ON d.id = s.dept_id
+                             LEFT JOIN dept_academic_programs p ON p.id = s.program_id
+                             WHERE  s.student_id = ?
+                                OR  s.student_id = ?
+                                OR  TRIM(LEADING \'0\' FROM s.student_id) = ?
+                             ORDER  BY (s.student_id = ?) DESC
+                             LIMIT  1'
+                        );
+                        $stmt->execute([$lookup, $sid_trimmed, $sid_trimmed, $lookup]);
+                        $student = $stmt->fetch() ?: null;
+                        if ($student) {
+                            try {
+                                $cn_stmt = $db->prepare(
+                                    'SELECT certificate_number
+                                     FROM   student_certificates
+                                     WHERE  student_ref_id = ?
+                                     LIMIT  1'
+                                );
+                                $cn_stmt->execute([$student['id']]);
+                                $cn = $cn_stmt->fetchColumn();
+                                if ($cn) $certificate_number = $cn;
+                            } catch (Throwable $cert_ex) {
+                                // table not available – ignore
+                            }
+                        }
+                    }
 
                     if ($student) {
                         // Try to find the most recent published result exam linked to this student
@@ -730,7 +779,7 @@ function cert_photo_url(?string $photo): string
          <h1 class="wow fadeInUp" data-wow-delay=".1s">Certificate<br>Verification</h1>
          <p class="tagline wow fadeInUp" data-wow-delay=".2s">
             Verify the authenticity of a Prime University degree or certificate
-            instantly by entering the student&rsquo;s ID below.
+            instantly by entering the student&rsquo;s ID or certificate number below.
          </p>
       </div>
    </section>
@@ -843,18 +892,18 @@ function cert_photo_url(?string $photo): string
 
                      <hr class="cv-divider">
 
-                     <!-- Step 2: Student ID -->
+                     <!-- Step 2: Student ID / Certificate Number -->
                      <div class="cv-section-label">Step 2</div>
-                     <div class="cv-section-title">Enter Student ID</div>
+                     <div class="cv-section-title">Enter Student ID or Certificate Number</div>
 
                      <div class="cv-sid-wrap">
-                        <label for="studentIdInput">Student ID <span style="color:#dc2626;">*</span></label>
+                        <label for="studentIdInput">Student ID / Certificate Number <span style="color:#dc2626;">*</span></label>
                         <div class="cv-sid-row">
                            <input type="text" name="student_id" id="studentIdInput"
                                   class="form-control"
-                                  placeholder="e.g. 230101010001"
+                                  placeholder="e.g. 230101010001 or certificate no."
                                   value="<?= fh($fd['student_id']) ?>"
-                                  maxlength="25"
+                                  maxlength="50"
                                   autocomplete="off"
                                   spellcheck="false">
                            <?php captcha_render_widget(); ?>
@@ -936,6 +985,12 @@ function cert_photo_url(?string $photo): string
                            <div class="label">Student ID</div>
                            <div class="value"><?= fh($student['student_id']) ?></div>
                         </div>
+                        <?php if (!empty($certificate_number)): ?>
+                        <div class="cv-info-item">
+                           <div class="label">Certificate Number</div>
+                           <div class="value"><?= fh($certificate_number) ?></div>
+                        </div>
+                        <?php endif; ?>
                         <div class="cv-info-item">
                            <div class="label">Full Name</div>
                            <div class="value"><?= fh($student['full_name']) ?></div>
@@ -1024,9 +1079,9 @@ function cert_photo_url(?string $photo): string
                      </div>
                      <h3>No Record Found</h3>
                      <p>
-                        We could not find any student with the ID
+                        We could not find any student with the ID or certificate number
                         <strong>&ldquo;<?= fh($fd['student_id']) ?>&rdquo;</strong>
-                        in our database. Please double-check the ID and try again.
+                        in our database. Please double-check the value and try again.
                      </p>
                      <p>
                         If you believe this is a mistake, please send us an email at:

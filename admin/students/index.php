@@ -37,12 +37,31 @@ $where  = [];
 $params = [];
 
 if ($search !== '') {
-    $like     = '%' . $search . '%';
-    $where[]  = '(s.student_id LIKE ? OR s.full_name LIKE ? OR s.email LIKE ? OR s.phone LIKE ?)';
+    $like = '%' . $search . '%';
+    // Leading-zero-insensitive ID match: "0123" finds "123" and vice versa.
+    $search_nz = ltrim($search, '0');
+    if ($search_nz === '') $search_nz = $search;
+    $like_nz = '%' . $search_nz . '%';
+
+    $search_cond = "(s.student_id LIKE ? OR TRIM(LEADING '0' FROM s.student_id) LIKE ? OR s.full_name LIKE ? OR s.email LIKE ? OR s.phone LIKE ?";
+    $params[] = $like;
+    $params[] = $like_nz;
     $params[] = $like;
     $params[] = $like;
     $params[] = $like;
-    $params[] = $like;
+
+    // Certificate number search (the student_certificates table is created by
+    // the Certificate Number Upload tool; skip silently when it doesn't exist).
+    try {
+        if (db()->query("SHOW TABLES LIKE 'student_certificates'")->fetchColumn()) {
+            $search_cond .= ' OR s.id IN (SELECT sc.student_ref_id FROM student_certificates sc WHERE sc.certificate_number LIKE ?)';
+            $params[]     = $like;
+        }
+    } catch (Throwable $e) {
+        // ignore – certificate search unavailable
+    }
+
+    $where[] = $search_cond . ')';
 }
 if ($f_dept > 0) {
     $where[]  = 's.dept_id = ?';

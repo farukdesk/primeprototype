@@ -118,14 +118,33 @@ if (isset($_GET['ajax_search'])) {
     $q = trim($_GET['q'] ?? '');
     $rows = [];
     if (strlen($q) >= 2) {
-        $like = '%' . $q . '%';
+        // Leading-zero-insensitive ID match: "0123" finds "123" and vice versa.
+        $q_nz = ltrim($q, '0');
+        if ($q_nz === '') $q_nz = $q;
+        $like    = '%' . $q . '%';
+        $like_nz = '%' . $q_nz . '%';
+
+        $cond   = "(s.student_id LIKE ? OR TRIM(LEADING '0' FROM s.student_id) LIKE ? OR s.full_name LIKE ?";
+        $params = [$like, $like_nz, $like];
+
+        // Certificate number search (table created by Certificate Number Upload)
+        try {
+            if (db()->query("SHOW TABLES LIKE 'student_certificates'")->fetchColumn()) {
+                $cond    .= ' OR s.id IN (SELECT sc.student_ref_id FROM student_certificates sc WHERE sc.certificate_number LIKE ?)';
+                $params[] = $like;
+            }
+        } catch (Throwable $e) {
+            // ignore – certificate search unavailable
+        }
+        $cond .= ')';
+
         $st = db()->prepare(
             'SELECT s.id, s.student_id, s.full_name, d.name AS dept_name
              FROM students s JOIN dept_departments d ON d.id = s.dept_id
-             WHERE (s.student_id LIKE ? OR s.full_name LIKE ?)
+             WHERE ' . $cond . '
              ORDER BY s.student_id ASC LIMIT 10'
         );
-        $st->execute([$like, $like]);
+        $st->execute($params);
         $rows = $st->fetchAll(PDO::FETCH_ASSOC);
     }
     echo json_encode($rows);
@@ -147,6 +166,14 @@ if (isset($_GET['ajax_student_card'])) {
     $ss->execute([$sid]);
     $sc = $ss->fetch();
     if (!$sc) { echo json_encode(['ok' => false]); exit; }
+
+    // Certificate number (table created by Certificate Number Upload)
+    $cert_no = null;
+    try {
+        $cq0 = db()->prepare('SELECT certificate_number FROM student_certificates WHERE student_ref_id = ? LIMIT 1');
+        $cq0->execute([$sid]);
+        $cert_no = $cq0->fetchColumn() ?: null;
+    } catch (Throwable $e) {}
 
     $sfst = db()->prepare(
         "SELECT id, file_name, original_name, mime_type, stored_name
@@ -205,6 +232,7 @@ if (isset($_GET['ajax_student_card'])) {
         'student' => [
             'id'               => (int)$sc['id'],
             'student_id'       => $sc['student_id'],
+            'certificate_number' => $cert_no,
             'full_name'        => $sc['full_name'],
             'dept_name'        => $sc['dept_name'],
             'dept_code'        => $sc['dept_code'] ?? '',
@@ -777,6 +805,7 @@ function stuCard(s){
     const ph=s.photo_url?`<img src="${ex(s.photo_url)}" class="sv-ph" alt="${ex(s.full_name)}">`:`<div class="sv-ph-ph"><i class="fas fa-user-graduate"></i></div>`;
     const sb=`<span class="badge ${s.status==='Graduated'?'bg-success':'bg-primary'}">${ex(s.status||'Active')}</span>`;
     let rows=`<tr><th class="text-muted fw-normal" style="width:40%;">Department</th><td class="fw-medium">${ex(s.dept_name)}</td></tr>`;
+    if(s.certificate_number) rows+=`<tr><th class="text-muted fw-normal">Certificate No.</th><td><code>${ex(s.certificate_number)}</code></td></tr>`;
     if(s.program_name)      rows+=`<tr><th class="text-muted fw-normal">Obtained Degree</th><td>${ex(s.program_name)}</td></tr>`;
     if(s.admitted_semester) rows+=`<tr><th class="text-muted fw-normal">Enrolled Semester</th><td>${ex(s.admitted_semester)}</td></tr>`;
     if(s.ending_semester)   rows+=`<tr><th class="text-muted fw-normal">Ending Semester</th><td>${ex(s.ending_semester)}</td></tr>`;
