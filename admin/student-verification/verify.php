@@ -167,6 +167,14 @@ if (isset($_GET['ajax_student_card'])) {
     $sc = $ss->fetch();
     if (!$sc) { echo json_encode(['ok' => false]); exit; }
 
+    // Certificate number (table created by Certificate Number Upload)
+    $cert_no = null;
+    try {
+        $cq0 = db()->prepare('SELECT certificate_number FROM student_certificates WHERE student_ref_id = ? LIMIT 1');
+        $cq0->execute([$sid]);
+        $cert_no = $cq0->fetchColumn() ?: null;
+    } catch (Throwable $e) {}
+
     $sfst = db()->prepare(
         "SELECT id, file_name, original_name, mime_type, stored_name
          FROM student_files WHERE student_id = ? ORDER BY created_at DESC"

@@ -18,6 +18,7 @@ $form_errors   = [];
 $submitted      = false;
 $student        = null;
 $result_info    = null; // ['ending_semester', 'publish_date', 'final_cgpa']
+$certificate_number = null;
 
 $fd = [
     'verifier_type'   => '',
