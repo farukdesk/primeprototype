@@ -1079,9 +1079,9 @@ function cert_photo_url(?string $photo): string
                      </div>
                      <h3>No Record Found</h3>
                      <p>
-                        We could not find any student with the ID
+                        We could not find any student with the ID or certificate number
                         <strong>&ldquo;<?= fh($fd['student_id']) ?>&rdquo;</strong>
-                        in our database. Please double-check the ID and try again.
+                        in our database. Please double-check the value and try again.
                      </p>
                      <p>
                         If you believe this is a mistake, please send us an email at:
