@@ -10,6 +10,7 @@ import bd.ac.primeuniversity.studentportal.data.local.SecureStorage
 import bd.ac.primeuniversity.studentportal.data.model.AppNotificationsResponse
 import bd.ac.primeuniversity.studentportal.data.model.AppVersionResponse
 import bd.ac.primeuniversity.studentportal.data.model.BaseResponse
+import bd.ac.primeuniversity.studentportal.data.model.CourseOffersResponse
 import bd.ac.primeuniversity.studentportal.data.model.FinancesResponse
 import bd.ac.primeuniversity.studentportal.data.model.LeaveApplyResponse
 import bd.ac.primeuniversity.studentportal.data.model.LeaveApprovalsResponse
