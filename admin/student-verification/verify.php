@@ -118,14 +118,33 @@ if (isset($_GET['ajax_search'])) {
     $q = trim($_GET['q'] ?? '');
     $rows = [];
     if (strlen($q) >= 2) {
-        $like = '%' . $q . '%';
+        // Leading-zero-insensitive ID match: "0123" finds "123" and vice versa.
+        $q_nz = ltrim($q, '0');
+        if ($q_nz === '') $q_nz = $q;
+        $like    = '%' . $q . '%';
+        $like_nz = '%' . $q_nz . '%';
+
+        $cond   = "(s.student_id LIKE ? OR TRIM(LEADING '0' FROM s.student_id) LIKE ? OR s.full_name LIKE ?";
+        $params = [$like, $like_nz, $like];
+
+        // Certificate number search (table created by Certificate Number Upload)
+        try {
+            if (db()->query("SHOW TABLES LIKE 'student_certificates'")->fetchColumn()) {
+                $cond    .= ' OR s.id IN (SELECT sc.student_ref_id FROM student_certificates sc WHERE sc.certificate_number LIKE ?)';
+                $params[] = $like;
+            }
+        } catch (Throwable $e) {
+            // ignore – certificate search unavailable
+        }
+        $cond .= ')';
+
         $st = db()->prepare(
             'SELECT s.id, s.student_id, s.full_name, d.name AS dept_name
              FROM students s JOIN dept_departments d ON d.id = s.dept_id
-             WHERE (s.student_id LIKE ? OR s.full_name LIKE ?)
+             WHERE ' . $cond . '
              ORDER BY s.student_id ASC LIMIT 10'
         );
-        $st->execute([$like, $like]);
+        $st->execute($params);
         $rows = $st->fetchAll(PDO::FETCH_ASSOC);
     }
     echo json_encode($rows);
