@@ -779,7 +779,7 @@ function cert_photo_url(?string $photo): string
          <h1 class="wow fadeInUp" data-wow-delay=".1s">Certificate<br>Verification</h1>
          <p class="tagline wow fadeInUp" data-wow-delay=".2s">
             Verify the authenticity of a Prime University degree or certificate
-            instantly by entering the student&rsquo;s ID below.
+            instantly by entering the student&rsquo;s ID or certificate number below.
          </p>
       </div>
    </section>
