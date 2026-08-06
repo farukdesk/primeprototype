@@ -183,7 +183,10 @@ function sa_subjects_filtered(array $filters = [], int $page = 1, int $per_page 
     // Faculty members (non-staff) only see subjects assigned to them.
     if (!sa_is_staff()) {
         $user     = auth_user();
-        $where[]  = 'cos.id IN (SELECT t.offer_subject_id\n                                  FROM co_offer_subject_teachers t\n                                  JOIN dept_faculty df ON df.id = t.faculty_id\n                                 WHERE df.user_id = ?)';
+        $where[]  = 'cos.id IN (SELECT t.offer_subject_id
+                                  FROM co_offer_subject_teachers t
+                                  JOIN dept_faculty df ON df.id = t.faculty_id
+                                 WHERE df.user_id = ?)';
         $params[] = (int)($user['id'] ?? 0);
     }
 
