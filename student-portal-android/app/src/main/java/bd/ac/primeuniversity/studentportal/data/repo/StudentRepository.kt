@@ -21,8 +21,11 @@ import bd.ac.primeuniversity.studentportal.data.model.NoticesResponse
 import bd.ac.primeuniversity.studentportal.data.model.SimpleResponse
 import bd.ac.primeuniversity.studentportal.data.model.StaffAttendanceResponse
 import bd.ac.primeuniversity.studentportal.data.model.StaffLeavesResponse
+import bd.ac.primeuniversity.studentportal.data.model.SaveStudentAttendanceResponse
 import bd.ac.primeuniversity.studentportal.data.model.StaffLoginResponse
 import bd.ac.primeuniversity.studentportal.data.model.StaffMeResponse
+import bd.ac.primeuniversity.studentportal.data.model.SubjectStudentsResponse
+import bd.ac.primeuniversity.studentportal.data.model.TeachSubjectsResponse
 import bd.ac.primeuniversity.studentportal.util.AppResult
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
@@ -199,6 +202,24 @@ class StudentRepository private constructor(context: Context) {
         newPassword: String,
     ): AppResult<SimpleResponse> =
         call { staffApi.changePassword(currentPassword, newPassword) }
+
+    // ── Faculty: student attendance ──────────────────────────────────────
+
+    /** Offered subjects the signed-in faculty member is assigned to teach. */
+    suspend fun getTeachingSubjects(): AppResult<TeachSubjectsResponse> =
+        call { staffApi.getTeachingSubjects() }
+
+    /** Roster + saved statuses of an assigned subject for one class date. */
+    suspend fun getSubjectStudents(subjectId: Int, date: String): AppResult<SubjectStudentsResponse> =
+        call { staffApi.getSubjectStudents(subjectId = subjectId, date = date) }
+
+    /** Save (upsert) attendance for a subject and date. */
+    suspend fun saveStudentAttendance(
+        subjectId: Int,
+        date: String,
+        statuses: Map<Int, String>,
+    ): AppResult<SaveStudentAttendanceResponse> =
+        call { staffApi.saveStudentAttendance(subjectId, date, Gson().toJson(statuses)) }
 
     // ── Push notifications ────────────────────────────────────────────────────────────
 
