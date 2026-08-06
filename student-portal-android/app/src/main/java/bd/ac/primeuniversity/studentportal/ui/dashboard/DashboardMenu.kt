@@ -19,7 +19,6 @@ enum class Feature(
     // Academic
     REGISTERED_COURSES(R.string.feat_registered_courses, R.drawable.ic_school, R.color.cat_academic),
     COURSE_REGISTRATION(R.string.feat_course_registration, R.drawable.ic_registration, R.color.cat_academic),
-    COURSE_MODULES(R.string.feat_course_modules, R.drawable.ic_modules, R.color.cat_academic),
 
     // Examination
     RESULTS(R.string.feat_results, R.drawable.ic_results, R.color.cat_exam, R.string.feat_results_desc),
@@ -70,7 +69,6 @@ fun buildDashboardMenu(): List<MenuRow> = buildList {
     add(MenuRow.Header(R.string.section_academic))
     add(MenuRow.Item(Feature.REGISTERED_COURSES))
     add(MenuRow.Item(Feature.COURSE_REGISTRATION))
-    add(MenuRow.Item(Feature.COURSE_MODULES))
 
     add(MenuRow.Header(R.string.section_examination))
     add(MenuRow.Item(Feature.RESULTS))
