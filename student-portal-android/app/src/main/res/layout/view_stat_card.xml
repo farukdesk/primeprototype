@@ -36,6 +36,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
+            android:ellipsize="end"
             android:fontFamily="sans-serif-medium"
             android:maxLines="1"
             android:text="@string/dash"
@@ -43,7 +44,7 @@
             android:textSize="24sp"
             android:textStyle="bold"
             app:autoSizeMaxTextSize="24sp"
-            app:autoSizeMinTextSize="14sp"
+            app:autoSizeMinTextSize="11sp"
             app:autoSizeStepGranularity="1sp"
             app:autoSizeTextType="uniform" />
 
