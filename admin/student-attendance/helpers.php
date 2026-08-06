@@ -125,13 +125,30 @@ function sa_intakes(): array
         ->fetchAll(PDO::FETCH_COLUMN);
 }
 
+/** Distinct non-empty sections that actually exist on course offers. */
+function sa_sections(): array
+{
+    return db()
+        ->query("SELECT DISTINCT section FROM co_offers WHERE section IS NOT NULL AND section <> '' ORDER BY section ASC")
+        ->fetchAll(PDO::FETCH_COLUMN);
+}
+
+/** Distinct non-empty shifts (groups) that actually exist on course offers. */
+function sa_shifts(): array
+{
+    return db()
+        ->query("SELECT DISTINCT shift FROM co_offers WHERE shift IS NOT NULL AND shift <> '' ORDER BY shift ASC")
+        ->fetchAll(PDO::FETCH_COLUMN);
+}
+
 // ── Subject listing ───────────────────────────────────────────────────────────
 
 /**
  * Filtered + paginated offered subjects for the attendance dashboard.
  *
  * Supported $filters keys: dept_id, program_id, batch_id, semester,
- *                          academic_intake, search (course code/name).
+ *                          academic_intake, section, shift,
+ *                          search (course code/name).
  *
  * Staff (can_edit) and super admins see every subject within their department
  * scope. Everyone else (faculty) only sees the subjects they are assigned to
@@ -157,6 +174,14 @@ function sa_subjects_filtered(array $filters = [], int $page = 1, int $per_page 
     if (!empty($filters['academic_intake'])) {
         $where[]  = 'o.academic_intake = ?';
         $params[] = $filters['academic_intake'];
+    }
+    if (!empty($filters['section'])) {
+        $where[]  = 'o.section = ?';
+        $params[] = $filters['section'];
+    }
+    if (!empty($filters['shift'])) {
+        $where[]  = 'o.shift = ?';
+        $params[] = $filters['shift'];
     }
 
     $search = trim($filters['search'] ?? '');
