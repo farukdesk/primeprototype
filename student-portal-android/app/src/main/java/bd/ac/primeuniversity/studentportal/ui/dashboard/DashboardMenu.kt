@@ -54,6 +54,7 @@ enum class Feature(
     MY_ATTENDANCE(R.string.feat_my_attendance, R.drawable.ic_check_circle, R.color.icon_attendance, R.string.feat_my_attendance_desc, R.color.tint_attendance),
     LEAVE_MANAGEMENT(R.string.feat_leave_management, R.drawable.ic_event, R.color.icon_leave, R.string.feat_leave_management_desc, R.color.tint_leave),
     LEAVE_APPROVALS(R.string.feat_leave_approvals, R.drawable.ic_check_circle, R.color.icon_approvals, R.string.feat_leave_approvals_desc, R.color.tint_approvals),
+    STUDENT_ATTENDANCE(R.string.feat_student_attendance, R.drawable.ic_school, R.color.icon_approvals, R.string.feat_student_attendance_desc, R.color.tint_approvals),
     STAFF_NOTICES(R.string.feat_notices, R.drawable.ic_notifications, R.color.icon_notices, containerRes = R.color.tint_notices),
     STAFF_PROFILE(R.string.feat_my_profile, R.drawable.ic_person, R.color.icon_profile, containerRes = R.color.tint_profile),
 }
@@ -106,10 +107,16 @@ fun buildDashboardMenu(): List<MenuRow> = buildList {
  *
  * @param canApproveLeaves whether the employee's user group is part of an
  * active leave approval flow – adds the Leave Approvals entry.
+ * @param canTakeStudentAttendance whether the employee is a Faculty member –
+ * adds the Student Attendance entry.
  */
-fun buildStaffDashboardMenu(canApproveLeaves: Boolean = false): List<MenuRow> = buildList {
+fun buildStaffDashboardMenu(
+    canApproveLeaves: Boolean = false,
+    canTakeStudentAttendance: Boolean = false,
+): List<MenuRow> = buildList {
     add(MenuRow.Header(R.string.section_staff_workspace))
     add(MenuRow.Item(Feature.MY_ATTENDANCE))
+    if (canTakeStudentAttendance) add(MenuRow.Item(Feature.STUDENT_ATTENDANCE))
     add(MenuRow.Item(Feature.LEAVE_MANAGEMENT))
     if (canApproveLeaves) add(MenuRow.Item(Feature.LEAVE_APPROVALS))
     add(MenuRow.Item(Feature.STAFF_NOTICES))

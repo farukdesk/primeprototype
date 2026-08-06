@@ -86,6 +86,16 @@
             android:parentActivityName=".ui.staff.StaffMainActivity" />
 
         <activity
+            android:name=".ui.staff.attendance.StudentAttendanceActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.staff.StaffMainActivity" />
+
+        <activity
+            android:name=".ui.staff.attendance.TakeStudentAttendanceActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.staff.attendance.StudentAttendanceActivity" />
+
+        <activity
             android:name=".ui.staff.leave.LeaveActivity"
             android:exported="false"
             android:parentActivityName=".ui.staff.StaffMainActivity" />

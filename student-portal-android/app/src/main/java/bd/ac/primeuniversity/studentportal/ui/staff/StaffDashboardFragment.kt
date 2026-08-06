@@ -21,6 +21,7 @@ import bd.ac.primeuniversity.studentportal.ui.dashboard.buildStaffDashboardMenu
 import bd.ac.primeuniversity.studentportal.ui.notifications.NotificationsActivity
 import bd.ac.primeuniversity.studentportal.ui.settings.SettingsActivity
 import bd.ac.primeuniversity.studentportal.ui.staff.attendance.StaffAttendanceActivity
+import bd.ac.primeuniversity.studentportal.ui.staff.attendance.StudentAttendanceActivity
 import bd.ac.primeuniversity.studentportal.ui.staff.leave.LeaveActivity
 import bd.ac.primeuniversity.studentportal.ui.staff.leave.LeaveApprovalsActivity
 import bd.ac.primeuniversity.studentportal.util.AppResult
@@ -39,8 +40,8 @@ class StaffDashboardFragment : Fragment() {
 
     private val app: PrimeApp by lazy { requireActivity().application as PrimeApp }
 
-    /** Whether the current menu was built with the Leave Approvals entry. */
-    private var menuHasApprovals = false
+    /** Flags (canApproveLeaves, isFaculty) the current launcher menu was built with. */
+    private var menuFlags: Pair<Boolean, Boolean>? = null
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
@@ -94,6 +95,8 @@ class StaffDashboardFragment : Fragment() {
         when (feature) {
             Feature.MY_ATTENDANCE ->
                 startActivity(Intent(requireContext(), StaffAttendanceActivity::class.java))
+            Feature.STUDENT_ATTENDANCE ->
+                startActivity(Intent(requireContext(), StudentAttendanceActivity::class.java))
             Feature.LEAVE_MANAGEMENT ->
                 startActivity(Intent(requireContext(), LeaveActivity::class.java))
             Feature.LEAVE_APPROVALS ->
@@ -132,13 +135,16 @@ class StaffDashboardFragment : Fragment() {
         binding.staffTypeBadge.visibility =
             if (typeLabel.isNullOrBlank()) View.GONE else View.VISIBLE
 
-        // Show the Leave Approvals launcher entry only for employees whose
-        // user group is part of an active leave approval flow.
+        // Leave Approvals appears only for approvers; Student Attendance only
+        // for Faculty (educational employee type or the Faculty user group).
         val canApprove = me?.permissions?.canApproveLeaves == true
-        if (canApprove != menuHasApprovals) {
-            menuHasApprovals = canApprove
+        val isFaculty = me?.employee?.isFaculty == true ||
+            me?.user?.group?.equals("Faculty", ignoreCase = true) == true
+        val flags = canApprove to isFaculty
+        if (flags != menuFlags) {
+            menuFlags = flags
             binding.menuList.adapter =
-                DashboardMenuAdapter(buildStaffDashboardMenu(canApprove), grid = true) {
+                DashboardMenuAdapter(buildStaffDashboardMenu(canApprove, isFaculty), grid = true) {
                     onFeature(it)
                 }
         }

@@ -9,8 +9,11 @@ import bd.ac.primeuniversity.studentportal.data.model.NoticesResponse
 import bd.ac.primeuniversity.studentportal.data.model.SimpleResponse
 import bd.ac.primeuniversity.studentportal.data.model.StaffAttendanceResponse
 import bd.ac.primeuniversity.studentportal.data.model.StaffLeavesResponse
+import bd.ac.primeuniversity.studentportal.data.model.SaveStudentAttendanceResponse
 import bd.ac.primeuniversity.studentportal.data.model.StaffLoginResponse
 import bd.ac.primeuniversity.studentportal.data.model.StaffMeResponse
+import bd.ac.primeuniversity.studentportal.data.model.SubjectStudentsResponse
+import bd.ac.primeuniversity.studentportal.data.model.TeachSubjectsResponse
 import retrofit2.Response
 import retrofit2.http.Field
 import retrofit2.http.FormUrlEncoded
@@ -102,6 +105,28 @@ interface StaffApiService {
         @Field("current_password") currentPassword: String,
         @Field("new_password") newPassword: String,
     ): Response<SimpleResponse>
+
+    // ── Faculty: student attendance ──
+
+    @GET("staff/student-attendance.php")
+    suspend fun getTeachingSubjects(
+        @Query("action") action: String = "subjects",
+    ): Response<TeachSubjectsResponse>
+
+    @GET("staff/student-attendance.php")
+    suspend fun getSubjectStudents(
+        @Query("action") action: String = "students",
+        @Query("subject_id") subjectId: Int,
+        @Query("date") date: String,
+    ): Response<SubjectStudentsResponse>
+
+    @FormUrlEncoded
+    @POST("staff/student-attendance.php")
+    suspend fun saveStudentAttendance(
+        @Field("subject_id") subjectId: Int,
+        @Field("class_date") classDate: String,
+        @Field("statuses") statusesJson: String,
+    ): Response<SaveStudentAttendanceResponse>
 
     // Public endpoint at admin/api/app-version.php (no auth required).
     @GET("app-version.php")

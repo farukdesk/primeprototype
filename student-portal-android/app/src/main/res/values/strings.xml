@@ -189,6 +189,30 @@
     <string name="attendance_title">My Attendance</string>
     <string name="attendance_empty">No attendance records for this period.</string>
 
+    <!-- Faculty: student attendance -->
+    <string name="feat_student_attendance">Student Attendance</string>
+    <string name="feat_student_attendance_desc">Take class attendance for your subjects</string>
+    <string name="student_att_title">Student Attendance</string>
+    <string name="student_att_subtitle">Your assigned subjects</string>
+    <string name="filter_all">All</string>
+    <string name="filter_semester">Semester</string>
+    <string name="filter_intake">Academic Intake</string>
+    <string name="filter_section">Section</string>
+    <string name="filter_shift">Shift (Group)</string>
+    <string name="student_att_students">%1$d students</string>
+    <string name="student_att_classes">%1$d classes taken</string>
+    <string name="student_att_no_match">No subjects match the selected filters.</string>
+    <string name="student_att_no_subjects">No subjects are assigned to you yet. Subjects are assigned to faculty in the Course Offer module.</string>
+    <string name="student_att_no_students">No students are registered on this subject yet.</string>
+    <string name="take_attendance">Take Attendance</string>
+    <string name="class_date">Class Date</string>
+    <string name="mark_all_present">All Present</string>
+    <string name="mark_all_absent">All Absent</string>
+    <string name="attendance_exists">Attendance already exists for this date — saving will overwrite it.</string>
+    <string name="attendance_saved">Attendance saved.</string>
+    <string name="save_attendance">Save Attendance</string>
+    <string name="attendance_legend">P Present · A Absent · L Late · E Excused</string>
+
     <!-- Staff: leave management -->
     <string name="leave_title">Leave Management</string>
     <string name="leave_apply">Apply for Leave</string>
