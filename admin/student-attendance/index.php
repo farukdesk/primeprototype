@@ -16,6 +16,8 @@ $departments = sa_departments();
 $batches     = sa_batches();
 $semesters   = sa_semesters();
 $intakes     = sa_intakes();
+$sections    = sa_sections();
+$shifts      = sa_shifts();
 
 // Default department comes from the faculty profile when no filter is set.
 $dept_id = isset($_GET['dept_id'])
@@ -28,6 +30,8 @@ $filters = [
     'batch_id'        => (int)($_GET['batch_id'] ?? 0),
     'semester'        => trim($_GET['semester'] ?? ''),
     'academic_intake' => trim($_GET['academic_intake'] ?? ''),
+    'section'         => trim($_GET['section'] ?? ''),
+    'shift'           => trim($_GET['shift'] ?? ''),
     'search'          => trim($_GET['search'] ?? ''),
 ];
 
@@ -108,6 +112,24 @@ include __DIR__ . '/../includes/header.php';
                     <option value="">All intakes</option>
                     <?php foreach ($intakes as $i): ?>
                     <option value="<?= h($i) ?>" <?= $filters['academic_intake'] === $i ? 'selected' : '' ?>><?= h($i) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label" style="font-size:.8rem;font-weight:600;">Section</label>
+                <select name="section" class="form-select form-select-sm">
+                    <option value="">All sections</option>
+                    <?php foreach ($sections as $sec): ?>
+                    <option value="<?= h($sec) ?>" <?= $filters['section'] === $sec ? 'selected' : '' ?>><?= h($sec) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label" style="font-size:.8rem;font-weight:600;">Shift / Group</label>
+                <select name="shift" class="form-select form-select-sm">
+                    <option value="">All shifts</option>
+                    <?php foreach ($shifts as $sh): ?>
+                    <option value="<?= h($sh) ?>" <?= $filters['shift'] === $sh ? 'selected' : '' ?>><?= h($sh) ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
