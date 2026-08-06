@@ -9,7 +9,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.graphics.ColorUtils
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.GridLayoutManager
 import bd.ac.primeuniversity.studentportal.PrimeApp
 import bd.ac.primeuniversity.studentportal.R
 import bd.ac.primeuniversity.studentportal.data.model.Stats
@@ -26,9 +26,10 @@ import bd.ac.primeuniversity.studentportal.util.Formatters
 import kotlinx.coroutines.launch
 
 /**
- * Home tab: welcome header, quick stats and a grouped launcher menu giving
- * access to every student-portal feature (Academic, Examination, Campus,
- * Profile, Finances and Settings).
+ * Home tab: glassmorphic hero header (mesh gradient, avatar, badge chips and
+ * frosted action buttons), frosted metric cards and a 2-column launcher grid
+ * grouped into sections (Academic, Examination, Campus, Profile, Finances
+ * and Settings).
  */
 class DashboardFragment : Fragment() {
 
@@ -47,14 +48,24 @@ class DashboardFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        binding.menuList.layoutManager = LinearLayoutManager(requireContext())
-        binding.menuList.adapter = DashboardMenuAdapter(buildDashboardMenu()) { onFeature(it) }
+        // 2-column card grid; section headers span the full width.
+        val adapter = DashboardMenuAdapter(buildDashboardMenu(), grid = true) { onFeature(it) }
+        val layoutManager = GridLayoutManager(requireContext(), 2)
+        layoutManager.spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
+            override fun getSpanSize(position: Int): Int =
+                if (adapter.isHeader(position)) 2 else 1
+        }
+        binding.menuList.layoutManager = layoutManager
+        binding.menuList.adapter = adapter
 
         binding.btnSettings.setOnClickListener { openSettings() }
+        binding.btnNotifications.setOnClickListener {
+            startActivity(Intent(requireContext(), NotificationsActivity::class.java))
+        }
 
         // Colourful pull-to-refresh spinner.
         binding.swipeRefresh.setColorSchemeResources(
-            R.color.primary, R.color.accent, R.color.info, R.color.cat_campus
+            R.color.electric_indigo, R.color.accent, R.color.success, R.color.cat_campus
         )
 
         // Gentle entrance animation for the header stat cards.
@@ -105,23 +116,29 @@ class DashboardFragment : Fragment() {
     private fun renderStudent(student: Student?) {
         binding.studentName.text = student?.fullName?.takeIf { it.isNotBlank() }
             ?: getString(R.string.student)
-        val meta = listOfNotNull(
-            student?.studentId?.takeIf { it.isNotBlank() },
-            student?.deptCode?.takeIf { it.isNotBlank() } ?: student?.deptName,
-        ).joinToString(" · ")
-        binding.studentMeta.text = meta
-        binding.studentMeta.visibility = if (meta.isBlank()) View.GONE else View.VISIBLE
+
+        // Floating glass badge chips: ID and Department.
+        val id = student?.studentId?.takeIf { it.isNotBlank() }
+        binding.badgeId.text = id?.let { getString(R.string.badge_id, it) }
+        binding.badgeId.visibility = if (id == null) View.GONE else View.VISIBLE
+
+        val dept = student?.deptCode?.takeIf { it.isNotBlank() }
+            ?: student?.deptName?.takeIf { it.isNotBlank() }
+        binding.badgeDept.text = dept?.let { getString(R.string.badge_dept, it) }
+        binding.badgeDept.visibility = if (dept == null) View.GONE else View.VISIBLE
     }
 
     private fun renderStats(stats: Stats?) {
+        // Notices: glowing electric indigo accent.
         val notices = stats?.noticesUniversity ?: 0
-        tint(binding.statNotices.iconContainer, R.color.info)
+        tint(binding.statNotices.iconContainer, R.color.electric_indigo)
         binding.statNotices.statValue.text = notices.toString()
-        binding.statNotices.statValue.setTextColor(color(R.color.info))
+        binding.statNotices.statValue.setTextColor(color(R.color.electric_indigo))
 
+        // Finances: emerald when clear, gold when a balance is outstanding.
         val outstanding = stats?.outstandingBalance
         val positive = outstanding != null && outstanding > 0
-        val colorRes = if (positive) R.color.error else R.color.success
+        val colorRes = if (positive) R.color.accent else R.color.success
         tint(binding.statOutstanding.iconContainer, colorRes)
         binding.statOutstanding.statValue.setTextColor(color(colorRes))
         binding.statOutstanding.statValue.text =

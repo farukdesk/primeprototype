@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Organic dark indigo/navy "mesh" gradient hero backdrop: a deep navy base
+     overlaid with soft radial glows of electric indigo, soft violet and a
+     faint emerald, finished with rounded bottom corners. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="315"
+                android:startColor="#0F172A"
+                android:centerColor="#1E1B4B"
+                android:endColor="#312E81"
+                android:type="linear" />
+            <corners
+                android:bottomLeftRadius="28dp"
+                android:bottomRightRadius="28dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="radial"
+                android:centerX="0.85"
+                android:centerY="0.05"
+                android:gradientRadius="300dp"
+                android:startColor="#596366F1"
+                android:endColor="#006366F1" />
+            <corners
+                android:bottomLeftRadius="28dp"
+                android:bottomRightRadius="28dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="radial"
+                android:centerX="0.12"
+                android:centerY="0.95"
+                android:gradientRadius="260dp"
+                android:startColor="#3D8B5CF6"
+                android:endColor="#008B5CF6" />
+            <corners
+                android:bottomLeftRadius="28dp"
+                android:bottomRightRadius="28dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="radial"
+                android:centerX="0.55"
+                android:centerY="1.1"
+                android:gradientRadius="200dp"
+                android:startColor="#2410B981"
+                android:endColor="#0010B981" />
+            <corners
+                android:bottomLeftRadius="28dp"
+                android:bottomRightRadius="28dp" />
+        </shape>
+    </item>
+</layer-list>
