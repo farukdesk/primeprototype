@@ -16,8 +16,9 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <!-- Hero header: organic indigo/navy mesh gradient with a glowing
-                 glass avatar, floating badge chips and frosted action buttons. -->
+            <!-- Hero header: organic indigo/navy mesh gradient. The badge row
+                 spans the full width below the avatar row so long IDs never
+                 overflow the narrow name column. -->
             <RelativeLayout
                 android:id="@+id/header"
                 android:layout_width="match_parent"
@@ -44,76 +45,6 @@
                         android:src="@drawable/ic_person"
                         app:tint="@android:color/white" />
                 </FrameLayout>
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="14dp"
-                    android:layout_toStartOf="@+id/actionsWrap"
-                    android:layout_toEndOf="@+id/avatarWrap"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/welcome_back"
-                        android:textColor="#B3FFFFFF"
-                        android:textSize="13sp" />
-
-                    <TextView
-                        android:id="@+id/studentName"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:fontFamily="sans-serif-medium"
-                        android:text="@string/student"
-                        android:textColor="@android:color/white"
-                        android:textSize="22sp"
-                        android:textStyle="bold" />
-
-                    <!-- Floating status badge chips -->
-                    <LinearLayout
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
-                        android:orientation="horizontal">
-
-                        <TextView
-                            android:id="@+id/badgeId"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:background="@drawable/bg_badge_glass"
-                            android:letterSpacing="0.02"
-                            android:paddingStart="12dp"
-                            android:paddingTop="5dp"
-                            android:paddingEnd="12dp"
-                            android:paddingBottom="5dp"
-                            android:textColor="@android:color/white"
-                            android:textSize="11sp"
-                            android:textStyle="bold"
-                            android:visibility="gone"
-                            tools:text="ID: 02826204081001"
-                            tools:visibility="visible" />
-
-                        <TextView
-                            android:id="@+id/badgeDept"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="6dp"
-                            android:background="@drawable/bg_badge_glass"
-                            android:letterSpacing="0.02"
-                            android:paddingStart="12dp"
-                            android:paddingTop="5dp"
-                            android:paddingEnd="12dp"
-                            android:paddingBottom="5dp"
-                            android:textColor="@android:color/white"
-                            android:textSize="11sp"
-                            android:textStyle="bold"
-                            android:visibility="gone"
-                            tools:text="Dept: DBA"
-                            tools:visibility="visible" />
-                    </LinearLayout>
-                </LinearLayout>
 
                 <!-- Frosted glass circular action buttons -->
                 <LinearLayout
@@ -144,6 +75,89 @@
                         android:contentDescription="@string/settings"
                         android:src="@drawable/ic_settings"
                         app:tint="@android:color/white" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/nameCol"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="14dp"
+                    android:layout_toStartOf="@id/actionsWrap"
+                    android:layout_toEndOf="@id/avatarWrap"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:text="@string/welcome_back"
+                        android:textColor="#B3FFFFFF"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/studentName"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:ellipsize="end"
+                        android:fontFamily="sans-serif-medium"
+                        android:maxLines="1"
+                        android:text="@string/student"
+                        android:textColor="@android:color/white"
+                        android:textSize="22sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <!-- Floating status badge chips: full-width row below the
+                     avatar so the long student ID always fits its chip. -->
+                <LinearLayout
+                    android:id="@+id/badgeRow"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_below="@id/avatarWrap"
+                    android:layout_marginTop="14dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/badgeId"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="0"
+                        android:background="@drawable/bg_badge_glass"
+                        android:ellipsize="end"
+                        android:letterSpacing="0.02"
+                        android:maxLines="1"
+                        android:paddingStart="12dp"
+                        android:paddingTop="5dp"
+                        android:paddingEnd="12dp"
+                        android:paddingBottom="5dp"
+                        android:textColor="@android:color/white"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:visibility="gone"
+                        tools:text="ID: 02826204081001"
+                        tools:visibility="visible" />
+
+                    <TextView
+                        android:id="@+id/badgeDept"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:background="@drawable/bg_badge_glass"
+                        android:ellipsize="end"
+                        android:letterSpacing="0.02"
+                        android:maxLines="1"
+                        android:paddingStart="12dp"
+                        android:paddingTop="5dp"
+                        android:paddingEnd="12dp"
+                        android:paddingBottom="5dp"
+                        android:textColor="@android:color/white"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:visibility="gone"
+                        tools:text="Dept: DBA"
+                        tools:visibility="visible" />
                 </LinearLayout>
             </RelativeLayout>
 

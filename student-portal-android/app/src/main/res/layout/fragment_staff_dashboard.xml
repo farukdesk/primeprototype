@@ -52,17 +52,21 @@
 
                     <TextView
                         android:id="@+id/staffName"
-                        android:layout_width="wrap_content"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:ellipsize="end"
+                        android:maxLines="1"
                         android:textColor="@android:color/white"
                         android:textSize="20sp"
                         android:textStyle="bold" />
 
                     <TextView
                         android:id="@+id/staffMeta"
-                        android:layout_width="wrap_content"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
+                        android:ellipsize="end"
+                        android:maxLines="2"
                         android:textColor="#B3FFFFFF"
                         android:textSize="13sp" />
 
@@ -164,12 +168,17 @@
 
                         <TextView
                             android:id="@+id/todayValue"
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="6dp"
+                            android:maxLines="1"
                             android:textColor="@color/text_primary"
                             android:textSize="14sp"
-                            android:textStyle="bold" />
+                            android:textStyle="bold"
+                            app:autoSizeMaxTextSize="14sp"
+                            app:autoSizeMinTextSize="10sp"
+                            app:autoSizeStepGranularity="1sp"
+                            app:autoSizeTextType="uniform" />
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/btnClock"
@@ -229,11 +238,13 @@
                                 android:textSize="12sp" />
                         </LinearLayout>
 
+                        <!-- Stacked vertically: side by side they overflow the
+                             half-width card on smaller screens. -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="10dp"
-                            android:orientation="horizontal">
+                            android:orientation="vertical">
 
                             <TextView
                                 android:id="@+id/casualPill"
@@ -241,6 +252,8 @@
                                 android:layout_height="wrap_content"
                                 android:background="@drawable/bg_badge_pill"
                                 android:backgroundTint="@color/success_soft"
+                                android:ellipsize="end"
+                                android:maxLines="1"
                                 android:paddingStart="10dp"
                                 android:paddingTop="5dp"
                                 android:paddingEnd="10dp"
@@ -254,9 +267,11 @@
                                 android:id="@+id/sickPill"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_marginStart="6dp"
+                                android:layout_marginTop="6dp"
                                 android:background="@drawable/bg_badge_pill"
                                 android:backgroundTint="@color/coral_soft"
+                                android:ellipsize="end"
+                                android:maxLines="1"
                                 android:paddingStart="10dp"
                                 android:paddingTop="5dp"
                                 android:paddingEnd="10dp"
