@@ -108,6 +108,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             'statuses'    => (object)$statuses,
             'has_session' => $has_session,
         ]);
+        exit;
     }
 
     // action=subjects (default): every offered subject assigned to this faculty.
@@ -169,6 +170,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             ];
         }, $subjects),
     ]);
+    exit;
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -224,6 +226,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $pdo->commit();
         api_ok(['message' => 'Attendance saved.', 'saved' => $saved, 'class_date' => $date]);
+        exit;
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) {
             $pdo->rollBack();
