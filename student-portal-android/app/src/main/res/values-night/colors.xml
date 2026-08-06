@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Dark theme overrides. Brand navy/gold stay the same; surfaces darken. -->
-    <color name="background">#0E1420</color>
+    <color name="background">#090D16</color>
     <color name="surface">#182233</color>
     <color name="text_primary">#F1F5F9</color>
     <color name="text_secondary">#94A3B8</color>
@@ -60,4 +60,11 @@
     <color name="icon_notices">#FBBF24</color>
     <color name="icon_announcements">#FB7185</color>
     <color name="icon_profile">#60A5FA</color>
+
+    <!-- Glassmorphism design tokens (dark: frosted white over deep charcoal,
+         1dp strokes at rgba(255,255,255,0.2)) -->
+    <color name="electric_indigo">#818CF8</color>
+    <color name="glass_card_bg">#14FFFFFF</color>
+    <color name="glass_card_stroke">#33FFFFFF</color>
+    <color name="nav_glass_bg">#F0111827</color>
 </resources>

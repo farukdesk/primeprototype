@@ -76,4 +76,9 @@
     <style name="TextAppearance.StudentPortal.NavActive" parent="TextAppearance.Material3.LabelMedium">
         <item name="android:textStyle">bold</item>
     </style>
+
+    <!-- Glowing indigo pill indicator behind the active bottom-nav icon. -->
+    <style name="Widget.StudentPortal.NavIndicator" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
+        <item name="android:color">@color/indigo_soft</item>
+    </style>
 </resources>

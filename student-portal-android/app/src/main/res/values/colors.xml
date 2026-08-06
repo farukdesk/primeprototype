@@ -81,4 +81,10 @@
     <color name="icon_notices">#D97706</color>
     <color name="icon_announcements">#E11D48</color>
     <color name="icon_profile">#2563EB</color>
+
+    <!-- Glassmorphism design tokens (student dashboard redesign) -->
+    <color name="electric_indigo">#6366F1</color>
+    <color name="glass_card_bg">#E6FFFFFF</color>
+    <color name="glass_card_stroke">#2664748B</color>
+    <color name="nav_glass_bg">#F2FFFFFF</color>
 </resources>

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.swiperefreshlayout.widget.SwipeRefreshLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/swipeRefresh"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
@@ -15,63 +16,138 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <!-- Header -->
-            <FrameLayout
+            <!-- Hero header: organic indigo/navy mesh gradient with a glowing
+                 glass avatar, floating badge chips and frosted action buttons. -->
+            <RelativeLayout
+                android:id="@+id/header"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:background="@drawable/bg_header_gradient">
+                android:background="@drawable/bg_header_mesh"
+                android:paddingStart="20dp"
+                android:paddingTop="24dp"
+                android:paddingEnd="20dp"
+                android:paddingBottom="28dp">
 
-                <ImageButton
-                    android:id="@+id/btnSettings"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:layout_gravity="top|end"
-                    android:layout_marginTop="28dp"
-                    android:layout_marginEnd="8dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="@string/settings"
-                    android:src="@drawable/ic_settings" />
+                <FrameLayout
+                    android:id="@+id/avatarWrap"
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
+                    android:layout_alignParentStart="true"
+                    android:background="@drawable/bg_avatar_glow">
+
+                    <ImageView
+                        android:id="@+id/avatarImage"
+                        android:layout_width="30dp"
+                        android:layout_height="30dp"
+                        android:layout_gravity="center"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_person"
+                        app:tint="@android:color/white" />
+                </FrameLayout>
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:paddingStart="20dp"
-                    android:paddingTop="72dp"
-                    android:paddingEnd="20dp"
-                    android:paddingBottom="24dp">
+                    android:layout_marginStart="14dp"
+                    android:layout_toStartOf="@+id/actionsWrap"
+                    android:layout_toEndOf="@+id/avatarWrap"
+                    android:orientation="vertical">
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:alpha="0.8"
                         android:text="@string/welcome_back"
-                        android:textColor="@color/white"
+                        android:textColor="#B3FFFFFF"
                         android:textSize="13sp" />
 
                     <TextView
                         android:id="@+id/studentName"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
+                        android:layout_marginTop="2dp"
+                        android:fontFamily="sans-serif-medium"
                         android:text="@string/student"
-                        android:textColor="@color/white"
+                        android:textColor="@android:color/white"
                         android:textSize="22sp"
                         android:textStyle="bold" />
 
-                    <TextView
-                        android:id="@+id/studentMeta"
+                    <!-- Floating status badge chips -->
+                    <LinearLayout
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:alpha="0.85"
-                        android:textColor="@color/white"
-                        android:textSize="12sp"
-                        android:visibility="gone" />
-                </LinearLayout>
-            </FrameLayout>
+                        android:layout_marginTop="10dp"
+                        android:orientation="horizontal">
 
-            <!-- Stats row -->
+                        <TextView
+                            android:id="@+id/badgeId"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/bg_badge_glass"
+                            android:letterSpacing="0.02"
+                            android:paddingStart="12dp"
+                            android:paddingTop="5dp"
+                            android:paddingEnd="12dp"
+                            android:paddingBottom="5dp"
+                            android:textColor="@android:color/white"
+                            android:textSize="11sp"
+                            android:textStyle="bold"
+                            android:visibility="gone"
+                            tools:text="ID: 02826204081001"
+                            tools:visibility="visible" />
+
+                        <TextView
+                            android:id="@+id/badgeDept"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="6dp"
+                            android:background="@drawable/bg_badge_glass"
+                            android:letterSpacing="0.02"
+                            android:paddingStart="12dp"
+                            android:paddingTop="5dp"
+                            android:paddingEnd="12dp"
+                            android:paddingBottom="5dp"
+                            android:textColor="@android:color/white"
+                            android:textSize="11sp"
+                            android:textStyle="bold"
+                            android:visibility="gone"
+                            tools:text="Dept: DBA"
+                            tools:visibility="visible" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- Frosted glass circular action buttons -->
+                <LinearLayout
+                    android:id="@+id/actionsWrap"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentEnd="true"
+                    android:orientation="horizontal">
+
+                    <ImageButton
+                        android:id="@+id/btnNotifications"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:background="@drawable/bg_oval_glass_glow"
+                        android:contentDescription="@string/announcements_title"
+                        android:src="@drawable/ic_notifications_none"
+                        app:tint="@android:color/white" />
+
+                    <Space
+                        android:layout_width="8dp"
+                        android:layout_height="1dp" />
+
+                    <ImageButton
+                        android:id="@+id/btnSettings"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:background="@drawable/bg_oval_glass_glow"
+                        android:contentDescription="@string/settings"
+                        android:src="@drawable/ic_settings"
+                        app:tint="@android:color/white" />
+                </LinearLayout>
+            </RelativeLayout>
+
+            <!-- Frosted glass metric cards -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -97,7 +173,7 @@
                     android:layout_weight="1" />
             </LinearLayout>
 
-            <!-- Grouped launcher menu -->
+            <!-- Launcher: 2-column card grid with full-width section headers -->
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/menuList"
                 android:layout_width="match_parent"
@@ -105,6 +181,8 @@
                 android:clipToPadding="false"
                 android:layoutAnimation="@anim/layout_animation_fall_down"
                 android:nestedScrollingEnabled="false"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
                 android:paddingBottom="24dp" />
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
