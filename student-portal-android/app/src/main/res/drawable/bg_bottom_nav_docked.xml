@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Opaque, solid docked bottom-nav background (theme-surface aware) with a
+     subtle top divider. Solid so scrolled content never shows through. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Subtle top divider line -->
     <item>
         <shape android:shape="rectangle">
-            <solid android:color="#E2E8F0" />
+            <solid android:color="@color/divider" />
         </shape>
     </item>
-    <!-- Solid white bar -->
     <item android:top="1dp">
         <shape android:shape="rectangle">
-            <solid android:color="#FFFFFF" />
+            <solid android:color="@color/surface" />
         </shape>
     </item>
 </layer-list>

@@ -23,10 +23,10 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:background="@drawable/bg_header_mesh"
-                android:paddingStart="20dp"
+                android:paddingStart="24dp"
                 android:paddingTop="24dp"
-                android:paddingEnd="20dp"
-                android:paddingBottom="28dp">
+                android:paddingEnd="24dp"
+                android:paddingBottom="64dp">
 
                 <FrameLayout
                     android:id="@+id/avatarWrap"
@@ -147,12 +147,15 @@
                 </LinearLayout>
             </RelativeLayout>
 
-            <!-- Frosted glass metric cards -->
+            <!-- Frosted glass metric cards, overlapping the banner -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="-40dp"
                 android:orientation="horizontal"
-                android:padding="16dp">
+                android:paddingStart="24dp"
+                android:paddingEnd="24dp"
+                android:paddingBottom="8dp">
 
                 <include
                     android:id="@+id/statNotices"
@@ -181,9 +184,9 @@
                 android:clipToPadding="false"
                 android:layoutAnimation="@anim/layout_animation_fall_down"
                 android:nestedScrollingEnabled="false"
-                android:paddingStart="10dp"
-                android:paddingEnd="10dp"
-                android:paddingBottom="24dp" />
+                android:paddingStart="18dp"
+                android:paddingEnd="18dp"
+                android:paddingBottom="100dp" />
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>

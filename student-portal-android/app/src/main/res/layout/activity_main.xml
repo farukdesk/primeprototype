@@ -5,46 +5,33 @@
     android:layout_height="match_parent"
     android:background="@color/background">
 
-    <!-- Scrollable content is anchored directly above the floating nav pill. -->
+    <!-- Scrollable content is anchored directly above the docked nav bar so
+         nothing ever scrolls underneath it. -->
     <androidx.fragment.app.FragmentContainerView
         android:id="@+id/fragmentContainer"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        app:layout_constraintBottom_toTopOf="@id/navCard"
+        app:layout_constraintBottom_toTopOf="@id/bottomNav"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <!-- Floating glass bottom navigation: a rounded frosted pill with a
-         subtle border stroke and soft drop shadow. -->
-    <com.google.android.material.card.MaterialCardView
-        android:id="@+id/navCard"
+    <!-- Opaque, solid bottom navigation bar with refined line icons and a
+         clean light-purple active indicator. -->
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/bottomNav"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginStart="16dp"
-        android:layout_marginEnd="16dp"
-        android:layout_marginBottom="12dp"
-        app:cardBackgroundColor="@color/nav_glass_bg"
-        app:cardCornerRadius="28dp"
-        app:cardElevation="12dp"
-        app:strokeColor="@color/glass_card_stroke"
-        app:strokeWidth="1dp"
+        android:background="@drawable/bg_bottom_nav_docked"
+        app:elevation="0dp"
+        app:itemActiveIndicatorStyle="@style/Widget.StudentPortal.NavIndicator"
+        app:itemIconTint="@color/bottom_nav_color"
+        app:itemRippleColor="@color/primary_soft"
+        app:itemTextColor="@color/bottom_nav_color"
+        app:labelVisibilityMode="labeled"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent">
-
-        <com.google.android.material.bottomnavigation.BottomNavigationView
-            android:id="@+id/bottomNav"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:background="@android:color/transparent"
-            app:elevation="0dp"
-            app:itemActiveIndicatorStyle="@style/Widget.StudentPortal.NavIndicator"
-            app:itemIconTint="@color/bottom_nav_color"
-            app:itemRippleColor="@color/primary_soft"
-            app:itemTextColor="@color/bottom_nav_color"
-            app:labelVisibilityMode="labeled"
-            app:menu="@menu/bottom_nav_menu" />
-    </com.google.android.material.card.MaterialCardView>
+        app:layout_constraintStart_toStartOf="parent"
+        app:menu="@menu/bottom_nav_menu" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
