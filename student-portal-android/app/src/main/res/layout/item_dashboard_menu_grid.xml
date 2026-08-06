@@ -8,11 +8,11 @@
     android:clickable="true"
     android:focusable="true"
     android:stateListAnimator="@animator/card_lift"
-    app:cardBackgroundColor="@color/glass_card_bg"
-    app:cardCornerRadius="20dp"
-    app:cardElevation="4dp"
+    app:cardBackgroundColor="@color/surface"
+    app:cardCornerRadius="16dp"
+    app:cardElevation="0dp"
     app:rippleColor="@color/primary_soft"
-    app:strokeColor="@color/glass_card_stroke"
+    app:strokeColor="@color/card_border"
     app:strokeWidth="1dp">
 
     <LinearLayout

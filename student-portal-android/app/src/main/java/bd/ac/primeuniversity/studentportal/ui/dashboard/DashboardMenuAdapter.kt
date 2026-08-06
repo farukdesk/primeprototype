@@ -73,9 +73,10 @@ class DashboardMenuAdapter(
         fun bind(header: MenuRow.Header) {
             binding.sectionTitle.setText(header.titleRes)
             if (grid) {
-                // The grid list already carries 10dp horizontal padding – trim
-                // the header's built-in 20dp so it keeps the same 20dp indent.
-                val pad = (10 * binding.root.resources.displayMetrics.density).toInt()
+                // Align the header's left edge exactly with the card edges
+                // below it: list padding + the 6dp card margin. Trim the
+                // header's built-in 20dp down to 6dp.
+                val pad = (6 * binding.root.resources.displayMetrics.density).toInt()
                 binding.sectionTitle.updatePadding(left = pad, right = pad)
             }
         }

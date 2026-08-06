@@ -87,4 +87,6 @@
     <color name="glass_card_bg">#E6FFFFFF</color>
     <color name="glass_card_stroke">#2664748B</color>
     <color name="nav_glass_bg">#F2FFFFFF</color>
+    <!-- Ultra-thin border for flat list-item cards -->
+    <color name="card_border">#EDEDED</color>
 </resources>

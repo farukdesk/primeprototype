@@ -47,15 +47,11 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         // Edge-to-edge is enforced when targeting API 35+: keep content below
-        // the status bar and float the nav pill above the system nav bar.
+        // the status bar and keep the nav bar clear of the system nav bar.
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             binding.fragmentContainer.updatePadding(top = bars.top)
-            val baseMargin = (12 * resources.displayMetrics.density).toInt()
-            (binding.navCard.layoutParams as android.view.ViewGroup.MarginLayoutParams).let { lp ->
-                lp.bottomMargin = baseMargin + bars.bottom
-                binding.navCard.layoutParams = lp
-            }
+            binding.bottomNav.updatePadding(bottom = bars.bottom)
             insets
         }
 
