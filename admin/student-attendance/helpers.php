@@ -237,7 +237,7 @@ function sa_subjects_filtered(array $filters = [], int $page = 1, int $per_page 
                 o.dept_id, o.semester, o.academic_intake, o.shift, o.section,
                 d.name AS dept_name, p.program_name, b.name AS batch_name,
                 (SELECT COUNT(*) FROM co_registrations r WHERE r.offer_subject_id = cos.id) AS student_count,
-                (SELECT COUNT(*) FROM att_sessions s WHERE s.offer_subject_id = cos.id)     AS session_count
+                (SELECT COUNT(*) FROM student_att_sessions s WHERE s.offer_subject_id = cos.id) AS session_count
            $base
           ORDER BY b.sort_order ASC, b.name ASC, c.course_code ASC, cos.id ASC
           LIMIT {$limit_val} OFFSET {$offset_val}"
@@ -315,7 +315,7 @@ function sa_sessions(int $offer_subject_id): array
 {
     $st = db()->prepare(
         'SELECT id, class_date, taken_by
-           FROM att_sessions
+           FROM student_att_sessions
           WHERE offer_subject_id = ?
           ORDER BY class_date ASC'
     );
@@ -331,8 +331,8 @@ function sa_matrix(int $offer_subject_id): array
 {
     $st = db()->prepare(
         'SELECT ar.student_id, ar.status, s.class_date
-           FROM att_records  ar
-           JOIN att_sessions s ON s.id = ar.session_id
+           FROM student_att_records  ar
+           JOIN student_att_sessions s ON s.id = ar.session_id
           WHERE s.offer_subject_id = ?'
     );
     $st->execute([$offer_subject_id]);
@@ -348,8 +348,8 @@ function sa_statuses_for_date(int $offer_subject_id, string $date): array
 {
     $st = db()->prepare(
         'SELECT ar.student_id, ar.status
-           FROM att_records  ar
-           JOIN att_sessions s ON s.id = ar.session_id
+           FROM student_att_records  ar
+           JOIN student_att_sessions s ON s.id = ar.session_id
           WHERE s.offer_subject_id = ? AND s.class_date = ?'
     );
     $st->execute([$offer_subject_id, $date]);
@@ -377,19 +377,19 @@ function sa_save_attendance(int $offer_subject_id, string $date, array $statuses
     $pdo->beginTransaction();
     try {
         $pdo->prepare(
-            'INSERT INTO att_sessions (offer_subject_id, class_date, taken_by)
+            'INSERT INTO student_att_sessions (offer_subject_id, class_date, taken_by)
              VALUES (?, ?, ?)
              ON DUPLICATE KEY UPDATE taken_by = VALUES(taken_by)'
         )->execute([$offer_subject_id, $date, $taken_by]);
 
-        $sid = $pdo->prepare('SELECT id FROM att_sessions WHERE offer_subject_id = ? AND class_date = ?');
+        $sid = $pdo->prepare('SELECT id FROM student_att_sessions WHERE offer_subject_id = ? AND class_date = ?');
         $sid->execute([$offer_subject_id, $date]);
         $session_id = (int)$sid->fetchColumn();
 
-        $pdo->prepare('DELETE FROM att_records WHERE session_id = ?')->execute([$session_id]);
+        $pdo->prepare('DELETE FROM student_att_records WHERE session_id = ?')->execute([$session_id]);
 
         $ins = $pdo->prepare(
-            'INSERT INTO att_records (session_id, student_id, status) VALUES (?, ?, ?)'
+            'INSERT INTO student_att_records (session_id, student_id, status) VALUES (?, ?, ?)'
         );
         foreach ($statuses as $student_pk => $status) {
             $student_pk = (int)$student_pk;
@@ -409,7 +409,7 @@ function sa_save_attendance(int $offer_subject_id, string $date, array $statuses
 /** Delete one attendance session (and its records via cascade). */
 function sa_delete_session(int $offer_subject_id, string $date): bool
 {
-    $st = db()->prepare('DELETE FROM att_sessions WHERE offer_subject_id = ? AND class_date = ?');
+    $st = db()->prepare('DELETE FROM student_att_sessions WHERE offer_subject_id = ? AND class_date = ?');
     $st->execute([$offer_subject_id, $date]);
     return $st->rowCount() > 0;
 }
