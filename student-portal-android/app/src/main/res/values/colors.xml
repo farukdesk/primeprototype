@@ -82,9 +82,12 @@
     <color name="icon_announcements">#E11D48</color>
     <color name="icon_profile">#2563EB</color>
 
-    <!-- Glassmorphism design tokens (student dashboard redesign) -->
+    <!-- Glassmorphism design tokens (student dashboard redesign).
+         glass_card_bg must stay fully opaque: the metric cards overlap the
+         dark hero banner, and any translucency lets the banner bleed through
+         the top half of the card (split-tone artifact). -->
     <color name="electric_indigo">#6366F1</color>
-    <color name="glass_card_bg">#E6FFFFFF</color>
+    <color name="glass_card_bg">#FFFFFF</color>
     <color name="glass_card_stroke">#2664748B</color>
     <color name="nav_glass_bg">#F2FFFFFF</color>
     <!-- Ultra-thin border for flat list-item cards -->

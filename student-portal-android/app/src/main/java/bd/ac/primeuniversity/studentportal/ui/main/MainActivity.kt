@@ -47,13 +47,20 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         // Edge-to-edge is enforced when targeting API 35+: keep content below
-        // the status bar and keep the nav bar clear of the system nav bar.
+        // the status bar / display cutout and keep the nav bar clear of the
+        // system nav bar.
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
-            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val bars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
             binding.fragmentContainer.updatePadding(top = bars.top)
             binding.bottomNav.updatePadding(bottom = bars.bottom)
             insets
         }
+        // The first insets pass can be dispatched before the listener is
+        // attached on some devices, leaving the header under the status bar.
+        // Explicitly request a pass so the padding is always applied.
+        ViewCompat.requestApplyInsets(binding.root)
 
         val tabIds = listOf(
             R.id.nav_dashboard, R.id.nav_notices, R.id.nav_finances, R.id.nav_profile

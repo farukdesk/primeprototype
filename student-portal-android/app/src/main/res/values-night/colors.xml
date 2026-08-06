@@ -61,10 +61,11 @@
     <color name="icon_announcements">#FB7185</color>
     <color name="icon_profile">#60A5FA</color>
 
-    <!-- Glassmorphism design tokens (dark: frosted white over deep charcoal,
-         1dp strokes at rgba(255,255,255,0.2)) -->
+    <!-- Glassmorphism design tokens (dark). glass_card_bg must stay fully
+         opaque: the metric cards overlap the hero banner, and translucency
+         lets the banner bleed through the top half of the card. -->
     <color name="electric_indigo">#818CF8</color>
-    <color name="glass_card_bg">#14FFFFFF</color>
+    <color name="glass_card_bg">#1E2A40</color>
     <color name="glass_card_stroke">#33FFFFFF</color>
     <color name="nav_glass_bg">#F0111827</color>
     <!-- Ultra-thin border for flat list-item cards -->
