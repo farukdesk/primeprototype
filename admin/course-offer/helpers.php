@@ -603,7 +603,7 @@ function co_batch_students_filtered(int $batch_id, array $filters = [], int $pag
            LEFT JOIN dept_academic_programs p ON p.id = s.program_id
            LEFT JOIN student_batches        b ON b.id = s.batch_id
           WHERE $whereSQL
-          ORDER BY s.student_id ASC
+          ORDER BY LENGTH(s.student_id) ASC, s.student_id ASC
           LIMIT {$limit_val} OFFSET {$offset_val}"
     );
     $st->execute($params);
