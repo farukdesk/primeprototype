@@ -53,6 +53,10 @@ $marks_offer_ids = co_offers_with_marks($offer_ids);
 // Enrolled student counts per offered subject (offer_subject_id => count).
 $subject_reg_counts = co_subject_registration_counts($offer_ids);
 
+// Unique enrolled students per offer (offer_id => count) — a student in
+// several subjects of the same offer is counted once.
+$offer_unique_counts = co_offer_unique_student_counts($offer_ids);
+
 // Group rows by batch for the grouped display
 $grouped = [];
 foreach ($offers as $row) {
@@ -290,12 +294,11 @@ a.co-chip-enrolled:hover { background: #cffafe; border-color: #67e8f9; color: #1
                 </div>
             </div>
 
-            <!-- Total enrolled students in this offer -->
-            <?php $offer_enrolled = 0;
-                  foreach ($offer_subjects as $os) { $offer_enrolled += $subject_reg_counts[(int)$os['id']] ?? 0; } ?>
+            <!-- Total UNIQUE enrolled students in this offer -->
+            <?php $offer_enrolled = $offer_unique_counts[(int)$row['id']] ?? 0; ?>
             <a href="<?= APP_URL ?>/course-offer/registrations.php?offer_id=<?= $row['id'] ?>"
-               class="co-chip co-chip-enrolled" title="Total enrolled students in this offer">
-                <i class="fas fa-user-graduate"></i><?= $offer_enrolled ?> enrolled
+               class="co-chip co-chip-enrolled" title="Unique students enrolled in this offer (each student counted once)">
+                <i class="fas fa-user-graduate"></i><?= $offer_enrolled ?> student<?= $offer_enrolled != 1 ? 's' : '' ?>
             </a>
 
             <!-- Status -->

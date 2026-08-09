@@ -720,6 +720,30 @@ function co_subject_registration_counts(array $offer_ids): array
 }
 
 /**
+ * UNIQUE enrolled student counts per offer, keyed by offer_id.
+ * A student registered in several subjects of the same offer is counted
+ * once. Used for the offer-level "enrolled" total on the listing page.
+ */
+function co_offer_unique_student_counts(array $offer_ids): array
+{
+    if (empty($offer_ids)) return [];
+    $ph = implode(',', array_fill(0, count($offer_ids), '?'));
+    $st = db()->prepare(
+        "SELECT cos.offer_id, COUNT(DISTINCT r.student_id) AS student_count
+           FROM co_offer_subjects cos
+           JOIN co_registrations r ON r.offer_subject_id = cos.id
+          WHERE cos.offer_id IN ($ph)
+          GROUP BY cos.offer_id"
+    );
+    $st->execute(array_map('intval', array_values($offer_ids)));
+    $map = [];
+    foreach ($st->fetchAll() as $r) {
+        $map[(int)$r['offer_id']] = (int)$r['student_count'];
+    }
+    return $map;
+}
+
+/**
  * Register a student into a single offer subject.
  * Idempotent: existing rows are left untouched (INSERT IGNORE semantics).
  * Returns true when a new row was created.
