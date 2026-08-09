@@ -527,7 +527,7 @@ function co_batch_students(int $batch_id, string $q = '', int $limit = 50): arra
         "SELECT s.id, s.student_id, s.full_name, s.section
            FROM students s
           WHERE $where
-          ORDER BY s.student_id ASC
+          ORDER BY LENGTH(s.student_id) ASC, s.student_id ASC
           LIMIT $limit"
     );
     $st->execute($params);
@@ -603,7 +603,7 @@ function co_batch_students_filtered(int $batch_id, array $filters = [], int $pag
            LEFT JOIN dept_academic_programs p ON p.id = s.program_id
            LEFT JOIN student_batches        b ON b.id = s.batch_id
           WHERE $whereSQL
-          ORDER BY s.student_id ASC
+          ORDER BY LENGTH(s.student_id) ASC, s.student_id ASC
           LIMIT {$limit_val} OFFSET {$offset_val}"
     );
     $st->execute($params);
@@ -661,7 +661,7 @@ function co_registrations_by_subject(int $offer_id): array
            LEFT JOIN dept_departments d ON d.id = s.dept_id
            LEFT JOIN student_batches  b ON b.id = s.batch_id
           WHERE cos.offer_id = ?
-          ORDER BY s.student_id ASC"
+          ORDER BY LENGTH(s.student_id) ASC, s.student_id ASC"
     );
     $st->execute([$offer_id]);
 
