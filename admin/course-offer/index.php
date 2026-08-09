@@ -351,6 +351,11 @@ require_once __DIR__ . '/../includes/header.php';
                 <?php if ($sub['credit']): ?>
                 <span class="co-chip"><i class="fas fa-star"></i><?= h($sub['credit']) ?> cr</span>
                 <?php endif; ?>
+                <?php $sub_enrolled = $subject_reg_counts[(int)$sub['id']] ?? 0; ?>
+                <a href="<?= APP_URL ?>/course-offer/registrations.php?offer_id=<?= $row['id'] ?>"
+                   class="co-chip co-chip-enrolled" title="Students enrolled in this subject">
+                    <i class="fas fa-user-graduate"></i><?= $sub_enrolled ?> enrolled
+                </a>
                 <?php if (!empty($sub['teachers'])): ?>
                 <div class="d-flex flex-wrap gap-1">
                     <?php foreach ($sub['teachers'] as $t): ?>
