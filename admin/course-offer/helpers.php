@@ -155,16 +155,39 @@ function co_offer_enrolled_counts(int $offer_id): array
 
 /**
  * Whether the current user may delete a given offer row.
- * Faculty members never get a delete option, and offers with marks already
- * entered can never be deleted by anyone.
+ *
+ * Rules:
+ * - Offers with marks entered can never be deleted (by anyone).
+ * - Offers with students already enrolled cannot be deleted (by anyone) —
+ *   the enrollments must be removed first.
+ * - The creator of the offer (faculty or any user) may delete their own
+ *   offer while the rules above allow it.
+ * - Non-creators need the module delete permission; faculty members may
+ *   only ever delete offers they created themselves.
  */
-function co_can_delete_offer(array $offer, ?bool $has_marks = null): bool
+function co_can_delete_offer(array $offer, ?bool $has_marks = null, ?bool $has_enrollments = null): bool
 {
-    if (!co_can_delete()) return false;
-    if (co_is_faculty()) return false;
+    if (!can_access_dept((int)$offer['dept_id'])) return false;
+
     if ($has_marks === null) $has_marks = co_offer_has_marks((int)$offer['id']);
     if ($has_marks) return false;
-    return can_access_dept((int)$offer['dept_id']);
+
+    if ($has_enrollments === null) {
+        $has_enrollments = false;
+        foreach (co_offer_enrolled_counts((int)$offer['id']) as $e) {
+            if ((int)$e['count'] > 0) { $has_enrollments = true; break; }
+        }
+    }
+    if ($has_enrollments) return false;
+
+    if (is_super_admin()) return true;
+
+    $user       = auth_user();
+    $is_creator = $user && (int)($offer['created_by'] ?? 0) === (int)$user['id'];
+    if ($is_creator) return true;
+
+    if (co_is_faculty()) return false;
+    return co_can_delete();
 }
 
 // ── Cascade data helpers ──────────────────────────────────────────────────────
