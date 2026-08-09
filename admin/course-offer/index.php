@@ -47,6 +47,9 @@ $intake_opts      = co_academic_intake_options();
 $offer_ids    = array_column($offers, 'id');
 $subjects_map = co_get_subjects_map($offer_ids);
 
+// Offers that already have marks entered — these can never be deleted.
+$marks_offer_ids = co_offers_with_marks($offer_ids);
+
 // Group rows by batch for the grouped display
 $grouped = [];
 foreach ($offers as $row) {
@@ -288,18 +291,23 @@ require_once __DIR__ . '/../includes/header.php';
                    class="btn btn-outline-primary" title="Registrations">
                     <i class="fas fa-user-check"></i>
                 </a>
-                <?php if (co_is_staff()): ?>
+                <?php $row_has_marks = in_array((int)$row['id'], $marks_offer_ids, true); ?>
+                <?php if (co_can_edit_offer($row)): ?>
                 <a href="<?= APP_URL ?>/course-offer/edit.php?id=<?= $row['id'] ?>"
                    class="btn btn-outline-secondary" title="Edit">
                     <i class="fas fa-pen"></i>
                 </a>
                 <?php endif; ?>
-                <?php if (co_can_delete()): ?>
+                <?php if (co_can_delete_offer($row, $row_has_marks)): ?>
                 <a href="<?= APP_URL ?>/course-offer/delete.php?id=<?= $row['id'] ?>"
                    class="btn btn-outline-danger" title="Delete"
                    onclick="return confirm('Delete this course offer and all its subjects? This cannot be undone.')">
                     <i class="fas fa-trash"></i>
                 </a>
+                <?php elseif ($row_has_marks && co_can_delete() && !co_is_faculty()): ?>
+                <span class="btn btn-outline-secondary disabled" title="Marks have been entered — this offer can no longer be deleted">
+                    <i class="fas fa-lock"></i>
+                </span>
                 <?php endif; ?>
             </div>
 

@@ -22,6 +22,123 @@ function co_can_delete(): bool
     return is_super_admin() || can_access('course-offer', 'can_delete');
 }
 
+/**
+ * Whether the current user is a faculty member (linked to a faculty profile
+ * or a dept_faculty record). Super admins are never treated as faculty for
+ * permission purposes.
+ */
+function co_is_faculty(): bool
+{
+    if (is_super_admin()) return false;
+    $user = auth_user();
+    if (!$user) return false;
+    static $cache = null;
+    if ($cache !== null) return $cache;
+    $uid   = (int)$user['id'];
+    $cache = false;
+    try {
+        $st = db()->prepare('SELECT id FROM faculty_profiles WHERE user_id = ? LIMIT 1');
+        $st->execute([$uid]);
+        $cache = (bool)$st->fetch();
+    } catch (Throwable $e) {}
+    if (!$cache) {
+        try {
+            $st = db()->prepare('SELECT id FROM dept_faculty WHERE user_id = ? AND is_active = 1 LIMIT 1');
+            $st->execute([$uid]);
+            $cache = (bool)$st->fetch();
+        } catch (Throwable $e) {}
+    }
+    return $cache;
+}
+
+/**
+ * Department IDs the current faculty user belongs to (their own department).
+ * Collected from faculty_profiles.dept_id and dept_faculty.dept_id.
+ */
+function co_faculty_dept_ids(): array
+{
+    $user = auth_user();
+    if (!$user) return [];
+    static $cache = null;
+    if ($cache !== null) return $cache;
+    $uid = (int)$user['id'];
+    $ids = [];
+    try {
+        $st = db()->prepare('SELECT dept_id FROM faculty_profiles WHERE user_id = ? AND dept_id IS NOT NULL');
+        $st->execute([$uid]);
+        foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $d) $ids[] = (int)$d;
+    } catch (Throwable $e) {}
+    try {
+        $st = db()->prepare('SELECT dept_id FROM dept_faculty WHERE user_id = ? AND is_active = 1 AND dept_id IS NOT NULL');
+        $st->execute([$uid]);
+        foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $d) $ids[] = (int)$d;
+    } catch (Throwable $e) {}
+    $cache = array_values(array_unique($ids));
+    return $cache;
+}
+
+/**
+ * Whether the current user may edit a given offer row.
+ * Staff can edit offers within their scope; faculty members can only edit
+ * offers they created themselves — other offers are view-only for them.
+ */
+function co_can_edit_offer(array $offer): bool
+{
+    if (is_super_admin()) return true;
+    if (!co_is_staff()) return false;
+    if (!can_access_dept((int)$offer['dept_id'])) return false;
+    if (co_is_faculty()) {
+        $user = auth_user();
+        return $user && (int)($offer['created_by'] ?? 0) === (int)$user['id'];
+    }
+    return true;
+}
+
+/**
+ * Offer IDs (out of the given list) that already have marks entered against
+ * any of their subjects (result_mark_sheets.offer_subject_id).
+ */
+function co_offers_with_marks(array $offer_ids): array
+{
+    if (empty($offer_ids)) return [];
+    $ph = implode(',', array_fill(0, count($offer_ids), '?'));
+    try {
+        $st = db()->prepare(
+            "SELECT DISTINCT cos.offer_id
+               FROM result_mark_sheets ms
+               JOIN co_offer_subjects cos ON cos.id = ms.offer_subject_id
+              WHERE cos.offer_id IN ($ph)"
+        );
+        $st->execute(array_map('intval', array_values($offer_ids)));
+        return array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+/**
+ * Whether marks entry has been done for any subject of the offer.
+ * Such offers can no longer be deleted (by anyone).
+ */
+function co_offer_has_marks(int $offer_id): bool
+{
+    return in_array($offer_id, co_offers_with_marks([$offer_id]), true);
+}
+
+/**
+ * Whether the current user may delete a given offer row.
+ * Faculty members never get a delete option, and offers with marks already
+ * entered can never be deleted by anyone.
+ */
+function co_can_delete_offer(array $offer, ?bool $has_marks = null): bool
+{
+    if (!co_can_delete()) return false;
+    if (co_is_faculty()) return false;
+    if ($has_marks === null) $has_marks = co_offer_has_marks((int)$offer['id']);
+    if ($has_marks) return false;
+    return can_access_dept((int)$offer['dept_id']);
+}
+
 // ── Cascade data helpers ──────────────────────────────────────────────────────
 
 /**
@@ -35,7 +152,15 @@ function co_departments(): array
         ->query("SELECT id, name FROM dept_departments WHERE is_active = 1 ORDER BY name ASC")
         ->fetchAll();
 
-    return array_values(array_filter($rows, fn($d) => can_access_dept((int)$d['id'])));
+    $rows = array_values(array_filter($rows, fn($d) => can_access_dept((int)$d['id'])));
+
+    // Faculty members only see their own department(s).
+    if (co_is_faculty()) {
+        $fac  = co_faculty_dept_ids();
+        $rows = array_values(array_filter($rows, fn($d) => in_array((int)$d['id'], $fac, true)));
+    }
+
+    return $rows;
 }
 
 /**
@@ -583,6 +708,19 @@ function co_get_offers_filtered(array $filters = [], int $page = 1, int $per_pag
         }
     }
 
+    // Faculty members only see offers for their own department(s).
+    if (co_is_faculty()) {
+        $fac_depts = co_faculty_dept_ids();
+        if (empty($fac_depts)) {
+            return ['rows' => [], 'total' => 0];
+        }
+        $fac_ph  = implode(',', array_fill(0, count($fac_depts), '?'));
+        $where[] = "o.dept_id IN ($fac_ph)";
+        foreach ($fac_depts as $fd) {
+            $params[] = (int)$fd;
+        }
+    }
+
     $search = trim($filters['search'] ?? '');
     $searchJoin = '';
     if ($search !== '') {
@@ -610,6 +748,7 @@ function co_get_offers_filtered(array $filters = [], int $page = 1, int $per_pag
     $rowsSt = db()->prepare(
         "SELECT DISTINCT o.id, o.dept_id, o.program_id, o.batch_id,
                 o.status, o.semester, o.academic_intake, o.shift, o.section, o.created_at,
+                o.created_by,
                 d.name AS dept_name,
                 p.program_name,
                 b.name AS batch_name
