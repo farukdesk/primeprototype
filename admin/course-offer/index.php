@@ -53,6 +53,10 @@ $marks_offer_ids = co_offers_with_marks($offer_ids);
 // Enrolled student counts per offered subject (offer_subject_id => count).
 $subject_reg_counts = co_subject_registration_counts($offer_ids);
 
+// Unique enrolled students per offer (offer_id => count) — a student in
+// several subjects of the same offer is counted once.
+$offer_unique_counts = co_offer_unique_student_counts($offer_ids);
+
 // Group rows by batch for the grouped display
 $grouped = [];
 foreach ($offers as $row) {
