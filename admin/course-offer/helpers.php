@@ -661,7 +661,7 @@ function co_registrations_by_subject(int $offer_id): array
            LEFT JOIN dept_departments d ON d.id = s.dept_id
            LEFT JOIN student_batches  b ON b.id = s.batch_id
           WHERE cos.offer_id = ?
-          ORDER BY s.student_id ASC"
+          ORDER BY LENGTH(s.student_id) ASC, s.student_id ASC"
     );
     $st->execute([$offer_id]);
 
