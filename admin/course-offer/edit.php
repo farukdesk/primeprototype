@@ -705,6 +705,12 @@ document.getElementById('btn-add-row').addEventListener('click', function() {
 PRE_ROWS.forEach(function(pr) {
     buildSubjectSelect(pr.ri, pr.cid, pr.ctext);
     buildTeacherSelect(pr.ri, pr.teacher_ids, pr.teachers);
+    // Lock the subject picker when students are already enrolled — swapping
+    // the subject would orphan their registrations. Teachers stay editable.
+    var rbtn = document.querySelector('[data-row="' + pr.ri + '"] .btn-remove-row');
+    if (rbtn && parseInt(rbtn.getAttribute('data-enrolled') || '0') > 0 && tsSubjectMap[pr.ri]) {
+        tsSubjectMap[pr.ri].disable();
+    }
 });
 
 if (PRE_ROWS.length === 0) addRow();
