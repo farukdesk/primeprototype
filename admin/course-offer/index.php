@@ -70,15 +70,18 @@ require_once __DIR__ . '/../includes/header.php';
 
 <style>
 /* ── Course Offer listing ─────────────────────────────────────────────── */
-.co-card            { border: 0; border-radius: 14px; box-shadow: 0 1px 4px rgba(15,23,42,.07); }
+.co-card            { border: 0; border-radius: 14px; box-shadow: 0 2px 10px rgba(15,23,42,.08); }
 .co-batch-card      { overflow: hidden; }
-.co-batch-head      { background: linear-gradient(135deg, #0d6efd12, #0d6efd04); border-bottom: 1px solid #e9ecef; }
-.co-batch-icon      { width: 2rem; height: 2rem; font-size: .8rem; }
+.co-batch-head      { background: linear-gradient(135deg, #6366f11f, #0ea5e912 55%, #0d6efd05); border-bottom: 2px solid #e0e7ff; }
+.co-batch-icon      { width: 2rem; height: 2rem; font-size: .8rem;
+                      background: linear-gradient(135deg, #6366f1, #0ea5e9) !important; color: #fff !important;
+                      box-shadow: 0 2px 6px rgba(99,102,241,.35); }
 
-.co-offer           { border-bottom: 1px solid #f0f2f5; }
+.co-offer           { border-bottom: 1px solid #f0f2f5; border-left: 3px solid transparent; transition: border-color .15s ease; }
 .co-offer:last-child{ border-bottom: 0; }
+.co-offer:hover     { border-left-color: #6366f1; }
 .co-offer-head      { padding: .85rem 1.25rem; }
-.co-offer-head:hover{ background: #f8fafc; }
+.co-offer-head:hover{ background: linear-gradient(90deg, #eef2ff66, #f8fafc); }
 
 .co-chip            { display: inline-flex; align-items: center; gap: .3rem; font-size: .72rem;
                       font-weight: 500; padding: .16rem .55rem; border-radius: 20rem;
