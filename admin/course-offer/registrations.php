@@ -70,14 +70,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // other than their own, so enrollment is not restricted to this offer's
         // batch — we only verify each selected student actually exists.
         $ph      = implode(',', array_fill(0, count($student_ids), '?'));
-        $chk     = db()->prepare("SELECT id FROM students WHERE id IN ($ph)");
+        $chk     = db()->prepare("SELECT id, student_id, full_name FROM students WHERE id IN ($ph)");
         $chk->execute($student_ids);
-        $allowed = array_map('intval', array_column($chk->fetchAll(), 'id'));
+        $stu_map = [];
+        foreach ($chk->fetchAll() as $srow) {
+            $stu_map[(int)$srow['id']] = $srow;
+        }
+        $allowed = array_keys($stu_map);
+
+        // Subject labels for the detailed per-enrollment log entries.
+        $sub_label_map = [];
+        foreach ($subjects as $s) {
+            $sub_label_map[(int)$s['id']] =
+                ($s['course_code'] ? '[' . $s['course_code'] . '] ' : '') . $s['course_name'];
+        }
+        $actor = $user['full_name'] ?? ('user #' . (int)$user['id']);
 
         $added = 0;
         foreach ($allowed as $sid) {
             foreach ($subject_ids as $osid) {
-                if (co_register_student($osid, $sid, 'admin', (int)$user['id'])) $added++;
+                if (co_register_student($osid, $sid, 'admin', (int)$user['id'])) {
+                    $added++;
+                    // Detailed per-enrollment log entry (previous → new values).
+                    $stu   = $stu_map[$sid];
+                    $slbl  = $sub_label_map[$osid] ?? ('Subject #' . $osid);
+                    $stlbl = $stu['student_id'] . ' — ' . $stu['full_name'];
+                    log_change(
+                        'course-offer', 'CREATE', $offer_id,
+                        'Offer #' . $offer_id . ' / ' . $slbl,
+                        'enrollment',
+                        'Not enrolled',
+                        'Enrolled — Student: ' . $stlbl
+                            . ' | Subject: ' . $slbl
+                            . ' | Source: admin'
+                            . ' | Enrolled by: ' . $actor
+                            . ' | At: ' . date('Y-m-d H:i:s'),
+                        'Student ' . $stlbl . ' enrolled into "' . $slbl . '" of course offer #' . $offer_id
+                            . ' (batch: ' . ($offer['batch_name'] ?? '') . ', semester: ' . ($offer['semester'] ?: '-') . ') by ' . $actor . '.'
+                    );
+                }
             }
         }
         $skipped = count($student_ids) - count($allowed);
@@ -94,10 +125,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'remove') {
         $osid = (int)($_POST['offer_subject_id'] ?? 0);
         $sid  = (int)($_POST['student_id'] ?? 0);
+
+        // Capture the full registration details BEFORE removal so the change
+        // log keeps the previous values.
+        $prev = null;
+        if ($osid > 0 && $sid > 0) {
+            $pst = db()->prepare(
+                "SELECT r.source, r.created_at, r.registered_by,
+                        s.student_id, s.full_name,
+                        c.course_code, c.course_name,
+                        u.full_name AS registered_by_name
+                   FROM co_registrations r
+                   JOIN students          s   ON s.id   = r.student_id
+                   JOIN co_offer_subjects cos ON cos.id = r.offer_subject_id
+                   JOIN course_curriculum c   ON c.id   = cos.curriculum_id
+                   LEFT JOIN users        u   ON u.id   = r.registered_by
+                  WHERE r.offer_subject_id = ? AND r.student_id = ?
+                  LIMIT 1"
+            );
+            $pst->execute([$osid, $sid]);
+            $prev = $pst->fetch() ?: null;
+        }
+
         if (in_array($osid, $valid_sub, true) && co_unregister_student($osid, $sid)) {
-            log_change('course-offer', 'DELETE', $offer_id, 'Offer #' . $offer_id,
-                null, null, null,
-                'Removed student #' . $sid . ' from subject #' . $osid);
+            $actor = $user['full_name'] ?? ('user #' . (int)$user['id']);
+            $slbl  = $prev
+                ? (($prev['course_code'] ? '[' . $prev['course_code'] . '] ' : '') . $prev['course_name'])
+                : ('Subject #' . $osid);
+            $stlbl = $prev ? ($prev['student_id'] . ' — ' . $prev['full_name']) : ('Student #' . $sid);
+            $old   = 'Enrolled — Student: ' . $stlbl
+                   . ' | Subject: ' . $slbl
+                   . ' | Source: ' . ($prev['source'] ?? '-')
+                   . ' | Enrolled by: ' . ($prev['registered_by_name'] ?? '-')
+                   . ' | Enrolled at: ' . ($prev['created_at'] ?? '-');
+            log_change(
+                'course-offer', 'DELETE', $offer_id,
+                'Offer #' . $offer_id . ' / ' . $slbl,
+                'enrollment',
+                $old,
+                'Not enrolled (removed by ' . $actor . ' at ' . date('Y-m-d H:i:s') . ')',
+                'Student ' . $stlbl . ' removed from "' . $slbl . '" of course offer #' . $offer_id
+                    . ' (batch: ' . ($offer['batch_name'] ?? '') . ', semester: ' . ($offer['semester'] ?: '-') . ') by ' . $actor . '.'
+            );
             flash_set('success', 'Registration removed.');
         } else {
             flash_set('error', 'Registration not found.');
