@@ -50,6 +50,9 @@ $subjects_map = co_get_subjects_map($offer_ids);
 // Offers that already have marks entered — these can never be deleted.
 $marks_offer_ids = co_offers_with_marks($offer_ids);
 
+// Enrolled student counts per offered subject (offer_subject_id => count).
+$subject_reg_counts = co_subject_registration_counts($offer_ids);
+
 // Group rows by batch for the grouped display
 $grouped = [];
 foreach ($offers as $row) {
@@ -67,15 +70,18 @@ require_once __DIR__ . '/../includes/header.php';
 
 <style>
 /* ── Course Offer listing ─────────────────────────────────────────────── */
-.co-card            { border: 0; border-radius: 14px; box-shadow: 0 1px 4px rgba(15,23,42,.07); }
+.co-card            { border: 0; border-radius: 14px; box-shadow: 0 2px 10px rgba(15,23,42,.08); }
 .co-batch-card      { overflow: hidden; }
-.co-batch-head      { background: linear-gradient(135deg, #0d6efd12, #0d6efd04); border-bottom: 1px solid #e9ecef; }
-.co-batch-icon      { width: 2rem; height: 2rem; font-size: .8rem; }
+.co-batch-head      { background: linear-gradient(135deg, #6366f11f, #0ea5e912 55%, #0d6efd05); border-bottom: 2px solid #e0e7ff; }
+.co-batch-icon      { width: 2rem; height: 2rem; font-size: .8rem;
+                      background: linear-gradient(135deg, #6366f1, #0ea5e9) !important; color: #fff !important;
+                      box-shadow: 0 2px 6px rgba(99,102,241,.35); }
 
-.co-offer           { border-bottom: 1px solid #f0f2f5; }
+.co-offer           { border-bottom: 1px solid #f0f2f5; border-left: 3px solid transparent; transition: border-color .15s ease; }
 .co-offer:last-child{ border-bottom: 0; }
+.co-offer:hover     { border-left-color: #6366f1; }
 .co-offer-head      { padding: .85rem 1.25rem; }
-.co-offer-head:hover{ background: #f8fafc; }
+.co-offer-head:hover{ background: linear-gradient(90deg, #eef2ff66, #f8fafc); }
 
 .co-chip            { display: inline-flex; align-items: center; gap: .3rem; font-size: .72rem;
                       font-weight: 500; padding: .16rem .55rem; border-radius: 20rem;
@@ -86,22 +92,27 @@ require_once __DIR__ . '/../includes/header.php';
 .co-chip-shift      { background: #f0fdf4; border-color: #d1f0da; color: #14713d; }
 .co-chip-section    { background: #fdf2f8; border-color: #f8d7e8; color: #9d3a6d; }
 .co-chip-teacher    { background: #eef4ff; border-color: #d8e4fd; color: #2d4f9e; }
+.co-chip-enrolled   { background: #ecfeff; border-color: #a5f3fc; color: #0e7490; text-decoration: none; }
+a.co-chip-enrolled:hover { background: #cffafe; border-color: #67e8f9; color: #155e75; }
+.co-chip-status-active   { background: #f0fdf4; border-color: #bbf7d0; color: #15803d; }
+.co-chip-status-inactive { background: #f8fafc; border-color: #e2e8f0; color: #64748b; }
 
 .co-status-dot      { width: .5rem; height: .5rem; border-radius: 50%; display: inline-block; }
 
-.co-subjects        { background: #fafbfd; border-top: 1px dashed #e5e8ee; }
+.co-subjects        { background: linear-gradient(180deg, #f6f8ff, #fafbfd); border-top: 1px dashed #c7d2fe; }
 .co-subject         { padding: .6rem 1.25rem .6rem 2.5rem; border-bottom: 1px solid #eef0f4; font-size: .85rem; }
 .co-subject:last-child { border-bottom: 0; }
+.co-subject:hover   { background: #eef2ff55; }
 .co-code            { font-family: SFMono-Regular, Menlo, Consolas, monospace; font-size: .7rem;
-                      background: #eef2f7; border: 1px solid #e0e6ef; border-radius: 6px;
-                      padding: .12rem .45rem; color: #374151; white-space: nowrap; }
+                      background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 6px;
+                      padding: .12rem .45rem; color: #4338ca; white-space: nowrap; }
 
 .co-toggle          { border: 0; background: transparent; color: #6b7280; font-size: .78rem; }
 .co-toggle:hover    { color: #0d6efd; }
 .co-toggle .fa-chevron-down { transition: transform .2s ease; }
 .co-toggle[aria-expanded="true"] .fa-chevron-down { transform: rotate(180deg); }
 
-.co-actions .btn    { --bs-btn-padding-y: .25rem; --bs-btn-padding-x: .55rem; --bs-btn-font-size: .78rem; }
+.co-actions .btn    { --bs-btn-padding-y: .25rem; --bs-btn-padding-x: .55rem; --bs-btn-font-size: .78rem; border-radius: 8px; }
 </style>
 
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
@@ -279,8 +290,16 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
             </div>
 
+            <!-- Total enrolled students in this offer -->
+            <?php $offer_enrolled = 0;
+                  foreach ($offer_subjects as $os) { $offer_enrolled += $subject_reg_counts[(int)$os['id']] ?? 0; } ?>
+            <a href="<?= APP_URL ?>/course-offer/registrations.php?offer_id=<?= $row['id'] ?>"
+               class="co-chip co-chip-enrolled" title="Total enrolled students in this offer">
+                <i class="fas fa-user-graduate"></i><?= $offer_enrolled ?> enrolled
+            </a>
+
             <!-- Status -->
-            <span class="co-chip">
+            <span class="co-chip co-chip-status-<?= $row['status'] === 'active' ? 'active' : 'inactive' ?>">
                 <span class="co-status-dot <?= $row['status'] === 'active' ? 'bg-success' : 'bg-secondary' ?>"></span>
                 <?= $row['status'] === 'active' ? 'Active' : 'Inactive' ?>
             </span>
@@ -340,6 +359,11 @@ require_once __DIR__ . '/../includes/header.php';
                 <?php if ($sub['credit']): ?>
                 <span class="co-chip"><i class="fas fa-star"></i><?= h($sub['credit']) ?> cr</span>
                 <?php endif; ?>
+                <?php $sub_enrolled = $subject_reg_counts[(int)$sub['id']] ?? 0; ?>
+                <a href="<?= APP_URL ?>/course-offer/registrations.php?offer_id=<?= $row['id'] ?>"
+                   class="co-chip co-chip-enrolled" title="Students enrolled in this subject">
+                    <i class="fas fa-user-graduate"></i><?= $sub_enrolled ?> enrolled
+                </a>
                 <?php if (!empty($sub['teachers'])): ?>
                 <div class="d-flex flex-wrap gap-1">
                     <?php foreach ($sub['teachers'] as $t): ?>
