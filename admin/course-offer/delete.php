@@ -28,6 +28,18 @@ if (co_is_faculty()) {
     redirect(APP_URL . '/course-offer/index.php');
 }
 
+// Offers with students already enrolled cannot be deleted — the enrollments
+// must be removed first from the Registrations page.
+$enrolled_total = 0;
+foreach (co_offer_enrolled_counts($id) as $einfo) {
+    $enrolled_total += (int)$einfo['count'];
+}
+if ($enrolled_total > 0) {
+    flash_set('error', 'Students are already enrolled in this course offer (' . $enrolled_total
+        . ' enrollment(s)). Remove the enrollments first from the Registrations page before deleting.');
+    redirect(APP_URL . '/course-offer/index.php');
+}
+
 // Once marks entry has been done for any subject of this offer, it can no
 // longer be deleted.
 if (co_offer_has_marks($id)) {

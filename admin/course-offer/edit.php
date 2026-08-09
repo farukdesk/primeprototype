@@ -94,6 +94,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     unset($row);
 
+    // Subjects that already have enrolled students cannot be removed from the
+    // offer (or swapped for another subject). Their enrollments must be
+    // removed first from the Registrations page.
+    $submitted_cids = array_map('intval', array_column($rows, 'curriculum_id'));
+    foreach (co_offer_enrolled_counts($id) as $ecid => $einfo) {
+        if ($einfo['count'] > 0 && !in_array((int)$ecid, $submitted_cids, true)) {
+            $label = ($einfo['course_code'] ? '[' . $einfo['course_code'] . '] ' : '') . $einfo['course_name'];
+            $errors[] = 'Students are already enrolled in "' . $label . '" (' . $einfo['count']
+                      . ' student(s)). Remove their enrollments first from the Registrations page before removing this subject.';
+        }
+    }
+
     if (empty($errors)) {
         db()->prepare(
             "UPDATE co_offers
