@@ -25,9 +25,13 @@ if (!can_access_dept((int)$offer['dept_id'])) {
     redirect(APP_URL . '/course-offer/index.php');
 }
 
-// Faculty members are never allowed to delete course offers.
-if (co_is_faculty()) {
-    flash_set('error', 'Faculty members are not allowed to delete course offers.');
+// The creator of an offer may delete their own offer; other users need the
+// module delete permission. Faculty members may only ever delete offers
+// they created themselves.
+$cur_user   = auth_user();
+$is_creator = $cur_user && (int)($offer['created_by'] ?? 0) === (int)$cur_user['id'];
+if (!is_super_admin() && !$is_creator && (co_is_faculty() || !co_can_delete())) {
+    flash_set('error', 'You can only delete course offers that you created.');
     redirect(APP_URL . '/course-offer/index.php');
 }
 
