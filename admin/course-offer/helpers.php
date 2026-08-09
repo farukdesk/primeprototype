@@ -673,6 +673,30 @@ function co_registrations_by_subject(int $offer_id): array
 }
 
 /**
+ * Enrolled (registered) student counts for every subject of the given offers.
+ * Returns [offer_subject_id => count]. Used on the listing page to show how
+ * many students are enrolled in each offered subject.
+ */
+function co_subject_registration_counts(array $offer_ids): array
+{
+    if (empty($offer_ids)) return [];
+    $ph = implode(',', array_fill(0, count($offer_ids), '?'));
+    $st = db()->prepare(
+        "SELECT cos.id AS offer_subject_id, COUNT(r.id) AS reg_count
+           FROM co_offer_subjects cos
+           LEFT JOIN co_registrations r ON r.offer_subject_id = cos.id
+          WHERE cos.offer_id IN ($ph)
+          GROUP BY cos.id"
+    );
+    $st->execute(array_map('intval', array_values($offer_ids)));
+    $map = [];
+    foreach ($st->fetchAll() as $r) {
+        $map[(int)$r['offer_subject_id']] = (int)$r['reg_count'];
+    }
+    return $map;
+}
+
+/**
  * Register a student into a single offer subject.
  * Idempotent: existing rows are left untouched (INSERT IGNORE semantics).
  * Returns true when a new row was created.

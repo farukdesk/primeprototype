@@ -50,6 +50,9 @@ $subjects_map = co_get_subjects_map($offer_ids);
 // Offers that already have marks entered — these can never be deleted.
 $marks_offer_ids = co_offers_with_marks($offer_ids);
 
+// Enrolled student counts per offered subject (offer_subject_id => count).
+$subject_reg_counts = co_subject_registration_counts($offer_ids);
+
 // Group rows by batch for the grouped display
 $grouped = [];
 foreach ($offers as $row) {
