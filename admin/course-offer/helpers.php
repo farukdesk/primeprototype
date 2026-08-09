@@ -126,6 +126,34 @@ function co_offer_has_marks(int $offer_id): bool
 }
 
 /**
+ * Enrollment (registration) counts per subject of an offer, keyed by
+ * curriculum_id: [curriculum_id => ['count' => int, 'course_code' => ?, 'course_name' => ?]].
+ * Used to warn about — and block — removing subjects that already have
+ * students enrolled.
+ */
+function co_offer_enrolled_counts(int $offer_id): array
+{
+    $st = db()->prepare(
+        "SELECT cos.curriculum_id, c.course_code, c.course_name, COUNT(r.id) AS reg_count
+           FROM co_offer_subjects cos
+           JOIN course_curriculum c ON c.id = cos.curriculum_id
+           LEFT JOIN co_registrations r ON r.offer_subject_id = cos.id
+          WHERE cos.offer_id = ?
+          GROUP BY cos.curriculum_id, c.course_code, c.course_name"
+    );
+    $st->execute([$offer_id]);
+    $map = [];
+    foreach ($st->fetchAll() as $r) {
+        $map[(int)$r['curriculum_id']] = [
+            'count'       => (int)$r['reg_count'],
+            'course_code' => $r['course_code'],
+            'course_name' => $r['course_name'],
+        ];
+    }
+    return $map;
+}
+
+/**
  * Whether the current user may delete a given offer row.
  * Faculty members never get a delete option, and offers with marks already
  * entered can never be deleted by anyone.

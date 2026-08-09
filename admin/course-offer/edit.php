@@ -94,6 +94,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     unset($row);
 
+    // Subjects that already have enrolled students cannot be removed from the
+    // offer (or swapped for another subject). Their enrollments must be
+    // removed first from the Registrations page.
+    $submitted_cids = array_map('intval', array_column($rows, 'curriculum_id'));
+    foreach (co_offer_enrolled_counts($id) as $ecid => $einfo) {
+        if ($einfo['count'] > 0 && !in_array((int)$ecid, $submitted_cids, true)) {
+            $label = ($einfo['course_code'] ? '[' . $einfo['course_code'] . '] ' : '') . $einfo['course_name'];
+            $errors[] = 'Students are already enrolled in "' . $label . '" (' . $einfo['count']
+                      . ' student(s)). Remove their enrollments first from the Registrations page before removing this subject.';
+        }
+    }
+
     if (empty($errors)) {
         db()->prepare(
             "UPDATE co_offers
@@ -213,6 +225,10 @@ if (!empty($_SESSION['old']['rows'])) {
         ];
     }
 }
+
+// Enrollment counts per subject — used to warn about and block removal of
+// subjects that already have registered students.
+$enrolled_counts = co_offer_enrolled_counts($id);
 
 require_once __DIR__ . '/../includes/header.php';
 echo '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.min.css">';
@@ -417,8 +433,16 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                                         </div>
                                     </td>
                                     <td class="text-center">
+                                        <?php $enr = $enrolled_counts[(int)($pr['subject']['id'] ?? 0)]['count'] ?? 0; ?>
+                                        <?php if ($enr > 0): ?>
+                                        <span class="badge text-bg-warning d-block mb-1"
+                                              title="<?= $enr ?> student(s) already enrolled in this subject">
+                                            <i class="fas fa-user-check me-1"></i><?= $enr ?>
+                                        </span>
+                                        <?php endif; ?>
                                         <button type="button" class="btn btn-sm btn-outline-danger btn-remove-row"
-                                                title="Remove row" style="border-radius:6px;">
+                                                data-enrolled="<?= $enr ?>"
+                                                title="<?= $enr > 0 ? 'Students already enrolled — remove their enrollments first' : 'Remove row' ?>" style="border-radius:6px;">
                                             <i class="fas fa-times"></i>
                                         </button>
                                     </td>
@@ -653,6 +677,12 @@ function addRow(cid, ctext, tids, teachers) {
 }
 
 function removeRow(btn) {
+    var enrolled = parseInt(btn.getAttribute('data-enrolled') || '0');
+    if (enrolled > 0) {
+        alert('Students are already enrolled in this subject (' + enrolled + ' student(s)).\n\n' +
+              'Please remove their enrollments first from the Registrations page before removing this subject.');
+        return;
+    }
     var tr = btn.closest('tr.subject-row');
     var ri = parseInt(tr.getAttribute('data-row'));
     if (tsSubjectMap[ri]) { tsSubjectMap[ri].destroy(); delete tsSubjectMap[ri]; }
@@ -675,6 +705,12 @@ document.getElementById('btn-add-row').addEventListener('click', function() {
 PRE_ROWS.forEach(function(pr) {
     buildSubjectSelect(pr.ri, pr.cid, pr.ctext);
     buildTeacherSelect(pr.ri, pr.teacher_ids, pr.teachers);
+    // Lock the subject picker when students are already enrolled — swapping
+    // the subject would orphan their registrations. Teachers stay editable.
+    var rbtn = document.querySelector('[data-row="' + pr.ri + '"] .btn-remove-row');
+    if (rbtn && parseInt(rbtn.getAttribute('data-enrolled') || '0') > 0 && tsSubjectMap[pr.ri]) {
+        tsSubjectMap[pr.ri].disable();
+    }
 });
 
 if (PRE_ROWS.length === 0) addRow();
