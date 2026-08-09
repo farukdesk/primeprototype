@@ -415,30 +415,66 @@ function co_get_subjects_map(array $offer_ids): array
 function co_save_subjects_teachers(int $offer_id, array $rows): void
 {
     $pdo = db();
-    $pdo->prepare("DELETE FROM co_offer_subjects WHERE offer_id = ?")->execute([$offer_id]);
 
-    if (empty($rows)) return;
+    // Existing subject rows keyed by curriculum_id. Rows whose subject is
+    // still present after the edit KEEP their id, so student registrations
+    // (co_registrations.offer_subject_id) and mark sheets referencing them
+    // are preserved instead of being cascade-deleted on every offer edit.
+    $st = $pdo->prepare("SELECT id, curriculum_id FROM co_offer_subjects WHERE offer_id = ?");
+    $st->execute([$offer_id]);
+    $existing = [];
+    foreach ($st->fetchAll() as $r) {
+        $existing[(int)$r['curriculum_id']] = (int)$r['id'];
+    }
 
     $insSub = $pdo->prepare(
         "INSERT INTO co_offer_subjects (offer_id, curriculum_id, sort_order) VALUES (?, ?, ?)"
+    );
+    $updSub = $pdo->prepare(
+        "UPDATE co_offer_subjects SET sort_order = ? WHERE id = ?"
+    );
+    $delTch = $pdo->prepare(
+        "DELETE FROM co_offer_subject_teachers WHERE offer_subject_id = ?"
     );
     $insTch = $pdo->prepare(
         "INSERT INTO co_offer_subject_teachers (offer_subject_id, faculty_id, sort_order) VALUES (?, ?, ?)"
     );
 
+    $kept_ids = [];
     foreach (array_values($rows) as $i => $row) {
         $cid = (int)($row['curriculum_id'] ?? 0);
         if ($cid <= 0) continue;
 
-        $insSub->execute([$offer_id, $cid, $i]);
-        $sub_id = (int)$pdo->lastInsertId();
+        if (isset($existing[$cid])) {
+            // Subject unchanged — keep the row (and its registrations),
+            // just refresh its position.
+            $sub_id = $existing[$cid];
+            $updSub->execute([$i, $sub_id]);
+        } else {
+            $insSub->execute([$offer_id, $cid, $i]);
+            $sub_id = (int)$pdo->lastInsertId();
+        }
+        $kept_ids[] = $sub_id;
 
+        // Teachers are safely replaced — registrations do not reference them.
+        $delTch->execute([$sub_id]);
         foreach (array_values((array)($row['teacher_ids'] ?? [])) as $j => $fid) {
             $fid = (int)$fid;
             if ($fid > 0) {
                 $insTch->execute([$sub_id, $fid, $j]);
             }
         }
+    }
+
+    // Remove only the subjects that were actually taken out of the offer.
+    // Their registrations cascade-delete, which is expected when a subject
+    // is removed from the offer.
+    if (empty($kept_ids)) {
+        $pdo->prepare("DELETE FROM co_offer_subjects WHERE offer_id = ?")->execute([$offer_id]);
+    } else {
+        $ph  = implode(',', array_fill(0, count($kept_ids), '?'));
+        $del = $pdo->prepare("DELETE FROM co_offer_subjects WHERE offer_id = ? AND id NOT IN ($ph)");
+        $del->execute(array_merge([$offer_id], $kept_ids));
     }
 }
 
