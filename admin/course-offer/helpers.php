@@ -152,7 +152,15 @@ function co_departments(): array
         ->query("SELECT id, name FROM dept_departments WHERE is_active = 1 ORDER BY name ASC")
         ->fetchAll();
 
-    return array_values(array_filter($rows, fn($d) => can_access_dept((int)$d['id'])));
+    $rows = array_values(array_filter($rows, fn($d) => can_access_dept((int)$d['id'])));
+
+    // Faculty members only see their own department(s).
+    if (co_is_faculty()) {
+        $fac  = co_faculty_dept_ids();
+        $rows = array_values(array_filter($rows, fn($d) => in_array((int)$d['id'], $fac, true)));
+    }
+
+    return $rows;
 }
 
 /**

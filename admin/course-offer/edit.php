@@ -22,6 +22,12 @@ if (!can_access_dept((int)$offer['dept_id'])) {
     redirect(APP_URL . '/course-offer/index.php');
 }
 
+// Faculty members may only edit offers they created themselves.
+if (!co_can_edit_offer($offer)) {
+    flash_set('error', 'You can only edit course offers that you created. This offer is view-only for you.');
+    redirect(APP_URL . '/course-offer/index.php');
+}
+
 $page_title = 'Edit Course Offer';
 $errors     = [];
 clear_old();

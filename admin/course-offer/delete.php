@@ -22,6 +22,19 @@ if (!can_access_dept((int)$offer['dept_id'])) {
     redirect(APP_URL . '/course-offer/index.php');
 }
 
+// Faculty members are never allowed to delete course offers.
+if (co_is_faculty()) {
+    flash_set('error', 'Faculty members are not allowed to delete course offers.');
+    redirect(APP_URL . '/course-offer/index.php');
+}
+
+// Once marks entry has been done for any subject of this offer, it can no
+// longer be deleted.
+if (co_offer_has_marks($id)) {
+    flash_set('error', 'Marks have already been entered for this course offer, so it can no longer be deleted.');
+    redirect(APP_URL . '/course-offer/index.php');
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 

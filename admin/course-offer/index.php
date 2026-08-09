@@ -47,6 +47,9 @@ $intake_opts      = co_academic_intake_options();
 $offer_ids    = array_column($offers, 'id');
 $subjects_map = co_get_subjects_map($offer_ids);
 
+// Offers that already have marks entered — these can never be deleted.
+$marks_offer_ids = co_offers_with_marks($offer_ids);
+
 // Group rows by batch for the grouped display
 $grouped = [];
 foreach ($offers as $row) {
