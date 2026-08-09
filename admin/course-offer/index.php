@@ -112,7 +112,7 @@ a.co-chip-enrolled:hover { background: #cffafe; border-color: #67e8f9; color: #1
 .co-toggle .fa-chevron-down { transition: transform .2s ease; }
 .co-toggle[aria-expanded="true"] .fa-chevron-down { transform: rotate(180deg); }
 
-.co-actions .btn    { --bs-btn-padding-y: .25rem; --bs-btn-padding-x: .55rem; --bs-btn-font-size: .78rem; }
+.co-actions .btn    { --bs-btn-padding-y: .25rem; --bs-btn-padding-x: .55rem; --bs-btn-font-size: .78rem; border-radius: 8px; }
 </style>
 
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
