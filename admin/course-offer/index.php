@@ -294,12 +294,11 @@ a.co-chip-enrolled:hover { background: #cffafe; border-color: #67e8f9; color: #1
                 </div>
             </div>
 
-            <!-- Total enrolled students in this offer -->
-            <?php $offer_enrolled = 0;
-                  foreach ($offer_subjects as $os) { $offer_enrolled += $subject_reg_counts[(int)$os['id']] ?? 0; } ?>
+            <!-- Total UNIQUE enrolled students in this offer -->
+            <?php $offer_enrolled = $offer_unique_counts[(int)$row['id']] ?? 0; ?>
             <a href="<?= APP_URL ?>/course-offer/registrations.php?offer_id=<?= $row['id'] ?>"
-               class="co-chip co-chip-enrolled" title="Total enrolled students in this offer">
-                <i class="fas fa-user-graduate"></i><?= $offer_enrolled ?> enrolled
+               class="co-chip co-chip-enrolled" title="Unique students enrolled in this offer (each student counted once)">
+                <i class="fas fa-user-graduate"></i><?= $offer_enrolled ?> student<?= $offer_enrolled != 1 ? 's' : '' ?>
             </a>
 
             <!-- Status -->
