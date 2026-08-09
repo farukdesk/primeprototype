@@ -92,6 +92,10 @@ require_once __DIR__ . '/../includes/header.php';
 .co-chip-shift      { background: #f0fdf4; border-color: #d1f0da; color: #14713d; }
 .co-chip-section    { background: #fdf2f8; border-color: #f8d7e8; color: #9d3a6d; }
 .co-chip-teacher    { background: #eef4ff; border-color: #d8e4fd; color: #2d4f9e; }
+.co-chip-enrolled   { background: #ecfeff; border-color: #a5f3fc; color: #0e7490; text-decoration: none; }
+a.co-chip-enrolled:hover { background: #cffafe; border-color: #67e8f9; color: #155e75; }
+.co-chip-status-active   { background: #f0fdf4; border-color: #bbf7d0; color: #15803d; }
+.co-chip-status-inactive { background: #f8fafc; border-color: #e2e8f0; color: #64748b; }
 
 .co-status-dot      { width: .5rem; height: .5rem; border-radius: 50%; display: inline-block; }
 
