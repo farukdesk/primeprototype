@@ -174,6 +174,70 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect(APP_URL . '/course-offer/registrations.php?offer_id=' . $offer_id);
     }
 
+    if ($action === 'remove_bulk') {
+        $keys  = (array)($_POST['reg_keys'] ?? []);
+        $actor = $user['full_name'] ?? ('user #' . (int)$user['id']);
+
+        // Capture the full registration details BEFORE removal so the change
+        // log keeps the previous values (same as single removal).
+        $pst = db()->prepare(
+            "SELECT r.source, r.created_at, r.registered_by,
+                    s.student_id, s.full_name,
+                    c.course_code, c.course_name,
+                    u.full_name AS registered_by_name
+               FROM co_registrations r
+               JOIN students          s   ON s.id   = r.student_id
+               JOIN co_offer_subjects cos ON cos.id = r.offer_subject_id
+               JOIN course_curriculum c   ON c.id   = cos.curriculum_id
+               LEFT JOIN users        u   ON u.id   = r.registered_by
+              WHERE r.offer_subject_id = ? AND r.student_id = ?
+              LIMIT 1"
+        );
+
+        $removed = 0;
+        foreach ($keys as $key) {
+            if (!preg_match('/^(\\d+):(\\d+)$/', (string)$key, $m)) continue;
+            $osid = (int)$m[1];
+            $sid  = (int)$m[2];
+            if (!in_array($osid, $valid_sub, true)) continue;
+
+            $pst->execute([$osid, $sid]);
+            $prev = $pst->fetch() ?: null;
+
+            if (!co_unregister_student($osid, $sid)) continue;
+            $removed++;
+
+            $slbl  = $prev
+                ? (($prev['course_code'] ? '[' . $prev['course_code'] . '] ' : '') . $prev['course_name'])
+                : ('Subject #' . $osid);
+            $stlbl = $prev ? ($prev['student_id'] . ' — ' . $prev['full_name']) : ('Student #' . $sid);
+            $old   = 'Enrolled — Student: ' . $stlbl
+                   . ' | Subject: ' . $slbl
+                   . ' | Source: ' . ($prev['source'] ?? '-')
+                   . ' | Enrolled by: ' . ($prev['registered_by_name'] ?? '-')
+                   . ' | Enrolled at: ' . ($prev['created_at'] ?? '-');
+            log_change(
+                'course-offer', 'DELETE', $offer_id,
+                'Offer #' . $offer_id . ' / ' . $slbl,
+                'enrollment',
+                $old,
+                'Not enrolled (bulk-removed by ' . $actor . ' at ' . date('Y-m-d H:i:s') . ')',
+                'Student ' . $stlbl . ' removed from "' . $slbl . '" of course offer #' . $offer_id
+                    . ' (batch: ' . ($offer['batch_name'] ?? '') . ', semester: ' . ($offer['semester'] ?: '-') . ') by ' . $actor . ' (bulk removal).'
+            );
+        }
+
+        if ($removed > 0) {
+            log_change('course-offer', 'DELETE', $offer_id, 'Offer #' . $offer_id,
+                null, null, null,
+                'Bulk removed ' . $removed . ' registration(s)');
+            flash_set('success', 'Removed <strong>' . $removed . '</strong> registration(s).');
+        } else {
+            flash_set('error', 'No registrations were removed.');
+        }
+        redirect(APP_URL . '/course-offer/registrations.php?offer_id=' . $offer_id);
+    }
+
     redirect(APP_URL . '/course-offer/registrations.php?offer_id=' . $offer_id);
 }
 
@@ -388,6 +452,29 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 <?php endif; ?>
 
+<?php if (co_is_staff() && $total_regs > 0): ?>
+<!-- Bulk removal toolbar -->
+<form method="POST" id="bulk-remove-form" class="d-none">
+    <?= csrf_field() ?>
+    <input type="hidden" name="offer_id" value="<?= $offer_id ?>">
+    <input type="hidden" name="action" value="remove_bulk">
+    <div id="bulk-remove-inputs"></div>
+</form>
+<div class="card mb-3" style="border-radius:12px;">
+    <div class="card-body py-2 px-4 d-flex flex-wrap align-items-center gap-2">
+        <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle">
+            <span id="reg-sel-count">0</span> registration(s) selected
+        </span>
+        <button type="button" class="btn btn-link btn-sm p-0" id="reg-select-all">Select all</button>
+        <span class="text-muted">/</span>
+        <button type="button" class="btn btn-link btn-sm p-0" id="reg-clear-all">none</button>
+        <button type="button" class="btn btn-sm btn-danger ms-auto" id="reg-remove-selected" disabled style="border-radius:8px;">
+            <i class="fas fa-trash me-1"></i>Remove Selected
+        </button>
+    </div>
+</div>
+<?php endif; ?>
+
 <!-- Registrations per subject -->
 <?php foreach ($subjects as $s): $osid = (int)$s['id']; $regs = $reg_map[$osid] ?? []; ?>
 <div class="card mb-3" style="border-radius:12px;">
@@ -407,6 +494,11 @@ require_once __DIR__ . '/../includes/header.php';
         <table class="table table-sm table-hover align-middle mb-0" style="font-size:.85rem;">
             <thead class="table-light">
                 <tr>
+                    <?php if (co_is_staff()): ?>
+                    <th style="width:2.5rem;" class="text-center">
+                        <input type="checkbox" class="form-check-input reg-check-sub" data-osid="<?= $osid ?>" title="Select all in this subject">
+                    </th>
+                    <?php endif; ?>
                     <th style="width:2.5rem;">#</th>
                     <th>Student</th>
                     <th>Department</th>
@@ -421,6 +513,12 @@ require_once __DIR__ . '/../includes/header.php';
             <?php foreach ($regs as $i => $r): ?>
                 <?php $other_batch = (int)($r['student_batch_id'] ?? 0) > 0 && (int)$r['student_batch_id'] !== $batch_id; ?>
                 <tr<?= $other_batch ? ' class="table-warning"' : '' ?>>
+                    <?php if (co_is_staff()): ?>
+                    <td class="text-center">
+                        <input type="checkbox" class="form-check-input reg-check" data-osid="<?= $osid ?>"
+                               value="<?= $osid ?>:<?= (int)$r['student_pk'] ?>">
+                    </td>
+                    <?php endif; ?>
                     <td class="text-muted"><?= $i + 1 ?></td>
                     <td>
                         <div class="fw-medium">
@@ -701,6 +799,70 @@ function toggleAllSubs(on) {
     });
 
     load();
+})();
+
+// ── Bulk removal of registrations ──
+(function () {
+    var form = document.getElementById('bulk-remove-form');
+    if (!form) return;
+    var inputs  = document.getElementById('bulk-remove-inputs');
+    var countEl = document.getElementById('reg-sel-count');
+    var btn     = document.getElementById('reg-remove-selected');
+    var allBtn  = document.getElementById('reg-select-all');
+    var noneBtn = document.getElementById('reg-clear-all');
+    var checks  = Array.prototype.slice.call(document.querySelectorAll('.reg-check'));
+    var subAlls = Array.prototype.slice.call(document.querySelectorAll('.reg-check-sub'));
+
+    function selectedKeys() {
+        return checks.filter(function (c) { return c.checked; }).map(function (c) { return c.value; });
+    }
+
+    function refresh() {
+        var n = selectedKeys().length;
+        countEl.textContent = n;
+        btn.disabled = n === 0;
+        subAlls.forEach(function (sa) {
+            var group = checks.filter(function (c) { return c.dataset.osid === sa.dataset.osid; });
+            sa.checked = group.length > 0 && group.every(function (c) { return c.checked; });
+        });
+    }
+
+    checks.forEach(function (c) { c.addEventListener('change', refresh); });
+
+    subAlls.forEach(function (sa) {
+        sa.addEventListener('change', function () {
+            checks.forEach(function (c) {
+                if (c.dataset.osid === sa.dataset.osid) c.checked = sa.checked;
+            });
+            refresh();
+        });
+    });
+
+    allBtn.addEventListener('click', function () {
+        checks.forEach(function (c) { c.checked = true; });
+        refresh();
+    });
+    noneBtn.addEventListener('click', function () {
+        checks.forEach(function (c) { c.checked = false; });
+        refresh();
+    });
+
+    btn.addEventListener('click', function () {
+        var keys = selectedKeys();
+        if (!keys.length) return;
+        if (!confirm('Remove ' + keys.length + ' selected registration(s)? This cannot be undone.')) return;
+        inputs.innerHTML = '';
+        keys.forEach(function (k) {
+            var inp = document.createElement('input');
+            inp.type = 'hidden';
+            inp.name = 'reg_keys[]';
+            inp.value = k;
+            inputs.appendChild(inp);
+        });
+        form.submit();
+    });
+
+    refresh();
 })();
 <?php endif; ?>
 </script>
