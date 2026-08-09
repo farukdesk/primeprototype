@@ -314,15 +314,15 @@ require_once __DIR__ . '/../includes/header.php';
             <!-- Subjects toggle -->
             <button class="co-toggle d-inline-flex align-items-center gap-1" type="button"
                     data-bs-toggle="collapse" data-bs-target="#<?= $collapse_id ?>"
-                    aria-expanded="true" aria-controls="<?= $collapse_id ?>">
+                    aria-expanded="false" aria-controls="<?= $collapse_id ?>">
                 <i class="fas fa-book"></i>
                 <?= count($offer_subjects) ?> subject<?= count($offer_subjects) != 1 ? 's' : '' ?>
                 <i class="fas fa-chevron-down"></i>
             </button>
         </div>
 
-        <!-- Subjects -->
-        <div class="collapse show co-subjects" id="<?= $collapse_id ?>">
+        <!-- Subjects (collapsed by default — use the toggle arrow to expand) -->
+        <div class="collapse co-subjects" id="<?= $collapse_id ?>">
             <?php if (empty($offer_subjects)): ?>
             <div class="co-subject text-muted fst-italic">No subjects added yet.</div>
             <?php else: ?>
