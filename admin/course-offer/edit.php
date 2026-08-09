@@ -433,8 +433,16 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                                         </div>
                                     </td>
                                     <td class="text-center">
+                                        <?php $enr = $enrolled_counts[(int)($pr['subject']['id'] ?? 0)]['count'] ?? 0; ?>
+                                        <?php if ($enr > 0): ?>
+                                        <span class="badge text-bg-warning d-block mb-1"
+                                              title="<?= $enr ?> student(s) already enrolled in this subject">
+                                            <i class="fas fa-user-check me-1"></i><?= $enr ?>
+                                        </span>
+                                        <?php endif; ?>
                                         <button type="button" class="btn btn-sm btn-outline-danger btn-remove-row"
-                                                title="Remove row" style="border-radius:6px;">
+                                                data-enrolled="<?= $enr ?>"
+                                                title="<?= $enr > 0 ? 'Students already enrolled — remove their enrollments first' : 'Remove row' ?>" style="border-radius:6px;">
                                             <i class="fas fa-times"></i>
                                         </button>
                                     </td>
