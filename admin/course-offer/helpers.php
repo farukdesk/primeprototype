@@ -677,6 +677,7 @@ function co_registrations_by_subject(int $offer_id): array
     $st = db()->prepare(
         "SELECT r.id AS reg_id, r.offer_subject_id, r.source, r.created_at,
                 s.id AS student_pk, s.student_id, s.full_name, s.section, s.shift,
+                s.batch_id AS student_batch_id,
                 d.name AS dept_name, b.name AS batch_name
            FROM co_registrations   r
            JOIN co_offer_subjects  cos ON cos.id = r.offer_subject_id
