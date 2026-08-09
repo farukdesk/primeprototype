@@ -4,9 +4,12 @@ auth_check();
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/../change-log/helpers.php';
 
-if (!co_can_delete()) {
-    flash_set('error', 'You do not have permission to delete course offers.');
-    redirect(APP_URL . '/course-offer/index.php');
+// The full delete permission is checked after the offer is loaded: the
+// creator of an offer may delete their own offer (while it has no
+// enrollments or marks), even without the module-level delete permission.
+if (!can_access('course-offer')) {
+    flash_set('error', 'You do not have permission to access this section.');
+    redirect(APP_URL . '/index.php');
 }
 
 $id    = (int)($_GET['id'] ?? $_POST['id'] ?? 0);
