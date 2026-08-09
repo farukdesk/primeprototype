@@ -708,6 +708,19 @@ function co_get_offers_filtered(array $filters = [], int $page = 1, int $per_pag
         }
     }
 
+    // Faculty members only see offers for their own department(s).
+    if (co_is_faculty()) {
+        $fac_depts = co_faculty_dept_ids();
+        if (empty($fac_depts)) {
+            return ['rows' => [], 'total' => 0];
+        }
+        $fac_ph  = implode(',', array_fill(0, count($fac_depts), '?'));
+        $where[] = "o.dept_id IN ($fac_ph)";
+        foreach ($fac_depts as $fd) {
+            $params[] = (int)$fd;
+        }
+    }
+
     $search = trim($filters['search'] ?? '');
     $searchJoin = '';
     if ($search !== '') {
