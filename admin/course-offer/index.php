@@ -99,12 +99,13 @@ a.co-chip-enrolled:hover { background: #cffafe; border-color: #67e8f9; color: #1
 
 .co-status-dot      { width: .5rem; height: .5rem; border-radius: 50%; display: inline-block; }
 
-.co-subjects        { background: #fafbfd; border-top: 1px dashed #e5e8ee; }
+.co-subjects        { background: linear-gradient(180deg, #f6f8ff, #fafbfd); border-top: 1px dashed #c7d2fe; }
 .co-subject         { padding: .6rem 1.25rem .6rem 2.5rem; border-bottom: 1px solid #eef0f4; font-size: .85rem; }
 .co-subject:last-child { border-bottom: 0; }
+.co-subject:hover   { background: #eef2ff55; }
 .co-code            { font-family: SFMono-Regular, Menlo, Consolas, monospace; font-size: .7rem;
-                      background: #eef2f7; border: 1px solid #e0e6ef; border-radius: 6px;
-                      padding: .12rem .45rem; color: #374151; white-space: nowrap; }
+                      background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 6px;
+                      padding: .12rem .45rem; color: #4338ca; white-space: nowrap; }
 
 .co-toggle          { border: 0; background: transparent; color: #6b7280; font-size: .78rem; }
 .co-toggle:hover    { color: #0d6efd; }
