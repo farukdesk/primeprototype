@@ -4,9 +4,12 @@ auth_check();
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/../change-log/helpers.php';
 
-if (!co_can_delete()) {
-    flash_set('error', 'You do not have permission to delete course offers.');
-    redirect(APP_URL . '/course-offer/index.php');
+// The full delete permission is checked after the offer is loaded: the
+// creator of an offer may delete their own offer (while it has no
+// enrollments or marks), even without the module-level delete permission.
+if (!can_access('course-offer')) {
+    flash_set('error', 'You do not have permission to access this section.');
+    redirect(APP_URL . '/index.php');
 }
 
 $id    = (int)($_GET['id'] ?? $_POST['id'] ?? 0);
@@ -22,9 +25,13 @@ if (!can_access_dept((int)$offer['dept_id'])) {
     redirect(APP_URL . '/course-offer/index.php');
 }
 
-// Faculty members are never allowed to delete course offers.
-if (co_is_faculty()) {
-    flash_set('error', 'Faculty members are not allowed to delete course offers.');
+// The creator of an offer may delete their own offer; other users need the
+// module delete permission. Faculty members may only ever delete offers
+// they created themselves.
+$cur_user   = auth_user();
+$is_creator = $cur_user && (int)($offer['created_by'] ?? 0) === (int)$cur_user['id'];
+if (!is_super_admin() && !$is_creator && (co_is_faculty() || !co_can_delete())) {
+    flash_set('error', 'You can only delete course offers that you created.');
     redirect(APP_URL . '/course-offer/index.php');
 }
 

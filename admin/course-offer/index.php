@@ -317,14 +317,19 @@ a.co-chip-enrolled:hover { background: #cffafe; border-color: #67e8f9; color: #1
                     <i class="fas fa-pen"></i>
                 </a>
                 <?php endif; ?>
-                <?php if (co_can_delete_offer($row, $row_has_marks)): ?>
+                <?php $can_del_now = co_can_delete_offer($row, $row_has_marks, $offer_enrolled > 0);
+                      $could_del   = co_can_delete_offer($row, false, false); ?>
+                <?php if ($can_del_now): ?>
                 <a href="<?= APP_URL ?>/course-offer/delete.php?id=<?= $row['id'] ?>"
                    class="btn btn-outline-danger" title="Delete"
                    onclick="return confirm('Delete this course offer and all its subjects? This cannot be undone.')">
                     <i class="fas fa-trash"></i>
                 </a>
-                <?php elseif ($row_has_marks && co_can_delete() && !co_is_faculty()): ?>
-                <span class="btn btn-outline-secondary disabled" title="Marks have been entered — this offer can no longer be deleted">
+                <?php elseif ($could_del && ($row_has_marks || $offer_enrolled > 0)): ?>
+                <span class="btn btn-outline-secondary disabled"
+                      title="<?= $row_has_marks
+                          ? 'Marks have been entered — this offer can no longer be deleted'
+                          : 'Students are enrolled — remove the enrollments first to delete' ?>">
                     <i class="fas fa-lock"></i>
                 </span>
                 <?php endif; ?>
