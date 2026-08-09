@@ -527,7 +527,7 @@ function co_batch_students(int $batch_id, string $q = '', int $limit = 50): arra
         "SELECT s.id, s.student_id, s.full_name, s.section
            FROM students s
           WHERE $where
-          ORDER BY s.student_id ASC
+          ORDER BY LENGTH(s.student_id) ASC, s.student_id ASC
           LIMIT $limit"
     );
     $st->execute($params);
