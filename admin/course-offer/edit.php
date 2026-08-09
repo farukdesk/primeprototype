@@ -226,6 +226,10 @@ if (!empty($_SESSION['old']['rows'])) {
     }
 }
 
+// Enrollment counts per subject — used to warn about and block removal of
+// subjects that already have registered students.
+$enrolled_counts = co_offer_enrolled_counts($id);
+
 require_once __DIR__ . '/../includes/header.php';
 echo '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.min.css">';
 echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>';
