@@ -419,14 +419,30 @@ require_once __DIR__ . '/../includes/header.php';
             </thead>
             <tbody>
             <?php foreach ($regs as $i => $r): ?>
-                <tr>
+                <?php $other_batch = (int)($r['student_batch_id'] ?? 0) > 0 && (int)$r['student_batch_id'] !== $batch_id; ?>
+                <tr<?= $other_batch ? ' class="table-warning"' : '' ?>>
                     <td class="text-muted"><?= $i + 1 ?></td>
                     <td>
-                        <div class="fw-medium"><?= h($r['full_name']) ?></div>
+                        <div class="fw-medium">
+                            <?= h($r['full_name']) ?>
+                            <?php if ($other_batch): ?>
+                            <i class="fas fa-exchange-alt text-warning ms-1" title="Enrolled from another batch"></i>
+                            <?php endif; ?>
+                        </div>
                         <div class="text-muted font-monospace" style="font-size:.78rem;"><?= h($r['student_id']) ?></div>
                     </td>
                     <td><?= h($r['dept_name'] ?: '—') ?></td>
-                    <td><?= h($r['batch_name'] ?: '—') ?></td>
+                    <td>
+                        <?php if ($other_batch): ?>
+                        <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle"
+                              title="Student's own batch — different from this offer's batch (<?= h($offer['batch_name']) ?>)">
+                            <i class="fas fa-exchange-alt me-1"></i><?= h($r['batch_name'] ?: '—') ?>
+                        </span>
+                        <div class="text-muted" style="font-size:.72rem;">Other batch</div>
+                        <?php else: ?>
+                        <?= h($r['batch_name'] ?: '—') ?>
+                        <?php endif; ?>
+                    </td>
                     <td><?= h($r['section'] ?: '—') ?></td>
                     <td><?= h($r['shift'] ?: '—') ?></td>
                     <td>
