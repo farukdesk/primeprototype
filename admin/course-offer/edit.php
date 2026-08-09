@@ -677,6 +677,12 @@ function addRow(cid, ctext, tids, teachers) {
 }
 
 function removeRow(btn) {
+    var enrolled = parseInt(btn.getAttribute('data-enrolled') || '0');
+    if (enrolled > 0) {
+        alert('Students are already enrolled in this subject (' + enrolled + ' student(s)).\n\n' +
+              'Please remove their enrollments first from the Registrations page before removing this subject.');
+        return;
+    }
     var tr = btn.closest('tr.subject-row');
     var ri = parseInt(tr.getAttribute('data-row'));
     if (tsSubjectMap[ri]) { tsSubjectMap[ri].destroy(); delete tsSubjectMap[ri]; }
