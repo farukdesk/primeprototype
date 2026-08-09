@@ -282,8 +282,16 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
             </div>
 
+            <!-- Total enrolled students in this offer -->
+            <?php $offer_enrolled = 0;
+                  foreach ($offer_subjects as $os) { $offer_enrolled += $subject_reg_counts[(int)$os['id']] ?? 0; } ?>
+            <a href="<?= APP_URL ?>/course-offer/registrations.php?offer_id=<?= $row['id'] ?>"
+               class="co-chip co-chip-enrolled" title="Total enrolled students in this offer">
+                <i class="fas fa-user-graduate"></i><?= $offer_enrolled ?> enrolled
+            </a>
+
             <!-- Status -->
-            <span class="co-chip">
+            <span class="co-chip co-chip-status-<?= $row['status'] === 'active' ? 'active' : 'inactive' ?>">
                 <span class="co-status-dot <?= $row['status'] === 'active' ? 'bg-success' : 'bg-secondary' ?>"></span>
                 <?= $row['status'] === 'active' ? 'Active' : 'Inactive' ?>
             </span>
