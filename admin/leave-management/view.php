@@ -47,6 +47,16 @@ if (!$is_owner && !$is_admin && !$in_flow) {
 $can_act    = lm_user_can_act($req, $user) || ($is_admin && $req['status'] === 'pending' && !$is_owner);
 $can_cancel = $is_owner && $req['status'] === 'pending';
 
+// Groups selectable for the Forward option (excludes the current step's group).
+$forward_groups = [];
+if ($can_act) {
+    $cur_step_row = lm_current_step($id, (int)$req['current_step']);
+    $cur_gid      = $cur_step_row ? (int)$cur_step_row['group_id'] : 0;
+    foreach (lm_group_options() as $g) {
+        if ((int)$g['id'] !== $cur_gid) $forward_groups[] = $g;
+    }
+}
+
 // Admin may (re-)sync the approval flow while the request is pending and no
 // step has been acted on — covers requests submitted before the approval
 // chain for the requester's group was configured.
@@ -173,6 +183,40 @@ if (in_array($req['category'], LM_BALANCE_CATEGORIES, true)) {
                     </div>
                     <p class="text-muted small mb-0 mt-2"><i class="fas fa-signature me-1"></i> Approving applies your uploaded signature image to this step.</p>
                 </form>
+
+                <?php if (!empty($forward_groups)): ?>
+                <hr>
+                <form method="POST" action="<?= APP_URL ?>/leave-management/action.php"
+                      onsubmit="return confirm('Forward this leave request to the selected group? They must approve before it returns to your step.')">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="id" value="<?= $id ?>">
+                    <input type="hidden" name="action" value="forward">
+                    <label class="form-label fw-medium"><i class="fas fa-share me-1 text-primary"></i>Need another group's attention first?</label>
+                    <div class="row g-2">
+                        <div class="col-md-4">
+                            <select name="forward_group_id" class="form-select" required>
+                                <option value="">Forward to group…</option>
+                                <?php foreach ($forward_groups as $g): ?>
+                                <option value="<?= (int)$g['id'] ?>"><?= h($g['name']) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <input type="text" name="note" class="form-control" maxlength="150" required
+                                   placeholder="Comment — why is their attention needed?">
+                        </div>
+                        <div class="col-md-2 d-grid">
+                            <button type="submit" class="btn btn-outline-primary" style="border-radius:10px;">
+                                <i class="fas fa-share me-1"></i> Forward
+                            </button>
+                        </div>
+                    </div>
+                    <p class="text-muted small mb-0 mt-2">
+                        Adds an extra approval step for the selected group to this request only.
+                        Once they approve &amp; sign, the request automatically returns to your step.
+                    </p>
+                </form>
+                <?php endif; ?>
                 <?php endif; ?>
 
                 <?php if ($can_cancel): ?>
