@@ -223,14 +223,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // also hold results staff/create permissions.
     if ($offer_subject_id > 0 && !is_super_admin()
         && ($is_faculty_member || (!rm_can_create() && !rm_is_staff()))) {
-        $fac_uid = (int)$user['id'];
+        $fac_uid   = (int)$user['id'];
+        // dept_faculty.user_id is optional, so also match the faculty record by
+        // the logged-in user's email when no user account is linked.
+        $fac_email = trim((string)($user['email'] ?? ''));
         // Faculty members only qualify when they are a teacher on this offer subject…
         $fa_stmt = db()->prepare(
             "SELECT COUNT(*) FROM co_offer_subject_teachers t
                JOIN dept_faculty df ON df.id = t.faculty_id
-              WHERE t.offer_subject_id = ? AND df.user_id = ?"
+              WHERE t.offer_subject_id = ?
+                AND (df.user_id = ?
+                     OR (? <> '' AND df.email IS NOT NULL AND df.email = ?))"
         );
-        $fa_stmt->execute([$offer_subject_id, $fac_uid]);
+        $fa_stmt->execute([$offer_subject_id, $fac_uid, $fac_email, $fac_email]);
         $is_authorized = (int)$fa_stmt->fetchColumn() > 0;
         // …or they are the approved/admin-assigned teacher of the curriculum subject.
         if (!$is_authorized && $curriculum_id > 0) {
@@ -245,9 +250,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $fa3 = db()->prepare(
                 "SELECT COUNT(*) FROM course_curriculum cc
                    JOIN dept_faculty df ON df.id = cc.assigned_faculty_id
-                  WHERE df.user_id = ? AND cc.id = ?"
+                  WHERE cc.id = ?
+                    AND (df.user_id = ?
+                         OR (? <> '' AND df.email IS NOT NULL AND df.email = ?))"
             );
-            $fa3->execute([$fac_uid, $curriculum_id]);
+            $fa3->execute([$curriculum_id, $fac_uid, $fac_email, $fac_email]);
             $is_authorized = (int)$fa3->fetchColumn() > 0;
         }
         if (!$is_authorized) {

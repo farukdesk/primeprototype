@@ -56,6 +56,10 @@ $restrict_to_teacher = !is_super_admin()
 $params = [$dept_id, $program_id];
 $teacher_filter = '';
 if ($restrict_to_teacher) {
+    // dept_faculty.user_id is optional, so also match the faculty record by the
+    // logged-in user's email when no user account is linked.
+    $user_email = trim((string)(auth_user()['email'] ?? ''));
+
     // Faculty may enter marks for an offered subject when they are authorized via
     // ANY of the three sources below. These mirror the server-side authorization
     // check in mark-entry.php and the approved subjects shown on my-profile.php:
@@ -66,7 +70,9 @@ if ($restrict_to_teacher) {
         EXISTS (
             SELECT 1 FROM co_offer_subject_teachers t
             JOIN dept_faculty df ON df.id = t.faculty_id
-            WHERE t.offer_subject_id = cos.id AND df.user_id = ?
+            WHERE t.offer_subject_id = cos.id
+              AND (df.user_id = ?
+                   OR (? <> '' AND df.email IS NOT NULL AND df.email = ?))
         )
         OR EXISTS (
             SELECT 1 FROM faculty_subject_assignments fsa
@@ -77,12 +83,18 @@ if ($restrict_to_teacher) {
         OR EXISTS (
             SELECT 1 FROM course_curriculum cc2
             JOIN dept_faculty df2 ON df2.id = cc2.assigned_faculty_id
-            WHERE cc2.id = cos.curriculum_id AND df2.user_id = ?
+            WHERE cc2.id = cos.curriculum_id
+              AND (df2.user_id = ?
+                   OR (? <> '' AND df2.email IS NOT NULL AND df2.email = ?))
         )
     )";
     $params[] = $user_id;
+    $params[] = $user_email;
+    $params[] = $user_email;
     $params[] = $user_id;
     $params[] = $user_id;
+    $params[] = $user_email;
+    $params[] = $user_email;
 }
 
 $sql = "SELECT cos.id            AS offer_subject_id,
