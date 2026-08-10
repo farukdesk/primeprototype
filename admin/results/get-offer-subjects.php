@@ -40,6 +40,15 @@ if (!is_super_admin()) {
     $fac_check = db()->prepare('SELECT id FROM faculty_profiles WHERE user_id = ? LIMIT 1');
     $fac_check->execute([$user_id]);
     $is_faculty_member = (bool)$fac_check->fetch();
+    // An active dept_faculty record also marks the user as a faculty member,
+    // so course teachers without a faculty profile are restricted too.
+    if (!$is_faculty_member) {
+        try {
+            $df_check = db()->prepare('SELECT id FROM dept_faculty WHERE user_id = ? AND is_active = 1 LIMIT 1');
+            $df_check->execute([$user_id]);
+            $is_faculty_member = (bool)$df_check->fetch();
+        } catch (Throwable $_e) {}
+    }
 }
 $restrict_to_teacher = !is_super_admin()
     && (!(rm_can_create() || rm_is_staff()) || $is_faculty_member);
