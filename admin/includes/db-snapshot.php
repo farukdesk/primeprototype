@@ -35,8 +35,11 @@ class SnapshotStatement extends PDOStatement
     {
         $ctx = $this->snap->snapshotBefore($this->queryString, $params);
         $ok  = parent::execute($params);
-        if ($ok && $ctx !== null) {
-            $this->snap->snapshotAfter($ctx);
+        if ($ok) {
+            $this->snap->rememberInsertId($this->queryString);
+            if ($ctx !== null) {
+                $this->snap->snapshotAfter($ctx);
+            }
         }
         return $ok;
     }
@@ -47,6 +50,7 @@ class SnapshotPDO extends PDO
     private static bool $writing  = false; // recursion guard for internal reads/writes
     private static bool $disabled = false; // set when db_snapshots table is missing
     private array $pk_cache = [];
+    private string|false $userInsertId = false; // insert id of the last USER-level INSERT/REPLACE
 
     public function __construct(string $dsn, ?string $user = null, ?string $pass = null, ?array $options = null)
     {
@@ -58,7 +62,10 @@ class SnapshotPDO extends PDO
     {
         $ctx = $this->snapshotBefore($statement, null);
         $res = parent::exec($statement);
-        if ($res !== false && $ctx !== null) $this->snapshotAfter($ctx);
+        if ($res !== false) {
+            $this->rememberInsertId($statement);
+            if ($ctx !== null) $this->snapshotAfter($ctx);
+        }
         return $res;
     }
 
@@ -68,8 +75,36 @@ class SnapshotPDO extends PDO
         $stmt = $fetchMode === null
             ? parent::query($query)
             : parent::query($query, $fetchMode, ...$fetchModeArgs);
-        if ($stmt !== false && $ctx !== null) $this->snapshotAfter($ctx);
+        if ($stmt !== false) {
+            $this->rememberInsertId($query);
+            if ($ctx !== null) $this->snapshotAfter($ctx);
+        }
         return $stmt;
+    }
+
+    /**
+     * The snapshot feature INSERTs into db_snapshots on the same connection,
+     * which clobbers MySQL's LAST_INSERT_ID() for callers. We cache the id of
+     * the last USER-level INSERT/REPLACE and serve it from here instead.
+     */
+    public function lastInsertId(?string $name = null): string|false
+    {
+        if ($name === null && $this->userInsertId !== false) {
+            return $this->userInsertId;
+        }
+        return parent::lastInsertId($name);
+    }
+
+    /**
+     * Called after every successful user-level statement. Internal snapshot
+     * writes (self::$writing = true) never update the cached value.
+     */
+    public function rememberInsertId(string $sql): void
+    {
+        if (self::$writing) return;
+        if (preg_match('/^\s*(insert|replace)\b/i', $sql)) {
+            $this->userInsertId = parent::lastInsertId();
+        }
     }
 
     // ── Capture ────────────────────────────────────────────────────────────────────
