@@ -1783,6 +1783,36 @@ foreach ($creatable as $cr) {
         });
     }
 
+    // ── Row-integrity guard: marks must NEVER shift to another student ──────
+    // Disabled inputs are not submitted by the browser (absent segments,
+    // exam-mode locked columns, rows locked by another teacher). With plain
+    // name[] arrays that shifts the positional marks arrays and can attach a
+    // mark to the WRONG student. Before every submit, each row's inputs are
+    // renamed with an explicit row index so PHP receives perfectly aligned
+    // rows: a missing (disabled) input just leaves that one student's value
+    // empty instead of shifting everyone below them.
+    var markForm = document.getElementById('markEntryForm');
+    if (markForm) {
+        markForm.addEventListener('submit', function() {
+            Array.from(tbody.querySelectorAll('tr.grade-row')).forEach(function(tr, idx) {
+                function rename(sel, name) {
+                    var el = tr.querySelector(sel);
+                    if (el) el.name = name;
+                }
+                rename('input[name^="student_id_pk"]', 'student_id_pk[' + idx + ']');
+                rename('input[name^="student_sid"]',   'student_sid['   + idx + ']');
+                rename('input[name^="student_name"]',  'student_name['  + idx + ']');
+                rename('input[name^="is_absent"]',     'is_absent['     + idx + ']');
+                tr.querySelectorAll('.marks-input').forEach(function(inp) {
+                    inp.name = 'marks[' + inp.getAttribute('data-dist-idx') + '][' + idx + ']';
+                });
+                tr.querySelectorAll('.dist-absent-flag').forEach(function(f) {
+                    f.name = 'dist_absent[' + f.getAttribute('data-dist-idx') + '][' + idx + ']';
+                });
+            });
+        });
+    }
+
     // Initial load: programs (and subjects + students if editing).
     // Edit mode: prefer the sheet's own saved department so a cross-department
     // sheet restores its saved program/exam/subject correctly.
