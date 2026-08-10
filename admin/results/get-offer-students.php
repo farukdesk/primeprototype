@@ -30,9 +30,11 @@ $exclude_sheet_id = (int)($_GET['exclude_sheet_id'] ?? 0);
 if ($offer_subject_id <= 0) { echo '[]'; exit; }
 
 $stmt = db()->prepare(
-    "SELECT s.id, s.student_id, s.full_name, s.batch
+    "SELECT s.id, s.student_id, s.full_name, s.batch,
+            s.dept_id, d.name AS dept_name
        FROM co_registrations r
        JOIN students s ON s.id = r.student_id
+       LEFT JOIN dept_departments d ON d.id = s.dept_id
       WHERE r.offer_subject_id = ?
         AND s.status = 'Active'
       ORDER BY s.student_id ASC"

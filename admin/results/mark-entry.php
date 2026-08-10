@@ -879,7 +879,16 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
 // Output existing rows (edit mode) with saved mark values as data attributes.
 // Mark cells are injected by JS after the distribution loads.
 if (!empty($grades)):
+    // Majority batch among the saved rows — students from another batch or
+    // another department get highlighted like in create mode.
+    $g_batches  = array_filter(array_map(static fn($x) => trim((string)($x['s_batch'] ?? '')), $grades));
+    $g_counts   = array_count_values($g_batches);
+    arsort($g_counts);
+    $main_batch = $g_counts ? (string)array_key_first($g_counts) : '';
     foreach ($grades as $idx => $g):
+        $g_batch     = trim((string)($g['s_batch'] ?? ''));
+        $other_batch = $g_batch !== '' && $main_batch !== '' && $g_batch !== $main_batch;
+        $other_dept  = !empty($g['s_dept_id']) && (int)$g['s_dept_id'] !== (int)($sheet['dept_id'] ?? 0);
         // Prefer marks_json for edit-mode pre-population; fall back to 4 legacy columns.
         $saved_marks = null;
         if (!empty($g['marks_json'])) {
@@ -899,7 +908,7 @@ if (!empty($grades)):
             $saved_absent_flags = json_decode($g['absent_json'], true);
         }
 ?>
-                        <tr class="grade-row <?= $g['is_absent'] ? 'table-warning' : '' ?>"
+                        <tr class="grade-row <?= ($g['is_absent'] || $other_batch || $other_dept) ? 'table-warning' : '' ?>"
                             data-saved-marks="<?= h(json_encode($saved_marks)) ?>"
                             data-is-absent="<?= $g['is_absent'] ? '1' : '0' ?>"
                             data-absent-flags="<?= h(json_encode($saved_absent_flags)) ?>">
@@ -910,6 +919,16 @@ if (!empty($grades)):
                                 <input type="text" name="student_sid[]" class="form-control form-control-sm"
                                        value="<?= h($g['student_sid']) ?>" placeholder="ID" required
                                        style="font-size:.78rem;padding:.2rem .4rem;">
+                                <?php if ($other_batch || $other_dept): ?>
+                                <small class="text-danger d-block mt-1 fw-semibold" style="font-size:.68rem;">
+                                    <?php
+                                    $tags = [];
+                                    if ($other_batch) $tags[] = 'Batch: ' . h($g_batch);
+                                    if ($other_dept)  $tags[] = 'Dept: '  . h($g['s_dept_name'] ?: ('#' . (int)$g['s_dept_id']));
+                                    echo implode(' · ', $tags);
+                                    ?>
+                                </small>
+                                <?php endif; ?>
                             </td>
                             <td>
                                 <input type="text" name="student_name[]" class="form-control form-control-sm"
@@ -1605,7 +1624,9 @@ foreach ($creatable as $cr) {
                 data.forEach(function(s) {
                     if (existingPk[String(s.id)] || existingSid[String(s.student_id).trim()]) return;
                     var diffBatch = (s.batch && mainBatch && s.batch !== mainBatch) ? s.batch : null;
-                    appendRow(s.student_id, s.full_name, s.id, null, null, true, s.marked_by || null, diffBatch);
+                    var diffDept  = (s.dept_id && String(s.dept_id) !== String(getDeptId() || 0))
+                        ? (s.dept_name || ('#' + s.dept_id)) : null;
+                    appendRow(s.student_id, s.full_name, s.id, null, null, true, s.marked_by || null, diffBatch, diffDept);
                     added++;
                 });
                 if (added > 0) {
@@ -1656,7 +1677,9 @@ foreach ($creatable as $cr) {
                 });
                 data.forEach(function(s) {
                     var diffBatch = (s.batch && mainBatch && s.batch !== mainBatch) ? s.batch : null;
-                    appendRow(s.student_id, s.full_name, s.id, null, null, true, s.marked_by || null, diffBatch);
+                    var diffDept  = (s.dept_id && String(s.dept_id) !== String(getDeptId() || 0))
+                        ? (s.dept_name || ('#' + s.dept_id)) : null;
+                    appendRow(s.student_id, s.full_name, s.id, null, null, true, s.marked_by || null, diffBatch, diffDept);
                 });
                 renumber();
                 applyExamMode();
@@ -1804,7 +1827,7 @@ foreach ($creatable as $cr) {
      * @param {Array|null}  savedMarks    pre-filled mark values
      * @param {Array|null}  absentFlags   per-segment absent flags
      */
-    function appendRow(sid, name, idPk, savedMarks, absentFlags, isRegistered, markedBy, diffBatch) {
+    function appendRow(sid, name, idPk, savedMarks, absentFlags, isRegistered, markedBy, diffBatch, diffDept) {
         if (emptyRow) emptyRow.style.display = 'none';
         var clone = template.content.cloneNode(true);
         var tr    = clone.querySelector('tr');
@@ -1812,16 +1835,20 @@ foreach ($creatable as $cr) {
         tr.querySelector('[name="student_sid[]"]').value   = sid  || '';
         tr.querySelector('[name="student_name[]"]').value  = name || '';
 
-        // Student registered from a different batch → show their batch under the ID
-        if (diffBatch) {
+        // Student registered from a different batch/department → tag under the ID
+        if (diffBatch || diffDept) {
             var sidTd = tr.querySelector('[name="student_sid[]"]').closest('td');
             if (sidTd) {
                 var badge = document.createElement('small');
                 badge.className = 'text-danger d-block mt-1 fw-semibold';
                 badge.style.fontSize = '.68rem';
-                badge.textContent = 'Batch: ' + diffBatch;
+                var parts = [];
+                if (diffBatch) parts.push('Batch: ' + diffBatch);
+                if (diffDept)  parts.push('Dept: ' + diffDept);
+                badge.textContent = parts.join(' · ');
                 sidTd.appendChild(badge);
             }
+            tr.classList.add('table-warning');
         }
 
         // Registered students may only be removed by administrators.
