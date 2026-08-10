@@ -828,10 +828,20 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
         /* Small-device responsiveness */
         #marks_table { min-width: 640px; }
         #marks_wrap { -webkit-overflow-scrolling: touch; }
+        /* Columns dropdown: anchor to its button and stay inside the viewport */
+        #col_toggle_menu { z-index: 1080; }
         @media (max-width: 768px) {
             #marks_table th, #marks_table td { padding: .25rem .25rem; font-size: .75rem; }
             #marks_table input.form-control-sm { font-size: .72rem !important; padding: .15rem .25rem !important; }
             #marks_table th.mark-col { width: 58px !important; }
+            #col_toggle_menu {
+                position: absolute !important;
+                right: 0 !important;
+                left: auto !important;
+                transform: none !important;
+                width: min(260px, calc(100vw - 2rem));
+                max-width: calc(100vw - 2rem);
+            }
         }
     </style>
     <div class="card mb-4" style="border-radius:12px;">
@@ -843,7 +853,7 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
                 <div class="dropdown">
                     <button type="button" id="btn_columns" class="btn btn-sm btn-outline-secondary dropdown-toggle"
                             style="border-radius:8px;" data-bs-toggle="dropdown" data-bs-auto-close="outside"
-                            title="Show / hide columns">
+                            data-bs-display="static" title="Show / hide columns">
                         <i class="fas fa-columns me-1"></i> Columns
                     </button>
                     <div class="dropdown-menu dropdown-menu-end p-2" id="col_toggle_menu"
