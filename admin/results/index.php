@@ -233,6 +233,16 @@ function _wf_render_my_sheets(int $user_id, ?array $dept_scope): void
                                         <i class="fas fa-edit"></i>
                                     </a>
                                     <?php endif; ?>
+                                    <?php if ($s['workflow_status'] === 'draft'): ?>
+                                    <form method="POST" action="<?= APP_URL ?>/results/sheet-delete.php" class="d-inline"
+                                          onsubmit="return confirm('Delete this draft mark sheet? All marks entered in it will be removed. This cannot be undone.');">
+                                        <?= csrf_field() ?>
+                                        <input type="hidden" name="id" value="<?= (int)$s['id'] ?>">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete draft" style="border-radius:7px;">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
+                                    <?php endif; ?>
                                     <?php
                                     // Students from a different batch registered in this course offer
                                     // → one print button per batch (each batch prints separately).
