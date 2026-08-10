@@ -186,5 +186,80 @@ if ($action === 'approve' || $action === 'reject') {
     redirect($view_url);
 }
 
+// ── Forward (route to another group's attention before this step) ─────────────
+// Inserts an extra approval step for the chosen group at the current position,
+// for THIS request only. The forwarded group must approve first; the flow then
+// automatically returns to the current approver's step.
+if ($action === 'forward') {
+    if ($req['status'] !== 'pending') {
+        flash_set('error', 'This request is no longer pending.');
+        redirect($view_url);
+    }
+    if ((int)$req['user_id'] === (int)$user['id']) {
+        flash_set('error', 'You cannot forward your own request.');
+        redirect($view_url);
+    }
+    if (!lm_user_can_act($req, $user) && !lm_is_admin()) {
+        flash_set('error', 'You are not authorized to forward this request.');
+        redirect($view_url);
+    }
+    $step = lm_current_step($id, (int)$req['current_step']);
+    if (!$step || $step['status'] !== 'pending') {
+        flash_set('error', 'There is no pending approval step to forward.');
+        redirect($view_url);
+    }
+
+    $target_gid = (int)($_POST['forward_group_id'] ?? 0);
+    $g_stmt = db()->prepare('SELECT name FROM user_groups WHERE id = ? AND is_active = 1 AND is_super = 0');
+    $g_stmt->execute([$target_gid]);
+    $target_name = (string)$g_stmt->fetchColumn();
+    if ($target_gid < 1 || $target_name === '') {
+        flash_set('error', 'Please choose a valid user group to forward to.');
+        redirect($view_url);
+    }
+    if ($target_gid === (int)$step['group_id']) {
+        flash_set('error', 'This request is already awaiting that group.');
+        redirect($view_url);
+    }
+    if ($note === '') {
+        flash_set('error', 'Please add a comment explaining why their attention is needed.');
+        redirect($view_url);
+    }
+
+    // The comment travels with the inserted step's label so it stays visible in
+    // the approval timeline (the note column is reserved for their decision).
+    $label = 'Forwarded by ' . $user['full_name'] . ' — ' . $note;
+    $label = function_exists('mb_substr') ? mb_substr($label, 0, 180) : substr($label, 0, 180);
+
+    $db = db();
+    $db->beginTransaction();
+    try {
+        // Make room at the current position (shift descending to keep step_order unique).
+        $db->prepare(
+            'UPDATE leave_request_approvals SET step_order = step_order + 1
+              WHERE request_id = ? AND step_order >= ? ORDER BY step_order DESC'
+        )->execute([$id, (int)$req['current_step']]);
+        // Insert the forwarded step where the current step was; once this group
+        // approves, the flow advances back to the original approver's step.
+        $db->prepare(
+            'INSERT INTO leave_request_approvals (request_id, step_order, group_id, label)
+             VALUES (?,?,?,?)'
+        )->execute([$id, (int)$req['current_step'], $target_gid, $label]);
+        $db->commit();
+    } catch (Throwable $ex) {
+        if ($db->inTransaction()) $db->rollBack();
+        flash_set('error', 'Could not forward the request. Please try again.');
+        redirect($view_url);
+    }
+
+    log_change('leave-management', 'UPDATE', $id, lm_category_label($req['category']), 'approval', 'forwarded', $target_name);
+
+    // Alert the forwarded group (in-app + push) that the request now awaits them.
+    lm_notify_step_group($req, (int)$req['current_step']);
+
+    flash_set('success', 'Request forwarded to “' . $target_name . '”. Once they approve, it will return to your approval step.');
+    redirect($view_url);
+}
+
 flash_set('error', 'Unknown action.');
 redirect($view_url);
