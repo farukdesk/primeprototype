@@ -40,6 +40,10 @@ $stmt = db()->prepare(
 $stmt->execute([$offer_subject_id]);
 $students = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+// Natural (serial-wise) ordering: IDs sharing the same group/prefix sort
+// numerically (…-1, …-2, …-10) instead of as plain strings (…-1, …-10, …-2).
+usort($students, static fn($a, $b) => strnatcasecmp((string)$a['student_id'], (string)$b['student_id']));
+
 // Already-marked lookup (multi-teacher support): flag students whose marks for
 // this exam + subject were already entered in another pending/published sheet.
 if ($exam_id > 0 && $students) {
