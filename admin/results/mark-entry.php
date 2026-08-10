@@ -839,7 +839,16 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
             <h6 class="mb-0 fw-semibold"><i class="fas fa-list me-2 text-muted"></i>Student Marks
                 <span id="exam_mode_hint" class="badge d-none ms-2" style="font-weight:500;"></span>
             </h6>
-            <div class="d-flex gap-2">
+            <div class="d-flex gap-2 flex-wrap">
+                <div class="dropdown">
+                    <button type="button" id="btn_columns" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                            style="border-radius:8px;" data-bs-toggle="dropdown" data-bs-auto-close="outside"
+                            title="Show / hide columns">
+                        <i class="fas fa-columns me-1"></i> Columns
+                    </button>
+                    <div class="dropdown-menu dropdown-menu-end p-2" id="col_toggle_menu"
+                         style="min-width:220px;max-height:60vh;overflow:auto;"></div>
+                </div>
                 <button type="button" id="btn_reload_students" class="btn btn-sm btn-outline-primary"
                         style="border-radius:8px;" disabled title="Reload registered students for the selected subject">
                     <i class="fas fa-sync me-1"></i> Reload Registered
@@ -1135,6 +1144,9 @@ foreach ($creatable as $cr) {
 
         // Re-attach drag handles after the header is rebuilt
         initColResizers();
+        // Refresh the show/hide column menu for the new distribution
+        rebuildColumnMenu();
+        applyColumnVisibility();
     }
 
     // ── Resizable columns (drag the right edge of any header cell) ───────────
@@ -1186,6 +1198,105 @@ foreach ($creatable as $cr) {
     }
     // Attach handles to the initial (static) header as soon as the page loads.
     initColResizers();
+
+    // ── Show / hide columns ("Columns" dropdown) ─────────────────────────
+    // Hidden columns are visual only — their inputs remain in the form and are
+    // still submitted with the sheet.
+    var hiddenCols = {}; // key → true when hidden
+
+    function colKeyForIndex(i, total) {
+        // Layout: 0 #, 1 Student ID, 2 Name, [mark cols], Total, Grade, Remarks, actions
+        if (i === 0) return 'num';
+        if (i === 1) return 'sid';
+        if (i === 2) return 'name';
+        var marks = total - 7; // total = 3 static + marks + 4 static
+        if (i < 3 + marks) return 'mark-' + (i - 3);
+        return ['total', 'grade', 'remarks', 'actions'][i - (3 + marks)] || ('col-' + i);
+    }
+
+    function colLabelForKey(key) {
+        if (key === 'name')    return 'Name';
+        if (key === 'total')   return 'Total';
+        if (key === 'grade')   return 'Grade';
+        if (key === 'remarks') return 'Remarks';
+        if (key.indexOf('mark-') === 0) {
+            var d = currentDist[parseInt(key.slice(5), 10)];
+            return d ? d.name + ' (/' + d.max + ')' : key;
+        }
+        return key;
+    }
+
+    function applyColumnVisibility() {
+        var thead = document.getElementById('marks_thead');
+        if (!thead) return;
+        var ths   = Array.from(thead.querySelectorAll('tr:first-child th'));
+        var total = ths.length;
+        ths.forEach(function(th, i) {
+            th.style.display = hiddenCols[colKeyForIndex(i, total)] ? 'none' : '';
+        });
+        Array.from(tbody.querySelectorAll('tr.grade-row')).forEach(function(tr) {
+            Array.from(tr.children).forEach(function(td, i) {
+                td.style.display = hiddenCols[colKeyForIndex(i, total)] ? 'none' : '';
+            });
+        });
+    }
+
+    function rebuildColumnMenu() {
+        var menu = document.getElementById('col_toggle_menu');
+        if (!menu) return;
+        var thead = document.getElementById('marks_thead');
+        var total = thead ? thead.querySelectorAll('tr:first-child th').length : 0;
+
+        var keys = [];
+        for (var i = 0; i < total; i++) {
+            var k = colKeyForIndex(i, total);
+            // #, Student ID and the actions column always stay visible.
+            if (k === 'num' || k === 'sid' || k === 'actions') continue;
+            keys.push(k);
+        }
+
+        menu.innerHTML = '';
+        var head = document.createElement('div');
+        head.className = 'd-flex justify-content-between align-items-center px-1 mb-1';
+        head.innerHTML = '<small class="text-muted fw-semibold">Show columns</small>'
+                       + '<button type="button" class="btn btn-link btn-sm p-0" style="font-size:.75rem;">Show all</button>';
+        head.querySelector('button').addEventListener('click', function() {
+            hiddenCols = {};
+            rebuildColumnMenu();
+            applyColumnVisibility();
+        });
+        menu.appendChild(head);
+
+        keys.forEach(function(key) {
+            var wrap = document.createElement('label');
+            wrap.className = 'dropdown-item d-flex align-items-center gap-2 px-2 py-1';
+            wrap.style.cursor = 'pointer';
+            var chk = document.createElement('input');
+            chk.type = 'checkbox';
+            chk.className = 'form-check-input m-0';
+            chk.checked = !hiddenCols[key];
+            chk.addEventListener('change', function() {
+                hiddenCols[key] = !chk.checked;
+                applyColumnVisibility();
+            });
+            var span = document.createElement('span');
+            span.style.fontSize = '.8rem';
+            span.textContent = colLabelForKey(key);
+            wrap.appendChild(chk);
+            wrap.appendChild(span);
+            menu.appendChild(wrap);
+        });
+    }
+
+    // Re-apply visibility whenever rows are added/removed or mark cells rebuilt.
+    var colVisTimer = null;
+    new MutationObserver(function() {
+        clearTimeout(colVisTimer);
+        colVisTimer = setTimeout(applyColumnVisibility, 50);
+    }).observe(tbody, { childList: true, subtree: true });
+
+    rebuildColumnMenu();
+    applyColumnVisibility();
 
     /**
      * Build the mark-input <td> elements for a row using currentDist.
