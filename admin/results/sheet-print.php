@@ -16,6 +16,11 @@ $id     = (int)($_GET['id'] ?? 0);
 $sheet  = wf_get_sheet($id);
 $grades = wf_get_grades($id);
 
+// ── Digital sign-offs: signature images auto-attached from user profiles ───
+// Teacher = submitter of the sheet; HOD = approver at the "Head …" step.
+$signatures = wf_get_print_signatures($id, $sheet);
+$sig_base   = UPLOAD_URL . '/' . (defined('NS_SIG_SUBDIR') ? NS_SIG_SUBDIR : 'signatures');
+
 // ── Exam name + exam mode (mid / final / all) ───────────────────────────
 $exam_label = '';
 if (!empty($sheet['exam_id'])) {
@@ -209,8 +214,12 @@ $page_title      = h($sheet['subject_title']);
 
         /* ── Signatures ── */
         .signoff { margin-top: 48px; display: grid; grid-template-columns: 1fr 1fr; column-gap: 160px; font-size: 12px; }
-        .signoff-box { border-top: 1px solid #999; padding-top: 5px; text-align: center; }
+        .signoff-box { text-align: center; }
         .signoff-box .lbl { font-weight: bold; color: #002147; }
+        .sig-space { height: 46px; display: flex; align-items: flex-end; justify-content: center; }
+        .sig-img { max-height: 44px; max-width: 180px; object-fit: contain; }
+        .sig-line { border-top: 1px solid #999; margin-bottom: 5px; }
+        .sig-meta { font-size: 11px; color: #333; margin-top: 2px; line-height: 1.4; }
 
         .footer { margin-top: 10px; border-top: 1px solid #ccc; padding-top: 4px; font-size: 10px; color: #666; text-align: right; }
 
@@ -387,15 +396,38 @@ $page_title      = h($sheet['subject_title']);
     </table>
     <?php endif; ?>
 
-    <!-- Signatures (manual signing – no digital names) -->
+    <!-- Signatures: profile signature images auto-attached once signed;
+         blank line kept for manual signing when not yet signed -->
     <div class="signoff">
         <div class="signoff-box">
-            <div style="height:34px;"></div>
+            <div class="sig-space">
+                <?php if (!empty($signatures['teacher']['signature_file'])): ?>
+                <img class="sig-img" src="<?= $sig_base ?>/<?= h($signatures['teacher']['signature_file']) ?>" alt="Course Teacher Signature">
+                <?php endif; ?>
+            </div>
+            <div class="sig-line"></div>
             <div class="lbl">Course Teacher</div>
+            <?php if (!empty($signatures['teacher']['signed_at'])): ?>
+            <div class="sig-meta">
+                <?= h($signatures['teacher']['name'] ?? '') ?><br>
+                Signed on <?= date('d M Y', strtotime($signatures['teacher']['signed_at'])) ?>
+            </div>
+            <?php endif; ?>
         </div>
         <div class="signoff-box">
-            <div style="height:34px;"></div>
+            <div class="sig-space">
+                <?php if (!empty($signatures['hod']['signature_file'])): ?>
+                <img class="sig-img" src="<?= $sig_base ?>/<?= h($signatures['hod']['signature_file']) ?>" alt="Head of the Department Signature">
+                <?php endif; ?>
+            </div>
+            <div class="sig-line"></div>
             <div class="lbl">Head of the Department</div>
+            <?php if (!empty($signatures['hod']['signed_at'])): ?>
+            <div class="sig-meta">
+                <?= h($signatures['hod']['name'] ?? '') ?><br>
+                Signed on <?= date('d M Y', strtotime($signatures['hod']['signed_at'])) ?>
+            </div>
+            <?php endif; ?>
         </div>
     </div>
 

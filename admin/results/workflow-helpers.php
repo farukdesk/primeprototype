@@ -823,6 +823,75 @@ function wf_get_sheet_signoffs(int $sheet_id): array
     return $signoffs;
 }
 
+/**
+ * Digital signatures for the mark sheet print view.
+ *
+ * Pulls each signer's profile signature image (users.signature_file,
+ * uploaded via the My Signature module) from the workflow history:
+ *  - teacher: the user who SUBMITTED the sheet at the entry step
+ *             (latest submission wins after a return/resubmit cycle).
+ *  - hod:     the approval whose step label mentions Head / HOD;
+ *             falls back to the last 'approved'/'published' action
+ *             for chains with differently named steps.
+ *
+ * Returns ['teacher' => [...], 'hod' => [...]] where each entry has
+ * keys: name, signature_file, signed_at (all null when not signed yet).
+ */
+function wf_get_print_signatures(int $sheet_id, array $sheet): array
+{
+    $out = [
+        'teacher' => ['name' => null, 'signature_file' => null, 'signed_at' => null],
+        'hod'     => ['name' => null, 'signature_file' => null, 'signed_at' => null],
+    ];
+
+    try {
+        $stmt = db()->prepare(
+            "SELECT h.action, h.acted_at, h.step_label, h.acted_by,
+                    u.full_name AS actor_name, u.signature_file
+               FROM wf_sheet_history h
+               LEFT JOIN users u ON u.id = h.acted_by
+              WHERE h.sheet_id = ?
+              ORDER BY h.acted_at ASC, h.id ASC"
+        );
+        $stmt->execute([$sheet_id]);
+        $rows = $stmt->fetchAll();
+    } catch (Throwable $e) {
+        return $out;
+    }
+
+    // Course Teacher signs by submitting the sheet (entry step).
+    foreach ($rows as $h) {
+        if ($h['action'] === 'submitted') {
+            $out['teacher'] = [
+                'name'           => $h['actor_name'] ?: ($sheet['creator_name'] ?? null),
+                'signature_file' => $h['signature_file'],
+                'signed_at'      => $h['acted_at'],
+            ]; // later submissions overwrite (return → resubmit cycle)
+        }
+    }
+
+    // HOD: prefer the approval at a "Head …" step; fall back to the
+    // last approval/publish so custom chain labels still print a sign-off.
+    $fallback = null;
+    foreach ($rows as $h) {
+        if (!in_array($h['action'], ['approved', 'published'], true)) continue;
+        $entry = [
+            'name'           => $h['actor_name'],
+            'signature_file' => $h['signature_file'],
+            'signed_at'      => $h['acted_at'],
+        ];
+        if (preg_match('/\bhead\b|\bh\.?\s*o\.?\s*d\b/i', (string)$h['step_label'])) {
+            $out['hod'] = $entry;
+        }
+        $fallback = $entry;
+    }
+    if ($out['hod']['name'] === null && $fallback !== null) {
+        $out['hod'] = $fallback;
+    }
+
+    return $out;
+}
+
 function wf_status_badge(string $status, string $step_label = ''): string
 {
     $map = [
