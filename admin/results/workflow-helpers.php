@@ -400,11 +400,14 @@ function wf_get_grades(int $sheet_id): array
         'SELECT g.*, s.full_name AS s_full_name, s.student_id AS s_student_id
          FROM result_sheet_grades g
          LEFT JOIN students s ON s.id = g.student_id
-         WHERE g.sheet_id = ?
-         ORDER BY g.student_name ASC, g.student_sid ASC'
+         WHERE g.sheet_id = ?'
     );
     $stmt->execute([$sheet_id]);
-    return $stmt->fetchAll();
+    $rows = $stmt->fetchAll();
+    // Serial-wise (natural) ordering by student ID so saved rows keep the same
+    // order as the marks-entry roster (…-1, …-2, …-10) instead of name order.
+    usort($rows, static fn($a, $b) => strnatcasecmp((string)$a['student_sid'], (string)$b['student_sid']));
+    return $rows;
 }
 
 function wf_get_sheet_history(int $sheet_id): array

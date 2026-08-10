@@ -1500,11 +1500,13 @@ foreach ($creatable as $cr) {
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 if (!data.length) {
-                    var o = document.createElement('option');
-                    o.value = ''; o.textContent = '— No offered courses found —';
-                    o.disabled = true;
-                    currSel.appendChild(o);
+                    var o0 = document.createElement('option');
+                    o0.value = ''; o0.textContent = '— No offered courses found —';
+                    o0.disabled = true;
+                    currSel.appendChild(o0);
+                    appendSavedSubjectOption(selectId);
                     currSel.disabled = false;
+                    if (selectId && String(currSel.value) === String(selectId)) fillFromOffer(skipReload);
                     return;
                 }
 
@@ -1525,9 +1527,29 @@ foreach ($creatable as $cr) {
                     if (s.offer_subject_id == selectId) o.selected = true;
                     currSel.appendChild(o);
                 });
+                appendSavedSubjectOption(selectId);
                 currSel.disabled = false;
                 if (selectId) fillFromOffer(skipReload);
             });
+    }
+
+    // Edit mode: keep the sheet's own saved subject selectable even when it is
+    // no longer in the offered list (offer deactivated, teacher changed, etc.).
+    function appendSavedSubjectOption(selectId) {
+        if (!selectId || !isEditMode) return;
+        var exists = Array.prototype.some.call(currSel.options, function(o) {
+            return String(o.value) === String(selectId);
+        });
+        if (exists) return;
+        var o = document.createElement('option');
+        o.value = selectId;
+        o.textContent = ((subCode.value ? subCode.value + ' – ' : '') + (subTitle.value || 'Saved subject')) + ' (saved)';
+        o.dataset.curriculumId = savedCurr || '';
+        o.dataset.code    = subCode.value  || '';
+        o.dataset.title   = subTitle.value || '';
+        o.dataset.credits = credits.value  || '';
+        o.selected = true;
+        currSel.appendChild(o);
     }
 
     function fillFromOffer(skipReload) {
@@ -1547,8 +1569,62 @@ foreach ($creatable as $cr) {
         loadMarkDistribution(curriculumId);
 
         // Load the active registered students of the selected offered course.
-        // In edit mode the first render keeps the saved rows.
+        // In edit mode the saved rows are kept and any students registered after
+        // the draft was saved are appended without touching entered marks.
         if (!skipReload) loadRegisteredStudents(sel.value, false);
+        else mergeRegisteredStudents(sel.value);
+    }
+
+    // ── Merge newly registered students into the table (edit mode) ──────────
+    // Appends roster students not in the table yet (matched by student PK or ID)
+    // WITHOUT clearing existing rows, so saved/entered marks survive. Rows are
+    // then re-sorted serial-wise by student ID.
+    function mergeRegisteredStudents(offerSubjectId) {
+        if (!offerSubjectId) return;
+        var url = APP_URL + '/results/get-offer-students.php?offer_subject_id=' + encodeURIComponent(offerSubjectId)
+                + (examSel && examSel.value ? '&exam_id=' + encodeURIComponent(examSel.value) : '')
+                + '&exclude_sheet_id=' + encodeURIComponent(currentSheetId);
+        fetch(url)
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data.length) return;
+                var existingPk = {}, existingSid = {};
+                Array.from(tbody.querySelectorAll('tr.grade-row')).forEach(function(tr) {
+                    var pk  = (tr.querySelector('[name="student_id_pk[]"]') || {}).value || '';
+                    var sid = ((tr.querySelector('[name="student_sid[]"]') || {}).value || '').trim();
+                    if (pk && pk !== '0') existingPk[pk] = true;
+                    if (sid) existingSid[sid] = true;
+                });
+                var batchCounts = {};
+                data.forEach(function(s) { if (s.batch) batchCounts[s.batch] = (batchCounts[s.batch] || 0) + 1; });
+                var mainBatch = '';
+                Object.keys(batchCounts).forEach(function(b) {
+                    if (mainBatch === '' || batchCounts[b] > batchCounts[mainBatch]) mainBatch = b;
+                });
+                var added = 0;
+                data.forEach(function(s) {
+                    if (existingPk[String(s.id)] || existingSid[String(s.student_id).trim()]) return;
+                    var diffBatch = (s.batch && mainBatch && s.batch !== mainBatch) ? s.batch : null;
+                    appendRow(s.student_id, s.full_name, s.id, null, null, true, s.marked_by || null, diffBatch);
+                    added++;
+                });
+                if (added > 0) {
+                    sortRowsBySid();
+                    renumber();
+                    applyExamMode();
+                }
+            });
+    }
+
+    // Re-order the table rows serial-wise by student ID (natural compare).
+    function sortRowsBySid() {
+        var rows = Array.from(tbody.querySelectorAll('tr.grade-row'));
+        rows.sort(function(a, b) {
+            var sa = ((a.querySelector('[name="student_sid[]"]') || {}).value || '').trim();
+            var sb = ((b.querySelector('[name="student_sid[]"]') || {}).value || '').trim();
+            return sa.localeCompare(sb, undefined, { numeric: true, sensitivity: 'base' });
+        });
+        rows.forEach(function(r) { tbody.appendChild(r); });
     }
 
     // ── Load active registered students of the selected offer subject ─────────
@@ -1674,12 +1750,20 @@ foreach ($creatable as $cr) {
     if (btnReload) {
         btnReload.addEventListener('click', function() {
             if (!currSel.value) { alert('Please select a subject first.'); return; }
-            loadRegisteredStudents(currSel.value, true);
+            if (isEditMode) {
+                // Edit mode: append newly registered students without wiping
+                // the marks already entered on existing rows.
+                mergeRegisteredStudents(currSel.value);
+            } else {
+                loadRegisteredStudents(currSel.value, true);
+            }
         });
     }
 
-    // Initial load: programs (and subjects + students if editing)
-    var initDept = facultyDeptId || savedDept;
+    // Initial load: programs (and subjects + students if editing).
+    // Edit mode: prefer the sheet's own saved department so a cross-department
+    // sheet restores its saved program/exam/subject correctly.
+    var initDept = savedDept || facultyDeptId;
     if (initDept) {
         loadPrograms(initDept, savedProg);
     }
