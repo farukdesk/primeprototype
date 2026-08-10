@@ -1,9 +1,15 @@
 <?php
 /**
  * Database Connection (PDO)
+ *
+ * db() returns a SnapshotPDO: every INSERT/UPDATE/DELETE/REPLACE is
+ * automatically snapshotted (before/after row images) into db_snapshots
+ * so super admins can restore any change from admin/db-snapshots/.
+ * See includes/db-snapshot.php.
  */
 
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/db-snapshot.php';
 
 function db(): PDO {
     static $pdo = null;
@@ -18,7 +24,7 @@ function db(): PDO {
             PDO::ATTR_EMULATE_PREPARES   => false,
         ];
         try {
-            $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
+            $pdo = new SnapshotPDO($dsn, DB_USER, DB_PASS, $options);
         } catch (PDOException $e) {
             // In production replace with a friendly error page
             die('Database connection failed: ' . htmlspecialchars($e->getMessage()));
