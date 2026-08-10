@@ -815,8 +815,27 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
         </div>
     </div>
     <!-- Student Marks Table -->
+    <style>
+        /* Resizable columns: drag handle on the right edge of every header cell */
+        #marks_table th { position: relative; }
+        #marks_table th .col-resizer {
+            position: absolute; top: 0; right: -3px; width: 7px; height: 100%;
+            cursor: col-resize; user-select: none; z-index: 3;
+        }
+        #marks_table th .col-resizer:hover,
+        #marks_table th .col-resizer.resizing { background: rgba(13,110,253,.25); }
+        body.col-resizing, body.col-resizing * { cursor: col-resize !important; user-select: none !important; }
+        /* Small-device responsiveness */
+        #marks_table { min-width: 640px; }
+        #marks_wrap { -webkit-overflow-scrolling: touch; }
+        @media (max-width: 768px) {
+            #marks_table th, #marks_table td { padding: .25rem .25rem; font-size: .75rem; }
+            #marks_table input.form-control-sm { font-size: .72rem !important; padding: .15rem .25rem !important; }
+            #marks_table th.mark-col { width: 58px !important; }
+        }
+    </style>
     <div class="card mb-4" style="border-radius:12px;">
-        <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center">
+        <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
             <h6 class="mb-0 fw-semibold"><i class="fas fa-list me-2 text-muted"></i>Student Marks
                 <span id="exam_mode_hint" class="badge d-none ms-2" style="font-weight:500;"></span>
             </h6>
@@ -832,7 +851,7 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
             </div>
         </div>
         <div class="card-body p-0">
-            <div class="table-responsive">
+            <div class="table-responsive" id="marks_wrap">
                 <table class="table table-bordered table-hover mb-0" id="marks_table">
                     <thead class="table-light" id="marks_thead">
                         <tr>
@@ -1113,7 +1132,60 @@ foreach ($creatable as $cr) {
         // Update colspan of empty-row placeholder
         var emptyTd = document.getElementById('empty_colspan');
         if (emptyTd) emptyTd.setAttribute('colspan', String(3 + currentDist.length + 4));
+
+        // Re-attach drag handles after the header is rebuilt
+        initColResizers();
     }
+
+    // ── Resizable columns (drag the right edge of any header cell) ───────────
+    function initColResizers() {
+        var thead = document.getElementById('marks_thead');
+        if (!thead) return;
+        Array.from(thead.querySelectorAll('th')).forEach(function(th) {
+            if (th.querySelector('.col-resizer')) return;
+            var grip = document.createElement('div');
+            grip.className = 'col-resizer';
+            grip.title = 'Drag to resize column';
+            th.appendChild(grip);
+
+            function startResize(startX) {
+                var startW = th.getBoundingClientRect().width;
+                grip.classList.add('resizing');
+                document.body.classList.add('col-resizing');
+
+                function onMove(clientX) {
+                    var w = Math.max(36, startW + (clientX - startX));
+                    th.style.width    = w + 'px';
+                    th.style.minWidth = w + 'px';
+                    th.style.maxWidth = w + 'px';
+                }
+                function mouseMove(e) { onMove(e.clientX); }
+                function touchMove(e) { if (e.touches.length) onMove(e.touches[0].clientX); }
+                function stop() {
+                    grip.classList.remove('resizing');
+                    document.body.classList.remove('col-resizing');
+                    document.removeEventListener('mousemove', mouseMove);
+                    document.removeEventListener('mouseup', stop);
+                    document.removeEventListener('touchmove', touchMove);
+                    document.removeEventListener('touchend', stop);
+                }
+                document.addEventListener('mousemove', mouseMove);
+                document.addEventListener('mouseup', stop);
+                document.addEventListener('touchmove', touchMove, { passive: true });
+                document.addEventListener('touchend', stop);
+            }
+
+            grip.addEventListener('mousedown', function(e) {
+                e.preventDefault();
+                startResize(e.clientX);
+            });
+            grip.addEventListener('touchstart', function(e) {
+                if (e.touches.length) startResize(e.touches[0].clientX);
+            }, { passive: true });
+        });
+    }
+    // Attach handles to the initial (static) header as soon as the page loads.
+    initColResizers();
 
     /**
      * Build the mark-input <td> elements for a row using currentDist.
