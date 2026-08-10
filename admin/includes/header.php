@@ -316,7 +316,8 @@ if (is_portal_student()) {
                       || $is_law_legal_active;
     $is_admin_active    = strpos($current_path, '/users/') !== false || strpos($current_path, '/user-groups/') !== false
                        || strpos($current_path, '/modules/') !== false || strpos($current_path, '/access/') !== false
-                       || strpos($current_path, '/email-templates/') !== false || strpos($current_path, '/change-log/') !== false;
+                       || strpos($current_path, '/email-templates/') !== false || strpos($current_path, '/change-log/') !== false
+                       || strpos($current_path, '/db-snapshots/') !== false || strpos($current_path, '/backups/') !== false;
     $is_internal_active = strpos($current_path, '/file-manager/') !== false || strpos($current_path, '/notice-signing/') !== false || strpos($current_path, '/my-signature/') !== false;
     $is_seo_active      = strpos($current_path, '/seo/') !== false;
     $is_reports_active    = strpos($current_path, '/accounting/reports/') !== false;
@@ -1926,6 +1927,18 @@ if (is_portal_student()) {
                 <a href="<?= APP_URL ?>/change-log/index.php"
                    class="<?= strpos($current_path, '/change-log/') !== false ? 'active' : '' ?>">
                     <i class="fas fa-history"></i> Change Log
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/db-snapshots/index.php"
+                   class="<?= strpos($current_path, '/db-snapshots/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-database"></i> DB Snapshots
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/backups/index.php"
+                   class="<?= strpos($current_path, '/backups/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-cloud-upload-alt"></i> System Backups
                 </a>
             </li>
             <?php endif; ?>
