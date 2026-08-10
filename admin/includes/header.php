@@ -857,7 +857,7 @@ if (is_portal_student()) {
     <?php endif; ?>
 
     <!-- ── Controller of Examinations ── -->
-    <?php if (is_super_admin() || can_access('results') || can_access('results-entry') || can_access('results-chains') || can_access('spring-result') || can_access('final-result-publish') || can_access('tabulation-checker') || can_access('transcript-maker') || can_access('student-verification') || can_access('cert-verifiers') || can_access('exam-invigilation') || can_access('admit-card')): ?>
+    <?php if (is_super_admin() || can_access('results') || can_access('results-entry') || can_access('results-chains') || can_access('spring-result') || can_access('final-result-publish') || can_access('tabulation-checker') || can_access('transcript-maker') || can_access('student-verification') || can_access('cert-verifiers') || can_access('exam-invigilation') || can_access('exam-routine') || can_access('admit-card')): ?>
     <button class="nav-group-toggle <?= $is_coe_active ? '' : 'collapsed' ?>"
             data-bs-toggle="collapse" data-bs-target="#grp-coe"
             aria-expanded="<?= $is_coe_active ? 'true' : 'false' ?>">
@@ -979,6 +979,22 @@ if (is_portal_student()) {
                     <i class="fas fa-users"></i> Faculty Pool
                 </a>
             </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('exam-routine')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/exam-routine/index.php"
+                   class="<?= (strpos($current_path, '/exam-routine/') !== false && strpos($current_path, '/exam-routine/create') === false) ? 'active' : '' ?>">
+                    <i class="fas fa-calendar-alt"></i> Exam Routine
+                </a>
+            </li>
+            <?php if (is_super_admin() || can_access('exam-routine', 'can_create')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/exam-routine/create.php"
+                   class="<?= strpos($current_path, '/exam-routine/create') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-plus"></i> New Routine
+                </a>
+            </li>
+            <?php endif; ?>
             <?php endif; ?>
             <?php if (is_super_admin() || can_access('admit-card')): ?>
             <li class="nav-item">
