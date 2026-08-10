@@ -60,21 +60,6 @@ $page_title = 'Leave Request #' . $id;
 require_once __DIR__ . '/../includes/header.php';
 
 $fmt = fn(float $n) => rtrim(rtrim(number_format($n, 1), '0'), '.');
-
-// ── Balance impact (Casual / Sick only) ─────────────────────────────────────────
-$bal_info = null;
-if (in_array($req['category'], LM_BALANCE_CATEGORIES, true)) {
-    $bal_year = (int)date('Y', strtotime($req['start_date']));
-    $bal      = lm_get_balance((int)$req['user_id'], $bal_year);
-    $bal_rem  = $req['category'] === 'casual' ? (float)$bal['casual_remaining'] : (float)$bal['sick_remaining'];
-    $bal_tot  = $req['category'] === 'casual' ? (float)$bal['casual_total']     : (float)$bal['sick_total'];
-    $bal_info = [
-        'year'      => $bal_year,
-        'total'     => $bal_tot,
-        'remaining' => $bal_rem,                        // approved requests already deducted
-        'after'     => $bal_rem - (float)$req['days'],  // if this pending request gets approved
-    ];
-}
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
@@ -123,27 +108,6 @@ if (in_array($req['category'], LM_BALANCE_CATEGORIES, true)) {
                         <tr><th class="text-muted">Makeup Class Plan</th><td><?= nl2br(h($req['makeup_plan'])) ?></td></tr>
                         <?php endif; ?>
                         <tr><th class="text-muted">Submitted</th><td><?= h(date('d M Y, g:i A', strtotime($req['created_at']))) ?></td></tr>
-                        <?php if ($bal_info !== null): ?>
-                        <tr>
-                            <th class="text-muted"><?= h(lm_category_label($req['category'])) ?> Balance (<?= (int)$bal_info['year'] ?>)</th>
-                            <td>
-                                <?php if ($req['status'] === 'pending'): ?>
-                                    <strong><?= $fmt($bal_info['remaining']) ?></strong> of <?= $fmt($bal_info['total']) ?> day(s) left
-                                    <i class="fas fa-arrow-right mx-1 text-muted"></i>
-                                    <strong class="<?= $bal_info['after'] < 0 ? 'text-danger' : 'text-success' ?>"><?= $fmt($bal_info['after']) ?></strong> day(s) will be left after approval
-                                    <?php if ($bal_info['after'] < 0): ?>
-                                        <br><span class="badge bg-danger-subtle text-danger border border-danger mt-1"><i class="fas fa-exclamation-triangle me-1"></i>Exceeds available balance</span>
-                                    <?php endif; ?>
-                                <?php elseif ($req['status'] === 'approved'): ?>
-                                    <strong class="<?= $bal_info['remaining'] < 0 ? 'text-danger' : 'text-success' ?>"><?= $fmt($bal_info['remaining']) ?></strong> of <?= $fmt($bal_info['total']) ?> day(s) left
-                                    <span class="text-muted small">(this leave already deducted)</span>
-                                <?php else: ?>
-                                    <strong><?= $fmt($bal_info['remaining']) ?></strong> of <?= $fmt($bal_info['total']) ?> day(s) left
-                                    <span class="text-muted small">(this request does not affect the balance)</span>
-                                <?php endif; ?>
-                            </td>
-                        </tr>
-                        <?php endif; ?>
                     </tbody>
                 </table>
             </div>
