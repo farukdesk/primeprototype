@@ -36,7 +36,7 @@ $creatable = wf_get_creatable_chains(); // [{chain_id, dept_id, program_id, step
 $creatable_dept_ids = array_unique(array_filter(array_column($creatable, 'dept_id')));
 $dept_scope         = get_dept_scope();
 
-if (empty($creatable_dept_ids) && !is_super_admin()) {
+if (empty($creatable) && !is_super_admin()) {
     flash_set('error', 'No active workflow chains are configured for your department.');
     redirect(APP_URL . '/results/index.php');
 }
@@ -45,10 +45,46 @@ if (empty($creatable_dept_ids) && !is_super_admin()) {
 if (is_super_admin()) {
     $departments = db()->query('SELECT id, name FROM dept_departments WHERE is_active = 1 ORDER BY name ASC')->fetchAll();
 } else {
-    $phs         = implode(',', array_fill(0, count($creatable_dept_ids), '?'));
-    $ds          = db()->prepare("SELECT id, name FROM dept_departments WHERE is_active = 1 AND id IN ($phs) ORDER BY name ASC");
-    $ds->execute($creatable_dept_ids);
-    $departments = $ds->fetchAll();
+    // Departments of chains the user can submit for (dept-scoped chains).
+    $allowed_dept_ids = array_map('intval', $creatable_dept_ids);
+
+    // Own department(s) from the faculty/dept profile.
+    try {
+        $st = db()->prepare('SELECT dept_id FROM faculty_profiles WHERE user_id = ? AND dept_id IS NOT NULL');
+        $st->execute([$user['id']]);
+        foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $d) $allowed_dept_ids[] = (int)$d;
+    } catch (Throwable $_e) {}
+    try {
+        $st = db()->prepare('SELECT dept_id FROM dept_faculty WHERE user_id = ? AND is_active = 1 AND dept_id IS NOT NULL');
+        $st->execute([$user['id']]);
+        foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $d) $allowed_dept_ids[] = (int)$d;
+    } catch (Throwable $_e) {}
+
+    // Departments of course offers where this user is an assigned subject teacher,
+    // so faculty can enter marks for cross-department courses they teach.
+    try {
+        $st = db()->prepare(
+            'SELECT DISTINCT o.dept_id
+               FROM co_offer_subject_teachers t
+               JOIN dept_faculty      df  ON df.id  = t.faculty_id
+               JOIN co_offer_subjects cos ON cos.id = t.offer_subject_id
+               JOIN co_offers         o   ON o.id   = cos.offer_id
+              WHERE df.user_id = ?'
+        );
+        $st->execute([$user['id']]);
+        foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $d) $allowed_dept_ids[] = (int)$d;
+    } catch (Throwable $_e) {}
+
+    $allowed_dept_ids = array_values(array_unique(array_filter($allowed_dept_ids)));
+
+    if (empty($allowed_dept_ids)) {
+        $departments = [];
+    } else {
+        $phs = implode(',', array_fill(0, count($allowed_dept_ids), '?'));
+        $ds  = db()->prepare("SELECT id, name FROM dept_departments WHERE is_active = 1 AND id IN ($phs) ORDER BY name ASC");
+        $ds->execute($allowed_dept_ids);
+        $departments = $ds->fetchAll();
+    }
 }
 
 // ── Auto-detect faculty's department ──────────────────────────────────────────
@@ -573,10 +609,10 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
                     <div class="row g-3 mb-3">
                         <div class="col-md-4">
                             <label class="form-label fw-medium">Department <span class="text-danger">*</span></label>
-                            <?php if (!is_super_admin() && $faculty_dept_id): ?>
-                            <?php $fd = array_values(array_filter($departments, fn($d) => (int)$d['id'] === $faculty_dept_id))[0] ?? null; ?>
-                            <input type="hidden" name="dept_id" id="dept_select" value="<?= $faculty_dept_id ?>">
-                            <input type="text" class="form-control" value="<?= h($fd['name'] ?? '') ?>" readonly
+                            <?php $single_dept = (count($departments) === 1) ? $departments[0] : null; ?>
+                            <?php if (!is_super_admin() && $single_dept): ?>
+                            <input type="hidden" name="dept_id" id="dept_select" value="<?= (int)$single_dept['id'] ?>">
+                            <input type="text" class="form-control" value="<?= h($single_dept['name']) ?>" readonly
                                    style="background:#f8f9fa;">
                             <?php else: ?>
                             <select name="dept_id" id="dept_select" class="form-select" required>
