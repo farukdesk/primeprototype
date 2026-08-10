@@ -90,16 +90,29 @@ if (is_super_admin()) {
 // ── Auto-detect faculty's department ──────────────────────────────────────────
 // Prefer the dept_id from faculty_profiles; fall back to the single dept in
 // their creatable chains if unambiguous.
-$faculty_dept_id = 0;
+$faculty_dept_id   = 0;
+$is_faculty_member = false;
 if (!is_super_admin()) {
     try {
         $fp_stmt = db()->prepare('SELECT dept_id FROM faculty_profiles WHERE user_id = ? LIMIT 1');
         $fp_stmt->execute([$user['id']]);
         $fp_row = $fp_stmt->fetch();
-        if ($fp_row && $fp_row['dept_id']) {
-            $faculty_dept_id = (int)$fp_row['dept_id'];
+        if ($fp_row) {
+            $is_faculty_member = true;
+            if ($fp_row['dept_id']) {
+                $faculty_dept_id = (int)$fp_row['dept_id'];
+            }
         }
     } catch (Throwable $_e) {}
+    // An active dept_faculty record also marks the user as a faculty member,
+    // so course teachers without a faculty profile are restricted too.
+    if (!$is_faculty_member) {
+        try {
+            $df_stmt = db()->prepare('SELECT id FROM dept_faculty WHERE user_id = ? AND is_active = 1 LIMIT 1');
+            $df_stmt->execute([$user['id']]);
+            $is_faculty_member = (bool)$df_stmt->fetch();
+        } catch (Throwable $_e) {}
+    }
     // If faculty_profiles has no record, use the only chain dept (if unambiguous)
     if (!$faculty_dept_id && count($departments) === 1) {
         $faculty_dept_id = (int)$departments[0]['id'];
@@ -206,7 +219,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // Faculty: server-side check that they are assigned to teach this offered subject.
-    if ($offer_subject_id > 0 && !is_super_admin() && !rm_can_create() && !rm_is_staff()) {
+    // Faculty members are ALWAYS restricted to their own subjects, even when they
+    // also hold results staff/create permissions.
+    if ($offer_subject_id > 0 && !is_super_admin()
+        && ($is_faculty_member || (!rm_can_create() && !rm_is_staff()))) {
         $fac_uid = (int)$user['id'];
         // Faculty members only qualify when they are a teacher on this offer subject…
         $fa_stmt = db()->prepare(
@@ -654,7 +670,7 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
                     <div class="mb-3">
                         <label class="form-label fw-medium">
                             Subject
-                            <?= (!is_super_admin() && !rm_can_create() && !rm_is_staff())
+                            <?= (!is_super_admin() && ($is_faculty_member || (!rm_can_create() && !rm_is_staff())))
                                 ? '<span class="badge bg-info text-dark ms-1" style="font-size:.7rem;"><i class="fas fa-lock me-1"></i>Assigned Only</span>'
                                 : '' ?>
                             <span class="text-danger">*</span>
@@ -664,7 +680,7 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
                             <option value="">— Select Subject —</option>
                         </select>
                         <div class="form-text" id="subject_hint">
-                            <?= (!is_super_admin() && !rm_can_create() && !rm_is_staff())
+                            <?= (!is_super_admin() && ($is_faculty_member || (!rm_can_create() && !rm_is_staff())))
                                 ? 'Only offered courses you teach are shown. Selecting one loads its registered students.'
                                 : 'Subjects are pulled from Course Offers. Selecting one loads its active registered students.' ?>
                         </div>
