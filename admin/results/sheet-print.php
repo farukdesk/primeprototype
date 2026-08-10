@@ -75,7 +75,14 @@ $batch_filter = trim((string)($_GET['batch'] ?? ''));
 if ($batch_filter !== '') {
     $grades = array_values(array_filter(
         $grades,
-        fn($g) => ($grade_batches[(int)$g['id']] ?? '') === $batch_filter
+        function ($g) use ($grade_batches, $batch_filter, $main_batch) {
+            $b = $grade_batches[(int)$g['id']] ?? '';
+            // Students without a batch on record (or manually added rows with
+            // no linked student profile) print with the sheet's main batch, so
+            // their marks are never dropped from every printout.
+            if ($b === '') $b = $main_batch;
+            return $b === $batch_filter;
+        }
     ));
     $batch_label = $batch_filter;
 }

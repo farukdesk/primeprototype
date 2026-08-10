@@ -248,6 +248,10 @@ function _wf_render_my_sheets(int $user_id, ?array $dept_scope): void
                                     // → one print button per batch (each batch prints separately).
                                     $_batches = array_values(array_filter(explode('||', (string)($s['batch_list'] ?? ''))));
                                     if (count($_batches) > 1): ?>
+                                        <a href="<?= APP_URL ?>/results/sheet-print.php?id=<?= $s['id'] ?>" target="_blank"
+                                           class="btn btn-sm btn-outline-secondary" title="Print all batches together" style="border-radius:7px;white-space:nowrap;">
+                                            <i class="fas fa-print me-1"></i>All
+                                        </a>
                                         <?php foreach ($_batches as $_b): ?>
                                         <a href="<?= APP_URL ?>/results/sheet-print.php?id=<?= $s['id'] ?>&batch=<?= urlencode($_b) ?>" target="_blank"
                                            class="btn btn-sm btn-outline-secondary" title="Print — Batch <?= h($_b) ?>" style="border-radius:7px;white-space:nowrap;">
@@ -378,6 +382,10 @@ function _wf_render_published(?array $dept_scope, int $user_id = 0): void
                                     <?php
                                     $_batches = array_values(array_filter(explode('||', (string)($s['batch_list'] ?? ''))));
                                     if (count($_batches) > 1): ?>
+                                        <a href="<?= APP_URL ?>/results/sheet-print.php?id=<?= $s['id'] ?>" target="_blank"
+                                           class="btn btn-sm btn-outline-secondary" style="border-radius:7px;white-space:nowrap;" title="Print all batches together">
+                                            <i class="fas fa-print me-1"></i>All
+                                        </a>
                                         <?php foreach ($_batches as $_b): ?>
                                         <a href="<?= APP_URL ?>/results/sheet-print.php?id=<?= $s['id'] ?>&batch=<?= urlencode($_b) ?>" target="_blank"
                                            class="btn btn-sm btn-outline-secondary" style="border-radius:7px;white-space:nowrap;" title="Print — Batch <?= h($_b) ?>">
