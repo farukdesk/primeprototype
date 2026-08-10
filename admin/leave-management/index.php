@@ -114,8 +114,8 @@ require_once __DIR__ . '/../includes/header.php';
  * Render a table of requests. Pass $flows (request_id => approval steps) to
  * add an Approval Progress column showing who approved / where it is stuck.
  */
-function lm_render_rows(array $rows, bool $show_user, callable $fmt, ?array $flows = null): void {
-    $cols = 7 + ($show_user ? 1 : 0) + ($flows !== null ? 1 : 0); ?>
+function lm_render_rows(array $rows, bool $show_user, callable $fmt, ?array $flows = null, bool $show_balance = false): void {
+    $cols = 7 + ($show_user ? 1 : 0) + ($flows !== null ? 1 : 0) + ($show_balance ? 1 : 0); ?>
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
             <thead class="table-light">
@@ -125,6 +125,7 @@ function lm_render_rows(array $rows, bool $show_user, callable $fmt, ?array $flo
                     <th>Category</th>
                     <th>Dates</th>
                     <th>Days</th>
+                    <?php if ($show_balance): ?><th>Balance (Left &rarr; After Approval)</th><?php endif; ?>
                     <th>Pay</th>
                     <th>Status</th>
                     <?php if ($flows !== null): ?><th>Approval Progress</th><?php endif; ?>
@@ -153,6 +154,23 @@ function lm_render_rows(array $rows, bool $show_user, callable $fmt, ?array $flo
                         <?php endif; ?>
                     </td>
                     <td><?= $fmt((float)$r['days']) ?></td>
+                    <?php if ($show_balance): ?>
+                    <td class="small">
+                        <?php if (in_array($r['category'], LM_BALANCE_CATEGORIES, true)):
+                            $b_year  = (int)date('Y', strtotime($r['start_date']));
+                            $b       = lm_get_balance((int)$r['user_id'], $b_year);
+                            $b_rem   = $r['category'] === 'casual' ? (float)$b['casual_remaining'] : (float)$b['sick_remaining'];
+                            $b_after = $b_rem - (float)$r['days']; ?>
+                            <span class="fw-semibold"><?= $fmt($b_rem) ?></span>
+                            <i class="fas fa-arrow-right mx-1 text-muted"></i>
+                            <span class="fw-semibold <?= $b_after < 0 ? 'text-danger' : 'text-success' ?>"><?= $fmt($b_after) ?></span>
+                            <span class="text-muted">day(s)</span>
+                            <?php if ($b_after < 0): ?><br><span class="badge bg-danger-subtle text-danger border border-danger mt-1">Exceeds balance</span><?php endif; ?>
+                        <?php else: ?>
+                            <span class="text-muted">—</span>
+                        <?php endif; ?>
+                    </td>
+                    <?php endif; ?>
                     <td><?= lm_paytype_badge($r['pay_type']) ?: '<span class="text-muted">—</span>' ?></td>
                     <td><?= lm_status_badge($r['status']) ?></td>
                     <?php if ($flows !== null): ?>
@@ -237,7 +255,7 @@ function lm_render_rows(array $rows, bool $show_user, callable $fmt, ?array $flo
 <?php if (!empty($pending_approvals)): ?>
 <div class="card mb-4" style="border-radius:12px;">
     <div class="card-header py-3 px-4"><h6 class="mb-0 fw-semibold"><i class="fas fa-inbox me-2 text-warning"></i>Awaiting My Approval</h6></div>
-    <div class="card-body p-0"><?php lm_render_rows($pending_approvals, true, $fmt); ?></div>
+    <div class="card-body p-0"><?php lm_render_rows($pending_approvals, true, $fmt, null, true); ?></div>
 </div>
 <?php endif; ?>
 
