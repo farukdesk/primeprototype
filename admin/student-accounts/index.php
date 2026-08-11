@@ -262,6 +262,60 @@ require_once __DIR__ . '/../includes/header.php';
                     <input type="number" name="bulk_project_fee" class="form-control form-control-sm"
                            min="0" step="0.01" placeholder="&mdash;">
                 </div>
+                <?php $bulk_months = [1 => 'January', 2 => 'February', 3 => 'March', 4 => 'April',
+                                      5 => 'May', 6 => 'June', 7 => 'July', 8 => 'August',
+                                      9 => 'September', 10 => 'October', 11 => 'November', 12 => 'December']; ?>
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold small mb-1">Payment Type</label>
+                    <select name="bulk_payment_type" class="form-select form-select-sm">
+                        <option value="">&mdash; No change &mdash;</option>
+                        <option value="merit">Merit (calculated)</option>
+                        <option value="fixed">Fixed (flat monthly)</option>
+                    </select>
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold small mb-1">Monthly Payment (Fixed)</label>
+                    <input type="number" name="bulk_monthly_payment" class="form-control form-control-sm"
+                           min="0" step="0.01" placeholder="&mdash;">
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold small mb-1">Bi-Sem Start Month</label>
+                    <select name="bulk_bi_start_month" class="form-select form-select-sm">
+                        <option value="">&mdash; No change &mdash;</option>
+                        <?php foreach ($bulk_months as $mn => $mname): ?>
+                        <option value="<?= $mn ?>"><?= $mname ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold small mb-1">Tri-Sem Start Month</label>
+                    <select name="bulk_tri_start_month" class="form-select form-select-sm">
+                        <option value="">&mdash; No change &mdash;</option>
+                        <?php foreach ($bulk_months as $mn => $mname): ?>
+                        <option value="<?= $mn ?>"><?= $mname ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold small mb-1">Total Months</label>
+                    <input type="number" name="bulk_total_months" class="form-control form-control-sm"
+                           min="1" step="1" placeholder="&mdash;">
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold small mb-1">Months / Semester</label>
+                    <input type="number" name="bulk_months_per_semester" class="form-control form-control-sm"
+                           min="0" step="0.01" placeholder="&mdash;">
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold small mb-1">Standard Tuition (Full)</label>
+                    <input type="number" name="bulk_standard_tuition_full" class="form-control form-control-sm"
+                           min="0" step="0.01" placeholder="&mdash;">
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold small mb-1">Reg Fee / Semester</label>
+                    <input type="number" name="bulk_reg_fee_per_semester" class="form-control form-control-sm"
+                           min="0" step="0.01" placeholder="&mdash;">
+                </div>
             </div>
             <div class="d-flex gap-2 mt-3">
                 <button type="submit" class="btn btn-warning btn-sm">
@@ -483,7 +537,11 @@ require_once __DIR__ . '/../includes/header.php';
             return;
         }
         var fields = ['bulk_cf_program_id', 'bulk_dept_id', 'bulk_total_semesters',
-                      'bulk_tuition_per_semester', 'bulk_monthly_fixed', 'bulk_project_fee'];
+                      'bulk_tuition_per_semester', 'bulk_monthly_fixed', 'bulk_project_fee',
+                      'bulk_payment_type', 'bulk_monthly_payment',
+                      'bulk_bi_start_month', 'bulk_tri_start_month',
+                      'bulk_total_months', 'bulk_months_per_semester',
+                      'bulk_standard_tuition_full', 'bulk_reg_fee_per_semester'];
         var any = fields.some(function (f) {
             var el = form.elements[f];
             return el && el.value !== '';
