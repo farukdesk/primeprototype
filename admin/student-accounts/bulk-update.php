@@ -8,6 +8,9 @@
  *   - Total semesters (sfp_semester_fees rows are added / removed to match)
  *   - Tuition per semester (applied to every semester row, scholarships recalculated)
  *   - Monthly fixed fee (fixed_institutional_fees re-derived from total_months)
+ *   - Fixed institutional fees total (monthly_fixed_fee re-derived)
+ *   - "Select all pages": when select_all_matching = 1, package IDs are
+ *     resolved server-side from the posted list filters
  *   - Project fee (requires the project_fee column - see
  *     admin/student-accounts-project-fee.sql)
  *
@@ -36,6 +39,38 @@ $ids = array_values(array_unique(array_filter(
     fn($v) => $v > 0
 )));
 
+// "Select all pages": resolve the package IDs server-side from the same
+// filters used on the index page, instead of only the checkboxes rendered
+// on the current page.
+if ((int)($_POST['select_all_matching'] ?? 0) === 1) {
+    $flt_q       = trim((string)($_POST['flt_q'] ?? ''));
+    $flt_dept    = (int)($_POST['flt_dept']    ?? 0);
+    $flt_program = (int)($_POST['flt_program'] ?? 0);
+    $flt_batch   = (int)($_POST['flt_batch']   ?? 0);
+    $flt_sems    = (int)($_POST['flt_sems']    ?? 0);
+
+    $flt_where  = ['1=1'];
+    $flt_params = [];
+    if ($flt_q !== '') {
+        $flt_where[]  = '(s.full_name LIKE ? OR s.student_id LIKE ?)';
+        $flt_params[] = "%$flt_q%";
+        $flt_params[] = "%$flt_q%";
+    }
+    if ($flt_dept > 0)    { $flt_where[] = 's.dept_id = ?';          $flt_params[] = $flt_dept; }
+    if ($flt_program > 0) { $flt_where[] = 's.program_id = ?';       $flt_params[] = $flt_program; }
+    if ($flt_batch > 0)   { $flt_where[] = 's.batch_id = ?';         $flt_params[] = $flt_batch; }
+    if ($flt_sems > 0)    { $flt_where[] = 'p.total_semesters = ?';  $flt_params[] = $flt_sems; }
+
+    $flt_stmt = $db->prepare(
+        'SELECT p.id
+         FROM sfp_packages p
+         JOIN students s ON s.id = p.student_id
+         WHERE ' . implode(' AND ', $flt_where)
+    );
+    $flt_stmt->execute($flt_params);
+    $ids = array_map('intval', $flt_stmt->fetchAll(PDO::FETCH_COLUMN));
+}
+
 $cf_program_id      = (int)($_POST['bulk_cf_program_id']      ?? 0);
 $student_program_id = (int)($_POST['bulk_student_program_id'] ?? 0);
 $dept_id            = (int)($_POST['bulk_dept_id']            ?? 0);
@@ -43,6 +78,7 @@ $semesters_raw = trim((string)($_POST['bulk_total_semesters']      ?? ''));
 $tuition_raw   = trim((string)($_POST['bulk_tuition_per_semester'] ?? ''));
 $monthly_raw   = trim((string)($_POST['bulk_monthly_fixed']        ?? ''));
 $project_raw   = trim((string)($_POST['bulk_project_fee']          ?? ''));
+$fixed_total_raw = trim((string)($_POST['bulk_fixed_institutional_fees'] ?? ''));
 
 $payment_type       = trim((string)($_POST['bulk_payment_type'] ?? ''));    // '' = no change
 $monthly_payment_raw = trim((string)($_POST['bulk_monthly_payment'] ?? ''));
@@ -57,6 +93,7 @@ $total_semesters = $semesters_raw !== '' ? (int)$semesters_raw           : null;
 $tuition         = $tuition_raw   !== '' ? round((float)$tuition_raw, 2) : null;
 $monthly_fixed   = $monthly_raw   !== '' ? round((float)$monthly_raw, 2) : null;
 $project_fee     = $project_raw   !== '' ? round((float)$project_raw, 2) : null;
+$fixed_total     = $fixed_total_raw !== '' ? round((float)$fixed_total_raw, 2) : null;
 $monthly_payment = $monthly_payment_raw !== '' ? round((float)$monthly_payment_raw, 2) : null;
 $total_months    = $total_months_raw !== '' ? (int)$total_months_raw            : null;
 $mps             = $mps_raw          !== '' ? round((float)$mps_raw, 2)         : null;
@@ -70,6 +107,7 @@ if (empty($ids)) {
 }
 if ($cf_program_id <= 0 && $student_program_id <= 0 && $dept_id <= 0 && $total_semesters === null
     && $tuition === null && $monthly_fixed === null && $project_fee === null
+    && $fixed_total === null
     && $payment_type === '' && $monthly_payment === null
     && $bi_start_month <= 0 && $tri_start_month <= 0
     && $total_months === null && $mps === null && $std_tuition === null && $reg_fee === null) {
@@ -92,6 +130,10 @@ if ($reg_fee      !== null && $reg_fee      < 0)  $errors[] = 'Registration fee 
 if ($total_semesters !== null && $total_semesters <= 0) $errors[] = 'Total semesters must be greater than 0.';
 if ($tuition       !== null && $tuition       < 0)      $errors[] = 'Tuition per semester cannot be negative.';
 if ($monthly_fixed !== null && $monthly_fixed < 0)      $errors[] = 'Monthly fixed fee cannot be negative.';
+if ($fixed_total   !== null && $fixed_total   < 0)      $errors[] = 'Fixed institutional fees cannot be negative.';
+if ($fixed_total !== null && $monthly_fixed !== null) {
+    $errors[] = 'Set either Monthly Fixed or Fixed Institutional Fees (total), not both.';
+}
 if ($project_fee   !== null && $project_fee   < 0)      $errors[] = 'Project fee cannot be negative.';
 
 // -- Validate lookups ---------------------------------------------------------
@@ -172,7 +214,7 @@ if (empty($errors)) {
                 $changes[] = 'total months ' . (int)$pkg['total_months'] . ' -> ' . $total_months;
                 // Re-derive monthly rates from the snapshotted totals
                 // (monthly fixed is overridden further below when explicitly provided)
-                if ($monthly_fixed === null) {
+                if ($monthly_fixed === null && $fixed_total === null) {
                     $set[]    = 'monthly_fixed_fee = ?';
                     $params[] = $total_months > 0 ? round((float)$pkg['fixed_institutional_fees'] / $total_months, 4) : 0;
                 }
@@ -202,6 +244,14 @@ if (empty($errors)) {
                 $set[]     = 'fixed_institutional_fees = ?';
                 $params[]  = round($monthly_fixed * $new_months, 2);
                 $changes[] = 'monthly fixed -> ' . number_format($monthly_fixed, 2);
+            }
+
+            if ($fixed_total !== null) {
+                $set[]     = 'fixed_institutional_fees = ?';
+                $params[]  = $fixed_total;
+                $set[]     = 'monthly_fixed_fee = ?';
+                $params[]  = $new_months > 0 ? round($fixed_total / $new_months, 4) : 0;
+                $changes[] = 'fixed institutional fees -> ' . number_format($fixed_total, 2);
             }
 
             if ($project_fee !== null) {
@@ -303,7 +353,8 @@ if (empty($errors)) {
             }
 
             // Recalculate scholarship cascades / payables when fee inputs changed
-            if ($tuition !== null || $monthly_fixed !== null || $total_semesters !== null
+            if ($tuition !== null || $monthly_fixed !== null || $fixed_total !== null
+                || $total_semesters !== null
                 || $total_months !== null || $mps !== null) {
                 $sf_stmt = $db->prepare('SELECT id FROM sfp_semester_fees WHERE package_id = ?');
                 $sf_stmt->execute([$package_id]);

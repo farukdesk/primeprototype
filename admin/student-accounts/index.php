@@ -216,6 +216,12 @@ require_once __DIR__ . '/../includes/header.php';
 <!-- ── Bulk Edit (super admin only) ── -->
 <form id="bulk-form" method="post" action="<?= APP_URL ?>/student-accounts/bulk-update.php">
     <?= csrf_field() ?>
+    <input type="hidden" name="select_all_matching" id="select-all-matching" value="0">
+    <input type="hidden" name="flt_q" value="<?= h($search) ?>">
+    <input type="hidden" name="flt_dept" value="<?= $f_dept ?>">
+    <input type="hidden" name="flt_program" value="<?= $f_program ?>">
+    <input type="hidden" name="flt_batch" value="<?= $f_batch ?>">
+    <input type="hidden" name="flt_sems" value="<?= $f_sems ?>">
     <div class="card mb-4 border-warning" id="bulk-panel" style="display:none;">
         <div class="card-header bg-warning-subtle fw-semibold py-2">
             <i class="fas fa-layer-group me-2"></i>Bulk Edit
@@ -223,6 +229,11 @@ require_once __DIR__ . '/../includes/header.php';
             <span class="text-muted fw-normal small ms-2">Leave a field blank to keep it unchanged.</span>
         </div>
         <div class="card-body py-3">
+            <div class="alert alert-info py-2 px-3 mb-3 small" id="bulk-all-pages-notice" style="display:none;">
+                <span id="bulk-all-pages-text"></span>
+                <a href="#" id="bulk-select-all-pages" class="fw-semibold">Select all <?= (int)$total ?> matching account(s) across all pages</a>
+                <a href="#" id="bulk-only-this-page" class="fw-semibold" style="display:none;">Select only this page</a>
+            </div>
             <div class="row g-2 align-items-end">
                 <div class="col-md-3">
                     <label class="form-label fw-semibold small mb-1">Programme (Course Fee Structure)</label>
@@ -264,6 +275,11 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="col-6 col-md-2">
                     <label class="form-label fw-semibold small mb-1">Monthly Fixed</label>
                     <input type="number" name="bulk_monthly_fixed" class="form-control form-control-sm"
+                           min="0" step="0.01" placeholder="&mdash;">
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold small mb-1">Fixed Inst. Fees (Total)</label>
+                    <input type="number" name="bulk_fixed_institutional_fees" class="form-control form-control-sm"
                            min="0" step="0.01" placeholder="&mdash;">
                 </div>
                 <div class="col-6 col-md-1">
@@ -508,38 +524,86 @@ require_once __DIR__ . '/../includes/header.php';
     var clearBtn = document.getElementById('bulk-clear');
     var boxes    = Array.prototype.slice.call(document.querySelectorAll('.bulk-pkg'));
 
+    var allMatching        = document.getElementById('select-all-matching');
+    var noticeEl           = document.getElementById('bulk-all-pages-notice');
+    var noticeText         = document.getElementById('bulk-all-pages-text');
+    var selectAllPagesLink = document.getElementById('bulk-select-all-pages');
+    var onlyThisPageLink   = document.getElementById('bulk-only-this-page');
+    var totalMatching      = <?= (int)$total ?>;
+
     function selectedCount() {
         return boxes.filter(function (b) { return b.checked; }).length;
     }
 
+    function allPagesSelected() {
+        return allMatching && allMatching.value === '1';
+    }
+
     function refresh() {
-        var n = selectedCount();
-        countEl.textContent = n;
-        panel.style.display = n > 0 ? '' : 'none';
+        var n        = selectedCount();
+        var allPages = allPagesSelected();
+        countEl.textContent = allPages ? totalMatching : n;
+        panel.style.display = (n > 0 || allPages) ? '' : 'none';
         if (selAll) {
             selAll.checked       = n > 0 && n === boxes.length;
             selAll.indeterminate = n > 0 && n < boxes.length;
         }
+        if (noticeEl) {
+            var offer = !allPages && n > 0 && n === boxes.length && totalMatching > boxes.length;
+            noticeEl.style.display = (offer || allPages) ? '' : 'none';
+            if (selectAllPagesLink) selectAllPagesLink.style.display = allPages ? 'none' : '';
+            if (onlyThisPageLink)   onlyThisPageLink.style.display   = allPages ? '' : 'none';
+            if (noticeText) {
+                noticeText.textContent = allPages
+                    ? 'All ' + totalMatching + ' matching account(s) across all pages are selected. '
+                    : 'All ' + n + ' account(s) on this page are selected. ';
+            }
+        }
     }
 
-    boxes.forEach(function (b) { b.addEventListener('change', refresh); });
+    boxes.forEach(function (b) {
+        b.addEventListener('change', function () {
+            if (allMatching) allMatching.value = '0';
+            refresh();
+        });
+    });
 
     if (selAll) {
         selAll.addEventListener('change', function () {
+            if (allMatching) allMatching.value = '0';
             boxes.forEach(function (b) { b.checked = selAll.checked; });
+            refresh();
+        });
+    }
+
+    if (selectAllPagesLink) {
+        selectAllPagesLink.addEventListener('click', function (e) {
+            e.preventDefault();
+            boxes.forEach(function (b) { b.checked = true; });
+            if (allMatching) allMatching.value = '1';
+            refresh();
+        });
+    }
+
+    if (onlyThisPageLink) {
+        onlyThisPageLink.addEventListener('click', function (e) {
+            e.preventDefault();
+            if (allMatching) allMatching.value = '0';
             refresh();
         });
     }
 
     if (clearBtn) {
         clearBtn.addEventListener('click', function () {
+            if (allMatching) allMatching.value = '0';
             boxes.forEach(function (b) { b.checked = false; });
             refresh();
         });
     }
 
     form.addEventListener('submit', function (e) {
-        var n = selectedCount();
+        var allPages = allPagesSelected();
+        var n = allPages ? totalMatching : selectedCount();
         if (n === 0) {
             e.preventDefault();
             alert('Select at least one student account.');
@@ -547,7 +611,8 @@ require_once __DIR__ . '/../includes/header.php';
         }
         var fields = ['bulk_cf_program_id', 'bulk_student_program_id', 'bulk_dept_id',
                       'bulk_total_semesters',
-                      'bulk_tuition_per_semester', 'bulk_monthly_fixed', 'bulk_project_fee',
+                      'bulk_tuition_per_semester', 'bulk_monthly_fixed',
+                      'bulk_fixed_institutional_fees', 'bulk_project_fee',
                       'bulk_payment_type', 'bulk_monthly_payment',
                       'bulk_bi_start_month', 'bulk_tri_start_month',
                       'bulk_total_months', 'bulk_months_per_semester',
@@ -561,7 +626,7 @@ require_once __DIR__ . '/../includes/header.php';
             alert('Set at least one field to change.');
             return;
         }
-        if (!confirm('Apply bulk changes to ' + n + ' student account(s)? This cannot be undone.')) {
+        if (!confirm('Apply bulk changes to ' + n + ' student account(s)' + (allPages ? ' across all pages' : '') + '? This cannot be undone.')) {
             e.preventDefault();
         }
     });
