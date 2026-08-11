@@ -100,6 +100,10 @@ $departments = $db->query(
 )->fetchAll();
 $all_programs = sm_program_data();
 $batches      = sm_batches();
+
+// Bulk edit is restricted to super admins only
+$is_super         = is_super_admin();
+$cf_programs_bulk = $is_super ? sfp_get_cf_programs() : [];
 // Restrict dept/program dropdowns to the user's allowed departments
 if ($dept_scope !== null) {
     $departments = array_values(array_filter(
@@ -188,6 +192,70 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
+<?php if ($is_super): ?>
+<!-- ── Bulk Edit (super admin only) ── -->
+<form id="bulk-form" method="post" action="<?= APP_URL ?>/student-accounts/bulk-update.php">
+    <?= csrf_field() ?>
+    <div class="card mb-4 border-warning" id="bulk-panel" style="display:none;">
+        <div class="card-header bg-warning-subtle fw-semibold py-2">
+            <i class="fas fa-layer-group me-2"></i>Bulk Edit
+            (<span id="bulk-count">0</span> selected)
+            <span class="text-muted fw-normal small ms-2">Leave a field blank to keep it unchanged.</span>
+        </div>
+        <div class="card-body py-3">
+            <div class="row g-2 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold small mb-1">Programme (Course Fee Structure)</label>
+                    <select name="bulk_cf_program_id" class="form-select form-select-sm">
+                        <option value="">&mdash; No change &mdash;</option>
+                        <?php foreach ($cf_programs_bulk as $cp): ?>
+                        <option value="<?= $cp['id'] ?>"><?= h($cp['program_name']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold small mb-1">Department (student record)</label>
+                    <select name="bulk_dept_id" class="form-select form-select-sm">
+                        <option value="">&mdash; No change &mdash;</option>
+                        <?php foreach ($departments as $d): ?>
+                        <option value="<?= $d['id'] ?>"><?= h($d['name']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-6 col-md-1">
+                    <label class="form-label fw-semibold small mb-1">Semesters</label>
+                    <input type="number" name="bulk_total_semesters" class="form-control form-control-sm"
+                           min="1" step="1" placeholder="&mdash;">
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold small mb-1">Tuition / Semester</label>
+                    <input type="number" name="bulk_tuition_per_semester" class="form-control form-control-sm"
+                           min="0" step="0.01" placeholder="&mdash;">
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold small mb-1">Monthly Fixed</label>
+                    <input type="number" name="bulk_monthly_fixed" class="form-control form-control-sm"
+                           min="0" step="0.01" placeholder="&mdash;">
+                </div>
+                <div class="col-6 col-md-1">
+                    <label class="form-label fw-semibold small mb-1">Project Fee</label>
+                    <input type="number" name="bulk_project_fee" class="form-control form-control-sm"
+                           min="0" step="0.01" placeholder="&mdash;">
+                </div>
+            </div>
+            <div class="d-flex gap-2 mt-3">
+                <button type="submit" class="btn btn-warning btn-sm">
+                    <i class="fas fa-check me-1"></i>Apply to Selected
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="bulk-clear">
+                    Clear Selection
+                </button>
+            </div>
+        </div>
+    </div>
+</form>
+<?php endif; ?>
+
 <!-- ── Table ── -->
 <div class="card">
     <div class="card-body p-0">
@@ -201,6 +269,12 @@ require_once __DIR__ . '/../includes/header.php';
             <table class="table table-hover mb-0">
                 <thead>
                     <tr>
+                        <?php if ($is_super): ?>
+                        <th style="width:32px;">
+                            <input type="checkbox" class="form-check-input" id="bulk-select-all"
+                                   title="Select all on this page">
+                        </th>
+                        <?php endif; ?>
                         <th>Student</th>
                         <th>Programme</th>
                         <th>Semesters</th>
@@ -213,6 +287,12 @@ require_once __DIR__ . '/../includes/header.php';
                 <tbody>
                 <?php foreach ($packages as $pkg): ?>
                 <tr>
+                    <?php if ($is_super): ?>
+                    <td>
+                        <input type="checkbox" class="form-check-input bulk-pkg" form="bulk-form"
+                               name="package_ids[]" value="<?= $pkg['id'] ?>">
+                    </td>
+                    <?php endif; ?>
                     <td>
                         <a href="<?= APP_URL ?>/students/view.php?id=<?= $pkg['student_id'] ?>"
                            class="fw-semibold text-decoration-none">
@@ -332,5 +412,72 @@ require_once __DIR__ . '/../includes/header.php';
 
     deptSel.addEventListener('change', filterPrograms);
     filterPrograms(); // run on page load to respect pre-selected dept
+}());
+</script>
+<script>
+(function () {
+    var form = document.getElementById('bulk-form');
+    if (!form) return; // bulk edit is only rendered for super admins
+
+    var panel    = document.getElementById('bulk-panel');
+    var countEl  = document.getElementById('bulk-count');
+    var selAll   = document.getElementById('bulk-select-all');
+    var clearBtn = document.getElementById('bulk-clear');
+    var boxes    = Array.prototype.slice.call(document.querySelectorAll('.bulk-pkg'));
+
+    function selectedCount() {
+        return boxes.filter(function (b) { return b.checked; }).length;
+    }
+
+    function refresh() {
+        var n = selectedCount();
+        countEl.textContent = n;
+        panel.style.display = n > 0 ? '' : 'none';
+        if (selAll) {
+            selAll.checked       = n > 0 && n === boxes.length;
+            selAll.indeterminate = n > 0 && n < boxes.length;
+        }
+    }
+
+    boxes.forEach(function (b) { b.addEventListener('change', refresh); });
+
+    if (selAll) {
+        selAll.addEventListener('change', function () {
+            boxes.forEach(function (b) { b.checked = selAll.checked; });
+            refresh();
+        });
+    }
+
+    if (clearBtn) {
+        clearBtn.addEventListener('click', function () {
+            boxes.forEach(function (b) { b.checked = false; });
+            refresh();
+        });
+    }
+
+    form.addEventListener('submit', function (e) {
+        var n = selectedCount();
+        if (n === 0) {
+            e.preventDefault();
+            alert('Select at least one student account.');
+            return;
+        }
+        var fields = ['bulk_cf_program_id', 'bulk_dept_id', 'bulk_total_semesters',
+                      'bulk_tuition_per_semester', 'bulk_monthly_fixed', 'bulk_project_fee'];
+        var any = fields.some(function (f) {
+            var el = form.elements[f];
+            return el && el.value !== '';
+        });
+        if (!any) {
+            e.preventDefault();
+            alert('Set at least one field to change.');
+            return;
+        }
+        if (!confirm('Apply bulk changes to ' + n + ' student account(s)? This cannot be undone.')) {
+            e.preventDefault();
+        }
+    });
+
+    refresh();
 }());
 </script>
