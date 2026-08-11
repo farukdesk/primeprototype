@@ -36,8 +36,9 @@ $ids = array_values(array_unique(array_filter(
     fn($v) => $v > 0
 )));
 
-$cf_program_id = (int)($_POST['bulk_cf_program_id'] ?? 0);
-$dept_id       = (int)($_POST['bulk_dept_id']       ?? 0);
+$cf_program_id      = (int)($_POST['bulk_cf_program_id']      ?? 0);
+$student_program_id = (int)($_POST['bulk_student_program_id'] ?? 0);
+$dept_id            = (int)($_POST['bulk_dept_id']            ?? 0);
 $semesters_raw = trim((string)($_POST['bulk_total_semesters']      ?? ''));
 $tuition_raw   = trim((string)($_POST['bulk_tuition_per_semester'] ?? ''));
 $monthly_raw   = trim((string)($_POST['bulk_monthly_fixed']        ?? ''));
@@ -67,7 +68,7 @@ $errors = [];
 if (empty($ids)) {
     $errors[] = 'No student accounts selected.';
 }
-if ($cf_program_id <= 0 && $dept_id <= 0 && $total_semesters === null
+if ($cf_program_id <= 0 && $student_program_id <= 0 && $dept_id <= 0 && $total_semesters === null
     && $tuition === null && $monthly_fixed === null && $project_fee === null
     && $payment_type === '' && $monthly_payment === null
     && $bi_start_month <= 0 && $tri_start_month <= 0
@@ -108,6 +109,14 @@ if ($dept_id > 0 && empty($errors)) {
     $st->execute([$dept_id]);
     $dept = $st->fetch();
     if (!$dept) $errors[] = 'Selected department not found or inactive.';
+}
+
+$student_program = null;
+if ($student_program_id > 0 && empty($errors)) {
+    $st = $db->prepare('SELECT id, program_name FROM dept_academic_programs WHERE id = ? AND is_active = 1');
+    $st->execute([$student_program_id]);
+    $student_program = $st->fetch();
+    if (!$student_program) $errors[] = 'Selected student programme not found or inactive.';
 }
 
 // The project_fee column is added by admin/student-accounts-project-fee.sql
@@ -308,6 +317,14 @@ if (empty($errors)) {
                 $db->prepare('UPDATE students SET dept_id = ? WHERE id = ?')
                    ->execute([(int)$dept['id'], (int)$pkg['student_id']]);
                 $changes[] = 'department -> ' . $dept['name'];
+            }
+
+            // Academic programme lives on the student record (students.program_id),
+            // shown on the students list at admin/students/index.php
+            if ($student_program) {
+                $db->prepare('UPDATE students SET program_id = ? WHERE id = ?')
+                   ->execute([(int)$student_program['id'], (int)$pkg['student_id']]);
+                $changes[] = 'student programme -> ' . $student_program['program_name'];
             }
 
             if (!empty($changes)) {

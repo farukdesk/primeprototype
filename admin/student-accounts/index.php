@@ -234,6 +234,15 @@ require_once __DIR__ . '/../includes/header.php';
                     </select>
                 </div>
                 <div class="col-md-3">
+                    <label class="form-label fw-semibold small mb-1">Student Programme (student record)</label>
+                    <select name="bulk_student_program_id" class="form-select form-select-sm">
+                        <option value="">&mdash; No change &mdash;</option>
+                        <?php foreach ($all_programs as $sp): ?>
+                        <option value="<?= $sp['id'] ?>"><?= h($sp['program_name']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-md-3">
                     <label class="form-label fw-semibold small mb-1">Department (student record)</label>
                     <select name="bulk_dept_id" class="form-select form-select-sm">
                         <option value="">&mdash; No change &mdash;</option>
@@ -536,7 +545,8 @@ require_once __DIR__ . '/../includes/header.php';
             alert('Select at least one student account.');
             return;
         }
-        var fields = ['bulk_cf_program_id', 'bulk_dept_id', 'bulk_total_semesters',
+        var fields = ['bulk_cf_program_id', 'bulk_student_program_id', 'bulk_dept_id',
+                      'bulk_total_semesters',
                       'bulk_tuition_per_semester', 'bulk_monthly_fixed', 'bulk_project_fee',
                       'bulk_payment_type', 'bulk_monthly_payment',
                       'bulk_bi_start_month', 'bulk_tri_start_month',
