@@ -34,6 +34,18 @@ csrf_check();
 $db   = db();
 $user = auth_user();
 
+// Preserve the list filters and page across the redirect back to the index,
+// so applying a bulk edit does not reset the user's search/filter state.
+$back_qs = http_build_query(array_filter([
+    'q'       => trim((string)($_POST['flt_q'] ?? '')),
+    'dept'    => (int)($_POST['flt_dept']    ?? 0) ?: null,
+    'program' => (int)($_POST['flt_program'] ?? 0) ?: null,
+    'batch'   => (int)($_POST['flt_batch']   ?? 0) ?: null,
+    'sems'    => (int)($_POST['flt_sems']    ?? 0) ?: null,
+    'page'    => (int)($_POST['flt_page']    ?? 0) ?: null,
+], fn($v) => $v !== null && $v !== ''));
+$back_url = APP_URL . '/student-accounts/index.php' . ($back_qs !== '' ? '?' . $back_qs : '');
+
 $ids = array_values(array_unique(array_filter(
     array_map('intval', (array)($_POST['package_ids'] ?? [])),
     fn($v) => $v > 0
@@ -402,4 +414,4 @@ if (!empty($errors)) {
     flash_set('success', 'Bulk edit applied to <strong>' . $updated . '</strong> student account(s).');
 }
 
-redirect(APP_URL . '/student-accounts/index.php');
+redirect($back_url);

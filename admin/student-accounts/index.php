@@ -222,6 +222,7 @@ require_once __DIR__ . '/../includes/header.php';
     <input type="hidden" name="flt_program" value="<?= $f_program ?>">
     <input type="hidden" name="flt_batch" value="<?= $f_batch ?>">
     <input type="hidden" name="flt_sems" value="<?= $f_sems ?>">
+    <input type="hidden" name="flt_page" value="<?= (int)$page ?>">
     <div class="card mb-4 border-warning" id="bulk-panel" style="display:none;">
         <div class="card-header bg-warning-subtle fw-semibold py-2">
             <i class="fas fa-layer-group me-2"></i>Bulk Edit
