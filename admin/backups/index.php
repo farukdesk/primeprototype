@@ -14,6 +14,15 @@ if ((string)bk_setting_get('cron_key', '') === '') {
 $table_missing = false;
 try { db()->query('SELECT 1 FROM sys_backups LIMIT 1'); } catch (Throwable $e) { $table_missing = true; }
 
+// Mark backups stuck in "running" (process died / timed out) as failed so
+// the history reflects reality and new runs are not blocked.
+if (!$table_missing) {
+    $stale_marked = bk_mark_stale();
+    if ($stale_marked > 0) {
+        flash_set('error', $stale_marked . ' backup(s) were stuck in "running" and have been marked as failed. For large sites, prefer the CLI cron over running backups from the browser, and check PHP max_execution_time / memory_limit.');
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$table_missing) {
     csrf_check();
     $action = $_POST['action'] ?? '';
