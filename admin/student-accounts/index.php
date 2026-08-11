@@ -16,6 +16,7 @@ $search    = trim($_GET['q'] ?? '');
 $f_dept    = (int)($_GET['dept']    ?? 0);
 $f_program = (int)($_GET['program'] ?? 0);
 $f_batch   = (int)($_GET['batch']   ?? 0);
+$f_sems    = (int)($_GET['sems']    ?? 0);
 
 $where  = ['1=1'];
 $params = [];
@@ -36,6 +37,10 @@ if ($f_program > 0) {
 if ($f_batch > 0) {
     $where[]  = 's.batch_id = ?';
     $params[] = $f_batch;
+}
+if ($f_sems > 0) {
+    $where[]  = 'p.total_semesters = ?';
+    $params[] = $f_sems;
 }
 
 // Apply department scope restriction for non-super-admins
@@ -100,6 +105,10 @@ $departments = $db->query(
 )->fetchAll();
 $all_programs = sm_program_data();
 $batches      = sm_batches();
+// Distinct semester counts that actually exist across packages
+$semester_options = $db->query(
+    'SELECT DISTINCT total_semesters FROM sfp_packages ORDER BY total_semesters ASC'
+)->fetchAll(PDO::FETCH_COLUMN);
 
 // Bulk edit is restricted to super admins only
 $is_super         = is_super_admin();
@@ -142,7 +151,7 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="card mb-4">
     <div class="card-body py-3">
         <form method="get" class="row g-2 align-items-end">
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <label class="form-label fw-semibold small mb-1">Search</label>
                 <input type="text" name="q" class="form-control form-control-sm" placeholder="Student name or ID…"
                        value="<?= h($search) ?>">
@@ -182,9 +191,20 @@ require_once __DIR__ . '/../includes/header.php';
                     <?php endforeach; ?>
                 </select>
             </div>
+            <div class="col-6 col-md-1">
+                <label class="form-label fw-semibold small mb-1">Semesters</label>
+                <select name="sems" class="form-select form-select-sm">
+                    <option value="">All</option>
+                    <?php foreach ($semester_options as $so): ?>
+                    <option value="<?= (int)$so ?>" <?= $f_sems == (int)$so ? 'selected' : '' ?>>
+                        <?= (int)$so ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
             <div class="col-6 col-md-2 d-flex gap-2">
                 <button class="btn btn-primary btn-sm flex-fill" type="submit"><i class="fas fa-search me-1"></i>Filter</button>
-                <?php if ($search !== '' || $f_dept || $f_program || $f_batch): ?>
+                <?php if ($search !== '' || $f_dept || $f_program || $f_batch || $f_sems): ?>
                 <a href="<?= APP_URL ?>/student-accounts/index.php" class="btn btn-outline-secondary btn-sm flex-fill">Clear</a>
                 <?php endif; ?>
             </div>
@@ -377,7 +397,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <?php for ($p = 1; $p <= $pages; $p++): ?>
                     <li class="page-item <?= $p === $page ? 'active' : '' ?>">
                         <a class="page-link"
-                           href="?<?= http_build_query(['q' => $search, 'dept' => $f_dept ?: '', 'program' => $f_program ?: '', 'batch' => $f_batch ?: '', 'page' => $p]) ?>">
+                           href="?<?= http_build_query(['q' => $search, 'dept' => $f_dept ?: '', 'program' => $f_program ?: '', 'batch' => $f_batch ?: '', 'sems' => $f_sems ?: '', 'page' => $p]) ?>">
                             <?= $p ?>
                         </a>
                     </li>
