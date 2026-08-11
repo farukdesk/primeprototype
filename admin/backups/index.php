@@ -44,7 +44,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$table_missing) {
         bk_setting_set('keep_daily_days',  (string)max(1, (int)($_POST['keep_daily_days'] ?? 7)));
         bk_setting_set('keep_weekly_days', (string)max(1, (int)($_POST['keep_weekly_days'] ?? 30)));
         bk_setting_set('exclude_paths',    trim((string)($_POST['exclude_paths'] ?? '')));
+        bk_setting_set('oauth_client_id',  trim((string)($_POST['oauth_client_id'] ?? '')));
+        $oauth_secret = trim((string)($_POST['oauth_client_secret'] ?? ''));
+        if ($oauth_secret !== '') {
+            bk_setting_set('oauth_client_secret', $oauth_secret);
+        }
         flash_set('success', 'Backup settings saved.');
+        redirect(APP_URL . '/backups/index.php');
+    }
+
+    if ($action === 'oauth_start') {
+        $client_id = trim((string)bk_setting_get('oauth_client_id', ''));
+        if ($client_id === '' || (string)bk_setting_get('oauth_client_secret', '') === '') {
+            flash_set('error', 'Save the OAuth Client ID and Client Secret first, then click Connect.');
+            redirect(APP_URL . '/backups/index.php');
+        }
+        $state = bin2hex(random_bytes(16));
+        bk_setting_set('oauth_state', $state);
+        redirect('https://accounts.google.com/o/oauth2/v2/auth?' . http_build_query([
+            'client_id'     => $client_id,
+            'redirect_uri'  => APP_URL . '/backups/oauth-callback.php',
+            'response_type' => 'code',
+            'scope'         => 'https://www.googleapis.com/auth/drive',
+            'access_type'   => 'offline',
+            'prompt'        => 'consent',
+            'state'         => $state,
+        ]));
+    }
+
+    if ($action === 'oauth_disconnect') {
+        bk_setting_set('oauth_refresh_token', null);
+        bk_setting_set('drive_token_cache', null);
+        flash_set('success', 'Google account disconnected. Backups will use the service account (if configured).');
         redirect(APP_URL . '/backups/index.php');
     }
 
@@ -76,6 +107,9 @@ $sa_email = '';
 if ($sa_configured) {
     $sa_email = (string)(json_decode((string)bk_setting_get('drive_service_account_json'), true)['client_email'] ?? '');
 }
+$oauth_connected = (string)bk_setting_get('oauth_refresh_token', '') !== ''
+                && (string)bk_setting_get('oauth_client_id', '') !== '';
+$drive_ready = $sa_configured || $oauth_connected;
 $cron_key = (string)bk_setting_get('cron_key', '');
 $cron_url = APP_URL . '/backups/cron.php?key=' . $cron_key;
 
@@ -112,11 +146,11 @@ require_once __DIR__ . '/../includes/header.php';
                 </p>
                 <form method="POST" action="run.php" class="d-grid gap-2">
                     <?= csrf_field() ?>
-                    <button name="scope" value="full"  class="btn btn-primary"        <?= $sa_configured ? '' : 'disabled' ?>><i class="fas fa-cloud-upload-alt me-1"></i> Full Backup (DB + Files)</button>
-                    <button name="scope" value="db"    class="btn btn-outline-primary" <?= $sa_configured ? '' : 'disabled' ?>><i class="fas fa-database me-1"></i> Database Only</button>
-                    <button name="scope" value="files" class="btn btn-outline-primary" <?= $sa_configured ? '' : 'disabled' ?>><i class="fas fa-folder me-1"></i> Files Only</button>
+                    <button name="scope" value="full"  class="btn btn-primary"        <?= $drive_ready ? '' : 'disabled' ?>><i class="fas fa-cloud-upload-alt me-1"></i> Full Backup (DB + Files)</button>
+                    <button name="scope" value="db"    class="btn btn-outline-primary" <?= $drive_ready ? '' : 'disabled' ?>><i class="fas fa-database me-1"></i> Database Only</button>
+                    <button name="scope" value="files" class="btn btn-outline-primary" <?= $drive_ready ? '' : 'disabled' ?>><i class="fas fa-folder me-1"></i> Files Only</button>
                 </form>
-                <?php if (!$sa_configured): ?>
+                <?php if (!$drive_ready): ?>
                 <div class="alert alert-warning mt-3 mb-0 py-2" style="font-size:.82rem;">Configure Google Drive first (right panel).</div>
                 <?php endif; ?>
 
@@ -141,7 +175,7 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center">
                 <h6 class="mb-0 fw-semibold"><i class="fab fa-google-drive me-2 text-success"></i>Google Drive &amp; Backup Settings</h6>
                 <form method="POST" class="m-0"><?= csrf_field() ?><input type="hidden" name="action" value="test">
-                    <button class="btn btn-sm btn-outline-success" <?= $sa_configured ? '' : 'disabled' ?>><i class="fas fa-plug me-1"></i> Test Connection</button>
+                    <button class="btn btn-sm btn-outline-success" <?= $drive_ready ? '' : 'disabled' ?>><i class="fas fa-plug me-1"></i> Test Connection</button>
                 </form>
             </div>
             <div class="card-body p-4">
@@ -158,6 +192,30 @@ require_once __DIR__ . '/../includes/header.php';
                             Google Cloud Console → create a project → enable <strong>Drive API</strong> → create a
                             <strong>Service Account</strong> → add a JSON key. Then <strong>share your Drive backup folder</strong>
                             with the service account email (Editor).
+                        </div>
+                    </div>
+                    <div class="mb-3 p-3 rounded border" style="background:#f8f9fa;">
+                        <label class="form-label fw-medium mb-1" style="font-size:.85rem;">
+                            <i class="fab fa-google me-1"></i> Personal Google account (OAuth) – recommended for personal Gmail
+                            <?php if ($oauth_connected): ?><span class="badge bg-success ms-1">Connected</span><?php endif; ?>
+                        </label>
+                        <div class="form-text mb-2" style="font-size:.75rem;">
+                            Service accounts have <strong>no Drive storage quota</strong>, so uploads into a personal
+                            “My Drive” folder fail with HTTP 403. Instead: Google Cloud Console → create an
+                            <strong>OAuth client ID</strong> (type: <em>Web application</em>) → add
+                            <code><?= h(APP_URL) ?>/backups/oauth-callback.php</code> as an authorised redirect URI →
+                            paste the Client ID/Secret below, <strong>Save Settings</strong>, then click
+                            <strong>Connect Google Account</strong>. Backups will upload using that account's own storage.
+                        </div>
+                        <div class="row g-2">
+                            <div class="col-md-6">
+                                <input type="text" name="oauth_client_id" class="form-control form-control-sm"
+                                       placeholder="OAuth Client ID" value="<?= h(bk_setting_get('oauth_client_id', '')) ?>">
+                            </div>
+                            <div class="col-md-6">
+                                <input type="password" name="oauth_client_secret" class="form-control form-control-sm"
+                                       placeholder="<?= (string)bk_setting_get('oauth_client_secret', '') !== '' ? 'Secret saved – type to replace' : 'OAuth Client Secret' ?>">
+                            </div>
                         </div>
                     </div>
                     <div class="row g-2">
@@ -196,6 +254,16 @@ require_once __DIR__ . '/../includes/header.php';
                     </div>
                     <button class="btn btn-primary btn-sm"><i class="fas fa-save me-1"></i> Save Settings</button>
                 </form>
+                <div class="d-flex gap-2 mt-2">
+                    <form method="POST" class="m-0"><?= csrf_field() ?><input type="hidden" name="action" value="oauth_start">
+                        <button class="btn btn-outline-primary btn-sm"><i class="fab fa-google me-1"></i> Connect Google Account</button>
+                    </form>
+                    <?php if ($oauth_connected): ?>
+                    <form method="POST" class="m-0"><?= csrf_field() ?><input type="hidden" name="action" value="oauth_disconnect">
+                        <button class="btn btn-outline-danger btn-sm">Disconnect Google Account</button>
+                    </form>
+                    <?php endif; ?>
+                </div>
             </div>
         </div>
     </div>
