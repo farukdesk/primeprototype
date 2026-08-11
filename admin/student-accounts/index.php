@@ -242,6 +242,17 @@ require_once __DIR__ . '/../includes/header.php';
                     <input type="number" name="bulk_project_fee" class="form-control form-control-sm"
                            min="0" step="0.01" placeholder="&mdash;">
                 </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold small mb-1">Payment Start Month</label>
+                    <select name="bulk_payment_start_month" class="form-select form-select-sm">
+                        <option value="">&mdash; No change &mdash;</option>
+                        <?php foreach ([1 => 'January', 2 => 'February', 3 => 'March', 4 => 'April',
+                                        5 => 'May', 6 => 'June', 7 => 'July', 8 => 'August',
+                                        9 => 'September', 10 => 'October', 11 => 'November', 12 => 'December'] as $mn => $mname): ?>
+                        <option value="<?= $mn ?>"><?= $mname ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
             </div>
             <div class="d-flex gap-2 mt-3">
                 <button type="submit" class="btn btn-warning btn-sm">
@@ -463,7 +474,8 @@ require_once __DIR__ . '/../includes/header.php';
             return;
         }
         var fields = ['bulk_cf_program_id', 'bulk_dept_id', 'bulk_total_semesters',
-                      'bulk_tuition_per_semester', 'bulk_monthly_fixed', 'bulk_project_fee'];
+                      'bulk_tuition_per_semester', 'bulk_monthly_fixed', 'bulk_project_fee',
+                      'bulk_payment_start_month'];
         var any = fields.some(function (f) {
             var el = form.elements[f];
             return el && el.value !== '';

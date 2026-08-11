@@ -42,6 +42,7 @@ $semesters_raw = trim((string)($_POST['bulk_total_semesters']      ?? ''));
 $tuition_raw   = trim((string)($_POST['bulk_tuition_per_semester'] ?? ''));
 $monthly_raw   = trim((string)($_POST['bulk_monthly_fixed']        ?? ''));
 $project_raw   = trim((string)($_POST['bulk_project_fee']          ?? ''));
+$start_month   = (int)($_POST['bulk_payment_start_month'] ?? 0); // 0 = no change
 
 $total_semesters = $semesters_raw !== '' ? (int)$semesters_raw           : null;
 $tuition         = $tuition_raw   !== '' ? round((float)$tuition_raw, 2) : null;
@@ -54,8 +55,12 @@ if (empty($ids)) {
     $errors[] = 'No student accounts selected.';
 }
 if ($cf_program_id <= 0 && $dept_id <= 0 && $total_semesters === null
-    && $tuition === null && $monthly_fixed === null && $project_fee === null) {
+    && $tuition === null && $monthly_fixed === null && $project_fee === null
+    && $start_month <= 0) {
     $errors[] = 'No changes specified. Set at least one field.';
+}
+if ($start_month !== 0 && ($start_month < 1 || $start_month > 12)) {
+    $errors[] = 'Payment start month must be between 1 and 12.';
 }
 if ($total_semesters !== null && $total_semesters <= 0) $errors[] = 'Total semesters must be greater than 0.';
 if ($tuition       !== null && $tuition       < 0)      $errors[] = 'Tuition per semester cannot be negative.';
@@ -137,6 +142,18 @@ if (empty($errors)) {
                 $set[]     = 'project_fee = ?';
                 $params[]  = $project_fee;
                 $changes[] = 'project fee -> ' . number_format($project_fee, 2);
+            }
+
+            if ($start_month >= 1 && $start_month <= 12) {
+                // Bi-semester packages use bi_semester_start_month,
+                // tri-semester packages use tri_semester_start_month.
+                $sem_count = $total_semesters ?? (int)$pkg['total_semesters'];
+                $month_col = $sem_count > SFP_MAX_BI_SEMESTER_COUNT
+                    ? 'tri_semester_start_month'
+                    : 'bi_semester_start_month';
+                $set[]     = $month_col . ' = ?';
+                $params[]  = $start_month;
+                $changes[] = 'payment start month -> ' . sfp_get_month_name(1, $start_month);
             }
 
             if (!empty($set)) {
