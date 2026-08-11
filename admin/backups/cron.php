@@ -29,6 +29,12 @@ if (bk_setting_get('auto_enabled', '0') !== '1') {
 // Do not run twice on the same day (unless forced).
 $force = $is_cli ? in_array('--force', $argv ?? [], true) : (($_GET['force'] ?? '') === '1');
 try {
+    // First, fail anything stuck in "running" so a dead run from a previous
+    // day/hour does not block today's backup.
+    $stale = bk_mark_stale();
+    if ($stale > 0) {
+        echo 'Marked ' . $stale . " stale running backup(s) as failed.\n";
+    }
     $done = db()->query(
         "SELECT COUNT(*) FROM sys_backups
          WHERE backup_type = 'auto' AND status IN ('running','completed')

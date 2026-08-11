@@ -56,6 +56,31 @@ function bk_fmt_bytes($b): string
     return round($b, 1) . ' PB';
 }
 
+/**
+ * Mark backups stuck in 'running' as failed. A backup that has been
+ * "running" longer than the stale window means the PHP process died
+ * (timeout, out of memory, killed) without reaching the catch block.
+ * Returns the number of rows marked.
+ */
+function bk_mark_stale(?int $hours = null): int
+{
+    $hours = $hours ?? max(1, (int)bk_setting_get('stale_after_hours', '6'));
+    try {
+        $st = db()->prepare(
+            "UPDATE sys_backups
+             SET status = 'failed',
+                 log = CONCAT(COALESCE(log, ''),
+                              '\nERROR: marked as failed - the backup process died or timed out (stuck in running for over ', ?, ' hour(s)).')
+             WHERE status = 'running'
+               AND created_at < DATE_SUB(NOW(), INTERVAL ? HOUR)"
+        );
+        $st->execute([$hours, $hours]);
+        return (int)$st->rowCount();
+    } catch (Throwable $e) {
+        return 0;
+    }
+}
+
 // ── Google Drive client (service account, raw REST) ────────────────────────
 
 /** Get (and cache) an OAuth2 access token for the configured service account. */
@@ -249,10 +274,33 @@ function bk_sql_value(PDO $pdo, mixed $v): string
     return str_replace(["\r", "\n"], ['\\r', '\\n'], $pdo->quote((string)$v));
 }
 
-/** Pure-PHP full database dump → gzip file (one statement per line). */
+/**
+ * Plain UNBUFFERED PDO used only for dumping. Bypasses the row-snapshot
+ * db() wrapper (far too slow for full-table reads) and streams result
+ * sets row-by-row so huge tables do not exhaust memory.
+ */
+function bk_dump_pdo(): PDO
+{
+    return new PDO(
+        sprintf('mysql:host=%s;port=%s;dbname=%s;charset=%s', DB_HOST, DB_PORT, DB_NAME, DB_CHARSET),
+        DB_USER, DB_PASS,
+        [
+            PDO::ATTR_ERRMODE                  => PDO::ERRMODE_EXCEPTION,
+            PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => false,
+        ]
+    );
+}
+
+/**
+ * Pure-PHP full database dump → gzip file (one statement per line).
+ *
+ * Each table is read ONCE with a streaming cursor. The previous
+ * implementation used "LIMIT 200 OFFSET n" which re-scans the table for
+ * every page (O(n²)) - on large tables that made backups run for days.
+ */
 function bk_dump_database(string $gz_path, array &$log): void
 {
-    $pdo = db();
+    $pdo = bk_dump_pdo();
     $gz  = gzopen($gz_path, 'wb6');
     if (!$gz) throw new RuntimeException('Cannot create dump file in temp dir.');
     gzwrite($gz, "-- PUMIS database backup " . date('c') . "\nSET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS=0;\n");
@@ -260,26 +308,34 @@ function bk_dump_database(string $gz_path, array &$log): void
     $tables = $pdo->query('SHOW FULL TABLES')->fetchAll(PDO::FETCH_NUM);
     foreach ($tables as [$table, $ttype]) {
         if (strcasecmp((string)$ttype, 'VIEW') === 0) {
-            $row = $pdo->query('SHOW CREATE VIEW `' . $table . '`')->fetch(PDO::FETCH_NUM);
+            $stmt = $pdo->query('SHOW CREATE VIEW `' . $table . '`');
+            $row  = $stmt->fetch(PDO::FETCH_NUM);
+            $stmt->closeCursor();
             gzwrite($gz, "DROP VIEW IF EXISTS `$table`;\n" . preg_replace('/\s+/', ' ', (string)$row[1]) . ";\n");
             continue;
         }
-        $row = $pdo->query('SHOW CREATE TABLE `' . $table . '`')->fetch(PDO::FETCH_NUM);
+        $stmt = $pdo->query('SHOW CREATE TABLE `' . $table . '`');
+        $row  = $stmt->fetch(PDO::FETCH_NUM);
+        $stmt->closeCursor();
         gzwrite($gz, "DROP TABLE IF EXISTS `$table`;\n" . str_replace("\n", ' ', (string)$row[1]) . ";\n");
 
-        $offset = 0;
-        $count  = 0;
-        while (true) {
-            $rows = $pdo->query("SELECT * FROM `$table` LIMIT 200 OFFSET $offset")->fetchAll(PDO::FETCH_ASSOC);
-            if (!$rows) break;
-            $cols = '`' . implode('`,`', array_keys($rows[0])) . '`';
-            $vals = [];
-            foreach ($rows as $r) {
-                $vals[] = '(' . implode(',', array_map(fn($v) => bk_sql_value($pdo, $v), array_values($r))) . ')';
+        // Stream the table once; write INSERTs in batches of 200 rows.
+        $stmt  = $pdo->query("SELECT * FROM `$table`");
+        $count = 0;
+        $cols  = '';
+        $batch = [];
+        while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            if ($cols === '') $cols = '`' . implode('`,`', array_keys($r)) . '`';
+            $batch[] = '(' . implode(',', array_map(fn($v) => bk_sql_value($pdo, $v), array_values($r))) . ')';
+            $count++;
+            if (count($batch) >= 200) {
+                gzwrite($gz, "INSERT INTO `$table` ($cols) VALUES " . implode(',', $batch) . ";\n");
+                $batch = [];
             }
-            gzwrite($gz, "INSERT INTO `$table` ($cols) VALUES " . implode(',', $vals) . ";\n");
-            $count  += count($rows);
-            $offset += 200;
+        }
+        $stmt->closeCursor();
+        if (!empty($batch)) {
+            gzwrite($gz, "INSERT INTO `$table` ($cols) VALUES " . implode(',', $batch) . ";\n");
         }
         $log[] = "db: $table ($count rows)";
     }
@@ -331,14 +387,43 @@ function bk_run_backup(string $scope, string $type, string $retention, ?int $use
 {
     @set_time_limit(0);
     @ignore_user_abort(true);
+    @ini_set('memory_limit', '512M');
     $scope = in_array($scope, ['db', 'files', 'full'], true) ? $scope : 'full';
     $log   = [];
+
+    // House-keeping: fail anything stuck in "running", then refuse to start
+    // a second concurrent backup (they compete for CPU/temp space and pile up).
+    $stale_h = max(1, (int)bk_setting_get('stale_after_hours', '6'));
+    bk_mark_stale($stale_h);
+    $running_id = db()->query("SELECT id FROM sys_backups WHERE status = 'running' LIMIT 1")->fetchColumn();
+    if ($running_id) {
+        return [false, 'Backup #' . (int)$running_id . ' is still running. If it is stuck, it will be marked as failed automatically after ' . $stale_h . ' hour(s).'];
+    }
 
     db()->prepare('INSERT INTO sys_backups (backup_type, scope, retention_class, status, created_by) VALUES (?,?,?,?,?)')
         ->execute([$type, $scope, $retention, 'running', $user_id]);
     $id    = (int)db()->lastInsertId();
     $stamp = date('Y-m-d_His');
     $tmp   = bk_tmp_dir();
+
+    // Watchdog: if PHP dies mid-run (max_execution_time, out of memory,
+    // killed process) the catch block below never executes and the row
+    // would sit in "running" forever. The shutdown handler still runs on
+    // fatal errors, so mark the backup failed from there.
+    register_shutdown_function(static function () use ($id) {
+        try {
+            $st = db()->prepare('SELECT status FROM sys_backups WHERE id = ?');
+            $st->execute([$id]);
+            if ($st->fetchColumn() === 'running') {
+                $err = error_get_last();
+                $msg = "\nERROR: backup terminated unexpectedly (timeout / out of memory / process killed)"
+                     . ($err ? ' - ' . $err['message'] : '');
+                db()->prepare("UPDATE sys_backups SET status = 'failed', log = CONCAT(COALESCE(log, ''), ?) WHERE id = ?")
+                    ->execute([$msg, $id]);
+            }
+        } catch (Throwable $e) {
+        }
+    });
 
     try {
         if ($scope === 'db' || $scope === 'full') {
