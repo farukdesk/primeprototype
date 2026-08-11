@@ -83,16 +83,70 @@ function bk_mark_stale(?int $hours = null): int
 
 // ── Google Drive client (service account, raw REST) ────────────────────────
 
-/** Get (and cache) an OAuth2 access token for the configured service account. */
+/** 'oauth' when a personal Google account is connected, otherwise 'service'. */
+function bk_drive_auth_mode(): string
+{
+    if ((string)bk_setting_get('oauth_refresh_token', '') !== ''
+        && (string)bk_setting_get('oauth_client_id', '') !== '') {
+        return 'oauth';
+    }
+    return 'service';
+}
+
+/** Access token via OAuth refresh token (connected personal Google account). */
+function bk_drive_token_oauth(): string
+{
+    $client_id     = (string)bk_setting_get('oauth_client_id', '');
+    $client_secret = (string)bk_setting_get('oauth_client_secret', '');
+    $refresh       = (string)bk_setting_get('oauth_refresh_token', '');
+    if ($client_id === '' || $client_secret === '' || $refresh === '') {
+        throw new RuntimeException('Google account is not connected – save the OAuth Client ID/Secret and click “Connect Google Account” in Backup Settings.');
+    }
+    $now = time();
+    $ch = curl_init('https://oauth2.googleapis.com/token');
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 60,
+        CURLOPT_POSTFIELDS     => http_build_query([
+            'grant_type'    => 'refresh_token',
+            'client_id'     => $client_id,
+            'client_secret' => $client_secret,
+            'refresh_token' => $refresh,
+        ]),
+    ]);
+    $resp = curl_exec($ch);
+    $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+    curl_close($ch);
+    $json = json_decode((string)$resp, true);
+    if ($code !== 200 || empty($json['access_token'])) {
+        throw new RuntimeException('Google OAuth token refresh failed (HTTP ' . $code . '): ' . substr((string)$resp, 0, 300) . ' – reconnect the Google account in Backup Settings.');
+    }
+    bk_setting_set('drive_token_cache', json_encode([
+        'token'   => $json['access_token'],
+        'expires' => $now + max(60, (int)($json['expires_in'] ?? 3600) - 100),
+    ]));
+    return (string)$json['access_token'];
+}
+
+/**
+ * Get (and cache) an OAuth2 access token.
+ * Prefers the connected personal Google account (its Drive storage is used
+ * for uploads); falls back to the service account JWT flow.
+ */
 function bk_drive_token(): string
 {
-    $sa = json_decode((string)bk_setting_get('drive_service_account_json', ''), true);
-    if (!is_array($sa) || empty($sa['client_email']) || empty($sa['private_key'])) {
-        throw new RuntimeException('Google Drive is not configured – paste your service account JSON in Backup Settings.');
-    }
     $cache = json_decode((string)bk_setting_get('drive_token_cache', ''), true);
     if (is_array($cache) && ($cache['expires'] ?? 0) > time() + 60 && !empty($cache['token'])) {
         return (string)$cache['token'];
+    }
+    if (bk_drive_auth_mode() === 'oauth') {
+        return bk_drive_token_oauth();
+    }
+
+    $sa = json_decode((string)bk_setting_get('drive_service_account_json', ''), true);
+    if (!is_array($sa) || empty($sa['client_email']) || empty($sa['private_key'])) {
+        throw new RuntimeException('Google Drive is not configured – connect a Google account or paste your service account JSON in Backup Settings.');
     }
 
     $b64 = fn(string $d) => rtrim(strtr(base64_encode($d), '+/', '-_'), '=');
@@ -180,8 +234,9 @@ function bk_drive_explain(int $code, string $body): string
     if (str_contains($r, 'storagequotaexceeded') || str_contains($r, 'storage quota')) {
         return 'Service accounts have NO Drive storage of their own, so uploads into a folder in a personal '
              . '"My Drive" always fail even when the folder is shared (the uploaded file would be owned by the '
-             . 'service account). Fix: create the backup folder inside a Google Workspace SHARED DRIVE, add the '
-             . 'service account email as a member (Content manager), and put that folder ID in Backup Settings.';
+             . 'service account). Fix: either use “Connect Google Account” in Backup Settings so uploads use '
+             . 'your own account\'s storage, or (Google Workspace only) create the backup folder inside a '
+             . 'SHARED DRIVE and add the service account as Content manager.';
     }
     if (str_contains($r, 'accessnotconfigured') || str_contains($r, 'service_disabled') || str_contains($r, 'has not been used')) {
         return 'The Google Drive API is not enabled for this Google Cloud project - enable it under APIs & Services.';
