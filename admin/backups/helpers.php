@@ -149,7 +149,52 @@ function bk_drive_test(): string
         }
         $msg .= ' Folder “' . ($json['name'] ?? $folder) . '” is accessible.';
     }
+
+    // Real WRITE test: upload a tiny file and delete it again. This catches
+    // errors the read-only checks above miss (e.g. 403 storageQuotaExceeded
+    // because the folder is in a personal My Drive instead of a Shared Drive).
+    $tmp = bk_tmp_dir() . '/drive-write-test.txt';
+    file_put_contents($tmp, 'PUMIS backup write test ' . date('c'));
+    try {
+        $test_id = bk_drive_upload($tmp, 'pumis-write-test.txt');
+        bk_drive_delete($test_id);
+        $msg .= ' Test upload succeeded – backups can be written to Drive.';
+    } finally {
+        @unlink($tmp);
+    }
     return $msg;
+}
+
+/** Turn a Google Drive error response body into an actionable hint. */
+function bk_drive_explain(int $code, string $body): string
+{
+    $reason  = '';
+    $message = '';
+    $json = json_decode(trim($body), true);
+    if (is_array($json)) {
+        $message = (string)($json['error']['message'] ?? '');
+        $reason  = (string)($json['error']['errors'][0]['reason'] ?? ($json['error']['status'] ?? ''));
+    }
+    $r = strtolower($reason . ' ' . $message);
+
+    if (str_contains($r, 'storagequotaexceeded') || str_contains($r, 'storage quota')) {
+        return 'Service accounts have NO Drive storage of their own, so uploads into a folder in a personal '
+             . '"My Drive" always fail even when the folder is shared (the uploaded file would be owned by the '
+             . 'service account). Fix: create the backup folder inside a Google Workspace SHARED DRIVE, add the '
+             . 'service account email as a member (Content manager), and put that folder ID in Backup Settings.';
+    }
+    if (str_contains($r, 'accessnotconfigured') || str_contains($r, 'service_disabled') || str_contains($r, 'has not been used')) {
+        return 'The Google Drive API is not enabled for this Google Cloud project - enable it under APIs & Services.';
+    }
+    if (str_contains($r, 'insufficientpermissions') || str_contains($r, 'insufficientfilepermissions')
+        || str_contains($r, 'notfound') || $code === 404) {
+        return 'The service account cannot write to the configured folder - share the folder (or Shared Drive) with '
+             . 'the service account email as Editor / Content manager, and double-check the Drive Folder ID.';
+    }
+    if ($code === 401 || str_contains($r, 'authentication') || str_contains($r, 'invalid_grant')) {
+        return 'Authentication problem - re-paste the service account JSON key in Backup Settings (a new key may be needed).';
+    }
+    return $message !== '' ? $message : 'Check the service account key, Drive API status, and folder sharing.';
 }
 
 /** Chunked resumable upload. Returns the Drive file ID. */
@@ -179,7 +224,13 @@ function bk_drive_upload(string $path, string $name): string
     $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
     curl_close($ch);
     if ($code !== 200 || !preg_match('/^location:\s*(.+)$/mi', (string)$resp, $m)) {
-        throw new RuntimeException('Drive: could not start upload session (HTTP ' . $code . ').');
+        $p    = strrpos((string)$resp, "\r\n\r\n");
+        $body = $p !== false ? trim(substr((string)$resp, $p + 4)) : trim((string)$resp);
+        throw new RuntimeException(
+            'Drive: could not start upload session (HTTP ' . $code . '). '
+            . bk_drive_explain($code, $body)
+            . ($body !== '' ? ' [Google said: ' . substr($body, 0, 300) . ']' : '')
+        );
     }
     $session = trim($m[1]);
 
@@ -214,7 +265,11 @@ function bk_drive_upload(string $path, string $name): string
             break;
         }
         fclose($fh);
-        throw new RuntimeException('Drive: chunk upload failed (HTTP ' . $code . '): ' . substr((string)$resp, 0, 200));
+        throw new RuntimeException(
+            'Drive: chunk upload failed (HTTP ' . $code . '). '
+            . bk_drive_explain($code, (string)$resp)
+            . ' [Google said: ' . substr((string)$resp, 0, 300) . ']'
+        );
     }
     fclose($fh);
     if (!$file_id) throw new RuntimeException('Drive: upload finished but no file ID was returned.');
