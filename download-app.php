@@ -4,7 +4,7 @@
 // Replace YOUTUBE_VIDEO_ID below with your actual YouTube
 // Shorts / 9:16 video ID (the part after "v=" or "shorts/").
 // ============================================================
-$YOUTUBE_VIDEO_ID = 'YOUTUBE_VIDEO_ID';
+$YOUTUBE_VIDEO_ID = 'tTRdKca_JJU';
 $APK_URL          = 'https://primeuniversity.ac.bd/downloads/app/pu-portal-v1.0.7.apk';
 $WEB_PORTAL_URL   = 'https://primeuniversity.ac.bd/admin/index.php';
 $APP_VERSION      = 'v1.0.7';
@@ -42,7 +42,8 @@ $APP_VERSION      = 'v1.0.7';
   header{position:sticky;top:0;z-index:50;background:rgba(13,27,62,.95);backdrop-filter:blur(8px);color:#fff}
   .nav{display:flex;align-items:center;justify-content:space-between;padding:.8rem 0}
   .brand{display:flex;align-items:center;gap:.6rem;font-weight:700;font-size:1.05rem}
-  .brand .logo{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,var(--gold),#ffdd66);display:grid;place-items:center;color:var(--navy);font-weight:800;font-size:1rem}
+  .brand .logo{height:42px;padding:4px 8px;border-radius:10px;background:#fff;display:flex;align-items:center;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+  .brand .logo img{height:100%;width:auto;object-fit:contain}
   .nav-cta{display:inline-flex;align-items:center;gap:.45rem;background:var(--accent);padding:.5rem 1rem;border-radius:999px;font-weight:600;font-size:.85rem;transition:.25s}
   .nav-cta:hover{background:var(--accent-2);transform:translateY(-1px)}
 
@@ -66,6 +67,11 @@ $APP_VERSION      = 'v1.0.7';
   .btn small{display:block;font-weight:400;font-size:.7rem;opacity:.85;line-height:1;margin-top:2px}
   .btn .stack{display:flex;flex-direction:column;align-items:flex-start;line-height:1.2;text-align:left}
   .hero-note{font-size:.82rem;color:#9fb0d0;display:flex;align-items:center;gap:.45rem}
+  .beta-alert{display:flex;gap:.8rem;align-items:flex-start;background:rgba(245,179,1,.12);border:1px solid rgba(245,179,1,.5);border-left:4px solid var(--gold);border-radius:12px;padding:.9rem 1.1rem;margin-bottom:1.6rem;max-width:36rem;text-align:left}
+  .beta-alert .ic{flex:none;font-size:1.2rem;line-height:1.3}
+  .beta-alert p{font-size:.86rem;color:#e8d9a8;margin:0}
+  .beta-alert strong{color:var(--gold)}
+  @media (max-width:960px){.beta-alert{margin-inline:auto}}
 
   /* ---------- Video (highlighted, 9:16) ---------- */
   .video-wrap{display:flex;flex-direction:column;align-items:center;gap:.9rem}
@@ -138,8 +144,8 @@ $APP_VERSION      = 'v1.0.7';
 
 <header>
   <div class="container nav">
-    <a class="brand" href="#">
-      <span class="logo">PU</span>
+    <a class="brand" href="https://primeuniversity.ac.bd">
+      <span class="logo"><img src="/assets/img/logo/logo-black.png" alt="Prime University"></span>
       <span>PU Portal <small style="opacity:.6;font-weight:400">&mdash; Prime University</small></span>
     </a>
     <a class="nav-cta" href="<?= htmlspecialchars($APK_URL) ?>" download>
@@ -153,9 +159,13 @@ $APP_VERSION      = 'v1.0.7';
 <section class="hero">
   <div class="container hero-grid">
     <div>
-      <span class="badge"><span class="dot"></span> New &middot; Android App <?= htmlspecialchars($APP_VERSION) ?></span>
+      <span class="badge"><span class="dot"></span> Beta &middot; Android App <?= htmlspecialchars($APP_VERSION) ?></span>
       <h1>Your Campus, <span>In Your Pocket.</span></h1>
       <p class="lead">The official <strong>Prime University Student Portal</strong> app. Check results, class routines, notices, fees and more &mdash; anytime, anywhere. Watch the quick video tutorial to install it in under 2 minutes.</p>
+      <div class="beta-alert">
+        <span class="ic">&#9888;&#65039;</span>
+        <p><strong>Beta Version &mdash; For Testing Purposes Only.</strong> This is a beta release of the PU Portal app. A final version is currently awaiting <strong>Google Play Store</strong> review. Once approved, you will be able to install the app directly from the Google Play Store.</p>
+      </div>
       <div class="cta-row">
         <a class="btn btn-primary" href="<?= htmlspecialchars($APK_URL) ?>" download>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M17.6 9.48l1.84-3.18c.16-.31.04-.7-.26-.85-.29-.15-.65-.06-.83.22l-1.88 3.24a11.46 11.46 0 0 0-8.94 0L5.65 5.67c-.19-.29-.55-.37-.84-.22-.3.15-.42.54-.26.85L6.4 9.48A10.81 10.81 0 0 0 1 18h22a10.81 10.81 0 0 0-5.4-8.52zM7 15.25a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5zm10 0a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5z"/></svg>
@@ -238,7 +248,7 @@ $APP_VERSION      = 'v1.0.7';
   <div class="container">
     <div class="dl-banner">
       <h2>Ready to get started?</h2>
-      <p>Download the PU Portal app now &mdash; it takes less than 2 minutes to install.</p>
+      <p>Download the PU Portal beta app now &mdash; it takes less than 2 minutes to install.<br><small style="color:#b58900">&#9888;&#65039; Beta release for testing purposes. The final version will be available on the Google Play Store once its review is approved.</small></p>
       <a class="btn btn-primary" href="<?= htmlspecialchars($APK_URL) ?>" download>
         <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 16l-6-6h4V4h4v6h4l-6 6zm-8 2h16v2H4v-2z"/></svg>
         Download PU Portal <?= htmlspecialchars($APP_VERSION) ?>
