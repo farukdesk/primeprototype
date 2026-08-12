@@ -42,7 +42,8 @@ $APP_VERSION      = 'v1.0.7';
   header{position:sticky;top:0;z-index:50;background:rgba(13,27,62,.95);backdrop-filter:blur(8px);color:#fff}
   .nav{display:flex;align-items:center;justify-content:space-between;padding:.8rem 0}
   .brand{display:flex;align-items:center;gap:.6rem;font-weight:700;font-size:1.05rem}
-  .brand .logo{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,var(--gold),#ffdd66);display:grid;place-items:center;color:var(--navy);font-weight:800;font-size:1rem}
+  .brand .logo{height:42px;padding:4px 8px;border-radius:10px;background:#fff;display:flex;align-items:center;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+  .brand .logo img{height:100%;width:auto;object-fit:contain}
   .nav-cta{display:inline-flex;align-items:center;gap:.45rem;background:var(--accent);padding:.5rem 1rem;border-radius:999px;font-weight:600;font-size:.85rem;transition:.25s}
   .nav-cta:hover{background:var(--accent-2);transform:translateY(-1px)}
 
@@ -138,8 +139,8 @@ $APP_VERSION      = 'v1.0.7';
 
 <header>
   <div class="container nav">
-    <a class="brand" href="#">
-      <span class="logo">PU</span>
+    <a class="brand" href="https://primeuniversity.ac.bd">
+      <span class="logo"><img src="/assets/img/logo/logo-black.png" alt="Prime University"></span>
       <span>PU Portal <small style="opacity:.6;font-weight:400">&mdash; Prime University</small></span>
     </a>
     <a class="nav-cta" href="<?= htmlspecialchars($APK_URL) ?>" download>
