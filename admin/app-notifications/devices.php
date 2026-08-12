@@ -28,7 +28,9 @@ $spt_ver_col = $has_app_version('student_push_tokens') ? 't.app_version' : 'NULL
 $apt_ver_col = $has_app_version('api_push_tokens')     ? 't.app_version' : 'NULL AS app_version';
 
 // ── Student devices ─────────────────────────────────────────────────────────
-$student_devices = [];
+$student_devices  = [];
+$student_query_error = null;
+$user_query_error    = null;
 try {
     $sql = "SELECT t.id, t.platform, t.device_id, t.created_at, t.updated_at, $spt_ver_col,
                    u.full_name AS account_name, u.username, u.email AS account_email,
@@ -58,6 +60,7 @@ try {
     $stmt->execute($params);
     $student_devices = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Throwable $e) {
+    $student_query_error = $e->getMessage();
     error_log('APN devices: student query failed – ' . $e->getMessage());
 }
 
@@ -80,6 +83,7 @@ try {
     $stmt->execute($params);
     $user_devices = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Throwable $e) {
+    $user_query_error = $e->getMessage();
     error_log('APN devices: user query failed – ' . $e->getMessage());
 }
 
@@ -115,10 +119,20 @@ require_once __DIR__ . '/../includes/header.php';
         <span class="badge bg-primary"><?= count($student_devices) ?></span>
     </div>
     <div class="card-body p-0">
-        <?php if (empty($student_devices)): ?>
+        <?php if ($student_query_error !== null): ?>
+        <div class="alert alert-danger m-3 mb-3">
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            <strong>Student device list could not be loaded.</strong>
+            The database query failed &mdash; most likely the <code>student_push_tokens</code>
+            table is missing (run the App Notification migration) or a joined table/column
+            has changed.
+            <div class="small text-muted mt-1"><code><?= h($student_query_error) ?></code></div>
+        </div>
+        <?php elseif (empty($student_devices)): ?>
         <div class="text-center text-muted py-5">
             <i class="fas fa-mobile-alt fa-3x mb-3 opacity-25"></i>
             <p class="mb-0">No student devices found<?= $q !== '' ? ' for this search' : '' ?>.</p>
+            <p class="small mb-0 mt-1">Student devices appear here after a student signs in on the mobile app.</p>
         </div>
         <?php else: ?>
         <div class="table-responsive">
@@ -194,7 +208,13 @@ require_once __DIR__ . '/../includes/header.php';
         <span class="badge bg-primary"><?= count($user_devices) ?></span>
     </div>
     <div class="card-body p-0">
-        <?php if (empty($user_devices)): ?>
+        <?php if ($user_query_error !== null): ?>
+        <div class="alert alert-danger m-3 mb-3">
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            <strong>Employee device list could not be loaded.</strong>
+            <div class="small text-muted mt-1"><code><?= h($user_query_error) ?></code></div>
+        </div>
+        <?php elseif (empty($user_devices)): ?>
         <div class="text-center text-muted py-5">
             <i class="fas fa-mobile-alt fa-3x mb-3 opacity-25"></i>
             <p class="mb-0">No employee/user devices found<?= $q !== '' ? ' for this search' : '' ?>.</p>
