@@ -453,19 +453,49 @@ function bk_dump_database(string $gz_path, array &$log): void
     gzclose($gz);
 }
 
-/** Zip the whole site (admin's parent dir), excluding noise + configured paths. */
-function bk_archive_files(string $zip_path, array &$log): void
+/** File extensions that are already compressed – stored in the zip without recompression (much faster). */
+const BK_STORE_EXT = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'ico', 'zip', 'gz', 'bz2', 'xz', '7z', 'rar',
+                      'pdf', 'mp3', 'mp4', 'm4a', 'mov', 'avi', 'mkv', 'webm', 'woff', 'woff2'];
+
+/** Split the comma-separated Drive file IDs stored on a backup row (multi-part files backups). */
+function bk_drive_ids(?string $ids): array
 {
-    $root = realpath(__DIR__ . '/../../');
-    if (!$root) throw new RuntimeException('Cannot resolve site root.');
-    $zip = new ZipArchive();
-    if ($zip->open($zip_path, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
-        throw new RuntimeException('Cannot create zip archive in temp dir.');
+    if ($ids === null || trim($ids) === '') return [];
+    return array_values(array_filter(array_map('trim', explode(',', $ids))));
+}
+
+/** Widen sys_backups.files_drive_id to TEXT once, so multi-part Drive ID lists fit. */
+function bk_ensure_schema(): void
+{
+    try {
+        $type = db()->query(
+            "SELECT DATA_TYPE FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sys_backups' AND COLUMN_NAME = 'files_drive_id'"
+        )->fetchColumn();
+        if ($type && strtolower((string)$type) !== 'text') {
+            db()->exec('ALTER TABLE sys_backups MODIFY files_drive_id TEXT DEFAULT NULL');
+        }
+    } catch (Throwable $e) {
+        // non-fatal – single-part backups still fit in the original VARCHAR(128)
     }
+}
+
+/** Persist progress into the backup row's log so long runs can be followed from the UI. */
+function bk_progress(int $backup_id, array $log): void
+{
+    try {
+        db()->prepare('UPDATE sys_backups SET log = ? WHERE id = ?')
+            ->execute([implode("\n", $log), $backup_id]);
+    } catch (Throwable $e) {
+    }
+}
+
+/** Iterator over all site files honouring the built-in and configured excludes. */
+function bk_files_iterator(string $root): RecursiveIteratorIterator
+{
     $skip_names = ['.git', 'node_modules'];
     $extra = array_values(array_filter(array_map('trim', explode("\n", (string)bk_setting_get('exclude_paths', '')))));
-
-    $it = new RecursiveIteratorIterator(
+    return new RecursiveIteratorIterator(
         new RecursiveCallbackFilterIterator(
             new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS),
             function ($f) use ($root, $skip_names, $extra) {
@@ -479,14 +509,85 @@ function bk_archive_files(string $zip_path, array &$log): void
         ),
         RecursiveIteratorIterator::LEAVES_ONLY
     );
-    $n = 0;
-    foreach ($it as $file) {
-        if (!$file->isFile()) continue;
-        $rel = str_replace('\\', '/', ltrim(substr($file->getPathname(), strlen($root)), '/\\'));
-        if ($zip->addFile($file->getPathname(), $rel)) $n++;
+}
+
+/**
+ * Memory-safe files backup: the site is archived in PARTS.
+ *
+ * The previous implementation added EVERY file to one ZipArchive and wrote
+ * it in a single close() – on a large site that exhausted RAM / open-file
+ * limits and the process was killed, so the backup always failed. Now files
+ * are grouped into parts of at most ~files_part_mb MB (default 250) or 2000
+ * entries; each part is zipped, uploaded to Drive and deleted locally BEFORE
+ * the next part starts, so memory, file handles and temp disk usage stay
+ * bounded regardless of site size.
+ *
+ * @return array{0: string, 1: string, 2: int, 3: int} [filename summary, csv drive ids, total bytes, part count]
+ */
+function bk_archive_files_parts(string $stamp, int $backup_id, array &$log): array
+{
+    $root = realpath(__DIR__ . '/../../');
+    if (!$root) throw new RuntimeException('Cannot resolve site root.');
+    $tmp         = bk_tmp_dir();
+    $part_limit  = max(50, (int)bk_setting_get('files_part_mb', '250')) * 1048576;
+    $max_entries = 2000;
+
+    // Collect paths first – a plain string list is tiny even for 100k files.
+    $files = [];
+    foreach (bk_files_iterator($root) as $f) {
+        if ($f->isFile()) $files[] = $f->getPathname();
     }
-    $log[] = "files: $n file(s) archived";
-    if (!$zip->close()) throw new RuntimeException('Zip finalisation failed.');
+
+    $ids   = [];
+    $total = 0;
+    $added = 0;
+    $part  = 0;
+    $i     = 0;
+    $count = count($files);
+
+    while ($i < $count) {
+        $part++;
+        $part_name = 'files-' . $stamp . '.part' . $part . '.zip';
+        $part_path = $tmp . '/' . $part_name;
+        $zip = new ZipArchive();
+        if ($zip->open($part_path, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+            throw new RuntimeException('Cannot create zip part in temp dir.');
+        }
+        $acc     = 0;
+        $entries = 0;
+        while ($i < $count && $acc < $part_limit && $entries < $max_entries) {
+            $path = $files[$i];
+            $i++;
+            $size = @filesize($path);
+            if ($size === false || !is_readable($path)) continue;
+            $rel = str_replace('\\', '/', ltrim(substr($path, strlen($root)), '/\\'));
+            if (!$zip->addFile($path, $rel)) continue;
+            $ext = strtolower(pathinfo($rel, PATHINFO_EXTENSION));
+            if (in_array($ext, BK_STORE_EXT, true)) {
+                $zip->setCompressionName($rel, ZipArchive::CM_STORE);
+            }
+            $acc += (int)$size;
+            $entries++;
+            $added++;
+        }
+        if (!$zip->close()) {
+            throw new RuntimeException('Zip finalisation failed on part ' . $part . ' (temp disk full?).');
+        }
+        $psize = (int)filesize($part_path);
+        try {
+            $ids[] = bk_drive_upload($part_path, $part_name);
+        } finally {
+            @unlink($part_path); // never leave big files behind, even on failure
+        }
+        $total += $psize;
+        $log[]  = "files: part $part uploaded ($entries file(s), " . bk_fmt_bytes($psize) . ')';
+        bk_progress($backup_id, $log);
+        gc_collect_cycles();
+    }
+
+    $log[] = "files: $added file(s) archived in $part part(s), " . bk_fmt_bytes($total) . ' total';
+    $summary = 'files-' . $stamp . ($part > 1 ? ' (' . $part . ' parts)' : '.part1.zip');
+    return [$summary, implode(',', $ids), $total, $part];
 }
 
 /**
@@ -548,15 +649,11 @@ function bk_run_backup(string $scope, string $type, string $retention, ?int $use
             $log[] = 'database uploaded to Drive (' . bk_fmt_bytes($size) . ')';
         }
         if ($scope === 'files' || $scope === 'full') {
-            $name = 'files-' . $stamp . '.zip';
-            $path = $tmp . '/' . $name;
-            bk_archive_files($path, $log);
-            $size = (int)filesize($path);
-            $drive_id = bk_drive_upload($path, $name);
-            @unlink($path);
+            bk_ensure_schema();
+            [$fname, $ids_csv, $fsize, $parts] = bk_archive_files_parts($stamp, $id, $log);
             db()->prepare('UPDATE sys_backups SET files_filename=?, files_drive_id=?, files_size_bytes=? WHERE id=?')
-                ->execute([$name, $drive_id, $size, $id]);
-            $log[] = 'files archive uploaded to Drive (' . bk_fmt_bytes($size) . ')';
+                ->execute([$fname, $ids_csv !== '' ? $ids_csv : null, $fsize, $id]);
+            $log[] = 'files backup uploaded to Drive (' . bk_fmt_bytes($fsize) . ($parts > 1 ? ', ' . $parts . ' parts' : '') . ')';
         }
         db()->prepare('UPDATE sys_backups SET status=?, log=?, completed_at=NOW() WHERE id=?')
             ->execute(['completed', implode("\n", $log), $id]);
@@ -588,7 +685,9 @@ function bk_prune(array &$log = []): int
     $n = 0;
     foreach ($stmt->fetchAll() as $b) {
         bk_drive_delete($b['db_drive_id'] ?? null);
-        bk_drive_delete($b['files_drive_id'] ?? null);
+        foreach (bk_drive_ids($b['files_drive_id'] ?? null) as $fid) {
+            bk_drive_delete($fid);
+        }
         db()->prepare('DELETE FROM sys_backups WHERE id = ?')->execute([(int)$b['id']]);
         $log[] = 'pruned backup #' . $b['id'] . ' (' . $b['retention_class'] . ', ' . $b['created_at'] . ')';
         $n++;
@@ -649,29 +748,37 @@ function bk_restore_db(array $b, ?int $user_id): array
     }
 }
 
-/** Restore the site files from a backup's Drive archive (extracts over the site root). */
+/** Restore the site files from a backup's Drive archive(s) – parts are
+ *  downloaded and extracted one at a time so disk usage stays bounded. */
 function bk_restore_files(array $b, ?int $user_id): array
 {
-    if (empty($b['files_drive_id'])) return [false, 'This backup has no files archive.'];
+    $ids = bk_drive_ids($b['files_drive_id'] ?? null);
+    if (empty($ids)) return [false, 'This backup has no files archive.'];
     @set_time_limit(0);
     @ignore_user_abort(true);
-    $tmp = bk_tmp_dir() . '/restore-files-' . (int)$b['id'] . '.zip';
-    try {
-        bk_drive_download((string)$b['files_drive_id'], $tmp);
-        $root = realpath(__DIR__ . '/../../');
-        $zip  = new ZipArchive();
-        if ($zip->open($tmp) !== true) throw new RuntimeException('Cannot open downloaded archive.');
-        if (!$zip->extractTo($root)) throw new RuntimeException('Extraction failed – check file permissions.');
-        $n = $zip->numFiles;
-        $zip->close();
-        @unlink($tmp);
-        db()->prepare('UPDATE sys_backups SET restored_at=NOW(), restored_by=? WHERE id=?')
-            ->execute([$user_id, (int)$b['id']]);
-        return [true, 'Files restored from backup #' . $b['id'] . ' (' . $n . ' entries extracted).'];
-    } catch (Throwable $e) {
-        @unlink($tmp);
-        return [false, 'Files restore failed: ' . $e->getMessage()];
+    $root = realpath(__DIR__ . '/../../');
+    if (!$root) return [false, 'Cannot resolve site root.'];
+    $n = 0;
+    $p = 0;
+    foreach ($ids as $fid) {
+        $p++;
+        $tmp = bk_tmp_dir() . '/restore-files-' . (int)$b['id'] . '-part' . $p . '.zip';
+        try {
+            bk_drive_download($fid, $tmp);
+            $zip = new ZipArchive();
+            if ($zip->open($tmp) !== true) throw new RuntimeException('Cannot open downloaded archive (part ' . $p . ').');
+            if (!$zip->extractTo($root)) throw new RuntimeException('Extraction failed on part ' . $p . ' – check file permissions.');
+            $n += $zip->numFiles;
+            $zip->close();
+            @unlink($tmp);
+        } catch (Throwable $e) {
+            @unlink($tmp);
+            return [false, 'Files restore failed: ' . $e->getMessage()];
+        }
     }
+    db()->prepare('UPDATE sys_backups SET restored_at=NOW(), restored_by=? WHERE id=?')
+        ->execute([$user_id, (int)$b['id']]);
+    return [true, 'Files restored from backup #' . $b['id'] . ' (' . $n . ' entries extracted from ' . $p . ' part(s)).'];
 }
 
 /** Status badge. */
