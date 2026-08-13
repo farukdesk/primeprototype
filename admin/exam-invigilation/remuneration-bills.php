@@ -26,6 +26,7 @@ $selected_exams = [];
 $bill_rows      = [];
 $exam_summary   = [];
 $untracked_rows = [];
+$dept_groups    = [];
 $grand_total    = 0.0;
 $grand_slots    = 0;
 $qs_base        = '';
@@ -336,6 +337,15 @@ require_once __DIR__ . '/../includes/header.php';
                         </td>
                     </tr>
                 <?php else: ?>
+                    <?php
+                    // Safety net: rebuild department groups if not already built
+                    if (empty($dept_groups)) {
+                        $dept_groups = [];
+                        foreach ($bill_rows as $row) {
+                            $dept_groups[$row['dept_name']][] = $row;
+                        }
+                    }
+                    ?>
                     <?php foreach ($dept_groups as $dept_name => $dept_rows): ?>
                     <?php
                         $dept_slots = array_sum(array_column($dept_rows, 'attended_slots'));
