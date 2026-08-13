@@ -119,13 +119,11 @@ require_once __DIR__ . '/../includes/header.php';
             <li class="breadcrumb-item active">Version History</li>
         </ol>
     </nav>
-    <a href="<?= APP_URL ?>/exam-invigilation/view.php?id=<?= $id ?>"
-       class="btn btn-outline-secondary btn-sm" style="border-radius:10px;">
-        <i class="fas fa-arrow-left me-1"></i> Back to Invigilation View
-    </a>
 </div>
 
 <?php flash_show(); ?>
+<?php require __DIR__ . '/ei-nav.php'; ?>
+<?php require __DIR__ . '/exam-tabs.php'; ?>
 
 <!-- Info banner -->
 <div class="alert alert-info d-flex align-items-start gap-2 py-2 mb-4" style="font-size:.875rem;">

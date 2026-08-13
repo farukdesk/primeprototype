@@ -128,19 +128,11 @@ require_once __DIR__ . '/../includes/header.php';
             <li class="breadcrumb-item active">Attendance</li>
         </ol>
     </nav>
-    <div class="d-flex gap-2">
-        <a href="<?= APP_URL ?>/exam-invigilation/unique-attendance.php?id=<?= $id ?>&slot_date=<?= urlencode($f_date) ?>"
-           class="btn btn-outline-warning btn-sm" style="border-radius:10px;">
-            <i class="fas fa-user-clock me-1"></i> Officials (Unique-Slot) Attendance
-        </a>
-        <a href="<?= APP_URL ?>/exam-invigilation/remuneration-bill.php?id=<?= $id ?>"
-           class="btn btn-outline-success btn-sm" style="border-radius:10px;">
-            <i class="fas fa-file-invoice-dollar me-1"></i> Remuneration Bill
-        </a>
-    </div>
 </div>
 
 <?php flash_show(); ?>
+<?php require __DIR__ . '/ei-nav.php'; ?>
+<?php require __DIR__ . '/exam-tabs.php'; ?>
 
 <div class="card mb-3">
     <div class="card-body py-2 px-3">
