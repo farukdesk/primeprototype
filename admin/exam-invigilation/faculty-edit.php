@@ -217,6 +217,14 @@ require_once __DIR__ . '/../includes/header.php';
                         sittings of the exam; department employees count only their <strong>own department's</strong> sittings.
                         Mark their per-sitting attendance on the exam's Attendance page — absent sittings are not paid.
                     </small>
+                    <?php if (!empty($fac['pay_by_unique_slot'])): ?>
+                    <div class="mt-2">
+                        <a href="<?= APP_URL ?>/exam-invigilation/faculty-attendance.php?id=<?= $fid ?>"
+                           class="btn btn-sm btn-outline-success" style="border-radius:8px;">
+                            <i class="fas fa-calendar-check me-1"></i> Mark Unique-Slot Attendance
+                        </a>
+                    </div>
+                    <?php endif; ?>
                 </div>
                 <div class="col-md-6">
                     <label class="form-label fw-medium">Signature Image</label>
