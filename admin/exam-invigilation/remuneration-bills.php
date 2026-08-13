@@ -285,8 +285,8 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
     <div class="col-md">
         <div class="card text-center py-3" style="border-left:4px solid #f39c12;">
-            <div style="font-size:1.8rem;font-weight:700;color:#f39c12;">৳<?= number_format((float)$grand_total, 2) ?></div>
-            <div class="text-muted" style="font-size:.8rem;">Total Remuneration</div>
+            <div style="font-size:1.8rem;font-weight:700;color:#f39c12;">৳<?= number_format((float)$grand_total + (float)$unique_bill_total, 2) ?></div>
+            <div class="text-muted" style="font-size:.8rem;">Total Remuneration<?= $unique_bill_total > 0 ? ' (incl. unique-slot payees)' : '' ?></div>
         </div>
     </div>
 </div>
