@@ -29,6 +29,7 @@ $untracked_rows = [];
 $dept_groups    = [];
 $grand_total    = 0.0;
 $grand_slots    = 0;
+$unique_slots   = 0;
 $qs_base        = '';
 
 if ($selected_ids) {
