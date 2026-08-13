@@ -466,6 +466,54 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
+<?php if (!empty($unique_bill_rows)): ?>
+<div class="card mt-4 <?= $print_mode ? 'border-0' : '' ?>">
+    <div class="card-header py-3 px-4">
+        <h6 class="mb-0 fw-semibold"><i class="fas fa-user-clock me-2 text-muted"></i>Unique-Slot Payees <small class="text-muted fw-normal">(paid per attended sitting)</small></h6>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-bordered mb-0 align-middle" <?= $print_mode ? 'style="font-size:12px;"' : '' ?>>
+                <thead class="table-light">
+                    <tr>
+                        <th class="px-3 text-center" style="width:40px;">#</th>
+                        <th>Name</th>
+                        <th>Department / Office</th>
+                        <th>Designation</th>
+                        <th class="text-end" style="width:110px;">Rate/Sitting</th>
+                        <th class="text-center" style="width:120px;">Attended Sittings</th>
+                        <th class="text-end" style="width:140px;">Total (৳)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($unique_bill_rows as $ubi => $ub): ?>
+                    <tr>
+                        <td class="px-3 text-center"><?= $ubi + 1 ?></td>
+                        <td class="fw-medium"><?= h($ub['name']) ?></td>
+                        <td><span class="badge bg-primary bg-opacity-10 text-primary"><?= h($ub['dept_name']) ?></span></td>
+                        <td class="text-muted" style="font-size:.85rem;"><?= $ub['designation'] ? h($ub['designation']) : '—' ?></td>
+                        <td class="text-end"><?= $ub['rate'] > 0 ? '৳' . number_format((float)$ub['rate'], 2) : '<span class="text-muted">—</span>' ?></td>
+                        <td class="text-center"><span class="badge bg-info bg-opacity-15 text-info fw-semibold"><?= (int)$ub['attended_sittings'] ?></span></td>
+                        <td class="text-end"><strong class="text-success">৳<?= number_format((float)$ub['total_remuneration'], 2) ?></strong></td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+                <tfoot class="table-light fw-semibold">
+                    <tr>
+                        <td colspan="6" class="text-end px-3">Unique-Slot Payees Total:</td>
+                        <td class="text-end text-success">৳<?= number_format((float)$unique_bill_total, 2) ?></td>
+                    </tr>
+                    <tr>
+                        <td colspan="6" class="text-end px-3">Combined Grand Total (Invigilators + Payees):</td>
+                        <td class="text-end text-success">৳<?= number_format((float)$grand_total + (float)$unique_bill_total, 2) ?></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
+
 <?php if (!$print_mode && !empty($untracked_rows)): ?>
 <div class="card mt-4 border-warning">
     <div class="card-header py-2 px-4 bg-warning bg-opacity-10 d-flex align-items-center gap-2">
