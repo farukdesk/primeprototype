@@ -196,12 +196,15 @@ class StudentRepository private constructor(context: Context) {
             )
         }
 
-    /** Change the signed-in employee's account password. */
-    suspend fun staffChangePassword(
+    /** Change the signed-in user's account password (student or employee). */
+    suspend fun changePassword(
         currentPassword: String,
         newPassword: String,
     ): AppResult<SimpleResponse> =
-        call { staffApi.changePassword(currentPassword, newPassword) }
+        call {
+            if (isStaff) staffApi.changePassword(currentPassword, newPassword)
+            else api.changePassword(currentPassword, newPassword)
+        }
 
     // ── Faculty: student attendance ──────────────────────────────────────
 

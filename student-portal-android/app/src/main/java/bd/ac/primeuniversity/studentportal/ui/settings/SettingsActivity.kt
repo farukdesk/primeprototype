@@ -52,20 +52,9 @@ class SettingsActivity : AppCompatActivity() {
         updateThemeLabel()
         binding.rowTheme.setOnClickListener { showThemeDialog() }
         binding.rowPassword.setOnClickListener {
-            if (app.repository.isStaff) {
-                // Employees have a working change-password flow backed by
-                // admin/api/staff/change-password.php.
-                startActivity(Intent(this, ChangePasswordActivity::class.java))
-            } else {
-                startActivity(
-                    FeatureActivity.open(
-                        this,
-                        R.string.feat_password_change,
-                        R.drawable.ic_lock,
-                        R.color.primary,
-                    )
-                )
-            }
+            // Students use admin/api/student/change-password.php and employees
+            // use admin/api/staff/change-password.php behind the same screen.
+            startActivity(Intent(this, ChangePasswordActivity::class.java))
         }
         binding.rowPrivacy.setOnClickListener { openPrivacyPolicy() }
         binding.btnSignOut.setOnClickListener { confirmSignOut() }
