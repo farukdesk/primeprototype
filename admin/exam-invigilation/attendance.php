@@ -145,6 +145,39 @@ if ($f_date !== '') {
             $attendance_map[$row['slot_id'] . '_' . $row['faculty_id']] = $row;
         }
     }
+
+    // ── Unique-slot payees & sittings for this date ─────────────────────────
+    $unique_payees = [];
+    $u_att_map     = [];
+    $sitting_depts = [];
+    try {
+        $unique_payees = db()->query(
+            "SELECT f.id, f.name, f.designation, f.dept_id, f.remuneration_per_slot AS rate,
+                    d.name AS dept_name, d.dept_type
+             FROM ei_faculty f
+             JOIN dept_departments d ON d.id = f.dept_id
+             WHERE f.is_active = 1 AND f.pay_by_unique_slot = 1
+             ORDER BY d.dept_type DESC, d.name ASC, f.name ASC"
+        )->fetchAll();
+    } catch (Throwable $e) {
+        $unique_payees = []; // migrations not run yet
+    }
+    if ($unique_payees) {
+        foreach ($slots as $s_row) {
+            $sitting_depts[$s_row['time_slot']][] = (int)$s_row['dept_id'];
+        }
+        try {
+            $u_att_st = db()->prepare(
+                'SELECT faculty_id, time_slot, attended FROM ei_unique_slot_attendance WHERE exam_id = ? AND slot_date = ?'
+            );
+            $u_att_st->execute([$id, $f_date]);
+            foreach ($u_att_st->fetchAll() as $ur) {
+                $u_att_map[$ur['faculty_id'] . '|' . $ur['time_slot']] = (int)$ur['attended'];
+            }
+        } catch (Throwable $e) {
+            $u_att_map = [];
+        }
+    }
 }
 
 require_once __DIR__ . '/../includes/header.php';
