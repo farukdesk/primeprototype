@@ -18,12 +18,17 @@ $page_title = 'Sync Student IDs';
 
 // Portal accounts whose users.student_sid is missing or differs from the
 // linked student record (students.portal_user_id).
+// Note: both sides of the comparison are forced to the same collation because
+// users.student_sid and students.student_id may use different utf8mb4
+// collations (general_ci vs unicode_ci), which would otherwise raise
+// error 1267 "Illegal mix of collations".
 $pending_sql =
     'SELECT u.id AS user_id, u.username, u.full_name, u.student_sid,
             s.student_id
      FROM students s
      JOIN users u ON u.id = s.portal_user_id
-     WHERE u.student_sid IS NULL OR u.student_sid <> s.student_id
+     WHERE u.student_sid IS NULL
+        OR u.student_sid COLLATE utf8mb4_unicode_ci <> s.student_id COLLATE utf8mb4_unicode_ci
      ORDER BY s.student_id ASC';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'sync_all') {
