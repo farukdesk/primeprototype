@@ -290,7 +290,13 @@ require_once __DIR__ . '/../includes/header.php';
                         <td class="fw-medium"><?= h($ub['name']) ?></td>
                         <td><span class="badge bg-primary bg-opacity-10 text-primary"><?= h($ub['dept_name']) ?></span></td>
                         <td class="text-muted" style="font-size:.85rem;"><?= $ub['designation'] ? h($ub['designation']) : '—' ?></td>
-                        <td class="text-end"><?= $ub['rate'] > 0 ? '৳' . number_format((float)$ub['rate'], 2) : '<span class="text-muted">—</span>' ?></td>
+                        <td class="text-end">
+                            <?php if (!empty($ub['pay_fixed'])): ?>
+                            <span class="badge bg-warning bg-opacity-15 text-warning-emphasis" title="Fixed payment — not multiplied by sittings">Fixed</span>
+                            <?php else: ?>
+                            <?= $ub['rate'] > 0 ? '৳' . number_format((float)$ub['rate'], 2) : '<span class="text-muted">—</span>' ?>
+                            <?php endif; ?>
+                        </td>
                         <td class="text-center"><span class="badge bg-info bg-opacity-15 text-info fw-semibold"><?= (int)$ub['attended_sittings'] ?></span></td>
                         <td class="text-end"><strong class="text-success">৳<?= number_format((float)$ub['total_remuneration'], 2) ?></strong></td>
                     </tr>
