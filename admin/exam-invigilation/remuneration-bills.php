@@ -81,10 +81,11 @@ if ($selected_ids) {
     $sum_st = db()->prepare(
         "SELECT e.id, e.exam_name, e.exam_year,
                 COUNT(f.id) AS slots,
-                COUNT(DISTINCT a.slot_id) AS unique_slots,
+                COUNT(DISTINCT CONCAT(s.slot_date, '|', s.time_slot)) AS unique_slots,
                 COALESCE(SUM(f.remuneration_per_slot), 0) AS total
          FROM ei_exams e
          LEFT JOIN ei_slot_attendance a ON a.exam_id = e.id AND a.attended = 1
+         LEFT JOIN ei_slots s ON s.id = a.slot_id
          LEFT JOIN ei_faculty f ON f.id = a.faculty_id AND f.is_active = 1
          WHERE e.id IN ($ph)
          GROUP BY e.id, e.exam_name, e.exam_year
