@@ -133,7 +133,7 @@ if ($selected_ids) {
              FROM ei_unique_slot_attendance u
              JOIN ei_faculty f ON f.id = u.faculty_id
              JOIN dept_departments d ON d.id = f.dept_id
-             WHERE u.exam_id IN ($ph) AND u.attended = 1 AND f.is_active = 1 AND f.pay_by_unique_slot = 1
+             WHERE u.exam_id IN ($ph) AND u.attended = 1 AND f.pay_by_unique_slot = 1
              GROUP BY f.id, f.name, f.designation, f.remuneration_per_slot, d.name
              ORDER BY d.name ASC, f.name ASC"
         );
