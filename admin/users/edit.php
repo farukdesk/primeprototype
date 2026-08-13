@@ -28,6 +28,17 @@ if (!$edit_user) {
     redirect($users_index_url);
 }
 
+// Linked student record (via students.portal_user_id) – used to display and
+// sync the Student ID on this user account.
+$linked_student = null;
+try {
+    $ls = db()->prepare('SELECT id, student_id, full_name FROM students WHERE portal_user_id = ? LIMIT 1');
+    $ls->execute([$id]);
+    $linked_student = $ls->fetch() ?: null;
+} catch (Throwable $e) {
+    $linked_student = null;
+}
+
 // Load user's current group assignments
 $gstmt = db()->prepare(
     'SELECT group_id, is_primary FROM user_group_assignments WHERE user_id = ?'
@@ -86,6 +97,24 @@ clear_old();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
+
+    // Sync Student ID from the linked student record (students.portal_user_id)
+    if (($_POST['action'] ?? '') === 'sync_student_sid') {
+        if (!is_super_admin()) {
+            flash_set('error', 'You do not have permission to sync the Student ID.');
+        } elseif ($linked_student) {
+            $old_sid = $edit_user['student_sid'] ?? null;
+            db()->prepare('UPDATE users SET student_sid = ? WHERE id = ?')
+               ->execute([$linked_student['student_id'], $id]);
+            log_change('users', 'UPDATE', $id, $edit_user['username'],
+                'student_sid', (string)$old_sid, $linked_student['student_id'],
+                'Student ID synced from linked student record (#' . $linked_student['id'] . ')');
+            flash_set('success', 'Student ID synced to <strong>' . h($linked_student['student_id']) . '</strong>.');
+        } else {
+            flash_set('error', 'No linked student record found for this user.');
+        }
+        redirect(APP_URL . '/users/edit.php?id=' . $id . ($return_qs !== '' ? '&return=' . urlencode($return_qs) : ''));
+    }
 
     $full_name        = trim($_POST['full_name']      ?? '');
     $username         = trim($_POST['username']        ?? '');
@@ -281,8 +310,26 @@ require_once __DIR__ . '/../includes/header.php';
                     <label class="form-label fw-medium">Student ID
                         <small class="text-muted">(links user to their student fee record)</small>
                     </label>
-                    <input type="text" name="student_sid" class="form-control"
-                           value="<?= h($edit_user['student_sid'] ?? '') ?>" maxlength="50" autocomplete="off">
+                    <div class="input-group">
+                        <input type="text" name="student_sid" class="form-control"
+                               value="<?= h($edit_user['student_sid'] ?? '') ?>" maxlength="50" autocomplete="off">
+                        <?php if ($linked_student): ?>
+                        <button type="submit" name="action" value="sync_student_sid"
+                                class="btn btn-outline-primary"
+                                title="Sync Student ID from the linked student record"
+                                onclick="return confirm('Set Student ID to <?= h($linked_student['student_id']) ?> from the linked student record?');">
+                            <i class="fas fa-sync-alt me-1"></i> Sync
+                        </button>
+                        <?php endif; ?>
+                    </div>
+                    <?php if ($linked_student): ?>
+                    <small class="text-muted">
+                        Linked student: <strong><?= h($linked_student['student_id']) ?></strong> – <?= h($linked_student['full_name']) ?>
+                        <?php if (($edit_user['student_sid'] ?? '') !== $linked_student['student_id']): ?>
+                        <span class="text-warning fw-semibold">(not synced – click Sync)</span>
+                        <?php endif; ?>
+                    </small>
+                    <?php endif; ?>
                 </div>
                 <?php endif; ?>
                 <div class="col-md-6">

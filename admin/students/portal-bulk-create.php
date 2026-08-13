@@ -138,8 +138,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'bulk_
         try {
             $db = db();
             $db->prepare(
-                'INSERT INTO users (group_id, username, email, password, full_name, phone, is_active)
-                 VALUES (?,?,?,?,?,?,1)'
+                'INSERT INTO users (group_id, username, email, password, full_name, phone, student_sid, is_active)
+                 VALUES (?,?,?,?,?,?,?,1)'
             )->execute([
                 $group_id,
                 $username,
@@ -147,6 +147,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'bulk_
                 $hash,
                 $stu['full_name'],
                 $stu['phone'] ?: null,
+                $stu['student_id'],
             ]);
             $new_user_id = (int)$db->lastInsertId();
 
