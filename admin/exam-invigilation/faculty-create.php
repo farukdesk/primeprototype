@@ -199,6 +199,25 @@ require_once __DIR__ . '/../includes/header.php';
                         Mark their per-sitting attendance on the exam's Attendance page — absent sittings are not paid.
                     </small>
                 </div>
+                <div class="col-12">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="pay_fixed"
+                               name="pay_fixed" value="1"
+                               <?= old('pay_fixed') ? 'checked' : '' ?>>
+                        <label class="form-check-label fw-medium" for="pay_fixed">Fixed Payment <small class="text-muted fw-normal">(same group as unique slot, fixed amount)</small></label>
+                    </div>
+                    <div class="input-group mt-2" style="max-width:280px;">
+                        <span class="input-group-text" style="border-radius:10px 0 0 10px;">৳</span>
+                        <input type="number" name="fixed_payment_amount" class="form-control" style="border-radius:0 10px 10px 0;"
+                               value="<?= number_format((float)old('fixed_payment_amount', 0), 2, '.', '') ?>"
+                               min="0" step="0.01" placeholder="0.00">
+                    </div>
+                    <small class="text-muted">
+                        Counted in the same unique-slot payee group and per-sitting attendance is still required,
+                        but the remuneration bill pays this <strong>fixed amount per exam</strong> instead of rate &times; sittings.
+                        Enabling this automatically enables Paid by Unique Slot.
+                    </small>
+                </div>
                 <div class="col-md-6">
                     <label class="form-label fw-medium">Signature Image</label>
                     <input type="file" name="signature" class="form-control" style="border-radius:10px;"
