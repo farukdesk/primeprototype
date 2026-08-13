@@ -56,7 +56,7 @@ class ChangePasswordActivity : AppCompatActivity() {
 
         setLoading(true)
         lifecycleScope.launch {
-            when (val result = app.repository.staffChangePassword(current, newPass)) {
+            when (val result = app.repository.changePassword(current, newPass)) {
                 is AppResult.Success -> {
                     Toast.makeText(
                         this@ChangePasswordActivity,
