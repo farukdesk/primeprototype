@@ -29,6 +29,7 @@ $untracked_rows = [];
 $dept_groups    = [];
 $grand_total    = 0.0;
 $grand_slots    = 0;
+$unique_slots   = 0;
 $qs_base        = '';
 
 if ($selected_ids) {
@@ -80,6 +81,7 @@ if ($selected_ids) {
     $sum_st = db()->prepare(
         "SELECT e.id, e.exam_name, e.exam_year,
                 COUNT(f.id) AS slots,
+                COUNT(DISTINCT a.slot_id) AS unique_slots,
                 COALESCE(SUM(f.remuneration_per_slot), 0) AS total
          FROM ei_exams e
          LEFT JOIN ei_slot_attendance a ON a.exam_id = e.id AND a.attended = 1
@@ -90,6 +92,15 @@ if ($selected_ids) {
     );
     $sum_st->execute($selected_ids);
     $exam_summary = $sum_st->fetchAll();
+
+    // ── Unique duty slots (each room/time slot counted once, even with 2 invigilators)
+    $uniq_st = db()->prepare(
+        "SELECT COUNT(DISTINCT a.slot_id)
+         FROM ei_slot_attendance a
+         WHERE a.attended = 1 AND a.exam_id IN ($ph)"
+    );
+    $uniq_st->execute($selected_ids);
+    $unique_slots = (int)$uniq_st->fetchColumn();
 
     // ── Faculty assigned in selected exams but attendance not yet marked ────
     $untracked_st = db()->prepare(
@@ -222,25 +233,31 @@ require_once __DIR__ . '/../includes/header.php';
 <?php if (!$print_mode): ?>
 <!-- Summary cards -->
 <div class="row g-3 mb-4">
-    <div class="col-md-3">
+    <div class="col-md">
         <div class="card text-center py-3" style="border-left:4px solid #8e44ad;">
             <div style="font-size:1.8rem;font-weight:700;color:#8e44ad;"><?= count($selected_exams) ?></div>
             <div class="text-muted" style="font-size:.8rem;">Exams Selected</div>
         </div>
     </div>
-    <div class="col-md-3">
+    <div class="col-md">
         <div class="card text-center py-3" style="border-left:4px solid #27ae60;">
             <div style="font-size:1.8rem;font-weight:700;color:#27ae60;"><?= count($bill_rows) ?></div>
             <div class="text-muted" style="font-size:.8rem;">Faculty with Attended Duty</div>
         </div>
     </div>
-    <div class="col-md-3">
+    <div class="col-md">
+        <div class="card text-center py-3" style="border-left:4px solid #16a085;">
+            <div style="font-size:1.8rem;font-weight:700;color:#16a085;"><?= $unique_slots ?></div>
+            <div class="text-muted" style="font-size:.8rem;">Unique Duty Slots</div>
+        </div>
+    </div>
+    <div class="col-md">
         <div class="card text-center py-3" style="border-left:4px solid #4f8ef7;">
             <div style="font-size:1.8rem;font-weight:700;color:#4f8ef7;"><?= $grand_slots ?></div>
             <div class="text-muted" style="font-size:.8rem;">Total Attended Slots</div>
         </div>
     </div>
-    <div class="col-md-3">
+    <div class="col-md">
         <div class="card text-center py-3" style="border-left:4px solid #f39c12;">
             <div style="font-size:1.8rem;font-weight:700;color:#f39c12;">৳<?= number_format((float)$grand_total, 2) ?></div>
             <div class="text-muted" style="font-size:.8rem;">Total Remuneration</div>
@@ -264,7 +281,8 @@ require_once __DIR__ . '/../includes/header.php';
                     <tr>
                         <th class="px-3 text-center" style="width:40px;">#</th>
                         <th>Exam</th>
-                        <th class="text-center" style="width:120px;">Year</th>
+                        <th class="text-center" style="width:110px;">Year</th>
+                        <th class="text-center" style="width:110px;">Unique Slots</th>
                         <th class="text-center" style="width:120px;">Attended Slots</th>
                         <th class="text-end" style="width:160px;">Amount (৳)</th>
                         <?php if (!$print_mode): ?><th class="text-center" style="width:120px;">Detail Bill</th><?php endif; ?>
@@ -276,6 +294,9 @@ require_once __DIR__ . '/../includes/header.php';
                         <td class="px-3 text-center"><?= $si + 1 ?></td>
                         <td class="fw-medium"><?= h($sr['exam_name']) ?></td>
                         <td class="text-center"><?= h($sr['exam_year']) ?></td>
+                        <td class="text-center">
+                            <span class="badge bg-success bg-opacity-10 text-success fw-semibold"><?= (int)$sr['unique_slots'] ?></span>
+                        </td>
                         <td class="text-center"><?= (int)$sr['slots'] ?></td>
                         <td class="text-end"><?= $sr['total'] > 0 ? '৳' . number_format((float)$sr['total'], 2) : '<span class="text-muted">৳0.00</span>' ?></td>
                         <?php if (!$print_mode): ?>
@@ -292,6 +313,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <tfoot class="table-light fw-semibold">
                     <tr>
                         <td colspan="3" class="text-end px-3">Grand Total:</td>
+                        <td class="text-center"><?= $unique_slots ?></td>
                         <td class="text-center"><?= $grand_slots ?></td>
                         <td class="text-end text-success">৳<?= number_format((float)$grand_total, 2) ?></td>
                         <?php if (!$print_mode): ?><td></td><?php endif; ?>
