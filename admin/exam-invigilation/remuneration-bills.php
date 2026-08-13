@@ -313,6 +313,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <tfoot class="table-light fw-semibold">
                     <tr>
                         <td colspan="3" class="text-end px-3">Grand Total:</td>
+                        <td class="text-center"><?= $unique_slots ?></td>
                         <td class="text-center"><?= $grand_slots ?></td>
                         <td class="text-end text-success">৳<?= number_format((float)$grand_total, 2) ?></td>
                         <?php if (!$print_mode): ?><td></td><?php endif; ?>
