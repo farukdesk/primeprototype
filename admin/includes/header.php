@@ -961,7 +961,7 @@ if (is_portal_student()) {
             <?php if (is_super_admin() || can_access('exam-invigilation')): ?>
             <li class="nav-item">
                 <a href="<?= APP_URL ?>/exam-invigilation/index.php"
-                   class="<?= ($is_exam_invigilation_active && strpos($current_path, '/faculty') === false && strpos($current_path, '/create') === false) ? 'active' : '' ?>">
+                   class="<?= ($is_exam_invigilation_active && strpos($current_path, '/faculty') === false && strpos($current_path, '/create') === false && strpos($current_path, '/remuneration-bills') === false) ? 'active' : '' ?>">
                     <i class="fas fa-list"></i> Exams
                 </a>
             </li>
@@ -977,6 +977,12 @@ if (is_portal_student()) {
                 <a href="<?= APP_URL ?>/exam-invigilation/faculty.php"
                    class="<?= strpos($current_path, '/exam-invigilation/faculty') !== false ? 'active' : '' ?>">
                     <i class="fas fa-users"></i> Faculty Pool
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/exam-invigilation/remuneration-bills.php"
+                   class="<?= strpos($current_path, '/exam-invigilation/remuneration-bills') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-file-invoice-dollar"></i> Remuneration Bills
                 </a>
             </li>
             <?php endif; ?>
