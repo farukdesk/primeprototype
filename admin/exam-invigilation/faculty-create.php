@@ -72,13 +72,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (empty($errors)) {
         db()->prepare(
-            'INSERT INTO ei_faculty (dept_id, name, designation, gender, weekend_available, weekend_days, contact_number, remuneration_per_slot, signature, is_active)
-             VALUES (?,?,?,?,?,?,?,?,?,?)'
-        )->execute([$dept_id, $name, $designation ?: null, $gender, $weekend_available, $weekend_days, $contact_number ?: null, $remuneration_per_slot, $signature, $is_active]);
+            'INSERT INTO ei_faculty (dept_id, name, designation, gender, weekend_available, weekend_days, contact_number, remuneration_per_slot, pay_by_unique_slot, signature, is_active)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?)'
+        )->execute([$dept_id, $name, $designation ?: null, $gender, $weekend_available, $weekend_days, $contact_number ?: null, $remuneration_per_slot, $pay_by_unique_slot, $signature, $is_active]);
         flash_set('success', 'Faculty <strong>' . h($name) . '</strong> added to pool.');
         redirect(APP_URL . '/exam-invigilation/faculty.php');
     }
-    save_old(compact('dept_id','name','designation','gender','weekend_days_raw','contact_number','remuneration_per_slot','is_active'));
+    save_old(compact('dept_id','name','designation','gender','weekend_days_raw','contact_number','remuneration_per_slot','pay_by_unique_slot','is_active'));
 }
 
 require_once __DIR__ . '/../includes/header.php';
