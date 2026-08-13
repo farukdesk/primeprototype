@@ -62,6 +62,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $contact_number        = trim($_POST['contact_number'] ?? '');
     $remuneration_per_slot = max(0, (float)($_POST['remuneration_per_slot'] ?? 0));
     $pay_by_unique_slot    = isset($_POST['pay_by_unique_slot']) ? 1 : 0;
+    $pay_fixed             = isset($_POST['pay_fixed']) ? 1 : 0;
+    $fixed_payment_amount  = max(0, (float)($_POST['fixed_payment_amount'] ?? 0));
+    if ($pay_fixed) $pay_by_unique_slot = 1; // fixed payees belong to the unique-slot payee group
     $is_active             = isset($_POST['is_active']) ? 1 : 0;
 
     // Handle signature upload
