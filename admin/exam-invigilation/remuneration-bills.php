@@ -127,21 +127,43 @@ if ($selected_ids) {
     $unique_bill_total = 0.0;
     try {
         $u_bill_st = db()->prepare(
-            "SELECT f.id, f.name, f.designation, f.remuneration_per_slot AS rate, d.name AS dept_name,
+            "SELECT f.id, f.name, f.designation, f.remuneration_per_slot AS rate,
+                    f.pay_fixed, f.fixed_payment_amount, d.name AS dept_name,
                     COUNT(DISTINCT CONCAT(u.slot_date, '|', u.time_slot)) AS attended_sittings,
-                    (COUNT(DISTINCT CONCAT(u.slot_date, '|', u.time_slot)) * f.remuneration_per_slot) AS total_remuneration
+                    (CASE WHEN f.pay_fixed = 1
+                          THEN f.fixed_payment_amount * COUNT(DISTINCT u.exam_id)
+                          ELSE COUNT(DISTINCT CONCAT(u.slot_date, '|', u.time_slot)) * f.remuneration_per_slot END) AS total_remuneration
              FROM ei_unique_slot_attendance u
              JOIN ei_faculty f ON f.id = u.faculty_id
              JOIN dept_departments d ON d.id = f.dept_id
              WHERE u.exam_id IN ($ph) AND u.attended = 1 AND f.pay_by_unique_slot = 1
-             GROUP BY f.id, f.name, f.designation, f.remuneration_per_slot, d.name
+             GROUP BY f.id, f.name, f.designation, f.remuneration_per_slot, f.pay_fixed, f.fixed_payment_amount, d.name
              ORDER BY d.name ASC, f.name ASC"
         );
         $u_bill_st->execute($selected_ids);
         $unique_bill_rows  = $u_bill_st->fetchAll();
         $unique_bill_total = array_sum(array_column($unique_bill_rows, 'total_remuneration'));
     } catch (Throwable $e) {
-        // ei-unique-slot-payees-v1.sql not run yet
+        // ei-fixed-payment-payees-v1.sql not run yet — fall back to per-sitting pay only
+        try {
+            $u_bill_st = db()->prepare(
+                "SELECT f.id, f.name, f.designation, f.remuneration_per_slot AS rate,
+                        0 AS pay_fixed, 0 AS fixed_payment_amount, d.name AS dept_name,
+                        COUNT(DISTINCT CONCAT(u.slot_date, '|', u.time_slot)) AS attended_sittings,
+                        (COUNT(DISTINCT CONCAT(u.slot_date, '|', u.time_slot)) * f.remuneration_per_slot) AS total_remuneration
+                 FROM ei_unique_slot_attendance u
+                 JOIN ei_faculty f ON f.id = u.faculty_id
+                 JOIN dept_departments d ON d.id = f.dept_id
+                 WHERE u.exam_id IN ($ph) AND u.attended = 1 AND f.pay_by_unique_slot = 1
+                 GROUP BY f.id, f.name, f.designation, f.remuneration_per_slot, d.name
+                 ORDER BY d.name ASC, f.name ASC"
+            );
+            $u_bill_st->execute($selected_ids);
+            $unique_bill_rows  = $u_bill_st->fetchAll();
+            $unique_bill_total = array_sum(array_column($unique_bill_rows, 'total_remuneration'));
+        } catch (Throwable $e2) {
+            // ei-unique-slot-payees-v1.sql not run yet
+        }
     }
 }
 
@@ -492,7 +514,13 @@ require_once __DIR__ . '/../includes/header.php';
                         <td class="fw-medium"><?= h($ub['name']) ?></td>
                         <td><span class="badge bg-primary bg-opacity-10 text-primary"><?= h($ub['dept_name']) ?></span></td>
                         <td class="text-muted" style="font-size:.85rem;"><?= $ub['designation'] ? h($ub['designation']) : '—' ?></td>
-                        <td class="text-end"><?= $ub['rate'] > 0 ? '৳' . number_format((float)$ub['rate'], 2) : '<span class="text-muted">—</span>' ?></td>
+                        <td class="text-end">
+                            <?php if (!empty($ub['pay_fixed'])): ?>
+                            <span class="badge bg-warning bg-opacity-15 text-warning-emphasis" title="Fixed payment per exam — not multiplied by sittings">Fixed</span>
+                            <?php else: ?>
+                            <?= $ub['rate'] > 0 ? '৳' . number_format((float)$ub['rate'], 2) : '<span class="text-muted">—</span>' ?>
+                            <?php endif; ?>
+                        </td>
                         <td class="text-center"><span class="badge bg-info bg-opacity-15 text-info fw-semibold"><?= (int)$ub['attended_sittings'] ?></span></td>
                         <td class="text-end"><strong class="text-success">৳<?= number_format((float)$ub['total_remuneration'], 2) ?></strong></td>
                     </tr>

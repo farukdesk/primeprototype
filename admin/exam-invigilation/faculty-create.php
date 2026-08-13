@@ -43,6 +43,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $contact_number        = trim($_POST['contact_number'] ?? '');
     $remuneration_per_slot = max(0, (float)($_POST['remuneration_per_slot'] ?? 0));
     $pay_by_unique_slot    = isset($_POST['pay_by_unique_slot']) ? 1 : 0;
+    $pay_fixed             = isset($_POST['pay_fixed']) ? 1 : 0;
+    $fixed_payment_amount  = max(0, (float)($_POST['fixed_payment_amount'] ?? 0));
+    if ($pay_fixed) $pay_by_unique_slot = 1; // fixed payees belong to the unique-slot payee group
     $is_active             = isset($_POST['is_active']) ? 1 : 0;
 
     // Handle signature upload
@@ -71,14 +74,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($name === '') $errors[] = 'Name is required.';
 
     if (empty($errors)) {
-        db()->prepare(
-            'INSERT INTO ei_faculty (dept_id, name, designation, gender, weekend_available, weekend_days, contact_number, remuneration_per_slot, pay_by_unique_slot, signature, is_active)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?)'
-        )->execute([$dept_id, $name, $designation ?: null, $gender, $weekend_available, $weekend_days, $contact_number ?: null, $remuneration_per_slot, $pay_by_unique_slot, $signature, $is_active]);
+        try {
+            db()->prepare(
+                'INSERT INTO ei_faculty (dept_id, name, designation, gender, weekend_available, weekend_days, contact_number, remuneration_per_slot, pay_by_unique_slot, pay_fixed, fixed_payment_amount, signature, is_active)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)'
+            )->execute([$dept_id, $name, $designation ?: null, $gender, $weekend_available, $weekend_days, $contact_number ?: null, $remuneration_per_slot, $pay_by_unique_slot, $pay_fixed, $fixed_payment_amount, $signature, $is_active]);
+        } catch (Throwable $e) {
+            // ei-fixed-payment-payees-v1.sql not run yet
+            db()->prepare(
+                'INSERT INTO ei_faculty (dept_id, name, designation, gender, weekend_available, weekend_days, contact_number, remuneration_per_slot, pay_by_unique_slot, signature, is_active)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?)'
+            )->execute([$dept_id, $name, $designation ?: null, $gender, $weekend_available, $weekend_days, $contact_number ?: null, $remuneration_per_slot, $pay_by_unique_slot, $signature, $is_active]);
+        }
         flash_set('success', 'Faculty <strong>' . h($name) . '</strong> added to pool.');
         redirect(APP_URL . '/exam-invigilation/faculty.php');
     }
-    save_old(compact('dept_id','name','designation','gender','weekend_days_raw','contact_number','remuneration_per_slot','pay_by_unique_slot','is_active'));
+    save_old(compact('dept_id','name','designation','gender','weekend_days_raw','contact_number','remuneration_per_slot','pay_by_unique_slot','pay_fixed','fixed_payment_amount','is_active'));
 }
 
 require_once __DIR__ . '/../includes/header.php';
@@ -186,6 +197,25 @@ require_once __DIR__ . '/../includes/header.php';
                         Office employees (Treasurer, Controller of Examinations, Accounts &amp; Audit) count <strong>all</strong>
                         sittings of the exam; department employees count only their <strong>own department's</strong> sittings.
                         Mark their per-sitting attendance on the exam's Attendance page — absent sittings are not paid.
+                    </small>
+                </div>
+                <div class="col-12">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="pay_fixed"
+                               name="pay_fixed" value="1"
+                               <?= old('pay_fixed') ? 'checked' : '' ?>>
+                        <label class="form-check-label fw-medium" for="pay_fixed">Fixed Payment <small class="text-muted fw-normal">(same group as unique slot, fixed amount)</small></label>
+                    </div>
+                    <div class="input-group mt-2" style="max-width:280px;">
+                        <span class="input-group-text" style="border-radius:10px 0 0 10px;">৳</span>
+                        <input type="number" name="fixed_payment_amount" class="form-control" style="border-radius:0 10px 10px 0;"
+                               value="<?= number_format((float)old('fixed_payment_amount', 0), 2, '.', '') ?>"
+                               min="0" step="0.01" placeholder="0.00">
+                    </div>
+                    <small class="text-muted">
+                        Counted in the same unique-slot payee group and per-sitting attendance is still required,
+                        but the remuneration bill pays this <strong>fixed amount per exam</strong> instead of rate &times; sittings.
+                        Enabling this automatically enables Paid by Unique Slot.
                     </small>
                 </div>
                 <div class="col-md-6">
