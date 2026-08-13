@@ -42,6 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $gender                = in_array($_POST['gender'] ?? '', ['Male','Female'], true) ? $_POST['gender'] : null;
     $contact_number        = trim($_POST['contact_number'] ?? '');
     $remuneration_per_slot = max(0, (float)($_POST['remuneration_per_slot'] ?? 0));
+    $pay_by_unique_slot    = isset($_POST['pay_by_unique_slot']) ? 1 : 0;
     $is_active             = isset($_POST['is_active']) ? 1 : 0;
 
     // Handle signature upload
@@ -71,13 +72,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (empty($errors)) {
         db()->prepare(
-            'INSERT INTO ei_faculty (dept_id, name, designation, gender, weekend_available, weekend_days, contact_number, remuneration_per_slot, signature, is_active)
-             VALUES (?,?,?,?,?,?,?,?,?,?)'
-        )->execute([$dept_id, $name, $designation ?: null, $gender, $weekend_available, $weekend_days, $contact_number ?: null, $remuneration_per_slot, $signature, $is_active]);
+            'INSERT INTO ei_faculty (dept_id, name, designation, gender, weekend_available, weekend_days, contact_number, remuneration_per_slot, pay_by_unique_slot, signature, is_active)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?)'
+        )->execute([$dept_id, $name, $designation ?: null, $gender, $weekend_available, $weekend_days, $contact_number ?: null, $remuneration_per_slot, $pay_by_unique_slot, $signature, $is_active]);
         flash_set('success', 'Faculty <strong>' . h($name) . '</strong> added to pool.');
         redirect(APP_URL . '/exam-invigilation/faculty.php');
     }
-    save_old(compact('dept_id','name','designation','gender','weekend_days_raw','contact_number','remuneration_per_slot','is_active'));
+    save_old(compact('dept_id','name','designation','gender','weekend_days_raw','contact_number','remuneration_per_slot','pay_by_unique_slot','is_active'));
 }
 
 require_once __DIR__ . '/../includes/header.php';
@@ -172,6 +173,20 @@ require_once __DIR__ . '/../includes/header.php';
                                min="0" step="0.01" placeholder="0.00">
                     </div>
                     <small class="text-muted">Amount paid to this faculty per attended invigilation slot.</small>
+                </div>
+                <div class="col-12">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="pay_by_unique_slot"
+                               name="pay_by_unique_slot" value="1"
+                               <?= old('pay_by_unique_slot') ? 'checked' : '' ?>>
+                        <label class="form-check-label fw-medium" for="pay_by_unique_slot">Paid by Unique Slot <small class="text-muted fw-normal">(per exam sitting)</small></label>
+                    </div>
+                    <small class="text-muted">
+                        Pays rate &times; attended <strong>sittings</strong> (date + time slot) instead of per room duty.
+                        Office employees (Treasurer, Controller of Examinations, Accounts &amp; Audit) count <strong>all</strong>
+                        sittings of the exam; department employees count only their <strong>own department's</strong> sittings.
+                        Mark their per-sitting attendance on the exam's Attendance page — absent sittings are not paid.
+                    </small>
                 </div>
                 <div class="col-md-6">
                     <label class="form-label fw-medium">Signature Image</label>

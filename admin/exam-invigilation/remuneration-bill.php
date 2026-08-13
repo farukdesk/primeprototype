@@ -56,6 +56,28 @@ $untracked_st = db()->prepare(
 $untracked_st->execute([$id, $id]);
 $untracked_rows = $untracked_st->fetchAll();
 
+// ── Unique-slot payees: rate × attended sittings (date + time slot) ──────────
+$unique_bill_rows  = [];
+$unique_bill_total = 0.0;
+try {
+    $u_bill_st = db()->prepare(
+        "SELECT f.id, f.name, f.designation, f.remuneration_per_slot AS rate, d.name AS dept_name,
+                COUNT(DISTINCT CONCAT(u.slot_date, '|', u.time_slot)) AS attended_sittings,
+                (COUNT(DISTINCT CONCAT(u.slot_date, '|', u.time_slot)) * f.remuneration_per_slot) AS total_remuneration
+         FROM ei_unique_slot_attendance u
+         JOIN ei_faculty f ON f.id = u.faculty_id
+         JOIN dept_departments d ON d.id = f.dept_id
+         WHERE u.exam_id = ? AND u.attended = 1 AND f.is_active = 1 AND f.pay_by_unique_slot = 1
+         GROUP BY f.id, f.name, f.designation, f.remuneration_per_slot, d.name
+         ORDER BY d.name ASC, f.name ASC"
+    );
+    $u_bill_st->execute([$id]);
+    $unique_bill_rows  = $u_bill_st->fetchAll();
+    $unique_bill_total = array_sum(array_column($unique_bill_rows, 'total_remuneration'));
+} catch (Throwable $e) {
+    // ei-unique-slot-payees-v1.sql not run yet
+}
+
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
@@ -116,8 +138,8 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
     <div class="col-md-4">
         <div class="card text-center py-3" style="border-left:4px solid #f39c12;">
-            <div style="font-size:1.8rem;font-weight:700;color:#f39c12;">৳<?= number_format($grand_total, 2) ?></div>
-            <div class="text-muted" style="font-size:.8rem;">Total Remuneration</div>
+            <div style="font-size:1.8rem;font-weight:700;color:#f39c12;">৳<?= number_format((float)$grand_total + (float)$unique_bill_total, 2) ?></div>
+            <div class="text-muted" style="font-size:.8rem;">Total Remuneration<?= $unique_bill_total > 0 ? ' (incl. unique-slot payees)' : '' ?></div>
         </div>
     </div>
 </div>
@@ -220,6 +242,54 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
     </div>
 </div>
+
+<?php if (!empty($unique_bill_rows)): ?>
+<div class="card mt-4 <?= $print_mode ? 'border-0' : '' ?>">
+    <div class="card-header py-3 px-4">
+        <h6 class="mb-0 fw-semibold"><i class="fas fa-user-clock me-2 text-muted"></i>Unique-Slot Payees <small class="text-muted fw-normal">(paid per attended sitting)</small></h6>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-bordered mb-0 align-middle" <?= $print_mode ? 'style="font-size:12px;"' : '' ?>>
+                <thead class="table-light">
+                    <tr>
+                        <th class="px-3 text-center" style="width:40px;">#</th>
+                        <th>Name</th>
+                        <th>Department / Office</th>
+                        <th>Designation</th>
+                        <th class="text-end" style="width:110px;">Rate/Sitting</th>
+                        <th class="text-center" style="width:120px;">Attended Sittings</th>
+                        <th class="text-end" style="width:140px;">Total (৳)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($unique_bill_rows as $ubi => $ub): ?>
+                    <tr>
+                        <td class="px-3 text-center"><?= $ubi + 1 ?></td>
+                        <td class="fw-medium"><?= h($ub['name']) ?></td>
+                        <td><span class="badge bg-primary bg-opacity-10 text-primary"><?= h($ub['dept_name']) ?></span></td>
+                        <td class="text-muted" style="font-size:.85rem;"><?= $ub['designation'] ? h($ub['designation']) : '—' ?></td>
+                        <td class="text-end"><?= $ub['rate'] > 0 ? '৳' . number_format((float)$ub['rate'], 2) : '<span class="text-muted">—</span>' ?></td>
+                        <td class="text-center"><span class="badge bg-info bg-opacity-15 text-info fw-semibold"><?= (int)$ub['attended_sittings'] ?></span></td>
+                        <td class="text-end"><strong class="text-success">৳<?= number_format((float)$ub['total_remuneration'], 2) ?></strong></td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+                <tfoot class="table-light fw-semibold">
+                    <tr>
+                        <td colspan="6" class="text-end px-3">Unique-Slot Payees Total:</td>
+                        <td class="text-end text-success">৳<?= number_format((float)$unique_bill_total, 2) ?></td>
+                    </tr>
+                    <tr>
+                        <td colspan="6" class="text-end px-3">Combined Grand Total (Invigilators + Payees):</td>
+                        <td class="text-end text-success">৳<?= number_format((float)$grand_total + (float)$unique_bill_total, 2) ?></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 
 <?php if (!$print_mode && !empty($untracked_rows)): ?>
 <div class="card mt-4 border-warning">

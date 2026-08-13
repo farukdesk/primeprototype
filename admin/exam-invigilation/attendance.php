@@ -76,6 +76,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action']) && $_POST[
         }
     }
 
+    // ── Unique-slot payees: per-sitting (date + time slot) attendance ─────────
+    try {
+        $u_payees = db()->query(
+            "SELECT f.id, f.dept_id, d.dept_type
+             FROM ei_faculty f
+             JOIN dept_departments d ON d.id = f.dept_id
+             WHERE f.is_active = 1 AND f.pay_by_unique_slot = 1"
+        )->fetchAll();
+    } catch (Throwable $e) {
+        $u_payees = []; // migrations ei-office-departments-v1 / ei-unique-slot-payees-v1 not run yet
+    }
+    if ($u_payees) {
+        $sit_st = db()->prepare('SELECT DISTINCT time_slot, dept_id FROM ei_slots WHERE exam_id = ? AND slot_date = ?');
+        $sit_st->execute([$id, $post_date]);
+        $sitting_dept_map = [];
+        foreach ($sit_st->fetchAll() as $sr) {
+            $sitting_dept_map[$sr['time_slot']][] = (int)$sr['dept_id'];
+        }
+        $u_attended_post = $_POST['uattended'] ?? [];
+        if (!is_array($u_attended_post)) $u_attended_post = [];
+        $u_upsert = db()->prepare(
+            'INSERT INTO ei_unique_slot_attendance (exam_id, faculty_id, slot_date, time_slot, attended)
+             VALUES (?,?,?,?,?)
+             ON DUPLICATE KEY UPDATE attended = VALUES(attended), updated_at = NOW()'
+        );
+        foreach ($u_payees as $p) {
+            foreach ($sitting_dept_map as $sit_ts => $sit_depts) {
+                $eligible = ($p['dept_type'] === 'office') || in_array((int)$p['dept_id'], $sit_depts, true);
+                if (!$eligible) continue;
+                $u_att = isset($u_attended_post[$p['id']][md5($sit_ts)]) ? 1 : 0;
+                $u_upsert->execute([$id, (int)$p['id'], $post_date, $sit_ts, $u_att]);
+            }
+        }
+    }
+
     flash_set('success', 'Attendance saved for ' . date('d M Y', strtotime($post_date)) . '.');
     redirect(APP_URL . '/exam-invigilation/attendance.php?id=' . $id . '&slot_date=' . urlencode($post_date));
 }
@@ -108,6 +143,39 @@ if ($f_date !== '') {
         $att_st->execute(array_merge([$id], $slot_ids));
         foreach ($att_st->fetchAll() as $row) {
             $attendance_map[$row['slot_id'] . '_' . $row['faculty_id']] = $row;
+        }
+    }
+
+    // ── Unique-slot payees & sittings for this date ─────────────────────────
+    $unique_payees = [];
+    $u_att_map     = [];
+    $sitting_depts = [];
+    try {
+        $unique_payees = db()->query(
+            "SELECT f.id, f.name, f.designation, f.dept_id, f.remuneration_per_slot AS rate,
+                    d.name AS dept_name, d.dept_type
+             FROM ei_faculty f
+             JOIN dept_departments d ON d.id = f.dept_id
+             WHERE f.is_active = 1 AND f.pay_by_unique_slot = 1
+             ORDER BY d.dept_type DESC, d.name ASC, f.name ASC"
+        )->fetchAll();
+    } catch (Throwable $e) {
+        $unique_payees = []; // migrations not run yet
+    }
+    if ($unique_payees) {
+        foreach ($slots as $s_row) {
+            $sitting_depts[$s_row['time_slot']][] = (int)$s_row['dept_id'];
+        }
+        try {
+            $u_att_st = db()->prepare(
+                'SELECT faculty_id, time_slot, attended FROM ei_unique_slot_attendance WHERE exam_id = ? AND slot_date = ?'
+            );
+            $u_att_st->execute([$id, $f_date]);
+            foreach ($u_att_st->fetchAll() as $ur) {
+                $u_att_map[$ur['faculty_id'] . '|' . $ur['time_slot']] = (int)$ur['attended'];
+            }
+        } catch (Throwable $e) {
+            $u_att_map = [];
         }
     }
 }
@@ -259,6 +327,77 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
         <?php endif; ?>
     </div>
+
+    <?php if (!empty($unique_payees) && !empty($sitting_depts)): ?>
+    <div class="card mt-4">
+        <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <h6 class="mb-0 fw-semibold"><i class="fas fa-user-clock me-2 text-muted"></i>Unique-Slot Payees — Sitting Attendance</h6>
+            <span class="text-muted" style="font-size:.8rem;">Paid per sitting (date + time). Unchecked = absent = not paid.</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="px-3" style="width:40px;">#</th>
+                            <th>Employee</th>
+                            <th>Department / Office</th>
+                            <th style="width:110px;">Rate (৳)</th>
+                            <?php foreach (array_keys($sitting_depts) as $sit_ts): ?>
+                            <th class="text-center"><?= h($sit_ts) ?></th>
+                            <?php endforeach; ?>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <?php $u_no = 0; foreach ($unique_payees as $p): ?>
+                        <?php
+                        $eligible_any = false;
+                        foreach ($sitting_depts as $sit_dept_ids) {
+                            if ($p['dept_type'] === 'office' || in_array((int)$p['dept_id'], $sit_dept_ids, true)) { $eligible_any = true; break; }
+                        }
+                        if (!$eligible_any) continue;
+                        $u_no++;
+                        ?>
+                        <tr>
+                            <td class="px-3"><?= $u_no ?></td>
+                            <td>
+                                <span class="fw-medium"><?= h($p['name']) ?></span>
+                                <?php if ($p['designation']): ?><small class="text-muted">– <?= h($p['designation']) ?></small><?php endif; ?>
+                            </td>
+                            <td>
+                                <span class="badge <?= $p['dept_type'] === 'office' ? 'bg-warning bg-opacity-15 text-warning-emphasis' : 'bg-primary bg-opacity-10 text-primary' ?>"><?= h($p['dept_name']) ?></span>
+                            </td>
+                            <td><?= $p['rate'] > 0 ? '<span class="fw-medium text-success">৳' . number_format((float)$p['rate'], 2) . '</span>' : '<span class="text-muted">—</span>' ?></td>
+                            <?php foreach ($sitting_depts as $sit_ts => $sit_dept_ids): ?>
+                            <td class="text-center">
+                                <?php if ($p['dept_type'] === 'office' || in_array((int)$p['dept_id'], $sit_dept_ids, true)): ?>
+                                <?php $u_checked = $u_att_map[$p['id'] . '|' . $sit_ts] ?? 1; ?>
+                                <div class="form-check form-switch d-inline-flex justify-content-center">
+                                    <input class="form-check-input" type="checkbox"
+                                           name="uattended[<?= (int)$p['id'] ?>][<?= md5($sit_ts) ?>]" value="1"
+                                           <?= $u_checked ? 'checked' : '' ?> style="cursor:pointer;">
+                                </div>
+                                <?php else: ?>
+                                <span class="text-muted">—</span>
+                                <?php endif; ?>
+                            </td>
+                            <?php endforeach; ?>
+                        </tr>
+                    <?php endforeach; ?>
+                    <?php if ($u_no === 0): ?>
+                        <tr><td colspan="<?= 4 + count($sitting_depts) ?>" class="text-center text-muted py-4">No unique-slot payees eligible for this date.</td></tr>
+                    <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card-footer text-end py-2 px-4">
+            <button type="submit" class="btn btn-primary" style="border-radius:10px;">
+                <i class="fas fa-save me-1"></i> Save Attendance
+            </button>
+        </div>
+    </div>
+    <?php endif; ?>
 </form>
 
 <script>
