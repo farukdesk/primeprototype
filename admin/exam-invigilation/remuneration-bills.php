@@ -93,10 +93,12 @@ if ($selected_ids) {
     $sum_st->execute($selected_ids);
     $exam_summary = $sum_st->fetchAll();
 
-    // ── Unique duty slots (each room/time slot counted once, even with 2 invigilators)
+    // ── Unique slots: one exam sitting = slot_date + time_slot.
+    // Multiple rooms/departments in the same date/time window count as ONE unique slot.
     $uniq_st = db()->prepare(
-        "SELECT COUNT(DISTINCT a.slot_id)
+        "SELECT COUNT(DISTINCT CONCAT(s.slot_date, '|', s.time_slot))
          FROM ei_slot_attendance a
+         JOIN ei_slots s ON s.id = a.slot_id
          WHERE a.attended = 1 AND a.exam_id IN ($ph)"
     );
     $uniq_st->execute($selected_ids);
