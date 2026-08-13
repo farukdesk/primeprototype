@@ -240,9 +240,16 @@ require_once __DIR__ . '/../includes/header.php';
             <li class="breadcrumb-item active">Bulk Create Portal Accounts</li>
         </ol>
     </nav>
-    <a href="<?= APP_URL ?>/students/portal-settings.php" class="btn btn-outline-secondary btn-sm" style="border-radius:10px;">
-        <i class="fas fa-cog me-1"></i> Portal Settings
-    </a>
+    <div class="d-flex gap-2">
+        <?php if (is_super_admin()): ?>
+        <a href="<?= APP_URL ?>/users/sync-student-ids.php" class="btn btn-outline-primary btn-sm" style="border-radius:10px;">
+            <i class="fas fa-sync-alt me-1"></i> Sync Student IDs
+        </a>
+        <?php endif; ?>
+        <a href="<?= APP_URL ?>/students/portal-settings.php" class="btn btn-outline-secondary btn-sm" style="border-radius:10px;">
+            <i class="fas fa-cog me-1"></i> Portal Settings
+        </a>
+    </div>
 </div>
 
 <?php flash_show(); ?>
