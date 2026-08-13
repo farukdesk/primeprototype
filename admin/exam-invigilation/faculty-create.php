@@ -115,11 +115,26 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="row g-3">
                 <div class="col-12">
                     <label class="form-label fw-medium">Department <span class="text-danger">*</span></label>
+                    <?php
+                    $dept_opts = ['academic' => [], 'office' => []];
+                    foreach ($departments as $d) {
+                        $dept_opts[(($d['dept_type'] ?? 'academic') === 'office') ? 'office' : 'academic'][] = $d;
+                    }
+                    ?>
                     <select name="dept_id" class="form-select" style="border-radius:10px;" required>
                         <option value="0">— Select Department —</option>
-                        <?php foreach ($departments as $d): ?>
-                        <option value="<?= $d['id'] ?>" <?= old('dept_id') == $d['id'] ? 'selected' : '' ?>><?= h($d['name']) ?></option>
-                        <?php endforeach; ?>
+                        <optgroup label="Academic Departments">
+                            <?php foreach ($dept_opts['academic'] as $d): ?>
+                            <option value="<?= $d['id'] ?>" <?= old('dept_id') == $d['id'] ? 'selected' : '' ?>><?= h($d['name']) ?></option>
+                            <?php endforeach; ?>
+                        </optgroup>
+                        <?php if ($dept_opts['office']): ?>
+                        <optgroup label="University Offices">
+                            <?php foreach ($dept_opts['office'] as $d): ?>
+                            <option value="<?= $d['id'] ?>" <?= old('dept_id') == $d['id'] ? 'selected' : '' ?>><?= h($d['name']) ?></option>
+                            <?php endforeach; ?>
+                        </optgroup>
+                        <?php endif; ?>
                     </select>
                 </div>
                 <div class="col-md-6">
