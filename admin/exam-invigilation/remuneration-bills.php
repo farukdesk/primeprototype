@@ -320,7 +320,6 @@ require_once __DIR__ . '/../includes/header.php';
                     <tr>
                         <th class="px-3 text-center" style="width:40px;">#</th>
                         <th>Faculty Name</th>
-                        <th>Department</th>
                         <th>Designation</th>
                         <th class="text-end" style="width:100px;">Rate/Slot</th>
                         <th class="text-center" style="width:80px;">Slots</th>
@@ -331,17 +330,27 @@ require_once __DIR__ . '/../includes/header.php';
                 <tbody>
                 <?php if (empty($bill_rows)): ?>
                     <tr>
-                        <td colspan="8" class="text-center text-muted py-5">
+                        <td colspan="7" class="text-center text-muted py-5">
                             <i class="fas fa-inbox fa-2x mb-2 d-block text-muted"></i>
                             No attendance marked yet for the selected exam(s).
                         </td>
                     </tr>
                 <?php else: ?>
-                    <?php foreach ($bill_rows as $i => $row): ?>
+                    <?php foreach ($dept_groups as $dept_name => $dept_rows): ?>
+                    <?php
+                        $dept_slots = array_sum(array_column($dept_rows, 'attended_slots'));
+                        $dept_total = array_sum(array_column($dept_rows, 'total_remuneration'));
+                    ?>
+                    <tr style="background:#eef3fd;">
+                        <td colspan="7" class="px-3 py-2 fw-semibold" style="font-size:.9rem;">
+                            <i class="fas fa-building-columns me-1 text-primary"></i> <?= h($dept_name) ?>
+                            <span class="text-muted fw-normal" style="font-size:.78rem;">— <?= count($dept_rows) ?> faculty</span>
+                        </td>
+                    </tr>
+                    <?php foreach ($dept_rows as $i => $row): ?>
                     <tr>
                         <td class="px-3 text-center"><?= $i + 1 ?></td>
                         <td class="fw-medium"><?= h($row['faculty_name']) ?></td>
-                        <td><span class="badge bg-primary bg-opacity-10 text-primary"><?= h($row['dept_name']) ?></span></td>
                         <td class="text-muted" style="font-size:.85rem;"><?= $row['designation'] ? h($row['designation']) : '—' ?></td>
                         <td class="text-end">
                             <?php if ($row['rate'] > 0): ?>
@@ -375,12 +384,19 @@ require_once __DIR__ . '/../includes/header.php';
                         </td>
                     </tr>
                     <?php endforeach; ?>
+                    <tr class="table-light fw-semibold">
+                        <td colspan="4" class="text-end px-3">Subtotal — <?= h($dept_name) ?>:</td>
+                        <td class="text-center"><?= $dept_slots ?></td>
+                        <td class="text-end text-success">৳<?= number_format((float)$dept_total, 2) ?></td>
+                        <td></td>
+                    </tr>
+                    <?php endforeach; ?>
                 <?php endif; ?>
                 </tbody>
                 <?php if (!empty($bill_rows)): ?>
                 <tfoot class="table-light fw-semibold">
                     <tr>
-                        <td colspan="5" class="text-end px-3">Grand Total:</td>
+                        <td colspan="4" class="text-end px-3">Grand Total (All Departments):</td>
                         <td class="text-center"><?= $grand_slots ?></td>
                         <td class="text-end text-success">৳<?= number_format((float)$grand_total, 2) ?></td>
                         <td></td>
