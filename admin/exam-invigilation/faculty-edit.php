@@ -61,6 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $gender                = in_array($_POST['gender'] ?? '', ['Male','Female'], true) ? $_POST['gender'] : null;
     $contact_number        = trim($_POST['contact_number'] ?? '');
     $remuneration_per_slot = max(0, (float)($_POST['remuneration_per_slot'] ?? 0));
+    $pay_by_unique_slot    = isset($_POST['pay_by_unique_slot']) ? 1 : 0;
     $is_active             = isset($_POST['is_active']) ? 1 : 0;
 
     // Handle signature upload
