@@ -26,6 +26,7 @@ $selected_exams = [];
 $bill_rows      = [];
 $exam_summary   = [];
 $untracked_rows = [];
+$dept_groups    = [];
 $grand_total    = 0.0;
 $grand_slots    = 0;
 $qs_base        = '';
