@@ -43,6 +43,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$table_missing) {
         bk_setting_set('auto_scope',       in_array($_POST['auto_scope'] ?? '', ['db', 'files', 'full'], true) ? $_POST['auto_scope'] : 'full');
         bk_setting_set('keep_daily_days',  (string)max(1, (int)($_POST['keep_daily_days'] ?? 7)));
         bk_setting_set('keep_weekly_days', (string)max(1, (int)($_POST['keep_weekly_days'] ?? 30)));
+        bk_setting_set('files_part_mb',    (string)min(1024, max(50, (int)($_POST['files_part_mb'] ?? 250))));
         bk_setting_set('exclude_paths',    trim((string)($_POST['exclude_paths'] ?? '')));
         bk_setting_set('oauth_client_id',  trim((string)($_POST['oauth_client_id'] ?? '')));
         $oauth_secret = trim((string)($_POST['oauth_client_secret'] ?? ''));
@@ -142,7 +143,9 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="card-body p-4">
                 <p class="text-muted" style="font-size:.85rem;">
                     Creates the backup, uploads it to <strong>Google Drive</strong> and deletes the local copy
-                    immediately – no space is used on this server. Large sites may take several minutes; keep the tab open.
+                    immediately – no space is used on this server. The files backup is split into small
+                    <strong>parts</strong> uploaded one at a time, so even very large sites back up without
+                    running out of memory. Large sites may take several minutes; keep the tab open (or use the cron).
                 </p>
                 <form method="POST" action="run.php" class="d-grid gap-2">
                     <?= csrf_field() ?>
@@ -233,15 +236,19 @@ require_once __DIR__ . '/../includes/header.php';
                                 <option value="files" <?= $sc === 'files' ? 'selected' : '' ?>>Files only</option>
                             </select>
                         </div>
-                        <div class="col-md-4 mb-2">
+                        <div class="col-md-3 mb-2">
                             <label class="form-label fw-medium" style="font-size:.85rem;">Keep daily (days)</label>
                             <input type="number" min="1" name="keep_daily_days" class="form-control form-control-sm" value="<?= h(bk_setting_get('keep_daily_days', '7')) ?>">
                         </div>
-                        <div class="col-md-4 mb-2">
+                        <div class="col-md-3 mb-2">
                             <label class="form-label fw-medium" style="font-size:.85rem;">Keep weekly (days)</label>
                             <input type="number" min="1" name="keep_weekly_days" class="form-control form-control-sm" value="<?= h(bk_setting_get('keep_weekly_days', '30')) ?>">
                         </div>
-                        <div class="col-md-4 mb-2 d-flex align-items-end">
+                        <div class="col-md-3 mb-2">
+                            <label class="form-label fw-medium" style="font-size:.85rem;" title="The files backup is split into zip parts of this size, uploaded one at a time – keeps memory and disk usage low">Files part size (MB)</label>
+                            <input type="number" min="50" max="1024" name="files_part_mb" class="form-control form-control-sm" value="<?= h(bk_setting_get('files_part_mb', '250')) ?>">
+                        </div>
+                        <div class="col-md-3 mb-2 d-flex align-items-end">
                             <div class="form-check">
                                 <input class="form-check-input" type="checkbox" name="auto_enabled" id="auto_enabled" <?= bk_setting_get('auto_enabled', '0') === '1' ? 'checked' : '' ?>>
                                 <label class="form-check-label fw-medium" for="auto_enabled" style="font-size:.85rem;">Enable daily auto backup</label>

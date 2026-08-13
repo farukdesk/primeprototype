@@ -15,7 +15,9 @@ $backup = $stmt->fetch();
 
 if ($backup) {
     bk_drive_delete($backup['db_drive_id'] ?? null);
-    bk_drive_delete($backup['files_drive_id'] ?? null);
+    foreach (bk_drive_ids($backup['files_drive_id'] ?? null) as $fid) {
+        bk_drive_delete($fid);
+    }
     db()->prepare('DELETE FROM sys_backups WHERE id = ?')->execute([$id]);
     log_change('backups', 'DELETE', $id, 'Backup #' . $id, null, null, null, 'Backup deleted from Google Drive.');
     flash_set('success', 'Backup #' . $id . ' deleted from Google Drive.');
