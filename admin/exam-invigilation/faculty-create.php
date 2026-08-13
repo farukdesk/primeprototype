@@ -6,7 +6,16 @@ $page_title = 'Add Faculty';
 $errors     = [];
 clear_old();
 
-$departments = db()->query('SELECT id, name FROM dept_departments WHERE is_active=1 ORDER BY name ASC')->fetchAll();
+try {
+    $departments = db()->query(
+        "SELECT id, name, dept_type FROM dept_departments
+         WHERE (is_active = 1 AND dept_type = 'academic') OR dept_type = 'office'
+         ORDER BY dept_type ASC, name ASC"
+    )->fetchAll();
+} catch (Throwable $e) {
+    // dept_type column missing (run ei-office-departments-v1.sql); academic only
+    $departments = db()->query('SELECT id, name FROM dept_departments WHERE is_active=1 ORDER BY name ASC')->fetchAll();
+}
 $weekday_labels = [
     0 => 'Sunday',
     1 => 'Monday',

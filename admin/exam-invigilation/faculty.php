@@ -78,7 +78,16 @@ $data_st = db()->prepare(
 $data_st->execute($params);
 $rows = $data_st->fetchAll();
 
-$departments = db()->query('SELECT id, name FROM dept_departments WHERE is_active=1 ORDER BY name ASC')->fetchAll();
+try {
+    $departments = db()->query(
+        "SELECT id, name, dept_type FROM dept_departments
+         WHERE (is_active = 1 AND dept_type = 'academic') OR dept_type = 'office'
+         ORDER BY dept_type ASC, name ASC"
+    )->fetchAll();
+} catch (Throwable $e) {
+    // dept_type column missing (run ei-office-departments-v1.sql); academic only
+    $departments = db()->query('SELECT id, name FROM dept_departments WHERE is_active=1 ORDER BY name ASC')->fetchAll();
+}
 $designation_rows = db()->query("SELECT DISTINCT designation FROM ei_faculty WHERE designation IS NOT NULL AND designation <> '' ORDER BY designation ASC")->fetchAll();
 $designations = array_map(static fn($r) => (string)$r['designation'], $designation_rows);
 
