@@ -233,25 +233,31 @@ require_once __DIR__ . '/../includes/header.php';
 <?php if (!$print_mode): ?>
 <!-- Summary cards -->
 <div class="row g-3 mb-4">
-    <div class="col-md-3">
+    <div class="col-md">
         <div class="card text-center py-3" style="border-left:4px solid #8e44ad;">
             <div style="font-size:1.8rem;font-weight:700;color:#8e44ad;"><?= count($selected_exams) ?></div>
             <div class="text-muted" style="font-size:.8rem;">Exams Selected</div>
         </div>
     </div>
-    <div class="col-md-3">
+    <div class="col-md">
         <div class="card text-center py-3" style="border-left:4px solid #27ae60;">
             <div style="font-size:1.8rem;font-weight:700;color:#27ae60;"><?= count($bill_rows) ?></div>
             <div class="text-muted" style="font-size:.8rem;">Faculty with Attended Duty</div>
         </div>
     </div>
-    <div class="col-md-3">
+    <div class="col-md">
+        <div class="card text-center py-3" style="border-left:4px solid #16a085;">
+            <div style="font-size:1.8rem;font-weight:700;color:#16a085;"><?= $unique_slots ?></div>
+            <div class="text-muted" style="font-size:.8rem;">Unique Duty Slots</div>
+        </div>
+    </div>
+    <div class="col-md">
         <div class="card text-center py-3" style="border-left:4px solid #4f8ef7;">
             <div style="font-size:1.8rem;font-weight:700;color:#4f8ef7;"><?= $grand_slots ?></div>
             <div class="text-muted" style="font-size:.8rem;">Total Attended Slots</div>
         </div>
     </div>
-    <div class="col-md-3">
+    <div class="col-md">
         <div class="card text-center py-3" style="border-left:4px solid #f39c12;">
             <div style="font-size:1.8rem;font-weight:700;color:#f39c12;">৳<?= number_format((float)$grand_total, 2) ?></div>
             <div class="text-muted" style="font-size:.8rem;">Total Remuneration</div>
