@@ -327,6 +327,77 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
         <?php endif; ?>
     </div>
+
+    <?php if (!empty($unique_payees) && !empty($sitting_depts)): ?>
+    <div class="card mt-4">
+        <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <h6 class="mb-0 fw-semibold"><i class="fas fa-user-clock me-2 text-muted"></i>Unique-Slot Payees — Sitting Attendance</h6>
+            <span class="text-muted" style="font-size:.8rem;">Paid per sitting (date + time). Unchecked = absent = not paid.</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="px-3" style="width:40px;">#</th>
+                            <th>Employee</th>
+                            <th>Department / Office</th>
+                            <th style="width:110px;">Rate (৳)</th>
+                            <?php foreach (array_keys($sitting_depts) as $sit_ts): ?>
+                            <th class="text-center"><?= h($sit_ts) ?></th>
+                            <?php endforeach; ?>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <?php $u_no = 0; foreach ($unique_payees as $p): ?>
+                        <?php
+                        $eligible_any = false;
+                        foreach ($sitting_depts as $sit_dept_ids) {
+                            if ($p['dept_type'] === 'office' || in_array((int)$p['dept_id'], $sit_dept_ids, true)) { $eligible_any = true; break; }
+                        }
+                        if (!$eligible_any) continue;
+                        $u_no++;
+                        ?>
+                        <tr>
+                            <td class="px-3"><?= $u_no ?></td>
+                            <td>
+                                <span class="fw-medium"><?= h($p['name']) ?></span>
+                                <?php if ($p['designation']): ?><small class="text-muted">– <?= h($p['designation']) ?></small><?php endif; ?>
+                            </td>
+                            <td>
+                                <span class="badge <?= $p['dept_type'] === 'office' ? 'bg-warning bg-opacity-15 text-warning-emphasis' : 'bg-primary bg-opacity-10 text-primary' ?>"><?= h($p['dept_name']) ?></span>
+                            </td>
+                            <td><?= $p['rate'] > 0 ? '<span class="fw-medium text-success">৳' . number_format((float)$p['rate'], 2) . '</span>' : '<span class="text-muted">—</span>' ?></td>
+                            <?php foreach ($sitting_depts as $sit_ts => $sit_dept_ids): ?>
+                            <td class="text-center">
+                                <?php if ($p['dept_type'] === 'office' || in_array((int)$p['dept_id'], $sit_dept_ids, true)): ?>
+                                <?php $u_checked = $u_att_map[$p['id'] . '|' . $sit_ts] ?? 1; ?>
+                                <div class="form-check form-switch d-inline-flex justify-content-center">
+                                    <input class="form-check-input" type="checkbox"
+                                           name="uattended[<?= (int)$p['id'] ?>][<?= md5($sit_ts) ?>]" value="1"
+                                           <?= $u_checked ? 'checked' : '' ?> style="cursor:pointer;">
+                                </div>
+                                <?php else: ?>
+                                <span class="text-muted">—</span>
+                                <?php endif; ?>
+                            </td>
+                            <?php endforeach; ?>
+                        </tr>
+                    <?php endforeach; ?>
+                    <?php if ($u_no === 0): ?>
+                        <tr><td colspan="<?= 4 + count($sitting_depts) ?>" class="text-center text-muted py-4">No unique-slot payees eligible for this date.</td></tr>
+                    <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card-footer text-end py-2 px-4">
+            <button type="submit" class="btn btn-primary" style="border-radius:10px;">
+                <i class="fas fa-save me-1"></i> Save Attendance
+            </button>
+        </div>
+    </div>
+    <?php endif; ?>
 </form>
 
 <script>
