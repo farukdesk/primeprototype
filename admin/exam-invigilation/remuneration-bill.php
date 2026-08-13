@@ -56,6 +56,28 @@ $untracked_st = db()->prepare(
 $untracked_st->execute([$id, $id]);
 $untracked_rows = $untracked_st->fetchAll();
 
+// ── Unique-slot payees: rate × attended sittings (date + time slot) ──────────
+$unique_bill_rows  = [];
+$unique_bill_total = 0.0;
+try {
+    $u_bill_st = db()->prepare(
+        "SELECT f.id, f.name, f.designation, f.remuneration_per_slot AS rate, d.name AS dept_name,
+                COUNT(DISTINCT CONCAT(u.slot_date, '|', u.time_slot)) AS attended_sittings,
+                (COUNT(DISTINCT CONCAT(u.slot_date, '|', u.time_slot)) * f.remuneration_per_slot) AS total_remuneration
+         FROM ei_unique_slot_attendance u
+         JOIN ei_faculty f ON f.id = u.faculty_id
+         JOIN dept_departments d ON d.id = f.dept_id
+         WHERE u.exam_id = ? AND u.attended = 1 AND f.is_active = 1 AND f.pay_by_unique_slot = 1
+         GROUP BY f.id, f.name, f.designation, f.remuneration_per_slot, d.name
+         ORDER BY d.name ASC, f.name ASC"
+    );
+    $u_bill_st->execute([$id]);
+    $unique_bill_rows  = $u_bill_st->fetchAll();
+    $unique_bill_total = array_sum(array_column($unique_bill_rows, 'total_remuneration'));
+} catch (Throwable $e) {
+    // ei-unique-slot-payees-v1.sql not run yet
+}
+
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
