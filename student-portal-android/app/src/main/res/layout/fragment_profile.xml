@@ -128,7 +128,7 @@
                             android:layout_width="18dp"
                             android:layout_height="18dp"
                             android:contentDescription="@null"
-                            android:src="@drawable/ic_school" />
+                            android:src="@drawable/ic_university_logo" />
 
                         <TextView
                             android:layout_width="wrap_content"

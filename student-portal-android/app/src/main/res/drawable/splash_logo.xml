@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="96dp" android:height="96dp"
-    android:viewportWidth="24" android:viewportHeight="24">
-    <path android:fillColor="#FFFFFF"
-        android:pathData="M12,3L1,9l11,6 9,-4.91L21,17h2L23,9zM5,13.18v4L12,21l7,-3.82v-4L12,17z"/>
-</vector>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:width="120dp"
+        android:height="120dp"
+        android:drawable="@drawable/ic_university_logo" />
+</layer-list>

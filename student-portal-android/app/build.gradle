@@ -29,8 +29,8 @@ android {
         applicationId "bd.ac.primeuniversity.studentportal"
         minSdk 24
         targetSdk 35
-        versionCode 4
-        versionName "1.0.4"
+        versionCode 7
+        versionName "1.0.7"
 
         // Base URL of the Prime University student API. Override here if your
         // server differs. No trailing slash. Exposed to code as BuildConfig.

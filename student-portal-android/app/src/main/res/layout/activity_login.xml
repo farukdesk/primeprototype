@@ -29,11 +29,11 @@
                 android:background="@drawable/bg_logo_tile">
 
                 <ImageView
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
                     android:layout_gravity="center"
                     android:contentDescription="@string/app_name"
-                    android:src="@drawable/ic_school" />
+                    android:src="@drawable/ic_university_logo" />
             </FrameLayout>
 
             <TextView

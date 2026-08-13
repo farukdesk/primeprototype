@@ -17,7 +17,7 @@ enum class Feature(
     @androidx.annotation.ColorRes val containerRes: Int = 0,
 ) {
     // Academic
-    REGISTERED_COURSES(R.string.feat_registered_courses, R.drawable.ic_school, R.color.cat_academic),
+    REGISTERED_COURSES(R.string.feat_registered_courses, R.drawable.ic_university_logo, R.color.cat_academic),
     COURSE_REGISTRATION(R.string.feat_course_registration, R.drawable.ic_registration, R.color.cat_academic),
 
     // Examination
@@ -54,7 +54,7 @@ enum class Feature(
     MY_ATTENDANCE(R.string.feat_my_attendance, R.drawable.ic_check_circle, R.color.icon_attendance, R.string.feat_my_attendance_desc, R.color.tint_attendance),
     LEAVE_MANAGEMENT(R.string.feat_leave_management, R.drawable.ic_event, R.color.icon_leave, R.string.feat_leave_management_desc, R.color.tint_leave),
     LEAVE_APPROVALS(R.string.feat_leave_approvals, R.drawable.ic_check_circle, R.color.icon_approvals, R.string.feat_leave_approvals_desc, R.color.tint_approvals),
-    STUDENT_ATTENDANCE(R.string.feat_student_attendance, R.drawable.ic_school, R.color.icon_approvals, R.string.feat_student_attendance_desc, R.color.tint_approvals),
+    STUDENT_ATTENDANCE(R.string.feat_student_attendance, R.drawable.ic_university_logo, R.color.icon_approvals, R.string.feat_student_attendance_desc, R.color.tint_approvals),
     STAFF_NOTICES(R.string.feat_notices, R.drawable.ic_notifications, R.color.icon_notices, containerRes = R.color.tint_notices),
     STAFF_PROFILE(R.string.feat_my_profile, R.drawable.ic_person, R.color.icon_profile, containerRes = R.color.tint_profile),
 }
