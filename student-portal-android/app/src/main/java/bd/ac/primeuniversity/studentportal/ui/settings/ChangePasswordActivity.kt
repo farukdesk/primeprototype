@@ -12,8 +12,9 @@ import bd.ac.primeuniversity.studentportal.util.AppResult
 import kotlinx.coroutines.launch
 
 /**
- * Lets the signed-in employee change their account password
- * (Settings → Password Change → admin/api/staff/change-password.php).
+ * Lets the signed-in student or employee change their account password
+ * (Settings → Password Change → admin/api/student/change-password.php or
+ * admin/api/staff/change-password.php).
  */
 class ChangePasswordActivity : AppCompatActivity() {
 

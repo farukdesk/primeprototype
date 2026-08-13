@@ -27,14 +27,26 @@ if ($login === '' || $password === '') {
     sp_api_error(400, 'Username and password are required.');
 }
 
-// Look up the user account
-$stmt = db()->prepare(
-    'SELECT u.id, u.full_name, u.username, u.email, u.password, u.is_active
+// Look up the user account. Numeric logins (student IDs) also match with or
+// without leading zeros, e.g. "0123456" and "123456" find the same account.
+$sql    = 'SELECT u.id, u.full_name, u.username, u.email, u.password, u.is_active
      FROM users u
-     WHERE (u.username = ? OR u.email = ?) AND u.is_active = 1
-     LIMIT 1'
-);
-$stmt->execute([$login, $login]);
+     WHERE (u.username = ? OR u.email = ?';
+$params = [$login, $login];
+
+$digits = ctype_digit($login) ? ltrim($login, '0') : '';
+if ($digits !== '') {
+    $sql     .= " OR (u.username REGEXP '^[0-9]+$' AND TRIM(LEADING '0' FROM u.username) = ?)";
+    $params[] = $digits;
+}
+
+// Prefer an exact username/email match if several accounts qualify.
+$sql     .= ') AND u.is_active = 1 ORDER BY (u.username = ? OR u.email = ?) DESC LIMIT 1';
+$params[] = $login;
+$params[] = $login;
+
+$stmt = db()->prepare($sql);
+$stmt->execute($params);
 $user = $stmt->fetch();
 
 // Verify password (bcrypt, MD5, SHA1 and plain-text for legacy compatibility)

@@ -36,6 +36,13 @@ interface ApiService {
     @GET("auth/me.php")
     suspend fun me(): Response<MeResponse>
 
+    @FormUrlEncoded
+    @POST("change-password.php")
+    suspend fun changePassword(
+        @Field("current_password") currentPassword: String,
+        @Field("new_password") newPassword: String,
+    ): Response<SimpleResponse>
+
     @GET("notices.php")
     suspend fun getNotices(
         @Query("type") type: String,
