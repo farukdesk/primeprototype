@@ -185,10 +185,17 @@ require_once __DIR__ . '/../includes/header.php';
         </ol>
     </nav>
     <?php if ($selected_ids): ?>
-    <a href="?<?= h($qs_base) ?>&print=1" target="_blank"
-       class="btn btn-outline-secondary btn-sm" style="border-radius:10px;">
-        <i class="fas fa-print me-1"></i> Print
-    </a>
+    <div class="d-flex gap-2 align-items-center">
+        <a href="<?= APP_URL ?>/exam-invigilation/remuneration-bill-word.php?<?= h($qs_base) ?>"
+           class="btn btn-primary btn-sm" style="border-radius:10px;"
+           title="Download the official approval memo (.doc): subject, memo text, per-department bills and summary">
+            <i class="fas fa-file-word me-1"></i> Download Approval Memo (Word)
+        </a>
+        <a href="?<?= h($qs_base) ?>&print=1" target="_blank"
+           class="btn btn-outline-secondary btn-sm" style="border-radius:10px;">
+            <i class="fas fa-print me-1"></i> Print
+        </a>
+    </div>
     <?php endif; ?>
 </div>
 <?php flash_show(); ?>
@@ -236,6 +243,10 @@ require_once __DIR__ . '/../includes/header.php';
             <button type="submit" class="btn btn-primary btn-sm" style="border-radius:10px;">
                 <i class="fas fa-calculator me-1"></i> Generate Bill
             </button>
+            <span class="text-muted ms-2" style="font-size:.8rem;">
+                After generating, use <strong>Download Approval Memo (Word)</strong> (top right) to get the
+                editable office memo for the Authority.
+            </span>
         </form>
         <script>
         (function () {
