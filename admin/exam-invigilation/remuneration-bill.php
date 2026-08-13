@@ -113,10 +113,6 @@ require_once __DIR__ . '/../includes/header.php';
         </ol>
     </nav>
     <div class="d-flex gap-2">
-        <a href="<?= APP_URL ?>/exam-invigilation/attendance.php?id=<?= $id ?>"
-           class="btn btn-outline-primary btn-sm" style="border-radius:10px;">
-            <i class="fas fa-calendar-check me-1"></i> Mark Attendance
-        </a>
         <a href="?id=<?= $id ?>&print=1" target="_blank"
            class="btn btn-outline-secondary btn-sm" style="border-radius:10px;">
             <i class="fas fa-print me-1"></i> Print
@@ -124,6 +120,8 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
 </div>
 <?php flash_show(); ?>
+<?php require __DIR__ . '/ei-nav.php'; ?>
+<?php require __DIR__ . '/exam-tabs.php'; ?>
 <?php endif; ?>
 
 <?php if ($print_mode): ?>

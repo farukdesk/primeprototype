@@ -499,20 +499,8 @@ require_once __DIR__ . '/../includes/header.php';
     </nav>
     <div class="d-flex gap-2 flex-wrap">
         <?php if (!$print_mode): ?>
-        <a href="<?= APP_URL ?>/exam-invigilation/versions.php?id=<?= $id ?>"
-           class="btn btn-outline-secondary btn-sm" style="border-radius:10px;" title="View version history">
-            <i class="fas fa-history me-1"></i> Version History
-        </a>
         <a href="<?= h($print_url) ?>" target="_blank" class="btn btn-outline-dark btn-sm" style="border-radius:10px;">
             <i class="fas fa-file-pdf me-1"></i> A4 PDF Print
-        </a>
-        <a href="<?= APP_URL ?>/exam-invigilation/attendance.php?id=<?= $id ?>"
-           class="btn btn-outline-info btn-sm" style="border-radius:10px;">
-            <i class="fas fa-calendar-check me-1"></i> Attendance
-        </a>
-        <a href="<?= APP_URL ?>/exam-invigilation/remuneration-bill.php?id=<?= $id ?>"
-           class="btn btn-outline-success btn-sm" style="border-radius:10px;">
-            <i class="fas fa-file-invoice-dollar me-1"></i> Bill
         </a>
         <?php else: ?>
         <a href="<?= h($view_url) ?>" class="btn btn-outline-secondary btn-sm" style="border-radius:10px;">
@@ -530,17 +518,16 @@ require_once __DIR__ . '/../includes/header.php';
             <i class="fas fa-plus me-1"></i> Add Slot
         </a>
         <?php endif; ?>
-        <?php if (is_super_admin() || can_access('exam-invigilation', 'can_edit')): ?>
-        <a href="<?= APP_URL ?>/exam-invigilation/edit.php?id=<?= $id ?>"
-           class="btn btn-outline-primary btn-sm" style="border-radius:10px;">
-            <i class="fas fa-edit me-1"></i> Edit Exam
-        </a>
-        <?php endif; ?>
         <?php endif; ?>
     </div>
 </div>
 
 <?php flash_show(); ?>
+
+<?php if (!$print_mode): ?>
+<?php require __DIR__ . '/ei-nav.php'; ?>
+<?php require __DIR__ . '/exam-tabs.php'; ?>
+<?php endif; ?>
 
 <?php if ($print_mode): ?>
 <style>
