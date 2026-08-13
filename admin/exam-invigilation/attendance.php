@@ -76,6 +76,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action']) && $_POST[
         }
     }
 
+    // ── Unique-slot payees: per-sitting (date + time slot) attendance ─────────
+    try {
+        $u_payees = db()->query(
+            "SELECT f.id, f.dept_id, d.dept_type
+             FROM ei_faculty f
+             JOIN dept_departments d ON d.id = f.dept_id
+             WHERE f.is_active = 1 AND f.pay_by_unique_slot = 1"
+        )->fetchAll();
+    } catch (Throwable $e) {
+        $u_payees = []; // migrations ei-office-departments-v1 / ei-unique-slot-payees-v1 not run yet
+    }
+    if ($u_payees) {
+        $sit_st = db()->prepare('SELECT DISTINCT time_slot, dept_id FROM ei_slots WHERE exam_id = ? AND slot_date = ?');
+        $sit_st->execute([$id, $post_date]);
+        $sitting_dept_map = [];
+        foreach ($sit_st->fetchAll() as $sr) {
+            $sitting_dept_map[$sr['time_slot']][] = (int)$sr['dept_id'];
+        }
+        $u_attended_post = $_POST['uattended'] ?? [];
+        if (!is_array($u_attended_post)) $u_attended_post = [];
+        $u_upsert = db()->prepare(
+            'INSERT INTO ei_unique_slot_attendance (exam_id, faculty_id, slot_date, time_slot, attended)
+             VALUES (?,?,?,?,?)
+             ON DUPLICATE KEY UPDATE attended = VALUES(attended), updated_at = NOW()'
+        );
+        foreach ($u_payees as $p) {
+            foreach ($sitting_dept_map as $sit_ts => $sit_depts) {
+                $eligible = ($p['dept_type'] === 'office') || in_array((int)$p['dept_id'], $sit_depts, true);
+                if (!$eligible) continue;
+                $u_att = isset($u_attended_post[$p['id']][md5($sit_ts)]) ? 1 : 0;
+                $u_upsert->execute([$id, (int)$p['id'], $post_date, $sit_ts, $u_att]);
+            }
+        }
+    }
+
     flash_set('success', 'Attendance saved for ' . date('d M Y', strtotime($post_date)) . '.');
     redirect(APP_URL . '/exam-invigilation/attendance.php?id=' . $id . '&slot_date=' . urlencode($post_date));
 }
