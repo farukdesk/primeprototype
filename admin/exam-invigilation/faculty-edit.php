@@ -25,7 +25,16 @@ $page_title = 'Edit Faculty';
 $errors     = [];
 clear_old();
 
-$departments = db()->query('SELECT id, name FROM dept_departments WHERE is_active=1 ORDER BY name ASC')->fetchAll();
+try {
+    $departments = db()->query(
+        "SELECT id, name, dept_type FROM dept_departments
+         WHERE (is_active = 1 AND dept_type = 'academic') OR dept_type = 'office'
+         ORDER BY dept_type ASC, name ASC"
+    )->fetchAll();
+} catch (Throwable $e) {
+    // dept_type column missing (run ei-office-departments-v1.sql); academic only
+    $departments = db()->query('SELECT id, name FROM dept_departments WHERE is_active=1 ORDER BY name ASC')->fetchAll();
+}
 $weekday_labels = [
     0 => 'Sunday',
     1 => 'Monday',
@@ -132,14 +141,32 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="row g-3">
                 <div class="col-12">
                     <label class="form-label fw-medium">Department <span class="text-danger">*</span></label>
+                    <?php
+                    $dept_opts = ['academic' => [], 'office' => []];
+                    foreach ($departments as $d) {
+                        $dept_opts[(($d['dept_type'] ?? 'academic') === 'office') ? 'office' : 'academic'][] = $d;
+                    }
+                    ?>
                     <select name="dept_id" class="form-select" style="border-radius:10px;" required>
                         <option value="0">— Select Department —</option>
-                        <?php foreach ($departments as $d): ?>
-                        <option value="<?= $d['id'] ?>"
-                            <?= (int)(old('dept_id') ?: $fac['dept_id']) == $d['id'] ? 'selected' : '' ?>>
-                            <?= h($d['name']) ?>
-                        </option>
-                        <?php endforeach; ?>
+                        <optgroup label="Academic Departments">
+                            <?php foreach ($dept_opts['academic'] as $d): ?>
+                            <option value="<?= $d['id'] ?>"
+                                <?= (int)(old('dept_id') ?: $fac['dept_id']) == $d['id'] ? 'selected' : '' ?>>
+                                <?= h($d['name']) ?>
+                            </option>
+                            <?php endforeach; ?>
+                        </optgroup>
+                        <?php if ($dept_opts['office']): ?>
+                        <optgroup label="University Offices">
+                            <?php foreach ($dept_opts['office'] as $d): ?>
+                            <option value="<?= $d['id'] ?>"
+                                <?= (int)(old('dept_id') ?: $fac['dept_id']) == $d['id'] ? 'selected' : '' ?>>
+                                <?= h($d['name']) ?>
+                            </option>
+                            <?php endforeach; ?>
+                        </optgroup>
+                        <?php endif; ?>
                     </select>
                 </div>
                 <div class="col-md-6">
