@@ -281,7 +281,8 @@ require_once __DIR__ . '/../includes/header.php';
                     <tr>
                         <th class="px-3 text-center" style="width:40px;">#</th>
                         <th>Exam</th>
-                        <th class="text-center" style="width:120px;">Year</th>
+                        <th class="text-center" style="width:110px;">Year</th>
+                        <th class="text-center" style="width:110px;">Unique Slots</th>
                         <th class="text-center" style="width:120px;">Attended Slots</th>
                         <th class="text-end" style="width:160px;">Amount (৳)</th>
                         <?php if (!$print_mode): ?><th class="text-center" style="width:120px;">Detail Bill</th><?php endif; ?>
@@ -293,6 +294,9 @@ require_once __DIR__ . '/../includes/header.php';
                         <td class="px-3 text-center"><?= $si + 1 ?></td>
                         <td class="fw-medium"><?= h($sr['exam_name']) ?></td>
                         <td class="text-center"><?= h($sr['exam_year']) ?></td>
+                        <td class="text-center">
+                            <span class="badge bg-success bg-opacity-10 text-success fw-semibold"><?= (int)$sr['unique_slots'] ?></span>
+                        </td>
                         <td class="text-center"><?= (int)$sr['slots'] ?></td>
                         <td class="text-end"><?= $sr['total'] > 0 ? '৳' . number_format((float)$sr['total'], 2) : '<span class="text-muted">৳0.00</span>' ?></td>
                         <?php if (!$print_mode): ?>
