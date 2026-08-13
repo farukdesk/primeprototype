@@ -81,10 +81,11 @@ if ($selected_ids) {
     $sum_st = db()->prepare(
         "SELECT e.id, e.exam_name, e.exam_year,
                 COUNT(f.id) AS slots,
-                COUNT(DISTINCT a.slot_id) AS unique_slots,
+                COUNT(DISTINCT CONCAT(s.slot_date, '|', s.time_slot)) AS unique_slots,
                 COALESCE(SUM(f.remuneration_per_slot), 0) AS total
          FROM ei_exams e
          LEFT JOIN ei_slot_attendance a ON a.exam_id = e.id AND a.attended = 1
+         LEFT JOIN ei_slots s ON s.id = a.slot_id
          LEFT JOIN ei_faculty f ON f.id = a.faculty_id AND f.is_active = 1
          WHERE e.id IN ($ph)
          GROUP BY e.id, e.exam_name, e.exam_year
@@ -93,10 +94,12 @@ if ($selected_ids) {
     $sum_st->execute($selected_ids);
     $exam_summary = $sum_st->fetchAll();
 
-    // ── Unique duty slots (each room/time slot counted once, even with 2 invigilators)
+    // ── Unique slots: one exam sitting = slot_date + time_slot.
+    // Multiple rooms/departments in the same date/time window count as ONE unique slot.
     $uniq_st = db()->prepare(
-        "SELECT COUNT(DISTINCT a.slot_id)
+        "SELECT COUNT(DISTINCT CONCAT(s.slot_date, '|', s.time_slot))
          FROM ei_slot_attendance a
+         JOIN ei_slots s ON s.id = a.slot_id
          WHERE a.attended = 1 AND a.exam_id IN ($ph)"
     );
     $uniq_st->execute($selected_ids);
