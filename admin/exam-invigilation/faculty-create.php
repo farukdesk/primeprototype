@@ -174,6 +174,20 @@ require_once __DIR__ . '/../includes/header.php';
                     </div>
                     <small class="text-muted">Amount paid to this faculty per attended invigilation slot.</small>
                 </div>
+                <div class="col-12">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="pay_by_unique_slot"
+                               name="pay_by_unique_slot" value="1"
+                               <?= old('pay_by_unique_slot') ? 'checked' : '' ?>>
+                        <label class="form-check-label fw-medium" for="pay_by_unique_slot">Paid by Unique Slot <small class="text-muted fw-normal">(per exam sitting)</small></label>
+                    </div>
+                    <small class="text-muted">
+                        Pays rate &times; attended <strong>sittings</strong> (date + time slot) instead of per room duty.
+                        Office employees (Treasurer, Controller of Examinations, Accounts &amp; Audit) count <strong>all</strong>
+                        sittings of the exam; department employees count only their <strong>own department's</strong> sittings.
+                        Mark their per-sitting attendance on the exam's Attendance page — absent sittings are not paid.
+                    </small>
+                </div>
                 <div class="col-md-6">
                     <label class="form-label fw-medium">Signature Image</label>
                     <input type="file" name="signature" class="form-control" style="border-radius:10px;"
