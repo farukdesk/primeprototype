@@ -5,10 +5,11 @@
  */
 $ei_nav_script = basename($_SERVER['PHP_SELF'] ?? '');
 $ei_nav_map = [
-    'overview' => ['index.php', 'create.php', 'edit.php', 'view.php', 'slot-create.php', 'slot-edit.php', 'attendance.php', 'unique-attendance.php', 'versions.php'],
-    'faculty'  => ['faculty.php', 'faculty-create.php', 'faculty-edit.php', 'faculty-import.php', 'faculty-attendance.php'],
-    'bills'    => ['remuneration-bills.php', 'remuneration-bill.php'],
-    'reports'  => ['reports.php'],
+    'overview'   => ['index.php', 'create.php', 'edit.php', 'view.php', 'slot-create.php', 'slot-edit.php', 'versions.php'],
+    'attendance' => ['attendance-hub.php', 'attendance.php', 'unique-attendance.php', 'faculty-attendance.php'],
+    'faculty'    => ['faculty.php', 'faculty-create.php', 'faculty-edit.php', 'faculty-import.php'],
+    'bills'      => ['remuneration-bills.php', 'remuneration-bill.php'],
+    'reports'    => ['reports.php'],
 ];
 $ei_nav_active = 'overview';
 foreach ($ei_nav_map as $ei_nav_tab => $ei_nav_scripts) {
@@ -18,7 +19,8 @@ foreach ($ei_nav_map as $ei_nav_tab => $ei_nav_scripts) {
     }
 }
 $ei_nav_items = [
-    'overview' => ['label' => 'Overview & Exams',   'icon' => 'fa-th-large',            'href' => APP_URL . '/exam-invigilation/index.php'],
+    'overview'   => ['label' => 'Overview & Exams',   'icon' => 'fa-th-large',            'href' => APP_URL . '/exam-invigilation/index.php'],
+    'attendance' => ['label' => 'Attendance',          'icon' => 'fa-calendar-check',      'href' => APP_URL . '/exam-invigilation/attendance-hub.php'],
     'faculty'  => ['label' => 'Faculty Pool',        'icon' => 'fa-users',               'href' => APP_URL . '/exam-invigilation/faculty.php'],
     'bills'    => ['label' => 'Remuneration Bills',  'icon' => 'fa-file-invoice-dollar', 'href' => APP_URL . '/exam-invigilation/remuneration-bills.php'],
     'reports'  => ['label' => 'Reports',             'icon' => 'fa-chart-bar',           'href' => APP_URL . '/exam-invigilation/reports.php'],
