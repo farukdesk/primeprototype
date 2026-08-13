@@ -193,6 +193,8 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 <?php flash_show(); ?>
 
+<?php require __DIR__ . '/ei-nav.php'; ?>
+
 <!-- ── Exam selector ── -->
 <div class="card mb-4">
     <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between">

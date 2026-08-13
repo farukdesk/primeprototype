@@ -116,6 +116,8 @@ require_once __DIR__ . '/../includes/header.php';
 
 <?php flash_show(); ?>
 
+<?php require __DIR__ . '/ei-nav.php'; ?>
+
 <div class="card mb-3">
     <div class="card-body py-2 px-3">
         <form method="GET" class="row g-2 align-items-center">
