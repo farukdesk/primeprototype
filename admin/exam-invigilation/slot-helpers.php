@@ -269,6 +269,32 @@ function ei_save_assignment_snapshot(int $exam_id, string $change_type, string $
     return $snapshot_id;
 }
 
+/**
+ * SQL CASE expression that ranks free-text designations so people lists can be
+ * ordered by seniority within a department:
+ * Dean → Head → Professor → Associate Professor → Assistant Professor →
+ * Lecturer → Section Officer → MLSS → Cleaner.
+ * Unknown designations sort between Section Officer and MLSS.
+ */
+function ei_designation_rank_sql(string $col = 'f.designation'): string
+{
+    $c = "LOWER(COALESCE($col, ''))";
+    return "(CASE
+        WHEN $c LIKE '%dean%' THEN 1
+        WHEN $c LIKE '%head%' OR $c LIKE '%chairman%' OR $c LIKE '%chairperson%' THEN 2
+        WHEN $c LIKE '%associate professor%' THEN 4
+        WHEN $c LIKE '%assistant professor%' THEN 5
+        WHEN $c LIKE '%professor%' THEN 3
+        WHEN $c LIKE '%senior lecturer%' THEN 6
+        WHEN $c LIKE '%lecturer%' THEN 7
+        WHEN $c LIKE '%senior section officer%' THEN 8
+        WHEN $c LIKE '%section officer%' THEN 9
+        WHEN $c LIKE '%mlss%' OR $c LIKE '%peon%' THEN 30
+        WHEN $c LIKE '%cleaner%' THEN 31
+        ELSE 20
+    END)";
+}
+
 // ── Remuneration helpers ───────────────────────────────────────────────────────
 
 /**
