@@ -15,6 +15,7 @@
  */
 require_once __DIR__ . '/../includes/auth.php';
 require_access('exam-invigilation');
+require_once __DIR__ . '/slot-helpers.php';
 
 // ── Selected exams (exam_ids[] like remuneration-bills.php, or single id=) ───
 $selected_ids = [];
@@ -92,8 +93,11 @@ function ei_taka_words(float $amount): string
 }
 
 // ── Invigilators: per faculty with per-exam slot breakdown ───────────────────
-$bill_st = db()->prepare(
-    "SELECT f.id, f.name, f.designation, f.remuneration_per_slot AS rate, d.name AS dept_name,
+// Unique-slot / fixed payees are billed in their own rows below — excluded here
+// so nobody is paid twice. Rows are ordered by designation within a department.
+$rank_sql = ei_designation_rank_sql('f.designation');
+$inv_sql  = static function (string $extra_where) use ($ph, $rank_sql): string {
+    return "SELECT f.id, f.name, f.designation, f.remuneration_per_slot AS rate, d.name AS dept_name,
             SUM(x.cnt) AS total_slots,
             (SUM(x.cnt) * f.remuneration_per_slot) AS total_remuneration,
             GROUP_CONCAT(
@@ -109,12 +113,20 @@ $bill_st = db()->prepare(
      ) x
      JOIN ei_faculty f ON f.id = x.faculty_id
      JOIN dept_departments d ON d.id = f.dept_id
-     WHERE f.is_active = 1
+     WHERE f.is_active = 1 {$extra_where}
      GROUP BY f.id, f.name, f.designation, f.remuneration_per_slot, d.name
-     ORDER BY d.name ASC, f.name ASC"
-);
-$bill_st->execute($selected_ids);
-$inv_rows = $bill_st->fetchAll();
+     ORDER BY d.name ASC, {$rank_sql} ASC, f.name ASC";
+};
+try {
+    $bill_st = db()->prepare($inv_sql('AND COALESCE(f.pay_by_unique_slot, 0) = 0'));
+    $bill_st->execute($selected_ids);
+    $inv_rows = $bill_st->fetchAll();
+} catch (Throwable $e) {
+    // pay_by_unique_slot column missing (migration not run yet)
+    $bill_st = db()->prepare($inv_sql(''));
+    $bill_st->execute($selected_ids);
+    $inv_rows = $bill_st->fetchAll();
+}
 
 // ── Unique-slot payees (officials): per payee with per-exam sitting breakdown ─
 $payee_rows = [];
@@ -138,9 +150,9 @@ try {
          ) x
          JOIN ei_faculty f ON f.id = x.faculty_id
          JOIN dept_departments d ON d.id = f.dept_id
-         WHERE f.pay_by_unique_slot = 1
+         WHERE f.pay_by_unique_slot = 1 AND COALESCE(f.pay_fixed, 0) = 0
          GROUP BY f.id, f.name, f.designation, f.remuneration_per_slot, f.pay_fixed, f.fixed_payment_amount, d.name
-         ORDER BY d.name ASC, f.name ASC"
+         ORDER BY d.name ASC, {$rank_sql} ASC, f.name ASC"
     );
     $p_st->execute($selected_ids);
     $payee_rows = $p_st->fetchAll();
@@ -168,7 +180,7 @@ try {
              JOIN dept_departments d ON d.id = f.dept_id
              WHERE f.pay_by_unique_slot = 1
              GROUP BY f.id, f.name, f.designation, f.remuneration_per_slot, d.name
-             ORDER BY d.name ASC, f.name ASC"
+             ORDER BY d.name ASC, {$rank_sql} ASC, f.name ASC"
         );
         $p_st->execute($selected_ids);
         $payee_rows = $p_st->fetchAll();
@@ -178,7 +190,34 @@ try {
 }
 
 // ── Build sections grouped by department / office ───────────────────────────
-$sections = []; // dept_name => ['has_inv' => bool, 'rows' => [...], 'total' => float]
+// Fixed payees: ALWAYS the fixed amount per exam — attendance is irrelevant.
+$fixed_rows = [];
+try {
+    $fx_st = db()->prepare(
+        "SELECT f.id, f.name, f.designation, f.fixed_payment_amount, d.name AS dept_name,
+                COALESCE((SELECT COUNT(DISTINCT CONCAT(u.slot_date, '|', u.time_slot))
+                          FROM ei_unique_slot_attendance u
+                          WHERE u.faculty_id = f.id AND u.attended = 1 AND u.exam_id IN ($ph)), 0) AS total_slots
+         FROM ei_faculty f
+         JOIN dept_departments d ON d.id = f.dept_id
+         WHERE f.pay_fixed = 1
+         ORDER BY d.name ASC, {$rank_sql} ASC, f.name ASC"
+    );
+    $fx_st->execute($selected_ids);
+    $fixed_rows = $fx_st->fetchAll();
+} catch (Throwable $e) {
+    // ei-fixed-payment-payees-v1.sql not run yet
+}
+
+// Pay each person only ONCE, in one department.
+// Priority: fixed payment → invigilation (per-slot) → per-sitting official.
+$paid_keys  = [];
+$fixed_rows = ei_dedupe_pay_rows($fixed_rows, 'name', $paid_keys, 'fixed_payment_amount');
+$inv_rows   = ei_dedupe_pay_rows($inv_rows, 'name', $paid_keys);
+$payee_rows = ei_dedupe_pay_rows($payee_rows, 'name', $paid_keys, 'total_slots');
+
+$exam_count = max(1, count($selected_exams));
+$sections   = []; // dept_name => ['has_inv' => bool, 'rows' => [...], 'total' => float]
 
 foreach ($inv_rows as $r) {
     $dept = (string)$r['dept_name'];
@@ -195,18 +234,28 @@ foreach ($inv_rows as $r) {
 
 foreach ($payee_rows as $r) {
     $dept  = (string)$r['dept_name'];
-    $fixed = !empty($r['pay_fixed']);
-    $total = $fixed
-        ? (float)$r['fixed_payment_amount'] * max(1, (int)$r['exams_cnt'])
-        : (int)$r['total_slots'] * (float)$r['rate'];
+    $total = (int)$r['total_slots'] * (float)$r['rate'];
     $sections[$dept]['has_inv'] = $sections[$dept]['has_inv'] ?? false;
     $sections[$dept]['rows'][] = [
         'name'      => $r['name'],
         'desig'     => $r['designation'],
         'breakdown' => $r['breakdown'] ? explode('||', $r['breakdown']) : [],
         'slots'     => (int)$r['total_slots'],
-        'rate'      => $fixed ? 'Fixed' : ($r['rate'] > 0 ? ei_bd_money((float)$r['rate']) . '/-' : '—'),
+        'rate'      => $r['rate'] > 0 ? ei_bd_money((float)$r['rate']) . '/-' : '—',
         'total'     => $total,
+    ];
+}
+
+foreach ($fixed_rows as $r) {
+    $dept = (string)$r['dept_name'];
+    $sections[$dept]['has_inv'] = $sections[$dept]['has_inv'] ?? false;
+    $sections[$dept]['rows'][] = [
+        'name'      => $r['name'],
+        'desig'     => $r['designation'],
+        'breakdown' => [], // fixed pay — slots/attendance never change the amount
+        'slots'     => (int)$r['total_slots'],
+        'rate'      => 'Fixed',
+        'total'     => (float)$r['fixed_payment_amount'] * $exam_count,
     ];
 }
 
