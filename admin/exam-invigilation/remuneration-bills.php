@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
 require_access('exam-invigilation');
+require_once __DIR__ . '/slot-helpers.php';
 
 $page_title = 'Remuneration Bills';
 $print_mode = isset($_GET['print']) && $_GET['print'] === '1';
@@ -44,8 +45,11 @@ if ($selected_ids) {
     $selected_exams = $sel_st->fetchAll();
 
     // ── Aggregate per faculty across ALL selected exams ─────────────────────
-    $bill_st = db()->prepare(
-        "SELECT
+    // Unique-slot / fixed payees are billed in their own section below, so they
+    // are excluded here to avoid paying the same person twice.
+    $rank_sql = ei_designation_rank_sql('f.designation');
+    $bill_sql = static function (string $extra_where) use ($ph, $rank_sql): string {
+        return "SELECT
              f.id AS faculty_id,
              f.name AS faculty_name,
              f.designation,
@@ -67,12 +71,20 @@ if ($selected_ids) {
          ) x
          JOIN ei_faculty f ON f.id = x.faculty_id
          JOIN dept_departments d ON d.id = f.dept_id
-         WHERE f.is_active = 1
+         WHERE f.is_active = 1 {$extra_where}
          GROUP BY f.id, f.name, f.designation, f.remuneration_per_slot, d.name
-         ORDER BY d.name ASC, f.name ASC"
-    );
-    $bill_st->execute($selected_ids);
-    $bill_rows = $bill_st->fetchAll();
+         ORDER BY d.name ASC, {$rank_sql} ASC, f.name ASC";
+    };
+    try {
+        $bill_st = db()->prepare($bill_sql('AND COALESCE(f.pay_by_unique_slot, 0) = 0'));
+        $bill_st->execute($selected_ids);
+        $bill_rows = $bill_st->fetchAll();
+    } catch (Throwable $e) {
+        // pay_by_unique_slot column missing (migration not run yet)
+        $bill_st = db()->prepare($bill_sql(''));
+        $bill_st->execute($selected_ids);
+        $bill_rows = $bill_st->fetchAll();
+    }
 
     $grand_total = array_sum(array_column($bill_rows, 'total_remuneration'));
     $grand_slots = array_sum(array_column($bill_rows, 'attended_slots'));
@@ -116,33 +128,37 @@ if ($selected_ids) {
                SELECT 1 FROM ei_slot_attendance a
                WHERE a.exam_id = s.exam_id AND a.faculty_id = f.id
            )
-         ORDER BY d.name ASC, f.name ASC"
+         ORDER BY d.name ASC, {$rank_sql} ASC, f.name ASC"
     );
     $untracked_st->execute($selected_ids);
     $untracked_rows = $untracked_st->fetchAll();
 
-    // ── Unique-slot payees: rate × attended sittings across selected exams ────
-    // Same date+time sitting shared by several exams is paid once.
+    // ── Officials & fixed payees ──────────────────────────────────────────
+    // Per-sitting payees: rate × attended sittings (same date+time sitting shared
+    // by several exams is paid once).
+    // Fixed payees: ALWAYS the fixed amount per exam — present, absent or the
+    // number of slots does NOT change their bill.
     $unique_bill_rows  = [];
     $unique_bill_total = 0.0;
+    $sitting_rows      = [];
+    $fixed_rows        = [];
+    $exam_count        = max(1, count($selected_ids));
     try {
         $u_bill_st = db()->prepare(
             "SELECT f.id, f.name, f.designation, f.remuneration_per_slot AS rate,
-                    f.pay_fixed, f.fixed_payment_amount, d.name AS dept_name,
+                    0 AS pay_fixed, 0 AS fixed_payment_amount, d.name AS dept_name,
                     COUNT(DISTINCT CONCAT(u.slot_date, '|', u.time_slot)) AS attended_sittings,
-                    (CASE WHEN f.pay_fixed = 1
-                          THEN f.fixed_payment_amount * COUNT(DISTINCT u.exam_id)
-                          ELSE COUNT(DISTINCT CONCAT(u.slot_date, '|', u.time_slot)) * f.remuneration_per_slot END) AS total_remuneration
+                    (COUNT(DISTINCT CONCAT(u.slot_date, '|', u.time_slot)) * f.remuneration_per_slot) AS total_remuneration
              FROM ei_unique_slot_attendance u
              JOIN ei_faculty f ON f.id = u.faculty_id
              JOIN dept_departments d ON d.id = f.dept_id
-             WHERE u.exam_id IN ($ph) AND u.attended = 1 AND f.pay_by_unique_slot = 1
-             GROUP BY f.id, f.name, f.designation, f.remuneration_per_slot, f.pay_fixed, f.fixed_payment_amount, d.name
-             ORDER BY d.name ASC, f.name ASC"
+             WHERE u.exam_id IN ($ph) AND u.attended = 1
+               AND f.pay_by_unique_slot = 1 AND COALESCE(f.pay_fixed, 0) = 0
+             GROUP BY f.id, f.name, f.designation, f.remuneration_per_slot, d.name
+             ORDER BY d.name ASC, {$rank_sql} ASC, f.name ASC"
         );
         $u_bill_st->execute($selected_ids);
-        $unique_bill_rows  = $u_bill_st->fetchAll();
-        $unique_bill_total = array_sum(array_column($unique_bill_rows, 'total_remuneration'));
+        $sitting_rows = $u_bill_st->fetchAll();
     } catch (Throwable $e) {
         // ei-fixed-payment-payees-v1.sql not run yet — fall back to per-sitting pay only
         try {
@@ -156,15 +172,49 @@ if ($selected_ids) {
                  JOIN dept_departments d ON d.id = f.dept_id
                  WHERE u.exam_id IN ($ph) AND u.attended = 1 AND f.pay_by_unique_slot = 1
                  GROUP BY f.id, f.name, f.designation, f.remuneration_per_slot, d.name
-                 ORDER BY d.name ASC, f.name ASC"
+                 ORDER BY d.name ASC, {$rank_sql} ASC, f.name ASC"
             );
             $u_bill_st->execute($selected_ids);
-            $unique_bill_rows  = $u_bill_st->fetchAll();
-            $unique_bill_total = array_sum(array_column($unique_bill_rows, 'total_remuneration'));
+            $sitting_rows = $u_bill_st->fetchAll();
         } catch (Throwable $e2) {
             // ei-unique-slot-payees-v1.sql not run yet
         }
     }
+
+    // Fixed payees are billed from the faculty pool directly — NOT from the
+    // attendance table — so absence never changes their fixed amount.
+    try {
+        $fx_st = db()->prepare(
+            "SELECT f.id, f.name, f.designation, f.remuneration_per_slot AS rate,
+                    1 AS pay_fixed, f.fixed_payment_amount, d.name AS dept_name,
+                    COALESCE((SELECT COUNT(DISTINCT CONCAT(u.slot_date, '|', u.time_slot))
+                              FROM ei_unique_slot_attendance u
+                              WHERE u.faculty_id = f.id AND u.attended = 1 AND u.exam_id IN ($ph)), 0) AS attended_sittings,
+                    (f.fixed_payment_amount * {$exam_count}) AS total_remuneration
+             FROM ei_faculty f
+             JOIN dept_departments d ON d.id = f.dept_id
+             WHERE f.pay_fixed = 1
+             ORDER BY d.name ASC, {$rank_sql} ASC, f.name ASC"
+        );
+        $fx_st->execute($selected_ids);
+        $fixed_rows = $fx_st->fetchAll();
+    } catch (Throwable $e) {
+        // pay_fixed column missing — no fixed payees yet
+    }
+
+    // ── Pay each person only ONCE, in one department ─────────────────────────
+    // Priority: fixed payment → invigilation (per-slot) → per-sitting official.
+    $paid_keys    = [];
+    $fixed_rows   = ei_dedupe_pay_rows($fixed_rows, 'name', $paid_keys);
+    $bill_rows    = ei_dedupe_pay_rows($bill_rows, 'faculty_name', $paid_keys);
+    $sitting_rows = ei_dedupe_pay_rows($sitting_rows, 'name', $paid_keys);
+
+    $unique_bill_rows = array_merge($fixed_rows, $sitting_rows);
+    usort($unique_bill_rows, static fn ($a, $b) => [$a['dept_name'], $a['name']] <=> [$b['dept_name'], $b['name']]);
+
+    $unique_bill_total = array_sum(array_column($unique_bill_rows, 'total_remuneration'));
+    $grand_total       = array_sum(array_column($bill_rows, 'total_remuneration'));
+    $grand_slots       = array_sum(array_column($bill_rows, 'attended_slots'));
 }
 
 $exam_label = implode(', ', array_map(
@@ -504,7 +554,7 @@ require_once __DIR__ . '/../includes/header.php';
 <?php if (!empty($unique_bill_rows)): ?>
 <div class="card mt-4 <?= $print_mode ? 'border-0' : '' ?>">
     <div class="card-header py-3 px-4">
-        <h6 class="mb-0 fw-semibold"><i class="fas fa-user-clock me-2 text-muted"></i>Unique-Slot Payees <small class="text-muted fw-normal">(paid per attended sitting)</small></h6>
+        <h6 class="mb-0 fw-semibold"><i class="fas fa-user-clock me-2 text-muted"></i>Officials &amp; Fixed Payees <small class="text-muted fw-normal">(fixed payees always get their fixed amount; others are paid per attended sitting)</small></h6>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
