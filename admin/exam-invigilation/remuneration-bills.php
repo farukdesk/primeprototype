@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
 require_access('exam-invigilation');
+require_once __DIR__ . '/slot-helpers.php';
 
 $page_title = 'Remuneration Bills';
 $print_mode = isset($_GET['print']) && $_GET['print'] === '1';
@@ -44,8 +45,11 @@ if ($selected_ids) {
     $selected_exams = $sel_st->fetchAll();
 
     // ── Aggregate per faculty across ALL selected exams ─────────────────────
-    $bill_st = db()->prepare(
-        "SELECT
+    // Unique-slot / fixed payees are billed in their own section below, so they
+    // are excluded here to avoid paying the same person twice.
+    $rank_sql = ei_designation_rank_sql('f.designation');
+    $bill_sql = static function (string $extra_where) use ($ph, $rank_sql): string {
+        return "SELECT
              f.id AS faculty_id,
              f.name AS faculty_name,
              f.designation,
@@ -67,12 +71,20 @@ if ($selected_ids) {
          ) x
          JOIN ei_faculty f ON f.id = x.faculty_id
          JOIN dept_departments d ON d.id = f.dept_id
-         WHERE f.is_active = 1
+         WHERE f.is_active = 1 {$extra_where}
          GROUP BY f.id, f.name, f.designation, f.remuneration_per_slot, d.name
-         ORDER BY d.name ASC, f.name ASC"
-    );
-    $bill_st->execute($selected_ids);
-    $bill_rows = $bill_st->fetchAll();
+         ORDER BY d.name ASC, {$rank_sql} ASC, f.name ASC";
+    };
+    try {
+        $bill_st = db()->prepare($bill_sql('AND COALESCE(f.pay_by_unique_slot, 0) = 0'));
+        $bill_st->execute($selected_ids);
+        $bill_rows = $bill_st->fetchAll();
+    } catch (Throwable $e) {
+        // pay_by_unique_slot column missing (migration not run yet)
+        $bill_st = db()->prepare($bill_sql(''));
+        $bill_st->execute($selected_ids);
+        $bill_rows = $bill_st->fetchAll();
+    }
 
     $grand_total = array_sum(array_column($bill_rows, 'total_remuneration'));
     $grand_slots = array_sum(array_column($bill_rows, 'attended_slots'));
@@ -116,7 +128,7 @@ if ($selected_ids) {
                SELECT 1 FROM ei_slot_attendance a
                WHERE a.exam_id = s.exam_id AND a.faculty_id = f.id
            )
-         ORDER BY d.name ASC, f.name ASC"
+         ORDER BY d.name ASC, {$rank_sql} ASC, f.name ASC"
     );
     $untracked_st->execute($selected_ids);
     $untracked_rows = $untracked_st->fetchAll();
