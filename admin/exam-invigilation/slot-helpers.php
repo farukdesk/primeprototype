@@ -297,51 +297,6 @@ function ei_designation_rank_sql(string $col = 'f.designation'): string
 
 // ── Remuneration helpers ───────────────────────────────────────────────────────
 
-/**
- * SQL CASE expression that ranks free-text designations so people lists can be
- * ordered by seniority within a department (Professor → … → Lecturer →
- * officers → MLSS). Unknown designations sort before MLSS/support staff.
- */
-function ei_designation_rank_sql(string $col = 'f.designation'): string
-{
-    $c = "LOWER(COALESCE($col, ''))";
-    return "(CASE
-        WHEN $c LIKE '%vice%chancellor%' THEN 1
-        WHEN $c LIKE '%dean%' THEN 2
-        WHEN $c LIKE '%associate professor%' THEN 4
-        WHEN $c LIKE '%assistant professor%' THEN 5
-        WHEN $c LIKE '%professor%' THEN 3
-        WHEN $c LIKE '%senior lecturer%' THEN 6
-        WHEN $c LIKE '%lecturer%' THEN 7
-        WHEN $c LIKE '%additional controller%' THEN 9
-        WHEN $c LIKE '%deputy controller%' THEN 10
-        WHEN $c LIKE '%assistant controller%' THEN 11
-        WHEN $c LIKE '%controller%' THEN 8
-        WHEN $c LIKE '%additional registrar%' THEN 13
-        WHEN $c LIKE '%deputy registrar%' THEN 14
-        WHEN $c LIKE '%assistant registrar%' THEN 15
-        WHEN $c LIKE '%registrar%' THEN 12
-        WHEN $c LIKE '%deputy director%' THEN 17
-        WHEN $c LIKE '%assistant director%' THEN 18
-        WHEN $c LIKE '%director%' THEN 16
-        WHEN $c LIKE '%administrative officer%' THEN 19
-        WHEN $c LIKE '%senior section officer%' THEN 20
-        WHEN $c LIKE '%section officer%' THEN 21
-        WHEN $c LIKE '%senior officer%' THEN 22
-        WHEN $c LIKE '%accounts officer%' THEN 23
-        WHEN $c LIKE '%assistant officer%' THEN 25
-        WHEN $c LIKE '%officer%' THEN 24
-        WHEN $c LIKE '%senior assistant%' THEN 26
-        WHEN $c LIKE '%computer operator%' THEN 27
-        WHEN $c LIKE '%office assistant%' THEN 28
-        WHEN $c LIKE '%lab%' THEN 29
-        WHEN $c LIKE '%assistant%' THEN 30
-        WHEN $c LIKE '%driver%' THEN 33
-        WHEN $c LIKE '%mlss%' OR $c LIKE '%peon%' OR $c LIKE '%cleaner%' THEN 34
-        ELSE 32
-    END)";
-}
-
 /** Normalised key used to recognise the same person across departments/lists. */
 function ei_norm_person_key(?string $name): string
 {
