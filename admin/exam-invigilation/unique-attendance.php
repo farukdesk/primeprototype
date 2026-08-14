@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
 require_access('exam-invigilation', 'can_edit');
+require_once __DIR__ . '/slot-helpers.php';
 
 $id = (int)($_GET['id'] ?? 0);
 $exam_st = db()->prepare('SELECT * FROM ei_exams WHERE id = ?');
@@ -77,8 +78,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action']) && $_POST[
             );
             foreach ($u_payees as $p) {
                 foreach ($sitting_dept_map as $sit_ts => $sit_depts) {
-                    $eligible = ($p['dept_type'] === 'office') || in_array((int)$p['dept_id'], $sit_depts, true);
-                    if (!$eligible) continue;
+                    // Every official (incl. MLSS / Section Officers from any
+                    // department) covers every sitting — no department filter.
                     $u_att = isset($u_attended_post[$p['id']][md5($sit_ts)]) ? 1 : 0;
                     $u_upsert->execute([$id, (int)$p['id'], $post_date, $sit_ts, $u_att]);
                 }
@@ -107,7 +108,7 @@ if ($f_date !== '') {
              FROM ei_faculty f
              JOIN dept_departments d ON d.id = f.dept_id
              WHERE f.pay_by_unique_slot = 1
-             ORDER BY d.dept_type DESC, d.name ASC, f.name ASC"
+             ORDER BY d.dept_type DESC, d.name ASC, " . ei_designation_rank_sql('f.designation') . " ASC, f.name ASC"
         )->fetchAll();
     } catch (Throwable $e) {
         $unique_payees = []; // migrations not run yet
@@ -230,11 +231,8 @@ require_once __DIR__ . '/../includes/header.php';
                     <tbody>
                     <?php $u_no = 0; foreach ($unique_payees as $p): ?>
                         <?php
-                        $eligible_any = false;
-                        foreach ($sitting_depts as $sit_dept_ids) {
-                            if ($p['dept_type'] === 'office' || in_array((int)$p['dept_id'], $sit_dept_ids, true)) { $eligible_any = true; break; }
-                        }
-                        if (!$eligible_any) continue;
+                        // Every payee (incl. MLSS / Section Officers) is listed for
+                        // every sitting — no department-based hiding.
                         $u_no++;
                         ?>
                         <tr>
@@ -252,16 +250,12 @@ require_once __DIR__ . '/../includes/header.php';
                             <td><?= $p['rate'] > 0 ? '<span class="fw-medium text-success">৳' . number_format((float)$p['rate'], 2) . '</span>' : '<span class="text-muted">—</span>' ?></td>
                             <?php foreach ($sitting_depts as $sit_ts => $sit_dept_ids): ?>
                             <td class="text-center">
-                                <?php if ($p['dept_type'] === 'office' || in_array((int)$p['dept_id'], $sit_dept_ids, true)): ?>
                                 <?php $u_checked = $u_att_map[$p['id'] . '|' . $sit_ts] ?? 1; ?>
                                 <div class="form-check form-switch d-inline-flex justify-content-center">
                                     <input class="form-check-input" type="checkbox"
                                            name="uattended[<?= (int)$p['id'] ?>][<?= md5($sit_ts) ?>]" value="1"
                                            <?= $u_checked ? 'checked' : '' ?> style="cursor:pointer;">
                                 </div>
-                                <?php else: ?>
-                                <span class="text-muted">—</span>
-                                <?php endif; ?>
                             </td>
                             <?php endforeach; ?>
                         </tr>
