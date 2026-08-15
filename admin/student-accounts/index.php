@@ -288,6 +288,15 @@ require_once __DIR__ . '/../includes/header.php';
                     <input type="number" name="bulk_project_fee" class="form-control form-control-sm"
                            min="0" step="0.01" placeholder="&mdash;">
                 </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold small mb-1"
+                           title="Keeps the student's monthly total at this amount by rebalancing Fixed Institutional Fees; the difference is moved into the one-time Project Fee so the Grand Total (incl. Admission, Form &amp; ID Card &amp; Project Fees) stays the same.">
+                        Target Monthly Total <i class="fas fa-circle-info text-muted"></i>
+                    </label>
+                    <input type="number" name="bulk_target_monthly_total" class="form-control form-control-sm"
+                           min="0" step="0.01" placeholder="&mdash;"
+                           title="Monthly total to keep (tuition + fixed + English per month). The fixed-fee difference is shifted into the one-time Project Fee so the Grand Total is unchanged.">
+                </div>
                 <?php $bulk_months = [1 => 'January', 2 => 'February', 3 => 'March', 4 => 'April',
                                       5 => 'May', 6 => 'June', 7 => 'July', 8 => 'August',
                                       9 => 'September', 10 => 'October', 11 => 'November', 12 => 'December']; ?>
@@ -614,6 +623,7 @@ require_once __DIR__ . '/../includes/header.php';
                       'bulk_total_semesters',
                       'bulk_tuition_per_semester', 'bulk_monthly_fixed',
                       'bulk_fixed_institutional_fees', 'bulk_project_fee',
+                      'bulk_target_monthly_total',
                       'bulk_payment_type', 'bulk_monthly_payment',
                       'bulk_bi_start_month', 'bulk_tri_start_month',
                       'bulk_total_months', 'bulk_months_per_semester',
