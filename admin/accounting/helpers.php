@@ -1555,6 +1555,20 @@ function acc_package_project_fee(array $pkg): float
     return max(0.0, (float)($pkg['project_fee'] ?? 0));
 }
 
+/**
+ * One-time Bi-Tri Shift Merge fee snapshotted on the package
+ * (sfp_packages.bi_tri_shift_fee). Absorbs the Fixed Institutional Fees
+ * removed by the bulk-edit Target Monthly Total rebalance for the few
+ * students who moved from bi-semester to trimester. Billed as extra monthly
+ * installments at the end of the final semester, before the Project Fee.
+ * 0.00 for everyone else. Null-safe so the code keeps working if
+ * student-accounts-bi-tri-shift-fee.sql has not been applied yet.
+ */
+function acc_package_bi_tri_shift_fee(array $pkg): float
+{
+    return max(0.0, (float)($pkg['bi_tri_shift_fee'] ?? 0));
+}
+
 function acc_package_payment_start(array $pkg, array $semester_fees = []): array
 {
     $note = (string)($pkg['note'] ?? '');
@@ -1663,6 +1677,8 @@ function acc_student_fee_summary(int $student_id): ?array
     $id_card_fee_due   = (float)$split_form_id_fee['id_card_fee'];
     // One-time Project Fee snapshotted on the package (0.00 unless assigned, e.g. batch 261)
     $project_fee_due   = acc_package_project_fee($pkg);
+    // Bi-Tri Shift Merge fee (extra months appended to the last semester)
+    $bitri_fee_due     = acc_package_bi_tri_shift_fee($pkg);
 
     // Semester fee rows
     $sf_stmt = $db->prepare(
@@ -1738,6 +1754,9 @@ function acc_student_fee_summary(int $student_id): ?array
 
     // One-time Project Fee (snapshotted on the package; falls due with the final semester)
     $project_fee_paid = $total_paid_for('project_fee');
+
+    // Bi-Tri Shift Merge fee (billed as extra months at the end of the last semester)
+    $bitri_fee_paid = $total_paid_for('bi_tri_shift_fee');
 
     // Per-semester tuition + monthly breakdown
     $months     = (float)($pkg['total_months'] ?? 0);
@@ -1836,6 +1855,46 @@ function acc_student_fee_summary(int $student_id): ?array
                         + $total_paid_for('fixed_fee')
                         + $total_paid_for('english_fee');
 
+    // ── Bi-Tri Shift Merge fee: extra months appended to the LAST semester ──
+    // Students who moved from bi-semester to trimester still owe the fixed
+    // fees removed from their monthly schedule (parked on the package as
+    // bi_tri_shift_fee by the Target Monthly Total rebalance). The amount is
+    // billed as extra monthly installments at the end of the final semester,
+    // before the one-time Project Fee. The number of extra months is derived
+    // from the last semester's monthly fee (e.g. 11,624 at 5,811/month -> 2
+    // months); the last month absorbs any rounding remainder.
+    $bitri_months = [];
+    if ($bitri_fee_due > 0 && !empty($semesters_enriched)) {
+        $last_sem_row = $semesters_enriched[count($semesters_enriched) - 1];
+        $monthly_ref  = (float)($last_sem_row['monthly_fee'] ?? 0);
+        $n_extra      = $monthly_ref > 0
+            ? max(1, (int)round($bitri_fee_due / $monthly_ref))
+            : 1;
+        $per_extra    = round($bitri_fee_due / $n_extra, 2);
+        $extra_credit = $bitri_fee_paid;
+        // The extra months start right after the last scheduled month
+        $base_offset  = $num_semesters * $months_int;
+        for ($m = 1; $m <= $n_extra; $m++) {
+            $m_due  = ($m < $n_extra)
+                ? $per_extra
+                : max(0.0, round($bitri_fee_due - $per_extra * ($n_extra - 1), 2));
+            $m_paid = min($m_due, max(0.0, $extra_credit));
+            $extra_credit -= $m_paid;
+            $month_info = (function_exists('sd_shifted_slot_calendar') && $student_id > 0)
+                ? sd_shifted_slot_calendar($student_id, $start_month, $start_year, $base_offset + ($m - 1))
+                : acc_month_year_for_slot($start_month, $start_year, $base_offset + ($m - 1));
+            $bitri_months[] = [
+                'month_number' => $m,
+                'month_label'  => $month_info['label'],
+                'cal_month'    => $month_info['month'],
+                'cal_year'     => $month_info['year'],
+                'due'          => round($m_due, 2),
+                'paid'         => round($m_paid, 2),
+                'out'          => round(max(0.0, $m_due - $m_paid), 2),
+            ];
+        }
+    }
+
     // Additional / examination fees (variable amount, collected outside the
     // scheduled obligations). They have no "due"; only the paid amount matters.
     $additional_items = [];
@@ -1854,6 +1913,8 @@ function acc_student_fee_summary(int $student_id): ?array
         'package'     => $pkg,
         'cf_settings' => ['reg_fee_per_semester' => $reg_fee, 'form_id_fee' => $form_id_total_fee],
         'semesters'   => $semesters_enriched,
+        // Extra months appended to the last semester for the Bi-Tri Shift Merge fee
+        'bi_tri_shift' => ['months' => $bitri_months],
         'additional'  => [
             'items'       => $additional_items,
             'total_paid'  => round($additional_total_paid, 2),
@@ -1864,6 +1925,8 @@ function acc_student_fee_summary(int $student_id): ?array
             'admission'    => ['due' => $admission_base_due, 'paid' => $admission_base_paid, 'out' => max(0.0, $admission_base_due - $admission_base_paid)],
             'form_fee'     => ['due' => $form_fee_due,       'paid' => $form_fee_paid,       'out' => max(0.0, $form_fee_due - $form_fee_paid)],
             'id_card_fee'  => ['due' => $id_card_fee_due,    'paid' => $id_card_fee_paid,    'out' => max(0.0, $id_card_fee_due - $id_card_fee_paid)],
+            // Bi-Tri Shift Merge fee: extra months in the final semester, before the Project Fee
+            'bi_tri_shift_fee' => ['due' => $bitri_fee_due,  'paid' => $bitri_fee_paid,      'out' => max(0.0, $bitri_fee_due - $bitri_fee_paid)],
             // One-time Project Fee (0.00 due unless assigned on the package, e.g. batch 261)
             'project_fee'  => ['due' => $project_fee_due,    'paid' => $project_fee_paid,    'out' => max(0.0, $project_fee_due - $project_fee_paid)],
             // Combined admission obligation retained for backwards compatibility.
@@ -2209,7 +2272,7 @@ function acc_income_account_id_by_code(string $code): int
 function acc_student_fee_types(): array
 {
     return array_merge(
-        ['admission', 'form_fee', 'id_card_fee', 'registration', 'semester_tuition', 'fixed_fee', 'english_fee', 'project_fee'],
+        ['admission', 'form_fee', 'id_card_fee', 'registration', 'semester_tuition', 'fixed_fee', 'english_fee', 'project_fee', 'bi_tri_shift_fee'],
         acc_additional_fee_types(),
         ['other']
     );
@@ -2231,6 +2294,7 @@ function acc_default_income_code_for_fee_type(string $fee_type): string
         'fixed_fee'        => '4100', // Tuition Fees
         'english_fee'      => '4100', // Tuition Fees
         'project_fee'      => '4700', // Project Fee (one-time) – remappable via income_account_project_fee setting
+        'bi_tri_shift_fee' => '4100', // Bi-Tri Shift Merge fee (carried-over fixed institutional fees) – tuition income
         'retake_fee'           => '4700', // Miscellaneous Income
         'improvement_fee'      => '4700', // Miscellaneous Income
         'special_exam_midterm' => '4700', // Miscellaneous Income
@@ -2920,6 +2984,7 @@ function acc_fee_type_label(string $fee_type): string
         'fixed_fee'        => 'Fixed Institutional Fee',
         'english_fee'      => 'English Course Fee',
         'project_fee'      => 'Project Fee',
+        'bi_tri_shift_fee' => 'Bi-Tri Shift Merge Fee',
         'retake_fee'           => 'Re-Take Fee',
         'improvement_fee'      => 'Improvement Fee',
         'special_exam_midterm' => 'Special Examination (Mid Term)',
@@ -3285,6 +3350,8 @@ function acc_outstanding_through_current_month(int $package_id): float
         // One-time Project Fee falls due with the final semester
         if ($sem_num === $num_semesters) {
             $total_due += acc_package_project_fee($pkg);
+            // The Bi-Tri Shift Merge fee (extra months) also falls due with the final semester
+            $total_due += acc_package_bi_tri_shift_fee($pkg);
         }
 
         // Per-semester portions of fixed institutional + English fees (after discounts)
@@ -3365,6 +3432,7 @@ function acc_total_outstanding(int $package_id): float
     $total_due = (float)$pkg['admission_fees']
                + $package_form_id_fee
                + acc_package_project_fee($pkg)
+               + acc_package_bi_tri_shift_fee($pkg)
                + ($reg_fee * $num_sems)
                + (float)$pkg['fixed_institutional_fees']
                + (float)$pkg['english_course_fee']

@@ -110,6 +110,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
                 $outstanding_lookup['form_fee|||'] = (float)($tot['form_fee']['out'] ?? 0);
                 $outstanding_lookup['id_card_fee|||'] = (float)($tot['id_card_fee']['out'] ?? 0);
                 $outstanding_lookup['project_fee|||'] = (float)($tot['project_fee']['out'] ?? 0);
+                $outstanding_lookup['bi_tri_shift_fee|||'] = (float)($tot['bi_tri_shift_fee']['out'] ?? 0);
+                foreach ((($summary['bi_tri_shift'] ?? [])['months'] ?? []) as $btm) {
+                    $key_bt = 'bi_tri_shift_fee|||' . (int)$btm['month_number'];
+                    $outstanding_lookup[$key_bt] = (float)($btm['out'] ?? 0);
+                }
                 foreach (($summary['semesters'] ?? []) as $sf) {
                     $key_reg = 'registration|' . (int)$sf['id'] . '|' . (int)$sf['semester_number'] . '|';
                     $outstanding_lookup[$key_reg] = (float)($sf['reg_out'] ?? 0);
@@ -1451,6 +1456,7 @@ require_once __DIR__ . '/../includes/header.php';
             fixed_fee:        'Fixed Institutional Fee',
             english_fee:      'English Course Fee',
             project_fee:      'Project Fee',
+            bi_tri_shift_fee: 'Bi-Tri Shift Merge Fee',
             retake_fee:           'Re-Take Fee',
             improvement_fee:      'Improvement Fee',
             special_exam_midterm: 'Special Examination (Mid Term)',
@@ -1681,7 +1687,33 @@ require_once __DIR__ . '/../includes/header.php';
             }
         }
 
-        // 3. One-time Project Fee — falls due with the final semester, so it is
+        // 3. Bi-Tri Shift Merge fee — extra months appended to the LAST
+        //    semester (fixed fees carried over from the bi-semester -> trimester
+        //    move), ordered after every scheduled month and before the one-time
+        //    Project Fee.
+        const btMonths = (s.bi_tri_shift && s.bi_tri_shift.months) || [];
+        if (btMonths.length) {
+            const lastSfBt  = s.semesters[s.semesters.length - 1];
+            const lastLblBt = lastSfBt ? (lastSfBt.semester_label || ('Semester ' + lastSfBt.semester_number)) : '';
+            for (const bm of btMonths) {
+                if (bm.out <= 0) continue;
+                items.push({
+                    fee_type:          'bi_tri_shift_fee',
+                    semester_fee_id:   null,
+                    semester_number:   null,
+                    month_number:      bm.month_number,
+                    out:               bm.out,
+                    label:             (lastLblBt ? lastLblBt + ' — ' : '') + 'Extra Month ' + bm.month_number
+                                       + (bm.month_label ? ' (' + bm.month_label + ')' : '') + ' · Bi-Tri Shift Merge',
+                    month_label:       bm.month_label || '',
+                    income_account_id: incomeAccountsMap['bi_tri_shift_fee'] ?? 0,
+                    cal_month:         Number(bm.cal_month) || null,
+                    cal_year:          Number(bm.cal_year)  || null,
+                });
+            }
+        }
+
+        // 4. One-time Project Fee — falls due with the final semester, so it is
         //    ordered after every scheduled monthly obligation. Its calendar slot
         //    mirrors the last month of the final semester.
         const pf = t.project_fee;
@@ -2294,6 +2326,27 @@ require_once __DIR__ . '/../includes/header.php';
                 );
             });
         });
+
+        // ── Bi-Tri Shift Merge fee — extra months in the final semester ───────
+        // Fixed fees carried over from the bi-semester -> trimester move
+        // (parked on the package by the Target Monthly Total rebalance) are
+        // billed as extra months at the end of the last semester, shown before
+        // the one-time Project Fee. The rows only appear for students who
+        // actually owe / paid this fee.
+        const btRows = (s.bi_tri_shift && s.bi_tri_shift.months) || [];
+        if (btRows.length) {
+            const lastSfBt2  = s.semesters[s.semesters.length - 1];
+            const lastLblBt2 = lastSfBt2 ? (lastSfBt2.semester_label || ('Semester ' + lastSfBt2.semester_number)) : '';
+            addSectionRow((lastLblBt2 ? lastLblBt2 + ' – ' : '') + 'Bi-Tri Shift Merge (extra months)');
+            btRows.forEach(bm => {
+                addRow(
+                    (lastLblBt2 ? lastLblBt2 + ' – ' : '') + 'Extra Month ' + bm.month_number
+                        + (bm.month_label ? ' (' + bm.month_label + ')' : '') + ' · Bi-Tri Shift Merge',
+                    bm.due, bm.paid, bm.out,
+                    'bi_tri_shift_fee', null, null, lastLblBt2 || null, bm.month_number, bm.month_label || ''
+                );
+            });
+        }
 
         // ── One-time Project Fee — last row of the final semester ─────────────
         // Snapshotted on the package (0.00 unless assigned, e.g. batch 261), so
