@@ -5,7 +5,10 @@
  * Applies any combination of the following to the selected packages:
  *   - Programme (cf_program_id + snapshotted program_name)
  *   - Department (students.dept_id on the student record)
- *   - Total semesters (sfp_semester_fees rows are added / removed to match)
+ *   - Total semesters (sfp_semester_fees rows are added / removed to match;
+ *     fixed-amount scholarships are redistributed so the grand total stays
+ *     the same, split evenly across the new semester count, and all-semester
+ *     percentage scholarships are extended to the new semesters)
  *   - Tuition per semester (applied to every semester row, scholarships recalculated)
  *   - Monthly fixed fee (fixed_institutional_fees re-derived from total_months)
  *   - Fixed institutional fees total (monthly_fixed_fee re-derived)
@@ -315,7 +318,14 @@ if (empty($errors)) {
                 )->execute($params);
             }
 
-            // Add / remove per-semester fee rows to match the new semester count
+            // Add / remove per-semester fee rows to match the new semester count.
+            // Scholarships are redistributed over the new semester count:
+            //   - Fixed-amount scholarships spanning 2+ semesters keep the same
+            //     grand total, split evenly across ALL semesters (e.g. 100 over
+            //     4 semesters -> 16.66 per semester over 6; the last semester
+            //     absorbs the rounding remainder).
+            //   - Percentage scholarships that covered every semester are
+            //     extended to the newly added semesters at the same percentage.
             if ($total_semesters !== null) {
                 $cur = $db->prepare(
                     'SELECT id, semester_number FROM sfp_semester_fees WHERE package_id = ? ORDER BY semester_number'
@@ -326,6 +336,45 @@ if (empty($errors)) {
                 $max_existing = 0;
                 foreach ($rows as $r) {
                     $max_existing = max($max_existing, (int)$r['semester_number']);
+                }
+                $old_sem_count = count($rows);
+
+                // Snapshot existing scholarships (grouped by identity) BEFORE
+                // semester rows are added/removed, so fixed-amount totals can
+                // be redistributed over the new semester count.
+                $sc_groups = [];
+                if (!empty($rows)) {
+                    $snap_sf_ids = array_map(fn($r) => (int)$r['id'], $rows);
+                    $snap_phs    = implode(',', array_fill(0, count($snap_sf_ids), '?'));
+                    $sc_stmt = $db->prepare(
+                        "SELECT * FROM sfp_semester_scholarships
+                         WHERE sf_id IN ($snap_phs)
+                         ORDER BY created_at ASC, id ASC"
+                    );
+                    $sc_stmt->execute($snap_sf_ids);
+                    foreach ($sc_stmt->fetchAll() as $sc) {
+                        $key = implode('|', [
+                            (string)$sc['label'],
+                            (string)($sc['discount_type'] ?? 'percentage'),
+                            (string)$sc['discount_pct'],
+                            (string)($sc['note'] ?? ''),
+                            (string)(int)$sc['is_from_policy'],
+                            (string)(int)$sc['applies_to_fixed'],
+                            (string)(int)$sc['applies_to_english'],
+                            (string)($sc['support_doc_id'] ?? ''),
+                        ]);
+                        if (!isset($sc_groups[$key])) {
+                            $sc_groups[$key] = [
+                                'sample'      => $sc,
+                                'total_fixed' => 0.0,
+                                'row_ids'     => [],
+                                'sf_ids'      => [],
+                            ];
+                        }
+                        $sc_groups[$key]['total_fixed'] += (float)($sc['fixed_amount'] ?? 0);
+                        $sc_groups[$key]['row_ids'][]    = (int)$sc['id'];
+                        $sc_groups[$key]['sf_ids'][]     = (int)$sc['sf_id'];
+                    }
                 }
 
                 if ($total_semesters > $max_existing) {
@@ -351,6 +400,84 @@ if (empty($errors)) {
                            ->execute($remove_ids);
                         $db->prepare("DELETE FROM sfp_semester_fees WHERE id IN ($phs)")
                            ->execute($remove_ids);
+                    }
+                }
+
+                // Redistribute the snapshotted scholarships across the
+                // (possibly changed) set of semester rows.
+                if (!empty($sc_groups)) {
+                    $cur->execute([$package_id]);
+                    $new_rows   = $cur->fetchAll();
+                    $new_sf_ids = array_map(fn($r) => (int)$r['id'], $new_rows);
+                    $sem_count  = count($new_sf_ids);
+
+                    $ins_sc = $db->prepare(
+                        'INSERT INTO sfp_semester_scholarships
+                           (sf_id, label, discount_pct, discount_type, fixed_amount, amount, note,
+                            is_from_policy, applies_to_fixed, applies_to_english,
+                            support_doc_id, created_by)
+                         VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)'
+                    );
+
+                    foreach ($sc_groups as $grp) {
+                        $sc      = $grp['sample'];
+                        $sc_type = $sc['discount_type'] ?? 'percentage';
+
+                        if ($sc_type === 'fixed') {
+                            // Single-semester fixed scholarships are left where
+                            // they are; only multi-semester ones are respread.
+                            if ($sem_count <= 0 || count($grp['row_ids']) < 2) {
+                                continue;
+                            }
+
+                            // Remove the old rows, then re-insert one row per
+                            // semester with the grand total split evenly.
+                            $del_phs = implode(',', array_fill(0, count($grp['row_ids']), '?'));
+                            $db->prepare("DELETE FROM sfp_semester_scholarships WHERE id IN ($del_phs)")
+                               ->execute($grp['row_ids']);
+
+                            $sc_total = round((float)$grp['total_fixed'], 2);
+                            $per_sem  = floor($sc_total / $sem_count * 100) / 100;
+                            $assigned = 0.0;
+
+                            foreach ($new_sf_ids as $idx => $target_sf_id) {
+                                $amt = ($idx === $sem_count - 1)
+                                    ? round($sc_total - $assigned, 2)
+                                    : $per_sem;
+                                $assigned += $amt;
+
+                                $ins_sc->execute([
+                                    $target_sf_id, $sc['label'], 0, 'fixed', $amt,
+                                    $sc['note'] ?? null,
+                                    (int)$sc['is_from_policy'],
+                                    (int)$sc['applies_to_fixed'],
+                                    (int)$sc['applies_to_english'],
+                                    $sc['support_doc_id'] ?? null,
+                                    (int)$sc['created_by'],
+                                ]);
+                            }
+                        } else {
+                            // Percentage scholarship: only extend it when it
+                            // covered every semester before the change, then
+                            // copy the same percentage onto the new rows.
+                            if (count($grp['sf_ids']) < $old_sem_count) {
+                                continue;
+                            }
+                            foreach ($new_sf_ids as $target_sf_id) {
+                                if (in_array($target_sf_id, $grp['sf_ids'], true)) {
+                                    continue;
+                                }
+                                $ins_sc->execute([
+                                    $target_sf_id, $sc['label'], $sc['discount_pct'], 'percentage', null,
+                                    $sc['note'] ?? null,
+                                    (int)$sc['is_from_policy'],
+                                    (int)$sc['applies_to_fixed'],
+                                    (int)$sc['applies_to_english'],
+                                    $sc['support_doc_id'] ?? null,
+                                    (int)$sc['created_by'],
+                                ]);
+                            }
+                        }
                     }
                 }
             }
