@@ -14,3 +14,11 @@
 
 ALTER TABLE sfp_packages
     ADD COLUMN bi_tri_shift_fee DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER project_fee;
+
+-- Collect Payment bills this fee as extra monthly installments appended to
+-- the last semester (before the one-time Project Fee), recorded with the new
+-- fee_type value 'bi_tri_shift_fee'. If sfp_payments.fee_type is still an
+-- ENUM on your database, widening it to VARCHAR keeps every existing value
+-- intact and removes the need for an enum change on every future fee head.
+ALTER TABLE sfp_payments
+    MODIFY fee_type VARCHAR(64) NOT NULL;
