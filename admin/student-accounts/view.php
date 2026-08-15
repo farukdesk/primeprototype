@@ -58,6 +58,10 @@ $form_fee_one_time   = (float)$split_form_id_fee['form_fee'];
 $id_card_fee_one_time = (float)$split_form_id_fee['id_card_fee'];
 // One-time Project Fee snapshotted on the package (0.00 unless assigned, e.g. batch 261)
 $project_fee_one_time = acc_package_project_fee($pkg);
+// One-time Bi-Tri Shift Merge fee: absorbs the Fixed Institutional Fees removed
+// by the bulk-edit Target Monthly Total rebalance for students who moved from
+// bi-semester to trimester (0.00 for everyone else)
+$bitri_shift_fee_one_time = (float)($pkg['bi_tri_shift_fee'] ?? 0.0);
 
 $pending_requests_by_id          = [];
 $pending_projection_by_sem       = [];
@@ -194,7 +198,7 @@ foreach ($semester_fees as $sf) {
     $total_fixed_all       += $sem_fixed_payable;
     $total_english_all     += $sem_english_payable;
 }
-$total_cost = $total_tuition_payable + $total_fixed_all + $total_english_all + $total_reg_fees + $admission_fee + $form_id_fee + $project_fee_one_time;
+$total_cost = $total_tuition_payable + $total_fixed_all + $total_english_all + $total_reg_fees + $admission_fee + $form_id_fee + $project_fee_one_time + $bitri_shift_fee_one_time;
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -339,6 +343,7 @@ require_once __DIR__ . '/../includes/header.php';
                     'Form Fee (one-time)'        => sfp_money($form_fee_one_time),
                     'ID Card Fee (one-time)'     => sfp_money($id_card_fee_one_time),
                     'Project Fee (one-time)'     => sfp_money($project_fee_one_time),
+                    'Bi-Tri Shift Merge (one-time)' => sfp_money($bitri_shift_fee_one_time),
                     'Fixed Institutional Fees'   => sfp_money((float)$pkg['fixed_institutional_fees']),
                     'English Course Fee'         => sfp_money((float)$pkg['english_course_fee']),
                 ];
@@ -704,9 +709,18 @@ require_once __DIR__ . '/../includes/header.php';
                         <td class="text-end text-warning-emphasis fs-6"><?= sfp_money($project_fee_one_time) ?></td>
                     </tr>
                     <?php endif; ?>
+                    <?php if ($bitri_shift_fee_one_time > 0): ?>
+                    <tr class="table-warning">
+                        <td colspan="8" class="text-end"
+                            title="One-time fee absorbing the Fixed Institutional Fees removed when this student moved from bi-semester to trimester (Target Monthly Total rebalance). Keeps the Grand Total unchanged.">
+                            Bi-Tri Shift Merge (one-time) →
+                        </td>
+                        <td class="text-end text-warning-emphasis fs-6"><?= sfp_money($bitri_shift_fee_one_time) ?></td>
+                    </tr>
+                    <?php endif; ?>
                     <tr class="table-success">
-                        <td colspan="8" class="text-end fw-bold">Grand Total (incl. Admission, Form & ID Card<?= $project_fee_one_time > 0 ? ' & Project' : '' ?> Fees) →</td>
-                        <td class="text-end fw-bold text-success fs-5"><?= sfp_money($grand_total + $admission_fee + $form_id_fee + $project_fee_one_time) ?></td>
+                        <td colspan="8" class="text-end fw-bold">Grand Total (incl. Admission, Form & ID Card<?= $project_fee_one_time > 0 ? ' & Project' : '' ?><?= $bitri_shift_fee_one_time > 0 ? ' & Bi-Tri Shift' : '' ?> Fees) →</td>
+                        <td class="text-end fw-bold text-success fs-5"><?= sfp_money($grand_total + $admission_fee + $form_id_fee + $project_fee_one_time + $bitri_shift_fee_one_time) ?></td>
                     </tr>
                 </tfoot>
             </table>
