@@ -290,12 +290,12 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
                 <div class="col-6 col-md-2">
                     <label class="form-label fw-semibold small mb-1"
-                           title="Keeps the student's monthly total at this amount by rebalancing Fixed Institutional Fees; the difference is moved into the one-time Project Fee so the Grand Total (incl. Admission, Form &amp; ID Card &amp; Project Fees) stays the same.">
+                           title="Keeps the student's monthly total at this amount by rebalancing Fixed Institutional Fees; the difference is moved into the one-time Bi-Tri Shift Merge fee so the Grand Total stays the same. Project Fee and all other fees are untouched.">
                         Target Monthly Total <i class="fas fa-circle-info text-muted"></i>
                     </label>
                     <input type="number" name="bulk_target_monthly_total" class="form-control form-control-sm"
                            min="0" step="0.01" placeholder="&mdash;"
-                           title="Monthly total to keep (tuition + fixed + English per month). The fixed-fee difference is shifted into the one-time Project Fee so the Grand Total is unchanged.">
+                           title="Monthly total to keep (tuition + fixed + English per month). The fixed-fee difference is shifted into the one-time Bi-Tri Shift Merge fee so the Grand Total is unchanged.">
                 </div>
                 <?php $bulk_months = [1 => 'January', 2 => 'February', 3 => 'March', 4 => 'April',
                                       5 => 'May', 6 => 'June', 7 => 'July', 8 => 'August',

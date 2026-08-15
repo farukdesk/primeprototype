@@ -19,8 +19,8 @@
  *   - Target monthly total: rebalances Fixed Institutional Fees so the
  *     student's monthly total (sem-1 tuition payable / months-per-semester
  *     + monthly fixed + monthly English) equals the given figure, moving the
- *     difference into the one-time Project Fee so the Grand Total
- *     (incl. Admission, Form & ID Card & Project Fees) stays unchanged
+ *     difference into the one-time Bi-Tri Shift Merge fee so the Grand Total
+ *     stays unchanged. Project Fee and all other fees are untouched.
  *
  * Fields left blank are not changed.
  */
@@ -139,8 +139,8 @@ if ($cf_program_id <= 0 && $student_program_id <= 0 && $dept_id <= 0 && $total_s
 if ($target_monthly !== null && $target_monthly < 0) {
     $errors[] = 'Target monthly total cannot be negative.';
 }
-if ($target_monthly !== null && ($monthly_fixed !== null || $fixed_total !== null || $project_fee !== null)) {
-    $errors[] = 'Target Monthly Total cannot be combined with Monthly Fixed, Fixed Institutional Fees, or Project Fee.';
+if ($target_monthly !== null && ($monthly_fixed !== null || $fixed_total !== null)) {
+    $errors[] = 'Target Monthly Total cannot be combined with Monthly Fixed or Fixed Institutional Fees.';
 }
 if ($payment_type !== '' && !in_array($payment_type, ['merit', 'fixed'], true)) {
     $errors[] = 'Payment type must be merit or fixed.';
@@ -191,12 +191,20 @@ if ($student_program_id > 0 && empty($errors)) {
 }
 
 // The project_fee column is added by admin/student-accounts-project-fee.sql
-// (also required for the Target Monthly Total rebalance, which shifts the
-// fixed-fee difference into the one-time project fee)
-if (($project_fee !== null || $target_monthly !== null) && empty($errors)) {
+if ($project_fee !== null && empty($errors)) {
     $col = $db->query("SHOW COLUMNS FROM sfp_packages LIKE 'project_fee'")->fetch();
     if (!$col) {
         $errors[] = 'The project_fee column does not exist yet. Run admin/student-accounts-project-fee.sql first.';
+    }
+}
+
+// The bi_tri_shift_fee column is added by admin/student-accounts-bi-tri-shift-fee.sql
+// (required for the Target Monthly Total rebalance, which parks the removed
+// fixed-fee amount in the one-time Bi-Tri Shift Merge fee)
+if ($target_monthly !== null && empty($errors)) {
+    $col = $db->query("SHOW COLUMNS FROM sfp_packages LIKE 'bi_tri_shift_fee'")->fetch();
+    if (!$col) {
+        $errors[] = 'The bi_tri_shift_fee column does not exist yet. Run admin/student-accounts-bi-tri-shift-fee.sql first.';
     }
 }
 
@@ -519,11 +527,12 @@ if (empty($errors)) {
             }
 
             // Keep the student's monthly total at the target figure WITHOUT
-            // changing the Grand Total (incl. Admission, Form & ID Card &
-            // Project Fees). The Fixed Institutional Fees are rebalanced so
+            // changing the Grand Total. The Fixed Institutional Fees are
+            // rebalanced so
             //   sem-1 tuition payable / mps + monthly fixed + monthly English = target
             // and the removed (or added) fixed amount is shifted into the
-            // one-time Project Fee, keeping the Grand Total identical.
+            // one-time Bi-Tri Shift Merge fee, keeping the Grand Total
+            // identical. Project Fee and all other fees are untouched.
             if ($target_monthly !== null) {
                 $fresh    = sfp_get_package($package_id);
                 $t_months = (float)($fresh['total_months'] ?? 0);
@@ -548,15 +557,15 @@ if (empty($errors)) {
                     }
 
                     $old_fixed_total_val = (float)$fresh['fixed_institutional_fees'];
-                    $old_project_val     = (float)($fresh['project_fee'] ?? 0);
+                    $old_bitri_val       = (float)($fresh['bi_tri_shift_fee'] ?? 0);
                     $new_fixed_total_val = round($new_monthly_fixed_val * $t_months, 2);
                     $shift               = round($old_fixed_total_val - $new_fixed_total_val, 2);
 
                     // When the target monthly is HIGHER than the current one,
-                    // fixed fees grow and the project fee shrinks - never let
-                    // the project fee go below zero.
-                    if ($shift < 0 && $old_project_val + $shift < 0) {
-                        $shift                 = -$old_project_val;
+                    // fixed fees grow and the Bi-Tri Shift Merge fee shrinks -
+                    // never let it go below zero.
+                    if ($shift < 0 && $old_bitri_val + $shift < 0) {
+                        $shift                 = -$old_bitri_val;
                         $new_fixed_total_val   = round($old_fixed_total_val - $shift, 2);
                         $new_monthly_fixed_val = $new_fixed_total_val / $t_months;
                     }
@@ -564,20 +573,20 @@ if (empty($errors)) {
                     if (abs($shift) >= 0.01) {
                         $db->prepare(
                             'UPDATE sfp_packages
-                             SET fixed_institutional_fees = ?, monthly_fixed_fee = ?, project_fee = ?
+                             SET fixed_institutional_fees = ?, monthly_fixed_fee = ?, bi_tri_shift_fee = ?
                              WHERE id = ?'
                         )->execute([
                             $new_fixed_total_val,
                             round($new_monthly_fixed_val, 4),
-                            round($old_project_val + $shift, 2),
+                            round($old_bitri_val + $shift, 2),
                             $package_id,
                         ]);
 
                         $changes[] = 'monthly total kept at ' . number_format($target_monthly, 2)
                             . ': fixed fees ' . number_format($old_fixed_total_val, 2)
                             . ' -> ' . number_format($new_fixed_total_val, 2)
-                            . ', project fee ' . number_format($old_project_val, 2)
-                            . ' -> ' . number_format($old_project_val + $shift, 2);
+                            . ', bi-tri shift fee ' . number_format($old_bitri_val, 2)
+                            . ' -> ' . number_format($old_bitri_val + $shift, 2);
 
                         // The per-semester fixed portion changed - refresh the
                         // scholarship cascades / payables.
