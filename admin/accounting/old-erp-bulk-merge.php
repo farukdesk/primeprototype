@@ -528,6 +528,190 @@ function oebm_collect_dropped_sids(array $rows): array
     return array_keys($sids);
 }
 
+// ── Undo (merge batch) helpers ───────────────────────────────────────────
+
+/**
+ * Ensure the batch-tracking table behind the Undo feature exists.
+ *
+ * Every confirmed merge is recorded as one batch: the memo vouchers it created
+ * and the student statuses it changed. Undoing a batch soft-deletes those
+ * vouchers and restores the statuses. (See old-erp-bulk-merge-undo-v1.sql.)
+ */
+function oebm_ensure_batch_table(): void
+{
+    static $done = false;
+    if ($done) {
+        return;
+    }
+    db()->exec(
+        'CREATE TABLE IF NOT EXISTS oebm_merge_batches (
+            id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            created_by INT UNSIGNED NOT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            merged_count INT UNSIGNED NOT NULL DEFAULT 0,
+            voucher_ids MEDIUMTEXT NOT NULL,
+            status_changes MEDIUMTEXT NOT NULL,
+            undone_by INT UNSIGNED NULL DEFAULT NULL,
+            undone_at DATETIME NULL DEFAULT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+    );
+    $done = true;
+}
+
+/**
+ * Record a confirmed merge as an undoable batch.
+ *
+ * @param int[] $voucher_ids Memo vouchers created by the merge.
+ * @param array<int,array{student_pk:int,student_id:string,old_status:string}> $status_changes
+ */
+function oebm_record_batch(array $voucher_ids, array $status_changes, int $merged_count): int
+{
+    oebm_ensure_batch_table();
+    $user = auth_user();
+    db()->prepare(
+        'INSERT INTO oebm_merge_batches (created_by, merged_count, voucher_ids, status_changes)
+         VALUES (?,?,?,?)'
+    )->execute([
+        (int)($user['id'] ?? 0),
+        $merged_count,
+        json_encode(array_values(array_unique(array_map('intval', $voucher_ids)))),
+        json_encode(array_values($status_changes), JSON_UNESCAPED_UNICODE),
+    ]);
+    return (int)db()->lastInsertId();
+}
+
+/**
+ * Fetch a single merge batch by id.
+ */
+function oebm_get_batch(int $id): ?array
+{
+    oebm_ensure_batch_table();
+    $stmt = db()->prepare('SELECT * FROM oebm_merge_batches WHERE id = ? LIMIT 1');
+    $stmt->execute([$id]);
+    return $stmt->fetch() ?: null;
+}
+
+/**
+ * Latest merge batches for the on-page list, newest first.
+ */
+function oebm_recent_batches(int $limit = 10): array
+{
+    oebm_ensure_batch_table();
+    $stmt = db()->prepare(
+        'SELECT b.*, u.full_name AS created_by_name, x.full_name AS undone_by_name
+         FROM oebm_merge_batches b
+         LEFT JOIN users u ON u.id = b.created_by
+         LEFT JOIN users x ON x.id = b.undone_by
+         ORDER BY b.id DESC
+         LIMIT ' . max(1, $limit)
+    );
+    $stmt->execute();
+    return $stmt->fetchAll();
+}
+
+/**
+ * Only the user who performed the merge — or a Super Administrator — may undo
+ * it, and only while the batch has not been undone yet.
+ */
+function oebm_can_undo_batch(array $batch): bool
+{
+    if (!empty($batch['undone_at'])) {
+        return false;
+    }
+    if (is_super_admin()) {
+        return true;
+    }
+    $user = auth_user();
+    return $user && (int)$batch['created_by'] === (int)($user['id'] ?? 0);
+}
+
+/**
+ * Undo a merge batch: soft-delete every memo voucher it recorded and restore
+ * the student statuses it changed — i.e. bring everything back to the state
+ * before that bulk merge was confirmed.
+ *
+ * Vouchers already deleted (e.g. through the audit cleanup) are skipped, and a
+ * status is only restored while the student is still Dropped, so a later
+ * manual status change is never overwritten.
+ *
+ * @return array{vouchers_deleted:int, statuses_restored:int, errors:string[]}
+ */
+function oebm_undo_batch(array $batch): array
+{
+    $deleted  = 0;
+    $restored = 0;
+    $errors   = [];
+
+    // ── Remove the batch's payment vouchers ────────────────────────────
+    // Safety guard (same as the audit cleanup): only old-ERP MEMO vouchers
+    // where every linked payment uses the old_erp method may be removed here.
+    // Payments collected in this ERP can never be touched through the undo.
+    $voucher_ids = json_decode((string)($batch['voucher_ids'] ?? '[]'), true);
+    $voucher_ids = is_array($voucher_ids) ? array_values(array_unique(array_map('intval', $voucher_ids))) : [];
+    $chk = db()->prepare(
+        "SELECT v.status,
+                COUNT(sp.id) AS total_rows,
+                SUM(sp.payment_method = 'old_erp') AS old_erp_rows
+         FROM acc_vouchers v
+         LEFT JOIN sfp_payments sp ON sp.voucher_id = v.id
+         WHERE v.id = ? AND v.is_deleted = 0
+         GROUP BY v.id, v.status"
+    );
+    foreach ($voucher_ids as $vid) {
+        try {
+            $chk->execute([$vid]);
+            $vrow = $chk->fetch();
+            if (!$vrow) {
+                continue; // already deleted (e.g. audit cleanup) — nothing to undo
+            }
+            if ((string)$vrow['status'] !== 'memo'
+                || (int)$vrow['total_rows'] < 1
+                || (int)$vrow['old_erp_rows'] !== (int)$vrow['total_rows']) {
+                throw new RuntimeException('Not an old-ERP memo payment — refusing to delete.');
+            }
+            acc_soft_delete_voucher($vid, 'Old ERP bulk merge undo: batch #' . (int)$batch['id'] . ' reverted.');
+            $deleted++;
+        } catch (Throwable $e) {
+            $errors[] = 'Voucher #' . $vid . ': ' . $e->getMessage();
+        }
+    }
+
+    // ── Restore student statuses the batch changed ───────────────────────
+    $status_changes = json_decode((string)($batch['status_changes'] ?? '[]'), true);
+    foreach (is_array($status_changes) ? $status_changes : [] as $chg) {
+        $pk  = (int)($chg['student_pk'] ?? 0);
+        $old = trim((string)($chg['old_status'] ?? ''));
+        if ($pk <= 0 || $old === '' || $old === 'Dropped') {
+            continue;
+        }
+        try {
+            $upd = db()->prepare("UPDATE students SET status = ? WHERE id = ? AND status = 'Dropped'");
+            $upd->execute([$old, $pk]);
+            if ($upd->rowCount() > 0) {
+                log_change('students', 'UPDATE', $pk,
+                    (string)($chg['student_id'] ?? ('#' . $pk)),
+                    'status', 'Dropped', $old,
+                    'Old ERP bulk merge undo: batch #' . (int)$batch['id'] . ' restored the previous status.');
+                $restored++;
+            }
+        } catch (Throwable $e) {
+            $errors[] = 'Student ' . (string)($chg['student_id'] ?? ('#' . $pk)) . ': ' . $e->getMessage();
+        }
+    }
+
+    // ── Mark the batch as undone (one undo per batch) ─────────────────────
+    $user = auth_user();
+    db()->prepare('UPDATE oebm_merge_batches SET undone_by = ?, undone_at = NOW() WHERE id = ?')
+        ->execute([(int)($user['id'] ?? 0), (int)$batch['id']]);
+    log_change('accounting', 'UPDATE', (int)$batch['id'],
+        'Old ERP bulk merge batch #' . (int)$batch['id'],
+        'undone', '0', '1',
+        'Old ERP bulk merge undone: ' . $deleted . ' voucher(s) soft-deleted, '
+        . $restored . ' student status(es) restored.');
+
+    return ['vouchers_deleted' => $deleted, 'statuses_restored' => $restored, 'errors' => $errors];
+}
+
 /**
  * Flatten a student's fee summary into an ordered list of monthly tuition
  * installment slots, each carrying the calendar month it falls on plus the
@@ -1574,6 +1758,7 @@ $did_commit = false;
 $commit_summary = null;
 $dropped_sids    = [];   // students the CSV's Student Status column marks as Dropped
 $dropped_updated = 0;    // how many were actually set to Dropped on confirm
+$undo_batch_id   = null; // batch id recorded for the merge just confirmed (undo)
 
 // ── POST: preview or confirm ────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -1604,6 +1789,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $csv_text = base64_decode((string)($_POST['csv_data'] ?? ''), true) ?: '';
         if ($csv_text === '') {
             $errors[] = 'The merge session expired. Please upload the CSV again.';
+        }
+    } elseif ($action === 'undo') {
+        // ── Undo a previously confirmed merge batch ───────────────────────
+        // Soft-deletes every memo voucher the batch recorded and restores any
+        // student statuses it changed — the state before the bulk merge. The
+        // CSV is optional here: when present (undo right after a merge) the
+        // preview below is re-validated against the reverted state.
+        $csv_text   = base64_decode((string)($_POST['csv_data'] ?? ''), true) ?: '';
+        $undo_id    = (int)($_POST['undo_batch_id'] ?? 0);
+        $undo_batch = $undo_id > 0 ? oebm_get_batch($undo_id) : null;
+        if (!$undo_batch) {
+            $errors[] = 'Merge batch not found.';
+        } elseif (!empty($undo_batch['undone_at'])) {
+            $errors[] = 'Merge batch #' . $undo_id . ' has already been undone.';
+        } elseif (!oebm_can_undo_batch($undo_batch)) {
+            $errors[] = 'Only the user who performed merge batch #' . $undo_id . ' — or a Super Administrator — can undo it.';
+        } else {
+            $undo_res = oebm_undo_batch($undo_batch);
+            $undo_msg = 'Merge batch #' . $undo_id . ' undone: '
+                . $undo_res['vouchers_deleted'] . ' payment voucher(s) removed'
+                . ($undo_res['statuses_restored'] > 0
+                    ? ', ' . $undo_res['statuses_restored'] . ' student status(es) restored'
+                    : '')
+                . '.';
+            if ($undo_res['errors']) {
+                $undo_msg .= ' ' . count($undo_res['errors']) . ' item(s) could not be reverted: ' . implode(' ', $undo_res['errors']);
+            }
+            flash_set($undo_res['errors'] ? 'warning' : 'success', $undo_msg);
         }
     } else {
         $errors[] = 'Unknown action.';
@@ -1709,6 +1922,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $merged = 0;
                 $failed = [];
                 $commit_failures_map = [];
+                $batch_voucher_ids    = [];   // memo vouchers created by this merge (for undo)
+                $batch_status_changes = [];   // student statuses changed by this merge (for undo)
                 if ($cash_account_id <= 0) {
                     $errors[] = 'Received-into (cash) account is not configured for Old ERP payments. Please set it in Accounting Settings.';
                 } else {
@@ -1735,7 +1950,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     'amount'          => (float)$res['amount'],
                                 ]];
                             foreach ($portions as $portion) {
-                                acc_collect_student_fee(
+                                $batch_voucher_ids[] = acc_collect_student_fee(
                                     (int)$res['student_pk'],
                                     (int)$res['package_id'],
                                     $res['fee_type'],
@@ -1772,15 +1987,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             if (!$dstu || (string)($dstu['status'] ?? '') === 'Dropped') {
                                 continue;
                             }
+                            $old_status = (string)($dstu['status'] ?? '');
                             db()->prepare('UPDATE students SET status = ? WHERE id = ?')
                                 ->execute(['Dropped', (int)$dstu['id']]);
+                            $batch_status_changes[] = [
+                                'student_pk' => (int)$dstu['id'],
+                                'student_id' => (string)($dstu['student_id'] ?? $dsid),
+                                'old_status' => $old_status,
+                            ];
                             log_change('students', 'UPDATE', (int)$dstu['id'],
                                 (string)($dstu['full_name'] ?? '') . ' (' . (string)($dstu['student_id'] ?? $dsid) . ')',
-                                'status', (string)($dstu['status'] ?? ''), 'Dropped',
+                                'status', $old_status, 'Dropped',
                                 'Old ERP bulk merge: the CSV Student Status column marks this student as Dropped.');
                             $dropped_updated++;
                         } catch (Throwable $e) {
                             $failed[] = 'Student ' . $dsid . ': could not set status to Dropped — ' . $e->getMessage();
+                        }
+                    }
+
+                    // Record this merge as an undoable batch (vouchers + status changes).
+                    if ($batch_voucher_ids || $batch_status_changes) {
+                        try {
+                            $undo_batch_id = oebm_record_batch($batch_voucher_ids, $batch_status_changes, $merged);
+                        } catch (Throwable $e) {
+                            $failed[] = 'Undo tracking could not be saved for this merge: ' . $e->getMessage();
                         }
                     }
 
@@ -1790,6 +2020,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $msg = $merged . ' payment(s) merged successfully. ' . $skipped . ' row(s) were skipped (duplicates / invalid).';
                     if ($dropped_updated > 0) {
                         $msg .= ' ' . $dropped_updated . ' student(s) set to Dropped from the CSV Student Status column.';
+                    }
+                    if ($undo_batch_id) {
+                        $msg .= ' Saved as merge batch #' . $undo_batch_id . ' — it can be undone from this page.';
                     }
                     if ($failed) {
                         $msg .= ' ' . count($failed) . ' row(s) failed during merge.';
@@ -1846,6 +2079,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <li><strong>Registration fees are placed by cumulative total.</strong> Registration is a fixed per-semester fee read from the student's own package (e.g. 1,000 BDT, or 500 BDT for masters). The total already collected decides which semester comes next (1,000 = semester 1 paid, 2,000 = semesters 1–2, …), so 2nd/3rd registration rows land on the correct semester even on a re-run, and a single row spanning several semesters is split across them. Registration collected in this ERP is always kept — it occupies the end of the timeline and never absorbs an old-ERP registration row.</li>
                 <li><strong>Summary and zero-amount rows are ignored.</strong> Old-ERP export lines such as <code>Monthly Payment Old Data</code> or <code>Current Dues</code>, and any row with an amount of <code>0</code>, are skipped automatically (shown in grey). Student IDs are matched with or without leading zeros.</li>
                 <li><strong>Student Status column (optional).</strong> If the CSV carries a <code>Student Status</code> column, every student marked <code>Dropped</code> is set to <strong>Dropped</strong> in Student Management on confirm (recorded in the change log). <code>Active</code> — or any other value — is ignored and never changes an existing status.</li>
+                <li><strong>Every merge can be undone.</strong> Each confirmed merge is saved as a batch. Use <em>Undo</em> — right after merging, or later from the <em>Recent Merge Batches</em> list on this page — to remove every payment the batch recorded (soft-delete, full audit trail kept) and restore any student statuses it changed, returning everything to the state before that merge. Only the user who performed the merge — or a Super Administrator — can undo it, and each batch can be undone once.</li>
                 <li>Confirm to merge only the valid rows. Each is stored as an <em>Old ERP</em> payment (a memo voucher), so dues update without double-counting income.</li>
             </ol>
             <a href="<?= APP_URL ?>/accounting/old-erp-bulk-merge.php?sample=1" class="alert-link">
@@ -1877,6 +2111,73 @@ require_once __DIR__ . '/../includes/header.php';
         </form>
     </div>
 </div>
+
+<!-- ── Recent merge batches (undo) ────────────────────────────────────── -->
+<?php $recent_batches = oebm_recent_batches(10); ?>
+<?php if ($recent_batches): ?>
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header py-3 px-4 fw-semibold">
+        <i class="fas fa-rotate-left me-2 text-danger"></i>Recent Merge Batches (Undo)
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Batch</th>
+                        <th>Merged At</th>
+                        <th>Merged By</th>
+                        <th class="text-end">Payments</th>
+                        <th class="text-end">Status Changes</th>
+                        <th>State</th>
+                        <th class="text-end">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($recent_batches as $b):
+                        $b_vouchers = json_decode((string)$b['voucher_ids'], true);
+                        $b_statuses = json_decode((string)$b['status_changes'], true);
+                        $b_undone   = !empty($b['undone_at']);
+                    ?>
+                    <tr>
+                        <td class="fw-semibold">#<?= (int)$b['id'] ?></td>
+                        <td class="small"><?= h((string)$b['created_at']) ?></td>
+                        <td class="small"><?= h((string)($b['created_by_name'] ?? '—')) ?></td>
+                        <td class="text-end"><?= is_array($b_vouchers) ? count($b_vouchers) : 0 ?></td>
+                        <td class="text-end"><?= is_array($b_statuses) ? count($b_statuses) : 0 ?></td>
+                        <td>
+                            <?php if ($b_undone): ?>
+                            <span class="badge bg-secondary">Undone<?= !empty($b['undone_by_name']) ? ' by ' . h((string)$b['undone_by_name']) : '' ?> at <?= h((string)$b['undone_at']) ?></span>
+                            <?php else: ?>
+                            <span class="badge bg-success">Merged</span>
+                            <?php endif; ?>
+                        </td>
+                        <td class="text-end">
+                            <?php if (!$b_undone && oebm_can_undo_batch($b)): ?>
+                            <form method="post" class="d-inline" onsubmit="return confirm('Undo merge batch #<?= (int)$b['id'] ?>? All payments it recorded will be removed and any student statuses it changed will be restored.');">
+                                <?= csrf_field() ?>
+                                <input type="hidden" name="action" value="undo">
+                                <input type="hidden" name="undo_batch_id" value="<?= (int)$b['id'] ?>">
+                                <button type="submit" class="btn btn-outline-danger btn-sm">
+                                    <i class="fas fa-rotate-left me-1"></i> Undo
+                                </button>
+                            </form>
+                            <?php else: ?>
+                            <span class="text-muted small">—</span>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <div class="px-4 py-2 small text-muted">
+            Undo removes every payment a merge recorded (soft-delete, audit trail kept) and restores any student statuses it changed.
+            Only the user who performed the merge — or a Super Administrator — can undo it, once per batch.
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 
 <?php if ($results !== null): ?>
 <?php
@@ -1917,6 +2218,17 @@ require_once __DIR__ . '/../includes/header.php';
             <strong><?= (int)$commit_summary['merged'] ?></strong> payment(s) merged.
             <?php if (!empty($commit_summary['failed'])): ?>
             <div class="mt-2"><strong>Failures:</strong><ul class="mb-0"><?php foreach ($commit_summary['failed'] as $f): ?><li><?= h($f) ?></li><?php endforeach; ?></ul></div>
+            <?php endif; ?>
+            <?php if ($undo_batch_id): ?>
+            <form method="post" class="mt-2" onsubmit="return confirm('Undo merge batch #<?= (int)$undo_batch_id ?>? All payments it recorded will be removed and any student statuses it changed will be restored.');">
+                <?= csrf_field() ?>
+                <input type="hidden" name="action" value="undo">
+                <input type="hidden" name="undo_batch_id" value="<?= (int)$undo_batch_id ?>">
+                <input type="hidden" name="csv_data" value="<?= h($csv_b64) ?>">
+                <button type="submit" class="btn btn-outline-danger btn-sm">
+                    <i class="fas fa-rotate-left me-1"></i> Undo This Merge (Batch #<?= (int)$undo_batch_id ?>)
+                </button>
+            </form>
             <?php endif; ?>
         </div>
         <?php endif; ?>
