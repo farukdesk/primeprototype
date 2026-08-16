@@ -88,15 +88,38 @@ require_once __DIR__ . '/../includes/header.php';
 
 <?php if ($opm_student && $opm_methods): ?>
 <!-- ── Pay Online ──────────────────────────────────────────────────────── -->
-<div class="card border-0 shadow-sm mb-3" id="payOnlineCard">
-    <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between">
-        <span class="fw-semibold"><i class="fas fa-globe me-2 text-primary"></i>Pay Online</span>
-        <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="collapse" data-bs-target="#payOnlineCollapse">
-            <i class="fas fa-hand-holding-usd me-1"></i>Make a Payment
+<style>
+    .opm-pay-header { background: linear-gradient(135deg, #1d976c 0%, #2f80ed 100%); }
+    .opm-type-card {
+        display: block; text-align: center; cursor: pointer; margin-bottom: 0;
+        border: 2px solid #e9ecef; border-radius: .75rem; padding: .75rem .5rem;
+        background: #fff; transition: border-color .15s, box-shadow .15s, transform .15s;
+    }
+    .opm-method-card {
+        display: flex; align-items: center; gap: .75rem; cursor: pointer; margin-bottom: 0;
+        border: 2px solid #e9ecef; border-radius: .75rem; padding: .7rem .9rem;
+        background: #fff; transition: border-color .15s, box-shadow .15s, transform .15s;
+    }
+    .opm-type-card:hover, .opm-method-card:hover { border-color: #adb5bd; transform: translateY(-1px); box-shadow: 0 .25rem .5rem rgba(0,0,0,.07); }
+    .btn-check:checked + .opm-type-card[for="opmTypeBank"] { border-color: #3b5bdb; color: #2b3a91; background: linear-gradient(135deg, #eef2ff, #e7f0ff); box-shadow: 0 .25rem .75rem rgba(59,91,219,.25); }
+    .btn-check:checked + .opm-type-card[for="opmTypeMobile"] { border-color: #e0218a; color: #a61e6a; background: linear-gradient(135deg, #fff0f6, #ffe3ef); box-shadow: 0 .25rem .75rem rgba(224,33,138,.25); }
+    .btn-check:checked + .opm-method-card { border-color: #198754; background: linear-gradient(135deg, #f0fff6, #e6f9ef); box-shadow: 0 .25rem .75rem rgba(25,135,84,.2); }
+    .opm-method-check { color: #198754; opacity: 0; transition: opacity .15s; margin-left: auto; }
+    .btn-check:checked + .opm-method-card .opm-method-check { opacity: 1; }
+    .opm-method-icon { width: 40px; height: 40px; flex: 0 0 40px; border-radius: .6rem; display: flex; align-items: center; justify-content: center; color: #fff; }
+    .opm-icon-bank { background: linear-gradient(135deg, #4c6ef5, #3b5bdb); }
+    .opm-icon-mobile { background: linear-gradient(135deg, #f06595, #e0218a); }
+    #bdBankMenu { -webkit-overflow-scrolling: touch; }
+</style>
+<div class="card border-0 shadow-sm mb-3 overflow-hidden" id="payOnlineCard">
+    <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between flex-wrap gap-2 border-0 opm-pay-header">
+        <span class="fw-semibold text-white"><i class="fas fa-globe me-2"></i>Pay Online</span>
+        <button type="button" class="btn btn-sm btn-light fw-semibold" data-bs-toggle="collapse" data-bs-target="#payOnlineCollapse">
+            <i class="fas fa-hand-holding-usd me-1 text-success"></i>Make a Payment
         </button>
     </div>
     <div class="collapse" id="payOnlineCollapse">
-        <div class="card-body p-4">
+        <div class="card-body p-3 p-md-4">
             <div class="alert alert-info small">
                 <i class="fas fa-info-circle me-1"></i>
                 Pay your fees through a bank deposit / transfer or mobile banking, then submit the payment details here with a receipt.
@@ -105,78 +128,102 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
             <form method="post" action="<?= APP_URL ?>/accounting/online-payment-submit.php" enctype="multipart/form-data" id="payOnlineForm">
                 <?= csrf_field() ?>
-                <div class="row g-3">
-                    <div class="col-md-4">
-                        <label class="form-label fw-semibold">Payment Type <span class="text-danger">*</span></label>
-                        <select class="form-select" id="opmType">
-                            <option value="">Select…</option>
-                            <option value="bank">Bank</option>
-                            <option value="mobile_banking">Mobile Banking</option>
-                        </select>
+                <label class="form-label fw-semibold">Payment Type <span class="text-danger">*</span></label>
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <input type="radio" class="btn-check" name="opm_type_choice" id="opmTypeBank" value="bank" autocomplete="off">
+                        <label class="opm-type-card w-100" for="opmTypeBank">
+                            <i class="fas fa-university fa-lg d-block mb-1"></i>
+                            <span class="fw-semibold">Bank</span>
+                            <span class="d-block small opacity-75">Deposit / transfer</span>
+                        </label>
                     </div>
-                    <div class="col-md-8">
-                        <label class="form-label fw-semibold">Payment Method <span class="text-danger">*</span></label>
-                        <select class="form-select" name="method_id" id="opmMethod" required disabled>
-                            <option value="">Select the payment type first…</option>
-                        </select>
+                    <div class="col-6">
+                        <input type="radio" class="btn-check" name="opm_type_choice" id="opmTypeMobile" value="mobile_banking" autocomplete="off">
+                        <label class="opm-type-card w-100" for="opmTypeMobile">
+                            <i class="fas fa-mobile-alt fa-lg d-block mb-1"></i>
+                            <span class="fw-semibold">Mobile Banking</span>
+                            <span class="d-block small opacity-75">bKash / Nagad / Rocket</span>
+                        </label>
+                    </div>
+                </div>
+                <div id="opmMethodWrap" style="display:none;">
+                    <label class="form-label fw-semibold">Payment Method <span class="text-danger">*</span></label>
+                    <div class="row g-2 mb-1">
+                        <?php foreach ($opm_methods as $opm_m): ?>
+                        <div class="col-12 col-sm-6 opm-method-col" data-type="<?= h((string)$opm_m['method_type']) ?>" style="display:none;">
+                            <input type="radio" class="btn-check opm-method-radio" name="method_id" id="opmMethod<?= (int)$opm_m['id'] ?>" value="<?= (int)$opm_m['id'] ?>" required>
+                            <label class="opm-method-card w-100" for="opmMethod<?= (int)$opm_m['id'] ?>">
+                                <span class="opm-method-icon <?= (string)$opm_m['method_type'] === 'bank' ? 'opm-icon-bank' : 'opm-icon-mobile' ?>">
+                                    <i class="fas fa-<?= (string)$opm_m['method_type'] === 'bank' ? 'university' : 'mobile-alt' ?>"></i>
+                                </span>
+                                <span class="flex-grow-1" style="min-width: 0;">
+                                    <span class="d-block fw-semibold text-truncate"><?= h(opm_method_title($opm_m)) ?></span>
+                                    <?php if ((string)$opm_m['method_type'] === 'bank' && !empty($opm_m['account_number'])): ?>
+                                    <span class="d-block small text-muted font-monospace text-truncate"><?= h((string)$opm_m['account_number']) ?></span>
+                                    <?php endif; ?>
+                                    <?php if (!empty($opm_m['charge_note'])): ?>
+                                    <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle mt-1"><?= h((string)$opm_m['charge_note']) ?></span>
+                                    <?php endif; ?>
+                                </span>
+                                <i class="fas fa-check-circle opm-method-check"></i>
+                            </label>
+                        </div>
+                        <?php endforeach; ?>
                     </div>
                 </div>
                 <div id="opmDetails" class="mt-3" style="display:none;"></div>
                 <div id="opmGuideline" class="alert alert-warning small mt-3 mb-0" style="display:none; white-space: pre-line;"></div>
                 <!-- Bank payments: structured payer details (shown only for type = bank) -->
                 <div class="row g-3 mt-1" id="opmBankPayerFields" style="display:none;">
-                    <div class="col-md-4">
+                    <div class="col-12 col-md-4 position-relative">
                         <label class="form-label fw-semibold">Bank Name (paid from) <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" name="payer_bank_name" id="opmPayerBankName"
-                               maxlength="190" list="bdBankList" autocomplete="off"
-                               placeholder="Type to search your bank…">
-                        <datalist id="bdBankList">
-                            <?php foreach ($opm_bd_banks as $opm_bank): ?>
-                            <option value="<?= h($opm_bank) ?>"></option>
-                            <?php endforeach; ?>
-                        </datalist>
-                        <div class="form-text">Start typing to search all Bangladeshi banks.</div>
+                               maxlength="190" autocomplete="off" placeholder="Type to search your bank…">
+                        <div id="bdBankMenu" class="list-group position-absolute start-0 end-0 mt-1 shadow border rounded bg-white overflow-auto"
+                             style="display:none; z-index: 1056; max-height: 240px;"></div>
+                        <div class="form-text">Start typing to search all Bangladeshi banks, or type the name manually.</div>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-12 col-md-4">
                         <label class="form-label fw-semibold">Paid From Account Name <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" name="payer_account_name" id="opmPayerAccountName"
                                maxlength="190" placeholder="Account holder name you paid from">
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-12 col-md-4">
                         <label class="form-label fw-semibold">Account Number <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" name="payer_account_number" id="opmPayerAccountNumber"
                                maxlength="64" placeholder="Account number you paid from">
                     </div>
                 </div>
                 <div class="row g-3 mt-1">
-                    <div class="col-md-6" id="opmPaidFromWrap">
+                    <div class="col-12 col-md-6" id="opmPaidFromWrap">
                         <label class="form-label fw-semibold">Paid From (wallet name or number) <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" name="paid_from" id="opmPaidFrom" maxlength="190" required
                                placeholder="e.g. the wallet number you paid from">
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-12 col-md-6">
                         <label class="form-label fw-semibold">Amount Paid (<?= h(acc_currency()) ?>) <span class="text-danger">*</span></label>
                         <input type="number" class="form-control" name="amount" min="1" step="0.01" required>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-12 col-sm-6 col-md-4">
                         <label class="form-label fw-semibold">Payment Date <span class="text-danger">*</span></label>
                         <input type="date" class="form-control" name="paid_date" max="<?= h(date('Y-m-d')) ?>" required>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-12 col-sm-6 col-md-4">
                         <label class="form-label fw-semibold">Payment Time</label>
                         <input type="time" class="form-control" name="paid_time">
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-12 col-md-4">
                         <label class="form-label fw-semibold">Transaction / Reference No. <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" name="transaction_number" maxlength="190" required>
                     </div>
-                    <div class="col-md-8">
+                    <div class="col-12 col-md-8">
                         <label class="form-label fw-semibold">Receipt / Screenshot <span class="text-danger">*</span></label>
                         <input type="file" class="form-control" name="receipt" id="opmReceipt" accept=".jpg,.jpeg,.png,.webp,.pdf" required>
                         <div class="form-text">JPG, PNG, WEBP or PDF — max 5 MB.</div>
                     </div>
-                    <div class="col-md-4 d-flex align-items-end">
-                        <button type="submit" class="btn btn-primary w-100">
+                    <div class="col-12 col-md-4 d-flex align-items-end">
+                        <button type="submit" class="btn w-100 text-white fw-semibold border-0 opm-pay-header">
                             <i class="fas fa-paper-plane me-1"></i> Submit for Verification
                         </button>
                     </div>
@@ -205,7 +252,7 @@ require_once __DIR__ . '/../includes/header.php';
         but sometimes it may take up to <strong>48 hours</strong>. You will see the result here.
     </div>
     <?php endif; ?>
-    <div class="table-responsive">
+    <div class="table-responsive d-none d-md-block">
         <table class="table table-sm table-hover align-middle mb-0">
             <thead class="table-light">
                 <tr>
@@ -233,6 +280,24 @@ require_once __DIR__ . '/../includes/header.php';
             </tbody>
         </table>
     </div>
+    <!-- Mobile: stacked cards instead of a wide table -->
+    <div class="d-md-none p-3 pt-2">
+        <?php foreach ($opm_submissions as $opm_s): ?>
+        <div class="border rounded-3 p-3 mb-2 shadow-sm">
+            <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
+                <div class="fw-semibold small"><?= h((string)$opm_s['method_title']) ?></div>
+                <?= opm_status_badge((string)$opm_s['status']) ?>
+            </div>
+            <div class="fs-5 fw-bold mb-1"><?= h(number_format((float)$opm_s['amount'], 2)) ?></div>
+            <div class="small text-muted">Paid on: <?= h((string)$opm_s['paid_date']) ?><?= !empty($opm_s['paid_time']) ? ' ' . h((string)$opm_s['paid_time']) : '' ?></div>
+            <div class="small text-muted">Txn: <span class="font-monospace"><?= h((string)$opm_s['transaction_number']) ?></span></div>
+            <div class="small text-muted">Submitted: <?= h((string)$opm_s['created_at']) ?></div>
+            <?php if (!empty($opm_s['admin_note'])): ?>
+            <div class="small mt-1"><i class="fas fa-comment-dots me-1 text-info"></i><?= h((string)$opm_s['admin_note']) ?></div>
+            <?php endif; ?>
+        </div>
+        <?php endforeach; ?>
+    </div>
 </div>
 <?php endif; ?>
 
@@ -253,8 +318,10 @@ require_once __DIR__ . '/../includes/header.php';
     ], $opm_methods), JSON_UNESCAPED_UNICODE) ?>;
     var opmGuidelines = <?= json_encode($opm_guidelines, JSON_UNESCAPED_UNICODE) ?>;
 
-    var typeSel   = document.getElementById('opmType');
-    var methodSel = document.getElementById('opmMethod');
+    var typeRadios   = Array.prototype.slice.call(document.querySelectorAll('input[name="opm_type_choice"]'));
+    var methodWrap   = document.getElementById('opmMethodWrap');
+    var methodCols   = Array.prototype.slice.call(document.querySelectorAll('.opm-method-col'));
+    var methodRadios = Array.prototype.slice.call(document.querySelectorAll('.opm-method-radio'));
     var details   = document.getElementById('opmDetails');
     var guideline = document.getElementById('opmGuideline');
     var receipt   = document.getElementById('opmReceipt');
@@ -264,7 +331,43 @@ require_once __DIR__ . '/../includes/header.php';
     var paidFrom     = document.getElementById('opmPaidFrom');
     var payerInputs  = ['opmPayerBankName', 'opmPayerAccountName', 'opmPayerAccountNumber']
         .map(function (id) { return document.getElementById(id); });
-    if (!typeSel || !methodSel) { return; }
+    var bdBanks   = <?= json_encode($opm_bd_banks, JSON_UNESCAPED_UNICODE) ?>;
+    var bankInput = document.getElementById('opmPayerBankName');
+    var bankMenu  = document.getElementById('bdBankMenu');
+    if (!typeRadios.length || !methodRadios.length) { return; }
+
+    // ── Searchable Bangladeshi bank picker (custom dropdown — works on all
+    // browsers and phones, unlike the native datalist) ──
+    function renderBankMenu(filter) {
+        if (!bankMenu) { return; }
+        var q = (filter || '').toLowerCase();
+        var matches = bdBanks.filter(function (b) { return b.toLowerCase().indexOf(q) !== -1; });
+        if (!matches.length) {
+            bankMenu.innerHTML = '<div class="list-group-item small text-muted">No bank found — you can still type the name manually.</div>';
+        } else {
+            bankMenu.innerHTML = matches.map(function (b) {
+                return '<button type="button" class="list-group-item list-group-item-action py-2 small" data-bank="' + esc(b) + '">' + esc(b) + '</button>';
+            }).join('');
+        }
+        bankMenu.style.display = '';
+    }
+    function hideBankMenu() { if (bankMenu) { bankMenu.style.display = 'none'; } }
+    if (bankInput && bankMenu) {
+        bankInput.addEventListener('focus', function () { renderBankMenu(bankInput.value.trim()); });
+        bankInput.addEventListener('input', function () { renderBankMenu(bankInput.value.trim()); });
+        bankInput.addEventListener('keydown', function (e) { if (e.key === 'Escape') { hideBankMenu(); } });
+        bankMenu.addEventListener('mousedown', function (e) {
+            var btn = e.target.closest('[data-bank]');
+            if (btn) {
+                e.preventDefault();
+                bankInput.value = btn.getAttribute('data-bank');
+                hideBankMenu();
+            }
+        });
+        document.addEventListener('click', function (e) {
+            if (e.target !== bankInput && !bankMenu.contains(e.target)) { hideBankMenu(); }
+        });
+    }
 
     function togglePayerFields(t) {
         var isBank = t === 'bank';
@@ -283,43 +386,37 @@ require_once __DIR__ . '/../includes/header.php';
 
     function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
     function row(label, value, mono) {
-        return '<tr><th class="text-muted small" style="width: 180px;">' + esc(label) + '</th>'
-             + '<td class="fw-semibold' + (mono ? ' font-monospace' : '') + '">' + esc(value) + '</td></tr>';
+        return '<div class="d-flex flex-column flex-sm-row py-1">'
+             + '<div class="text-muted small" style="flex: 0 0 160px;">' + esc(label) + '</div>'
+             + '<div class="fw-semibold' + (mono ? ' font-monospace' : '') + '" style="word-break: break-all;">' + esc(value) + '</div>'
+             + '</div>';
     }
 
-    typeSel.addEventListener('change', function () {
-        var t = typeSel.value;
+    function applyType(t) {
         togglePayerFields(t);
-        methodSel.innerHTML = '';
         details.style.display = 'none';
         details.innerHTML = '';
-        if (t === '') {
-            methodSel.disabled = true;
-            methodSel.innerHTML = '<option value="">Select the payment type first…</option>';
-            guideline.style.display = 'none';
-            return;
-        }
-        var opts = '<option value="">Select…</option>';
-        opmMethods.forEach(function (m) {
-            if (m.type === t) {
-                opts += '<option value="' + m.id + '">' + esc(m.title) + (m.charge_note ? ' — ' + esc(m.charge_note) : '') + '</option>';
-            }
+        methodRadios.forEach(function (r) { r.checked = false; });
+        methodCols.forEach(function (col) {
+            col.style.display = col.getAttribute('data-type') === t ? '' : 'none';
         });
-        methodSel.innerHTML = opts;
-        methodSel.disabled = false;
-        guideline.textContent = opmGuidelines[t] || '';
+        if (methodWrap) { methodWrap.style.display = t ? '' : 'none'; }
+        guideline.textContent = t ? (opmGuidelines[t] || '') : '';
         guideline.style.display = guideline.textContent !== '' ? '' : 'none';
+    }
+    typeRadios.forEach(function (r) {
+        r.addEventListener('change', function () { if (r.checked) { applyType(r.value); } });
     });
 
-    methodSel.addEventListener('change', function () {
-        var id = parseInt(methodSel.value, 10) || 0;
+    function onMethodChange(radio) {
+        var id = parseInt(radio.value, 10) || 0;
         var m = null;
         opmMethods.forEach(function (x) { if (x.id === id) { m = x; } });
         if (!m) { details.style.display = 'none'; details.innerHTML = ''; return; }
-        var html = '<div class="border rounded p-3 bg-light">'
-                 + '<div class="fw-semibold mb-2"><i class="fas fa-' + (m.type === 'bank' ? 'university' : 'mobile-alt') + ' me-1"></i>'
-                 + 'Pay to this ' + (m.type === 'bank' ? 'bank account' : 'wallet') + ':</div>'
-                 + '<table class="table table-sm table-borderless mb-0"><tbody>';
+        var isBank = m.type === 'bank';
+        var html = '<div class="rounded-3 p-3" style="background: linear-gradient(135deg, #f8fbff, #f3fff9); border: 1px solid #dbe7f6; border-left: 4px solid ' + (isBank ? '#3b5bdb' : '#e0218a') + ';">'
+                 + '<div class="fw-semibold mb-2" style="color: ' + (isBank ? '#3b5bdb' : '#c2185b') + ';"><i class="fas fa-' + (isBank ? 'university' : 'mobile-alt') + ' me-1"></i>'
+                 + 'Pay to this ' + (isBank ? 'bank account' : 'wallet') + ':</div>';
         if (m.type === 'bank') {
             html += row('Bank Name', m.bank_name)
                   + row('Branch Name', m.branch_name)
@@ -330,9 +427,27 @@ require_once __DIR__ . '/../includes/header.php';
                   + row('Number', m.wallet_number, true);
             if (m.charge_note) { html += row('Charge', m.charge_note); }
         }
-        html += '</tbody></table></div>';
+        html += '</div>';
+        if (m.type === 'mobile_banking' && String(m.operator_name || '').toLowerCase() === 'bkash') {
+            html += '<div class="alert alert-primary small mt-2 mb-0">'
+                  + '<div class="fw-semibold mb-1"><i class="fas fa-mobile-alt me-1"></i>How to pay with bKash:</div>'
+                  + '<ol class="mb-2 ps-3">'
+                  + '<li>Log in to your bKash account / app</li>'
+                  + '<li>Go to the <strong>Payment</strong> option</li>'
+                  + '<li>Enter: <strong class="font-monospace">' + esc(m.wallet_number) + '</strong></li>'
+                  + '<li>Enter the amount</li>'
+                  + '<li>Complete the payment</li>'
+                  + '<li>Write the <strong>Transaction ID (TrxID)</strong> in the field below</li>'
+                  + '</ol>'
+                  + '<div class="mb-0"><i class="fas fa-info-circle me-1"></i><strong>Note:</strong> 1.5% of the payment is the bKash fee — '
+                  + 'it will <strong>not</strong> be adjusted to your due amount, but it will be shown on your invoice.</div>'
+                  + '</div>';
+        }
         details.innerHTML = html;
         details.style.display = '';
+    }
+    methodRadios.forEach(function (radio) {
+        radio.addEventListener('change', function () { if (radio.checked) { onMethodChange(radio); } });
     });
 
     if (form) {
