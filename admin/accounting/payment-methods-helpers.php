@@ -192,7 +192,7 @@ function opm_guideline(string $type): string
         . "4. Upload a clear photo or screenshot of the receipt.\n"
         . "5. Verification is normally completed within 24 hours, but occasionally may take up to 48 hours."
         : "1. Send the exact amount to the selected wallet number.\n"
-        . "2. If the operator applies a charge (e.g. bKash 1.5%), it is NOT adjusted to your due amount — it is shown on your invoice. Add it on top if you want your full due covered.\n"
+        . "2. If the operator applies a charge (see the note next to the operator), add it on top so the university receives the full fee amount.\n"
         . "3. Note the Transaction ID (TrxID) from the confirmation SMS.\n"
         . "4. Fill in this form with the wallet number you paid from, the amount, date, time and TrxID.\n"
         . "5. Upload a screenshot of the payment confirmation.\n"
@@ -415,19 +415,10 @@ function opm_post_approved_payment(array $p): array
         }
     }
 
-    // ── bKash charge: 1.5% of the paid amount is the operator's fee — it is
-    // NOT adjusted against the student's dues, but it is shown as a separate
-    // line on the invoice. Only the net amount is allocated to dues. ──
-    $bkash_fee = 0.0;
-    if ($provider === 'bkash') {
-        $bkash_fee = round($amount * 0.015, 2);
-    }
-    $allocatable = round($amount - $bkash_fee, 2);
-
-    // ── Allocate the paid amount (net of any bKash fee) to outstanding dues, oldest first ──
+    // ── Allocate the paid amount to outstanding dues, oldest first ──
     $income_map = acc_income_account_map_for_fee_types();
     $items      = [];
-    $remaining  = $allocatable;
+    $remaining  = $amount;
     foreach (opm_build_outstanding_queue($summary) as $q) {
         if ($remaining <= 0.009) {
             break;
@@ -465,15 +456,6 @@ function opm_post_approved_payment(array $p): array
             throw new RuntimeException('Income account mapping is missing for fee type "' . acc_fee_type_label((string)$it['fee_type']) . '". Configure it in Accounting Settings.');
         }
         $credit_by_income[$income_id] = round(($credit_by_income[$income_id] ?? 0.0) + (float)$it['amount'], 2);
-    }
-    if ($bkash_fee > 0) {
-        // Credit the bKash fee to the "other" head so the voucher balances with
-        // the full paid amount while dues are only reduced by the net amount.
-        $fee_income_id = (int)($income_map['other'] ?? 0);
-        if ($fee_income_id <= 0) {
-            throw new RuntimeException('Income account mapping is missing for fee type "Other" (needed for the bKash charge). Configure it in Accounting Settings.');
-        }
-        $credit_by_income[$fee_income_id] = round(($credit_by_income[$fee_income_id] ?? 0.0) + $bkash_fee, 2);
     }
     $voucher_lines = [[
         'account_id'  => $received_into_account_id,
@@ -541,20 +523,6 @@ function opm_post_approved_payment(array $p): array
         ];
     }
 
-    if ($bkash_fee > 0) {
-        // Shown on the invoice only — no sfp_payments row, so it never
-        // reduces the student's dues.
-        $invoice_items[] = [
-            'voucher_id'     => $voucher_id,
-            'voucher_number' => $voucher_number,
-            'fee_type_label' => 'bKash Charge (1.5%)',
-            'semester_label' => '',
-            'month_label'    => '',
-            'amount'         => $bkash_fee,
-            'narration'      => 'bKash operator fee — not adjusted against dues',
-        ];
-    }
-
     // Link the voucher to the submission for the review queue / audit trail.
     db()->prepare('UPDATE acc_online_payments SET voucher_id = ? WHERE id = ?')
         ->execute([$voucher_id, $submission_id]);
@@ -577,6 +545,5 @@ function opm_post_approved_payment(array $p): array
         'voucher_number' => $voucher_number,
         'total'          => $amount,
         'advance'        => $advance,
-        'bkash_fee'      => $bkash_fee,
     ];
 }
