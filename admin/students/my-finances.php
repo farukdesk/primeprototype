@@ -29,6 +29,27 @@ $opm_guidelines  = [
     'mobile_banking' => opm_guideline('mobile_banking'),
 ];
 
+// Scheduled banks of Bangladesh — searchable list for the "Bank Name" field
+// shown when the student submits a bank payment.
+$opm_bd_banks = [
+    'AB Bank PLC', 'Agrani Bank PLC', 'Al-Arafah Islami Bank PLC', 'Bangladesh Commerce Bank Limited',
+    'Bangladesh Development Bank PLC', 'Bangladesh Krishi Bank', 'Bank Al-Falah Limited', 'Bank Asia PLC',
+    'BASIC Bank Limited', 'Bengal Commercial Bank PLC', 'BRAC Bank PLC', 'Citibank N.A.',
+    'Citizens Bank PLC', 'City Bank PLC', 'Commercial Bank of Ceylon PLC', 'Community Bank Bangladesh PLC',
+    'Dhaka Bank PLC', 'Dutch-Bangla Bank PLC', 'Eastern Bank PLC', 'EXIM Bank PLC',
+    'First Security Islami Bank PLC', 'Global Islami Bank PLC', 'Habib Bank Limited', 'HSBC',
+    'ICB Islamic Bank PLC', 'IFIC Bank PLC', 'Islami Bank Bangladesh PLC', 'Jamuna Bank PLC',
+    'Janata Bank PLC', 'Meghna Bank PLC', 'Mercantile Bank PLC', 'Midland Bank PLC',
+    'Modhumoti Bank PLC', 'Mutual Trust Bank PLC', 'National Bank of Pakistan', 'National Bank PLC',
+    'NCC Bank PLC', 'NRB Bank PLC', 'NRBC Bank PLC', 'One Bank PLC',
+    'Padma Bank PLC', 'Premier Bank PLC', 'Prime Bank PLC', 'Probashi Kallyan Bank',
+    'Pubali Bank PLC', 'Rajshahi Krishi Unnayan Bank', 'Rupali Bank PLC', 'Shahjalal Islami Bank PLC',
+    'Shimanto Bank PLC', 'Social Islami Bank PLC', 'Sonali Bank PLC', 'South Bangla Agriculture & Commerce Bank PLC',
+    'Southeast Bank PLC', 'Standard Bank PLC', 'Standard Chartered Bank', 'State Bank of India',
+    'Trust Bank PLC', 'Union Bank PLC', 'United Commercial Bank PLC', 'Uttara Bank PLC',
+    'Woori Bank',
+];
+
 $page_title = 'My Finances';
 
 require_once __DIR__ . '/../includes/header.php';
@@ -102,11 +123,36 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
                 <div id="opmDetails" class="mt-3" style="display:none;"></div>
                 <div id="opmGuideline" class="alert alert-warning small mt-3 mb-0" style="display:none; white-space: pre-line;"></div>
+                <!-- Bank payments: structured payer details (shown only for type = bank) -->
+                <div class="row g-3 mt-1" id="opmBankPayerFields" style="display:none;">
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Bank Name (paid from) <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="payer_bank_name" id="opmPayerBankName"
+                               maxlength="190" list="bdBankList" autocomplete="off"
+                               placeholder="Type to search your bank…">
+                        <datalist id="bdBankList">
+                            <?php foreach ($opm_bd_banks as $opm_bank): ?>
+                            <option value="<?= h($opm_bank) ?>"></option>
+                            <?php endforeach; ?>
+                        </datalist>
+                        <div class="form-text">Start typing to search all Bangladeshi banks.</div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Paid From Account Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="payer_account_name" id="opmPayerAccountName"
+                               maxlength="190" placeholder="Account holder name you paid from">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Account Number <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="payer_account_number" id="opmPayerAccountNumber"
+                               maxlength="64" placeholder="Account number you paid from">
+                    </div>
+                </div>
                 <div class="row g-3 mt-1">
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold">Paid From (account / wallet name or number) <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" name="paid_from" maxlength="190" required
-                               placeholder="e.g. the account name or wallet number you paid from">
+                    <div class="col-md-6" id="opmPaidFromWrap">
+                        <label class="form-label fw-semibold">Paid From (wallet name or number) <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="paid_from" id="opmPaidFrom" maxlength="190" required
+                               placeholder="e.g. the wallet number you paid from">
                     </div>
                     <div class="col-md-6">
                         <label class="form-label fw-semibold">Amount Paid (<?= h(acc_currency()) ?>) <span class="text-danger">*</span></label>
@@ -213,7 +259,27 @@ require_once __DIR__ . '/../includes/header.php';
     var guideline = document.getElementById('opmGuideline');
     var receipt   = document.getElementById('opmReceipt');
     var form      = document.getElementById('payOnlineForm');
+    var bankFields   = document.getElementById('opmBankPayerFields');
+    var paidFromWrap = document.getElementById('opmPaidFromWrap');
+    var paidFrom     = document.getElementById('opmPaidFrom');
+    var payerInputs  = ['opmPayerBankName', 'opmPayerAccountName', 'opmPayerAccountNumber']
+        .map(function (id) { return document.getElementById(id); });
     if (!typeSel || !methodSel) { return; }
+
+    function togglePayerFields(t) {
+        var isBank = t === 'bank';
+        if (bankFields)   { bankFields.style.display   = isBank ? '' : 'none'; }
+        if (paidFromWrap) { paidFromWrap.style.display = isBank ? 'none' : ''; }
+        if (paidFrom) {
+            paidFrom.required = !isBank;
+            if (isBank) { paidFrom.value = ''; }
+        }
+        payerInputs.forEach(function (el) {
+            if (!el) { return; }
+            el.required = isBank;
+            if (!isBank) { el.value = ''; }
+        });
+    }
 
     function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
     function row(label, value, mono) {
@@ -223,6 +289,7 @@ require_once __DIR__ . '/../includes/header.php';
 
     typeSel.addEventListener('change', function () {
         var t = typeSel.value;
+        togglePayerFields(t);
         methodSel.innerHTML = '';
         details.style.display = 'none';
         details.innerHTML = '';
