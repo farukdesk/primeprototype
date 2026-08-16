@@ -106,7 +106,7 @@ require_once __DIR__ . '/../includes/header.php';
             <form method="post" action="<?= APP_URL ?>/accounting/online-payment-submit.php" enctype="multipart/form-data" id="payOnlineForm">
                 <?= csrf_field() ?>
                 <div class="row g-3">
-                    <div class="col-md-4">
+                    <div class="col-12 col-md-4">
                         <label class="form-label fw-semibold">Payment Type <span class="text-danger">*</span></label>
                         <select class="form-select" id="opmType">
                             <option value="">Select…</option>
@@ -114,7 +114,7 @@ require_once __DIR__ . '/../includes/header.php';
                             <option value="mobile_banking">Mobile Banking</option>
                         </select>
                     </div>
-                    <div class="col-md-8">
+                    <div class="col-12 col-md-8">
                         <label class="form-label fw-semibold">Payment Method <span class="text-danger">*</span></label>
                         <select class="form-select" name="method_id" id="opmMethod" required disabled>
                             <option value="">Select the payment type first…</option>
@@ -125,57 +125,53 @@ require_once __DIR__ . '/../includes/header.php';
                 <div id="opmGuideline" class="alert alert-warning small mt-3 mb-0" style="display:none; white-space: pre-line;"></div>
                 <!-- Bank payments: structured payer details (shown only for type = bank) -->
                 <div class="row g-3 mt-1" id="opmBankPayerFields" style="display:none;">
-                    <div class="col-md-4">
+                    <div class="col-12 col-md-4 position-relative">
                         <label class="form-label fw-semibold">Bank Name (paid from) <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" name="payer_bank_name" id="opmPayerBankName"
-                               maxlength="190" list="bdBankList" autocomplete="off"
-                               placeholder="Type to search your bank…">
-                        <datalist id="bdBankList">
-                            <?php foreach ($opm_bd_banks as $opm_bank): ?>
-                            <option value="<?= h($opm_bank) ?>"></option>
-                            <?php endforeach; ?>
-                        </datalist>
-                        <div class="form-text">Start typing to search all Bangladeshi banks.</div>
+                               maxlength="190" autocomplete="off" placeholder="Type to search your bank…">
+                        <div id="bdBankMenu" class="list-group position-absolute start-0 end-0 mt-1 shadow border rounded bg-white overflow-auto"
+                             style="display:none; z-index: 1056; max-height: 240px;"></div>
+                        <div class="form-text">Start typing to search all Bangladeshi banks, or type the name manually.</div>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-12 col-md-4">
                         <label class="form-label fw-semibold">Paid From Account Name <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" name="payer_account_name" id="opmPayerAccountName"
                                maxlength="190" placeholder="Account holder name you paid from">
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-12 col-md-4">
                         <label class="form-label fw-semibold">Account Number <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" name="payer_account_number" id="opmPayerAccountNumber"
                                maxlength="64" placeholder="Account number you paid from">
                     </div>
                 </div>
                 <div class="row g-3 mt-1">
-                    <div class="col-md-6" id="opmPaidFromWrap">
+                    <div class="col-12 col-md-6" id="opmPaidFromWrap">
                         <label class="form-label fw-semibold">Paid From (wallet name or number) <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" name="paid_from" id="opmPaidFrom" maxlength="190" required
                                placeholder="e.g. the wallet number you paid from">
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-12 col-md-6">
                         <label class="form-label fw-semibold">Amount Paid (<?= h(acc_currency()) ?>) <span class="text-danger">*</span></label>
                         <input type="number" class="form-control" name="amount" min="1" step="0.01" required>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-12 col-sm-6 col-md-4">
                         <label class="form-label fw-semibold">Payment Date <span class="text-danger">*</span></label>
                         <input type="date" class="form-control" name="paid_date" max="<?= h(date('Y-m-d')) ?>" required>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-12 col-sm-6 col-md-4">
                         <label class="form-label fw-semibold">Payment Time</label>
                         <input type="time" class="form-control" name="paid_time">
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-12 col-md-4">
                         <label class="form-label fw-semibold">Transaction / Reference No. <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" name="transaction_number" maxlength="190" required>
                     </div>
-                    <div class="col-md-8">
+                    <div class="col-12 col-md-8">
                         <label class="form-label fw-semibold">Receipt / Screenshot <span class="text-danger">*</span></label>
                         <input type="file" class="form-control" name="receipt" id="opmReceipt" accept=".jpg,.jpeg,.png,.webp,.pdf" required>
                         <div class="form-text">JPG, PNG, WEBP or PDF — max 5 MB.</div>
                     </div>
-                    <div class="col-md-4 d-flex align-items-end">
+                    <div class="col-12 col-md-4 d-flex align-items-end">
                         <button type="submit" class="btn btn-primary w-100">
                             <i class="fas fa-paper-plane me-1"></i> Submit for Verification
                         </button>
@@ -264,7 +260,43 @@ require_once __DIR__ . '/../includes/header.php';
     var paidFrom     = document.getElementById('opmPaidFrom');
     var payerInputs  = ['opmPayerBankName', 'opmPayerAccountName', 'opmPayerAccountNumber']
         .map(function (id) { return document.getElementById(id); });
+    var bdBanks   = <?= json_encode($opm_bd_banks, JSON_UNESCAPED_UNICODE) ?>;
+    var bankInput = document.getElementById('opmPayerBankName');
+    var bankMenu  = document.getElementById('bdBankMenu');
     if (!typeSel || !methodSel) { return; }
+
+    // ── Searchable Bangladeshi bank picker (custom dropdown — works on all
+    // browsers and phones, unlike the native datalist) ──
+    function renderBankMenu(filter) {
+        if (!bankMenu) { return; }
+        var q = (filter || '').toLowerCase();
+        var matches = bdBanks.filter(function (b) { return b.toLowerCase().indexOf(q) !== -1; });
+        if (!matches.length) {
+            bankMenu.innerHTML = '<div class="list-group-item small text-muted">No bank found — you can still type the name manually.</div>';
+        } else {
+            bankMenu.innerHTML = matches.map(function (b) {
+                return '<button type="button" class="list-group-item list-group-item-action py-2 small" data-bank="' + esc(b) + '">' + esc(b) + '</button>';
+            }).join('');
+        }
+        bankMenu.style.display = '';
+    }
+    function hideBankMenu() { if (bankMenu) { bankMenu.style.display = 'none'; } }
+    if (bankInput && bankMenu) {
+        bankInput.addEventListener('focus', function () { renderBankMenu(bankInput.value.trim()); });
+        bankInput.addEventListener('input', function () { renderBankMenu(bankInput.value.trim()); });
+        bankInput.addEventListener('keydown', function (e) { if (e.key === 'Escape') { hideBankMenu(); } });
+        bankMenu.addEventListener('mousedown', function (e) {
+            var btn = e.target.closest('[data-bank]');
+            if (btn) {
+                e.preventDefault();
+                bankInput.value = btn.getAttribute('data-bank');
+                hideBankMenu();
+            }
+        });
+        document.addEventListener('click', function (e) {
+            if (e.target !== bankInput && !bankMenu.contains(e.target)) { hideBankMenu(); }
+        });
+    }
 
     function togglePayerFields(t) {
         var isBank = t === 'bank';
@@ -331,6 +363,21 @@ require_once __DIR__ . '/../includes/header.php';
             if (m.charge_note) { html += row('Charge', m.charge_note); }
         }
         html += '</tbody></table></div>';
+        if (m.type === 'mobile_banking' && String(m.operator_name || '').toLowerCase() === 'bkash') {
+            html += '<div class="alert alert-primary small mt-2 mb-0">'
+                  + '<div class="fw-semibold mb-1"><i class="fas fa-mobile-alt me-1"></i>How to pay with bKash:</div>'
+                  + '<ol class="mb-2 ps-3">'
+                  + '<li>Log in to your bKash account / app</li>'
+                  + '<li>Go to the <strong>Payment</strong> option</li>'
+                  + '<li>Enter: <strong class="font-monospace">' + esc(m.wallet_number) + '</strong></li>'
+                  + '<li>Enter the amount</li>'
+                  + '<li>Complete the payment</li>'
+                  + '<li>Write the <strong>Transaction ID (TrxID)</strong> in the field below</li>'
+                  + '</ol>'
+                  + '<div class="mb-0"><i class="fas fa-info-circle me-1"></i><strong>Note:</strong> 1.5% of the payment is the bKash fee — '
+                  + 'it will <strong>not</strong> be adjusted to your due amount, but it will be shown on your invoice.</div>'
+                  + '</div>';
+        }
         details.innerHTML = html;
         details.style.display = '';
     });
