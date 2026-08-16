@@ -55,6 +55,14 @@ const OEBM_FEE_TYPES = ['admission', 'form_fee', 'id_card_fee', 'registration', 
 // without accounting sign-off — it directly affects financial reconciliation.
 const OEBM_AMOUNT_TOLERANCE = 5.0;
 
+// Per-student reconciliation tolerance: after a merge, a student's TOTAL paid
+// (old-ERP merges plus payments collected in this ERP, combined — exactly what
+// Collect Payment shows as Total Paid) should match the student's CSV total
+// within this many BDT. Larger differences never block the merge — the student
+// is flagged for HUMAN REVIEW instead, and the flagged IDs are saved on the
+// merge batch so they can be checked later.
+const OEBM_REVIEW_TOLERANCE = 100.0;
+
 // ── Sample CSV template download ────────────────────────────────────────────
 if (isset($_GET['sample'])) {
     header('Content-Type: text/csv; charset=utf-8');
@@ -553,12 +561,13 @@ function oebm_ensure_batch_table(): void
             status_changes MEDIUMTEXT NOT NULL,
             deleted_voucher_ids MEDIUMTEXT NULL DEFAULT NULL,
             moved_payments MEDIUMTEXT NULL DEFAULT NULL,
+            review_students MEDIUMTEXT NULL DEFAULT NULL,
             undone_by INT UNSIGNED NULL DEFAULT NULL,
             undone_at DATETIME NULL DEFAULT NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
     );
     // Older installs may have created the table before these columns existed.
-    foreach (['deleted_voucher_ids', 'moved_payments'] as $extra_col) {
+    foreach (['deleted_voucher_ids', 'moved_payments', 'review_students'] as $extra_col) {
         $has_col = db()->query("SHOW COLUMNS FROM oebm_merge_batches LIKE '" . $extra_col . "'")->fetch();
         if (!$has_col) {
             db()->exec('ALTER TABLE oebm_merge_batches ADD COLUMN ' . $extra_col . ' MEDIUMTEXT NULL DEFAULT NULL');
@@ -578,14 +587,15 @@ function oebm_record_batch(
     array $status_changes,
     int   $merged_count,
     array $deleted_voucher_ids = [],
-    array $moved_payments = []
+    array $moved_payments = [],
+    array $review_students = []
 ): int {
     oebm_ensure_batch_table();
     $user = auth_user();
     db()->prepare(
         'INSERT INTO oebm_merge_batches
-            (created_by, merged_count, voucher_ids, status_changes, deleted_voucher_ids, moved_payments)
-         VALUES (?,?,?,?,?,?)'
+            (created_by, merged_count, voucher_ids, status_changes, deleted_voucher_ids, moved_payments, review_students)
+         VALUES (?,?,?,?,?,?,?)'
     )->execute([
         (int)($user['id'] ?? 0),
         $merged_count,
@@ -593,6 +603,7 @@ function oebm_record_batch(
         json_encode(array_values($status_changes), JSON_UNESCAPED_UNICODE),
         json_encode(array_values(array_unique(array_map('intval', $deleted_voucher_ids)))),
         json_encode(array_values($moved_payments), JSON_UNESCAPED_UNICODE),
+        json_encode(array_values($review_students), JSON_UNESCAPED_UNICODE),
     ]);
     return (int)db()->lastInsertId();
 }
@@ -640,6 +651,88 @@ function oebm_can_undo_batch(array $batch): bool
     }
     $user = auth_user();
     return $user && (int)$batch['created_by'] === (int)($user['id'] ?? 0);
+}
+
+/**
+ * Reconcile each student's TOTAL paid against the CSV total (±100 BDT).
+ *
+ * For every student in the CSV, the grand total of the uploaded statement is
+ * compared with the student's total paid in this system — old-ERP merges AND
+ * payments collected in this ERP (cash / bank / mobile banking), combined,
+ * exactly what Collect Payment shows as Total Paid. Differences within
+ * OEBM_REVIEW_TOLERANCE are considered matched. Larger differences never
+ * block the merge: the student is flagged for HUMAN REVIEW instead, and the
+ * flagged IDs are saved on the merge batch so they can be checked later.
+ *
+ * @param array<int,array<string,mixed>> $results         Validated CSV rows.
+ * @param bool                           $include_pending  True on preview: add
+ *        the amounts of rows that WILL merge to project the post-merge total.
+ *        False after a confirm, when the merged payments are already stored.
+ * @return array<int,array<string,mixed>> Students whose difference is beyond
+ *         the tolerance: student_pk, sid, name, csv_total, total_paid, diff.
+ */
+function oebm_total_review_flags(array $results, bool $include_pending): array
+{
+    // Per-student CSV totals from the ORIGINAL CSV amounts (ignored summary /
+    // zero-amount rows excluded), plus the still-pending merge amounts.
+    $students = [];
+    foreach ($results as $r) {
+        if ($r['status'] === 'ignored') {
+            continue;
+        }
+        $res = $r['resolved'];
+        $pk  = $res['student_pk'] ?? null;
+        if (!$pk) {
+            continue;
+        }
+        $pk = (int)$pk;
+        if (!isset($students[$pk])) {
+            $students[$pk] = [
+                'student_pk' => $pk,
+                'sid'        => (string)($r['input']['student_id'] ?? ''),
+                'name'       => (string)($res['student_name'] ?? ''),
+                'csv_total'  => 0.0,
+                'pending'    => 0.0,
+            ];
+        }
+        $raw_amt = oebm_parse_amount((string)($r['input']['amount'] ?? ''));
+        $students[$pk]['csv_total'] += $raw_amt !== null ? max(0.0, $raw_amt) : 0.0;
+        if ($include_pending && $r['status'] === 'merge' && $res['amount'] !== null) {
+            $students[$pk]['pending'] += (float)$res['amount'];
+        }
+    }
+    if (!$students) {
+        return [];
+    }
+
+    // Total paid per student across ALL payment methods (old + current ERP).
+    $stmt = db()->prepare(
+        "SELECT COALESCE(SUM(sp.amount), 0)
+         FROM sfp_payments sp
+         JOIN acc_vouchers v ON v.id = sp.voucher_id
+         WHERE sp.student_id = ?
+           AND v.is_deleted = 0
+           AND v.status IN ('posted','memo')"
+    );
+
+    $flagged = [];
+    foreach ($students as $pk => $info) {
+        $stmt->execute([$pk]);
+        $total_paid = (float)$stmt->fetchColumn() + (float)$info['pending'];
+        $diff = round($total_paid - (float)$info['csv_total'], 2);
+        if (abs($diff) <= OEBM_REVIEW_TOLERANCE) {
+            continue;
+        }
+        $flagged[] = [
+            'student_pk' => $pk,
+            'sid'        => $info['sid'],
+            'name'       => $info['name'],
+            'csv_total'  => round((float)$info['csv_total'], 2),
+            'total_paid' => round($total_paid, 2),
+            'diff'       => $diff,
+        ];
+    }
+    return $flagged;
 }
 
 /**
@@ -2118,6 +2211,7 @@ $undo_batch_id   = null; // batch id recorded for the merge just confirmed (undo
 $cp_duplicates    = [];  // Collect Payment records duplicating CSV receipts (CSV wins)
 $cp_deleted       = 0;   // duplicates deleted on confirm
 $cp_delete_errors = [];  // duplicates that could not be deleted
+$review_flags     = [];  // students whose total paid differs from the CSV total beyond ±100 BDT (human review)
 
 // ── POST: preview or confirm ────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -2284,6 +2378,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // confirm anything still listed could not be deleted.
             $cp_duplicates = oebm_find_collect_payment_duplicates($parsed['rows']);
 
+            // Per-student total check (±100 BDT): the CSV total vs each
+            // student's projected total paid (old + current ERP, plus the rows
+            // about to merge). Recomputed with the actual totals after a
+            // confirm, below.
+            $review_flags = oebm_total_review_flags($results, true);
+
             if ($action === 'report_pdf') {
                 // Stream a PDF report of the failed / needs-attention rows.
                 $commit_failures = [];
@@ -2419,16 +2519,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
                     }
 
+                    // ── Per-student total reconciliation (±100 BDT) ──────────
+                    // Compare each student's TOTAL paid — old-ERP merges and
+                    // payments collected in this ERP, combined — against the
+                    // CSV total, using the actual post-merge state. Differences
+                    // beyond the tolerance never block the merge: the student
+                    // is flagged for human review and the flagged IDs are saved
+                    // with this batch so they can be checked later.
+                    $review_flags = oebm_total_review_flags($results, false);
+
                     // Record this merge as an undoable batch (vouchers, status
-                    // changes, deleted duplicates and pushed months).
-                    if ($batch_voucher_ids || $batch_status_changes || $cp_deleted_voucher_ids || $moved_payments) {
+                    // changes, deleted duplicates, pushed months and students
+                    // flagged for human review).
+                    if ($batch_voucher_ids || $batch_status_changes || $cp_deleted_voucher_ids || $moved_payments || $review_flags) {
                         try {
                             $undo_batch_id = oebm_record_batch(
                                 $batch_voucher_ids,
                                 $batch_status_changes,
                                 $merged,
                                 $cp_deleted_voucher_ids,
-                                $moved_payments
+                                $moved_payments,
+                                $review_flags
                             );
                         } catch (Throwable $e) {
                             $failed[] = 'Undo tracking could not be saved for this merge: ' . $e->getMessage();
@@ -2442,6 +2553,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'failures_map' => $commit_failures_map,
                         'cp_deleted'   => $cp_deleted,
                         'moves'        => $moved_payments,
+                        'review'       => $review_flags,
                     ];
                     $skipped = ($counts['duplicate'] ?? 0) + ($counts['invalid'] ?? 0) + ($counts['ignored'] ?? 0);
                     $msg = $merged . ' payment(s) merged successfully. ' . $skipped . ' row(s) were skipped (duplicates / invalid).';
@@ -2456,6 +2568,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                     if ($moved_payments) {
                         $msg .= ' ' . count($moved_payments) . ' payment(s) collected in this ERP were pushed to the next month (the old ERP kept their month).';
+                    }
+                    if ($review_flags) {
+                        $msg .= ' ' . count($review_flags) . ' student(s) flagged for HUMAN REVIEW — total paid differs from the CSV total by more than '
+                            . number_format(OEBM_REVIEW_TOLERANCE) . ' BDT: '
+                            . implode(', ', array_map(static fn(array $rv): string => (string)$rv['sid'], $review_flags))
+                            . '. The IDs are saved with this merge batch.';
                     }
                     if ($undo_batch_id) {
                         $msg .= ' Saved as merge batch #' . $undo_batch_id . ' — it can be undone from this page.';
