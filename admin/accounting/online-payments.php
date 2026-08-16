@@ -39,10 +39,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $row = null;
     if ($id > 0) {
         $st = db()->prepare(
-            'SELECT p.*, s.student_id AS sid, s.full_name, m.operator_name AS m_operator
-             FROM acc_online_payments p
-             JOIN students s ON s.id = p.student_id
-             LEFT JOIN acc_payment_methods m ON m.id = p.method_id
+            'SELECT p.*, s.student_id AS sid, s.full_name
+             FROM acc_online_payments p JOIN students s ON s.id = p.student_id
              WHERE p.id = ? LIMIT 1'
         );
         $st->execute([$id]);
@@ -63,20 +61,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flash_set('danger', 'A note explaining the rejection is required — the student will see it on their portal.');
             redirect($self_url, 303);
         }
-        $posted = null;
-        if ($action === 'approve') {
-            // Auto-post to the books: allocate the amount against the student's
-            // outstanding dues (oldest first), create the receipt voucher and
-            // email the auto-created invoice. If posting fails the submission
-            // must stay pending so nothing is silently lost.
-            try {
-                $posted = opm_post_approved_payment($row);
-            } catch (Throwable $e) {
-                flash_set('danger', 'Submission #' . $id . ' was NOT approved — posting to the books failed: '
-                    . $e->getMessage() . ' The submission remains pending.');
-                redirect($self_url, 303);
-            }
-        }
         $new_status = $action === 'approve' ? 'approved' : 'rejected';
         db()->prepare(
             "UPDATE acc_online_payments
@@ -87,14 +71,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'Online payment #' . $id . ' — ' . (string)$row['sid'] . ' (' . acc_fmt((float)$row['amount']) . ', txn ' . (string)$row['transaction_number'] . ')',
             'status', 'pending', $new_status,
             $action === 'approve'
-                ? 'Online payment approved and auto-posted — voucher ' . (string)($posted['voucher_number'] ?? '—')
-                  . '; dues adjusted and the invoice was emailed to the student.'
+                ? 'Online payment approved. Record it in the books through Collect Payment.'
                 : 'Online payment rejected: ' . $note);
         flash_set('success', $action === 'approve'
-            ? 'Submission #' . $id . ' approved — ' . acc_fmt((float)$row['amount'])
-              . ' was posted to the books (voucher ' . (string)($posted['voucher_number'] ?? '—') . '), the dues were adjusted'
-              . (!empty($posted['advance']) ? ' (' . acc_fmt((float)$posted['advance']) . ' recorded as advance above current dues)' : '')
-              . ' and the invoice was emailed to the student.'
+            ? 'Submission #' . $id . ' approved. Now record it through Collect Payment (student, amount and transaction number are on the row).'
             : 'Submission #' . $id . ' rejected. The student can see your note and submit a corrected payment.');
     } elseif ($action === 'reopen') {
         if (!is_super_admin()) {
@@ -170,10 +150,9 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="alert alert-info small">
     <i class="fas fa-info-circle me-1"></i>
     <strong>Workflow:</strong> verify the money actually arrived in the selected account/wallet (amount, date and transaction
-    number against the bank statement / wallet history and the uploaded receipt), then <strong>Approve</strong> — the payment is posted to the
-    books automatically: it is allocated to the student's outstanding dues (oldest first), a receipt voucher is created, the dues are
-    adjusted immediately and the invoice is emailed to the student. Any amount above the current dues is kept as an advance.
-    If anything is wrong, <strong>Reject</strong> with a note; the student sees it and can resubmit.
+    number against the bank statement / wallet history and the uploaded receipt), then <strong>Approve</strong> and record the payment through
+    <a href="<?= APP_URL ?>/accounting/collect-payment.php" class="alert-link">Collect Payment</a> using the same method and transaction number —
+    Collect Payment allocates it to the correct fee heads and blocks duplicate transaction numbers. If anything is wrong, <strong>Reject</strong> with a note; the student sees it and can resubmit.
     Students are told verification normally takes up to 24 hours (occasionally 48).
 </div>
 
@@ -259,7 +238,7 @@ require_once __DIR__ . '/../includes/header.php';
                         </td>
                         <td class="text-end pe-4 text-nowrap">
                             <?php if ((string)$r['status'] === 'pending'): ?>
-                            <form method="post" class="d-inline" onsubmit="return confirm('Approve submission #<?= (int)$r['id'] ?>? Confirm the money actually arrived before approving — the payment will be posted to the books, the dues adjusted and the invoice emailed automatically.');">
+                            <form method="post" class="d-inline" onsubmit="return confirm('Approve submission #<?= (int)$r['id'] ?>? Confirm the money actually arrived before approving — then record it through Collect Payment.');">
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="action" value="approve">
                                 <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
@@ -274,11 +253,7 @@ require_once __DIR__ . '/../includes/header.php';
                             </form>
                             <?php else: ?>
                                 <?php if ((string)$r['status'] === 'approved'): ?>
-                                    <?php if (!empty($r['voucher_id'])): ?>
-                                    <a href="<?= APP_URL ?>/accounting/voucher-view.php?id=<?= (int)$r['voucher_id'] ?>" class="btn btn-sm btn-outline-success" title="View posted voucher"><i class="fas fa-file-invoice"></i></a>
-                                    <?php else: ?>
-                                    <a href="<?= APP_URL ?>/accounting/collect-payment.php" class="btn btn-sm btn-outline-success" title="Approved before auto-posting — record it through Collect Payment"><i class="fas fa-hand-holding-usd"></i></a>
-                                    <?php endif; ?>
+                                <a href="<?= APP_URL ?>/accounting/collect-payment.php" class="btn btn-sm btn-outline-success" title="Record in Collect Payment"><i class="fas fa-hand-holding-usd"></i></a>
                                 <?php endif; ?>
                                 <?php if (is_super_admin()): ?>
                                 <form method="post" class="d-inline" onsubmit="return confirm('Move submission #<?= (int)$r['id'] ?> back to Pending?');">
@@ -299,9 +274,8 @@ require_once __DIR__ . '/../includes/header.php';
             </table>
         </div>
         <div class="px-4 py-2 small text-muted">
-            Approving a submission posts it to the books automatically — dues are adjusted, a receipt voucher is created and the
-            invoice is emailed to the student. Older submissions approved before auto-posting (no voucher link) still need to be
-            recorded through Collect Payment with the same method and transaction number.
+            Approval confirms the money was received — it does <strong>not</strong> post to the books by itself. Record every approved
+            payment through Collect Payment with the same method and transaction number so dues update and duplicates stay blocked.
         </div>
     </div>
 </div>
