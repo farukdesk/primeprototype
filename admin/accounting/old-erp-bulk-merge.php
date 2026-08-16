@@ -41,6 +41,7 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_access('accounting', 'can_create');
 require_once __DIR__ . '/helpers.php';
+require_once __DIR__ . '/../change-log/helpers.php';
 
 $page_title = 'Old ERP Bulk CSV Merge';
 
@@ -443,6 +444,9 @@ function oebm_read_csv(string $csv_text): array
     $col_date    = oebm_find_col($header, ['date']);
     $col_amount  = oebm_find_col($header, ['amount paid', 'amount', 'paid']);
     $col_receipt = oebm_find_col($header, ['receipt number', 'receipt no', 'receipt', 'recpit', 'recipt', 'voucher no', 'voucher']);
+    // Optional column — newer old-ERP exports also carry the student's status
+    // (e.g. "Active" / "Dropped"). Older files without it keep working.
+    $col_status = oebm_find_col($header, ['student status']);
 
     $missing = [];
     if ($col_student === null) $missing[] = 'Student ID';
@@ -494,10 +498,34 @@ function oebm_read_csv(string $csv_text): array
             'date'       => trim((string)($r[$col_date] ?? '')),
             'amount'     => trim((string)($r[$col_amount] ?? '')),
             'receipt'    => oebm_normalize_receipt($receipt_raw),
+            'status'     => $col_status !== null ? trim((string)($r[$col_status] ?? '')) : '',
         ];
     }
 
     return ['rows' => $rows, 'error' => null];
+}
+
+/**
+ * Unique student IDs whose (optional) Student Status column marks them as
+ * Dropped. "Active" and any other value are intentionally ignored — the bulk
+ * merge only ever moves a student TO Dropped, never back to Active.
+ *
+ * @param array<int,array<string,string>> $rows
+ * @return string[]
+ */
+function oebm_collect_dropped_sids(array $rows): array
+{
+    $sids = [];
+    foreach ($rows as $row) {
+        $sid = trim((string)($row['student_id'] ?? ''));
+        if ($sid === '') {
+            continue;
+        }
+        if (strcasecmp(trim((string)($row['status'] ?? '')), 'dropped') === 0) {
+            $sids[$sid] = true;
+        }
+    }
+    return array_keys($sids);
 }
 
 /**
@@ -1544,6 +1572,8 @@ $counts   = null;
 $csv_b64  = '';   // carried between preview and confirm
 $did_commit = false;
 $commit_summary = null;
+$dropped_sids    = [];   // students the CSV's Student Status column marks as Dropped
+$dropped_updated = 0;    // how many were actually set to Dropped on confirm
 
 // ── POST: preview or confirm ────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -1647,6 +1677,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $results = $validated['results'];
             $counts  = $validated['counts'];
             $csv_b64 = base64_encode($csv_text);
+            $dropped_sids = oebm_collect_dropped_sids($parsed['rows']);
 
             if ($action === 'report_pdf') {
                 // Stream a PDF report of the failed / needs-attention rows.
@@ -1729,10 +1760,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $commit_failures_map[(int)$r['row_no']] = $e->getMessage();
                         }
                     }
+                    // ── Student-status sync: mark Dropped students ──────────
+                    // The CSV's optional Student Status column is authoritative
+                    // for drops: every student it marks as "Dropped" is set to
+                    // Dropped in Student Management (with a change-log entry).
+                    // "Active" (or any other value) is ignored — an existing
+                    // status is never changed back by this tool.
+                    foreach ($dropped_sids as $dsid) {
+                        try {
+                            $dstu = oebm_lookup_student($dsid);
+                            if (!$dstu || (string)($dstu['status'] ?? '') === 'Dropped') {
+                                continue;
+                            }
+                            db()->prepare('UPDATE students SET status = ? WHERE id = ?')
+                                ->execute(['Dropped', (int)$dstu['id']]);
+                            log_change('students', 'UPDATE', (int)$dstu['id'],
+                                (string)($dstu['full_name'] ?? '') . ' (' . (string)($dstu['student_id'] ?? $dsid) . ')',
+                                'status', (string)($dstu['status'] ?? ''), 'Dropped',
+                                'Old ERP bulk merge: the CSV Student Status column marks this student as Dropped.');
+                            $dropped_updated++;
+                        } catch (Throwable $e) {
+                            $failed[] = 'Student ' . $dsid . ': could not set status to Dropped — ' . $e->getMessage();
+                        }
+                    }
+
                     $did_commit = true;
                     $commit_summary = ['merged' => $merged, 'failed' => $failed, 'failures_map' => $commit_failures_map];
                     $skipped = ($counts['duplicate'] ?? 0) + ($counts['invalid'] ?? 0) + ($counts['ignored'] ?? 0);
                     $msg = $merged . ' payment(s) merged successfully. ' . $skipped . ' row(s) were skipped (duplicates / invalid).';
+                    if ($dropped_updated > 0) {
+                        $msg .= ' ' . $dropped_updated . ' student(s) set to Dropped from the CSV Student Status column.';
+                    }
                     if ($failed) {
                         $msg .= ' ' . count($failed) . ' row(s) failed during merge.';
                     }
@@ -1787,6 +1845,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <li><strong>Safe to re-run.</strong> Rows already in the current ERP are skipped, and amounts differing by up to <strong>5 BDT</strong> (CSV rounding) are counted as correct. When only part of a row's amount is recorded, just the <strong>missing difference is pushed forward</strong> so totals match the CSV (the latest data). Bigger mismatches are <strong>highlighted for manual correction</strong> and never re-inserted — a fee head written twice in the file (e.g. Admission Fee) is merged once, never twice.</li>
                 <li><strong>Registration fees are placed by cumulative total.</strong> Registration is a fixed per-semester fee read from the student's own package (e.g. 1,000 BDT, or 500 BDT for masters). The total already collected decides which semester comes next (1,000 = semester 1 paid, 2,000 = semesters 1–2, …), so 2nd/3rd registration rows land on the correct semester even on a re-run, and a single row spanning several semesters is split across them. Registration collected in this ERP is always kept — it occupies the end of the timeline and never absorbs an old-ERP registration row.</li>
                 <li><strong>Summary and zero-amount rows are ignored.</strong> Old-ERP export lines such as <code>Monthly Payment Old Data</code> or <code>Current Dues</code>, and any row with an amount of <code>0</code>, are skipped automatically (shown in grey). Student IDs are matched with or without leading zeros.</li>
+                <li><strong>Student Status column (optional).</strong> If the CSV carries a <code>Student Status</code> column, every student marked <code>Dropped</code> is set to <strong>Dropped</strong> in Student Management on confirm (recorded in the change log). <code>Active</code> — or any other value — is ignored and never changes an existing status.</li>
                 <li>Confirm to merge only the valid rows. Each is stored as an <em>Old ERP</em> payment (a memo voucher), so dues update without double-counting income.</li>
             </ol>
             <a href="<?= APP_URL ?>/accounting/old-erp-bulk-merge.php?sample=1" class="alert-link">
@@ -1835,9 +1894,24 @@ require_once __DIR__ . '/../includes/header.php';
             <span class="badge bg-warning text-dark">Already in ERP / review: <?= (int)$dup_count ?></span>
             <span class="badge bg-danger">Invalid: <?= (int)$inv_count ?></span>
             <span class="badge bg-secondary">Ignored: <?= (int)$ign_count ?></span>
+            <?php if ($dropped_sids): ?>
+            <span class="badge bg-dark">Dropped students: <?= count($dropped_sids) ?></span>
+            <?php endif; ?>
         </div>
     </div>
     <div class="card-body p-0">
+        <?php if ($dropped_sids): ?>
+        <div class="alert alert-dark m-3 mb-0 small">
+            <i class="fas fa-user-slash me-1"></i>
+            The CSV marks <strong><?= count($dropped_sids) ?></strong> student(s) as <strong>Dropped</strong>:
+            <?= h(implode(', ', $dropped_sids)) ?>.
+            <?php if ($did_commit): ?>
+                <strong><?= (int)$dropped_updated ?></strong> student record(s) were updated to Dropped<?= count($dropped_sids) > $dropped_updated ? ' (the rest were already Dropped or not found)' : '' ?>.
+            <?php else: ?>
+                On confirm, their status will be set to <strong>Dropped</strong> in Student Management. Students marked <em>Active</em> are left untouched.
+            <?php endif; ?>
+        </div>
+        <?php endif; ?>
         <?php if ($did_commit && $commit_summary): ?>
         <div class="alert alert-<?= $commit_summary['failed'] ? 'warning' : 'success' ?> m-3">
             <strong><?= (int)$commit_summary['merged'] ?></strong> payment(s) merged.
