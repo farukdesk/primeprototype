@@ -2,8 +2,10 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_access('accounting');
 require_once __DIR__ . '/helpers.php';
+require_once __DIR__ . '/payment-methods-helpers.php';
 
-$page_title = 'Accounting';
+$page_title  = 'Accounting';
+$opm_pending = opm_pending_count();
 $fy_start   = acc_fiscal_year_start();
 $fy_end     = acc_fiscal_year_end();
 $currency   = acc_currency();
@@ -90,6 +92,11 @@ require_once __DIR__ . '/../includes/header.php';
         <a href="<?= APP_URL ?>/accounting/collect-payment.php" class="btn btn-success btn-sm"><i class="fas fa-hand-holding-usd me-1"></i> Collect Payment</a>
         <a href="<?= APP_URL ?>/accounting/add-expense.php"     class="btn btn-danger btn-sm"><i class="fas fa-receipt me-1"></i> Add Expense</a>
         <a href="<?= APP_URL ?>/accounting/transfer-money.php"  class="btn btn-info btn-sm text-white"><i class="fas fa-exchange-alt me-1"></i> Transfer</a>
+        <a href="<?= APP_URL ?>/accounting/online-payments.php" class="btn btn-warning btn-sm">
+            <i class="fas fa-clipboard-check me-1"></i> Online Payments
+            <?php if ($opm_pending > 0): ?><span class="badge bg-danger ms-1"><?= (int)$opm_pending ?></span><?php endif; ?>
+        </a>
+        <a href="<?= APP_URL ?>/accounting/payment-methods.php" class="btn btn-outline-primary btn-sm"><i class="fas fa-university me-1"></i> Payment Methods</a>
     </div>
     <?php endif; ?>
 </div>
