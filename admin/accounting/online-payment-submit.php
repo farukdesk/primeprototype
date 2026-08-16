@@ -53,6 +53,9 @@ if (!$student) {
 // ── Validate the submission ────────────────────────────────────────────
 $method_id = (int)($_POST['method_id'] ?? 0);
 $paid_from = trim((string)($_POST['paid_from'] ?? ''));
+$payer_bank_name      = trim((string)($_POST['payer_bank_name'] ?? ''));
+$payer_account_name   = trim((string)($_POST['payer_account_name'] ?? ''));
+$payer_account_number = trim((string)($_POST['payer_account_number'] ?? ''));
 $amount    = (float)($_POST['amount'] ?? 0);
 $paid_date = trim((string)($_POST['paid_date'] ?? ''));
 $paid_time = trim((string)($_POST['paid_time'] ?? ''));
@@ -63,8 +66,19 @@ $method = $method_id > 0 ? opm_get_method($method_id) : null;
 if (!$method || (int)$method['is_active'] !== 1) {
     $errors[] = 'Please select a valid payment method.';
 }
-if ($paid_from === '') {
-    $errors[] = 'Please enter the account / wallet name (or number) you paid from.';
+$method_type = $method ? (string)$method['method_type'] : '';
+if ($method_type === 'bank') {
+    // Bank transfers: the payer's own bank details are collected as three
+    // structured fields (Bank Name, Account Name, Account Number).
+    if ($payer_bank_name === '')      { $errors[] = 'Please enter the bank name you paid from.'; }
+    if ($payer_account_name === '')   { $errors[] = 'Please enter the account name you paid from.'; }
+    if ($payer_account_number === '') { $errors[] = 'Please enter the account number you paid from.'; }
+    $paid_from = 'Bank: ' . $payer_bank_name . ' | A/C Name: ' . $payer_account_name . ' | A/C No: ' . $payer_account_number;
+} else {
+    $payer_bank_name = $payer_account_name = $payer_account_number = '';
+    if ($paid_from === '') {
+        $errors[] = 'Please enter the wallet name (or number) you paid from.';
+    }
 }
 if ($amount <= 0) {
     $errors[] = 'Please enter the amount you paid.';
@@ -128,14 +142,17 @@ if ($errors) {
 
 db()->prepare(
     'INSERT INTO acc_online_payments
-        (student_id, method_id, method_type, amount, paid_from, paid_date, paid_time, transaction_number, receipt_file)
-     VALUES (?,?,?,?,?,?,?,?,?)'
+        (student_id, method_id, method_type, amount, paid_from, payer_bank_name, payer_account_name, payer_account_number, paid_date, paid_time, transaction_number, receipt_file)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
 )->execute([
     (int)$student['id'],
     (int)$method['id'],
     (string)$method['method_type'],
     round($amount, 2),
     $paid_from,
+    $payer_bank_name !== '' ? $payer_bank_name : null,
+    $payer_account_name !== '' ? $payer_account_name : null,
+    $payer_account_number !== '' ? $payer_account_number : null,
     $paid_date,
     $paid_time !== '' ? $paid_time : null,
     $txn,

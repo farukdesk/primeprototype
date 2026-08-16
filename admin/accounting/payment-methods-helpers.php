@@ -73,7 +73,32 @@ function opm_ensure_tables(): void
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
     opm_seed_default_methods();
+    opm_upgrade_schema();
     $done = true;
+}
+
+/**
+ * Add columns introduced after the first release:
+ *   • payer_bank_name / payer_account_name / payer_account_number — the
+ *     student's own bank details for bank transfers ("Paid From");
+ *   • voucher_id — the receipt voucher created when an approved payment is
+ *     auto-posted to the books.
+ * Only ALTERs when a column is actually missing, so it is safe on every request.
+ */
+function opm_upgrade_schema(): void
+{
+    $existing = db()->query('SHOW COLUMNS FROM acc_online_payments')->fetchAll(PDO::FETCH_COLUMN);
+    $add = [
+        'payer_bank_name'      => 'VARCHAR(190) NULL DEFAULT NULL AFTER paid_from',
+        'payer_account_name'   => 'VARCHAR(190) NULL DEFAULT NULL AFTER payer_bank_name',
+        'payer_account_number' => 'VARCHAR(64) NULL DEFAULT NULL AFTER payer_account_name',
+        'voucher_id'           => 'INT UNSIGNED NULL DEFAULT NULL AFTER reviewed_at',
+    ];
+    foreach ($add as $col => $definition) {
+        if (!in_array($col, $existing, true)) {
+            db()->exec('ALTER TABLE acc_online_payments ADD COLUMN ' . $col . ' ' . $definition);
+        }
+    }
 }
 
 /**
