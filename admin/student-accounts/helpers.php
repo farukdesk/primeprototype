@@ -59,6 +59,38 @@ function sfp_can_delete(): bool
     return is_super_admin() || can_access('student-accounts', 'can_delete');
 }
 
+/**
+ * Bulk edit permission: super admins, plus members of the "Freelancer"
+ * user group (matched by group name, case-insensitive).
+ */
+function sfp_can_bulk_edit(): bool
+{
+    if (is_super_admin()) return true;
+    $user = auth_user();
+    if (!$user) return false;
+
+    static $cached = null;
+    if ($cached !== null) return $cached;
+
+    $group_ids = $user['group_ids'] ?? [];
+    if (empty($group_ids)) {
+        $cached = false;
+        return false;
+    }
+
+    $phs  = implode(',', array_fill(0, count($group_ids), '?'));
+    $stmt = db()->prepare(
+        "SELECT COUNT(*)
+           FROM user_groups
+          WHERE id IN ($phs)
+            AND LOWER(name) = 'freelancer'
+            AND is_active = 1"
+    );
+    $stmt->execute($group_ids);
+    $cached = ((int)$stmt->fetchColumn() > 0);
+    return $cached;
+}
+
 // ── Payment / voucher guards ──────────────────────────────────────────────────
 
 /**

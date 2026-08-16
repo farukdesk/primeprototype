@@ -1,6 +1,6 @@
 <?php
 /**
- * Bulk update student fee packages - SUPER ADMIN ONLY.
+ * Bulk update student fee packages - SUPER ADMIN & FREELANCER GROUP ONLY.
  *
  * Applies any combination of the following to the selected packages:
  *   - Programme (cf_program_id + snapshotted program_name)
@@ -28,8 +28,8 @@ require_once __DIR__ . '/../includes/auth.php';
 require_access('student-accounts', 'can_edit');
 require_once __DIR__ . '/helpers.php';
 
-if (!is_super_admin()) {
-    flash_set('error', 'Bulk edit is available to super admins only.');
+if (!sfp_can_bulk_edit()) {
+    flash_set('error', 'Bulk edit is available to super admins and the Freelancer group only.');
     redirect(APP_URL . '/student-accounts/index.php');
 }
 

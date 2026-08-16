@@ -110,9 +110,9 @@ $semester_options = $db->query(
     'SELECT DISTINCT total_semesters FROM sfp_packages ORDER BY total_semesters ASC'
 )->fetchAll(PDO::FETCH_COLUMN);
 
-// Bulk edit is restricted to super admins only
-$is_super         = is_super_admin();
-$cf_programs_bulk = $is_super ? sfp_get_cf_programs() : [];
+// Bulk edit is available to super admins and the Freelancer user group
+$can_bulk_edit    = sfp_can_bulk_edit();
+$cf_programs_bulk = $can_bulk_edit ? sfp_get_cf_programs() : [];
 // Restrict dept/program dropdowns to the user's allowed departments
 if ($dept_scope !== null) {
     $departments = array_values(array_filter(
@@ -212,8 +212,8 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
-<?php if ($is_super): ?>
-<!-- ── Bulk Edit (super admin only) ── -->
+<?php if ($can_bulk_edit): ?>
+<!-- ── Bulk Edit (super admin & Freelancer group) ── -->
 <form id="bulk-form" method="post" action="<?= APP_URL ?>/student-accounts/bulk-update.php">
     <?= csrf_field() ?>
     <input type="hidden" name="select_all_matching" id="select-all-matching" value="0">
@@ -378,7 +378,7 @@ require_once __DIR__ . '/../includes/header.php';
             <table class="table table-hover mb-0">
                 <thead>
                     <tr>
-                        <?php if ($is_super): ?>
+                        <?php if ($can_bulk_edit): ?>
                         <th style="width:32px;">
                             <input type="checkbox" class="form-check-input" id="bulk-select-all"
                                    title="Select all on this page">
@@ -396,7 +396,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <tbody>
                 <?php foreach ($packages as $pkg): ?>
                 <tr>
-                    <?php if ($is_super): ?>
+                    <?php if ($can_bulk_edit): ?>
                     <td>
                         <input type="checkbox" class="form-check-input bulk-pkg" form="bulk-form"
                                name="package_ids[]" value="<?= $pkg['id'] ?>">
@@ -526,7 +526,7 @@ require_once __DIR__ . '/../includes/header.php';
 <script>
 (function () {
     var form = document.getElementById('bulk-form');
-    if (!form) return; // bulk edit is only rendered for super admins
+    if (!form) return; // bulk edit is only rendered for super admins and the Freelancer group
 
     var panel    = document.getElementById('bulk-panel');
     var countEl  = document.getElementById('bulk-count');
