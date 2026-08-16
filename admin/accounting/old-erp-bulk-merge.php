@@ -2618,8 +2618,14 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="alert alert-info">
     <div class="d-flex gap-3">
         <div class="fs-4 text-info"><i class="fas fa-info-circle"></i></div>
-        <div class="small">
-            <strong>Merge a student's full historical account from the old ERP in bulk.</strong>
+        <div class="small flex-grow-1">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <strong>Merge a student's full historical account from the old ERP in bulk.</strong>
+                <button class="btn btn-sm btn-outline-info" type="button" data-bs-toggle="collapse" data-bs-target="#oebm-howto" aria-expanded="false" aria-controls="oebm-howto">
+                    <i class="fas fa-circle-question me-1"></i>How it works
+                </button>
+            </div>
+            <div class="collapse" id="oebm-howto">
             <ol class="mb-2 mt-1 ps-3">
                 <li>Prepare a CSV with the columns <code>Student ID</code>, <code>Fee Type</code>, <code>Date</code>, <code>Amount Paid</code>, <code>Receipt Number</code>. Dates use the <strong>DD/MM/YYYY</strong> format (e.g. <code>15/01/2023</code>). If a cell carries <strong>two dates</strong> (e.g. <code>17/06/2026, 06/04/2026</code>) the first valid date is used.</li>
                 <li><code>Fee Type</code> may be <strong>Admission Fee</strong>, <strong>Form Fee</strong>, <strong>ID Card Fee</strong> or <strong>Registration Fee</strong>, a <strong>month name</strong> (<code>Jan</code>, <code>February</code>, …) for a monthly tuition installment (add a year to target a specific one, e.g. <code>Jan-26</code> = January 2026), or an <strong>additional fee</strong> — <strong>Re-Take</strong>, <strong>Improvement</strong>, <strong>Special Exam (Mid Term / Final)</strong>, <strong>Remedial / Miscellaneous</strong> or <strong>Other</strong> (these are recorded at the amount given, with no schedule check).</li>
@@ -2637,7 +2643,9 @@ require_once __DIR__ . '/../includes/header.php';
                 <li><strong>Collect Payment duplicates are removed — the CSV wins.</strong> If a payment in the CSV is also found in <a class="alert-link" href="<?= APP_URL ?>/accounting/collect-payment.php">Collect Payment</a> (same receipt / transaction number for the same student), the Collect Payment record is <strong>deleted on confirm</strong> and only the CSV (old ERP) payment is kept. Payments created by the bulk merge itself are reconciled, never deleted, and a combined voucher carrying any unrelated payment is never touched. Undo restores these records.</li>
                 <li><strong>Months paid twice are pushed forward.</strong> When a month is paid by the old ERP (CSV) and this ERP also holds a payment for the <em>same month</em> made with another method (cash / bank / mobile banking), the old ERP keeps that month and the current-ERP payment is <strong>moved to the student's next month with room</strong> — in payment-date order — so no money is lost. Undo moves these payments back.</li>
                 <li>Confirm to merge only the valid rows. Each is stored as an <em>Old ERP</em> payment (a memo voucher), so dues update without double-counting income.</li>
+                <li><strong>Per-student total check (±100 BDT).</strong> Each student's <em>total paid</em> — old-ERP merges and payments collected in this ERP, combined — is compared against the CSV total. Differences up to 100 BDT are fine; anything larger <strong>still merges</strong> but the student is <strong>flagged for human review</strong>, and the flagged IDs are saved with the merge batch so they can be checked later.</li>
             </ol>
+            </div>
             <a href="<?= APP_URL ?>/accounting/old-erp-bulk-merge.php?sample=1" class="alert-link">
                 <i class="fas fa-download me-1"></i>Download a sample CSV template
             </a>
@@ -2685,6 +2693,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <th>Merged By</th>
                         <th class="text-end">Payments</th>
                         <th class="text-end">Status Changes</th>
+                        <th>Needs Review</th>
                         <th>State</th>
                         <th class="text-end">Action</th>
                     </tr>
@@ -2693,6 +2702,8 @@ require_once __DIR__ . '/../includes/header.php';
                     <?php foreach ($recent_batches as $b):
                         $b_vouchers = json_decode((string)$b['voucher_ids'], true);
                         $b_statuses = json_decode((string)$b['status_changes'], true);
+                        $b_review   = json_decode((string)($b['review_students'] ?? '[]'), true);
+                        $b_review   = is_array($b_review) ? $b_review : [];
                         $b_undone   = !empty($b['undone_at']);
                     ?>
                     <tr>
@@ -2701,6 +2712,20 @@ require_once __DIR__ . '/../includes/header.php';
                         <td class="small"><?= h((string)($b['created_by_name'] ?? '—')) ?></td>
                         <td class="text-end"><?= is_array($b_vouchers) ? count($b_vouchers) : 0 ?></td>
                         <td class="text-end"><?= is_array($b_statuses) ? count($b_statuses) : 0 ?></td>
+                        <td class="small">
+                            <?php if ($b_review): ?>
+                            <span class="badge bg-warning text-dark" title="Total paid differs from the CSV total by more than <?= h(number_format(OEBM_REVIEW_TOLERANCE)) ?> BDT">
+                                <i class="fas fa-user-clock me-1"></i><?= count($b_review) ?> student(s)
+                            </span>
+                            <div class="text-muted mt-1" style="max-width: 260px;">
+                                <?php foreach ($b_review as $rv): ?>
+                                <div><?= h((string)($rv['sid'] ?? '')) ?> <span class="<?= (float)($rv['diff'] ?? 0) > 0 ? 'text-danger' : 'text-primary' ?>">(<?= ((float)($rv['diff'] ?? 0) > 0 ? '+' : '') . h(number_format((float)($rv['diff'] ?? 0), 2)) ?>)</span></div>
+                                <?php endforeach; ?>
+                            </div>
+                            <?php else: ?>
+                            <span class="text-muted">—</span>
+                            <?php endif; ?>
+                        </td>
                         <td>
                             <?php if ($b_undone): ?>
                             <span class="badge bg-secondary">Undone<?= !empty($b['undone_by_name']) ? ' by ' . h((string)$b['undone_by_name']) : '' ?> at <?= h((string)$b['undone_at']) ?></span>
@@ -2800,9 +2825,20 @@ require_once __DIR__ . '/../includes/header.php';
             <?php endif; ?>
         </div>
         <?php endif; ?>
-        <div class="table-responsive">
-            <table class="table table-sm table-hover mb-0 align-middle">
-                <thead class="table-light">
+        <div class="d-flex flex-wrap gap-2 align-items-center px-4 py-3 border-bottom">
+            <div class="btn-group btn-group-sm" role="group" aria-label="Filter preview rows">
+                <button type="button" class="btn btn-outline-secondary active" data-oebm-filter="all">All</button>
+                <button type="button" class="btn btn-outline-success" data-oebm-filter="merge">Merge (<?= (int)$merge_count ?>)</button>
+                <button type="button" class="btn btn-outline-warning" data-oebm-filter="duplicate">Review (<?= (int)$dup_count ?>)</button>
+                <button type="button" class="btn btn-outline-danger" data-oebm-filter="invalid">Invalid (<?= (int)$inv_count ?>)</button>
+                <button type="button" class="btn btn-outline-secondary" data-oebm-filter="ignored">Ignored (<?= (int)$ign_count ?>)</button>
+            </div>
+            <input type="search" id="oebm-search" class="form-control form-control-sm" style="max-width: 260px;" placeholder="Search Student ID or name…" aria-label="Search preview rows">
+            <span class="small text-muted ms-auto" id="oebm-filter-count"></span>
+        </div>
+        <div class="table-responsive" style="max-height: 65vh;">
+            <table class="table table-sm table-hover mb-0 align-middle" id="oebm-preview-table">
+                <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
                     <tr>
                         <th>#</th>
                         <th>Status</th>
@@ -2831,7 +2867,7 @@ require_once __DIR__ . '/../includes/header.php';
                             default     => '<span class="badge bg-danger">Invalid</span>',
                         };
                     ?>
-                    <tr class="<?= $row_class ?>">
+                    <tr class="<?= $row_class ?>" data-status="<?= h($r['status']) ?>" data-search="<?= h(strtolower((string)$r['input']['student_id'] . ' ' . (string)$res['student_name'])) ?>">
                         <td><?= (int)$r['row_no'] ?></td>
                         <td><?= $badge ?></td>
                         <td><?= h($r['input']['student_id']) ?></td>
@@ -2863,6 +2899,62 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
     <?php endif; ?>
 </div>
+
+<?php if ($review_flags): ?>
+<!-- ── Needs human review: per-student total mismatch (±100 BDT) ───────── -->
+<div class="card border-0 shadow-sm mb-4 border-start border-4 border-warning">
+    <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span class="fw-semibold">
+            <i class="fas fa-user-clock me-2 text-warning"></i>Needs Human Review — Total Paid vs CSV Total
+            <span class="badge bg-warning text-dark ms-1"><?= count($review_flags) ?></span>
+        </span>
+        <span class="small text-muted">Tolerance: ±<?= h(number_format(OEBM_REVIEW_TOLERANCE)) ?> BDT</span>
+    </div>
+    <div class="card-body p-0">
+        <div class="px-4 pt-3 small text-muted">
+            For these students the <strong>total paid</strong> — old-ERP merges and payments collected in this ERP, combined —
+            differs from the <strong>CSV total</strong> by more than <?= h(number_format(OEBM_REVIEW_TOLERANCE)) ?> BDT.
+            <?php if ($did_commit): ?>
+            Their rows were <strong>merged anyway</strong> and the IDs are saved with this merge batch — verify each account manually
+            (see the <em>Recent Merge Batches</em> list above to find them again later).
+            <?php else: ?>
+            Their valid rows will <strong>still merge</strong> on confirm, but the IDs will be flagged and saved with the merge batch
+            for later human review.
+            <?php endif; ?>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Student ID</th>
+                        <th>Student</th>
+                        <th class="text-end">CSV Total</th>
+                        <th class="text-end">Total Paid (Old + New ERP)</th>
+                        <th class="text-end">Difference</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($review_flags as $rf): ?>
+                    <tr class="table-warning">
+                        <td class="fw-semibold"><?= h($rf['sid']) ?></td>
+                        <td><?= h($rf['name'] !== '' ? $rf['name'] : '—') ?></td>
+                        <td class="text-end"><?= h(number_format((float)$rf['csv_total'], 2)) ?></td>
+                        <td class="text-end"><?= h(number_format((float)$rf['total_paid'], 2)) ?></td>
+                        <td class="text-end fw-semibold <?= (float)$rf['diff'] > 0 ? 'text-danger' : 'text-primary' ?>">
+                            <?= ((float)$rf['diff'] > 0 ? '+' : '') . h(number_format((float)$rf['diff'], 2)) ?>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <div class="px-4 py-2 small text-muted">
+            A <span class="text-danger fw-semibold">positive</span> difference means the ERP holds more than the CSV shows;
+            a <span class="text-primary fw-semibold">negative</span> one means the CSV shows more than the ERP holds.
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 
 <?php if ($cp_duplicates || $cp_delete_errors): ?>
 <!-- ── Collect Payment duplicates (CSV wins) ───────────────────────────── -->
@@ -3082,5 +3174,41 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
 </div>
 <?php endif; ?>
+
+<script>
+(function () {
+    'use strict';
+    var table = document.getElementById('oebm-preview-table');
+    if (!table) { return; }
+    var rows    = Array.prototype.slice.call(table.querySelectorAll('tbody tr'));
+    var buttons = Array.prototype.slice.call(document.querySelectorAll('[data-oebm-filter]'));
+    var search  = document.getElementById('oebm-search');
+    var countEl = document.getElementById('oebm-filter-count');
+    var active  = 'all';
+
+    function apply() {
+        var q = (search && search.value ? search.value : '').trim().toLowerCase();
+        var shown = 0;
+        rows.forEach(function (tr) {
+            var okStatus = active === 'all' || tr.getAttribute('data-status') === active;
+            var okSearch = q === '' || (tr.getAttribute('data-search') || '').indexOf(q) !== -1;
+            var show = okStatus && okSearch;
+            tr.style.display = show ? '' : 'none';
+            if (show) { shown++; }
+        });
+        if (countEl) { countEl.textContent = 'Showing ' + shown + ' of ' + rows.length + ' row(s)'; }
+    }
+
+    buttons.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            active = btn.getAttribute('data-oebm-filter') || 'all';
+            buttons.forEach(function (b) { b.classList.toggle('active', b === btn); });
+            apply();
+        });
+    });
+    if (search) { search.addEventListener('input', apply); }
+    apply();
+})();
+</script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
