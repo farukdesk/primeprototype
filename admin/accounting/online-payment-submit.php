@@ -9,11 +9,21 @@
  * completed within 24 hours (occasionally up to 48 hours).
  */
 require_once __DIR__ . '/../includes/auth.php';
-require_access('student-accounts-portal');
+auth_check();
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/payment-methods-helpers.php';
 
-$portal_url = APP_URL . '/accounting/student-portal.php';
+// Accessible to student portal users (Students → My Finances) and to users of
+// the student-accounts-portal module (Accounting → Accounts page).
+$is_portal = function_exists('is_portal_student') && is_portal_student();
+if (!$is_portal && !can_access('student-accounts-portal')) {
+    flash_set('error', 'You do not have permission to access this section.');
+    redirect(APP_URL . '/index.php');
+}
+
+$portal_url = $is_portal
+    ? APP_URL . '/students/my-finances.php'
+    : APP_URL . '/accounting/student-portal.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     redirect($portal_url, 303);

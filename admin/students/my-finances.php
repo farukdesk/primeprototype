@@ -7,11 +7,27 @@
 require_once __DIR__ . '/../includes/auth.php';
 auth_check();
 require_once __DIR__ . '/../accounting/helpers.php';
+require_once __DIR__ . '/../accounting/payment-methods-helpers.php';
 
 if (!is_portal_student()) {
     flash_set('error', 'You do not have permission to access this section.');
     redirect(APP_URL . '/index.php');
 }
+
+// ── Pay Online data ───────────────────────────────────────────────────────
+$opm_user    = auth_user();
+$opm_student = null;
+if ($opm_user) {
+    $opm_stmt = db()->prepare('SELECT id, student_id, full_name FROM students WHERE portal_user_id = ? LIMIT 1');
+    $opm_stmt->execute([(int)($opm_user['id'] ?? 0)]);
+    $opm_student = $opm_stmt->fetch() ?: null;
+}
+$opm_methods     = opm_all_methods(true);
+$opm_submissions = $opm_student ? opm_student_submissions((int)$opm_student['id']) : [];
+$opm_guidelines  = [
+    'bank'           => opm_guideline('bank'),
+    'mobile_banking' => opm_guideline('mobile_banking'),
+];
 
 $page_title = 'My Finances';
 
@@ -48,6 +64,225 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
     </div>
 </div>
+
+<?php if ($opm_student && $opm_methods): ?>
+<!-- ── Pay Online ──────────────────────────────────────────────────────── -->
+<div class="card border-0 shadow-sm mb-3" id="payOnlineCard">
+    <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between">
+        <span class="fw-semibold"><i class="fas fa-globe me-2 text-primary"></i>Pay Online</span>
+        <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="collapse" data-bs-target="#payOnlineCollapse">
+            <i class="fas fa-hand-holding-usd me-1"></i>Make a Payment
+        </button>
+    </div>
+    <div class="collapse" id="payOnlineCollapse">
+        <div class="card-body p-4">
+            <div class="alert alert-info small">
+                <i class="fas fa-info-circle me-1"></i>
+                Pay your fees through a bank deposit / transfer or mobile banking, then submit the payment details here with a receipt.
+                After review and approval by the Accounts Office the payment is added to your account. Verification is normally completed
+                within <strong>24 hours</strong>, but occasionally may take up to <strong>48 hours</strong>.
+            </div>
+            <form method="post" action="<?= APP_URL ?>/accounting/online-payment-submit.php" enctype="multipart/form-data" id="payOnlineForm">
+                <?= csrf_field() ?>
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Payment Type <span class="text-danger">*</span></label>
+                        <select class="form-select" id="opmType">
+                            <option value="">Select…</option>
+                            <option value="bank">Bank</option>
+                            <option value="mobile_banking">Mobile Banking</option>
+                        </select>
+                    </div>
+                    <div class="col-md-8">
+                        <label class="form-label fw-semibold">Payment Method <span class="text-danger">*</span></label>
+                        <select class="form-select" name="method_id" id="opmMethod" required disabled>
+                            <option value="">Select the payment type first…</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="opmDetails" class="mt-3" style="display:none;"></div>
+                <div id="opmGuideline" class="alert alert-warning small mt-3 mb-0" style="display:none; white-space: pre-line;"></div>
+                <div class="row g-3 mt-1">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Paid From (account / wallet name or number) <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="paid_from" maxlength="190" required
+                               placeholder="e.g. the account name or wallet number you paid from">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Amount Paid (<?= h(acc_currency()) ?>) <span class="text-danger">*</span></label>
+                        <input type="number" class="form-control" name="amount" min="1" step="0.01" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Payment Date <span class="text-danger">*</span></label>
+                        <input type="date" class="form-control" name="paid_date" max="<?= h(date('Y-m-d')) ?>" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Payment Time</label>
+                        <input type="time" class="form-control" name="paid_time">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Transaction / Reference No. <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="transaction_number" maxlength="190" required>
+                    </div>
+                    <div class="col-md-8">
+                        <label class="form-label fw-semibold">Receipt / Screenshot <span class="text-danger">*</span></label>
+                        <input type="file" class="form-control" name="receipt" id="opmReceipt" accept=".jpg,.jpeg,.png,.webp,.pdf" required>
+                        <div class="form-text">JPG, PNG, WEBP or PDF — max 5 MB.</div>
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="fas fa-paper-plane me-1"></i> Submit for Verification
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<?php if ($opm_submissions): ?>
+<?php
+    $opm_has_pending = false;
+    foreach ($opm_submissions as $opm_s) {
+        if ((string)$opm_s['status'] === 'pending') { $opm_has_pending = true; break; }
+    }
+?>
+<!-- ── My Online Payment Submissions ───────────────────────────────────── -->
+<div class="card border-0 shadow-sm mb-3">
+    <div class="card-header py-3 px-4 fw-semibold">
+        <i class="fas fa-clipboard-check me-2 text-info"></i>My Online Payment Submissions
+    </div>
+    <?php if ($opm_has_pending): ?>
+    <div class="alert alert-info m-3 mb-0 small">
+        <i class="fas fa-hourglass-half me-1"></i>
+        Your payment is being verified. Verification is normally done within <strong>24 hours</strong>,
+        but sometimes it may take up to <strong>48 hours</strong>. You will see the result here.
+    </div>
+    <?php endif; ?>
+    <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th class="ps-4">Submitted</th>
+                    <th>Method</th>
+                    <th>Paid On</th>
+                    <th>Txn No.</th>
+                    <th class="text-end">Amount</th>
+                    <th>Status</th>
+                    <th>Note from Accounts Office</th>
+                </tr>
+            </thead>
+            <tbody>
+            <?php foreach ($opm_submissions as $opm_s): ?>
+                <tr>
+                    <td class="ps-4 small"><?= h((string)$opm_s['created_at']) ?></td>
+                    <td class="small"><?= h((string)$opm_s['method_title']) ?></td>
+                    <td class="small"><?= h((string)$opm_s['paid_date']) ?><?= !empty($opm_s['paid_time']) ? ' ' . h((string)$opm_s['paid_time']) : '' ?></td>
+                    <td class="small font-monospace"><?= h((string)$opm_s['transaction_number']) ?></td>
+                    <td class="text-end fw-semibold"><?= h(number_format((float)$opm_s['amount'], 2)) ?></td>
+                    <td><?= opm_status_badge((string)$opm_s['status']) ?></td>
+                    <td class="small text-muted"><?= !empty($opm_s['admin_note']) ? h((string)$opm_s['admin_note']) : '—' ?></td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+</div>
+<?php endif; ?>
+
+<script>
+(function () {
+    'use strict';
+    var opmMethods = <?= json_encode(array_map(static fn(array $m): array => [
+        'id'             => (int)$m['id'],
+        'type'           => (string)$m['method_type'],
+        'title'          => opm_method_title($m),
+        'bank_name'      => (string)($m['bank_name'] ?? ''),
+        'branch_name'    => (string)($m['branch_name'] ?? ''),
+        'account_name'   => (string)($m['account_name'] ?? ''),
+        'account_number' => (string)($m['account_number'] ?? ''),
+        'operator_name'  => (string)($m['operator_name'] ?? ''),
+        'wallet_number'  => (string)($m['wallet_number'] ?? ''),
+        'charge_note'    => (string)($m['charge_note'] ?? ''),
+    ], $opm_methods), JSON_UNESCAPED_UNICODE) ?>;
+    var opmGuidelines = <?= json_encode($opm_guidelines, JSON_UNESCAPED_UNICODE) ?>;
+
+    var typeSel   = document.getElementById('opmType');
+    var methodSel = document.getElementById('opmMethod');
+    var details   = document.getElementById('opmDetails');
+    var guideline = document.getElementById('opmGuideline');
+    var receipt   = document.getElementById('opmReceipt');
+    var form      = document.getElementById('payOnlineForm');
+    if (!typeSel || !methodSel) { return; }
+
+    function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+    function row(label, value, mono) {
+        return '<tr><th class="text-muted small" style="width: 180px;">' + esc(label) + '</th>'
+             + '<td class="fw-semibold' + (mono ? ' font-monospace' : '') + '">' + esc(value) + '</td></tr>';
+    }
+
+    typeSel.addEventListener('change', function () {
+        var t = typeSel.value;
+        methodSel.innerHTML = '';
+        details.style.display = 'none';
+        details.innerHTML = '';
+        if (t === '') {
+            methodSel.disabled = true;
+            methodSel.innerHTML = '<option value="">Select the payment type first…</option>';
+            guideline.style.display = 'none';
+            return;
+        }
+        var opts = '<option value="">Select…</option>';
+        opmMethods.forEach(function (m) {
+            if (m.type === t) {
+                opts += '<option value="' + m.id + '">' + esc(m.title) + (m.charge_note ? ' — ' + esc(m.charge_note) : '') + '</option>';
+            }
+        });
+        methodSel.innerHTML = opts;
+        methodSel.disabled = false;
+        guideline.textContent = opmGuidelines[t] || '';
+        guideline.style.display = guideline.textContent !== '' ? '' : 'none';
+    });
+
+    methodSel.addEventListener('change', function () {
+        var id = parseInt(methodSel.value, 10) || 0;
+        var m = null;
+        opmMethods.forEach(function (x) { if (x.id === id) { m = x; } });
+        if (!m) { details.style.display = 'none'; details.innerHTML = ''; return; }
+        var html = '<div class="border rounded p-3 bg-light">'
+                 + '<div class="fw-semibold mb-2"><i class="fas fa-' + (m.type === 'bank' ? 'university' : 'mobile-alt') + ' me-1"></i>'
+                 + 'Pay to this ' + (m.type === 'bank' ? 'bank account' : 'wallet') + ':</div>'
+                 + '<table class="table table-sm table-borderless mb-0"><tbody>';
+        if (m.type === 'bank') {
+            html += row('Bank Name', m.bank_name)
+                  + row('Branch Name', m.branch_name)
+                  + row('Accounts Name', m.account_name)
+                  + row('Accounts Number', m.account_number, true);
+        } else {
+            html += row('Operator', m.operator_name)
+                  + row('Number', m.wallet_number, true);
+            if (m.charge_note) { html += row('Charge', m.charge_note); }
+        }
+        html += '</tbody></table></div>';
+        details.innerHTML = html;
+        details.style.display = '';
+    });
+
+    if (form) {
+        form.addEventListener('submit', function (e) {
+            if (receipt && receipt.files && receipt.files[0] && receipt.files[0].size > 5242880) {
+                e.preventDefault();
+                alert('The receipt file is too large — maximum size is 5 MB.');
+                return;
+            }
+            if (!confirm('Submit this payment for verification? Make sure the amount, date and transaction number exactly match your receipt.')) {
+                e.preventDefault();
+            }
+        });
+    }
+})();
+</script>
+<?php endif; ?>
 
 <!-- Loading indicator -->
 <div id="loadingWrap" class="text-center py-5 text-muted">
