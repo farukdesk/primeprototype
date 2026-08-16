@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS oebm_merge_batches (
     merged_count INT UNSIGNED NOT NULL DEFAULT 0,
     voucher_ids MEDIUMTEXT NOT NULL,
     status_changes MEDIUMTEXT NOT NULL,
+    deleted_voucher_ids MEDIUMTEXT NULL DEFAULT NULL,
+    moved_payments MEDIUMTEXT NULL DEFAULT NULL,
     undone_by INT UNSIGNED NULL DEFAULT NULL,
     undone_at DATETIME NULL DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

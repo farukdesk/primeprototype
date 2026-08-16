@@ -551,10 +551,19 @@ function oebm_ensure_batch_table(): void
             merged_count INT UNSIGNED NOT NULL DEFAULT 0,
             voucher_ids MEDIUMTEXT NOT NULL,
             status_changes MEDIUMTEXT NOT NULL,
+            deleted_voucher_ids MEDIUMTEXT NULL DEFAULT NULL,
+            moved_payments MEDIUMTEXT NULL DEFAULT NULL,
             undone_by INT UNSIGNED NULL DEFAULT NULL,
             undone_at DATETIME NULL DEFAULT NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
     );
+    // Older installs may have created the table before these columns existed.
+    foreach (['deleted_voucher_ids', 'moved_payments'] as $extra_col) {
+        $has_col = db()->query("SHOW COLUMNS FROM oebm_merge_batches LIKE '" . $extra_col . "'")->fetch();
+        if (!$has_col) {
+            db()->exec('ALTER TABLE oebm_merge_batches ADD COLUMN ' . $extra_col . ' MEDIUMTEXT NULL DEFAULT NULL');
+        }
+    }
     $done = true;
 }
 
@@ -564,18 +573,26 @@ function oebm_ensure_batch_table(): void
  * @param int[] $voucher_ids Memo vouchers created by the merge.
  * @param array<int,array{student_pk:int,student_id:string,old_status:string}> $status_changes
  */
-function oebm_record_batch(array $voucher_ids, array $status_changes, int $merged_count): int
-{
+function oebm_record_batch(
+    array $voucher_ids,
+    array $status_changes,
+    int   $merged_count,
+    array $deleted_voucher_ids = [],
+    array $moved_payments = []
+): int {
     oebm_ensure_batch_table();
     $user = auth_user();
     db()->prepare(
-        'INSERT INTO oebm_merge_batches (created_by, merged_count, voucher_ids, status_changes)
-         VALUES (?,?,?,?)'
+        'INSERT INTO oebm_merge_batches
+            (created_by, merged_count, voucher_ids, status_changes, deleted_voucher_ids, moved_payments)
+         VALUES (?,?,?,?,?,?)'
     )->execute([
         (int)($user['id'] ?? 0),
         $merged_count,
         json_encode(array_values(array_unique(array_map('intval', $voucher_ids)))),
         json_encode(array_values($status_changes), JSON_UNESCAPED_UNICODE),
+        json_encode(array_values(array_unique(array_map('intval', $deleted_voucher_ids)))),
+        json_encode(array_values($moved_payments), JSON_UNESCAPED_UNICODE),
     ]);
     return (int)db()->lastInsertId();
 }
@@ -623,6 +640,275 @@ function oebm_can_undo_batch(array $batch): bool
     }
     $user = auth_user();
     return $user && (int)$batch['created_by'] === (int)($user['id'] ?? 0);
+}
+
+/**
+ * Find payments recorded through Collect Payment that duplicate CSV rows.
+ *
+ * A payment collected via collect-payment.php (any method, including single
+ * Old ERP collections) is a duplicate of the CSV when its transaction /
+ * receipt number matches a receipt number in the uploaded CSV for the SAME
+ * student — the same payment entered twice. The CSV is the authoritative
+ * old-ERP statement, so on confirm these records are deleted and only the CSV
+ * (old ERP) payment is kept.
+ *
+ * Payments created by this bulk merge itself (narration "Old ERP bulk merge")
+ * are never treated as duplicates — they are reconciled, not replaced. A
+ * voucher is only returned when EVERY payment linked to it matches a CSV
+ * receipt, so a combined voucher carrying an unrelated payment is never
+ * touched.
+ *
+ * @param array<int,array<string,string>> $rows Parsed CSV rows.
+ * @return array<int,array<string,mixed>>
+ */
+function oebm_find_collect_payment_duplicates(array $rows): array
+{
+    // Per-student receipt sets from the CSV.
+    $students = [];   // student_pk => ['sid','name','receipts' => set]
+    $lookup   = [];
+    foreach ($rows as $row) {
+        $sid     = trim((string)($row['student_id'] ?? ''));
+        $receipt = trim((string)($row['receipt'] ?? ''));
+        if ($sid === '' || $receipt === '') {
+            continue;
+        }
+        if (!array_key_exists($sid, $lookup)) {
+            $lookup[$sid] = oebm_lookup_student($sid);
+        }
+        $stu = $lookup[$sid];
+        if (!$stu) {
+            continue;
+        }
+        $pk = (int)$stu['id'];
+        if (!isset($students[$pk])) {
+            $students[$pk] = [
+                'sid'      => (string)$stu['student_id'],
+                'name'     => (string)($stu['full_name'] ?? ''),
+                'receipts' => [],
+            ];
+        }
+        foreach (oebm_split_receipts($receipt) as $rc) {
+            $students[$pk]['receipts'][$rc] = true;
+        }
+    }
+    if (!$students) {
+        return [];
+    }
+
+    $stmt = db()->prepare(
+        "SELECT sp.id, sp.voucher_id, sp.fee_type, sp.amount, sp.payment_method,
+                sp.transaction_number, sp.note,
+                v.voucher_number, v.voucher_date, v.status AS voucher_status
+         FROM sfp_payments sp
+         JOIN acc_vouchers v ON v.id = sp.voucher_id
+         WHERE sp.student_id = ?
+           AND v.is_deleted = 0
+           AND v.status IN ('posted','memo')
+           AND sp.transaction_number IS NOT NULL
+           AND sp.transaction_number <> ''"
+    );
+
+    $vouchers = [];
+    foreach ($students as $pk => $info) {
+        $stmt->execute([(int)$pk]);
+        foreach ($stmt->fetchAll() as $p) {
+            // Payments created by the bulk merge itself are reconciled, not replaced.
+            if (trim((string)($p['note'] ?? '')) === 'Old ERP bulk merge') {
+                continue;
+            }
+            $matches = false;
+            foreach (oebm_split_receipts((string)$p['transaction_number']) as $rc) {
+                if (isset($info['receipts'][$rc])) {
+                    $matches = true;
+                    break;
+                }
+            }
+            if (!$matches) {
+                continue;
+            }
+            $vid = (int)$p['voucher_id'];
+            if (!isset($vouchers[$vid])) {
+                $vouchers[$vid] = [
+                    'voucher_id'     => $vid,
+                    'voucher_number' => (string)$p['voucher_number'],
+                    'voucher_date'   => (string)$p['voucher_date'],
+                    'voucher_status' => (string)$p['voucher_status'],
+                    'student_sid'    => $info['sid'],
+                    'student_name'   => $info['name'],
+                    'payment_ids'    => [],
+                    'fee_labels'     => [],
+                    'methods'        => [],
+                    'receipts'       => [],
+                    'amount'         => 0.0,
+                ];
+            }
+            $vouchers[$vid]['payment_ids'][] = (int)$p['id'];
+            $vouchers[$vid]['fee_labels'][]  = acc_fee_type_label((string)$p['fee_type']);
+            $vouchers[$vid]['methods'][(string)$p['payment_method']] = true;
+            $vouchers[$vid]['receipts'][(string)$p['transaction_number']] = true;
+            $vouchers[$vid]['amount'] += (float)$p['amount'];
+        }
+    }
+    if (!$vouchers) {
+        return [];
+    }
+
+    // A voucher may only be deleted when EVERY payment linked to it matched
+    // above — a combined voucher carrying any unrelated payment is kept.
+    $cnt_stmt = db()->prepare('SELECT COUNT(*) FROM sfp_payments WHERE voucher_id = ?');
+    $out = [];
+    foreach ($vouchers as $vid => $v) {
+        $cnt_stmt->execute([$vid]);
+        if ((int)$cnt_stmt->fetchColumn() !== count(array_unique($v['payment_ids']))) {
+            continue;
+        }
+        $v['fee_labels'] = array_values(array_unique($v['fee_labels']));
+        $v['methods']    = array_keys($v['methods']);
+        $v['receipts']   = array_keys($v['receipts']);
+        $out[] = $v;
+    }
+    return $out;
+}
+
+/**
+ * Push same-month conflicts forward: the old ERP (CSV) keeps the month.
+ *
+ * When a monthly installment ends up paid BOTH by the old ERP (merged from the
+ * CSV) and by a payment collected in this ERP with another method (cash / bank
+ * / mobile banking), the old-ERP payment keeps that month and the current-ERP
+ * payment is moved ("pushed") to the student's next month with room left —
+ * processed in payment-date order so earlier payments land on earlier months.
+ * Old-ERP rows are never moved, and a payment is only moved when the target
+ * month can take its full amount (within the CSV-rounding tolerance).
+ *
+ * @return array{moves:array<int,array<string,mixed>>, errors:string[]}
+ */
+function oebm_push_conflicting_erp_months(int $student_pk): array
+{
+    $moves  = [];
+    $errors = [];
+
+    $summary = acc_student_fee_summary($student_pk);
+    if (!$summary) {
+        return ['moves' => [], 'errors' => []];
+    }
+    $slots = oebm_build_month_slots($summary);
+    if (!$slots) {
+        return ['moves' => [], 'errors' => []];
+    }
+
+    // Per-slot due and assigned totals, keyed "sfid:month_number", chronological.
+    $slot_keys = [];
+    $due       = [];
+    $labels    = [];
+    $meta      = [];
+    foreach ($slots as $slot) {
+        $key = (int)$slot['semester_fee_id'] . ':' . (int)$slot['month_number'];
+        $slot_keys[]  = $key;
+        $due[$key]    = (float)$slot['paid'] + (float)$slot['out']; // paid + out = the month's due
+        $labels[$key] = (string)$slot['label'];
+        $meta[$key]   = [
+            'semester_fee_id' => (int)$slot['semester_fee_id'],
+            'semester_number' => (int)$slot['semester_number'],
+            'month_number'    => (int)$slot['month_number'],
+        ];
+    }
+
+    $stmt = db()->prepare(
+        "SELECT sp.id, sp.semester_fee_id, sp.semester_number, sp.month_number,
+                sp.amount, sp.payment_method, v.voucher_number, v.voucher_date
+         FROM sfp_payments sp
+         JOIN acc_vouchers v ON v.id = sp.voucher_id
+         WHERE sp.student_id = ?
+           AND sp.fee_type = 'semester_tuition'
+           AND sp.semester_fee_id IS NOT NULL
+           AND sp.month_number IS NOT NULL
+           AND v.is_deleted = 0
+           AND v.status IN ('posted','memo')
+         ORDER BY v.voucher_date ASC, sp.id ASC"
+    );
+    $stmt->execute([$student_pk]);
+    $pays = $stmt->fetchAll();
+    if (!$pays) {
+        return ['moves' => [], 'errors' => []];
+    }
+
+    // Old-ERP rows are pinned to their (CSV) months first — they never move.
+    $assigned = array_fill_keys($slot_keys, 0.0);
+    $cur_rows = [];
+    foreach ($pays as $p) {
+        $key = (int)$p['semester_fee_id'] . ':' . (int)$p['month_number'];
+        if ((string)$p['payment_method'] === 'old_erp') {
+            if (isset($assigned[$key])) {
+                $assigned[$key] += (float)$p['amount'];
+            }
+        } else {
+            $cur_rows[] = $p;
+        }
+    }
+
+    // Current-ERP rows keep their month while it still has room; otherwise the
+    // old ERP already paid that month and the row is pushed to the next month
+    // with room — in payment-date order.
+    $upd = null;
+    foreach ($cur_rows as $p) {
+        $key = (int)$p['semester_fee_id'] . ':' . (int)$p['month_number'];
+        $amt = (float)$p['amount'];
+        if (!isset($assigned[$key])) {
+            continue; // slot no longer in the schedule — leave untouched
+        }
+        if ($assigned[$key] + $amt <= $due[$key] + OEBM_AMOUNT_TOLERANCE) {
+            $assigned[$key] += $amt; // month still has room — keep it here
+            continue;
+        }
+        // Month already covered (old ERP wins) — find the next month with room.
+        $target = null;
+        foreach ($slot_keys as $k) {
+            if ($due[$k] - $assigned[$k] > OEBM_AMOUNT_TOLERANCE
+                && $assigned[$k] + $amt <= $due[$k] + OEBM_AMOUNT_TOLERANCE) {
+                $target = $k;
+                break;
+            }
+        }
+        if ($target === null) {
+            $errors[] = 'Payment ' . $p['voucher_number'] . ' (' . acc_fmt($amt) . ', ' . $labels[$key]
+                . '): the month is already paid by the old ERP but no later month has room — left unchanged, review manually.';
+            continue;
+        }
+        try {
+            if ($upd === null) {
+                $upd = db()->prepare(
+                    'UPDATE sfp_payments SET semester_fee_id = ?, semester_number = ?, month_number = ? WHERE id = ?'
+                );
+            }
+            $upd->execute([
+                $meta[$target]['semester_fee_id'],
+                $meta[$target]['semester_number'],
+                $meta[$target]['month_number'],
+                (int)$p['id'],
+            ]);
+            $assigned[$target] += $amt;
+            log_change('accounting', 'UPDATE', (int)$p['id'],
+                'Payment on voucher ' . $p['voucher_number'],
+                'tuition_month', $labels[$key], $labels[$target],
+                'Old ERP bulk merge: ' . $labels[$key] . ' is paid by the old ERP (CSV) — this '
+                . acc_payment_method_label((string)$p['payment_method']) . ' payment of ' . acc_fmt($amt)
+                . ' was pushed forward to ' . $labels[$target] . '.');
+            $moves[] = [
+                'payment_id' => (int)$p['id'],
+                'voucher'    => (string)$p['voucher_number'],
+                'amount'     => $amt,
+                'from_label' => $labels[$key],
+                'to_label'   => $labels[$target],
+                'from'       => $meta[$key],
+                'to'         => $meta[$target],
+            ];
+        } catch (Throwable $e) {
+            $errors[] = 'Payment ' . $p['voucher_number'] . ': could not be moved — ' . $e->getMessage();
+        }
+    }
+
+    return ['moves' => $moves, 'errors' => $errors];
 }
 
 /**
@@ -699,6 +985,69 @@ function oebm_undo_batch(array $batch): array
         }
     }
 
+    // ── Restore Collect Payment records deleted as CSV duplicates ───────────
+    $v_restored  = 0;
+    $deleted_ids = json_decode((string)($batch['deleted_voucher_ids'] ?? '[]'), true);
+    foreach (is_array($deleted_ids) ? $deleted_ids : [] as $rvid) {
+        $rvid = (int)$rvid;
+        if ($rvid <= 0) {
+            continue;
+        }
+        try {
+            $upd = db()->prepare(
+                'UPDATE acc_vouchers
+                 SET is_deleted = 0, deleted_by = NULL, deleted_at = NULL, delete_reason = NULL
+                 WHERE id = ? AND is_deleted = 1'
+            );
+            $upd->execute([$rvid]);
+            if ($upd->rowCount() > 0) {
+                log_change('accounting', 'UPDATE', $rvid, 'Voucher #' . $rvid, 'is_deleted', '1', '0',
+                    'Old ERP bulk merge undo: batch #' . (int)$batch['id']
+                    . ' restored a Collect Payment record that was deleted as a CSV duplicate.');
+                $v_restored++;
+            }
+        } catch (Throwable $e) {
+            $errors[] = 'Voucher #' . $rvid . ': could not be restored — ' . $e->getMessage();
+        }
+    }
+
+    // ── Move pushed current-ERP payments back to their original months ──────
+    $moved_back = 0;
+    $moved = json_decode((string)($batch['moved_payments'] ?? '[]'), true);
+    foreach (is_array($moved) ? $moved : [] as $mv) {
+        $pid  = (int)($mv['payment_id'] ?? 0);
+        $from = $mv['from'] ?? null;
+        $to   = $mv['to'] ?? null;
+        if ($pid <= 0 || !is_array($from) || !is_array($to)) {
+            continue;
+        }
+        try {
+            // Only move back while the payment still sits where the merge put it.
+            $upd = db()->prepare(
+                'UPDATE sfp_payments
+                 SET semester_fee_id = ?, semester_number = ?, month_number = ?
+                 WHERE id = ? AND semester_fee_id = ? AND month_number = ?'
+            );
+            $upd->execute([
+                (int)($from['semester_fee_id'] ?? 0),
+                (int)($from['semester_number'] ?? 0),
+                (int)($from['month_number'] ?? 0),
+                $pid,
+                (int)($to['semester_fee_id'] ?? 0),
+                (int)($to['month_number'] ?? 0),
+            ]);
+            if ($upd->rowCount() > 0) {
+                log_change('accounting', 'UPDATE', $pid,
+                    'Payment on voucher ' . (string)($mv['voucher'] ?? ('#' . $pid)),
+                    'tuition_month', (string)($mv['to_label'] ?? ''), (string)($mv['from_label'] ?? ''),
+                    'Old ERP bulk merge undo: batch #' . (int)$batch['id'] . ' moved the payment back to its original month.');
+                $moved_back++;
+            }
+        } catch (Throwable $e) {
+            $errors[] = 'Payment #' . $pid . ': could not be moved back — ' . $e->getMessage();
+        }
+    }
+
     // ── Mark the batch as undone (one undo per batch) ─────────────────────
     $user = auth_user();
     db()->prepare('UPDATE oebm_merge_batches SET undone_by = ?, undone_at = NOW() WHERE id = ?')
@@ -707,9 +1056,16 @@ function oebm_undo_batch(array $batch): array
         'Old ERP bulk merge batch #' . (int)$batch['id'],
         'undone', '0', '1',
         'Old ERP bulk merge undone: ' . $deleted . ' voucher(s) soft-deleted, '
-        . $restored . ' student status(es) restored.');
+        . $restored . ' student status(es) restored, ' . $v_restored . ' duplicate-deleted voucher(s) restored, '
+        . $moved_back . ' pushed payment(s) moved back.');
 
-    return ['vouchers_deleted' => $deleted, 'statuses_restored' => $restored, 'errors' => $errors];
+    return [
+        'vouchers_deleted'    => $deleted,
+        'statuses_restored'   => $restored,
+        'vouchers_restored'   => $v_restored,
+        'payments_moved_back' => $moved_back,
+        'errors'              => $errors,
+    ];
 }
 
 /**
@@ -1759,6 +2115,9 @@ $commit_summary = null;
 $dropped_sids    = [];   // students the CSV's Student Status column marks as Dropped
 $dropped_updated = 0;    // how many were actually set to Dropped on confirm
 $undo_batch_id   = null; // batch id recorded for the merge just confirmed (undo)
+$cp_duplicates    = [];  // Collect Payment records duplicating CSV receipts (CSV wins)
+$cp_deleted       = 0;   // duplicates deleted on confirm
+$cp_delete_errors = [];  // duplicates that could not be deleted
 
 // ── POST: preview or confirm ────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -1811,6 +2170,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 . $undo_res['vouchers_deleted'] . ' payment voucher(s) removed'
                 . ($undo_res['statuses_restored'] > 0
                     ? ', ' . $undo_res['statuses_restored'] . ' student status(es) restored'
+                    : '')
+                . (!empty($undo_res['vouchers_restored'])
+                    ? ', ' . $undo_res['vouchers_restored'] . ' duplicate-deleted Collect Payment record(s) restored'
+                    : '')
+                . (!empty($undo_res['payments_moved_back'])
+                    ? ', ' . $undo_res['payments_moved_back'] . ' pushed payment(s) moved back to their original month'
                     : '')
                 . '.';
             if ($undo_res['errors']) {
@@ -1886,11 +2251,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
 
+            // ── Collect Payment duplicates: the CSV (old ERP) wins ──────────
+            // A payment recorded through Collect Payment whose receipt /
+            // transaction number matches a CSV receipt for the same student is
+            // the same payment entered twice. On confirm those records are
+            // deleted BEFORE validation, so the CSV rows merge onto the freed
+            // slots and only the CSV (old ERP) payment is kept.
+            $cp_deleted_voucher_ids = [];
+            if ($action === 'confirm') {
+                foreach (oebm_find_collect_payment_duplicates($parsed['rows']) as $cp_dupe) {
+                    try {
+                        acc_soft_delete_voucher(
+                            (int)$cp_dupe['voucher_id'],
+                            'Old ERP bulk merge: duplicate of CSV receipt '
+                            . implode(', ', $cp_dupe['receipts'])
+                            . ' — Collect Payment record removed, CSV (old ERP) payment kept.'
+                        );
+                        $cp_deleted_voucher_ids[] = (int)$cp_dupe['voucher_id'];
+                        $cp_deleted++;
+                    } catch (Throwable $e) {
+                        $cp_delete_errors[] = 'Voucher ' . $cp_dupe['voucher_number'] . ': ' . $e->getMessage();
+                    }
+                }
+            }
+
             $validated = oebm_validate_rows($parsed['rows']);
             $results = $validated['results'];
             $counts  = $validated['counts'];
             $csv_b64 = base64_encode($csv_text);
             $dropped_sids = oebm_collect_dropped_sids($parsed['rows']);
+            // On preview this lists what WILL be deleted on confirm; after a
+            // confirm anything still listed could not be deleted.
+            $cp_duplicates = oebm_find_collect_payment_duplicates($parsed['rows']);
 
             if ($action === 'report_pdf') {
                 // Stream a PDF report of the failed / needs-attention rows.
@@ -2005,21 +2397,65 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
                     }
 
-                    // Record this merge as an undoable batch (vouchers + status changes).
-                    if ($batch_voucher_ids || $batch_status_changes) {
+                    // ── Same-month conflicts: the old ERP (CSV) keeps the month ──
+                    // When a month is paid by the old ERP (CSV) AND by a payment
+                    // collected in this ERP with another method, the current-ERP
+                    // payment is pushed forward to the next month with room.
+                    $moved_payments   = [];
+                    $push_student_pks = [];
+                    foreach ($results as $push_r) {
+                        $push_pk = (int)($push_r['resolved']['student_pk'] ?? 0);
+                        if ($push_pk > 0) {
+                            $push_student_pks[$push_pk] = true;
+                        }
+                    }
+                    foreach (array_keys($push_student_pks) as $push_pk) {
+                        $push_res = oebm_push_conflicting_erp_months($push_pk);
+                        foreach ($push_res['moves'] as $push_mv) {
+                            $moved_payments[] = $push_mv;
+                        }
+                        foreach ($push_res['errors'] as $push_err) {
+                            $failed[] = $push_err;
+                        }
+                    }
+
+                    // Record this merge as an undoable batch (vouchers, status
+                    // changes, deleted duplicates and pushed months).
+                    if ($batch_voucher_ids || $batch_status_changes || $cp_deleted_voucher_ids || $moved_payments) {
                         try {
-                            $undo_batch_id = oebm_record_batch($batch_voucher_ids, $batch_status_changes, $merged);
+                            $undo_batch_id = oebm_record_batch(
+                                $batch_voucher_ids,
+                                $batch_status_changes,
+                                $merged,
+                                $cp_deleted_voucher_ids,
+                                $moved_payments
+                            );
                         } catch (Throwable $e) {
                             $failed[] = 'Undo tracking could not be saved for this merge: ' . $e->getMessage();
                         }
                     }
 
                     $did_commit = true;
-                    $commit_summary = ['merged' => $merged, 'failed' => $failed, 'failures_map' => $commit_failures_map];
+                    $commit_summary = [
+                        'merged'       => $merged,
+                        'failed'       => $failed,
+                        'failures_map' => $commit_failures_map,
+                        'cp_deleted'   => $cp_deleted,
+                        'moves'        => $moved_payments,
+                    ];
                     $skipped = ($counts['duplicate'] ?? 0) + ($counts['invalid'] ?? 0) + ($counts['ignored'] ?? 0);
                     $msg = $merged . ' payment(s) merged successfully. ' . $skipped . ' row(s) were skipped (duplicates / invalid).';
                     if ($dropped_updated > 0) {
                         $msg .= ' ' . $dropped_updated . ' student(s) set to Dropped from the CSV Student Status column.';
+                    }
+                    if ($cp_deleted > 0) {
+                        $msg .= ' ' . $cp_deleted . ' duplicate Collect Payment record(s) deleted — the CSV (old ERP) payment was kept.';
+                    }
+                    if ($cp_delete_errors) {
+                        $msg .= ' ' . count($cp_delete_errors) . ' duplicate(s) could not be deleted: ' . implode(' ', $cp_delete_errors);
+                    }
+                    if ($moved_payments) {
+                        $msg .= ' ' . count($moved_payments) . ' payment(s) collected in this ERP were pushed to the next month (the old ERP kept their month).';
                     }
                     if ($undo_batch_id) {
                         $msg .= ' Saved as merge batch #' . $undo_batch_id . ' — it can be undone from this page.';
@@ -2080,6 +2516,8 @@ require_once __DIR__ . '/../includes/header.php';
                 <li><strong>Summary and zero-amount rows are ignored.</strong> Old-ERP export lines such as <code>Monthly Payment Old Data</code> or <code>Current Dues</code>, and any row with an amount of <code>0</code>, are skipped automatically (shown in grey). Student IDs are matched with or without leading zeros.</li>
                 <li><strong>Student Status column (optional).</strong> If the CSV carries a <code>Student Status</code> column, every student marked <code>Dropped</code> is set to <strong>Dropped</strong> in Student Management on confirm (recorded in the change log). <code>Active</code> — or any other value — is ignored and never changes an existing status.</li>
                 <li><strong>Every merge can be undone.</strong> Each confirmed merge is saved as a batch. Use <em>Undo</em> — right after merging, or later from the <em>Recent Merge Batches</em> list on this page — to remove every payment the batch recorded (soft-delete, full audit trail kept) and restore any student statuses it changed, returning everything to the state before that merge. Only the user who performed the merge — or a Super Administrator — can undo it, and each batch can be undone once.</li>
+                <li><strong>Collect Payment duplicates are removed — the CSV wins.</strong> If a payment in the CSV is also found in <a class="alert-link" href="<?= APP_URL ?>/accounting/collect-payment.php">Collect Payment</a> (same receipt / transaction number for the same student), the Collect Payment record is <strong>deleted on confirm</strong> and only the CSV (old ERP) payment is kept. Payments created by the bulk merge itself are reconciled, never deleted, and a combined voucher carrying any unrelated payment is never touched. Undo restores these records.</li>
+                <li><strong>Months paid twice are pushed forward.</strong> When a month is paid by the old ERP (CSV) and this ERP also holds a payment for the <em>same month</em> made with another method (cash / bank / mobile banking), the old ERP keeps that month and the current-ERP payment is <strong>moved to the student's next month with room</strong> — in payment-date order — so no money is lost. Undo moves these payments back.</li>
                 <li>Confirm to merge only the valid rows. Each is stored as an <em>Old ERP</em> payment (a memo voucher), so dues update without double-counting income.</li>
             </ol>
             <a href="<?= APP_URL ?>/accounting/old-erp-bulk-merge.php?sample=1" class="alert-link">
@@ -2219,6 +2657,18 @@ require_once __DIR__ . '/../includes/header.php';
             <?php if (!empty($commit_summary['failed'])): ?>
             <div class="mt-2"><strong>Failures:</strong><ul class="mb-0"><?php foreach ($commit_summary['failed'] as $f): ?><li><?= h($f) ?></li><?php endforeach; ?></ul></div>
             <?php endif; ?>
+            <?php if (!empty($commit_summary['cp_deleted'])): ?>
+            <div class="mt-1 small"><i class="fas fa-trash-can me-1"></i><?= (int)$commit_summary['cp_deleted'] ?> duplicate Collect Payment record(s) deleted — the CSV (old ERP) payment was kept.</div>
+            <?php endif; ?>
+            <?php if (!empty($commit_summary['moves'])): ?>
+            <div class="mt-2"><strong>Pushed to the next month (old ERP kept the month):</strong>
+                <ul class="mb-0">
+                <?php foreach ($commit_summary['moves'] as $mv): ?>
+                    <li><?= h($mv['voucher']) ?>: <?= h($mv['from_label']) ?> &rarr; <?= h($mv['to_label']) ?> (<?= h(number_format((float)$mv['amount'], 2)) ?>)</li>
+                <?php endforeach; ?>
+                </ul>
+            </div>
+            <?php endif; ?>
             <?php if ($undo_batch_id): ?>
             <form method="post" class="mt-2" onsubmit="return confirm('Undo merge batch #<?= (int)$undo_batch_id ?>? All payments it recorded will be removed and any student statuses it changed will be restored.');">
                 <?= csrf_field() ?>
@@ -2295,6 +2745,62 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
     <?php endif; ?>
 </div>
+
+<?php if ($cp_duplicates || $cp_delete_errors): ?>
+<!-- ── Collect Payment duplicates (CSV wins) ───────────────────────────── -->
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span class="fw-semibold">
+            <i class="fas fa-clone me-2 text-warning"></i>Collect Payment Duplicates (CSV wins)
+            <span class="badge bg-warning text-dark ms-1"><?= count($cp_duplicates) ?></span>
+        </span>
+    </div>
+    <div class="card-body p-0">
+        <?php if ($cp_delete_errors): ?>
+        <div class="alert alert-danger m-3 mb-0">
+            <strong>Could not delete:</strong>
+            <ul class="mb-0"><?php foreach ($cp_delete_errors as $ce): ?><li><?= h($ce) ?></li><?php endforeach; ?></ul>
+        </div>
+        <?php endif; ?>
+        <?php if ($cp_duplicates): ?>
+        <div class="px-4 pt-3 small text-muted">
+            These payments were recorded through <strong>Collect Payment</strong> but share a receipt number with the uploaded CSV for the same student — the same payment entered twice.
+            <?php if ($did_commit): ?>They could not be removed during this merge; review them manually.<?php else: ?>On <strong>Confirm &amp; Merge</strong> they will be <strong>deleted</strong> and only the CSV (old ERP) payment kept.<?php endif; ?>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Student ID</th>
+                        <th>Student</th>
+                        <th>Fee Type(s)</th>
+                        <th>Method</th>
+                        <th>Date</th>
+                        <th>Receipt</th>
+                        <th>Voucher</th>
+                        <th class="text-end">Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($cp_duplicates as $cd): ?>
+                    <tr class="table-warning">
+                        <td class="fw-semibold"><?= h($cd['student_sid']) ?></td>
+                        <td><?= h($cd['student_name']) ?></td>
+                        <td class="small"><?= h(implode(', ', $cd['fee_labels'])) ?></td>
+                        <td class="small"><?= h(implode(', ', array_map('acc_payment_method_label', $cd['methods']))) ?></td>
+                        <td class="small"><?= h($cd['voucher_date']) ?></td>
+                        <td class="small"><?= h(implode(', ', $cd['receipts'])) ?></td>
+                        <td class="small"><?= h($cd['voucher_number']) ?></td>
+                        <td class="text-end fw-semibold"><?= h(number_format((float)$cd['amount'], 2)) ?></td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <?php endif; ?>
+    </div>
+</div>
+<?php endif; ?>
 
 <?php
     // ── Failed / needs-attention report ─────────────────────────────────────
