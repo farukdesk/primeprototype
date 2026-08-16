@@ -55,12 +55,16 @@ const OEBM_FEE_TYPES = ['admission', 'form_fee', 'id_card_fee', 'registration', 
 // without accounting sign-off — it directly affects financial reconciliation.
 const OEBM_AMOUNT_TOLERANCE = 5.0;
 
-// Per-student reconciliation tolerance: after a merge, a student's TOTAL paid
-// (old-ERP merges plus payments collected in this ERP, combined — exactly what
-// Collect Payment shows as Total Paid) should match the student's CSV total
-// within this many BDT. Larger differences never block the merge — the student
-// is flagged for HUMAN REVIEW instead, and the flagged IDs are saved on the
-// merge batch so they can be checked later.
+// Per-student reconciliation tolerance for the HUMAN REVIEW flag. A student is
+// flagged only for a GENUINE mismatch beyond this many BDT:
+//   • money in the CSV that is recorded nowhere (neither as an old-ERP record
+//     nor as a payment collected in this ERP), or
+//   • old-ERP records exceeding what the CSV supports.
+// Payments collected in THIS ERP with any other method (cash / bank / mobile
+// banking) are legitimate new-ERP collections — they count toward the CSV
+// obligations and NEVER cause a flag when they push the total above the CSV
+// total. Flags never block the merge; the flagged IDs are saved on the merge
+// batch so they can be checked later.
 const OEBM_REVIEW_TOLERANCE = 100.0;
 
 // ── Sample CSV template download ────────────────────────────────────────────
@@ -654,22 +658,26 @@ function oebm_can_undo_batch(array $batch): bool
 }
 
 /**
- * Reconcile each student's TOTAL paid against the CSV total (±100 BDT).
+ * Reconcile each student's recorded payments against the CSV total (±100 BDT).
  *
- * For every student in the CSV, the grand total of the uploaded statement is
- * compared with the student's total paid in this system — old-ERP merges AND
- * payments collected in this ERP (cash / bank / mobile banking), combined,
- * exactly what Collect Payment shows as Total Paid. Differences within
- * OEBM_REVIEW_TOLERANCE are considered matched. Larger differences never
- * block the merge: the student is flagged for HUMAN REVIEW instead, and the
- * flagged IDs are saved on the merge batch so they can be checked later.
+ * A student is flagged for HUMAN REVIEW only for a GENUINE mismatch beyond
+ * OEBM_REVIEW_TOLERANCE:
+ *   • part of the CSV total is recorded NOWHERE in this system — neither as an
+ *     old-ERP record nor as a payment collected in this ERP, or
+ *   • the old-ERP records exceed what the CSV supports.
+ * Amounts collected in THIS ERP with any other payment method (cash / bank /
+ * mobile banking) are legitimate new-ERP collections: they count toward the
+ * CSV obligations, and when they push the total paid ABOVE the CSV total that
+ * is fine — never a flag. Flags never block the merge; the flagged IDs are
+ * saved on the merge batch so they can be checked later.
  *
  * @param array<int,array<string,mixed>> $results         Validated CSV rows.
  * @param bool                           $include_pending  True on preview: add
- *        the amounts of rows that WILL merge to project the post-merge total.
- *        False after a confirm, when the merged payments are already stored.
- * @return array<int,array<string,mixed>> Students whose difference is beyond
- *         the tolerance: student_pk, sid, name, csv_total, total_paid, diff.
+ *        the amounts of rows that WILL merge (they become old-ERP records) to
+ *        project the post-merge totals. False after a confirm, when the merged
+ *        payments are already stored.
+ * @return array<int,array<string,mixed>> Flagged students: student_pk, sid,
+ *         name, csv_total, total_paid, old_erp_paid, new_erp_paid, diff, reason.
  */
 function oebm_total_review_flags(array $results, bool $include_pending): array
 {
@@ -705,9 +713,11 @@ function oebm_total_review_flags(array $results, bool $include_pending): array
         return [];
     }
 
-    // Total paid per student across ALL payment methods (old + current ERP).
+    // Per-student totals, split by method: old-ERP records vs payments
+    // collected in THIS ERP (cash / bank / mobile banking).
     $stmt = db()->prepare(
-        "SELECT COALESCE(SUM(sp.amount), 0)
+        "SELECT COALESCE(SUM(sp.amount), 0) AS total_paid,
+                COALESCE(SUM(CASE WHEN sp.payment_method = 'old_erp' THEN sp.amount ELSE 0 END), 0) AS old_erp_paid
          FROM sfp_payments sp
          JOIN acc_vouchers v ON v.id = sp.voucher_id
          WHERE sp.student_id = ?
@@ -718,18 +728,43 @@ function oebm_total_review_flags(array $results, bool $include_pending): array
     $flagged = [];
     foreach ($students as $pk => $info) {
         $stmt->execute([$pk]);
-        $total_paid = (float)$stmt->fetchColumn() + (float)$info['pending'];
-        $diff = round($total_paid - (float)$info['csv_total'], 2);
-        if (abs($diff) <= OEBM_REVIEW_TOLERANCE) {
+        $tot = $stmt->fetch() ?: [];
+        // Pending merge rows become old-ERP records, so they count on both.
+        $total_paid   = (float)($tot['total_paid'] ?? 0) + (float)$info['pending'];
+        $old_erp_paid = (float)($tot['old_erp_paid'] ?? 0) + (float)$info['pending'];
+        $new_erp_paid = max(0.0, $total_paid - $old_erp_paid);
+        $csv_total    = (float)$info['csv_total'];
+
+        // Missing money: part of the CSV total is recorded NOWHERE — neither
+        // as an old-ERP record nor as a payment collected in this ERP.
+        $missing = round($csv_total - $total_paid, 2);
+        // Over-collected old ERP: old-ERP records exceed what the CSV supports.
+        // A surplus from NEW-ERP collections (any other payment method) is a
+        // legitimate new payment and never causes a flag.
+        $excess_old = round($old_erp_paid - $csv_total, 2);
+
+        $reasons = [];
+        if ($missing > OEBM_REVIEW_TOLERANCE) {
+            $reasons[] = acc_fmt($missing) . ' of the CSV total is not recorded anywhere — neither as an old-ERP record nor as a payment collected in this ERP.';
+        }
+        if ($excess_old > OEBM_REVIEW_TOLERANCE) {
+            $reasons[] = 'Old-ERP records exceed the CSV total by ' . acc_fmt($excess_old) . '.';
+        }
+        if (!$reasons) {
+            // Matched — or the difference is explained by payments collected in
+            // this ERP with another method, which is fine.
             continue;
         }
         $flagged[] = [
-            'student_pk' => $pk,
-            'sid'        => $info['sid'],
-            'name'       => $info['name'],
-            'csv_total'  => round((float)$info['csv_total'], 2),
-            'total_paid' => round($total_paid, 2),
-            'diff'       => $diff,
+            'student_pk'   => $pk,
+            'sid'          => $info['sid'],
+            'name'         => $info['name'],
+            'csv_total'    => round($csv_total, 2),
+            'total_paid'   => round($total_paid, 2),
+            'old_erp_paid' => round($old_erp_paid, 2),
+            'new_erp_paid' => round($new_erp_paid, 2),
+            'diff'         => $missing > OEBM_REVIEW_TOLERANCE ? -$missing : $excess_old,
+            'reason'       => implode(' ', $reasons),
         ];
     }
     return $flagged;
@@ -2570,8 +2605,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $msg .= ' ' . count($moved_payments) . ' payment(s) collected in this ERP were pushed to the next month (the old ERP kept their month).';
                     }
                     if ($review_flags) {
-                        $msg .= ' ' . count($review_flags) . ' student(s) flagged for HUMAN REVIEW — total paid differs from the CSV total by more than '
-                            . number_format(OEBM_REVIEW_TOLERANCE) . ' BDT: '
+                        $msg .= ' ' . count($review_flags) . ' student(s) flagged for HUMAN REVIEW — genuine mismatch beyond '
+                            . number_format(OEBM_REVIEW_TOLERANCE) . ' BDT between the CSV total and the recorded payments'
+                            . ' (amounts collected in this ERP with another payment method are fine and never flagged): '
                             . implode(', ', array_map(static fn(array $rv): string => (string)$rv['sid'], $review_flags))
                             . '. The IDs are saved with this merge batch.';
                     }
@@ -2643,7 +2679,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <li><strong>Collect Payment duplicates are removed — the CSV wins.</strong> If a payment in the CSV is also found in <a class="alert-link" href="<?= APP_URL ?>/accounting/collect-payment.php">Collect Payment</a> (same receipt / transaction number for the same student), the Collect Payment record is <strong>deleted on confirm</strong> and only the CSV (old ERP) payment is kept. Payments created by the bulk merge itself are reconciled, never deleted, and a combined voucher carrying any unrelated payment is never touched. Undo restores these records.</li>
                 <li><strong>Months paid twice are pushed forward.</strong> When a month is paid by the old ERP (CSV) and this ERP also holds a payment for the <em>same month</em> made with another method (cash / bank / mobile banking), the old ERP keeps that month and the current-ERP payment is <strong>moved to the student's next month with room</strong> — in payment-date order — so no money is lost. Undo moves these payments back.</li>
                 <li>Confirm to merge only the valid rows. Each is stored as an <em>Old ERP</em> payment (a memo voucher), so dues update without double-counting income.</li>
-                <li><strong>Per-student total check (±100 BDT).</strong> Each student's <em>total paid</em> — old-ERP merges and payments collected in this ERP, combined — is compared against the CSV total. Differences up to 100 BDT are fine; anything larger <strong>still merges</strong> but the student is <strong>flagged for human review</strong>, and the flagged IDs are saved with the merge batch so they can be checked later.</li>
+                <li><strong>Per-student total check (±100 BDT).</strong> Each student's recorded payments are reconciled against the CSV total. A student is flagged for <strong>human review</strong> only for a <em>genuine</em> mismatch beyond 100 BDT: money in the CSV recorded nowhere (neither old-ERP records nor payments collected in this ERP), or old-ERP records exceeding the CSV. <strong>Amounts collected in this ERP with another payment method (cash / bank / mobile banking) are legitimate new collections and never cause a flag.</strong> Flagged rows <strong>still merge</strong>, and the flagged IDs are saved with the merge batch so they can be checked later.</li>
             </ol>
             </div>
             <a href="<?= APP_URL ?>/accounting/old-erp-bulk-merge.php?sample=1" class="alert-link">
@@ -2719,7 +2755,7 @@ require_once __DIR__ . '/../includes/header.php';
                             </span>
                             <div class="text-muted mt-1" style="max-width: 260px;">
                                 <?php foreach ($b_review as $rv): ?>
-                                <div><?= h((string)($rv['sid'] ?? '')) ?> <span class="<?= (float)($rv['diff'] ?? 0) > 0 ? 'text-danger' : 'text-primary' ?>">(<?= ((float)($rv['diff'] ?? 0) > 0 ? '+' : '') . h(number_format((float)($rv['diff'] ?? 0), 2)) ?>)</span></div>
+                                <div title="<?= h((string)($rv['reason'] ?? '')) ?>"><?= h((string)($rv['sid'] ?? '')) ?> <span class="<?= (float)($rv['diff'] ?? 0) > 0 ? 'text-danger' : 'text-primary' ?>">(<?= ((float)($rv['diff'] ?? 0) > 0 ? '+' : '') . h(number_format((float)($rv['diff'] ?? 0), 2)) ?>)</span></div>
                                 <?php endforeach; ?>
                             </div>
                             <?php else: ?>
@@ -2912,8 +2948,10 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
     <div class="card-body p-0">
         <div class="px-4 pt-3 small text-muted">
-            For these students the <strong>total paid</strong> — old-ERP merges and payments collected in this ERP, combined —
-            differs from the <strong>CSV total</strong> by more than <?= h(number_format(OEBM_REVIEW_TOLERANCE)) ?> BDT.
+            For these students there is a <strong>genuine mismatch</strong> beyond <?= h(number_format(OEBM_REVIEW_TOLERANCE)) ?> BDT between the
+            <strong>CSV total</strong> and the recorded payments: part of the CSV total is recorded nowhere, or old-ERP records exceed the CSV.
+            <strong>Amounts collected in this ERP with another payment method (cash / bank / mobile banking) are legitimate new collections
+            and are never flagged.</strong>
             <?php if ($did_commit): ?>
             Their rows were <strong>merged anyway</strong> and the IDs are saved with this merge batch — verify each account manually
             (see the <em>Recent Merge Batches</em> list above to find them again later).
@@ -2929,8 +2967,11 @@ require_once __DIR__ . '/../includes/header.php';
                         <th>Student ID</th>
                         <th>Student</th>
                         <th class="text-end">CSV Total</th>
-                        <th class="text-end">Total Paid (Old + New ERP)</th>
+                        <th class="text-end">Old ERP Paid</th>
+                        <th class="text-end">New ERP Paid</th>
+                        <th class="text-end">Total Paid</th>
                         <th class="text-end">Difference</th>
+                        <th>Why flagged</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -2939,18 +2980,22 @@ require_once __DIR__ . '/../includes/header.php';
                         <td class="fw-semibold"><?= h($rf['sid']) ?></td>
                         <td><?= h($rf['name'] !== '' ? $rf['name'] : '—') ?></td>
                         <td class="text-end"><?= h(number_format((float)$rf['csv_total'], 2)) ?></td>
+                        <td class="text-end"><?= h(number_format((float)($rf['old_erp_paid'] ?? 0), 2)) ?></td>
+                        <td class="text-end"><?= h(number_format((float)($rf['new_erp_paid'] ?? 0), 2)) ?></td>
                         <td class="text-end"><?= h(number_format((float)$rf['total_paid'], 2)) ?></td>
                         <td class="text-end fw-semibold <?= (float)$rf['diff'] > 0 ? 'text-danger' : 'text-primary' ?>">
                             <?= ((float)$rf['diff'] > 0 ? '+' : '') . h(number_format((float)$rf['diff'], 2)) ?>
                         </td>
+                        <td class="small"><?= h((string)($rf['reason'] ?? '')) ?></td>
                     </tr>
                     <?php endforeach; ?>
                 </tbody>
             </table>
         </div>
         <div class="px-4 py-2 small text-muted">
-            A <span class="text-danger fw-semibold">positive</span> difference means the ERP holds more than the CSV shows;
-            a <span class="text-primary fw-semibold">negative</span> one means the CSV shows more than the ERP holds.
+            A <span class="text-danger fw-semibold">positive</span> difference means old-ERP records exceed the CSV total;
+            a <span class="text-primary fw-semibold">negative</span> one means part of the CSV total is not recorded anywhere.
+            Surpluses from payments collected in this ERP with another method never appear here.
         </div>
     </div>
 </div>
