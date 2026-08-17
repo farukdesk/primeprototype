@@ -53,6 +53,7 @@ if ($dept_scope !== null) {
 
 $unchecked_where =
     "p.old_erp_payable_amount IS NULL
+     AND p.old_erp_monthly_amount IS NULL
      AND EXISTS (SELECT 1 FROM student_files stf
                   WHERE stf.student_id = p.student_id
                     AND stf.file_name  = '" . SFP_OLD_ERP_PROOF_LABEL . "'
@@ -123,6 +124,10 @@ if (($_GET['action'] ?? '') === 'list') {
                    FROM sfp_semester_fees sf WHERE sf.package_id = p.id) AS erp_sum_eng_disc,
                 (SELECT COUNT(*)
                    FROM sfp_semester_fees sf WHERE sf.package_id = p.id) AS erp_sem_count,
+                (SELECT sf.tuition_payable
+                   FROM sfp_semester_fees sf
+                  WHERE sf.package_id = p.id AND sf.semester_number = 1
+                  LIMIT 1) AS erp_sem1_tuition,
                 (SELECT stf.stored_name
                    FROM student_files stf
                   WHERE stf.student_id = p.student_id
@@ -170,6 +175,7 @@ if (($_GET['action'] ?? '') === 'list') {
             'grand_total' => round($grand, 2),
             'project_fee' => round($proj_fee, 2),
             'form_id_fee' => round($form_fee, 2),
+            'expected_monthly' => round(sfp_expected_monthly_total($pkg, (float)($pkg['erp_sem1_tuition'] ?? 0)), 2),
             'view_url'    => APP_URL . '/student-accounts/view.php?id=' . (int)$pkg['id'],
         ];
     }
@@ -235,10 +241,14 @@ require_once __DIR__ . '/../includes/header.php';
     <div class="d-flex gap-3">
         <div class="fs-4 text-info"><i class="fas fa-info-circle"></i></div>
         <div class="small">
-            <strong>How it works:</strong> this page reads the <em>Payable Amount</em> from every
-            OLD ERP proof screenshot with OCR, saves it, and compares it against the Grand Total
+            <strong>How it works:</strong> this page reads the <em>Payable Amount</em> and the
+            <em>Monthly Payment</em> from every OLD ERP proof screenshot with OCR, saves both,
+            and compares the Payable Amount against the Grand Total
             (incl. Admission, Form &amp; ID Card &amp; Project fees) with a ±<?= number_format(SFP_OLD_ERP_TOLERANCE, 0) ?> BDT tolerance
             (also cross-checking Grand Total − Project Fee and − 1,000 BDT).
+            The Monthly Payment is cross-checked against the expected monthly total
+            (±<?= number_format(SFP_OLD_ERP_MONTHLY_TOLERANCE, 0) ?> BDT) and shown as a
+            <strong>Monthly ✓</strong> indication here and on the Student Accounts list.
             <strong>Keep this tab open</strong> while it runs (≈ 2–6 seconds per student).
             You can stop at any time and continue later – already-checked students are skipped automatically.
             Proofs the OCR cannot read are listed for quick manual entry.
@@ -377,12 +387,13 @@ require_once __DIR__ . '/../includes/header.php';
                         <th class="text-end">ERP Payable</th>
                         <th class="text-end">Grand Total</th>
                         <th class="text-end">Δ</th>
+                        <th class="text-end">Monthly</th>
                         <th>Status</th>
                         <th></th>
                     </tr>
                 </thead>
                 <tbody id="results-body">
-                    <tr id="empty-row"><td colspan="6" class="text-center text-muted py-4">Not started yet.</td></tr>
+                    <tr id="empty-row"><td colspan="7" class="text-center text-muted py-4">Not started yet.</td></tr>
                 </tbody>
             </table>
         </div>
@@ -397,6 +408,7 @@ require_once __DIR__ . '/../includes/header.php';
         listUrl:       '<?= APP_URL ?>/student-accounts/erp-check-runner.php?action=list&dept=<?= (int)$f_dept ?>&program=<?= (int)$f_program ?>&batch=<?= (int)$f_batch ?>',
         saveUrl:       '<?= APP_URL ?>/student-accounts/save-erp-payable.php',
         tolerance:     <?= json_encode((float)SFP_OLD_ERP_TOLERANCE) ?>,
+        monthlyTolerance: <?= json_encode((float)SFP_OLD_ERP_MONTHLY_TOLERANCE) ?>,
         stdProjectFee: <?= json_encode((float)SFP_OLD_ERP_STANDARD_PROJECT_FEE) ?>,
         csrfField:     <?= json_encode(CSRF_TOKEN_NAME) ?>,
         csrfToken:     <?= json_encode(csrf_token()) ?>,
@@ -448,10 +460,12 @@ require_once __DIR__ . '/../includes/header.php';
         return { matched: best <= CFG.tolerance, diff: best };
     }
 
-    // Accepted labels for the payable field, in priority order. Some OLD ERP
-    // screenshots label the amount "Monthly Payment" (monthly fees) instead of
-    // "Payable Amount" – both are read the same way.
-    var PAYABLE_LABELS = [/pay\s*able\s*amount/i, /pay\s*able/i, /monthly\s*pay\s*ment/i];
+    // Labels for the payable field, in priority order.
+    var PAYABLE_LABELS = [/pay\s*able\s*amount/i, /pay\s*able/i];
+    // Labels for the monthly fee field ("Monthly Payment" on most OLD ERP
+    // screenshots). Read separately and cross-checked against the expected
+    // monthly total (±monthlyTolerance BDT).
+    var MONTHLY_LABELS = [/monthly\s*pay\s*ment/i, /monthly\s*fees?/i];
 
     // Read the first number AFTER the label on the line, so other columns the
     // OCR merges into the same line (Total / Paid / Due amounts) are ignored
@@ -481,11 +495,22 @@ require_once __DIR__ . '/../includes/header.php';
                 if (val !== null) return val;
             }
         }
-        var m = String(text).match(/(?:pay\s*able|monthly\s*pay\s*ment)[^0-9\-]*(-?[\d,]+(?:\.\d+)?)/i);
+        var m = String(text).match(/pay\s*able[^0-9\-]*(-?[\d,]+(?:\.\d+)?)/i);
         return m ? parseFloat(m[1].replace(/,/g, '')) : null;
     }
 
-    function addRow(item, payable, res, status) {
+    function parseMonthly(text) {
+        var lines = String(text).split(/\n/);
+        for (var l = 0; l < MONTHLY_LABELS.length; l++) {
+            for (var i = 0; i < lines.length; i++) {
+                var val = amountAfterLabel(lines[i], MONTHLY_LABELS[l]);
+                if (val !== null) return val;
+            }
+        }
+        return null;
+    }
+
+    function addRow(item, payable, res, status, monthly, monthlyOk) {
         var er = $id('empty-row');
         if (er) er.remove();
         var tr = document.createElement('tr');
@@ -496,11 +521,20 @@ require_once __DIR__ . '/../includes/header.php';
                 ? '<span class="badge bg-danger">MISMATCH</span>'
                 : '<span class="badge bg-warning text-dark">OCR failed – manual</span>';
         if (status === 'mismatch') tr.className = 'table-danger';
+        var monthlyCell = '—';
+        if (monthly !== null && monthly !== undefined) {
+            monthlyCell = fmt(monthly) + (monthlyOk === true
+                ? ' <span class="badge bg-success" title="Monthly Payment matches the expected monthly total.">✓</span>'
+                : (monthlyOk === false
+                    ? ' <span class="badge bg-danger" title="Monthly Payment differs from the expected monthly total.">✗</span>'
+                    : ''));
+        }
         tr.innerHTML =
             '<td>' + esc(item.name) + '<br><small class="text-muted">' + esc(item.sid) + '</small></td>' +
             '<td class="text-end">' + (payable === null ? '—' : fmt(payable)) + '</td>' +
             '<td class="text-end">' + fmt(item.grand_total) + '</td>' +
             '<td class="text-end">' + (res ? fmt(res.diff) : '—') + '</td>' +
+            '<td class="text-end">' + monthlyCell + '</td>' +
             '<td>' + badge + '</td>' +
             '<td class="text-end"><a href="' + esc(item.view_url) + '" target="_blank" class="btn btn-outline-primary btn-sm py-0">Open</a></td>';
         var body = $id('results-body');
@@ -516,11 +550,12 @@ require_once __DIR__ . '/../includes/header.php';
         });
     };
 
-    function save(packageId, amount, cb) {
+    function save(packageId, amount, monthly, cb) {
         var fd = new FormData();
         fd.append(CFG.csrfField, CFG.csrfToken);
         fd.append('package_id', packageId);
-        fd.append('amount', amount);
+        if (amount !== null) fd.append('amount', amount);
+        if (monthly !== null) fd.append('monthly', monthly);
         fd.append('source', 'ocr');
         fetch(CFG.saveUrl, { method: 'POST', body: fd })
             .then(function (r) { return r.json(); })
@@ -576,28 +611,34 @@ require_once __DIR__ . '/../includes/header.php';
         setStatus('Reading proof for ' + item.name + ' (' + item.sid + ')…');
 
         worker.recognize(item.proof_url).then(function (res) {
-            var val = parsePayable((res && res.data && res.data.text) || '');
-            if (val === null) {
+            var text = (res && res.data && res.data.text) || '';
+            var val  = parsePayable(text);
+            var mval = parseMonthly(text);
+            if (val === null && mval === null) {
                 nFailed++; nDone++;
                 failedIds.push(item.package_id);
-                addRow(item, null, null, 'failed');
+                addRow(item, null, null, 'failed', null, null);
                 setProgress();
                 setTimeout(processNext, 50);
                 return;
             }
-            save(item.package_id, val, function (ok) {
-                var ev = evaluate(val, item.grand_total, item.project_fee, item.form_id_fee);
+            save(item.package_id, val, mval, function (ok) {
+                var ev  = (val !== null) ? evaluate(val, item.grand_total, item.project_fee, item.form_id_fee) : null;
+                var mok = (mval !== null && typeof item.expected_monthly === 'number')
+                    ? (Math.abs(mval - item.expected_monthly) <= CFG.monthlyTolerance) : null;
                 if (!ok) {
                     // Could not persist – treat as failed so it is retried later
                     nFailed++; nDone++;
                     failedIds.push(item.package_id);
-                    addRow(item, val, ev, 'failed');
-                } else if (ev.matched) {
+                    addRow(item, val, ev, 'failed', mval, mok);
+                } else if ((ev && ev.matched) || (ev === null && mok === true)) {
+                    // Payable matched, or a monthly-only screenshot whose
+                    // Monthly Payment matched the expected monthly total.
                     nMatch++; nDone++;
-                    addRow(item, val, ev, 'match');
+                    addRow(item, val, ev, 'match', mval, mok);
                 } else {
                     nMismatch++; nDone++;
-                    addRow(item, val, ev, 'mismatch');
+                    addRow(item, val, ev, 'mismatch', mval, mok);
                 }
                 setProgress();
                 setTimeout(processNext, 50);

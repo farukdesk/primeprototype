@@ -35,6 +35,10 @@ csrf_check();
 
 $package_id = (int)($_POST['package_id'] ?? 0);
 $source     = (($_POST['source'] ?? 'ocr') === 'manual') ? 'manual' : 'ocr';
+
+// Payable Amount: only touched when the 'amount' field is present in the
+// request, so a monthly-only save cannot clear a stored payable value.
+$has_amount = array_key_exists('amount', $_POST);
 $raw        = trim((string)($_POST['amount'] ?? ''));
 $amount     = ($raw === '') ? null : (float)str_replace(',', '', $raw);
 
@@ -46,6 +50,9 @@ $monthly     = ($monthly_raw === '') ? null : (float)str_replace(',', '', $month
 
 if ($package_id <= 0) {
     sep_json(['success' => false, 'error' => 'Invalid package.']);
+}
+if (!$has_amount && !$has_monthly) {
+    sep_json(['success' => false, 'error' => 'Nothing to save.']);
 }
 if ($amount !== null && ($amount < 0 || $amount > 99999999)) {
     sep_json(['success' => false, 'error' => 'Invalid amount.']);
@@ -63,38 +70,73 @@ if (!$pkg) {
     sep_json(['success' => false, 'error' => 'Student account not found.']);
 }
 
-// An OCR auto-save must never overwrite a manually entered value.
-if ($source === 'ocr' && ($pkg['old_erp_payable_source'] ?? null) === 'manual') {
+// An OCR auto-save must never overwrite a manually entered payable value.
+// The Monthly Payment (if sent) is still saved in that case.
+$payable_skipped = ($has_amount
+    && $source === 'ocr'
+    && ($pkg['old_erp_payable_source'] ?? null) === 'manual');
+
+$old_value   = $pkg['old_erp_payable_amount'] ?? null;
+$old_monthly = $pkg['old_erp_monthly_amount'] ?? null;
+
+$sets = [];
+$vals = [];
+if ($has_amount && !$payable_skipped) {
+    $sets[] = 'old_erp_payable_amount = ?';
+    $vals[] = $amount;
+    $sets[] = 'old_erp_payable_source = ?';
+    $vals[] = $amount === null ? null : $source;
+}
+if ($has_monthly) {
+    $sets[] = 'old_erp_monthly_amount = ?';
+    $vals[] = $monthly;
+}
+
+if (!empty($sets)) {
+    $sets[] = 'old_erp_checked_at = NOW()';
+    $vals[] = $package_id;
+    db()->prepare(
+        'UPDATE sfp_packages SET ' . implode(', ', $sets) . ' WHERE id = ?'
+    )->execute($vals);
+}
+
+if ($has_amount && !$payable_skipped) {
+    log_change(
+        'student-accounts', 'UPDATE', $package_id,
+        (string)($pkg['student_name'] ?? ('Package #' . $package_id)),
+        'old_erp_payable_amount',
+        $old_value === null ? null : (string)$old_value,
+        $amount === null ? null : (string)$amount,
+        'OLD ERP Payable Amount ' . ($amount === null
+            ? 'cleared'
+            : 'set to ' . number_format($amount, 2) . ' BDT (' . $source . ')')
+    );
+}
+if ($has_monthly) {
+    log_change(
+        'student-accounts', 'UPDATE', $package_id,
+        (string)($pkg['student_name'] ?? ('Package #' . $package_id)),
+        'old_erp_monthly_amount',
+        $old_monthly === null ? null : (string)$old_monthly,
+        $monthly === null ? null : (string)$monthly,
+        'OLD ERP Monthly Payment ' . ($monthly === null
+            ? 'cleared'
+            : 'set to ' . number_format($monthly, 2) . ' BDT (' . $source . ')')
+    );
+}
+
+if ($payable_skipped) {
     sep_json([
         'success' => true,
         'skipped' => true,
         'amount'  => (float)$pkg['old_erp_payable_amount'],
+        'monthly' => $has_monthly ? $monthly : $old_monthly,
     ]);
 }
 
-$old_value = $pkg['old_erp_payable_amount'] ?? null;
-
-db()->prepare(
-    'UPDATE sfp_packages
-        SET old_erp_payable_amount = ?,
-            old_erp_payable_source = ?,
-            old_erp_checked_at     = NOW()
-      WHERE id = ?'
-)->execute([
-    $amount,
-    $amount === null ? null : $source,
-    $package_id,
+sep_json([
+    'success' => true,
+    'amount'  => $has_amount ? $amount : $old_value,
+    'source'  => $source,
+    'monthly' => $has_monthly ? $monthly : $old_monthly,
 ]);
-
-log_change(
-    'student-accounts', 'UPDATE', $package_id,
-    (string)($pkg['student_name'] ?? ('Package #' . $package_id)),
-    'old_erp_payable_amount',
-    $old_value === null ? null : (string)$old_value,
-    $amount === null ? null : (string)$amount,
-    'OLD ERP Payable Amount ' . ($amount === null
-        ? 'cleared'
-        : 'set to ' . number_format($amount, 2) . ' BDT (' . $source . ')')
-);
-
-sep_json(['success' => true, 'amount' => $amount, 'source' => $source]);

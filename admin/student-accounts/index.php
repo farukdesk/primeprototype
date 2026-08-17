@@ -528,6 +528,35 @@ require_once __DIR__ . '/../includes/header.php';
                             </span>
                         </div>
                         <?php endif; ?>
+                        <?php
+                        // OLD ERP Monthly Payment cross-check (read by the Bulk ERP Check)
+                        $erp_monthly = (isset($pkg['old_erp_monthly_amount']) && $pkg['old_erp_monthly_amount'] !== null)
+                            ? (float)$pkg['old_erp_monthly_amount'] : null;
+                        $monthly_check = null;
+                        $expected_monthly = 0.0;
+                        if ($erp_monthly !== null) {
+                            $expected_monthly = sfp_expected_monthly_total(
+                                $pkg,
+                                (float)($pkg['current_tuition_payable'] ?? $pkg['tuition_per_semester'] ?? 0)
+                            );
+                            $monthly_check = sfp_old_erp_monthly_check($erp_monthly, $expected_monthly);
+                        }
+                        ?>
+                        <?php if ($monthly_check !== null && $monthly_check['matched']): ?>
+                        <div class="mt-1">
+                            <span class="badge bg-success bg-opacity-75"
+                                  title="OLD ERP Monthly Payment (<?= number_format($erp_monthly, 2) ?> BDT) matches the expected monthly total (<?= number_format($expected_monthly, 2) ?> BDT) within ±<?= number_format(SFP_OLD_ERP_MONTHLY_TOLERANCE, 0) ?> BDT.">
+                                <i class="fas fa-calendar-check me-1"></i>Monthly ✓
+                            </span>
+                        </div>
+                        <?php elseif ($monthly_check !== null): ?>
+                        <div class="mt-1">
+                            <span class="badge bg-danger"
+                                  title="OLD ERP Monthly Payment (<?= number_format($erp_monthly, 2) ?> BDT) differs from the expected monthly total (<?= number_format($expected_monthly, 2) ?> BDT) by <?= number_format(abs($monthly_check['diff']), 2) ?> BDT (tolerance ±<?= number_format(SFP_OLD_ERP_MONTHLY_TOLERANCE, 0) ?> BDT). Open the account to review.">
+                                <i class="fas fa-calendar-xmark me-1"></i>Monthly mismatch (Δ <?= number_format(abs($monthly_check['diff']), 0) ?>)
+                            </span>
+                        </div>
+                        <?php endif; ?>
                     </td>
                     <td>
                         <?= h($pkg['program_name']) ?>
