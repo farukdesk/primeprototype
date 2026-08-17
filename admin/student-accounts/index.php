@@ -401,6 +401,22 @@ require_once __DIR__ . '/../includes/header.php';
                     <input type="number" name="bulk_fixed_institutional_fees" class="form-control form-control-sm"
                            min="0" step="0.01" placeholder="&mdash;">
                 </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold small mb-1"
+                           title="Total English Course Fee for the whole programme. The monthly English fee is re-derived from Total Months.">
+                        English Fee (Total)
+                    </label>
+                    <input type="number" name="bulk_english_course_fee" class="form-control form-control-sm"
+                           min="0" step="0.01" placeholder="&mdash;">
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold small mb-1"
+                           title="English fee per semester. The programme total is derived as per-semester × Total Months ÷ Months per Semester.">
+                        English Fee / Semester
+                    </label>
+                    <input type="number" name="bulk_english_per_semester" class="form-control form-control-sm"
+                           min="0" step="0.01" placeholder="&mdash;">
+                </div>
                 <div class="col-6 col-md-1">
                     <label class="form-label fw-semibold small mb-1">Project Fee</label>
                     <input type="number" name="bulk_project_fee" class="form-control form-control-sm"
@@ -801,6 +817,7 @@ require_once __DIR__ . '/../includes/header.php';
                       'bulk_total_semesters',
                       'bulk_tuition_per_semester', 'bulk_monthly_fixed',
                       'bulk_fixed_institutional_fees', 'bulk_project_fee',
+                      'bulk_english_course_fee', 'bulk_english_per_semester',
                       'bulk_target_monthly_total',
                       'bulk_payment_type', 'bulk_monthly_payment',
                       'bulk_bi_start_month', 'bulk_tri_start_month',

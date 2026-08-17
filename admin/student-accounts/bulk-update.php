@@ -99,6 +99,8 @@ $tuition_raw   = trim((string)($_POST['bulk_tuition_per_semester'] ?? ''));
 $monthly_raw   = trim((string)($_POST['bulk_monthly_fixed']        ?? ''));
 $project_raw   = trim((string)($_POST['bulk_project_fee']          ?? ''));
 $fixed_total_raw = trim((string)($_POST['bulk_fixed_institutional_fees'] ?? ''));
+$english_total_raw   = trim((string)($_POST['bulk_english_course_fee']   ?? ''));
+$english_per_sem_raw = trim((string)($_POST['bulk_english_per_semester'] ?? ''));
 $target_monthly_raw = trim((string)($_POST['bulk_target_monthly_total'] ?? ''));
 
 $payment_type       = trim((string)($_POST['bulk_payment_type'] ?? ''));    // '' = no change
@@ -115,6 +117,8 @@ $tuition         = $tuition_raw   !== '' ? round((float)$tuition_raw, 2) : null;
 $monthly_fixed   = $monthly_raw   !== '' ? round((float)$monthly_raw, 2) : null;
 $project_fee     = $project_raw   !== '' ? round((float)$project_raw, 2) : null;
 $fixed_total     = $fixed_total_raw !== '' ? round((float)$fixed_total_raw, 2) : null;
+$english_total   = $english_total_raw   !== '' ? round((float)$english_total_raw, 2)   : null;
+$english_per_sem = $english_per_sem_raw !== '' ? round((float)$english_per_sem_raw, 2) : null;
 $target_monthly  = $target_monthly_raw !== '' ? round((float)$target_monthly_raw, 2) : null;
 $monthly_payment = $monthly_payment_raw !== '' ? round((float)$monthly_payment_raw, 2) : null;
 $total_months    = $total_months_raw !== '' ? (int)$total_months_raw            : null;
@@ -130,6 +134,7 @@ if (empty($ids)) {
 if ($cf_program_id <= 0 && $student_program_id <= 0 && $dept_id <= 0 && $total_semesters === null
     && $tuition === null && $monthly_fixed === null && $project_fee === null
     && $fixed_total === null
+    && $english_total === null && $english_per_sem === null
     && $payment_type === '' && $monthly_payment === null
     && $bi_start_month <= 0 && $tri_start_month <= 0
     && $total_months === null && $mps === null && $std_tuition === null && $reg_fee === null
@@ -162,6 +167,11 @@ if ($monthly_fixed !== null && $monthly_fixed < 0)      $errors[] = 'Monthly fix
 if ($fixed_total   !== null && $fixed_total   < 0)      $errors[] = 'Fixed institutional fees cannot be negative.';
 if ($fixed_total !== null && $monthly_fixed !== null) {
     $errors[] = 'Set either Monthly Fixed or Fixed Institutional Fees (total), not both.';
+}
+if ($english_total   !== null && $english_total   < 0) $errors[] = 'English course fee cannot be negative.';
+if ($english_per_sem !== null && $english_per_sem < 0) $errors[] = 'English fee per semester cannot be negative.';
+if ($english_total !== null && $english_per_sem !== null) {
+    $errors[] = 'Set either English Fee (Total) or English Fee / Semester, not both.';
 }
 if ($project_fee   !== null && $project_fee   < 0)      $errors[] = 'Project fee cannot be negative.';
 
@@ -257,8 +267,10 @@ if (empty($errors)) {
                     $set[]    = 'monthly_fixed_fee = ?';
                     $params[] = $total_months > 0 ? round((float)$pkg['fixed_institutional_fees'] / $total_months, 4) : 0;
                 }
-                $set[]    = 'monthly_english_fee = ?';
-                $params[] = $total_months > 0 ? round((float)$pkg['english_course_fee'] / $total_months, 4) : 0;
+                if ($english_total === null && $english_per_sem === null) {
+                    $set[]    = 'monthly_english_fee = ?';
+                    $params[] = $total_months > 0 ? round((float)$pkg['english_course_fee'] / $total_months, 4) : 0;
+                }
             }
 
             // Months per semester: explicit value wins, otherwise re-derive when inputs changed
@@ -291,6 +303,31 @@ if (empty($errors)) {
                 $set[]     = 'monthly_fixed_fee = ?';
                 $params[]  = $new_months > 0 ? round($fixed_total / $new_months, 4) : 0;
                 $changes[] = 'fixed institutional fees -> ' . number_format($fixed_total, 2);
+            }
+
+            // English Course Fee: explicit programme total, or derived from a
+            // per-semester figure. The per-semester portion is
+            //   total / total_months * months_per_semester
+            // so the total is per_sem * total_months / months_per_semester.
+            $new_mps = $mps ?? (($total_semesters !== null || $total_months !== null)
+                ? ($new_sems > 0 ? round($new_months / $new_sems, 2) : 0.0)
+                : (float)$pkg['months_per_semester']);
+
+            $english_total_val = $english_total;
+            if ($english_per_sem !== null) {
+                $english_total_val = $new_mps > 0
+                    ? round($english_per_sem * $new_months / $new_mps, 2)
+                    : round($english_per_sem * $new_sems, 2);
+            }
+            if ($english_total_val !== null) {
+                $set[]     = 'english_course_fee = ?';
+                $params[]  = $english_total_val;
+                $set[]     = 'monthly_english_fee = ?';
+                $params[]  = $new_months > 0 ? round($english_total_val / $new_months, 4) : 0;
+                $changes[] = ($english_per_sem !== null
+                    ? 'english fee/semester -> ' . number_format($english_per_sem, 2)
+                        . ' (total ' . number_format($english_total_val, 2) . ')'
+                    : 'english course fee -> ' . number_format($english_total_val, 2));
             }
 
             if ($project_fee !== null) {
@@ -517,6 +554,7 @@ if (empty($errors)) {
 
             // Recalculate scholarship cascades / payables when fee inputs changed
             if ($tuition !== null || $monthly_fixed !== null || $fixed_total !== null
+                || $english_total !== null || $english_per_sem !== null
                 || $total_semesters !== null
                 || $total_months !== null || $mps !== null) {
                 $sf_stmt = $db->prepare('SELECT id FROM sfp_semester_fees WHERE package_id = ?');
