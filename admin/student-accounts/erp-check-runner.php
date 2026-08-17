@@ -66,6 +66,40 @@ if (($_GET['action'] ?? '') === 'list') {
     $exclude = array_filter(array_map('intval', explode(',', (string)($_GET['exclude'] ?? ''))));
     $exclude_sql = $exclude ? ' AND p.id NOT IN (' . implode(',', $exclude) . ')' : '';
 
+    // mode=unchecked (default): only accounts without a stored Payable Amount.
+    // mode=recheck: every account with a proof image – previous OCR values are
+    //               re-read and overwritten (manual entries are excluded; the
+    //               save endpoint protects them as well).
+    // sid=<student id>: check / re-check one student regardless of state.
+    // after_id: pagination cursor (p.id) so recheck runs cannot loop forever.
+    $mode     = (($_GET['mode'] ?? '') === 'recheck') ? 'recheck' : 'unchecked';
+    $sid      = trim((string)($_GET['sid'] ?? ''));
+    $after_id = (int)($_GET['after_id'] ?? 0);
+
+    $proof_exists =
+        "EXISTS (SELECT 1 FROM student_files stf
+                  WHERE stf.student_id = p.student_id
+                    AND stf.file_name  = '" . SFP_OLD_ERP_PROOF_LABEL . "'
+                    AND stf.mime_type LIKE 'image/%')";
+
+    $queue_params = [];
+    if ($sid !== '') {
+        $queue_where    = "$proof_exists AND s.student_id = ?";
+        $queue_params[] = $sid;
+    } elseif ($mode === 'recheck') {
+        $queue_where =
+            "$proof_exists
+             AND (p.old_erp_payable_source IS NULL OR p.old_erp_payable_source <> 'manual')";
+    } else {
+        $queue_where = $unchecked_where;
+    }
+
+    // Single-ID lookups ignore the Department / Program / Batch filters
+    // (the department scope restriction still applies).
+    $use_filter_sql    = ($sid === '') ? $filter_sql : '';
+    $use_filter_params = ($sid === '') ? $filter_params : [];
+    $cursor_sql        = ' AND p.id > ?';
+
     $db = db();
 
     $cnt_stmt = $db->prepare(
