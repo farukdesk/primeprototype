@@ -212,6 +212,81 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
+<!-- ── Filters ── -->
+<div class="card mb-4">
+    <div class="card-body py-3">
+        <form method="get" class="row g-2 align-items-end">
+            <div class="col-6 col-md-3">
+                <label class="form-label fw-semibold small mb-1">Department</label>
+                <select name="dept" id="filter_dept" class="form-select form-select-sm">
+                    <option value="">All Depts</option>
+                    <?php foreach ($departments as $d): ?>
+                    <option value="<?= $d['id'] ?>" <?= $f_dept == $d['id'] ? 'selected' : '' ?>>
+                        <?= h($d['name']) ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label fw-semibold small mb-1">Program</label>
+                <select name="program" id="filter_program" class="form-select form-select-sm">
+                    <option value="">All Programs</option>
+                    <?php foreach ($all_programs as $p): ?>
+                    <option value="<?= $p['id'] ?>"
+                            data-dept="<?= $p['dept_id'] ?>"
+                            <?= $f_program == $p['id'] ? 'selected' : '' ?>>
+                        <?= h($p['program_name']) ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label fw-semibold small mb-1">Batch</label>
+                <select name="batch" class="form-select form-select-sm">
+                    <option value="">All Batches</option>
+                    <?php foreach ($batches as $b): ?>
+                    <option value="<?= $b['id'] ?>" <?= $f_batch == $b['id'] ? 'selected' : '' ?>>
+                        <?= h($b['name']) ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-6 col-md-3 d-flex gap-2">
+                <button class="btn btn-primary btn-sm flex-fill" type="submit">
+                    <i class="fas fa-filter me-1"></i>Apply Filter
+                </button>
+                <?php if ($f_dept || $f_program || $f_batch): ?>
+                <a href="<?= APP_URL ?>/student-accounts/erp-check-runner.php" class="btn btn-outline-secondary btn-sm flex-fill">Clear</a>
+                <?php endif; ?>
+            </div>
+        </form>
+        <?php if ($f_dept || $f_program || $f_batch): ?>
+        <div class="small text-muted mt-2">
+            <i class="fas fa-filter me-1"></i>Filter active – only the <?= number_format($unchecked_total) ?> matching unchecked account(s) will be processed.
+        </div>
+        <?php endif; ?>
+    </div>
+</div>
+
+<script>
+(function () {
+    var deptSel    = document.getElementById('filter_dept');
+    var programSel = document.getElementById('filter_program');
+    if (!deptSel || !programSel) return;
+    function filterPrograms() {
+        var deptId = deptSel.value;
+        programSel.querySelectorAll('option[data-dept]').forEach(function (opt) {
+            var show = !deptId || opt.dataset.dept === deptId;
+            opt.hidden   = !show;
+            opt.disabled = !show;
+            if (!show && opt.selected) programSel.value = '';
+        });
+    }
+    deptSel.addEventListener('change', filterPrograms);
+    filterPrograms();
+}());
+</script>
+
 <div class="card mb-4">
     <div class="card-body d-flex align-items-center gap-3 flex-wrap">
         <button type="button" class="btn btn-success" id="run-btn">
