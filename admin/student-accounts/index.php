@@ -71,23 +71,37 @@ if ($dept_scope !== null) {
 
 $where_sql = implode(' AND ', $where);
 
+// ── OLD ERP cross-check for a list row (shared by status filter + rendering) ──
+$sfp_index_erp_check = static function (array $pkg): ?array {
+    if (!isset($pkg['old_erp_payable_amount']) || $pkg['old_erp_payable_amount'] === null) {
+        return null;
+    }
+    $months   = (float)($pkg['total_months'] ?? 0);
+    $mps      = (float)($pkg['months_per_semester'] ?? 0);
+    $fixed_ps = ($months > 0 && $mps > 0)
+        ? round((float)$pkg['fixed_institutional_fees'] * $mps / $months, 2) : 0.0;
+    $eng_ps   = ($months > 0 && $mps > 0)
+        ? round((float)$pkg['english_course_fee'] * $mps / $months, 2) : 0.0;
+    $sem_cnt  = (int)($pkg['erp_sem_count'] ?? 0);
+    $proj_fee = acc_package_project_fee($pkg);
+    $form_id  = acc_package_form_id_fee($pkg);
+    $grand = (float)($pkg['erp_sum_tuition'] ?? 0)
+           + max(0.0, $fixed_ps * $sem_cnt - (float)($pkg['erp_sum_fixed_disc'] ?? 0))
+           + max(0.0, $eng_ps   * $sem_cnt - (float)($pkg['erp_sum_eng_disc']   ?? 0))
+           + (float)($pkg['reg_fee_per_semester'] ?? 0) * $sem_cnt
+           + (float)($pkg['admission_fees'] ?? 0)
+           + $form_id
+           + $proj_fee
+           + (float)($pkg['bi_tri_shift_fee'] ?? 0);
+    // OLD ERP payable excludes Form, ID Card and Project fees
+    return sfp_old_erp_check((float)$pkg['old_erp_payable_amount'], $grand, $proj_fee, $form_id);
+};
+
 // ── Pagination ────────────────────────────────────────────────────────────────
 $per_page = 25;
 $page     = max(1, (int)($_GET['page'] ?? 1));
 
-$cnt_stmt = $db->prepare(
-    "SELECT COUNT(*)
-     FROM sfp_packages p
-     JOIN students s ON s.id = p.student_id
-     WHERE $where_sql"
-);
-$cnt_stmt->execute($params);
-$total = (int)$cnt_stmt->fetchColumn();
-$pages = max(1, (int)ceil($total / $per_page));
-$page  = min($page, $pages);
-$off   = ($page - 1) * $per_page;
-
-$stmt = $db->prepare(
+$list_select =
     "SELECT p.*,
             s.full_name    AS student_name,
             s.student_id   AS student_sid,
@@ -119,11 +133,46 @@ $stmt = $db->prepare(
              ON sf1.package_id = p.id
             AND sf1.semester_number = 1
       WHERE $where_sql
-      ORDER BY p.created_at DESC
-      LIMIT $per_page OFFSET $off"
-);
-$stmt->execute($params);
-$packages = $stmt->fetchAll();
+      ORDER BY p.created_at DESC";
+
+if ($f_erp === 'mismatch' || $f_erp === 'match') {
+    // Match / mismatch is computed from live fee math, so load all checked
+    // candidate rows (SQL already restricts to old_erp_payable_amount IS NOT
+    // NULL), evaluate each one and paginate in PHP.
+    $stmt = $db->prepare($list_select);
+    $stmt->execute($params);
+    $filtered = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $chk = $sfp_index_erp_check($row);
+        if ($chk === null) {
+            continue;
+        }
+        if (($f_erp === 'mismatch' && !$chk['matched'])
+            || ($f_erp === 'match' && $chk['matched'])) {
+            $filtered[] = $row;
+        }
+    }
+    $total    = count($filtered);
+    $pages    = max(1, (int)ceil($total / $per_page));
+    $page     = min($page, $pages);
+    $packages = array_slice($filtered, ($page - 1) * $per_page, $per_page);
+} else {
+    $cnt_stmt = $db->prepare(
+        "SELECT COUNT(*)
+         FROM sfp_packages p
+         JOIN students s ON s.id = p.student_id
+         WHERE $where_sql"
+    );
+    $cnt_stmt->execute($params);
+    $total = (int)$cnt_stmt->fetchColumn();
+    $pages = max(1, (int)ceil($total / $per_page));
+    $page  = min($page, $pages);
+    $off   = ($page - 1) * $per_page;
+
+    $stmt = $db->prepare($list_select . " LIMIT $per_page OFFSET $off");
+    $stmt->execute($params);
+    $packages = $stmt->fetchAll();
+}
 
 // ── Filter dropdown data ──────────────────────────────────────────────────────
 $departments = $db->query(
