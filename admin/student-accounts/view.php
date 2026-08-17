@@ -830,6 +830,7 @@ require_once __DIR__ . '/../includes/header.php';
         packageId:     <?= (int)$id ?>,
         grandTotal:    <?= json_encode(round($total_cost, 2)) ?>,
         projectFee:    <?= json_encode(round($project_fee_one_time, 2)) ?>,
+        formIdFee:     <?= json_encode(round($form_id_fee, 2)) ?>,
         tolerance:     <?= json_encode((float)SFP_OLD_ERP_TOLERANCE) ?>,
         stdProjectFee: <?= json_encode((float)SFP_OLD_ERP_STANDARD_PROJECT_FEE) ?>,
         stored:        <?= json_encode($old_erp_payable) ?>,
