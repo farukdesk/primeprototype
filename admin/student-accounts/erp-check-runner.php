@@ -508,7 +508,10 @@ require_once __DIR__ . '/../includes/header.php';
     }
 
     function fetchBatch(cb) {
-        var url = CFG.listUrl + '&exclude=' + encodeURIComponent(failedIds.join(','));
+        var url = CFG.listUrl
+            + '&mode=' + currentMode()
+            + '&after_id=' + afterId
+            + '&exclude=' + encodeURIComponent(failedIds.join(','));
         fetch(url)
             .then(function (r) { return r.json(); })
             .then(function (resp) {
