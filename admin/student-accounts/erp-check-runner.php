@@ -599,25 +599,70 @@ require_once __DIR__ . '/../includes/header.php';
         document.head.appendChild(s);
     }
 
-    $id('run-btn').addEventListener('click', function () {
-        if (running) return;
-        running = true;
-        $id('run-btn').disabled = true;
-        $id('stop-btn').disabled = false;
-        setStatus('Starting OCR engine…');
+    function ensureWorker(cb) {
         loadTesseract(function () {
-            if (worker) { processNext(); return; }
+            if (worker) { cb(); return; }
             window.Tesseract.createWorker('eng').then(function (w) {
                 worker = w;
-                processNext();
+                cb();
             }).catch(function (e) {
                 running = false;
+                singleMode = false;
                 $id('run-btn').disabled = false;
                 $id('stop-btn').disabled = true;
                 setStatus('Could not start the OCR engine: ' + e);
             });
         });
+    }
+
+    $id('run-btn').addEventListener('click', function () {
+        if (running) return;
+        running = true;
+        singleMode = false;
+        afterId = 0;   // fresh run: start from the beginning of the queue
+        queue = [];
+        $id('run-btn').disabled = true;
+        $id('stop-btn').disabled = false;
+        setStatus('Starting OCR engine…');
+        ensureWorker(processNext);
     });
+
+    // ── Check / re-check a single student ID ──
+    var oneBtn = $id('check-one-btn');
+    if (oneBtn) {
+        oneBtn.addEventListener('click', function () {
+            if (running) return;
+            var sid = ($id('check-one-sid').value || '').trim();
+            if (sid === '') { setStatus('Enter a student ID first.'); return; }
+            running = true;
+            singleMode = true;
+            $id('run-btn').disabled = true;
+            $id('stop-btn').disabled = false;
+            setStatus('Looking up ' + sid + '…');
+            fetch(CFG.listUrl + '&sid=' + encodeURIComponent(sid))
+                .then(function (r) { return r.json(); })
+                .then(function (resp) {
+                    var items = (resp && resp.items) || [];
+                    if (items.length === 0) {
+                        running = false;
+                        singleMode = false;
+                        $id('run-btn').disabled = false;
+                        $id('stop-btn').disabled = true;
+                        setStatus('No account with an OLD ERP proof image found for ID "' + sid + '".');
+                        return;
+                    }
+                    queue = items;
+                    ensureWorker(processNext);
+                })
+                .catch(function (e) {
+                    running = false;
+                    singleMode = false;
+                    $id('run-btn').disabled = false;
+                    $id('stop-btn').disabled = true;
+                    setStatus('Lookup failed: ' + e);
+                });
+        });
+    }
 
     $id('stop-btn').addEventListener('click', function () {
         running = false;
