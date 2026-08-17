@@ -204,11 +204,12 @@ $total_cost = $total_tuition_payable + $total_fixed_all + $total_english_all + $
 $old_erp_payable = (isset($pkg['old_erp_payable_amount']) && $pkg['old_erp_payable_amount'] !== null)
     ? (float)$pkg['old_erp_payable_amount']
     : null;
-$old_erp_check = sfp_old_erp_check($old_erp_payable, $total_cost, $project_fee_one_time);
+// OLD ERP payable excludes the one-time Form, ID Card and Project fees
+$old_erp_check = sfp_old_erp_check($old_erp_payable, $total_cost, $project_fee_one_time, $form_id_fee);
 $erp_basis_labels = [
-    'grand_total'         => 'Grand Total',
-    'grand_minus_project' => 'Grand Total − Project Fee (one-time)',
-    'grand_minus_1000'    => 'Grand Total − 1,000 BDT (project fee cross-check)',
+    'base_minus_project' => 'Grand Total − Form & ID Card − Project Fee',
+    'base_minus_1000'    => 'Grand Total − Form & ID Card − 1,000 BDT (project fee cross-check)',
+    'base'               => 'Grand Total − Form & ID Card fees',
 ];
 // Newest image proof to feed the client-side OCR auto-check
 $erp_ocr_proof_url = null;
