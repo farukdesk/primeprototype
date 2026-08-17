@@ -98,11 +98,11 @@ if (($_GET['action'] ?? '') === 'list') {
                   LIMIT 1) AS proof_stored_name
            FROM sfp_packages p
            JOIN students s ON s.id = p.student_id
-          WHERE $unchecked_where $scope_sql $exclude_sql
+          WHERE $unchecked_where $scope_sql $filter_sql $exclude_sql
           ORDER BY p.id ASC
           LIMIT 25"
     );
-    $stmt->execute($scope_params);
+    $stmt->execute(array_merge($scope_params, $filter_params));
 
     $items = [];
     foreach ($stmt->fetchAll() as $pkg) {
