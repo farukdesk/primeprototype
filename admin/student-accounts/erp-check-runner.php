@@ -329,6 +329,21 @@ require_once __DIR__ . '/../includes/header.php';
         <button type="button" class="btn btn-outline-danger" id="stop-btn" disabled>
             <i class="fas fa-stop me-1"></i>Stop
         </button>
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="recheck-toggle">
+            <label class="form-check-label small" for="recheck-toggle">
+                <strong>Re-check</strong> already checked accounts
+                <span class="text-muted d-block" style="font-size:.75rem;">OCR values are re-read and overwritten; manual entries are kept.</span>
+            </label>
+        </div>
+        <div class="input-group input-group-sm" style="max-width:340px;">
+            <input type="text" class="form-control" id="check-one-sid"
+                   placeholder="Student ID (e.g. 02826105101071)">
+            <button type="button" class="btn btn-outline-primary" id="check-one-btn"
+                    title="Run the OCR check for this one student now, even if it was checked before.">
+                <i class="fas fa-rotate me-1"></i>Check / Re-check ID
+            </button>
+        </div>
         <div class="flex-grow-1" style="min-width:240px;">
             <div class="progress" style="height:22px;">
                 <div id="progress-bar" class="progress-bar progress-bar-striped bg-success" role="progressbar" style="width:0%">0%</div>
