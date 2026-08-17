@@ -86,7 +86,18 @@ $stmt = $db->prepare(
                FROM sfp_payments sp
                JOIN acc_vouchers v ON v.id = sp.voucher_id
               WHERE sp.package_id = p.id
-                AND v.is_deleted = 0) AS payment_count
+                AND v.is_deleted = 0) AS payment_count,
+            (SELECT COALESCE(SUM(sf.tuition_payable), 0)
+               FROM sfp_semester_fees sf WHERE sf.package_id = p.id) AS erp_sum_tuition,
+            (SELECT COALESCE(SUM(sf.fixed_discount_amount), 0)
+               FROM sfp_semester_fees sf WHERE sf.package_id = p.id) AS erp_sum_fixed_disc,
+            (SELECT COALESCE(SUM(sf.english_discount_amount), 0)
+               FROM sfp_semester_fees sf WHERE sf.package_id = p.id) AS erp_sum_eng_disc,
+            (SELECT COUNT(*)
+               FROM sfp_semester_fees sf WHERE sf.package_id = p.id) AS erp_sem_count,
+            EXISTS(SELECT 1 FROM student_files stf
+                    WHERE stf.student_id = s.id
+                      AND stf.file_name = 'OLD ERP Proof') AS has_erp_proof
      FROM sfp_packages p
       JOIN students s ON s.id = p.student_id
       LEFT JOIN sfp_semester_fees sf1
