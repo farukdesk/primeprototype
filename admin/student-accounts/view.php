@@ -887,11 +887,12 @@ require_once __DIR__ . '/../includes/header.php';
         }
     }
 
-    function save(amount, source, cb) {
+    function save(amount, source, monthly, cb) {
         var fd = new FormData();
         fd.append(CFG.csrfField, CFG.csrfToken);
         fd.append('package_id', CFG.packageId);
         fd.append('amount', amount);
+        if (monthly !== null && monthly !== undefined) fd.append('monthly', monthly);
         fd.append('source', source);
         fetch(CFG.saveUrl, { method: 'POST', body: fd })
             .then(function (r) { return r.json(); })
@@ -899,10 +900,29 @@ require_once __DIR__ . '/../includes/header.php';
             .catch(function (e) { cb(false, { error: String(e) }); });
     }
 
-    // Find the number on the "Payable Amount" line of the OCR text. Some OLD
-    // ERP screenshots label the amount "Monthly Payment" (monthly fees) instead
-    // of "Payable Amount" – both labels are accepted, in priority order.
-    var PAYABLE_LABELS = [/pay\s*able\s*amount/i, /pay\s*able/i, /monthly\s*pay\s*ment/i];
+    // Monthly-only screenshots: store the Monthly Payment without touching
+    // the (absent) Payable Amount.
+    function saveMonthlyOnly(monthly) {
+        var fd = new FormData();
+        fd.append(CFG.csrfField, CFG.csrfToken);
+        fd.append('package_id', CFG.packageId);
+        fd.append('monthly', monthly);
+        fd.append('source', 'ocr');
+        fetch(CFG.saveUrl, { method: 'POST', body: fd })
+            .then(function (r) { return r.json(); })
+            .then(function (resp) {
+                setStatus(resp.success
+                    ? 'No "Payable Amount" found, but the Monthly Payment (' + fmt(monthly) + ') was read and saved.'
+                    : 'Monthly Payment read but saving failed.', !resp.success);
+            })
+            .catch(function () { setStatus('Monthly Payment read but saving failed.', true); });
+    }
+
+    // Find the number on the "Payable Amount" line of the OCR text.
+    var PAYABLE_LABELS = [/pay\s*able\s*amount/i, /pay\s*able/i];
+    // "Monthly Payment" is read separately and stored as the OLD ERP monthly
+    // amount (cross-checked on the Student Accounts list).
+    var MONTHLY_LABELS = [/monthly\s*pay\s*ment/i, /monthly\s*fees?/i];
 
     // Read the first number AFTER the label on the line, so other columns the
     // OCR merges into the same line (Total / Paid / Due amounts) are ignored
@@ -932,8 +952,19 @@ require_once __DIR__ . '/../includes/header.php';
                 if (val !== null) return val;
             }
         }
-        var m = String(text).match(/(?:pay\s*able|monthly\s*pay\s*ment)[^0-9\-]*(-?[\d,]+(?:\.\d+)?)/i);
+        var m = String(text).match(/pay\s*able[^0-9\-]*(-?[\d,]+(?:\.\d+)?)/i);
         return m ? parseFloat(m[1].replace(/,/g, '')) : null;
+    }
+
+    function parseMonthly(text) {
+        var lines = String(text).split(/\n/);
+        for (var l = 0; l < MONTHLY_LABELS.length; l++) {
+            for (var i = 0; i < lines.length; i++) {
+                var val = amountAfterLabel(lines[i], MONTHLY_LABELS[l]);
+                if (val !== null) return val;
+            }
+        }
+        return null;
     }
 
     function loadTesseract(cb) {
@@ -956,12 +987,18 @@ require_once __DIR__ . '/../includes/header.php';
                     }
                 }
             }).then(function (res) {
-                var val = parsePayable((res && res.data && res.data.text) || '');
+                var text = (res && res.data && res.data.text) || '';
+                var val  = parsePayable(text);
+                var mval = parseMonthly(text);
                 if (val === null) {
+                    if (mval !== null) {
+                        saveMonthlyOnly(mval);
+                        return;
+                    }
                     setStatus('Could not find a "Payable Amount" value in the proof image. Enter it manually below.', true);
                     return;
                 }
-                save(val, 'ocr', function (ok, resp) {
+                save(val, 'ocr', mval, function (ok, resp) {
                     if (!ok) {
                         setStatus('OCR read ' + fmt(val) + ' but saving failed: ' + (resp.error || 'unknown error'), true);
                         applyResult(val, 'Read automatically (OCR) · not saved');
@@ -989,7 +1026,7 @@ require_once __DIR__ . '/../includes/header.php';
             var input = $id('erp-manual-amount');
             var v = parseFloat(input.value);
             if (isNaN(v) || v < 0) { setStatus('Enter a valid payable amount first.', true); return; }
-            save(v, 'manual', function (ok, resp) {
+            save(v, 'manual', null, function (ok, resp) {
                 if (!ok) { setStatus('Saving failed: ' + (resp.error || 'unknown error'), true); return; }
                 setStatus('Manual payable amount saved.');
                 applyResult(v, 'Entered manually · just now');
