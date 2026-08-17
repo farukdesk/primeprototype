@@ -66,15 +66,49 @@ if (($_GET['action'] ?? '') === 'list') {
     $exclude = array_filter(array_map('intval', explode(',', (string)($_GET['exclude'] ?? ''))));
     $exclude_sql = $exclude ? ' AND p.id NOT IN (' . implode(',', $exclude) . ')' : '';
 
+    // mode=unchecked (default): only accounts without a stored Payable Amount.
+    // mode=recheck: every account with a proof image – previous OCR values are
+    //               re-read and overwritten (manual entries are excluded; the
+    //               save endpoint protects them as well).
+    // sid=<student id>: check / re-check one student regardless of state.
+    // after_id: pagination cursor (p.id) so recheck runs cannot loop forever.
+    $mode     = (($_GET['mode'] ?? '') === 'recheck') ? 'recheck' : 'unchecked';
+    $sid      = trim((string)($_GET['sid'] ?? ''));
+    $after_id = (int)($_GET['after_id'] ?? 0);
+
+    $proof_exists =
+        "EXISTS (SELECT 1 FROM student_files stf
+                  WHERE stf.student_id = p.student_id
+                    AND stf.file_name  = '" . SFP_OLD_ERP_PROOF_LABEL . "'
+                    AND stf.mime_type LIKE 'image/%')";
+
+    $queue_params = [];
+    if ($sid !== '') {
+        $queue_where    = "$proof_exists AND s.student_id = ?";
+        $queue_params[] = $sid;
+    } elseif ($mode === 'recheck') {
+        $queue_where =
+            "$proof_exists
+             AND (p.old_erp_payable_source IS NULL OR p.old_erp_payable_source <> 'manual')";
+    } else {
+        $queue_where = $unchecked_where;
+    }
+
+    // Single-ID lookups ignore the Department / Program / Batch filters
+    // (the department scope restriction still applies).
+    $use_filter_sql    = ($sid === '') ? $filter_sql : '';
+    $use_filter_params = ($sid === '') ? $filter_params : [];
+    $cursor_sql        = ' AND p.id > ?';
+
     $db = db();
 
     $cnt_stmt = $db->prepare(
         "SELECT COUNT(*)
            FROM sfp_packages p
            JOIN students s ON s.id = p.student_id
-          WHERE $unchecked_where $scope_sql $filter_sql $exclude_sql"
+          WHERE $queue_where $scope_sql $use_filter_sql $cursor_sql $exclude_sql"
     );
-    $cnt_stmt->execute(array_merge($scope_params, $filter_params));
+    $cnt_stmt->execute(array_merge($queue_params, $scope_params, $use_filter_params, [$after_id]));
     $remaining = (int)$cnt_stmt->fetchColumn();
 
     $stmt = $db->prepare(
@@ -98,11 +132,11 @@ if (($_GET['action'] ?? '') === 'list') {
                   LIMIT 1) AS proof_stored_name
            FROM sfp_packages p
            JOIN students s ON s.id = p.student_id
-          WHERE $unchecked_where $scope_sql $filter_sql $exclude_sql
+          WHERE $queue_where $scope_sql $use_filter_sql $cursor_sql $exclude_sql
           ORDER BY p.id ASC
           LIMIT 25"
     );
-    $stmt->execute(array_merge($scope_params, $filter_params));
+    $stmt->execute(array_merge($queue_params, $scope_params, $use_filter_params, [$after_id]));
 
     $items = [];
     foreach ($stmt->fetchAll() as $pkg) {
@@ -295,6 +329,21 @@ require_once __DIR__ . '/../includes/header.php';
         <button type="button" class="btn btn-outline-danger" id="stop-btn" disabled>
             <i class="fas fa-stop me-1"></i>Stop
         </button>
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="recheck-toggle">
+            <label class="form-check-label small" for="recheck-toggle">
+                <strong>Re-check</strong> already checked accounts
+                <span class="text-muted d-block" style="font-size:.75rem;">OCR values are re-read and overwritten; manual entries are kept.</span>
+            </label>
+        </div>
+        <div class="input-group input-group-sm" style="max-width:340px;">
+            <input type="text" class="form-control" id="check-one-sid"
+                   placeholder="Student ID (e.g. 02826105101071)">
+            <button type="button" class="btn btn-outline-primary" id="check-one-btn"
+                    title="Run the OCR check for this one student now, even if it was checked before.">
+                <i class="fas fa-rotate me-1"></i>Check / Re-check ID
+            </button>
+        </div>
         <div class="flex-grow-1" style="min-width:240px;">
             <div class="progress" style="height:22px;">
                 <div id="progress-bar" class="progress-bar progress-bar-striped bg-success" role="progressbar" style="width:0%">0%</div>
@@ -356,6 +405,12 @@ require_once __DIR__ . '/../includes/header.php';
 
     var running = false, worker = null, queue = [], failedIds = [];
     var nMatch = 0, nMismatch = 0, nFailed = 0, nDone = 0;
+    var afterId = 0, singleMode = false;
+
+    function currentMode() {
+        var t = document.getElementById('recheck-toggle');
+        return (t && t.checked) ? 'recheck' : 'unchecked';
+    }
 
     function $id(i) { return document.getElementById(i); }
     function setStatus(t) { $id('status-line').textContent = t; }
@@ -453,7 +508,10 @@ require_once __DIR__ . '/../includes/header.php';
     }
 
     function fetchBatch(cb) {
-        var url = CFG.listUrl + '&exclude=' + encodeURIComponent(failedIds.join(','));
+        var url = CFG.listUrl
+            + '&mode=' + currentMode()
+            + '&after_id=' + afterId
+            + '&exclude=' + encodeURIComponent(failedIds.join(','));
         fetch(url)
             .then(function (r) { return r.json(); })
             .then(function (resp) {
@@ -468,6 +526,14 @@ require_once __DIR__ . '/../includes/header.php';
     function processNext() {
         if (!running) { setStatus('Stopped. Click Start to continue – progress is saved.'); return; }
         if (queue.length === 0) {
+            if (singleMode) {
+                running = false;
+                singleMode = false;
+                $id('run-btn').disabled = false;
+                $id('stop-btn').disabled = true;
+                setStatus('Single ID check finished – see the top row of the results table.');
+                return;
+            }
             setStatus('Loading next batch…');
             fetchBatch(function (items) {
                 if (items.length === 0) {
@@ -485,6 +551,7 @@ require_once __DIR__ . '/../includes/header.php';
         }
 
         var item = queue.shift();
+        afterId = Math.max(afterId, item.package_id);
         setStatus('Reading proof for ' + item.name + ' (' + item.sid + ')…');
 
         worker.recognize(item.proof_url).then(function (res) {
@@ -532,25 +599,70 @@ require_once __DIR__ . '/../includes/header.php';
         document.head.appendChild(s);
     }
 
-    $id('run-btn').addEventListener('click', function () {
-        if (running) return;
-        running = true;
-        $id('run-btn').disabled = true;
-        $id('stop-btn').disabled = false;
-        setStatus('Starting OCR engine…');
+    function ensureWorker(cb) {
         loadTesseract(function () {
-            if (worker) { processNext(); return; }
+            if (worker) { cb(); return; }
             window.Tesseract.createWorker('eng').then(function (w) {
                 worker = w;
-                processNext();
+                cb();
             }).catch(function (e) {
                 running = false;
+                singleMode = false;
                 $id('run-btn').disabled = false;
                 $id('stop-btn').disabled = true;
                 setStatus('Could not start the OCR engine: ' + e);
             });
         });
+    }
+
+    $id('run-btn').addEventListener('click', function () {
+        if (running) return;
+        running = true;
+        singleMode = false;
+        afterId = 0;   // fresh run: start from the beginning of the queue
+        queue = [];
+        $id('run-btn').disabled = true;
+        $id('stop-btn').disabled = false;
+        setStatus('Starting OCR engine…');
+        ensureWorker(processNext);
     });
+
+    // ── Check / re-check a single student ID ──
+    var oneBtn = $id('check-one-btn');
+    if (oneBtn) {
+        oneBtn.addEventListener('click', function () {
+            if (running) return;
+            var sid = ($id('check-one-sid').value || '').trim();
+            if (sid === '') { setStatus('Enter a student ID first.'); return; }
+            running = true;
+            singleMode = true;
+            $id('run-btn').disabled = true;
+            $id('stop-btn').disabled = false;
+            setStatus('Looking up ' + sid + '…');
+            fetch(CFG.listUrl + '&sid=' + encodeURIComponent(sid))
+                .then(function (r) { return r.json(); })
+                .then(function (resp) {
+                    var items = (resp && resp.items) || [];
+                    if (items.length === 0) {
+                        running = false;
+                        singleMode = false;
+                        $id('run-btn').disabled = false;
+                        $id('stop-btn').disabled = true;
+                        setStatus('No account with an OLD ERP proof image found for ID "' + sid + '".');
+                        return;
+                    }
+                    queue = items;
+                    ensureWorker(processNext);
+                })
+                .catch(function (e) {
+                    running = false;
+                    singleMode = false;
+                    $id('run-btn').disabled = false;
+                    $id('stop-btn').disabled = true;
+                    setStatus('Lookup failed: ' + e);
+                });
+        });
+    }
 
     $id('stop-btn').addEventListener('click', function () {
         running = false;
