@@ -405,6 +405,12 @@ require_once __DIR__ . '/../includes/header.php';
 
     var running = false, worker = null, queue = [], failedIds = [];
     var nMatch = 0, nMismatch = 0, nFailed = 0, nDone = 0;
+    var afterId = 0, singleMode = false;
+
+    function currentMode() {
+        var t = document.getElementById('recheck-toggle');
+        return (t && t.checked) ? 'recheck' : 'unchecked';
+    }
 
     function $id(i) { return document.getElementById(i); }
     function setStatus(t) { $id('status-line').textContent = t; }
