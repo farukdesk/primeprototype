@@ -345,7 +345,7 @@ require_once __DIR__ . '/../includes/header.php';
     'use strict';
 
     var CFG = {
-        listUrl:       '<?= APP_URL ?>/student-accounts/erp-check-runner.php?action=list',
+        listUrl:       '<?= APP_URL ?>/student-accounts/erp-check-runner.php?action=list&dept=<?= (int)$f_dept ?>&program=<?= (int)$f_program ?>&batch=<?= (int)$f_batch ?>',
         saveUrl:       '<?= APP_URL ?>/student-accounts/save-erp-payable.php',
         tolerance:     <?= json_encode((float)SFP_OLD_ERP_TOLERANCE) ?>,
         stdProjectFee: <?= json_encode((float)SFP_OLD_ERP_STANDARD_PROJECT_FEE) ?>,
