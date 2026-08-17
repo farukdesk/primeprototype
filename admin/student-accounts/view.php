@@ -200,6 +200,25 @@ foreach ($semester_fees as $sf) {
 }
 $total_cost = $total_tuition_payable + $total_fixed_all + $total_english_all + $total_reg_fees + $admission_fee + $form_id_fee + $project_fee_one_time + $bitri_shift_fee_one_time;
 
+// ── OLD ERP payable cross-check (proof screenshot vs Grand Total, ±50 BDT) ────
+$old_erp_payable = (isset($pkg['old_erp_payable_amount']) && $pkg['old_erp_payable_amount'] !== null)
+    ? (float)$pkg['old_erp_payable_amount']
+    : null;
+$old_erp_check = sfp_old_erp_check($old_erp_payable, $total_cost, $project_fee_one_time);
+$erp_basis_labels = [
+    'grand_total'         => 'Grand Total',
+    'grand_minus_project' => 'Grand Total − Project Fee (one-time)',
+    'grand_minus_1000'    => 'Grand Total − 1,000 BDT (project fee cross-check)',
+];
+// Newest image proof to feed the client-side OCR auto-check
+$erp_ocr_proof_url = null;
+foreach ($old_erp_proofs as $erp_proof_row) {
+    if (strncmp((string)($erp_proof_row['mime_type'] ?? ''), 'image/', 6) === 0) {
+        $erp_ocr_proof_url = UPLOAD_URL . '/students/files/' . rawurlencode($erp_proof_row['stored_name']);
+        break;
+    }
+}
+
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
