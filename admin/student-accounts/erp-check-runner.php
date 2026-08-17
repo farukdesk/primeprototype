@@ -448,19 +448,40 @@ require_once __DIR__ . '/../includes/header.php';
         return { matched: best <= CFG.tolerance, diff: best };
     }
 
+    // Accepted labels for the payable field, in priority order. Some OLD ERP
+    // screenshots label the amount "Monthly Payment" (monthly fees) instead of
+    // "Payable Amount" – both are read the same way.
+    var PAYABLE_LABELS = [/pay\s*able\s*amount/i, /pay\s*able/i, /monthly\s*pay\s*ment/i];
+
+    // Read the first number AFTER the label on the line, so other columns the
+    // OCR merges into the same line (Total / Paid / Due amounts) are ignored
+    // instead of accidentally picking the biggest number on the line.
+    function amountAfterLabel(line, labelRe) {
+        var m = labelRe.exec(line);
+        if (!m) return null;
+        var candidates = line.slice(m.index + m[0].length).match(/-?[\d,]+(?:\.\d+)?/g);
+        if (!candidates) {
+            // Rare OCR column swap: the amount sits before the label
+            var before = line.slice(0, m.index).match(/-?[\d,]+(?:\.\d+)?/g);
+            if (before) candidates = [before[before.length - 1]];
+        }
+        if (!candidates) return null;
+        for (var i = 0; i < candidates.length; i++) {
+            var v = parseFloat(candidates[i].replace(/,/g, ''));
+            if (!isNaN(v) && v > 0) return v;
+        }
+        return null;
+    }
+
     function parsePayable(text) {
         var lines = String(text).split(/\n/);
-        for (var i = 0; i < lines.length; i++) {
-            if (/pay\s*able/i.test(lines[i])) {
-                var nums = lines[i].match(/-?[\d,]+(?:\.\d+)?/g);
-                if (nums) {
-                    var vals = nums.map(function (n) { return parseFloat(n.replace(/,/g, '')); })
-                                   .filter(function (v) { return !isNaN(v) && v > 0; });
-                    if (vals.length) return Math.max.apply(null, vals);
-                }
+        for (var l = 0; l < PAYABLE_LABELS.length; l++) {
+            for (var i = 0; i < lines.length; i++) {
+                var val = amountAfterLabel(lines[i], PAYABLE_LABELS[l]);
+                if (val !== null) return val;
             }
         }
-        var m = String(text).match(/pay\s*able[^0-9\-]*(-?[\d,]+(?:\.\d+)?)/i);
+        var m = String(text).match(/(?:pay\s*able|monthly\s*pay\s*ment)[^0-9\-]*(-?[\d,]+(?:\.\d+)?)/i);
         return m ? parseFloat(m[1].replace(/,/g, '')) : null;
     }
 
