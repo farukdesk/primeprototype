@@ -105,13 +105,14 @@ if (($_GET['action'] ?? '') === 'list') {
             ? round((float)$pkg['english_course_fee'] * $mps / $months, 2) : 0.0;
         $sem_cnt  = (int)($pkg['erp_sem_count'] ?? 0);
         $proj_fee = acc_package_project_fee($pkg);
+        $form_fee = acc_package_form_id_fee($pkg);
 
         $grand = (float)($pkg['erp_sum_tuition'] ?? 0)
                + max(0.0, $fixed_ps * $sem_cnt - (float)($pkg['erp_sum_fixed_disc'] ?? 0))
                + max(0.0, $eng_ps   * $sem_cnt - (float)($pkg['erp_sum_eng_disc']   ?? 0))
                + (float)($pkg['reg_fee_per_semester'] ?? 0) * $sem_cnt
                + (float)($pkg['admission_fees'] ?? 0)
-               + acc_package_form_id_fee($pkg)
+               + $form_fee
                + $proj_fee
                + (float)($pkg['bi_tri_shift_fee'] ?? 0);
 
@@ -122,6 +123,7 @@ if (($_GET['action'] ?? '') === 'list') {
             'proof_url'   => UPLOAD_URL . '/students/files/' . rawurlencode($pkg['proof_stored_name']),
             'grand_total' => round($grand, 2),
             'project_fee' => round($proj_fee, 2),
+            'form_id_fee' => round($form_fee, 2),
             'view_url'    => APP_URL . '/student-accounts/view.php?id=' . (int)$pkg['id'],
         ];
     }
