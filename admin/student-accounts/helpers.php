@@ -192,6 +192,41 @@ function sfp_old_erp_check(?float $payable, float $grand_total, float $project_f
     ];
 }
 
+/** Tolerance (BDT) when comparing the OLD ERP Monthly Payment to the month-wise breakdown. */
+define('SFP_OLD_ERP_MONTHLY_TOLERANCE', 5.0);
+
+/**
+ * Expected monthly total for Semester 1, mirroring the "Month-wise Breakdown"
+ * on the student account view: Semester 1 tuition payable spread over the
+ * months of the semester, plus the snapshotted monthly fixed / English fees.
+ */
+function sfp_expected_monthly_total(array $pkg, float $sem1_tuition_payable): float
+{
+    $mps = (float)($pkg['months_per_semester'] ?? 0);
+    $monthly_tuition = ($mps > 0) ? $sem1_tuition_payable / $mps : 0.0;
+    return $monthly_tuition
+         + (float)($pkg['monthly_fixed_fee'] ?? 0)
+         + (float)($pkg['monthly_english_fee'] ?? 0);
+}
+
+/**
+ * Cross-check the OLD ERP "Monthly Payment" against the expected monthly total
+ * (±SFP_OLD_ERP_MONTHLY_TOLERANCE BDT). Returns null when not captured yet.
+ *
+ * @return array{matched:bool,diff:float}|null
+ */
+function sfp_old_erp_monthly_check(?float $monthly, float $expected): ?array
+{
+    if ($monthly === null) {
+        return null;
+    }
+    $diff = round($monthly - $expected, 2);
+    return [
+        'matched' => abs($diff) <= SFP_OLD_ERP_MONTHLY_TOLERANCE,
+        'diff'    => $diff,
+    ];
+}
+
 // ── Get a package with student / assigner joins ───────────────────────────────
 
 function sfp_get_package(int $id): array|false
