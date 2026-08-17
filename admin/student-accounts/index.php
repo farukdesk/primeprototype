@@ -17,6 +17,11 @@ $f_dept    = (int)($_GET['dept']    ?? 0);
 $f_program = (int)($_GET['program'] ?? 0);
 $f_batch   = (int)($_GET['batch']   ?? 0);
 $f_sems    = (int)($_GET['sems']    ?? 0);
+// OLD ERP cross-check status filter: '' | 'mismatch' | 'match' | 'unchecked'
+$f_erp     = trim($_GET['erp'] ?? '');
+if (!in_array($f_erp, ['', 'mismatch', 'match', 'unchecked'], true)) {
+    $f_erp = '';
+}
 
 $where  = ['1=1'];
 $params = [];
@@ -41,6 +46,16 @@ if ($f_batch > 0) {
 if ($f_sems > 0) {
     $where[]  = 'p.total_semesters = ?';
     $params[] = $f_sems;
+}
+if ($f_erp === 'mismatch' || $f_erp === 'match') {
+    // Only checked accounts can have a match / mismatch status;
+    // the exact status is computed per row in PHP below.
+    $where[] = 'p.old_erp_payable_amount IS NOT NULL';
+} elseif ($f_erp === 'unchecked') {
+    $where[] = "p.old_erp_payable_amount IS NULL
+                AND EXISTS (SELECT 1 FROM student_files stf
+                             WHERE stf.student_id = s.id
+                               AND stf.file_name = 'OLD ERP Proof')";
 }
 
 // Apply department scope restriction for non-super-admins
