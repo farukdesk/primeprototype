@@ -273,11 +273,14 @@ require_once __DIR__ . '/../includes/header.php';
         return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
-    // Same match rules as sfp_old_erp_check() in helpers.php
-    function evaluate(payable, grand, projectFee) {
-        var cands = [grand];
-        if (projectFee > 0) cands.push(grand - projectFee);
-        cands.push(grand - CFG.stdProjectFee);
+    // Same match rules as sfp_old_erp_check() in helpers.php:
+    // the OLD ERP payable excludes the Form, ID Card and Project fees.
+    function evaluate(payable, grand, projectFee, formIdFee) {
+        var base = grand - (formIdFee || 0);
+        var cands = [];
+        if (projectFee > 0) cands.push(base - projectFee);
+        cands.push(base - CFG.stdProjectFee);
+        cands.push(base);
         var best = null;
         cands.forEach(function (v) {
             var d = Math.abs(v - payable);
