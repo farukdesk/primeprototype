@@ -105,13 +105,14 @@ if (($_GET['action'] ?? '') === 'list') {
             ? round((float)$pkg['english_course_fee'] * $mps / $months, 2) : 0.0;
         $sem_cnt  = (int)($pkg['erp_sem_count'] ?? 0);
         $proj_fee = acc_package_project_fee($pkg);
+        $form_fee = acc_package_form_id_fee($pkg);
 
         $grand = (float)($pkg['erp_sum_tuition'] ?? 0)
                + max(0.0, $fixed_ps * $sem_cnt - (float)($pkg['erp_sum_fixed_disc'] ?? 0))
                + max(0.0, $eng_ps   * $sem_cnt - (float)($pkg['erp_sum_eng_disc']   ?? 0))
                + (float)($pkg['reg_fee_per_semester'] ?? 0) * $sem_cnt
                + (float)($pkg['admission_fees'] ?? 0)
-               + acc_package_form_id_fee($pkg)
+               + $form_fee
                + $proj_fee
                + (float)($pkg['bi_tri_shift_fee'] ?? 0);
 
@@ -122,6 +123,7 @@ if (($_GET['action'] ?? '') === 'list') {
             'proof_url'   => UPLOAD_URL . '/students/files/' . rawurlencode($pkg['proof_stored_name']),
             'grand_total' => round($grand, 2),
             'project_fee' => round($proj_fee, 2),
+            'form_id_fee' => round($form_fee, 2),
             'view_url'    => APP_URL . '/student-accounts/view.php?id=' . (int)$pkg['id'],
         ];
     }
@@ -271,11 +273,14 @@ require_once __DIR__ . '/../includes/header.php';
         return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
-    // Same match rules as sfp_old_erp_check() in helpers.php
-    function evaluate(payable, grand, projectFee) {
-        var cands = [grand];
-        if (projectFee > 0) cands.push(grand - projectFee);
-        cands.push(grand - CFG.stdProjectFee);
+    // Same match rules as sfp_old_erp_check() in helpers.php:
+    // the OLD ERP payable excludes the Form, ID Card and Project fees.
+    function evaluate(payable, grand, projectFee, formIdFee) {
+        var base = grand - (formIdFee || 0);
+        var cands = [];
+        if (projectFee > 0) cands.push(base - projectFee);
+        cands.push(base - CFG.stdProjectFee);
+        cands.push(base);
         var best = null;
         cands.forEach(function (v) {
             var d = Math.abs(v - payable);
@@ -389,7 +394,7 @@ require_once __DIR__ . '/../includes/header.php';
                 return;
             }
             save(item.package_id, val, function (ok) {
-                var ev = evaluate(val, item.grand_total, item.project_fee);
+                var ev = evaluate(val, item.grand_total, item.project_fee, item.form_id_fee);
                 if (!ok) {
                     // Could not persist – treat as failed so it is retried later
                     nFailed++; nDone++;

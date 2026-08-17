@@ -204,11 +204,12 @@ $total_cost = $total_tuition_payable + $total_fixed_all + $total_english_all + $
 $old_erp_payable = (isset($pkg['old_erp_payable_amount']) && $pkg['old_erp_payable_amount'] !== null)
     ? (float)$pkg['old_erp_payable_amount']
     : null;
-$old_erp_check = sfp_old_erp_check($old_erp_payable, $total_cost, $project_fee_one_time);
+// OLD ERP payable excludes the one-time Form, ID Card and Project fees
+$old_erp_check = sfp_old_erp_check($old_erp_payable, $total_cost, $project_fee_one_time, $form_id_fee);
 $erp_basis_labels = [
-    'grand_total'         => 'Grand Total',
-    'grand_minus_project' => 'Grand Total − Project Fee (one-time)',
-    'grand_minus_1000'    => 'Grand Total − 1,000 BDT (project fee cross-check)',
+    'base_minus_project' => 'Grand Total − Form & ID Card − Project Fee',
+    'base_minus_1000'    => 'Grand Total − Form & ID Card − 1,000 BDT (project fee cross-check)',
+    'base'               => 'Grand Total − Form & ID Card fees',
 ];
 // Newest image proof to feed the client-side OCR auto-check
 $erp_ocr_proof_url = null;
@@ -787,13 +788,10 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="fw-bold fs-5"><?= sfp_money($total_cost) ?></div>
             </div>
             <div class="col-md-3">
-                <?php if ($project_fee_one_time > 0): ?>
-                <div class="text-muted small mb-1">Grand Total − Project Fee</div>
-                <div class="fw-bold fs-5"><?= sfp_money($total_cost - $project_fee_one_time) ?></div>
-                <?php else: ?>
-                <div class="text-muted small mb-1">Grand Total − 1,000 (project fee cross-check)</div>
-                <div class="fw-bold fs-5"><?= sfp_money($total_cost - SFP_OLD_ERP_STANDARD_PROJECT_FEE) ?></div>
-                <?php endif; ?>
+                <div class="text-muted small mb-1">Expected OLD ERP Payable
+                    <span class="d-block" style="font-size:.7rem;">Grand − Form &amp; ID Card<?= $project_fee_one_time > 0 ? ' − Project Fee' : ' − 1,000 (project fee)' ?></span>
+                </div>
+                <div class="fw-bold fs-5"><?= sfp_money($total_cost - $form_id_fee - ($project_fee_one_time > 0 ? $project_fee_one_time : SFP_OLD_ERP_STANDARD_PROJECT_FEE)) ?></div>
             </div>
             <div class="col-md-3">
                 <div class="text-muted small mb-1">Matched against</div>
@@ -832,6 +830,7 @@ require_once __DIR__ . '/../includes/header.php';
         packageId:     <?= (int)$id ?>,
         grandTotal:    <?= json_encode(round($total_cost, 2)) ?>,
         projectFee:    <?= json_encode(round($project_fee_one_time, 2)) ?>,
+        formIdFee:     <?= json_encode(round($form_id_fee, 2)) ?>,
         tolerance:     <?= json_encode((float)SFP_OLD_ERP_TOLERANCE) ?>,
         stdProjectFee: <?= json_encode((float)SFP_OLD_ERP_STANDARD_PROJECT_FEE) ?>,
         stored:        <?= json_encode($old_erp_payable) ?>,
@@ -850,13 +849,16 @@ require_once __DIR__ . '/../includes/header.php';
         el.className = 'small mt-3 ' + (danger ? 'text-danger' : 'text-muted');
     }
 
-    // Same match rules as sfp_old_erp_check() in helpers.php
+    // Same match rules as sfp_old_erp_check() in helpers.php:
+    // the OLD ERP payable excludes the Form, ID Card and Project fees.
     function evaluate(payable) {
-        var cands = [{ k: 'Grand Total', v: CFG.grandTotal }];
+        var base = CFG.grandTotal - CFG.formIdFee;
+        var cands = [];
         if (CFG.projectFee > 0) {
-            cands.push({ k: 'Grand Total − Project Fee (one-time)', v: CFG.grandTotal - CFG.projectFee });
+            cands.push({ k: 'Grand Total − Form & ID Card − Project Fee', v: base - CFG.projectFee });
         }
-        cands.push({ k: 'Grand Total − 1,000 BDT (project fee cross-check)', v: CFG.grandTotal - CFG.stdProjectFee });
+        cands.push({ k: 'Grand Total − Form & ID Card − 1,000 BDT (project fee cross-check)', v: base - CFG.stdProjectFee });
+        cands.push({ k: 'Grand Total − Form & ID Card fees', v: base });
         var best = null;
         cands.forEach(function (c) {
             var d = Math.abs(c.v - payable);

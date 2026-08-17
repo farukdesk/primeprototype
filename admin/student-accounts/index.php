@@ -425,15 +425,17 @@ require_once __DIR__ . '/../includes/header.php';
                             ? round((float)$pkg['english_course_fee'] * $mps_chk / $months_chk, 2) : 0.0;
                         $sem_cnt      = (int)($pkg['erp_sem_count'] ?? 0);
                         $proj_fee_row = acc_package_project_fee($pkg);
+                        $form_id_row  = acc_package_form_id_fee($pkg);
                         $grand_row = (float)($pkg['erp_sum_tuition'] ?? 0)
                                    + max(0.0, $fixed_ps_chk * $sem_cnt - (float)($pkg['erp_sum_fixed_disc'] ?? 0))
                                    + max(0.0, $eng_ps_chk   * $sem_cnt - (float)($pkg['erp_sum_eng_disc']   ?? 0))
                                    + (float)($pkg['reg_fee_per_semester'] ?? 0) * $sem_cnt
                                    + (float)($pkg['admission_fees'] ?? 0)
-                                   + acc_package_form_id_fee($pkg)
+                                   + $form_id_row
                                    + $proj_fee_row
                                    + (float)($pkg['bi_tri_shift_fee'] ?? 0);
-                        $erp_check = sfp_old_erp_check($erp_payable, $grand_row, $proj_fee_row);
+                        // OLD ERP payable excludes Form, ID Card and Project fees
+                        $erp_check = sfp_old_erp_check($erp_payable, $grand_row, $proj_fee_row, $form_id_row);
                     }
                     $erp_row_class = ($erp_check !== null && !$erp_check['matched']) ? 'table-danger' : '';
                 ?>
