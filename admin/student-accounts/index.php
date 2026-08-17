@@ -144,16 +144,20 @@ require_once __DIR__ . '/../includes/header.php';
         <h1 class="h3 mb-0"><i class="fas fa-file-invoice-dollar me-2 text-success"></i>Student Accounts</h1>
         <p class="text-muted mb-0 small">Snapshotted fee structures assigned to students.</p>
     </div>
-    <?php if (sfp_can_create()): ?>
     <div class="d-flex gap-2">
+        <a href="<?= APP_URL ?>/student-accounts/erp-check-runner.php" class="btn btn-outline-primary btn-sm"
+           title="Read the Payable Amount from every OLD ERP proof with OCR and cross-check it against the Grand Total, without opening each account.">
+            <i class="fas fa-wand-magic-sparkles me-1"></i> Bulk ERP Check
+        </a>
+        <?php if (sfp_can_create()): ?>
         <a href="<?= APP_URL ?>/student-accounts/create.php" class="btn btn-success btn-sm">
             <i class="fas fa-plus me-1"></i> Assign Package
         </a>
         <a href="<?= APP_URL ?>/student-accounts/bulk-import.php" class="btn btn-outline-success btn-sm">
             <i class="fas fa-file-import me-1"></i> Bulk PDF / CSV Import
         </a>
+        <?php endif; ?>
     </div>
-    <?php endif; ?>
 </div>
 
 <?= flash_show() ?>
