@@ -17,6 +17,11 @@ $f_dept    = (int)($_GET['dept']    ?? 0);
 $f_program = (int)($_GET['program'] ?? 0);
 $f_batch   = (int)($_GET['batch']   ?? 0);
 $f_sems    = (int)($_GET['sems']    ?? 0);
+// OLD ERP cross-check status filter: '' | 'mismatch' | 'match' | 'unchecked'
+$f_erp     = trim($_GET['erp'] ?? '');
+if (!in_array($f_erp, ['', 'mismatch', 'match', 'unchecked'], true)) {
+    $f_erp = '';
+}
 
 $where  = ['1=1'];
 $params = [];
@@ -42,6 +47,16 @@ if ($f_sems > 0) {
     $where[]  = 'p.total_semesters = ?';
     $params[] = $f_sems;
 }
+if ($f_erp === 'mismatch' || $f_erp === 'match') {
+    // Only checked accounts can have a match / mismatch status;
+    // the exact status is computed per row in PHP below.
+    $where[] = 'p.old_erp_payable_amount IS NOT NULL';
+} elseif ($f_erp === 'unchecked') {
+    $where[] = "p.old_erp_payable_amount IS NULL
+                AND EXISTS (SELECT 1 FROM student_files stf
+                             WHERE stf.student_id = s.id
+                               AND stf.file_name = 'OLD ERP Proof')";
+}
 
 // Apply department scope restriction for non-super-admins
 if ($dept_scope !== null) {
@@ -56,23 +71,37 @@ if ($dept_scope !== null) {
 
 $where_sql = implode(' AND ', $where);
 
+// ── OLD ERP cross-check for a list row (shared by status filter + rendering) ──
+$sfp_index_erp_check = static function (array $pkg): ?array {
+    if (!isset($pkg['old_erp_payable_amount']) || $pkg['old_erp_payable_amount'] === null) {
+        return null;
+    }
+    $months   = (float)($pkg['total_months'] ?? 0);
+    $mps      = (float)($pkg['months_per_semester'] ?? 0);
+    $fixed_ps = ($months > 0 && $mps > 0)
+        ? round((float)$pkg['fixed_institutional_fees'] * $mps / $months, 2) : 0.0;
+    $eng_ps   = ($months > 0 && $mps > 0)
+        ? round((float)$pkg['english_course_fee'] * $mps / $months, 2) : 0.0;
+    $sem_cnt  = (int)($pkg['erp_sem_count'] ?? 0);
+    $proj_fee = acc_package_project_fee($pkg);
+    $form_id  = acc_package_form_id_fee($pkg);
+    $grand = (float)($pkg['erp_sum_tuition'] ?? 0)
+           + max(0.0, $fixed_ps * $sem_cnt - (float)($pkg['erp_sum_fixed_disc'] ?? 0))
+           + max(0.0, $eng_ps   * $sem_cnt - (float)($pkg['erp_sum_eng_disc']   ?? 0))
+           + (float)($pkg['reg_fee_per_semester'] ?? 0) * $sem_cnt
+           + (float)($pkg['admission_fees'] ?? 0)
+           + $form_id
+           + $proj_fee
+           + (float)($pkg['bi_tri_shift_fee'] ?? 0);
+    // OLD ERP payable excludes Form, ID Card and Project fees
+    return sfp_old_erp_check((float)$pkg['old_erp_payable_amount'], $grand, $proj_fee, $form_id);
+};
+
 // ── Pagination ────────────────────────────────────────────────────────────────
 $per_page = 25;
 $page     = max(1, (int)($_GET['page'] ?? 1));
 
-$cnt_stmt = $db->prepare(
-    "SELECT COUNT(*)
-     FROM sfp_packages p
-     JOIN students s ON s.id = p.student_id
-     WHERE $where_sql"
-);
-$cnt_stmt->execute($params);
-$total = (int)$cnt_stmt->fetchColumn();
-$pages = max(1, (int)ceil($total / $per_page));
-$page  = min($page, $pages);
-$off   = ($page - 1) * $per_page;
-
-$stmt = $db->prepare(
+$list_select =
     "SELECT p.*,
             s.full_name    AS student_name,
             s.student_id   AS student_sid,
@@ -104,11 +133,46 @@ $stmt = $db->prepare(
              ON sf1.package_id = p.id
             AND sf1.semester_number = 1
       WHERE $where_sql
-      ORDER BY p.created_at DESC
-      LIMIT $per_page OFFSET $off"
-);
-$stmt->execute($params);
-$packages = $stmt->fetchAll();
+      ORDER BY p.created_at DESC";
+
+if ($f_erp === 'mismatch' || $f_erp === 'match') {
+    // Match / mismatch is computed from live fee math, so load all checked
+    // candidate rows (SQL already restricts to old_erp_payable_amount IS NOT
+    // NULL), evaluate each one and paginate in PHP.
+    $stmt = $db->prepare($list_select);
+    $stmt->execute($params);
+    $filtered = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $chk = $sfp_index_erp_check($row);
+        if ($chk === null) {
+            continue;
+        }
+        if (($f_erp === 'mismatch' && !$chk['matched'])
+            || ($f_erp === 'match' && $chk['matched'])) {
+            $filtered[] = $row;
+        }
+    }
+    $total    = count($filtered);
+    $pages    = max(1, (int)ceil($total / $per_page));
+    $page     = min($page, $pages);
+    $packages = array_slice($filtered, ($page - 1) * $per_page, $per_page);
+} else {
+    $cnt_stmt = $db->prepare(
+        "SELECT COUNT(*)
+         FROM sfp_packages p
+         JOIN students s ON s.id = p.student_id
+         WHERE $where_sql"
+    );
+    $cnt_stmt->execute($params);
+    $total = (int)$cnt_stmt->fetchColumn();
+    $pages = max(1, (int)ceil($total / $per_page));
+    $page  = min($page, $pages);
+    $off   = ($page - 1) * $per_page;
+
+    $stmt = $db->prepare($list_select . " LIMIT $per_page OFFSET $off");
+    $stmt->execute($params);
+    $packages = $stmt->fetchAll();
+}
 
 // ── Filter dropdown data ──────────────────────────────────────────────────────
 $departments = $db->query(
@@ -217,9 +281,18 @@ require_once __DIR__ . '/../includes/header.php';
                     <?php endforeach; ?>
                 </select>
             </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold small mb-1">OLD ERP Check</label>
+                <select name="erp" class="form-select form-select-sm">
+                    <option value="">All</option>
+                    <option value="mismatch" <?= $f_erp === 'mismatch' ? 'selected' : '' ?>>⚠ MISMATCH only</option>
+                    <option value="match" <?= $f_erp === 'match' ? 'selected' : '' ?>>✓ Match only</option>
+                    <option value="unchecked" <?= $f_erp === 'unchecked' ? 'selected' : '' ?>>Unchecked (proof attached)</option>
+                </select>
+            </div>
             <div class="col-6 col-md-2 d-flex gap-2">
                 <button class="btn btn-primary btn-sm flex-fill" type="submit"><i class="fas fa-search me-1"></i>Filter</button>
-                <?php if ($search !== '' || $f_dept || $f_program || $f_batch || $f_sems): ?>
+                <?php if ($search !== '' || $f_dept || $f_program || $f_batch || $f_sems || $f_erp !== ''): ?>
                 <a href="<?= APP_URL ?>/student-accounts/index.php" class="btn btn-outline-secondary btn-sm flex-fill">Clear</a>
                 <?php endif; ?>
             </div>
@@ -411,32 +484,10 @@ require_once __DIR__ . '/../includes/header.php';
                 <tbody>
                 <?php foreach ($packages as $pkg):
                     // ── OLD ERP payable cross-check for this row (±50 BDT) ──
-                    // Mirrors the view.php Grand Total (approved values; pending
-                    // VC-approval projections are not included here).
+                    // Shared closure defined above (also used by the status filter).
                     $erp_payable = (isset($pkg['old_erp_payable_amount']) && $pkg['old_erp_payable_amount'] !== null)
                         ? (float)$pkg['old_erp_payable_amount'] : null;
-                    $erp_check = null;
-                    if ($erp_payable !== null) {
-                        $months_chk = (float)($pkg['total_months'] ?? 0);
-                        $mps_chk    = (float)($pkg['months_per_semester'] ?? 0);
-                        $fixed_ps_chk = ($months_chk > 0 && $mps_chk > 0)
-                            ? round((float)$pkg['fixed_institutional_fees'] * $mps_chk / $months_chk, 2) : 0.0;
-                        $eng_ps_chk   = ($months_chk > 0 && $mps_chk > 0)
-                            ? round((float)$pkg['english_course_fee'] * $mps_chk / $months_chk, 2) : 0.0;
-                        $sem_cnt      = (int)($pkg['erp_sem_count'] ?? 0);
-                        $proj_fee_row = acc_package_project_fee($pkg);
-                        $form_id_row  = acc_package_form_id_fee($pkg);
-                        $grand_row = (float)($pkg['erp_sum_tuition'] ?? 0)
-                                   + max(0.0, $fixed_ps_chk * $sem_cnt - (float)($pkg['erp_sum_fixed_disc'] ?? 0))
-                                   + max(0.0, $eng_ps_chk   * $sem_cnt - (float)($pkg['erp_sum_eng_disc']   ?? 0))
-                                   + (float)($pkg['reg_fee_per_semester'] ?? 0) * $sem_cnt
-                                   + (float)($pkg['admission_fees'] ?? 0)
-                                   + $form_id_row
-                                   + $proj_fee_row
-                                   + (float)($pkg['bi_tri_shift_fee'] ?? 0);
-                        // OLD ERP payable excludes Form, ID Card and Project fees
-                        $erp_check = sfp_old_erp_check($erp_payable, $grand_row, $proj_fee_row, $form_id_row);
-                    }
+                    $erp_check     = $sfp_index_erp_check($pkg);
                     $erp_row_class = ($erp_check !== null && !$erp_check['matched']) ? 'table-danger' : '';
                 ?>
                 <tr class="<?= $erp_row_class ?>">
@@ -552,7 +603,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <?php for ($p = 1; $p <= $pages; $p++): ?>
                     <li class="page-item <?= $p === $page ? 'active' : '' ?>">
                         <a class="page-link"
-                           href="?<?= http_build_query(['q' => $search, 'dept' => $f_dept ?: '', 'program' => $f_program ?: '', 'batch' => $f_batch ?: '', 'sems' => $f_sems ?: '', 'page' => $p]) ?>">
+                           href="?<?= http_build_query(['q' => $search, 'dept' => $f_dept ?: '', 'program' => $f_program ?: '', 'batch' => $f_batch ?: '', 'sems' => $f_sems ?: '', 'erp' => $f_erp ?: '', 'page' => $p]) ?>">
                             <?= $p ?>
                         </a>
                     </li>
@@ -605,7 +656,9 @@ require_once __DIR__ . '/../includes/header.php';
     var noticeText         = document.getElementById('bulk-all-pages-text');
     var selectAllPagesLink = document.getElementById('bulk-select-all-pages');
     var onlyThisPageLink   = document.getElementById('bulk-only-this-page');
-    var totalMatching      = <?= (int)$total ?>;
+    // Cross-page "select all matching" is disabled while an ERP status filter
+    // is active: bulk-update.php cannot re-derive the computed ERP status.
+    var totalMatching      = <?= $f_erp === '' ? (int)$total : 0 ?>;
 
     function selectedCount() {
         return boxes.filter(function (b) { return b.checked; }).length;
