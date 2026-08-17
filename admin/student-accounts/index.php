@@ -656,7 +656,9 @@ require_once __DIR__ . '/../includes/header.php';
     var noticeText         = document.getElementById('bulk-all-pages-text');
     var selectAllPagesLink = document.getElementById('bulk-select-all-pages');
     var onlyThisPageLink   = document.getElementById('bulk-only-this-page');
-    var totalMatching      = <?= (int)$total ?>;
+    // Cross-page "select all matching" is disabled while an ERP status filter
+    // is active: bulk-update.php cannot re-derive the computed ERP status.
+    var totalMatching      = <?= $f_erp === '' ? (int)$total : 0 ?>;
 
     function selectedCount() {
         return boxes.filter(function (b) { return b.checked; }).length;
