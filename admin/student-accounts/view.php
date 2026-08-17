@@ -206,6 +206,14 @@ $old_erp_payable = (isset($pkg['old_erp_payable_amount']) && $pkg['old_erp_payab
     : null;
 // OLD ERP payable excludes the one-time Form, ID Card and Project fees
 $old_erp_check = sfp_old_erp_check($old_erp_payable, $total_cost, $project_fee_one_time, $form_id_fee);
+// OLD ERP Monthly Payment cross-check (±SFP_OLD_ERP_MONTHLY_TOLERANCE BDT)
+$old_erp_monthly = (isset($pkg['old_erp_monthly_amount']) && $pkg['old_erp_monthly_amount'] !== null)
+    ? (float)$pkg['old_erp_monthly_amount'] : null;
+$erp_expected_monthly = sfp_expected_monthly_total(
+    $pkg,
+    !empty($semester_fees) ? (float)$semester_fees[0]['tuition_payable'] : 0.0
+);
+$erp_monthly_check = sfp_old_erp_monthly_check($old_erp_monthly, $erp_expected_monthly);
 $erp_basis_labels = [
     'base_minus_project' => 'Grand Total − Form & ID Card − Project Fee',
     'base_minus_1000'    => 'Grand Total − Form & ID Card − 1,000 BDT (project fee cross-check)',
@@ -801,6 +809,33 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
         </div>
 
+        <hr class="my-3">
+        <div class="row g-3">
+            <div class="col-md-3">
+                <div class="text-muted small mb-1">OLD ERP Monthly Payment (proof)</div>
+                <div class="fw-bold fs-5" id="erp-monthly-display"><?= $old_erp_monthly !== null ? sfp_money($old_erp_monthly) : '—' ?></div>
+                <div class="text-muted" style="font-size:.75rem;" id="erp-monthly-note"><?= $old_erp_monthly !== null ? 'Read from proof / entered' : 'Not read yet' ?></div>
+            </div>
+            <div class="col-md-3">
+                <div class="text-muted small mb-1">Expected Monthly Total
+                    <span class="d-block" style="font-size:.7rem;">Semester 1 · tuition + fixed + English per month</span>
+                </div>
+                <div class="fw-bold fs-5"><?= sfp_money($erp_expected_monthly) ?></div>
+            </div>
+            <div class="col-md-3">
+                <div class="text-muted small mb-1">Monthly cross-check (±<?= number_format(SFP_OLD_ERP_MONTHLY_TOLERANCE, 0) ?> BDT)</div>
+                <div id="erp-monthly-badge">
+                    <?php if ($erp_monthly_check === null): ?>
+                    <span class="badge bg-secondary"><i class="fas fa-hourglass-half me-1"></i>Not checked yet</span>
+                    <?php elseif ($erp_monthly_check['matched']): ?>
+                    <span class="badge bg-success"><i class="fas fa-check me-1"></i>Match (Δ <?= number_format(abs($erp_monthly_check['diff']), 2) ?> BDT)</span>
+                    <?php else: ?>
+                    <span class="badge bg-danger"><i class="fas fa-triangle-exclamation me-1"></i>MISMATCH (Δ <?= number_format(abs($erp_monthly_check['diff']), 2) ?> BDT)</span>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+
         <div id="erp-ocr-status" class="small text-muted mt-3"></div>
 
         <div class="d-flex gap-2 mt-2 flex-wrap align-items-center">
@@ -816,6 +851,11 @@ require_once __DIR__ . '/../includes/header.php';
                 <input type="number" step="0.01" min="0" class="form-control" id="erp-manual-amount"
                        placeholder="Payable amount (manual override)">
                 <button type="button" class="btn btn-outline-secondary" id="erp-manual-save">Save</button>
+            </div>
+            <div class="input-group input-group-sm" style="max-width:300px;">
+                <input type="number" step="0.01" min="0" class="form-control" id="erp-manual-monthly"
+                       placeholder="Monthly payment (manual override)">
+                <button type="button" class="btn btn-outline-secondary" id="erp-manual-monthly-save">Save</button>
             </div>
             <?php endif; ?>
         </div>
@@ -833,6 +873,8 @@ require_once __DIR__ . '/../includes/header.php';
         formIdFee:     <?= json_encode(round($form_id_fee, 2)) ?>,
         tolerance:     <?= json_encode((float)SFP_OLD_ERP_TOLERANCE) ?>,
         stdProjectFee: <?= json_encode((float)SFP_OLD_ERP_STANDARD_PROJECT_FEE) ?>,
+        expectedMonthly:  <?= json_encode(round($erp_expected_monthly, 2)) ?>,
+        monthlyTolerance: <?= json_encode((float)SFP_OLD_ERP_MONTHLY_TOLERANCE) ?>,
         stored:        <?= json_encode($old_erp_payable) ?>,
         proofUrl:      <?= json_encode($erp_ocr_proof_url) ?>,
         saveUrl:       <?= json_encode(APP_URL . '/student-accounts/save-erp-payable.php') ?>,
@@ -887,6 +929,20 @@ require_once __DIR__ . '/../includes/header.php';
         }
     }
 
+    function applyMonthlyResult(monthly, sourceNote) {
+        var d = $id('erp-monthly-display');
+        if (d) d.textContent = fmt(monthly);
+        var n = $id('erp-monthly-note');
+        if (n && sourceNote) n.textContent = sourceNote;
+        var b = $id('erp-monthly-badge');
+        if (b) {
+            var diff = Math.abs(monthly - CFG.expectedMonthly);
+            b.innerHTML = diff <= CFG.monthlyTolerance
+                ? '<span class="badge bg-success"><i class="fas fa-check me-1"></i>Match (Δ ' + diff.toFixed(2) + ' BDT)</span>'
+                : '<span class="badge bg-danger"><i class="fas fa-triangle-exclamation me-1"></i>MISMATCH (Δ ' + diff.toFixed(2) + ' BDT)</span>';
+        }
+    }
+
     function save(amount, source, monthly, cb) {
         var fd = new FormData();
         fd.append(CFG.csrfField, CFG.csrfToken);
@@ -911,6 +967,7 @@ require_once __DIR__ . '/../includes/header.php';
         fetch(CFG.saveUrl, { method: 'POST', body: fd })
             .then(function (r) { return r.json(); })
             .then(function (resp) {
+                if (resp.success) applyMonthlyResult(monthly, 'Read automatically (OCR) · just now');
                 setStatus(resp.success
                     ? 'No "Payable Amount" found, but the Monthly Payment (' + fmt(monthly) + ') was read and saved.'
                     : 'Monthly Payment read but saving failed.', !resp.success);
@@ -1004,6 +1061,7 @@ require_once __DIR__ . '/../includes/header.php';
                         applyResult(val, 'Read automatically (OCR) · not saved');
                         return;
                     }
+                    if (mval !== null) applyMonthlyResult(mval, 'Read automatically (OCR) · just now');
                     if (resp.skipped) {
                         setStatus('OCR read ' + fmt(val) + ', but a manually entered value is kept (' + fmt(resp.amount) + ').');
                         return;
@@ -1032,6 +1090,29 @@ require_once __DIR__ . '/../includes/header.php';
                 applyResult(v, 'Entered manually · just now');
                 input.value = '';
             });
+        });
+    }
+
+    var manualMonthlyBtn = $id('erp-manual-monthly-save');
+    if (manualMonthlyBtn) {
+        manualMonthlyBtn.addEventListener('click', function () {
+            var input = $id('erp-manual-monthly');
+            var v = parseFloat(input.value);
+            if (isNaN(v) || v < 0) { setStatus('Enter a valid monthly payment first.', true); return; }
+            var fd = new FormData();
+            fd.append(CFG.csrfField, CFG.csrfToken);
+            fd.append('package_id', CFG.packageId);
+            fd.append('monthly', v);
+            fd.append('source', 'manual');
+            fetch(CFG.saveUrl, { method: 'POST', body: fd })
+                .then(function (r) { return r.json(); })
+                .then(function (resp) {
+                    if (!resp.success) { setStatus('Saving failed: ' + (resp.error || 'unknown error'), true); return; }
+                    setStatus('Manual monthly payment saved.');
+                    applyMonthlyResult(v, 'Entered manually · just now');
+                    input.value = '';
+                })
+                .catch(function (e) { setStatus('Saving failed: ' + e, true); });
         });
     }
 
