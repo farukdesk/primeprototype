@@ -405,8 +405,35 @@ require_once __DIR__ . '/../includes/header.php';
                     </tr>
                 </thead>
                 <tbody>
-                <?php foreach ($packages as $pkg): ?>
-                <tr>
+                <?php foreach ($packages as $pkg):
+                    // ── OLD ERP payable cross-check for this row (±50 BDT) ──
+                    // Mirrors the view.php Grand Total (approved values; pending
+                    // VC-approval projections are not included here).
+                    $erp_payable = (isset($pkg['old_erp_payable_amount']) && $pkg['old_erp_payable_amount'] !== null)
+                        ? (float)$pkg['old_erp_payable_amount'] : null;
+                    $erp_check = null;
+                    if ($erp_payable !== null) {
+                        $months_chk = (float)($pkg['total_months'] ?? 0);
+                        $mps_chk    = (float)($pkg['months_per_semester'] ?? 0);
+                        $fixed_ps_chk = ($months_chk > 0 && $mps_chk > 0)
+                            ? round((float)$pkg['fixed_institutional_fees'] * $mps_chk / $months_chk, 2) : 0.0;
+                        $eng_ps_chk   = ($months_chk > 0 && $mps_chk > 0)
+                            ? round((float)$pkg['english_course_fee'] * $mps_chk / $months_chk, 2) : 0.0;
+                        $sem_cnt      = (int)($pkg['erp_sem_count'] ?? 0);
+                        $proj_fee_row = acc_package_project_fee($pkg);
+                        $grand_row = (float)($pkg['erp_sum_tuition'] ?? 0)
+                                   + max(0.0, $fixed_ps_chk * $sem_cnt - (float)($pkg['erp_sum_fixed_disc'] ?? 0))
+                                   + max(0.0, $eng_ps_chk   * $sem_cnt - (float)($pkg['erp_sum_eng_disc']   ?? 0))
+                                   + (float)($pkg['reg_fee_per_semester'] ?? 0) * $sem_cnt
+                                   + (float)($pkg['admission_fees'] ?? 0)
+                                   + acc_package_form_id_fee($pkg)
+                                   + $proj_fee_row
+                                   + (float)($pkg['bi_tri_shift_fee'] ?? 0);
+                        $erp_check = sfp_old_erp_check($erp_payable, $grand_row, $proj_fee_row);
+                    }
+                    $erp_row_class = ($erp_check !== null && !$erp_check['matched']) ? 'table-danger' : '';
+                ?>
+                <tr class="<?= $erp_row_class ?>">
                     <?php if ($can_bulk_edit): ?>
                     <td>
                         <input type="checkbox" class="form-check-input bulk-pkg" form="bulk-form"
@@ -422,6 +449,28 @@ require_once __DIR__ . '/../includes/header.php';
                         <?php if (function_exists('sd_current_badge')): $sd_b = sd_current_badge((int)$pkg['student_id']); if ($sd_b !== ''): ?>
                         <div class="mt-1"><?= $sd_b ?></div>
                         <?php endif; endif; ?>
+                        <?php if ($erp_check !== null && !$erp_check['matched']): ?>
+                        <div class="mt-1">
+                            <span class="badge bg-danger"
+                                  title="OLD ERP Payable (<?= number_format($erp_payable, 2) ?> BDT) differs from the Grand Total by <?= number_format($erp_check['best_diff'], 2) ?> BDT (tolerance ±<?= number_format(SFP_OLD_ERP_TOLERANCE, 0) ?> BDT, incl. Project Fee cross-check). Open the account to review.">
+                                <i class="fas fa-triangle-exclamation me-1"></i>ERP mismatch (Δ <?= number_format($erp_check['best_diff'], 0) ?>)
+                            </span>
+                        </div>
+                        <?php elseif ($erp_check !== null): ?>
+                        <div class="mt-1">
+                            <span class="badge bg-success bg-opacity-75"
+                                  title="OLD ERP Payable (<?= number_format($erp_payable, 2) ?> BDT) matches the Grand Total within ±<?= number_format(SFP_OLD_ERP_TOLERANCE, 0) ?> BDT.">
+                                <i class="fas fa-check me-1"></i>ERP ✓
+                            </span>
+                        </div>
+                        <?php elseif (!empty($pkg['has_erp_proof'])): ?>
+                        <div class="mt-1">
+                            <span class="badge bg-secondary"
+                                  title="An OLD ERP proof is attached but the Payable Amount has not been read yet. Open the account to run the automatic check.">
+                                <i class="fas fa-hourglass-half me-1"></i>ERP unchecked
+                            </span>
+                        </div>
+                        <?php endif; ?>
                     </td>
                     <td>
                         <?= h($pkg['program_name']) ?>
