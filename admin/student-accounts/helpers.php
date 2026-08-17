@@ -145,29 +145,36 @@ define('SFP_OLD_ERP_STANDARD_PROJECT_FEE', 1000.0);
 
 /**
  * Cross-check the OLD ERP "Payable Amount" (read from the proof screenshot)
- * against the new-ERP Grand Total (incl. Admission, Form & ID Card & Project fees).
+ * against the new-ERP Grand Total.
+ *
+ * The OLD ERP payable EXCLUDES the one-time Form Fee, ID Card Fee and
+ * Project Fee, so the comparison base is:
+ *   base = Grand Total − Form & ID Card fees
  *
  * Match bases, each within ±SFP_OLD_ERP_TOLERANCE BDT:
- *   1. Grand Total
- *   2. Grand Total − Project Fee (one-time), when a project fee is assigned
- *   3. Grand Total − 1,000 BDT (standard project fee cross-check)
+ *   1. base − Project Fee (one-time), when a project fee is assigned
+ *   2. base − 1,000 BDT (standard project fee cross-check)
+ *   3. base (when no project fee applies)
  *
  * @return array{matched:bool,diff:float,best_diff:float,basis:string}|null
  *         null when no payable amount has been captured yet.
  */
-function sfp_old_erp_check(?float $payable, float $grand_total, float $project_fee): ?array
+function sfp_old_erp_check(?float $payable, float $grand_total, float $project_fee, float $form_id_fee = 0.0): ?array
 {
     if ($payable === null) {
         return null;
     }
 
-    $candidates = ['grand_total' => $grand_total];
-    if ($project_fee > 0) {
-        $candidates['grand_minus_project'] = $grand_total - $project_fee;
-    }
-    $candidates['grand_minus_1000'] = $grand_total - SFP_OLD_ERP_STANDARD_PROJECT_FEE;
+    $base = $grand_total - $form_id_fee;
 
-    $best_key  = 'grand_total';
+    $candidates = [];
+    if ($project_fee > 0) {
+        $candidates['base_minus_project'] = $base - $project_fee;
+    }
+    $candidates['base_minus_1000'] = $base - SFP_OLD_ERP_STANDARD_PROJECT_FEE;
+    $candidates['base']            = $base;
+
+    $best_key  = 'base';
     $best_diff = null;
     foreach ($candidates as $key => $value) {
         $diff = abs($value - $payable);
@@ -179,7 +186,7 @@ function sfp_old_erp_check(?float $payable, float $grand_total, float $project_f
 
     return [
         'matched'   => $best_diff <= SFP_OLD_ERP_TOLERANCE,
-        'diff'      => round($payable - $grand_total, 2),
+        'diff'      => round($payable - $base, 2),
         'best_diff' => round((float)$best_diff, 2),
         'basis'     => $best_key,
     ];
