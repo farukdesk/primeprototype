@@ -153,10 +153,27 @@ $cnt_stmt = $db->prepare(
     "SELECT COUNT(*)
        FROM sfp_packages p
        JOIN students s ON s.id = p.student_id
-      WHERE $unchecked_where $scope_sql"
+      WHERE $unchecked_where $scope_sql $filter_sql"
 );
-$cnt_stmt->execute($scope_params);
+$cnt_stmt->execute(array_merge($scope_params, $filter_params));
 $unchecked_total = (int)$cnt_stmt->fetchColumn();
+
+// ── Filter dropdown data (same sources as index.php) ──────────────────────
+$departments = $db->query(
+    'SELECT id, name FROM dept_departments WHERE is_active = 1 ORDER BY name ASC'
+)->fetchAll();
+$all_programs = sm_program_data();
+$batches      = sm_batches();
+if ($dept_scope !== null) {
+    $departments = array_values(array_filter(
+        $departments,
+        fn($d) => in_array((int)$d['id'], $dept_scope, true)
+    ));
+    $all_programs = array_values(array_filter(
+        $all_programs,
+        fn($p) => in_array((int)$p['dept_id'], $dept_scope, true)
+    ));
+}
 
 $page_title = 'Bulk ERP Check – Student Accounts';
 require_once __DIR__ . '/../includes/header.php';
