@@ -281,9 +281,18 @@ require_once __DIR__ . '/../includes/header.php';
                     <?php endforeach; ?>
                 </select>
             </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold small mb-1">OLD ERP Check</label>
+                <select name="erp" class="form-select form-select-sm">
+                    <option value="">All</option>
+                    <option value="mismatch" <?= $f_erp === 'mismatch' ? 'selected' : '' ?>>⚠ MISMATCH only</option>
+                    <option value="match" <?= $f_erp === 'match' ? 'selected' : '' ?>>✓ Match only</option>
+                    <option value="unchecked" <?= $f_erp === 'unchecked' ? 'selected' : '' ?>>Unchecked (proof attached)</option>
+                </select>
+            </div>
             <div class="col-6 col-md-2 d-flex gap-2">
                 <button class="btn btn-primary btn-sm flex-fill" type="submit"><i class="fas fa-search me-1"></i>Filter</button>
-                <?php if ($search !== '' || $f_dept || $f_program || $f_batch || $f_sems): ?>
+                <?php if ($search !== '' || $f_dept || $f_program || $f_batch || $f_sems || $f_erp !== ''): ?>
                 <a href="<?= APP_URL ?>/student-accounts/index.php" class="btn btn-outline-secondary btn-sm flex-fill">Clear</a>
                 <?php endif; ?>
             </div>
