@@ -24,6 +24,18 @@ require_once __DIR__ . '/../includes/auth.php';
 require_access('student-accounts');
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/../accounting/helpers.php';
+require_once __DIR__ . '/../students/helpers.php';  // sm_program_data(), sm_batches()
+
+// ── Filters: Department / Program / Batch (apply to the queue and counters) ───
+$f_dept    = (int)($_GET['dept']    ?? 0);
+$f_program = (int)($_GET['program'] ?? 0);
+$f_batch   = (int)($_GET['batch']   ?? 0);
+
+$filter_sql    = '';
+$filter_params = [];
+if ($f_dept > 0)    { $filter_sql .= ' AND s.dept_id = ?';    $filter_params[] = $f_dept; }
+if ($f_program > 0) { $filter_sql .= ' AND s.program_id = ?'; $filter_params[] = $f_program; }
+if ($f_batch > 0)   { $filter_sql .= ' AND s.batch_id = ?';   $filter_params[] = $f_batch; }
 
 // ── Shared: department scope (same restriction as index.php) ──────────────
 $dept_scope   = get_dept_scope();
