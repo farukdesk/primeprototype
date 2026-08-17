@@ -788,13 +788,10 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="fw-bold fs-5"><?= sfp_money($total_cost) ?></div>
             </div>
             <div class="col-md-3">
-                <?php if ($project_fee_one_time > 0): ?>
-                <div class="text-muted small mb-1">Grand Total − Project Fee</div>
-                <div class="fw-bold fs-5"><?= sfp_money($total_cost - $project_fee_one_time) ?></div>
-                <?php else: ?>
-                <div class="text-muted small mb-1">Grand Total − 1,000 (project fee cross-check)</div>
-                <div class="fw-bold fs-5"><?= sfp_money($total_cost - SFP_OLD_ERP_STANDARD_PROJECT_FEE) ?></div>
-                <?php endif; ?>
+                <div class="text-muted small mb-1">Expected OLD ERP Payable
+                    <span class="d-block" style="font-size:.7rem;">Grand − Form &amp; ID Card<?= $project_fee_one_time > 0 ? ' − Project Fee' : ' − 1,000 (project fee)' ?></span>
+                </div>
+                <div class="fw-bold fs-5"><?= sfp_money($total_cost - $form_id_fee - ($project_fee_one_time > 0 ? $project_fee_one_time : SFP_OLD_ERP_STANDARD_PROJECT_FEE)) ?></div>
             </div>
             <div class="col-md-3">
                 <div class="text-muted small mb-1">Matched against</div>
