@@ -38,11 +38,20 @@ $source     = (($_POST['source'] ?? 'ocr') === 'manual') ? 'manual' : 'ocr';
 $raw        = trim((string)($_POST['amount'] ?? ''));
 $amount     = ($raw === '') ? null : (float)str_replace(',', '', $raw);
 
+// Optional: Monthly Payment read from the proof. Only saved when the
+// 'monthly' field is present in the request; otherwise left untouched.
+$has_monthly = array_key_exists('monthly', $_POST);
+$monthly_raw = trim((string)($_POST['monthly'] ?? ''));
+$monthly     = ($monthly_raw === '') ? null : (float)str_replace(',', '', $monthly_raw);
+
 if ($package_id <= 0) {
     sep_json(['success' => false, 'error' => 'Invalid package.']);
 }
 if ($amount !== null && ($amount < 0 || $amount > 99999999)) {
     sep_json(['success' => false, 'error' => 'Invalid amount.']);
+}
+if ($has_monthly && $monthly !== null && ($monthly < 0 || $monthly > 9999999)) {
+    sep_json(['success' => false, 'error' => 'Invalid monthly amount.']);
 }
 // Manual entry / clearing is an explicit edit; OCR auto-save only needs view access.
 if ($source === 'manual' && !sfp_can_edit()) {
