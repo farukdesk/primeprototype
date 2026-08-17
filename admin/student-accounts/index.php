@@ -17,9 +17,10 @@ $f_dept    = (int)($_GET['dept']    ?? 0);
 $f_program = (int)($_GET['program'] ?? 0);
 $f_batch   = (int)($_GET['batch']   ?? 0);
 $f_sems    = (int)($_GET['sems']    ?? 0);
-// OLD ERP cross-check status filter: '' | 'mismatch' | 'match' | 'unchecked'
+// OLD ERP cross-check status filter:
+// '' | 'mismatch' | 'match' | 'unchecked' | 'monthly_mismatch' | 'monthly_match'
 $f_erp     = trim($_GET['erp'] ?? '');
-if (!in_array($f_erp, ['', 'mismatch', 'match', 'unchecked'], true)) {
+if (!in_array($f_erp, ['', 'mismatch', 'match', 'unchecked', 'monthly_mismatch', 'monthly_match'], true)) {
     $f_erp = '';
 }
 
@@ -51,6 +52,10 @@ if ($f_erp === 'mismatch' || $f_erp === 'match') {
     // Only checked accounts can have a match / mismatch status;
     // the exact status is computed per row in PHP below.
     $where[] = 'p.old_erp_payable_amount IS NOT NULL';
+} elseif ($f_erp === 'monthly_mismatch' || $f_erp === 'monthly_match') {
+    // Only accounts with a captured Monthly Payment can have a monthly status;
+    // the exact status is computed per row in PHP below.
+    $where[] = 'p.old_erp_monthly_amount IS NOT NULL';
 } elseif ($f_erp === 'unchecked') {
     $where[] = "p.old_erp_payable_amount IS NULL
                 AND EXISTS (SELECT 1 FROM student_files stf
@@ -97,6 +102,18 @@ $sfp_index_erp_check = static function (array $pkg): ?array {
     return sfp_old_erp_check((float)$pkg['old_erp_payable_amount'], $grand, $proj_fee, $form_id);
 };
 
+// ── OLD ERP Monthly Payment cross-check for a list row ──────────────────────
+$sfp_index_monthly_check = static function (array $pkg): ?array {
+    if (!isset($pkg['old_erp_monthly_amount']) || $pkg['old_erp_monthly_amount'] === null) {
+        return null;
+    }
+    $expected = sfp_expected_monthly_total(
+        $pkg,
+        (float)($pkg['current_tuition_payable'] ?? $pkg['tuition_per_semester'] ?? 0)
+    );
+    return sfp_old_erp_monthly_check((float)$pkg['old_erp_monthly_amount'], $expected);
+};
+
 // ── Pagination ────────────────────────────────────────────────────────────────
 $per_page = 25;
 $page     = max(1, (int)($_GET['page'] ?? 1));
@@ -135,14 +152,25 @@ $list_select =
       WHERE $where_sql
       ORDER BY p.created_at DESC";
 
-if ($f_erp === 'mismatch' || $f_erp === 'match') {
+if (in_array($f_erp, ['mismatch', 'match', 'monthly_mismatch', 'monthly_match'], true)) {
     // Match / mismatch is computed from live fee math, so load all checked
-    // candidate rows (SQL already restricts to old_erp_payable_amount IS NOT
-    // NULL), evaluate each one and paginate in PHP.
+    // candidate rows (SQL already restricts to the relevant captured amount),
+    // evaluate each one and paginate in PHP.
     $stmt = $db->prepare($list_select);
     $stmt->execute($params);
     $filtered = [];
     foreach ($stmt->fetchAll() as $row) {
+        if ($f_erp === 'monthly_mismatch' || $f_erp === 'monthly_match') {
+            $chk = $sfp_index_monthly_check($row);
+            if ($chk === null) {
+                continue;
+            }
+            if (($f_erp === 'monthly_mismatch' && !$chk['matched'])
+                || ($f_erp === 'monthly_match' && $chk['matched'])) {
+                $filtered[] = $row;
+            }
+            continue;
+        }
         $chk = $sfp_index_erp_check($row);
         if ($chk === null) {
             continue;
@@ -287,6 +315,8 @@ require_once __DIR__ . '/../includes/header.php';
                     <option value="">All</option>
                     <option value="mismatch" <?= $f_erp === 'mismatch' ? 'selected' : '' ?>>⚠ MISMATCH only</option>
                     <option value="match" <?= $f_erp === 'match' ? 'selected' : '' ?>>✓ Match only</option>
+                    <option value="monthly_mismatch" <?= $f_erp === 'monthly_mismatch' ? 'selected' : '' ?>>⚠ Monthly mismatch only</option>
+                    <option value="monthly_match" <?= $f_erp === 'monthly_match' ? 'selected' : '' ?>>✓ Monthly match only</option>
                     <option value="unchecked" <?= $f_erp === 'unchecked' ? 'selected' : '' ?>>Unchecked (proof attached)</option>
                 </select>
             </div>
