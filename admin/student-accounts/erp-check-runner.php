@@ -24,6 +24,18 @@ require_once __DIR__ . '/../includes/auth.php';
 require_access('student-accounts');
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/../accounting/helpers.php';
+require_once __DIR__ . '/../students/helpers.php';  // sm_program_data(), sm_batches()
+
+// ── Filters: Department / Program / Batch (apply to the queue and counters) ───
+$f_dept    = (int)($_GET['dept']    ?? 0);
+$f_program = (int)($_GET['program'] ?? 0);
+$f_batch   = (int)($_GET['batch']   ?? 0);
+
+$filter_sql    = '';
+$filter_params = [];
+if ($f_dept > 0)    { $filter_sql .= ' AND s.dept_id = ?';    $filter_params[] = $f_dept; }
+if ($f_program > 0) { $filter_sql .= ' AND s.program_id = ?'; $filter_params[] = $f_program; }
+if ($f_batch > 0)   { $filter_sql .= ' AND s.batch_id = ?';   $filter_params[] = $f_batch; }
 
 // ── Shared: department scope (same restriction as index.php) ──────────────
 $dept_scope   = get_dept_scope();
@@ -60,9 +72,9 @@ if (($_GET['action'] ?? '') === 'list') {
         "SELECT COUNT(*)
            FROM sfp_packages p
            JOIN students s ON s.id = p.student_id
-          WHERE $unchecked_where $scope_sql $exclude_sql"
+          WHERE $unchecked_where $scope_sql $filter_sql $exclude_sql"
     );
-    $cnt_stmt->execute($scope_params);
+    $cnt_stmt->execute(array_merge($scope_params, $filter_params));
     $remaining = (int)$cnt_stmt->fetchColumn();
 
     $stmt = $db->prepare(
@@ -86,11 +98,11 @@ if (($_GET['action'] ?? '') === 'list') {
                   LIMIT 1) AS proof_stored_name
            FROM sfp_packages p
            JOIN students s ON s.id = p.student_id
-          WHERE $unchecked_where $scope_sql $exclude_sql
+          WHERE $unchecked_where $scope_sql $filter_sql $exclude_sql
           ORDER BY p.id ASC
           LIMIT 25"
     );
-    $stmt->execute($scope_params);
+    $stmt->execute(array_merge($scope_params, $filter_params));
 
     $items = [];
     foreach ($stmt->fetchAll() as $pkg) {
@@ -141,10 +153,27 @@ $cnt_stmt = $db->prepare(
     "SELECT COUNT(*)
        FROM sfp_packages p
        JOIN students s ON s.id = p.student_id
-      WHERE $unchecked_where $scope_sql"
+      WHERE $unchecked_where $scope_sql $filter_sql"
 );
-$cnt_stmt->execute($scope_params);
+$cnt_stmt->execute(array_merge($scope_params, $filter_params));
 $unchecked_total = (int)$cnt_stmt->fetchColumn();
+
+// ── Filter dropdown data (same sources as index.php) ──────────────────────
+$departments = $db->query(
+    'SELECT id, name FROM dept_departments WHERE is_active = 1 ORDER BY name ASC'
+)->fetchAll();
+$all_programs = sm_program_data();
+$batches      = sm_batches();
+if ($dept_scope !== null) {
+    $departments = array_values(array_filter(
+        $departments,
+        fn($d) => in_array((int)$d['id'], $dept_scope, true)
+    ));
+    $all_programs = array_values(array_filter(
+        $all_programs,
+        fn($p) => in_array((int)$p['dept_id'], $dept_scope, true)
+    ));
+}
 
 $page_title = 'Bulk ERP Check – Student Accounts';
 require_once __DIR__ . '/../includes/header.php';
@@ -182,6 +211,81 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
     </div>
 </div>
+
+<!-- ── Filters ── -->
+<div class="card mb-4">
+    <div class="card-body py-3">
+        <form method="get" class="row g-2 align-items-end">
+            <div class="col-6 col-md-3">
+                <label class="form-label fw-semibold small mb-1">Department</label>
+                <select name="dept" id="filter_dept" class="form-select form-select-sm">
+                    <option value="">All Depts</option>
+                    <?php foreach ($departments as $d): ?>
+                    <option value="<?= $d['id'] ?>" <?= $f_dept == $d['id'] ? 'selected' : '' ?>>
+                        <?= h($d['name']) ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label fw-semibold small mb-1">Program</label>
+                <select name="program" id="filter_program" class="form-select form-select-sm">
+                    <option value="">All Programs</option>
+                    <?php foreach ($all_programs as $p): ?>
+                    <option value="<?= $p['id'] ?>"
+                            data-dept="<?= $p['dept_id'] ?>"
+                            <?= $f_program == $p['id'] ? 'selected' : '' ?>>
+                        <?= h($p['program_name']) ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label fw-semibold small mb-1">Batch</label>
+                <select name="batch" class="form-select form-select-sm">
+                    <option value="">All Batches</option>
+                    <?php foreach ($batches as $b): ?>
+                    <option value="<?= $b['id'] ?>" <?= $f_batch == $b['id'] ? 'selected' : '' ?>>
+                        <?= h($b['name']) ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-6 col-md-3 d-flex gap-2">
+                <button class="btn btn-primary btn-sm flex-fill" type="submit">
+                    <i class="fas fa-filter me-1"></i>Apply Filter
+                </button>
+                <?php if ($f_dept || $f_program || $f_batch): ?>
+                <a href="<?= APP_URL ?>/student-accounts/erp-check-runner.php" class="btn btn-outline-secondary btn-sm flex-fill">Clear</a>
+                <?php endif; ?>
+            </div>
+        </form>
+        <?php if ($f_dept || $f_program || $f_batch): ?>
+        <div class="small text-muted mt-2">
+            <i class="fas fa-filter me-1"></i>Filter active – only the <?= number_format($unchecked_total) ?> matching unchecked account(s) will be processed.
+        </div>
+        <?php endif; ?>
+    </div>
+</div>
+
+<script>
+(function () {
+    var deptSel    = document.getElementById('filter_dept');
+    var programSel = document.getElementById('filter_program');
+    if (!deptSel || !programSel) return;
+    function filterPrograms() {
+        var deptId = deptSel.value;
+        programSel.querySelectorAll('option[data-dept]').forEach(function (opt) {
+            var show = !deptId || opt.dataset.dept === deptId;
+            opt.hidden   = !show;
+            opt.disabled = !show;
+            if (!show && opt.selected) programSel.value = '';
+        });
+    }
+    deptSel.addEventListener('change', filterPrograms);
+    filterPrograms();
+}());
+</script>
 
 <div class="card mb-4">
     <div class="card-body d-flex align-items-center gap-3 flex-wrap">
@@ -241,7 +345,7 @@ require_once __DIR__ . '/../includes/header.php';
     'use strict';
 
     var CFG = {
-        listUrl:       '<?= APP_URL ?>/student-accounts/erp-check-runner.php?action=list',
+        listUrl:       '<?= APP_URL ?>/student-accounts/erp-check-runner.php?action=list&dept=<?= (int)$f_dept ?>&program=<?= (int)$f_program ?>&batch=<?= (int)$f_batch ?>',
         saveUrl:       '<?= APP_URL ?>/student-accounts/save-erp-payable.php',
         tolerance:     <?= json_encode((float)SFP_OLD_ERP_TOLERANCE) ?>,
         stdProjectFee: <?= json_encode((float)SFP_OLD_ERP_STANDARD_PROJECT_FEE) ?>,
