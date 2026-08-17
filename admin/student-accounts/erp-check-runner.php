@@ -394,7 +394,7 @@ require_once __DIR__ . '/../includes/header.php';
                 return;
             }
             save(item.package_id, val, function (ok) {
-                var ev = evaluate(val, item.grand_total, item.project_fee);
+                var ev = evaluate(val, item.grand_total, item.project_fee, item.form_id_fee);
                 if (!ok) {
                     // Could not persist – treat as failed so it is retried later
                     nFailed++; nDone++;
