@@ -603,7 +603,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <?php for ($p = 1; $p <= $pages; $p++): ?>
                     <li class="page-item <?= $p === $page ? 'active' : '' ?>">
                         <a class="page-link"
-                           href="?<?= http_build_query(['q' => $search, 'dept' => $f_dept ?: '', 'program' => $f_program ?: '', 'batch' => $f_batch ?: '', 'sems' => $f_sems ?: '', 'page' => $p]) ?>">
+                           href="?<?= http_build_query(['q' => $search, 'dept' => $f_dept ?: '', 'program' => $f_program ?: '', 'batch' => $f_batch ?: '', 'sems' => $f_sems ?: '', 'erp' => $f_erp ?: '', 'page' => $p]) ?>">
                             <?= $p ?>
                         </a>
                     </li>
