@@ -551,6 +551,7 @@ require_once __DIR__ . '/../includes/header.php';
         }
 
         var item = queue.shift();
+        afterId = Math.max(afterId, item.package_id);
         setStatus('Reading proof for ' + item.name + ' (' + item.sid + ')…');
 
         worker.recognize(item.proof_url).then(function (res) {
