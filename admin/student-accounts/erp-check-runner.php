@@ -1,0 +1,458 @@
+<?php
+/**
+ * Student Accounts – Bulk ERP Check Runner
+ *
+ * Mass OCR cross-check: goes through every package that has an OLD ERP proof
+ * image attached but no stored Payable Amount yet, reads the "Payable Amount"
+ * from the proof with client-side OCR (Tesseract.js), saves it via
+ * save-erp-payable.php and compares it with the Grand Total (±50 BDT,
+ * incl. the Project Fee / 1,000 BDT cross-checks).
+ *
+ * The run is resumable: checked accounts drop out of the queue automatically
+ * (old_erp_payable_amount IS NULL filter), so the tab can be closed and the
+ * runner restarted at any time. OCR failures are skipped and listed for
+ * manual entry on the account page.
+ *
+ * ?action=list – JSON: next batch of unchecked packages (id, proof URL,
+ *                grand total, project fee) + remaining count.
+ */
+
+ob_start();
+ini_set('display_errors', '0');
+
+require_once __DIR__ . '/../includes/auth.php';
+require_access('student-accounts');
+require_once __DIR__ . '/helpers.php';
+require_once __DIR__ . '/../accounting/helpers.php';
+
+// ── Shared: department scope (same restriction as index.php) ──────────────
+$dept_scope   = get_dept_scope();
+$scope_sql    = '';
+$scope_params = [];
+if ($dept_scope !== null) {
+    if (empty($dept_scope)) {
+        $scope_sql = ' AND 0 = 1';
+    } else {
+        $phs          = implode(',', array_fill(0, count($dept_scope), '?'));
+        $scope_sql    = " AND s.dept_id IN ($phs)";
+        $scope_params = array_values($dept_scope);
+    }
+}
+
+$unchecked_where =
+    "p.old_erp_payable_amount IS NULL
+     AND EXISTS (SELECT 1 FROM student_files stf
+                  WHERE stf.student_id = p.student_id
+                    AND stf.file_name  = '" . SFP_OLD_ERP_PROOF_LABEL . "'
+                    AND stf.mime_type LIKE 'image/%')";
+
+// ── JSON: next batch of unchecked packages ─────────────────────────────
+if (($_GET['action'] ?? '') === 'list') {
+    header('Content-Type: application/json; charset=UTF-8');
+
+    // Packages the client already tried and failed (OCR could not read them)
+    $exclude = array_filter(array_map('intval', explode(',', (string)($_GET['exclude'] ?? ''))));
+    $exclude_sql = $exclude ? ' AND p.id NOT IN (' . implode(',', $exclude) . ')' : '';
+
+    $db = db();
+
+    $cnt_stmt = $db->prepare(
+        "SELECT COUNT(*)
+           FROM sfp_packages p
+           JOIN students s ON s.id = p.student_id
+          WHERE $unchecked_where $scope_sql $exclude_sql"
+    );
+    $cnt_stmt->execute($scope_params);
+    $remaining = (int)$cnt_stmt->fetchColumn();
+
+    $stmt = $db->prepare(
+        "SELECT p.*,
+                s.full_name  AS student_name,
+                s.student_id AS student_sid,
+                (SELECT COALESCE(SUM(sf.tuition_payable), 0)
+                   FROM sfp_semester_fees sf WHERE sf.package_id = p.id) AS erp_sum_tuition,
+                (SELECT COALESCE(SUM(sf.fixed_discount_amount), 0)
+                   FROM sfp_semester_fees sf WHERE sf.package_id = p.id) AS erp_sum_fixed_disc,
+                (SELECT COALESCE(SUM(sf.english_discount_amount), 0)
+                   FROM sfp_semester_fees sf WHERE sf.package_id = p.id) AS erp_sum_eng_disc,
+                (SELECT COUNT(*)
+                   FROM sfp_semester_fees sf WHERE sf.package_id = p.id) AS erp_sem_count,
+                (SELECT stf.stored_name
+                   FROM student_files stf
+                  WHERE stf.student_id = p.student_id
+                    AND stf.file_name  = '" . SFP_OLD_ERP_PROOF_LABEL . "'
+                    AND stf.mime_type LIKE 'image/%'
+                  ORDER BY stf.created_at DESC, stf.id DESC
+                  LIMIT 1) AS proof_stored_name
+           FROM sfp_packages p
+           JOIN students s ON s.id = p.student_id
+          WHERE $unchecked_where $scope_sql $exclude_sql
+          ORDER BY p.id ASC
+          LIMIT 25"
+    );
+    $stmt->execute($scope_params);
+
+    $items = [];
+    foreach ($stmt->fetchAll() as $pkg) {
+        if (empty($pkg['proof_stored_name'])) {
+            continue;
+        }
+        $months = (float)($pkg['total_months'] ?? 0);
+        $mps    = (float)($pkg['months_per_semester'] ?? 0);
+        $fixed_ps = ($months > 0 && $mps > 0)
+            ? round((float)$pkg['fixed_institutional_fees'] * $mps / $months, 2) : 0.0;
+        $eng_ps   = ($months > 0 && $mps > 0)
+            ? round((float)$pkg['english_course_fee'] * $mps / $months, 2) : 0.0;
+        $sem_cnt  = (int)($pkg['erp_sem_count'] ?? 0);
+        $proj_fee = acc_package_project_fee($pkg);
+
+        $grand = (float)($pkg['erp_sum_tuition'] ?? 0)
+               + max(0.0, $fixed_ps * $sem_cnt - (float)($pkg['erp_sum_fixed_disc'] ?? 0))
+               + max(0.0, $eng_ps   * $sem_cnt - (float)($pkg['erp_sum_eng_disc']   ?? 0))
+               + (float)($pkg['reg_fee_per_semester'] ?? 0) * $sem_cnt
+               + (float)($pkg['admission_fees'] ?? 0)
+               + acc_package_form_id_fee($pkg)
+               + $proj_fee
+               + (float)($pkg['bi_tri_shift_fee'] ?? 0);
+
+        $items[] = [
+            'package_id'  => (int)$pkg['id'],
+            'name'        => (string)$pkg['student_name'],
+            'sid'         => (string)$pkg['student_sid'],
+            'proof_url'   => UPLOAD_URL . '/students/files/' . rawurlencode($pkg['proof_stored_name']),
+            'grand_total' => round($grand, 2),
+            'project_fee' => round($proj_fee, 2),
+            'view_url'    => APP_URL . '/student-accounts/view.php?id=' . (int)$pkg['id'],
+        ];
+    }
+
+    if (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    echo json_encode(['success' => true, 'remaining' => $remaining, 'items' => $items], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// ── HTML page ──────────────────────────────────────────────────────────────
+$db = db();
+$cnt_stmt = $db->prepare(
+    "SELECT COUNT(*)
+       FROM sfp_packages p
+       JOIN students s ON s.id = p.student_id
+      WHERE $unchecked_where $scope_sql"
+);
+$cnt_stmt->execute($scope_params);
+$unchecked_total = (int)$cnt_stmt->fetchColumn();
+
+$page_title = 'Bulk ERP Check – Student Accounts';
+require_once __DIR__ . '/../includes/header.php';
+?>
+
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+        <h1 class="h3 mb-0">
+            <i class="fas fa-wand-magic-sparkles me-2 text-success"></i>Bulk ERP Check
+        </h1>
+        <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small">
+            <li class="breadcrumb-item"><a href="<?= APP_URL ?>/index.php">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="<?= APP_URL ?>/student-accounts/index.php">Student Accounts</a></li>
+            <li class="breadcrumb-item active">Bulk ERP Check</li>
+        </ol></nav>
+    </div>
+    <a href="<?= APP_URL ?>/student-accounts/index.php" class="btn btn-outline-secondary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i> Back to Student Accounts
+    </a>
+</div>
+
+<?= flash_show() ?>
+
+<div class="alert alert-info">
+    <div class="d-flex gap-3">
+        <div class="fs-4 text-info"><i class="fas fa-info-circle"></i></div>
+        <div class="small">
+            <strong>How it works:</strong> this page reads the <em>Payable Amount</em> from every
+            OLD ERP proof screenshot with OCR, saves it, and compares it against the Grand Total
+            (incl. Admission, Form &amp; ID Card &amp; Project fees) with a ±<?= number_format(SFP_OLD_ERP_TOLERANCE, 0) ?> BDT tolerance
+            (also cross-checking Grand Total − Project Fee and − 1,000 BDT).
+            <strong>Keep this tab open</strong> while it runs (≈ 2–6 seconds per student).
+            You can stop at any time and continue later – already-checked students are skipped automatically.
+            Proofs the OCR cannot read are listed for quick manual entry.
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body d-flex align-items-center gap-3 flex-wrap">
+        <button type="button" class="btn btn-success" id="run-btn">
+            <i class="fas fa-play me-1"></i>Start Checking (<?= number_format($unchecked_total) ?> unchecked)
+        </button>
+        <button type="button" class="btn btn-outline-danger" id="stop-btn" disabled>
+            <i class="fas fa-stop me-1"></i>Stop
+        </button>
+        <div class="flex-grow-1" style="min-width:240px;">
+            <div class="progress" style="height:22px;">
+                <div id="progress-bar" class="progress-bar progress-bar-striped bg-success" role="progressbar" style="width:0%">0%</div>
+            </div>
+            <div class="small text-muted mt-1" id="status-line">Idle.</div>
+        </div>
+    </div>
+    <div class="card-footer py-2 d-flex gap-4 small">
+        <span><i class="fas fa-check-circle text-success me-1"></i>Match: <strong id="cnt-match">0</strong></span>
+        <span><i class="fas fa-triangle-exclamation text-danger me-1"></i>Mismatch: <strong id="cnt-mismatch">0</strong></span>
+        <span><i class="fas fa-question-circle text-warning me-1"></i>OCR failed (manual): <strong id="cnt-failed">0</strong></span>
+        <span><i class="fas fa-list text-muted me-1"></i>Processed: <strong id="cnt-done">0</strong> / <span id="cnt-total"><?= number_format($unchecked_total) ?></span></span>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h6 class="mb-0 fw-semibold"><i class="fas fa-table-list me-2 text-muted"></i>Results</h6>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-secondary btn-sm" onclick="erpFilter('all')">All</button>
+            <button class="btn btn-outline-danger btn-sm" onclick="erpFilter('mismatch')">Mismatches</button>
+            <button class="btn btn-outline-warning btn-sm" onclick="erpFilter('failed')">OCR failed</button>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive" style="max-height:520px;overflow-y:auto;">
+            <table class="table table-sm table-hover mb-0" style="font-size:.85rem;">
+                <thead class="table-light sticky-top">
+                    <tr>
+                        <th>Student</th>
+                        <th class="text-end">ERP Payable</th>
+                        <th class="text-end">Grand Total</th>
+                        <th class="text-end">Δ</th>
+                        <th>Status</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="results-body">
+                    <tr id="empty-row"><td colspan="6" class="text-center text-muted py-4">Not started yet.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    'use strict';
+
+    var CFG = {
+        listUrl:       '<?= APP_URL ?>/student-accounts/erp-check-runner.php?action=list',
+        saveUrl:       '<?= APP_URL ?>/student-accounts/save-erp-payable.php',
+        tolerance:     <?= json_encode((float)SFP_OLD_ERP_TOLERANCE) ?>,
+        stdProjectFee: <?= json_encode((float)SFP_OLD_ERP_STANDARD_PROJECT_FEE) ?>,
+        csrfField:     <?= json_encode(CSRF_TOKEN_NAME) ?>,
+        csrfToken:     <?= json_encode(csrf_token()) ?>,
+        total:         <?= (int)$unchecked_total ?>
+    };
+
+    var running = false, worker = null, queue = [], failedIds = [];
+    var nMatch = 0, nMismatch = 0, nFailed = 0, nDone = 0;
+
+    function $id(i) { return document.getElementById(i); }
+    function setStatus(t) { $id('status-line').textContent = t; }
+
+    function setProgress() {
+        var pct = CFG.total > 0 ? Math.min(100, Math.round(nDone / CFG.total * 100)) : 100;
+        var bar = $id('progress-bar');
+        bar.style.width = pct + '%';
+        bar.textContent = pct + '%';
+        $id('cnt-match').textContent    = nMatch;
+        $id('cnt-mismatch').textContent = nMismatch;
+        $id('cnt-failed').textContent   = nFailed;
+        $id('cnt-done').textContent     = nDone;
+    }
+
+    function fmt(n) { return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+    function esc(s) {
+        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // Same match rules as sfp_old_erp_check() in helpers.php
+    function evaluate(payable, grand, projectFee) {
+        var cands = [grand];
+        if (projectFee > 0) cands.push(grand - projectFee);
+        cands.push(grand - CFG.stdProjectFee);
+        var best = null;
+        cands.forEach(function (v) {
+            var d = Math.abs(v - payable);
+            if (best === null || d < best) best = d;
+        });
+        return { matched: best <= CFG.tolerance, diff: best };
+    }
+
+    function parsePayable(text) {
+        var lines = String(text).split(/\n/);
+        for (var i = 0; i < lines.length; i++) {
+            if (/pay\s*able/i.test(lines[i])) {
+                var nums = lines[i].match(/-?[\d,]+(?:\.\d+)?/g);
+                if (nums) {
+                    var vals = nums.map(function (n) { return parseFloat(n.replace(/,/g, '')); })
+                                   .filter(function (v) { return !isNaN(v) && v > 0; });
+                    if (vals.length) return Math.max.apply(null, vals);
+                }
+            }
+        }
+        var m = String(text).match(/pay\s*able[^0-9\-]*(-?[\d,]+(?:\.\d+)?)/i);
+        return m ? parseFloat(m[1].replace(/,/g, '')) : null;
+    }
+
+    function addRow(item, payable, res, status) {
+        var er = $id('empty-row');
+        if (er) er.remove();
+        var tr = document.createElement('tr');
+        tr.dataset.status = status;
+        var badge = status === 'match'
+            ? '<span class="badge bg-success">Match</span>'
+            : status === 'mismatch'
+                ? '<span class="badge bg-danger">MISMATCH</span>'
+                : '<span class="badge bg-warning text-dark">OCR failed – manual</span>';
+        if (status === 'mismatch') tr.className = 'table-danger';
+        tr.innerHTML =
+            '<td>' + esc(item.name) + '<br><small class="text-muted">' + esc(item.sid) + '</small></td>' +
+            '<td class="text-end">' + (payable === null ? '—' : fmt(payable)) + '</td>' +
+            '<td class="text-end">' + fmt(item.grand_total) + '</td>' +
+            '<td class="text-end">' + (res ? fmt(res.diff) : '—') + '</td>' +
+            '<td>' + badge + '</td>' +
+            '<td class="text-end"><a href="' + esc(item.view_url) + '" target="_blank" class="btn btn-outline-primary btn-sm py-0">Open</a></td>';
+        var body = $id('results-body');
+        body.insertBefore(tr, body.firstChild);
+    }
+
+    window.erpFilter = function (status) {
+        document.querySelectorAll('#results-body tr').forEach(function (tr) {
+            if (!tr.dataset.status) return;
+            tr.style.display = (status === 'all'
+                || (status === 'mismatch' && tr.dataset.status === 'mismatch')
+                || (status === 'failed'   && tr.dataset.status === 'failed')) ? '' : 'none';
+        });
+    };
+
+    function save(packageId, amount, cb) {
+        var fd = new FormData();
+        fd.append(CFG.csrfField, CFG.csrfToken);
+        fd.append('package_id', packageId);
+        fd.append('amount', amount);
+        fd.append('source', 'ocr');
+        fetch(CFG.saveUrl, { method: 'POST', body: fd })
+            .then(function (r) { return r.json(); })
+            .then(function (resp) { cb(!!resp.success); })
+            .catch(function () { cb(false); });
+    }
+
+    function fetchBatch(cb) {
+        var url = CFG.listUrl + '&exclude=' + encodeURIComponent(failedIds.join(','));
+        fetch(url)
+            .then(function (r) { return r.json(); })
+            .then(function (resp) {
+                if (!resp.success) { cb([]); return; }
+                CFG.total = nDone + (resp.remaining || 0);
+                $id('cnt-total').textContent = CFG.total.toLocaleString();
+                cb(resp.items || []);
+            })
+            .catch(function () { cb([]); });
+    }
+
+    function processNext() {
+        if (!running) { setStatus('Stopped. Click Start to continue – progress is saved.'); return; }
+        if (queue.length === 0) {
+            setStatus('Loading next batch…');
+            fetchBatch(function (items) {
+                if (items.length === 0) {
+                    running = false;
+                    $id('run-btn').disabled = false;
+                    $id('stop-btn').disabled = true;
+                    setStatus('Done. All readable proofs are checked. ' + nFailed + ' need manual entry (see "OCR failed" filter).');
+                    setProgress();
+                    return;
+                }
+                queue = items;
+                processNext();
+            });
+            return;
+        }
+
+        var item = queue.shift();
+        setStatus('Reading proof for ' + item.name + ' (' + item.sid + ')…');
+
+        worker.recognize(item.proof_url).then(function (res) {
+            var val = parsePayable((res && res.data && res.data.text) || '');
+            if (val === null) {
+                nFailed++; nDone++;
+                failedIds.push(item.package_id);
+                addRow(item, null, null, 'failed');
+                setProgress();
+                setTimeout(processNext, 50);
+                return;
+            }
+            save(item.package_id, val, function (ok) {
+                var ev = evaluate(val, item.grand_total, item.project_fee);
+                if (!ok) {
+                    // Could not persist – treat as failed so it is retried later
+                    nFailed++; nDone++;
+                    failedIds.push(item.package_id);
+                    addRow(item, val, ev, 'failed');
+                } else if (ev.matched) {
+                    nMatch++; nDone++;
+                    addRow(item, val, ev, 'match');
+                } else {
+                    nMismatch++; nDone++;
+                    addRow(item, val, ev, 'mismatch');
+                }
+                setProgress();
+                setTimeout(processNext, 50);
+            });
+        }).catch(function () {
+            nFailed++; nDone++;
+            failedIds.push(item.package_id);
+            addRow(item, null, null, 'failed');
+            setProgress();
+            setTimeout(processNext, 50);
+        });
+    }
+
+    function loadTesseract(cb) {
+        if (window.Tesseract) { cb(); return; }
+        var s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+        s.onload = cb;
+        s.onerror = function () { setStatus('Could not load the OCR library (CDN unreachable).'); };
+        document.head.appendChild(s);
+    }
+
+    $id('run-btn').addEventListener('click', function () {
+        if (running) return;
+        running = true;
+        $id('run-btn').disabled = true;
+        $id('stop-btn').disabled = false;
+        setStatus('Starting OCR engine…');
+        loadTesseract(function () {
+            if (worker) { processNext(); return; }
+            window.Tesseract.createWorker('eng').then(function (w) {
+                worker = w;
+                processNext();
+            }).catch(function (e) {
+                running = false;
+                $id('run-btn').disabled = false;
+                $id('stop-btn').disabled = true;
+                setStatus('Could not start the OCR engine: ' + e);
+            });
+        });
+    });
+
+    $id('stop-btn').addEventListener('click', function () {
+        running = false;
+        $id('run-btn').disabled = false;
+        $id('stop-btn').disabled = true;
+    });
+
+    window.addEventListener('beforeunload', function (e) {
+        if (running) { e.preventDefault(); e.returnValue = ''; }
+    });
+})();
+</script>
+
+<?php require_once __DIR__ . '/../includes/footer.php'; ?>
