@@ -135,6 +135,56 @@ function sfp_money(float $n): string
     return number_format($n, 2) . ' BDT';
 }
 
+// ── OLD ERP payable cross-check ───────────────────────────────────────────────
+
+/** Tolerance (BDT) when comparing the OLD ERP Payable Amount to the Grand Total. */
+define('SFP_OLD_ERP_TOLERANCE', 50.0);
+
+/** Standard one-time Project Fee used as an extra cross-check basis. */
+define('SFP_OLD_ERP_STANDARD_PROJECT_FEE', 1000.0);
+
+/**
+ * Cross-check the OLD ERP "Payable Amount" (read from the proof screenshot)
+ * against the new-ERP Grand Total (incl. Admission, Form & ID Card & Project fees).
+ *
+ * Match bases, each within ±SFP_OLD_ERP_TOLERANCE BDT:
+ *   1. Grand Total
+ *   2. Grand Total − Project Fee (one-time), when a project fee is assigned
+ *   3. Grand Total − 1,000 BDT (standard project fee cross-check)
+ *
+ * @return array{matched:bool,diff:float,best_diff:float,basis:string}|null
+ *         null when no payable amount has been captured yet.
+ */
+function sfp_old_erp_check(?float $payable, float $grand_total, float $project_fee): ?array
+{
+    if ($payable === null) {
+        return null;
+    }
+
+    $candidates = ['grand_total' => $grand_total];
+    if ($project_fee > 0) {
+        $candidates['grand_minus_project'] = $grand_total - $project_fee;
+    }
+    $candidates['grand_minus_1000'] = $grand_total - SFP_OLD_ERP_STANDARD_PROJECT_FEE;
+
+    $best_key  = 'grand_total';
+    $best_diff = null;
+    foreach ($candidates as $key => $value) {
+        $diff = abs($value - $payable);
+        if ($best_diff === null || $diff < $best_diff) {
+            $best_diff = $diff;
+            $best_key  = $key;
+        }
+    }
+
+    return [
+        'matched'   => $best_diff <= SFP_OLD_ERP_TOLERANCE,
+        'diff'      => round($payable - $grand_total, 2),
+        'best_diff' => round((float)$best_diff, 2),
+        'basis'     => $best_key,
+    ];
+}
+
 // ── Get a package with student / assigner joins ───────────────────────────────
 
 function sfp_get_package(int $id): array|false

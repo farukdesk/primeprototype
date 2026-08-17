@@ -200,6 +200,25 @@ foreach ($semester_fees as $sf) {
 }
 $total_cost = $total_tuition_payable + $total_fixed_all + $total_english_all + $total_reg_fees + $admission_fee + $form_id_fee + $project_fee_one_time + $bitri_shift_fee_one_time;
 
+// ── OLD ERP payable cross-check (proof screenshot vs Grand Total, ±50 BDT) ────
+$old_erp_payable = (isset($pkg['old_erp_payable_amount']) && $pkg['old_erp_payable_amount'] !== null)
+    ? (float)$pkg['old_erp_payable_amount']
+    : null;
+$old_erp_check = sfp_old_erp_check($old_erp_payable, $total_cost, $project_fee_one_time);
+$erp_basis_labels = [
+    'grand_total'         => 'Grand Total',
+    'grand_minus_project' => 'Grand Total − Project Fee (one-time)',
+    'grand_minus_1000'    => 'Grand Total − 1,000 BDT (project fee cross-check)',
+];
+// Newest image proof to feed the client-side OCR auto-check
+$erp_ocr_proof_url = null;
+foreach ($old_erp_proofs as $erp_proof_row) {
+    if (strncmp((string)($erp_proof_row['mime_type'] ?? ''), 'image/', 6) === 0) {
+        $erp_ocr_proof_url = UPLOAD_URL . '/students/files/' . rawurlencode($erp_proof_row['stored_name']);
+        break;
+    }
+}
+
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
@@ -727,6 +746,242 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
     </div>
 </div>
+
+<!-- ══════════════════════════════════════════════════════════
+     OLD ERP PAYABLE CROSS-CHECK
+═══════════════════════════════════════════════════════ -->
+<div class="card mt-4 <?= ($old_erp_check !== null && !$old_erp_check['matched']) ? 'border-danger' : '' ?>" id="erp-check-card">
+    <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h6 class="mb-0 fw-semibold">
+            <i class="fas fa-scale-balanced me-2 text-muted"></i>OLD ERP Payable Cross-Check
+            <span class="text-muted fw-normal ms-2" style="font-size:.75rem;">Grand Total vs old-ERP proof · tolerance ±<?= number_format(SFP_OLD_ERP_TOLERANCE, 0) ?> BDT</span>
+        </h6>
+        <span id="erp-check-badge">
+            <?php if ($old_erp_check === null): ?>
+            <span class="badge bg-secondary"><i class="fas fa-hourglass-half me-1"></i>Not checked yet</span>
+            <?php elseif ($old_erp_check['matched']): ?>
+            <span class="badge bg-success"><i class="fas fa-check me-1"></i>Match (Δ <?= number_format($old_erp_check['best_diff'], 2) ?> BDT)</span>
+            <?php else: ?>
+            <span class="badge bg-danger"><i class="fas fa-triangle-exclamation me-1"></i>MISMATCH (Δ <?= number_format($old_erp_check['best_diff'], 2) ?> BDT)</span>
+            <?php endif; ?>
+        </span>
+    </div>
+    <div class="card-body px-4">
+        <div class="row g-3">
+            <div class="col-md-3">
+                <div class="text-muted small mb-1">OLD ERP Payable Amount (proof)</div>
+                <div class="fw-bold fs-5" id="erp-payable-display"><?= $old_erp_payable !== null ? sfp_money($old_erp_payable) : '—' ?></div>
+                <div class="text-muted" style="font-size:.75rem;" id="erp-source-note"><?php
+                    if ($old_erp_payable !== null) {
+                        echo (($pkg['old_erp_payable_source'] ?? '') === 'manual') ? 'Entered manually' : 'Read automatically (OCR)';
+                        if (!empty($pkg['old_erp_checked_at'])) {
+                            echo ' · ' . h(date('d M Y, H:i', strtotime($pkg['old_erp_checked_at'])));
+                        }
+                    } else {
+                        echo 'Not read yet';
+                    }
+                ?></div>
+            </div>
+            <div class="col-md-3">
+                <div class="text-muted small mb-1">Grand Total (incl. one-time fees)</div>
+                <div class="fw-bold fs-5"><?= sfp_money($total_cost) ?></div>
+            </div>
+            <div class="col-md-3">
+                <?php if ($project_fee_one_time > 0): ?>
+                <div class="text-muted small mb-1">Grand Total − Project Fee</div>
+                <div class="fw-bold fs-5"><?= sfp_money($total_cost - $project_fee_one_time) ?></div>
+                <?php else: ?>
+                <div class="text-muted small mb-1">Grand Total − 1,000 (project fee cross-check)</div>
+                <div class="fw-bold fs-5"><?= sfp_money($total_cost - SFP_OLD_ERP_STANDARD_PROJECT_FEE) ?></div>
+                <?php endif; ?>
+            </div>
+            <div class="col-md-3">
+                <div class="text-muted small mb-1">Matched against</div>
+                <div style="font-size:.875rem;" id="erp-basis">
+                    <?= $old_erp_check !== null ? h($erp_basis_labels[$old_erp_check['basis']] ?? $old_erp_check['basis']) : '—' ?>
+                </div>
+            </div>
+        </div>
+
+        <div id="erp-ocr-status" class="small text-muted mt-3"></div>
+
+        <div class="d-flex gap-2 mt-2 flex-wrap align-items-center">
+            <?php if ($erp_ocr_proof_url !== null): ?>
+            <button type="button" class="btn btn-outline-primary btn-sm" id="erp-run-ocr">
+                <i class="fas fa-wand-magic-sparkles me-1"></i>Re-read from Proof (OCR)
+            </button>
+            <?php else: ?>
+            <span class="text-muted small"><i class="fas fa-circle-info me-1"></i>No OLD ERP proof image attached – the auto-check cannot run. Upload one via Bulk OLD ERP Proof Upload.</span>
+            <?php endif; ?>
+            <?php if (sfp_can_edit()): ?>
+            <div class="input-group input-group-sm" style="max-width:300px;">
+                <input type="number" step="0.01" min="0" class="form-control" id="erp-manual-amount"
+                       placeholder="Payable amount (manual override)">
+                <button type="button" class="btn btn-outline-secondary" id="erp-manual-save">Save</button>
+            </div>
+            <?php endif; ?>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    'use strict';
+
+    var CFG = {
+        packageId:     <?= (int)$id ?>,
+        grandTotal:    <?= json_encode(round($total_cost, 2)) ?>,
+        projectFee:    <?= json_encode(round($project_fee_one_time, 2)) ?>,
+        tolerance:     <?= json_encode((float)SFP_OLD_ERP_TOLERANCE) ?>,
+        stdProjectFee: <?= json_encode((float)SFP_OLD_ERP_STANDARD_PROJECT_FEE) ?>,
+        stored:        <?= json_encode($old_erp_payable) ?>,
+        proofUrl:      <?= json_encode($erp_ocr_proof_url) ?>,
+        saveUrl:       <?= json_encode(APP_URL . '/student-accounts/save-erp-payable.php') ?>,
+        csrfField:     <?= json_encode(CSRF_TOKEN_NAME) ?>,
+        csrfToken:     <?= json_encode(csrf_token()) ?>
+    };
+
+    function $id(i) { return document.getElementById(i); }
+
+    function setStatus(msg, danger) {
+        var el = $id('erp-ocr-status');
+        if (!el) return;
+        el.textContent = msg || '';
+        el.className = 'small mt-3 ' + (danger ? 'text-danger' : 'text-muted');
+    }
+
+    // Same match rules as sfp_old_erp_check() in helpers.php
+    function evaluate(payable) {
+        var cands = [{ k: 'Grand Total', v: CFG.grandTotal }];
+        if (CFG.projectFee > 0) {
+            cands.push({ k: 'Grand Total − Project Fee (one-time)', v: CFG.grandTotal - CFG.projectFee });
+        }
+        cands.push({ k: 'Grand Total − 1,000 BDT (project fee cross-check)', v: CFG.grandTotal - CFG.stdProjectFee });
+        var best = null;
+        cands.forEach(function (c) {
+            var d = Math.abs(c.v - payable);
+            if (!best || d < best.d) best = { k: c.k, d: d };
+        });
+        return { matched: best.d <= CFG.tolerance, diff: best.d, basis: best.k };
+    }
+
+    function fmt(n) {
+        return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' BDT';
+    }
+
+    function applyResult(payable, sourceNote) {
+        var res = evaluate(payable);
+        $id('erp-payable-display').textContent = fmt(payable);
+        $id('erp-basis').textContent = res.basis;
+        if (sourceNote) $id('erp-source-note').textContent = sourceNote;
+        var badge = $id('erp-check-badge');
+        var card  = $id('erp-check-card');
+        if (res.matched) {
+            badge.innerHTML = '<span class="badge bg-success"><i class="fas fa-check me-1"></i>Match (Δ ' + res.diff.toFixed(2) + ' BDT)</span>';
+            card.classList.remove('border-danger');
+        } else {
+            badge.innerHTML = '<span class="badge bg-danger"><i class="fas fa-triangle-exclamation me-1"></i>MISMATCH (Δ ' + res.diff.toFixed(2) + ' BDT)</span>';
+            card.classList.add('border-danger');
+        }
+    }
+
+    function save(amount, source, cb) {
+        var fd = new FormData();
+        fd.append(CFG.csrfField, CFG.csrfToken);
+        fd.append('package_id', CFG.packageId);
+        fd.append('amount', amount);
+        fd.append('source', source);
+        fetch(CFG.saveUrl, { method: 'POST', body: fd })
+            .then(function (r) { return r.json(); })
+            .then(function (resp) { cb(!!resp.success, resp); })
+            .catch(function (e) { cb(false, { error: String(e) }); });
+    }
+
+    // Find the number on the "Payable Amount" line of the OCR text.
+    function parsePayable(text) {
+        var lines = String(text).split(/\n/);
+        for (var i = 0; i < lines.length; i++) {
+            if (/pay\s*able/i.test(lines[i])) {
+                var nums = lines[i].match(/-?[\d,]+(?:\.\d+)?/g);
+                if (nums) {
+                    var vals = nums.map(function (n) { return parseFloat(n.replace(/,/g, '')); })
+                                   .filter(function (v) { return !isNaN(v) && v > 0; });
+                    if (vals.length) return Math.max.apply(null, vals);
+                }
+            }
+        }
+        var m = String(text).match(/pay\s*able[^0-9\-]*(-?[\d,]+(?:\.\d+)?)/i);
+        return m ? parseFloat(m[1].replace(/,/g, '')) : null;
+    }
+
+    function loadTesseract(cb) {
+        if (window.Tesseract) { cb(); return; }
+        var s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+        s.onload = cb;
+        s.onerror = function () { setStatus('Could not load the OCR library (CDN unreachable). Enter the amount manually.', true); };
+        document.head.appendChild(s);
+    }
+
+    function runOcr() {
+        if (!CFG.proofUrl) return;
+        setStatus('Reading Payable Amount from the OLD ERP proof…');
+        loadTesseract(function () {
+            window.Tesseract.recognize(CFG.proofUrl, 'eng', {
+                logger: function (m) {
+                    if (m.status === 'recognizing text') {
+                        setStatus('Reading proof… ' + Math.round(m.progress * 100) + '%');
+                    }
+                }
+            }).then(function (res) {
+                var val = parsePayable((res && res.data && res.data.text) || '');
+                if (val === null) {
+                    setStatus('Could not find a "Payable Amount" value in the proof image. Enter it manually below.', true);
+                    return;
+                }
+                save(val, 'ocr', function (ok, resp) {
+                    if (!ok) {
+                        setStatus('OCR read ' + fmt(val) + ' but saving failed: ' + (resp.error || 'unknown error'), true);
+                        applyResult(val, 'Read automatically (OCR) · not saved');
+                        return;
+                    }
+                    if (resp.skipped) {
+                        setStatus('OCR read ' + fmt(val) + ', but a manually entered value is kept (' + fmt(resp.amount) + ').');
+                        return;
+                    }
+                    setStatus('Payable Amount read from proof and saved.');
+                    applyResult(val, 'Read automatically (OCR) · just now');
+                });
+            }).catch(function (e) {
+                setStatus('OCR failed: ' + e + '. Enter the amount manually.', true);
+            });
+        });
+    }
+
+    var runBtn = $id('erp-run-ocr');
+    if (runBtn) runBtn.addEventListener('click', runOcr);
+
+    var manualBtn = $id('erp-manual-save');
+    if (manualBtn) {
+        manualBtn.addEventListener('click', function () {
+            var input = $id('erp-manual-amount');
+            var v = parseFloat(input.value);
+            if (isNaN(v) || v < 0) { setStatus('Enter a valid payable amount first.', true); return; }
+            save(v, 'manual', function (ok, resp) {
+                if (!ok) { setStatus('Saving failed: ' + (resp.error || 'unknown error'), true); return; }
+                setStatus('Manual payable amount saved.');
+                applyResult(v, 'Entered manually · just now');
+                input.value = '';
+            });
+        });
+    }
+
+    // Auto-check: first visit after a proof is uploaded (no stored value yet)
+    if (CFG.proofUrl && CFG.stored === null) {
+        runOcr();
+    }
+})();
+</script>
 
 <!-- ══════════════════════════════════════════════════════════
      PENDING VC APPROVAL SCHOLARSHIPS
