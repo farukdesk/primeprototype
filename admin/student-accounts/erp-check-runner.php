@@ -526,6 +526,14 @@ require_once __DIR__ . '/../includes/header.php';
     function processNext() {
         if (!running) { setStatus('Stopped. Click Start to continue – progress is saved.'); return; }
         if (queue.length === 0) {
+            if (singleMode) {
+                running = false;
+                singleMode = false;
+                $id('run-btn').disabled = false;
+                $id('stop-btn').disabled = true;
+                setStatus('Single ID check finished – see the top row of the results table.');
+                return;
+            }
             setStatus('Loading next batch…');
             fetchBatch(function (items) {
                 if (items.length === 0) {
