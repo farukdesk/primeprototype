@@ -849,13 +849,16 @@ require_once __DIR__ . '/../includes/header.php';
         el.className = 'small mt-3 ' + (danger ? 'text-danger' : 'text-muted');
     }
 
-    // Same match rules as sfp_old_erp_check() in helpers.php
+    // Same match rules as sfp_old_erp_check() in helpers.php:
+    // the OLD ERP payable excludes the Form, ID Card and Project fees.
     function evaluate(payable) {
-        var cands = [{ k: 'Grand Total', v: CFG.grandTotal }];
+        var base = CFG.grandTotal - CFG.formIdFee;
+        var cands = [];
         if (CFG.projectFee > 0) {
-            cands.push({ k: 'Grand Total − Project Fee (one-time)', v: CFG.grandTotal - CFG.projectFee });
+            cands.push({ k: 'Grand Total − Form & ID Card − Project Fee', v: base - CFG.projectFee });
         }
-        cands.push({ k: 'Grand Total − 1,000 BDT (project fee cross-check)', v: CFG.grandTotal - CFG.stdProjectFee });
+        cands.push({ k: 'Grand Total − Form & ID Card − 1,000 BDT (project fee cross-check)', v: base - CFG.stdProjectFee });
+        cands.push({ k: 'Grand Total − Form & ID Card fees', v: base });
         var best = null;
         cands.forEach(function (c) {
             var d = Math.abs(c.v - payable);
