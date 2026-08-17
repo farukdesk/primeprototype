@@ -72,9 +72,9 @@ if (($_GET['action'] ?? '') === 'list') {
         "SELECT COUNT(*)
            FROM sfp_packages p
            JOIN students s ON s.id = p.student_id
-          WHERE $unchecked_where $scope_sql $exclude_sql"
+          WHERE $unchecked_where $scope_sql $filter_sql $exclude_sql"
     );
-    $cnt_stmt->execute($scope_params);
+    $cnt_stmt->execute(array_merge($scope_params, $filter_params));
     $remaining = (int)$cnt_stmt->fetchColumn();
 
     $stmt = $db->prepare(
