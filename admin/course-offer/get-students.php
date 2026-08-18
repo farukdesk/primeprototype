@@ -24,7 +24,7 @@ if (!co_is_staff()) {
 $batch_id = (int)($_GET['batch_id'] ?? 0);
 $page     = max(1, (int)($_GET['page'] ?? 1));
 $per_page = (int)($_GET['per_page'] ?? 25);
-$per_page = max(1, min(100, $per_page));
+$per_page = max(1, min(200, $per_page));
 
 $filters = [
     'q'          => trim($_GET['q'] ?? ''),
