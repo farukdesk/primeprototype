@@ -6,6 +6,7 @@ require_once __DIR__ . '/helpers.php';
 $routine = er_get_routine((int)($_GET['id'] ?? 0));
 if (!$routine) { flash_set('error', 'Routine not found.'); redirect(APP_URL . '/exam-routine/index.php'); }
 $items = er_get_items((int)$routine['id']);
+$teacher_map = er_subject_teacher_map(array_column($items, 'offer_subject_id'));
 
 $page_title = 'Exam Routine – ' . $routine['exam_name'];
 require_once __DIR__ . '/../includes/header.php';
@@ -68,6 +69,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <th class="ps-4">#</th>
                         <th>Code</th>
                         <th>Course Title</th>
+                        <th>Course Teacher</th>
                         <th class="text-center">Students</th>
                         <th>Date</th>
                         <th>Time</th>
@@ -77,12 +79,13 @@ require_once __DIR__ . '/../includes/header.php';
                 </thead>
                 <tbody>
                 <?php if (empty($items)): ?>
-                    <tr><td colspan="8" class="text-center text-muted py-4">No subjects in this routine.</td></tr>
+                    <tr><td colspan="9" class="text-center text-muted py-4">No subjects in this routine.</td></tr>
                 <?php else: $total = 0; foreach ($items as $n => $it): $total += (int)$it['student_count']; ?>
                     <tr>
                         <td class="ps-4"><?= $n + 1 ?></td>
                         <td class="fw-medium"><?= h($it['course_code'] ?? '—') ?></td>
                         <td><?= h($it['course_title']) ?></td>
+                        <td class="small"><?= h($teacher_map[(int)($it['offer_subject_id'] ?? 0)] ?? '—') ?></td>
                         <td class="text-center"><?= (int)$it['student_count'] ?></td>
                         <td><?= h(date('d M Y (D)', strtotime($it['exam_date']))) ?></td>
                         <td class="small">
@@ -95,7 +98,7 @@ require_once __DIR__ . '/../includes/header.php';
                     </tr>
                 <?php endforeach; ?>
                     <tr class="table-light fw-semibold">
-                        <td colspan="3" class="ps-4 text-end">Total students</td>
+                        <td colspan="4" class="ps-4 text-end">Total students</td>
                         <td class="text-center"><?= $total ?></td>
                         <td colspan="4"></td>
                     </tr>

@@ -46,9 +46,14 @@ require_once __DIR__ . '/../includes/header.php';
         </ol>
     </nav>
     <?php if (is_super_admin() || can_access('exam-routine', 'can_create')): ?>
-    <a href="<?= APP_URL ?>/exam-routine/create.php" class="btn btn-primary" style="border-radius:10px;">
-        <i class="fas fa-plus me-1"></i> New Routine
-    </a>
+    <div class="d-flex gap-2">
+        <a href="<?= APP_URL ?>/exam-routine/import.php" class="btn btn-outline-primary" style="border-radius:10px;">
+            <i class="fas fa-file-csv me-1"></i> Import CSV
+        </a>
+        <a href="<?= APP_URL ?>/exam-routine/create.php" class="btn btn-primary" style="border-radius:10px;">
+            <i class="fas fa-plus me-1"></i> New Routine
+        </a>
+    </div>
     <?php endif; ?>
 </div>
 

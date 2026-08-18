@@ -15,6 +15,10 @@ if ($offer_id <= 0) { echo '[]'; exit; }
 $stmt = db()->prepare(
     "SELECT cos.id AS offer_subject_id,
             c.course_code, c.course_name, c.credit,
+            (SELECT GROUP_CONCAT(f.name ORDER BY t.sort_order SEPARATOR ', ')
+               FROM co_offer_subject_teachers t
+               JOIN dept_faculty f ON f.id = t.faculty_id
+              WHERE t.offer_subject_id = cos.id) AS teachers,
             (SELECT COUNT(*)
                FROM co_registrations r
                JOIN students s ON s.id = r.student_id
