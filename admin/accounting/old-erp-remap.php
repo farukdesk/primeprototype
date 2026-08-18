@@ -114,14 +114,16 @@ function oerm_load_payments(int $package_id): array
  */
 function oerm_has_fixable_gap(array $summary, array $fixed, array $movable): bool
 {
-    $due  = [];
-    $paid = [];
-    $oe   = [];
-    $keys = [];
+    $due       = [];
+    $paid      = [];
+    $oe        = [];
+    $keys      = [];
+    $sem_slots = [];   // sfid => ordered slot keys of that semester
     foreach (($summary['semesters'] ?? []) as $sem) {
         foreach (($sem['monthly_rows'] ?? []) as $mr) {
             $key = (int)$sem['id'] . ':' . (int)$mr['month_number'];
             $keys[] = $key;
+            $sem_slots[(int)$sem['id']][] = $key;
             $due[$key]  = (float)$mr['paid'] + (float)$mr['out'];
             $paid[$key] = 0.0;
             $oe[$key]   = 0.0;
@@ -135,27 +137,56 @@ function oerm_has_fixable_gap(array $summary, array $fixed, array $movable): boo
     // pool that is spread SEQUENTIALLY into the earliest short months,
     // exactly how the fee summary displays it. A month covered by such a
     // lump sum is therefore never mistaken for a gap.
-    $pool = 0.0;
+    // Three kinds of money:
+    //   • month-linked        — counted on its month; pullable from later months;
+    //   • semester-linked     — linked to a semester but not to a month (e.g. one
+    //     cash row on Semester 3 covering Sep + Oct): spreads into ITS OWN
+    //     semester's short months only, exactly how the fee summary shows it,
+    //     and is pullable on the months it fills;
+    //   • fully unlinked      — no schedule linkage at all: spreads globally into
+    //     the earliest short months (never a donor).
+    $pool     = 0.0;
+    $sem_pool = [];
     foreach ($fixed as $p) {
-        $key = (int)($p['semester_fee_id'] ?? 0) . ':' . (int)($p['month_number'] ?? 0);
+        $key  = (int)($p['semester_fee_id'] ?? 0) . ':' . (int)($p['month_number'] ?? 0);
+        $sfid = (int)($p['semester_fee_id'] ?? 0);
         if (isset($paid[$key])) {
             $paid[$key] += (float)$p['amount'];
-            // Month-linked this-ERP money in a LATER month is pullable too:
-            // the shortfall re-balancer may move it backward to fill an
-            // earlier unpaid month (e.g. August due while September and
-            // October are paid by cash).
             $oe[$key]   += (float)$p['amount'];
+        } elseif ($sfid > 0 && isset($sem_slots[$sfid])) {
+            $sem_pool[$sfid] = ($sem_pool[$sfid] ?? 0.0) + (float)$p['amount'];
         } else {
             $pool += (float)$p['amount'];
         }
     }
     foreach ($movable as $p) {
-        $key = (int)($p['semester_fee_id'] ?? 0) . ':' . (int)($p['month_number'] ?? 0);
+        $key  = (int)($p['semester_fee_id'] ?? 0) . ':' . (int)($p['month_number'] ?? 0);
+        $sfid = (int)($p['semester_fee_id'] ?? 0);
         if (isset($paid[$key])) {
             $paid[$key] += (float)$p['amount'];
             $oe[$key]   += (float)$p['amount'];
+        } elseif ($sfid > 0 && isset($sem_slots[$sfid])) {
+            $sem_pool[$sfid] = ($sem_pool[$sfid] ?? 0.0) + (float)$p['amount'];
         } else {
             $pool += (float)$p['amount'];
+        }
+    }
+    // Semester-linked money fills its own semester's short months first and
+    // counts as pullable money there — it must NEVER fill months of another
+    // semester (that hid genuine gaps like Aug due while Sep/Oct are paid).
+    foreach ($sem_pool as $sp_sfid => $sp_amt) {
+        foreach ($sem_slots[$sp_sfid] as $k) {
+            if ($sp_amt <= 0.005) {
+                break;
+            }
+            $need = round($due[$k] - $paid[$k], 2);
+            if ($need <= 0.005) {
+                continue;
+            }
+            $alloc    = round(min($need, $sp_amt), 2);
+            $paid[$k] = round($paid[$k] + $alloc, 2);
+            $oe[$k]   = round($oe[$k] + $alloc, 2);
+            $sp_amt   = round($sp_amt - $alloc, 2);
         }
     }
     $n = count($keys);
@@ -573,12 +604,14 @@ function oerm_apply_student_fix(string $sid): array
 function oerm_build_shortfall_plan(array $summary, array $fixed, array $plan_rows): array
 {
     // Chronological slots with their due amount and a human label.
-    $slots = [];
-    $index = [];
+    $slots   = [];
+    $index   = [];
+    $sem_idx = [];   // sfid => ordered slot positions of that semester
     foreach (($summary['semesters'] ?? []) as $sem) {
         foreach (($sem['monthly_rows'] ?? []) as $mr) {
             $key = (int)$sem['id'] . ':' . (int)$mr['month_number'];
             $index[$key] = count($slots);
+            $sem_idx[(int)$sem['id']][] = count($slots);
             $slots[] = [
                 'sfid'    => (int)$sem['id'],
                 'sem'     => (int)$sem['semester_number'],
@@ -599,8 +632,10 @@ function oerm_build_shortfall_plan(array $summary, array $fixed, array $plan_row
     // This-ERP money without an installment linkage (e.g. a lump-sum cash
     // collection) is collected into a pool and spread sequentially below.
     $unlinked = 0.0;
+    $sem_rows = [];   // sfid => this-ERP rows linked to the semester but not to a month
     foreach ($fixed as $p) {
-        $key = (int)($p['semester_fee_id'] ?? 0) . ':' . (int)($p['month_number'] ?? 0);
+        $key  = (int)($p['semester_fee_id'] ?? 0) . ':' . (int)($p['month_number'] ?? 0);
+        $sfid = (int)($p['semester_fee_id'] ?? 0);
         if (isset($index[$key])) {
             $slots[$index[$key]]['paid'] += (float)$p['amount'];
             // Month-linked this-ERP rows join the donor pool: when an earlier
@@ -608,6 +643,13 @@ function oerm_build_shortfall_plan(array $summary, array $fixed, array $plan_row
             // (never forward). Old-ERP rows are added after this loop, so
             // within the same month old-ERP money is taken before cash.
             $slots[$index[$key]]['oe_rows'][] = [
+                'id'        => (int)$p['id'],
+                'voucher'   => (string)$p['voucher_number'],
+                'amount'    => (float)$p['amount'],
+                'row_total' => (float)$p['amount'],
+            ];
+        } elseif ($sfid > 0 && isset($sem_idx[$sfid])) {
+            $sem_rows[$sfid][] = [
                 'id'      => (int)$p['id'],
                 'voucher' => (string)$p['voucher_number'],
                 'amount'  => (float)$p['amount'],
@@ -624,10 +666,40 @@ function oerm_build_shortfall_plan(array $summary, array $fixed, array $plan_row
         $i = $index[$key];
         $slots[$i]['paid'] += (float)$r['amount'];
         $slots[$i]['oe_rows'][] = [
-            'id'      => (int)$r['id'],
-            'voucher' => (string)$r['voucher_number'],
-            'amount'  => (float)$r['amount'],
+            'id'        => (int)$r['id'],
+            'voucher'   => (string)$r['voucher_number'],
+            'amount'    => (float)$r['amount'],
+            'row_total' => (float)$r['amount'],
         ];
+    }
+
+    // Semester-linked money without a month fills ITS OWN semester's short
+    // months first (mirroring the fee summary) and joins the donor pool on the
+    // months it fills — each filled portion remembers its physical row, so a
+    // pull later splits exactly the right payment. It never fills months of
+    // another semester.
+    foreach ($sem_rows as $sr_sfid => $sr_list) {
+        foreach ($sr_list as $sr) {
+            $sr_left = (float)$sr['amount'];
+            foreach ($sem_idx[$sr_sfid] as $si) {
+                if ($sr_left <= 0.005) {
+                    break;
+                }
+                $need = round($slots[$si]['due'] - $slots[$si]['paid'], 2);
+                if ($need <= 0.005) {
+                    continue;
+                }
+                $alloc = round(min($need, $sr_left), 2);
+                $slots[$si]['paid'] = round($slots[$si]['paid'] + $alloc, 2);
+                $slots[$si]['oe_rows'][] = [
+                    'id'        => (int)$sr['id'],
+                    'voucher'   => (string)$sr['voucher'],
+                    'amount'    => $alloc,
+                    'row_total' => (float)$sr['amount'],
+                ];
+                $sr_left = round($sr_left - $alloc, 2);
+            }
+        }
     }
 
     // Spread unlinked this-ERP money sequentially into the earliest short
@@ -663,7 +735,11 @@ function oerm_build_shortfall_plan(array $summary, array $fixed, array $plan_row
                 if ($take <= 0.009) {
                     break;
                 }
-                $full = $take >= (float)$row['amount'] - 0.005;
+                // A whole-row 'move' only when the pulled amount equals the
+                // FULL physical row — a portion of a row spread over several
+                // months must always be a split, never a whole-row move.
+                $row_total = (float)($row['row_total'] ?? $row['amount']);
+                $full = ($take >= (float)$row['amount'] - 0.005) && ($take >= $row_total - 0.005);
                 $transfers[] = [
                     'type'       => $full ? 'move' : 'split',
                     'payment_id' => (int)$row['id'],
