@@ -36,6 +36,12 @@ require_once __DIR__ . '/../change-log/helpers.php';
 
 $page_title = 'Old ERP – Remap Monthly Payments';
 
+// A month counts as SHORT only beyond this many BDT. Old-ERP dues carry tiny
+// 1–5 poisha rounding residues (e.g. a due of 3,104.09 next to 3,104.07);
+// those are never real gaps and must never trigger any movement. Genuine
+// shortfalls (e.g. 1.42) are still well above this tolerance.
+const OERM_GAP_TOLERANCE = 0.10;
+
 /**
  * Look up a student by ID, tolerant of leading zeros (same rule as the bulk merge).
  */
@@ -95,6 +101,67 @@ function oerm_load_payments(int $package_id): array
         }
     }
     return [$fixed, $movable];
+}
+
+/**
+ * Does this student actually have a FIXABLE gap?
+ *
+ * A student needs fixing ONLY when some month is short (beyond the rounding
+ * tolerance) while a LATER month holds old-ERP money that could fill it. A
+ * student whose months are all paid — with only a trailing shortfall at the
+ * end of the schedule because the money simply ran out — is fine and up to
+ * date, and must never be flagged or touched.
+ */
+function oerm_has_fixable_gap(array $summary, array $fixed, array $movable): bool
+{
+    $due  = [];
+    $paid = [];
+    $oe   = [];
+    $keys = [];
+    foreach (($summary['semesters'] ?? []) as $sem) {
+        foreach (($sem['monthly_rows'] ?? []) as $mr) {
+            $key = (int)$sem['id'] . ':' . (int)$mr['month_number'];
+            $keys[] = $key;
+            $due[$key]  = (float)$mr['paid'] + (float)$mr['out'];
+            $paid[$key] = 0.0;
+            $oe[$key]   = 0.0;
+        }
+    }
+    if (!$keys) {
+        return false;
+    }
+    foreach ($fixed as $p) {
+        $key = (int)($p['semester_fee_id'] ?? 0) . ':' . (int)($p['month_number'] ?? 0);
+        if (isset($paid[$key])) {
+            $paid[$key] += (float)$p['amount'];
+        }
+    }
+    foreach ($movable as $p) {
+        $key = (int)($p['semester_fee_id'] ?? 0) . ':' . (int)($p['month_number'] ?? 0);
+        if (isset($paid[$key])) {
+            $paid[$key] += (float)$p['amount'];
+            $oe[$key]   += (float)$p['amount'];
+        }
+    }
+    $n = count($keys);
+    for ($i = 0; $i < $n; $i++) {
+        $k = $keys[$i];
+        if (round($due[$k] - $paid[$k], 2) <= OERM_GAP_TOLERANCE) {
+            continue;
+        }
+        // This month is genuinely short — fixable only if a LATER month still
+        // holds old-ERP money that could be pulled forward to fill it.
+        for ($j = $i + 1; $j < $n; $j++) {
+            if ($oe[$keys[$j]] > OERM_GAP_TOLERANCE) {
+                return true;
+            }
+        }
+        // Gap exists but there is no later old-ERP money — the money simply
+        // ran out here (normal trailing shortfall). Nothing this tool can or
+        // should move.
+        return false;
+    }
+    return false;
 }
 
 /**
@@ -301,6 +368,13 @@ function oerm_scan_affected(int $f_dept, int $f_program, int $f_batch, int $limi
         if (!$cmovable) {
             continue;
         }
+        // Only students with a REAL gap are listed: a short month with old-ERP
+        // money in a later month. Fully up-to-date students — including those
+        // with only a trailing shortfall where the money simply ran out — are
+        // never flagged.
+        if (!oerm_has_fixable_gap($csum, $cfixed, $cmovable)) {
+            continue;
+        }
         $cplan      = oerm_build_plan($csum, $cfixed, $cmovable);
         $ctransfers = oerm_build_shortfall_plan($csum, $cfixed, $cplan['plan']);
         if ($cplan['changed'] > 0 || $ctransfers) {
@@ -346,6 +420,9 @@ function oerm_apply_student_fix(string $sid): array
     [$fixed, $movable] = oerm_load_payments((int)$student['package_id']);
     if (!$movable) {
         return [0, null, []];
+    }
+    if (!oerm_has_fixable_gap($summary, $fixed, $movable)) {
+        return [0, null, []]; // fully up to date — never touch a fine student
     }
     $plan      = oerm_build_plan($summary, $fixed, $movable);
     $transfers = oerm_build_shortfall_plan($summary, $fixed, $plan['plan']);
@@ -498,7 +575,7 @@ function oerm_build_shortfall_plan(array $summary, array $fixed, array $plan_row
     $n = count($slots);
     for ($i = 0; $i < $n; $i++) {
         $short = round($slots[$i]['due'] - $slots[$i]['paid'], 2);
-        if ($short <= 0.009) {
+        if ($short <= OERM_GAP_TOLERANCE) {
             continue;
         }
         // Pull from the LATEST later slot still holding old-ERP money, so the
@@ -1015,6 +1092,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         // so nothing posted from the browser can influence the mapping.
                         $plan = oerm_build_plan($summary, $fixed, $movable);
                         $shortfall_transfers = oerm_build_shortfall_plan($summary, $fixed, $plan['plan']);
+                        // A student with no REAL gap (every month paid, or only a
+                        // trailing shortfall where the money simply ran out) is
+                        // fine and up to date — show the plan as fully unchanged
+                        // and never move anything.
+                        if (!oerm_has_fixable_gap($summary, $fixed, $movable)) {
+                            foreach ($plan['plan'] as $gk => $gv) {
+                                $plan['plan'][$gk]['changed'] = false;
+                            }
+                            $plan['changed'] = 0;
+                            $shortfall_transfers = [];
+                        }
 
                         if ($action === 'apply') {
                             if ((int)$plan['changed'] === 0 && !$shortfall_transfers) {
