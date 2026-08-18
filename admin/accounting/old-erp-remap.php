@@ -36,6 +36,12 @@ require_once __DIR__ . '/../change-log/helpers.php';
 
 $page_title = 'Old ERP – Remap Monthly Payments';
 
+// A month counts as SHORT only beyond this many BDT. Old-ERP dues carry tiny
+// 1–5 poisha rounding residues (e.g. a due of 3,104.09 next to 3,104.07);
+// those are never real gaps and must never trigger any movement. Genuine
+// shortfalls (e.g. 1.42) are still well above this tolerance.
+const OERM_GAP_TOLERANCE = 0.10;
+
 /**
  * Look up a student by ID, tolerant of leading zeros (same rule as the bulk merge).
  */
@@ -95,6 +101,67 @@ function oerm_load_payments(int $package_id): array
         }
     }
     return [$fixed, $movable];
+}
+
+/**
+ * Does this student actually have a FIXABLE gap?
+ *
+ * A student needs fixing ONLY when some month is short (beyond the rounding
+ * tolerance) while a LATER month holds old-ERP money that could fill it. A
+ * student whose months are all paid — with only a trailing shortfall at the
+ * end of the schedule because the money simply ran out — is fine and up to
+ * date, and must never be flagged or touched.
+ */
+function oerm_has_fixable_gap(array $summary, array $fixed, array $movable): bool
+{
+    $due  = [];
+    $paid = [];
+    $oe   = [];
+    $keys = [];
+    foreach (($summary['semesters'] ?? []) as $sem) {
+        foreach (($sem['monthly_rows'] ?? []) as $mr) {
+            $key = (int)$sem['id'] . ':' . (int)$mr['month_number'];
+            $keys[] = $key;
+            $due[$key]  = (float)$mr['paid'] + (float)$mr['out'];
+            $paid[$key] = 0.0;
+            $oe[$key]   = 0.0;
+        }
+    }
+    if (!$keys) {
+        return false;
+    }
+    foreach ($fixed as $p) {
+        $key = (int)($p['semester_fee_id'] ?? 0) . ':' . (int)($p['month_number'] ?? 0);
+        if (isset($paid[$key])) {
+            $paid[$key] += (float)$p['amount'];
+        }
+    }
+    foreach ($movable as $p) {
+        $key = (int)($p['semester_fee_id'] ?? 0) . ':' . (int)($p['month_number'] ?? 0);
+        if (isset($paid[$key])) {
+            $paid[$key] += (float)$p['amount'];
+            $oe[$key]   += (float)$p['amount'];
+        }
+    }
+    $n = count($keys);
+    for ($i = 0; $i < $n; $i++) {
+        $k = $keys[$i];
+        if (round($due[$k] - $paid[$k], 2) <= OERM_GAP_TOLERANCE) {
+            continue;
+        }
+        // This month is genuinely short — fixable only if a LATER month still
+        // holds old-ERP money that could be pulled forward to fill it.
+        for ($j = $i + 1; $j < $n; $j++) {
+            if ($oe[$keys[$j]] > OERM_GAP_TOLERANCE) {
+                return true;
+            }
+        }
+        // Gap exists but there is no later old-ERP money — the money simply
+        // ran out here (normal trailing shortfall). Nothing this tool can or
+        // should move.
+        return false;
+    }
+    return false;
 }
 
 /**
@@ -301,8 +368,16 @@ function oerm_scan_affected(int $f_dept, int $f_program, int $f_batch, int $limi
         if (!$cmovable) {
             continue;
         }
-        $cplan = oerm_build_plan($csum, $cfixed, $cmovable);
-        if ($cplan['changed'] > 0) {
+        // Only students with a REAL gap are listed: a short month with old-ERP
+        // money in a later month. Fully up-to-date students — including those
+        // with only a trailing shortfall where the money simply ran out — are
+        // never flagged.
+        if (!oerm_has_fixable_gap($csum, $cfixed, $cmovable)) {
+            continue;
+        }
+        $cplan      = oerm_build_plan($csum, $cfixed, $cmovable);
+        $ctransfers = oerm_build_shortfall_plan($csum, $cfixed, $cplan['plan']);
+        if ($cplan['changed'] > 0 || $ctransfers) {
             $rows[] = [
                 'student_id'   => (string)$cand['student_id'],
                 'full_name'    => (string)$cand['full_name'],
@@ -311,6 +386,8 @@ function oerm_scan_affected(int $f_dept, int $f_program, int $f_batch, int $limi
                 'batch_name'   => (string)($cand['batch_name'] ?? ''),
                 'movable'      => count($cmovable),
                 'changed'      => (int)$cplan['changed'],
+                'shifts'       => count($ctransfers),
+                'shift_amount' => array_sum(array_map(static fn(array $t): float => (float)$t['amount'], $ctransfers)),
             ];
         }
     }
@@ -344,8 +421,12 @@ function oerm_apply_student_fix(string $sid): array
     if (!$movable) {
         return [0, null, []];
     }
-    $plan = oerm_build_plan($summary, $fixed, $movable);
-    if ((int)$plan['changed'] === 0) {
+    if (!oerm_has_fixable_gap($summary, $fixed, $movable)) {
+        return [0, null, []]; // fully up to date — never touch a fine student
+    }
+    $plan      = oerm_build_plan($summary, $fixed, $movable);
+    $transfers = oerm_build_shortfall_plan($summary, $fixed, $plan['plan']);
+    if ((int)$plan['changed'] === 0 && !$transfers) {
         return [0, null, []];
     }
 
@@ -408,6 +489,15 @@ function oerm_apply_student_fix(string $sid): array
                 ];
             }
         }
+        // Phase 2 — shortfall re-balance: pull any missing amount of an
+        // earlier month from the latest month still holding old-ERP money
+        // (e.g. April short by 1.42 while June is the last paid month:
+        // exactly 1.42 moves from June to April, the rest stays in June).
+        [$t_applied, $t_moves] = oerm_execute_transfers($transfers, (int)$student['package_id'], $student);
+        $updated += $t_applied;
+        foreach ($t_moves as $t_mv) {
+            $moves[] = $t_mv;
+        }
         $db->commit();
         return [$updated, null, $moves];
     } catch (Throwable $e) {
@@ -417,6 +507,253 @@ function oerm_apply_student_fix(string $sid): array
         error_log('old-erp-remap bulk fix failed for ' . $sid . ': ' . $e->getMessage());
         return [0, 'Student ' . $sid . ': fix failed and was fully rolled back — no payment was modified.', []];
     }
+}
+
+/**
+ * Build the shortfall re-balance plan (phase 2, runs after the whole-row remap).
+ *
+ * When an EARLIER month is short by a partial amount while a LATER month holds
+ * old-ERP money, exactly the missing amount is pulled from the LAST paid month
+ * — e.g. April due 6,208.34 but paid 6,206.92 (short 1.42) while June is the
+ * last paid month: exactly 1.42 moves from the June payment to April and the
+ * rest stays in June. Only old-ERP money ever moves; the student's total paid
+ * never changes and nothing is deleted.
+ *
+ * @param array $summary   acc_student_fee_summary() result (per-month dues).
+ * @param array $fixed     This-ERP payments (never touched) — they pin amounts.
+ * @param array $plan_rows Rows from oerm_build_plan()['plan'] — the old-ERP
+ *                         rows at their POST-remap slots.
+ * @return array<int,array<string,mixed>> Transfer list (type: move|split).
+ */
+function oerm_build_shortfall_plan(array $summary, array $fixed, array $plan_rows): array
+{
+    // Chronological slots with their due amount and a human label.
+    $slots = [];
+    $index = [];
+    foreach (($summary['semesters'] ?? []) as $sem) {
+        foreach (($sem['monthly_rows'] ?? []) as $mr) {
+            $key = (int)$sem['id'] . ':' . (int)$mr['month_number'];
+            $index[$key] = count($slots);
+            $slots[] = [
+                'sfid'    => (int)$sem['id'],
+                'sem'     => (int)$sem['semester_number'],
+                'month'   => (int)$mr['month_number'],
+                'label'   => 'Semester ' . (int)$sem['semester_number'] . ' – Month ' . (int)$mr['month_number']
+                    . ((string)($mr['month_label'] ?? '') !== '' ? ' (' . (string)$mr['month_label'] . ')' : ''),
+                'due'     => (float)$mr['paid'] + (float)$mr['out'],
+                'paid'    => 0.0,
+                'oe_rows' => [],
+            ];
+        }
+    }
+    if (!$slots) {
+        return [];
+    }
+
+    // This-ERP payments pin their amounts; old-ERP rows are the movable pool.
+    foreach ($fixed as $p) {
+        $key = (int)($p['semester_fee_id'] ?? 0) . ':' . (int)($p['month_number'] ?? 0);
+        if (isset($index[$key])) {
+            $slots[$index[$key]]['paid'] += (float)$p['amount'];
+        }
+    }
+    foreach ($plan_rows as $r) {
+        $key = (int)$r['new_sfid'] . ':' . (int)$r['new_month'];
+        if (!isset($index[$key])) {
+            continue;
+        }
+        $i = $index[$key];
+        $slots[$i]['paid'] += (float)$r['amount'];
+        $slots[$i]['oe_rows'][] = [
+            'id'      => (int)$r['id'],
+            'voucher' => (string)$r['voucher_number'],
+            'amount'  => (float)$r['amount'],
+        ];
+    }
+
+    $transfers = [];
+    $n = count($slots);
+    for ($i = 0; $i < $n; $i++) {
+        $short = round($slots[$i]['due'] - $slots[$i]['paid'], 2);
+        if ($short <= OERM_GAP_TOLERANCE) {
+            continue;
+        }
+        // Pull from the LATEST later slot still holding old-ERP money, so the
+        // shortfall always ends up on the last month(s) — never in the middle.
+        for ($j = $n - 1; $j > $i && $short > 0.009; $j--) {
+            while ($short > 0.009 && $slots[$j]['oe_rows']) {
+                $k    = count($slots[$j]['oe_rows']) - 1; // take from the last row first
+                $row  = $slots[$j]['oe_rows'][$k];
+                $take = round(min($short, (float)$row['amount']), 2);
+                if ($take <= 0.009) {
+                    break;
+                }
+                $full = $take >= (float)$row['amount'] - 0.005;
+                $transfers[] = [
+                    'type'       => $full ? 'move' : 'split',
+                    'payment_id' => (int)$row['id'],
+                    'voucher'    => (string)$row['voucher'],
+                    'amount'     => $take,
+                    'from'       => ['semester_fee_id' => $slots[$j]['sfid'], 'semester_number' => $slots[$j]['sem'], 'month_number' => $slots[$j]['month']],
+                    'from_label' => $slots[$j]['label'],
+                    'to'         => ['semester_fee_id' => $slots[$i]['sfid'], 'semester_number' => $slots[$i]['sem'], 'month_number' => $slots[$i]['month']],
+                    'to_label'   => $slots[$i]['label'],
+                ];
+                $slots[$j]['oe_rows'][$k]['amount'] = round((float)$row['amount'] - $take, 2);
+                $slots[$j]['paid'] = round($slots[$j]['paid'] - $take, 2);
+                $slots[$i]['paid'] = round($slots[$i]['paid'] + $take, 2);
+                $short = round($short - $take, 2);
+                if ($slots[$j]['oe_rows'][$k]['amount'] <= 0.005) {
+                    array_pop($slots[$j]['oe_rows']);
+                }
+            }
+        }
+    }
+    return $transfers;
+}
+
+/**
+ * Split helper: clone an sfp_payments row onto another installment slot with a
+ * given amount, keeping every other column (voucher, receipt, method, dates,
+ * notes) identical. Returns the new row id.
+ */
+function oerm_clone_payment_row(int $payment_id, float $amount, int $sfid, int $sem, int $month): int
+{
+    static $cols = null;
+    if ($cols === null) {
+        $cols = db()->query('SHOW COLUMNS FROM sfp_payments')->fetchAll(PDO::FETCH_COLUMN);
+    }
+    $ins  = [];
+    $sel  = [];
+    $vals = [];
+    foreach ($cols as $c) {
+        if ($c === 'id') {
+            continue;
+        }
+        $ins[] = '`' . $c . '`';
+        if ($c === 'amount') {
+            $sel[]  = '?';
+            $vals[] = round($amount, 2);
+        } elseif ($c === 'semester_fee_id') {
+            $sel[]  = '?';
+            $vals[] = $sfid;
+        } elseif ($c === 'semester_number') {
+            $sel[]  = '?';
+            $vals[] = $sem;
+        } elseif ($c === 'month_number') {
+            $sel[]  = '?';
+            $vals[] = $month;
+        } else {
+            $sel[] = '`' . $c . '`';
+        }
+    }
+    $stmt = db()->prepare(
+        'INSERT INTO sfp_payments (' . implode(', ', $ins) . ') SELECT ' . implode(', ', $sel)
+        . ' FROM sfp_payments WHERE id = ?'
+    );
+    $vals[] = $payment_id;
+    $stmt->execute($vals);
+    return (int)db()->lastInsertId();
+}
+
+/**
+ * Execute shortfall transfers. MUST run inside an open transaction; throws on
+ * any inconsistency so the caller's transaction rolls the student back fully.
+ *
+ * @return array{0:int, 1:array} [applied count, undo entries]
+ */
+function oerm_execute_transfers(array $transfers, int $package_id, array $student): array
+{
+    if (!$transfers) {
+        return [0, []];
+    }
+    $db      = db();
+    $applied = 0;
+    $moves   = [];
+    $sid     = (string)($student['student_id'] ?? '');
+    $name    = (string)($student['full_name'] ?? '');
+
+    $upd_slot = $db->prepare(
+        "UPDATE sfp_payments
+         SET semester_fee_id = ?, semester_number = ?, month_number = ?
+         WHERE id = ?
+           AND package_id = ?
+           AND fee_type = 'semester_tuition'
+           AND payment_method = 'old_erp'"
+    );
+    $upd_amt = $db->prepare(
+        "UPDATE sfp_payments
+         SET amount = ROUND(amount - ?, 2)
+         WHERE id = ?
+           AND package_id = ?
+           AND fee_type = 'semester_tuition'
+           AND payment_method = 'old_erp'
+           AND amount >= ?"
+    );
+
+    foreach ($transfers as $t) {
+        $amt = round((float)$t['amount'], 2);
+        if ($t['type'] === 'move') {
+            // The whole remaining payment moves to the short month.
+            $upd_slot->execute([
+                (int)$t['to']['semester_fee_id'],
+                (int)$t['to']['semester_number'],
+                (int)$t['to']['month_number'],
+                (int)$t['payment_id'],
+                $package_id,
+            ]);
+            if ($upd_slot->rowCount() < 1) {
+                throw new RuntimeException('Payment ' . (string)$t['voucher'] . ' changed while fixing — aborted.');
+            }
+            log_change('accounting', 'UPDATE', (int)$t['payment_id'],
+                'Payment #' . (int)$t['payment_id'] . ' / ' . (string)$t['voucher'],
+                'schedule_slot', (string)$t['from_label'], (string)$t['to_label'],
+                'Old ERP shortfall fix for ' . $name . ' (' . $sid . '): whole payment of ' . acc_fmt($amt)
+                . ' moved from ' . (string)$t['from_label'] . ' to fill ' . (string)$t['to_label']
+                . '. Nothing deleted; amount/voucher unchanged.');
+            $moves[] = [
+                'type'        => 'move',
+                'payment_id'  => (int)$t['payment_id'],
+                'voucher'     => (string)$t['voucher'],
+                'student_sid' => $sid,
+                'amount'      => $amt,
+                'from'        => $t['from'],
+                'to'          => $t['to'],
+            ];
+        } else {
+            // Split: ONLY the missing amount moves; the rest stays where it is.
+            $upd_amt->execute([$amt, (int)$t['payment_id'], $package_id, $amt - 0.005]);
+            if ($upd_amt->rowCount() < 1) {
+                throw new RuntimeException('Payment ' . (string)$t['voucher'] . ' no longer holds ' . acc_fmt($amt) . ' — aborted.');
+            }
+            $new_id = oerm_clone_payment_row(
+                (int)$t['payment_id'],
+                $amt,
+                (int)$t['to']['semester_fee_id'],
+                (int)$t['to']['semester_number'],
+                (int)$t['to']['month_number']
+            );
+            log_change('accounting', 'UPDATE', (int)$t['payment_id'],
+                'Payment #' . (int)$t['payment_id'] . ' / ' . (string)$t['voucher'],
+                'tuition_amount_split', (string)$t['from_label'], (string)$t['to_label'],
+                'Old ERP shortfall fix for ' . $name . ' (' . $sid . '): ' . acc_fmt($amt)
+                . ' pulled from ' . (string)$t['from_label'] . ' (the last paid month) to fill ' . (string)$t['to_label']
+                . '. Payment row split (new row #' . $new_id . '); the rest stays — total paid unchanged, nothing deleted.');
+            $moves[] = [
+                'type'        => 'split',
+                'payment_id'  => (int)$t['payment_id'],
+                'donor_id'    => (int)$t['payment_id'],
+                'new_id'      => $new_id,
+                'voucher'     => (string)$t['voucher'],
+                'student_sid' => $sid,
+                'amount'      => $amt,
+                'from'        => $t['from'],
+                'to'          => $t['to'],
+            ];
+        }
+        $applied++;
+    }
+    return [$applied, $moves];
 }
 
 // ── Undo (fix batch) helpers ───────────────────────────────────────────────────
@@ -536,7 +873,12 @@ function oerm_undo_batch(array $batch): array
     $errors     = [];
 
     $moves = json_decode((string)($batch['moved_payments'] ?? '[]'), true);
-    $upd = db()->prepare(
+    // Undo in REVERSE order — a payment may have been moved more than once
+    // (whole-row remap first, shortfall re-balance after), so reverting the
+    // steps backwards restores the exact original state.
+    $moves = is_array($moves) ? array_reverse($moves) : [];
+    $db  = db();
+    $upd = $db->prepare(
         "UPDATE sfp_payments
          SET semester_fee_id = ?, semester_number = ?, month_number = ?
          WHERE id = ?
@@ -545,11 +887,80 @@ function oerm_undo_batch(array $batch): array
            AND fee_type = 'semester_tuition'
            AND payment_method = 'old_erp'"
     );
-    foreach (is_array($moves) ? $moves : [] as $mv) {
-        $pid  = (int)($mv['payment_id'] ?? 0);
+    foreach ($moves as $mv) {
+        $type = (string)($mv['type'] ?? 'move');
         $from = $mv['from'] ?? null;
         $to   = $mv['to'] ?? null;
-        if ($pid <= 0 || !is_array($from) || !is_array($to)) {
+        if (!is_array($from) || !is_array($to)) {
+            continue;
+        }
+        if ($type === 'split') {
+            // Delete the split-off row (only while it still sits where the fix
+            // put it, with the same amount) and return the amount to the
+            // original payment — both steps atomically.
+            $pid_new = (int)($mv['new_id'] ?? 0);
+            $pid_don = (int)($mv['donor_id'] ?? ($mv['payment_id'] ?? 0));
+            $amt     = round((float)($mv['amount'] ?? 0), 2);
+            if ($pid_new <= 0 || $pid_don <= 0 || $amt <= 0) {
+                continue;
+            }
+            $own_tx = false;
+            try {
+                $own_tx = !$db->inTransaction();
+                if ($own_tx) {
+                    $db->beginTransaction();
+                }
+                $del = $db->prepare(
+                    "DELETE FROM sfp_payments
+                     WHERE id = ?
+                       AND fee_type = 'semester_tuition'
+                       AND payment_method = 'old_erp'
+                       AND semester_fee_id = ?
+                       AND month_number = ?
+                       AND ABS(amount - ?) < 0.01"
+                );
+                $del->execute([$pid_new, (int)($to['semester_fee_id'] ?? 0), (int)($to['month_number'] ?? 0), $amt]);
+                if ($del->rowCount() < 1) {
+                    if ($own_tx) {
+                        $db->rollBack();
+                    }
+                    $skipped++;
+                    continue;
+                }
+                $add = $db->prepare(
+                    "UPDATE sfp_payments SET amount = ROUND(amount + ?, 2)
+                     WHERE id = ? AND fee_type = 'semester_tuition' AND payment_method = 'old_erp'"
+                );
+                $add->execute([$amt, $pid_don]);
+                if ($add->rowCount() < 1) {
+                    if ($own_tx) {
+                        $db->rollBack();
+                    }
+                    $errors[] = 'Split from payment #' . $pid_don . ': original row missing — left unchanged.';
+                    continue;
+                }
+                if ($own_tx) {
+                    $db->commit();
+                }
+                $moved_back++;
+                log_change('accounting', 'UPDATE', $pid_don,
+                    'Payment #' . $pid_don . ' / ' . (string)($mv['voucher'] ?? ''),
+                    'tuition_amount_split',
+                    'sem ' . (int)($to['semester_number'] ?? 0) . ' / month ' . (int)($to['month_number'] ?? 0),
+                    'sem ' . (int)($from['semester_number'] ?? 0) . ' / month ' . (int)($from['month_number'] ?? 0),
+                    'Old ERP remap undo: fix batch #' . (int)$batch['id'] . ' reverted — ' . acc_fmt($amt)
+                    . ' returned to the original payment; the split-off row was removed. Total unchanged.');
+            } catch (Throwable $e) {
+                if ($own_tx && $db->inTransaction()) {
+                    $db->rollBack();
+                }
+                $errors[] = 'Split row #' . $pid_new . ': ' . $e->getMessage();
+            }
+            continue;
+        }
+        // Whole-row move.
+        $pid = (int)($mv['payment_id'] ?? 0);
+        if ($pid <= 0) {
             continue;
         }
         try {
@@ -592,6 +1003,7 @@ $errors    = [];
 $student   = null;
 $plan      = null;
 $scan_rows = null;
+$shortfall_transfers = null;
 $f_dept    = (int)($_POST['f_dept']    ?? 0);
 $f_program = (int)($_POST['f_program'] ?? 0);
 $f_batch   = (int)($_POST['f_batch']   ?? 0);
@@ -679,10 +1091,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         // The plan is ALWAYS recomputed server-side — also on apply —
                         // so nothing posted from the browser can influence the mapping.
                         $plan = oerm_build_plan($summary, $fixed, $movable);
+                        $shortfall_transfers = oerm_build_shortfall_plan($summary, $fixed, $plan['plan']);
+                        // A student with no REAL gap (every month paid, or only a
+                        // trailing shortfall where the money simply ran out) is
+                        // fine and up to date — show the plan as fully unchanged
+                        // and never move anything.
+                        if (!oerm_has_fixable_gap($summary, $fixed, $movable)) {
+                            foreach ($plan['plan'] as $gk => $gv) {
+                                $plan['plan'][$gk]['changed'] = false;
+                            }
+                            $plan['changed'] = 0;
+                            $shortfall_transfers = [];
+                        }
 
                         if ($action === 'apply') {
-                            if ((int)$plan['changed'] === 0) {
-                                flash_set('info', 'Nothing to change — all old-ERP monthly payments are already on the correct slots.');
+                            if ((int)$plan['changed'] === 0 && !$shortfall_transfers) {
+                                flash_set('info', 'Nothing to change — all old-ERP monthly payments are already on the correct months and amounts.');
                                 redirect(APP_URL . '/accounting/old-erp-remap.php');
                             }
                             $db = db();
@@ -743,6 +1167,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                             ],
                                         ];
                                     }
+                                }
+                                // Phase 2 — shortfall re-balance: pull any missing amount
+                                // of an earlier month from the latest month still holding
+                                // old-ERP money. Nothing is deleted; totals never change.
+                                [$t_applied, $t_moves] = oerm_execute_transfers($shortfall_transfers ?? [], (int)$student['package_id'], $student);
+                                $updated += $t_applied;
+                                foreach ($t_moves as $t_mv) {
+                                    $apply_moves[] = $t_mv;
                                 }
                                 $db->commit();
                                 // Record this apply as an undoable fix batch (best-effort:
@@ -836,6 +1268,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <li>The remap re-packs the student's <strong>old-ERP (memo) monthly tuition payments only</strong> onto the schedule from the start month forward, in payment-date order.</li>
                 <li>Payments collected in <strong>this ERP</strong> (cash / bank / mobile banking) keep their slots and are <strong>never touched</strong>.</li>
                 <li>Only the semester/month linkage moves — <strong>amounts, vouchers, dates and receipts never change</strong>, so the books stay balanced.</li>
+                <li><strong>Partial shortfalls are re-balanced too.</strong> When an earlier month is short by a small amount (e.g. April missing 1.42) while a later month is paid, exactly that amount is pulled from the <strong>last paid month</strong> (e.g. June) to fill the earlier month — the rest stays where it is. The payment row is split, nothing is deleted, and the student's total paid never changes.</li>
                 <li>Use the <strong>Department / Program / Batch filters</strong> to scan a specific group, then fix the listed students <strong>in bulk</strong> — the scan <strong>re-runs automatically</strong> after the fix so you can verify the result right away.</li>
                 <li>Nothing is saved until you confirm; every change is recorded in the change log.</li>
             </ul>
@@ -906,7 +1339,8 @@ require_once __DIR__ . '/../includes/header.php';
                         <th>Student ID</th><th>Student</th>
                         <th>Department</th><th>Program</th><th>Batch</th>
                         <th class="text-end">Old-ERP Monthly Payments</th>
-                        <th class="text-end">Would Move</th><th class="text-end pe-4">Action</th>
+                        <th class="text-end">Would Move</th>
+                        <th class="text-end">Amount Fixes</th><th class="text-end pe-4">Action</th>
                     </tr></thead>
                     <tbody>
                     <?php foreach ($scan_rows as $sr): ?>
@@ -919,6 +1353,9 @@ require_once __DIR__ . '/../includes/header.php';
                         <td class="small"><?= h($sr['batch_name'] !== '' ? $sr['batch_name'] : '—') ?></td>
                         <td class="text-end"><?= (int)$sr['movable'] ?></td>
                         <td class="text-end text-danger fw-semibold"><?= (int)$sr['changed'] ?></td>
+                        <td class="text-end fw-semibold <?= !empty($sr['shifts']) ? 'text-warning' : 'text-muted' ?>">
+                            <?= !empty($sr['shifts']) ? (int)$sr['shifts'] . ' (' . h(acc_fmt((float)($sr['shift_amount'] ?? 0))) . ')' : '—' ?>
+                        </td>
                         <td class="text-end pe-4">
                             <button type="submit" form="oerm-preview-form" name="student_sid" value="<?= h($sr['student_id']) ?>" class="btn btn-outline-warning btn-sm py-0 px-2">
                                 <i class="fas fa-eye me-1"></i>Preview
@@ -1063,6 +1500,7 @@ require_once __DIR__ . '/../includes/header.php';
         </span>
         <div class="d-flex gap-2 small">
             <span class="badge bg-warning text-dark">Will move: <?= (int)$plan['changed'] ?></span>
+            <span class="badge bg-info text-dark">Amount fixes: <?= is_array($shortfall_transfers) ? count($shortfall_transfers) : 0 ?></span>
             <span class="badge bg-secondary">Unchanged: <?= count($plan['plan']) - (int)$plan['changed'] ?></span>
         </div>
     </div>
@@ -1099,18 +1537,49 @@ require_once __DIR__ . '/../includes/header.php';
                 </tbody>
             </table>
         </div>
+        <?php if ($shortfall_transfers): ?>
+        <div class="border-top">
+            <div class="px-4 pt-3 small text-muted">
+                <strong>Amount fixes (shortfall re-balance):</strong> each amount below is pulled from the <strong>last paid month</strong>
+                to fill an earlier month that is short — e.g. April missing 1.42 while June is the last paid month: exactly 1.42 moves
+                from June to April and the rest stays in June. Nothing is deleted; the student's total paid never changes.
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0 align-middle">
+                    <thead class="table-light"><tr>
+                        <th class="ps-4">Voucher</th>
+                        <th class="text-end">Amount to Move</th>
+                        <th>From (last paid month)</th><th>To (short month)</th><th>How</th>
+                    </tr></thead>
+                    <tbody>
+                    <?php foreach ($shortfall_transfers as $tr): ?>
+                    <tr class="table-info">
+                        <td class="ps-4 small"><?= h((string)$tr['voucher']) ?></td>
+                        <td class="text-end small fw-semibold"><?= h(acc_fmt((float)$tr['amount'])) ?></td>
+                        <td class="small"><?= h((string)$tr['from_label']) ?></td>
+                        <td class="small fw-semibold"><?= h((string)$tr['to_label']) ?></td>
+                        <td class="small"><?= $tr['type'] === 'split' ? 'Split — only this amount moves, the rest stays' : 'Whole payment moves' ?></td>
+                    </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <?php endif; ?>
     </div>
+    <?php $oerm_total_fixes = (int)$plan['changed'] + (is_array($shortfall_transfers) ? count($shortfall_transfers) : 0); ?>
     <div class="card-footer py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
         <span class="text-muted small">
-            Only <strong>old-ERP (memo)</strong> monthly tuition payments move. This-ERP payments, amounts, vouchers and receipts are untouched.
+            Only <strong>old-ERP (memo)</strong> monthly tuition payments move. This-ERP payments, vouchers and receipts are untouched,
+            nothing is deleted, and the student's total paid never changes.
         </span>
         <form method="post"
-              onsubmit="return confirm('Remap <?= (int)$plan['changed'] ?> old-ERP payment(s) for <?= h(addslashes((string)$student['full_name'])) ?>? Amounts and vouchers will NOT change.');">
+              onsubmit="return confirm('Apply <?= $oerm_total_fixes ?> fix(es) for <?= h(addslashes((string)$student['full_name'])) ?>? Payments are only re-arranged — nothing is deleted and the total paid never changes.');">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="apply">
             <input type="hidden" name="student_sid" value="<?= h((string)$student['student_id']) ?>">
-            <button type="submit" class="btn btn-warning" <?= (int)$plan['changed'] > 0 ? '' : 'disabled' ?>>
-                <i class="fas fa-check me-1"></i> Confirm &amp; Remap <?= (int)$plan['changed'] ?> Payment(s)
+            <button type="submit" class="btn btn-warning" <?= $oerm_total_fixes > 0 ? '' : 'disabled' ?>>
+                <i class="fas fa-check me-1"></i> Confirm &amp; Fix <?= $oerm_total_fixes ?> Item(s)
             </button>
         </form>
     </div>
