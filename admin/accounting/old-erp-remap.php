@@ -130,10 +130,18 @@ function oerm_has_fixable_gap(array $summary, array $fixed, array $movable): boo
     if (!$keys) {
         return false;
     }
+    // Money not linked to a specific installment — e.g. a lump-sum cash
+    // collection covering several months in one payment row — goes into a
+    // pool that is spread SEQUENTIALLY into the earliest short months,
+    // exactly how the fee summary displays it. A month covered by such a
+    // lump sum is therefore never mistaken for a gap.
+    $pool = 0.0;
     foreach ($fixed as $p) {
         $key = (int)($p['semester_fee_id'] ?? 0) . ':' . (int)($p['month_number'] ?? 0);
         if (isset($paid[$key])) {
             $paid[$key] += (float)$p['amount'];
+        } else {
+            $pool += (float)$p['amount'];
         }
     }
     foreach ($movable as $p) {
@@ -141,9 +149,23 @@ function oerm_has_fixable_gap(array $summary, array $fixed, array $movable): boo
         if (isset($paid[$key])) {
             $paid[$key] += (float)$p['amount'];
             $oe[$key]   += (float)$p['amount'];
+        } else {
+            $pool += (float)$p['amount'];
         }
     }
     $n = count($keys);
+    if ($pool > 0.005) {
+        for ($i = 0; $i < $n && $pool > 0.005; $i++) {
+            $k    = $keys[$i];
+            $need = round($due[$k] - $paid[$k], 2);
+            if ($need <= 0.005) {
+                continue;
+            }
+            $alloc     = min($need, $pool);
+            $paid[$k]  = round($paid[$k] + $alloc, 2);
+            $pool      = round($pool - $alloc, 2);
+        }
+    }
     for ($i = 0; $i < $n; $i++) {
         $k = $keys[$i];
         if (round($due[$k] - $paid[$k], 2) <= OERM_GAP_TOLERANCE) {
@@ -202,6 +224,7 @@ function oerm_build_plan(array $summary, array $fixed, array $movable): array
     }
 
     // Payments collected in THIS ERP keep their place: consume capacity + months.
+    $plan_unlinked = 0.0;
     foreach ($fixed as $p) {
         $sfid = (int)($p['semester_fee_id'] ?? 0);
         if ($sfid && isset($caps[$sfid])) {
@@ -209,6 +232,22 @@ function oerm_build_plan(array $summary, array $fixed, array $movable): array
             if (!empty($p['month_number'])) {
                 $occupied[$sfid][(int)$p['month_number']] = true;
             }
+        } else {
+            $plan_unlinked += (float)$p['amount'];
+        }
+    }
+    // This-ERP money not linked to a semester (e.g. a lump-sum cash collection)
+    // still consumes tuition capacity — spread it over the semesters in order,
+    // exactly how the fee summary applies it, so old-ERP rows are never packed
+    // into space that cash already fills.
+    foreach ($order as $u_sfid) {
+        if ($plan_unlinked <= 0.005) {
+            break;
+        }
+        if ($caps[$u_sfid] > 0.005) {
+            $u_take = min($caps[$u_sfid], $plan_unlinked);
+            $caps[$u_sfid]  -= $u_take;
+            $plan_unlinked  -= $u_take;
         }
     }
 
@@ -551,10 +590,15 @@ function oerm_build_shortfall_plan(array $summary, array $fixed, array $plan_row
     }
 
     // This-ERP payments pin their amounts; old-ERP rows are the movable pool.
+    // This-ERP money without an installment linkage (e.g. a lump-sum cash
+    // collection) is collected into a pool and spread sequentially below.
+    $unlinked = 0.0;
     foreach ($fixed as $p) {
         $key = (int)($p['semester_fee_id'] ?? 0) . ':' . (int)($p['month_number'] ?? 0);
         if (isset($index[$key])) {
             $slots[$index[$key]]['paid'] += (float)$p['amount'];
+        } else {
+            $unlinked += (float)$p['amount'];
         }
     }
     foreach ($plan_rows as $r) {
@@ -569,6 +613,22 @@ function oerm_build_shortfall_plan(array $summary, array $fixed, array $plan_row
             'voucher' => (string)$r['voucher_number'],
             'amount'  => (float)$r['amount'],
         ];
+    }
+
+    // Spread unlinked this-ERP money sequentially into the earliest short
+    // months — matching the fee-summary display — so the re-balancer never
+    // "fills" a month that a lump-sum cash collection already covers.
+    if ($unlinked > 0.005) {
+        $ns = count($slots);
+        for ($ui = 0; $ui < $ns && $unlinked > 0.005; $ui++) {
+            $need = round($slots[$ui]['due'] - $slots[$ui]['paid'], 2);
+            if ($need <= 0.005) {
+                continue;
+            }
+            $alloc = min($need, $unlinked);
+            $slots[$ui]['paid'] = round($slots[$ui]['paid'] + $alloc, 2);
+            $unlinked = round($unlinked - $alloc, 2);
+        }
     }
 
     $transfers = [];
