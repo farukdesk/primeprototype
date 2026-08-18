@@ -62,7 +62,7 @@ function er_parse_csv_text(string $text): array
     $rows = [];
     foreach (preg_split('/\r\n|\r|\n/', $text) as $line) {
         if (trim($line) === '') continue;
-        $rows[] = str_getcsv($line);
+        $rows[] = str_getcsv($line, ',', '"', '');
     }
     return $rows;
 }
