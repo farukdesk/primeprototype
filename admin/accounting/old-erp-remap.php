@@ -140,6 +140,11 @@ function oerm_has_fixable_gap(array $summary, array $fixed, array $movable): boo
         $key = (int)($p['semester_fee_id'] ?? 0) . ':' . (int)($p['month_number'] ?? 0);
         if (isset($paid[$key])) {
             $paid[$key] += (float)$p['amount'];
+            // Month-linked this-ERP money in a LATER month is pullable too:
+            // the shortfall re-balancer may move it backward to fill an
+            // earlier unpaid month (e.g. August due while September and
+            // October are paid by cash).
+            $oe[$key]   += (float)$p['amount'];
         } else {
             $pool += (float)$p['amount'];
         }
@@ -172,13 +177,14 @@ function oerm_has_fixable_gap(array $summary, array $fixed, array $movable): boo
             continue;
         }
         // This month is genuinely short — fixable only if a LATER month still
-        // holds old-ERP money that could be pulled forward to fill it.
+        // holds month-linked tuition money (old-ERP or this-ERP) that could be
+        // pulled back to fill it.
         for ($j = $i + 1; $j < $n; $j++) {
             if ($oe[$keys[$j]] > OERM_GAP_TOLERANCE) {
                 return true;
             }
         }
-        // Gap exists but there is no later old-ERP money — the money simply
+        // Gap exists but there is no later tuition money — the money simply
         // ran out here (normal trailing shortfall). Nothing this tool can or
         // should move.
         return false;
@@ -597,6 +603,15 @@ function oerm_build_shortfall_plan(array $summary, array $fixed, array $plan_row
         $key = (int)($p['semester_fee_id'] ?? 0) . ':' . (int)($p['month_number'] ?? 0);
         if (isset($index[$key])) {
             $slots[$index[$key]]['paid'] += (float)$p['amount'];
+            // Month-linked this-ERP rows join the donor pool: when an earlier
+            // month is short, they can be pulled BACKWARD from a later month
+            // (never forward). Old-ERP rows are added after this loop, so
+            // within the same month old-ERP money is taken before cash.
+            $slots[$index[$key]]['oe_rows'][] = [
+                'id'      => (int)$p['id'],
+                'voucher' => (string)$p['voucher_number'],
+                'amount'  => (float)$p['amount'],
+            ];
         } else {
             $unlinked += (float)$p['amount'];
         }
@@ -733,13 +748,16 @@ function oerm_execute_transfers(array $transfers, int $package_id, array $studen
     $sid     = (string)($student['student_id'] ?? '');
     $name    = (string)($student['full_name'] ?? '');
 
+    // Shortfall moves/splits may touch tuition rows of ANY payment method —
+    // money only ever moves BACKWARD to an earlier unpaid month, amounts /
+    // vouchers / receipts never change, and a split keeps the donor row's
+    // own method. Scope stays locked to this package's tuition rows.
     $upd_slot = $db->prepare(
         "UPDATE sfp_payments
          SET semester_fee_id = ?, semester_number = ?, month_number = ?
          WHERE id = ?
            AND package_id = ?
-           AND fee_type = 'semester_tuition'
-           AND payment_method = 'old_erp'"
+           AND fee_type = 'semester_tuition'"
     );
     $upd_amt = $db->prepare(
         "UPDATE sfp_payments
@@ -747,7 +765,6 @@ function oerm_execute_transfers(array $transfers, int $package_id, array $studen
          WHERE id = ?
            AND package_id = ?
            AND fee_type = 'semester_tuition'
-           AND payment_method = 'old_erp'
            AND amount >= ?"
     );
 
@@ -944,8 +961,7 @@ function oerm_undo_batch(array $batch): array
          WHERE id = ?
            AND semester_fee_id = ?
            AND month_number = ?
-           AND fee_type = 'semester_tuition'
-           AND payment_method = 'old_erp'"
+           AND fee_type = 'semester_tuition'"
     );
     foreach ($moves as $mv) {
         $type = (string)($mv['type'] ?? 'move');
@@ -974,7 +990,6 @@ function oerm_undo_batch(array $batch): array
                     "DELETE FROM sfp_payments
                      WHERE id = ?
                        AND fee_type = 'semester_tuition'
-                       AND payment_method = 'old_erp'
                        AND semester_fee_id = ?
                        AND month_number = ?
                        AND ABS(amount - ?) < 0.01"
@@ -989,7 +1004,7 @@ function oerm_undo_batch(array $batch): array
                 }
                 $add = $db->prepare(
                     "UPDATE sfp_payments SET amount = ROUND(amount + ?, 2)
-                     WHERE id = ? AND fee_type = 'semester_tuition' AND payment_method = 'old_erp'"
+                     WHERE id = ? AND fee_type = 'semester_tuition'"
                 );
                 $add->execute([$amt, $pid_don]);
                 if ($add->rowCount() < 1) {
@@ -1326,7 +1341,7 @@ require_once __DIR__ . '/../includes/header.php';
             <ul class="mb-0 mt-1 ps-3">
                 <li>Happens when a student's old-ERP payments started <strong>before</strong> the schedule's payment start month (e.g. December while the schedule starts in January) — the early payment landed on a much later slot.</li>
                 <li>The remap re-packs the student's <strong>old-ERP (memo) monthly tuition payments only</strong> onto the schedule from the start month forward, in payment-date order.</li>
-                <li>Payments collected in <strong>this ERP</strong> (cash / bank / mobile banking) keep their slots and are <strong>never touched</strong>.</li>
+                <li>Payments collected in <strong>this ERP</strong> (cash / bank / mobile banking) keep their slots during the re-pack. The <strong>shortfall re-balance</strong> may pull part of a this-ERP payment <strong>backward</strong> to fill an earlier unpaid month (e.g. August due while September / October are paid by cash) — amounts, vouchers and receipts still never change, and money is never pushed forward.</li>
                 <li>Only the semester/month linkage moves — <strong>amounts, vouchers, dates and receipts never change</strong>, so the books stay balanced.</li>
                 <li><strong>Partial shortfalls are re-balanced too.</strong> When an earlier month is short by a small amount (e.g. April missing 1.42) while a later month is paid, exactly that amount is pulled from the <strong>last paid month</strong> (e.g. June) to fill the earlier month — the rest stays where it is. The payment row is split, nothing is deleted, and the student's total paid never changes.</li>
                 <li>Use the <strong>Department / Program / Batch filters</strong> to scan a specific group, then fix the listed students <strong>in bulk</strong> — the scan <strong>re-runs automatically</strong> after the fix so you can verify the result right away.</li>
@@ -1630,8 +1645,9 @@ require_once __DIR__ . '/../includes/header.php';
     <?php $oerm_total_fixes = (int)$plan['changed'] + (is_array($shortfall_transfers) ? count($shortfall_transfers) : 0); ?>
     <div class="card-footer py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
         <span class="text-muted small">
-            Only <strong>old-ERP (memo)</strong> monthly tuition payments move. This-ERP payments, vouchers and receipts are untouched,
-            nothing is deleted, and the student's total paid never changes.
+            Only monthly tuition <strong>month linkage</strong> moves: the re-pack touches <strong>old-ERP (memo)</strong> rows only, and the
+            shortfall re-balance may pull a later payment (any method) <strong>backward</strong> to an earlier unpaid month. Vouchers and
+            receipts are untouched, nothing is deleted, and the student's total paid never changes.
         </span>
         <form method="post"
               onsubmit="return confirm('Apply <?= $oerm_total_fixes ?> fix(es) for <?= h(addslashes((string)$student['full_name'])) ?>? Payments are only re-arranged — nothing is deleted and the total paid never changes.');">
