@@ -170,6 +170,7 @@ function oerm_build_plan(array $summary, array $fixed, array $movable): array
                 'voucher_date'   => (string)$p['voucher_date'],
                 'receipt'        => (string)($p['transaction_number'] ?? ''),
                 'amount'         => $amount,
+                'old_sfid'       => (int)($p['semester_fee_id'] ?? 0),
                 'old_sem'        => (int)($p['semester_number'] ?? 0),
                 'old_month'      => (int)($p['month_number'] ?? 0),
                 'new_sfid'       => (int)($p['semester_fee_id'] ?? 0),
@@ -209,6 +210,7 @@ function oerm_build_plan(array $summary, array $fixed, array $movable): array
             'voucher_date'    => (string)$p['voucher_date'],
             'receipt'         => (string)($p['transaction_number'] ?? ''),
             'amount'          => $amount,
+            'old_sfid'        => (int)($p['semester_fee_id'] ?? 0),
             'old_sem'         => (int)($p['semester_number'] ?? 0),
             'old_month'       => (int)($p['month_number'] ?? 0),
             'new_sfid'        => $target,
@@ -323,28 +325,28 @@ function oerm_scan_affected(int $f_dept, int $f_program, int $f_batch, int $limi
  * move; amounts, vouchers, dates and receipts never change, and every moved
  * row is written to the immutable change log.
  *
- * @return array{0:int, 1:?string} [payments moved, error message or null]
+ * @return array{0:int, 1:?string, 2:array} [payments moved, error message or null, move list for undo]
  */
 function oerm_apply_student_fix(string $sid): array
 {
     $student = oerm_lookup_student($sid);
     if (!$student) {
-        return [0, 'Student ' . $sid . ': not found.'];
+        return [0, 'Student ' . $sid . ': not found.', []];
     }
     if ((int)($student['package_id'] ?? 0) <= 0) {
-        return [0, 'Student ' . $sid . ': no fee package in the current system.'];
+        return [0, 'Student ' . $sid . ': no fee package in the current system.', []];
     }
     $summary = acc_student_fee_summary((int)$student['id']);
     if (!$summary) {
-        return [0, 'Student ' . $sid . ': could not load the fee summary.'];
+        return [0, 'Student ' . $sid . ': could not load the fee summary.', []];
     }
     [$fixed, $movable] = oerm_load_payments((int)$student['package_id']);
     if (!$movable) {
-        return [0, null];
+        return [0, null, []];
     }
     $plan = oerm_build_plan($summary, $fixed, $movable);
     if ((int)$plan['changed'] === 0) {
-        return [0, null];
+        return [0, null, []];
     }
 
     $db = db();
@@ -361,6 +363,7 @@ function oerm_apply_student_fix(string $sid): array
                AND payment_method = 'old_erp'"
         );
         $updated = 0;
+        $moves   = [];
         foreach ($plan['plan'] as $row) {
             if (!$row['changed']) {
                 continue;
@@ -387,17 +390,200 @@ function oerm_apply_student_fix(string $sid): array
                     . ($row['new_month_label'] !== '' ? ' (' . $row['new_month_label'] . ')' : '')
                     . '. Misaligned month correction; amount/voucher unchanged.'
                 );
+                $moves[] = [
+                    'payment_id'  => (int)$row['id'],
+                    'voucher'     => (string)$row['voucher_number'],
+                    'student_sid' => (string)($student['student_id'] ?? $sid),
+                    'amount'      => (float)$row['amount'],
+                    'from' => [
+                        'semester_fee_id' => (int)($row['old_sfid'] ?? 0),
+                        'semester_number' => (int)$row['old_sem'],
+                        'month_number'    => (int)$row['old_month'],
+                    ],
+                    'to' => [
+                        'semester_fee_id' => (int)$row['new_sfid'],
+                        'semester_number' => (int)$row['new_sem'],
+                        'month_number'    => (int)$row['new_month'],
+                    ],
+                ];
             }
         }
         $db->commit();
-        return [$updated, null];
+        return [$updated, null, $moves];
     } catch (Throwable $e) {
         if ($db->inTransaction()) {
             $db->rollBack();
         }
         error_log('old-erp-remap bulk fix failed for ' . $sid . ': ' . $e->getMessage());
-        return [0, 'Student ' . $sid . ': fix failed and was fully rolled back — no payment was modified.'];
+        return [0, 'Student ' . $sid . ': fix failed and was fully rolled back — no payment was modified.', []];
     }
+}
+
+// ── Undo (fix batch) helpers ───────────────────────────────────────────────────
+//
+// Every applied fix (single-student apply or bulk auto-fix) is recorded as one
+// fix batch carrying the exact from/to slot of every payment it moved. Undoing
+// a batch moves each payment BACK to its original month — only while it still
+// sits where the fix put it, so later manual corrections are never overwritten.
+// Nothing is ever deleted; amounts, vouchers and receipts are untouched.
+
+/**
+ * Ensure the fix-batch tracking table behind the Undo feature exists.
+ */
+function oerm_ensure_batch_table(): void
+{
+    static $done = false;
+    if ($done) {
+        return;
+    }
+    db()->exec(
+        'CREATE TABLE IF NOT EXISTS oerm_fix_batches (
+            id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            created_by INT UNSIGNED NOT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            fixed_students INT UNSIGNED NOT NULL DEFAULT 0,
+            moved_count INT UNSIGNED NOT NULL DEFAULT 0,
+            moved_payments MEDIUMTEXT NOT NULL,
+            undone_by INT UNSIGNED NULL DEFAULT NULL,
+            undone_at DATETIME NULL DEFAULT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+    );
+    $done = true;
+}
+
+/**
+ * Record an applied fix as an undoable batch. Returns the batch id (0 when
+ * there was nothing to record).
+ */
+function oerm_record_batch(array $moves, int $fixed_students): int
+{
+    if (!$moves) {
+        return 0;
+    }
+    oerm_ensure_batch_table();
+    $user = auth_user();
+    db()->prepare(
+        'INSERT INTO oerm_fix_batches (created_by, fixed_students, moved_count, moved_payments) VALUES (?,?,?,?)'
+    )->execute([
+        (int)($user['id'] ?? 0),
+        max(0, $fixed_students),
+        count($moves),
+        json_encode(array_values($moves), JSON_UNESCAPED_UNICODE),
+    ]);
+    return (int)db()->lastInsertId();
+}
+
+/**
+ * Fetch a single fix batch by id.
+ */
+function oerm_get_batch(int $id): ?array
+{
+    oerm_ensure_batch_table();
+    $stmt = db()->prepare('SELECT * FROM oerm_fix_batches WHERE id = ? LIMIT 1');
+    $stmt->execute([$id]);
+    return $stmt->fetch() ?: null;
+}
+
+/**
+ * Latest fix batches for the on-page list, newest first.
+ */
+function oerm_recent_batches(int $limit = 10): array
+{
+    oerm_ensure_batch_table();
+    $stmt = db()->prepare(
+        'SELECT b.*, u.full_name AS created_by_name, x.full_name AS undone_by_name
+         FROM oerm_fix_batches b
+         LEFT JOIN users u ON u.id = b.created_by
+         LEFT JOIN users x ON x.id = b.undone_by
+         ORDER BY b.id DESC
+         LIMIT ' . max(1, $limit)
+    );
+    $stmt->execute();
+    return $stmt->fetchAll();
+}
+
+/**
+ * Only the user who ran the fix — or a Super Administrator — may undo it,
+ * and only while the batch has not been undone yet.
+ */
+function oerm_can_undo_batch(array $batch): bool
+{
+    if (!empty($batch['undone_at'])) {
+        return false;
+    }
+    if (is_super_admin()) {
+        return true;
+    }
+    $user = auth_user();
+    return $user && (int)$batch['created_by'] === (int)($user['id'] ?? 0);
+}
+
+/**
+ * Undo a fix batch: move every payment it moved back to its original month.
+ *
+ * A payment is only moved back while it still sits where the fix put it — a
+ * payment moved again since (manually or by a later fix) is skipped, never
+ * overwritten. The WHERE clause re-asserts the safety scope: only old-ERP
+ * monthly tuition rows can ever move. Nothing is deleted; amounts, vouchers
+ * and receipts are untouched. Every reverted row is change-logged.
+ *
+ * @return array{moved_back:int, skipped:int, errors:string[]}
+ */
+function oerm_undo_batch(array $batch): array
+{
+    $moved_back = 0;
+    $skipped    = 0;
+    $errors     = [];
+
+    $moves = json_decode((string)($batch['moved_payments'] ?? '[]'), true);
+    $upd = db()->prepare(
+        "UPDATE sfp_payments
+         SET semester_fee_id = ?, semester_number = ?, month_number = ?
+         WHERE id = ?
+           AND semester_fee_id = ?
+           AND month_number = ?
+           AND fee_type = 'semester_tuition'
+           AND payment_method = 'old_erp'"
+    );
+    foreach (is_array($moves) ? $moves : [] as $mv) {
+        $pid  = (int)($mv['payment_id'] ?? 0);
+        $from = $mv['from'] ?? null;
+        $to   = $mv['to'] ?? null;
+        if ($pid <= 0 || !is_array($from) || !is_array($to)) {
+            continue;
+        }
+        try {
+            $upd->execute([
+                (int)($from['semester_fee_id'] ?? 0),
+                (int)($from['semester_number'] ?? 0),
+                (int)($from['month_number'] ?? 0),
+                $pid,
+                (int)($to['semester_fee_id'] ?? 0),
+                (int)($to['month_number'] ?? 0),
+            ]);
+            if ($upd->rowCount() > 0) {
+                $moved_back++;
+                log_change('accounting', 'UPDATE', $pid,
+                    'Payment #' . $pid . ' / ' . (string)($mv['voucher'] ?? ''),
+                    'schedule_slot',
+                    'sem ' . (int)($to['semester_number'] ?? 0) . ' / month ' . (int)($to['month_number'] ?? 0),
+                    'sem ' . (int)($from['semester_number'] ?? 0) . ' / month ' . (int)($from['month_number'] ?? 0),
+                    'Old ERP remap undo: fix batch #' . (int)$batch['id']
+                    . ' reverted — payment moved back to its original month. Amount/voucher unchanged.');
+            } else {
+                $skipped++;
+            }
+        } catch (Throwable $e) {
+            $errors[] = 'Payment #' . $pid . ': ' . $e->getMessage();
+        }
+    }
+
+    // Mark the batch as undone (one undo per batch).
+    $user = auth_user();
+    db()->prepare('UPDATE oerm_fix_batches SET undone_by = ?, undone_at = NOW() WHERE id = ?')
+        ->execute([(int)($user['id'] ?? 0), (int)$batch['id']]);
+
+    return ['moved_back' => $moved_back, 'skipped' => $skipped, 'errors' => $errors];
 }
 
 // ── Controller ────────────────────────────────────────────────────────────────────
@@ -438,19 +624,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $fixed_students = 0;
             $fixed_payments = 0;
             $bulk_errors    = [];
+            $all_moves = [];
             foreach ($bulk_sids as $bsid) {
-                [$moved_n, $bulk_err] = oerm_apply_student_fix($bsid);
+                [$moved_n, $bulk_err, $bulk_moves] = oerm_apply_student_fix($bsid);
                 if ($bulk_err !== null) {
                     $bulk_errors[] = $bulk_err;
                 } elseif ($moved_n > 0) {
                     $fixed_students++;
                     $fixed_payments += $moved_n;
+                    foreach ($bulk_moves as $bulk_mv) {
+                        $all_moves[] = $bulk_mv;
+                    }
+                }
+            }
+            // Record the whole bulk fix as ONE undoable batch.
+            $fix_batch_id = 0;
+            if ($all_moves) {
+                try {
+                    $fix_batch_id = oerm_record_batch($all_moves, $fixed_students);
+                } catch (Throwable $e) {
+                    $bulk_errors[] = 'Undo tracking could not be saved for this fix: ' . $e->getMessage();
                 }
             }
             $msg = 'Bulk auto-fix: <strong>' . $fixed_payments . '</strong> old-ERP payment(s) moved onto the correct month(s) across <strong>'
-                . $fixed_students . '</strong> student(s). Amounts, vouchers and receipts were not changed. The list below was rescanned automatically.';
+                . $fixed_students . '</strong> student(s). Nothing was deleted — payments were only re-arranged; amounts, vouchers and receipts were not changed. The list below was rescanned automatically.';
+            if ($fix_batch_id > 0) {
+                $msg .= ' Saved as fix batch #' . $fix_batch_id . ' — it can be undone from the <em>Recent Fix Batches</em> list on this page.';
+            }
             if ($bulk_errors) {
-                $msg .= ' ' . count($bulk_errors) . ' student(s) could not be fixed: ' . h(implode(' ', $bulk_errors));
+                $msg .= ' ' . count($bulk_errors) . ' issue(s): ' . h(implode(' ', $bulk_errors));
             }
             flash_set($bulk_errors ? 'warning' : 'success', $msg);
         }
@@ -496,7 +698,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                        AND fee_type = 'semester_tuition'
                                        AND payment_method = 'old_erp'"
                                 );
-                                $updated = 0;
+                                $updated     = 0;
+                                $apply_moves = [];
                                 foreach ($plan['plan'] as $row) {
                                     if (!$row['changed']) {
                                         continue;
@@ -523,11 +726,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                             . ($row['new_month_label'] !== '' ? ' (' . $row['new_month_label'] . ')' : '')
                                             . '. Pre-start month correction; amount/voucher unchanged.'
                                         );
+                                        $apply_moves[] = [
+                                            'payment_id'  => (int)$row['id'],
+                                            'voucher'     => (string)$row['voucher_number'],
+                                            'student_sid' => (string)($student['student_id'] ?? ''),
+                                            'amount'      => (float)$row['amount'],
+                                            'from' => [
+                                                'semester_fee_id' => (int)($row['old_sfid'] ?? 0),
+                                                'semester_number' => (int)$row['old_sem'],
+                                                'month_number'    => (int)$row['old_month'],
+                                            ],
+                                            'to' => [
+                                                'semester_fee_id' => (int)$row['new_sfid'],
+                                                'semester_number' => (int)$row['new_sem'],
+                                                'month_number'    => (int)$row['new_month'],
+                                            ],
+                                        ];
                                     }
                                 }
                                 $db->commit();
+                                // Record this apply as an undoable fix batch (best-effort:
+                                // the remap itself already succeeded).
+                                $apply_batch_id = 0;
+                                try {
+                                    $apply_batch_id = oerm_record_batch($apply_moves, 1);
+                                } catch (Throwable $e) {
+                                    error_log('old-erp-remap: undo tracking failed — ' . $e->getMessage());
+                                }
                                 flash_set('success', $updated . ' old-ERP payment(s) remapped for <strong>' . h((string)$student['full_name'])
-                                    . '</strong>. Amounts, vouchers and receipts were not changed. Verify the schedule below.');
+                                    . '</strong>. Nothing was deleted — payments were only re-arranged; amounts, vouchers and receipts were not changed.'
+                                    . ($apply_batch_id > 0 ? ' Saved as fix batch #' . $apply_batch_id . ' — it can be undone from the Old ERP remap page.' : '')
+                                    . ' Verify the schedule below.');
                                 redirect(APP_URL . '/accounting/collect-payment.php?tab=student&student_sid=' . urlencode((string)$student['student_id']));
                             } catch (Throwable $e) {
                                 if ($db->inTransaction()) {
@@ -540,6 +769,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
             }
+        }
+    } elseif ($action === 'undo_fix') {
+        // ── Undo a fix batch ──────────────────────────────────────────────────────
+        // Moves every payment the batch moved back to its original month —
+        // only while it still sits where the fix put it. Nothing is deleted.
+        $undo_id    = (int)($_POST['undo_batch_id'] ?? 0);
+        $undo_batch = $undo_id > 0 ? oerm_get_batch($undo_id) : null;
+        if (!$undo_batch) {
+            $errors[] = 'Fix batch not found.';
+        } elseif (!empty($undo_batch['undone_at'])) {
+            $errors[] = 'Fix batch #' . $undo_id . ' has already been undone.';
+        } elseif (!oerm_can_undo_batch($undo_batch)) {
+            $errors[] = 'Only the user who ran fix batch #' . $undo_id . ' — or a Super Administrator — can undo it.';
+        } else {
+            $undo_res = oerm_undo_batch($undo_batch);
+            $undo_msg = 'Fix batch #' . $undo_id . ' undone: ' . $undo_res['moved_back'] . ' payment(s) moved back to their original month(s).';
+            if ($undo_res['skipped'] > 0) {
+                $undo_msg .= ' ' . $undo_res['skipped'] . ' payment(s) were left unchanged because they had been moved again since the fix.';
+            }
+            if ($undo_res['errors']) {
+                $undo_msg .= ' ' . count($undo_res['errors']) . ' error(s): ' . implode(' ', $undo_res['errors']);
+            }
+            flash_set($undo_res['errors'] ? 'warning' : 'success', $undo_msg);
         }
     } else {
         $errors[] = 'Unknown action.';
@@ -720,6 +972,64 @@ require_once __DIR__ . '/../includes/header.php';
     refresh();
 })();
 </script>
+
+<!-- ── Recent fix batches (undo) ── -->
+<?php $recent_fix_batches = oerm_recent_batches(10); ?>
+<?php if ($recent_fix_batches): ?>
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header py-3 px-4 fw-semibold">
+        <i class="fas fa-rotate-left me-2 text-danger"></i>Recent Fix Batches (Undo)
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0 align-middle">
+                <thead class="table-light"><tr>
+                    <th class="ps-4">Batch</th><th>Fixed At</th><th>Fixed By</th>
+                    <th class="text-end">Students</th><th class="text-end">Payments Moved</th>
+                    <th>State</th><th class="text-end pe-4">Action</th>
+                </tr></thead>
+                <tbody>
+                <?php foreach ($recent_fix_batches as $fbatch): $fb_undone = !empty($fbatch['undone_at']); ?>
+                <tr>
+                    <td class="ps-4 fw-semibold">#<?= (int)$fbatch['id'] ?></td>
+                    <td class="small"><?= h((string)$fbatch['created_at']) ?></td>
+                    <td class="small"><?= h((string)($fbatch['created_by_name'] ?? '—')) ?></td>
+                    <td class="text-end"><?= (int)$fbatch['fixed_students'] ?></td>
+                    <td class="text-end"><?= (int)$fbatch['moved_count'] ?></td>
+                    <td>
+                        <?php if ($fb_undone): ?>
+                        <span class="badge bg-secondary">Undone<?= !empty($fbatch['undone_by_name']) ? ' by ' . h((string)$fbatch['undone_by_name']) : '' ?> at <?= h((string)$fbatch['undone_at']) ?></span>
+                        <?php else: ?>
+                        <span class="badge bg-success">Applied</span>
+                        <?php endif; ?>
+                    </td>
+                    <td class="text-end pe-4">
+                        <?php if (!$fb_undone && oerm_can_undo_batch($fbatch)): ?>
+                        <form method="post" class="d-inline" onsubmit="return confirm('Undo fix batch #<?= (int)$fbatch['id'] ?>? Every payment it moved will be returned to its original month. Amounts, vouchers and receipts are never touched.');">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="action" value="undo_fix">
+                            <input type="hidden" name="undo_batch_id" value="<?= (int)$fbatch['id'] ?>">
+                            <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-2">
+                                <i class="fas fa-rotate-left me-1"></i>Undo
+                            </button>
+                        </form>
+                        <?php else: ?>
+                        <span class="text-muted small">—</span>
+                        <?php endif; ?>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <div class="px-4 py-2 small text-muted">
+            Undo moves every payment a fix batch moved back to its original month — only while it still sits where the fix put it,
+            so later manual corrections are never overwritten. Nothing is ever deleted; amounts, vouchers and receipts are untouched.
+            Only the user who ran the fix — or a Super Administrator — can undo it, once per batch.
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 
 <!-- ── Per-student preview ── -->
 <div class="card border-0 shadow-sm mb-4">
