@@ -36,11 +36,11 @@ require_once __DIR__ . '/../change-log/helpers.php';
 
 $page_title = 'Old ERP – Remap Monthly Payments';
 
-// A month counts as SHORT only beyond this many BDT. Old-ERP dues carry tiny
-// 1–5 poisha rounding residues (e.g. a due of 3,104.09 next to 3,104.07);
-// those are never real gaps and must never trigger any movement. Genuine
-// shortfalls (e.g. 1.42) are still well above this tolerance.
-const OERM_GAP_TOLERANCE = 0.10;
+// A month counts as SHORT only beyond this many BDT. Small differences up to
+// this amount — poisha rounding residues (e.g. a due of 3,104.09 next to
+// 3,104.07) and minor old-ERP discrepancies — are never treated as gaps: they
+// don't flag the student in the scan and are never re-balanced or moved.
+const OERM_GAP_TOLERANCE = 20.0;
 
 /**
  * Look up a student by ID, tolerant of leading zeros (same rule as the bulk merge).
