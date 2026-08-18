@@ -223,12 +223,192 @@ function oerm_build_plan(array $summary, array $fixed, array $movable): array
     return ['plan' => $plan, 'changed' => $changed, 'warnings' => $warnings];
 }
 
+/**
+ * Option lists for the scan filters (Department, Program, Batch).
+ *
+ * @return array{0:array,1:array,2:array}
+ */
+function oerm_filter_options(): array
+{
+    $depts = db()->query(
+        'SELECT id, name FROM dept_departments WHERE is_active = 1 ORDER BY name ASC'
+    )->fetchAll();
+    $programs = db()->query(
+        'SELECT id, dept_id, program_name FROM dept_academic_programs WHERE is_active = 1 ORDER BY program_name ASC'
+    )->fetchAll();
+    $batches = db()->query(
+        'SELECT id, name FROM student_batches WHERE is_active = 1 ORDER BY sort_order, name ASC'
+    )->fetchAll();
+    return [$depts, $programs, $batches];
+}
+
+/**
+ * Scan students with old-ERP monthly tuition payments — optionally filtered by
+ * Department / Program / Batch — and return only those whose payments would
+ * move, i.e. whose months are misaligned (an earlier month left unpaid while a
+ * later month shows paid).
+ *
+ * The batch filter matches the student's home batch OR an active batch
+ * transfer, the same rule Student Management uses.
+ *
+ * @return array<int,array<string,mixed>>
+ */
+function oerm_scan_affected(int $f_dept, int $f_program, int $f_batch, int $limit = 1000): array
+{
+    $where  = '';
+    $params = [];
+    if ($f_dept > 0) {
+        $where   .= ' AND s.dept_id = ?';
+        $params[] = $f_dept;
+    }
+    if ($f_program > 0) {
+        $where   .= ' AND s.program_id = ?';
+        $params[] = $f_program;
+    }
+    if ($f_batch > 0) {
+        $where   .= ' AND (s.batch_id = ? OR s.id IN (SELECT sbt.student_id FROM student_batch_transfers sbt WHERE sbt.to_batch_id = ? AND sbt.is_active = 1))';
+        $params[] = $f_batch;
+        $params[] = $f_batch;
+    }
+
+    $stmt = db()->prepare(
+        "SELECT DISTINCT s.id AS student_pk, s.student_id, s.full_name, p.id AS package_id,
+                d.name AS dept_name, pr.program_name, b.name AS batch_name
+         FROM sfp_payments sp
+         JOIN acc_vouchers v ON v.id = sp.voucher_id
+         JOIN students s     ON s.id = sp.student_id
+         JOIN sfp_packages p ON p.id = sp.package_id
+         LEFT JOIN dept_departments d        ON d.id  = s.dept_id
+         LEFT JOIN dept_academic_programs pr ON pr.id = s.program_id
+         LEFT JOIN student_batches b         ON b.id  = s.batch_id
+         WHERE sp.payment_method = 'old_erp'
+           AND sp.fee_type = 'semester_tuition'
+           AND v.is_deleted = 0" . $where . "
+         ORDER BY s.student_id
+         LIMIT " . max(1, $limit)
+    );
+    $stmt->execute($params);
+
+    $rows = [];
+    foreach ($stmt->fetchAll() as $cand) {
+        $csum = acc_student_fee_summary((int)$cand['student_pk']);
+        if (!$csum) {
+            continue;
+        }
+        [$cfixed, $cmovable] = oerm_load_payments((int)$cand['package_id']);
+        if (!$cmovable) {
+            continue;
+        }
+        $cplan = oerm_build_plan($csum, $cfixed, $cmovable);
+        if ($cplan['changed'] > 0) {
+            $rows[] = [
+                'student_id'   => (string)$cand['student_id'],
+                'full_name'    => (string)$cand['full_name'],
+                'dept_name'    => (string)($cand['dept_name'] ?? ''),
+                'program_name' => (string)($cand['program_name'] ?? ''),
+                'batch_name'   => (string)($cand['batch_name'] ?? ''),
+                'movable'      => count($cmovable),
+                'changed'      => (int)$cplan['changed'],
+            ];
+        }
+    }
+    return $rows;
+}
+
+/**
+ * Apply the remap auto-fix for ONE student (used by the bulk fix).
+ *
+ * The plan is recomputed SERVER-SIDE — nothing from the browser is trusted —
+ * and applied in a transaction. Only old-ERP (memo) monthly tuition rows can
+ * move; amounts, vouchers, dates and receipts never change, and every moved
+ * row is written to the immutable change log.
+ *
+ * @return array{0:int, 1:?string} [payments moved, error message or null]
+ */
+function oerm_apply_student_fix(string $sid): array
+{
+    $student = oerm_lookup_student($sid);
+    if (!$student) {
+        return [0, 'Student ' . $sid . ': not found.'];
+    }
+    if ((int)($student['package_id'] ?? 0) <= 0) {
+        return [0, 'Student ' . $sid . ': no fee package in the current system.'];
+    }
+    $summary = acc_student_fee_summary((int)$student['id']);
+    if (!$summary) {
+        return [0, 'Student ' . $sid . ': could not load the fee summary.'];
+    }
+    [$fixed, $movable] = oerm_load_payments((int)$student['package_id']);
+    if (!$movable) {
+        return [0, null];
+    }
+    $plan = oerm_build_plan($summary, $fixed, $movable);
+    if ((int)$plan['changed'] === 0) {
+        return [0, null];
+    }
+
+    $db = db();
+    $db->beginTransaction();
+    try {
+        // The WHERE clause re-asserts the safety scope: only old-ERP monthly
+        // tuition rows of THIS package can ever move.
+        $upd = $db->prepare(
+            "UPDATE sfp_payments
+             SET semester_fee_id = ?, semester_number = ?, month_number = ?
+             WHERE id = ?
+               AND package_id = ?
+               AND fee_type = 'semester_tuition'
+               AND payment_method = 'old_erp'"
+        );
+        $updated = 0;
+        foreach ($plan['plan'] as $row) {
+            if (!$row['changed']) {
+                continue;
+            }
+            $upd->execute([
+                (int)$row['new_sfid'],
+                (int)$row['new_sem'],
+                (int)$row['new_month'],
+                (int)$row['id'],
+                (int)$student['package_id'],
+            ]);
+            if ($upd->rowCount() > 0) {
+                $updated++;
+                log_change(
+                    'accounting',
+                    'UPDATE',
+                    (int)$row['id'],
+                    'Payment #' . (int)$row['id'] . ' / ' . $row['voucher_number'],
+                    'schedule_slot',
+                    'sem ' . $row['old_sem'] . ' / month ' . $row['old_month'],
+                    'sem ' . $row['new_sem'] . ' / month ' . $row['new_month'],
+                    'Old ERP bulk auto-fix for ' . ($student['full_name'] ?? '') . ' (' . ($student['student_id'] ?? '') . '): '
+                    . 'payment moved to ' . $row['new_sem_label'] . ' – Month ' . $row['new_month']
+                    . ($row['new_month_label'] !== '' ? ' (' . $row['new_month_label'] . ')' : '')
+                    . '. Misaligned month correction; amount/voucher unchanged.'
+                );
+            }
+        }
+        $db->commit();
+        return [$updated, null];
+    } catch (Throwable $e) {
+        if ($db->inTransaction()) {
+            $db->rollBack();
+        }
+        error_log('old-erp-remap bulk fix failed for ' . $sid . ': ' . $e->getMessage());
+        return [0, 'Student ' . $sid . ': fix failed and was fully rolled back — no payment was modified.'];
+    }
+}
+
 // ── Controller ────────────────────────────────────────────────────────────────────
 
 $errors    = [];
 $student   = null;
 $plan      = null;
 $scan_rows = null;
+$f_dept    = (int)($_POST['f_dept']    ?? 0);
+$f_program = (int)($_POST['f_program'] ?? 0);
+$f_batch   = (int)($_POST['f_batch']   ?? 0);
 
 $sid_input = trim((string)($_POST['student_sid'] ?? $_GET['student_sid'] ?? ''));
 
@@ -237,40 +417,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = (string)($_POST['action'] ?? '');
 
     if ($action === 'scan') {
-        // Scan all students that have old-ERP monthly tuition payments and show
-        // only those whose payments would move (capped for safety).
-        $cand_stmt = db()->query(
-            "SELECT DISTINCT s.id AS student_pk, s.student_id, s.full_name, p.id AS package_id
-             FROM sfp_payments sp
-             JOIN acc_vouchers v ON v.id = sp.voucher_id
-             JOIN students s     ON s.id = sp.student_id
-             JOIN sfp_packages p ON p.id = sp.package_id
-             WHERE sp.payment_method = 'old_erp'
-               AND sp.fee_type = 'semester_tuition'
-               AND v.is_deleted = 0
-             ORDER BY s.student_id
-             LIMIT 500"
-        );
-        $scan_rows = [];
-        foreach ($cand_stmt->fetchAll() as $cand) {
-            $csum = acc_student_fee_summary((int)$cand['student_pk']);
-            if (!$csum) {
-                continue;
+        // Scan students with old-ERP monthly tuition payments — optionally
+        // filtered by Department / Program / Batch — and show only those whose
+        // payments would move (capped for safety).
+        $scan_rows = oerm_scan_affected($f_dept, $f_program, $f_batch);
+    } elseif ($action === 'bulk_apply') {
+        // ── Bulk auto-fix ────────────────────────────────────────────────
+        // Fix every selected student in one go. Each student's plan is
+        // recomputed server-side and applied in its own transaction, exactly
+        // like the single-student apply. Afterwards the scan RE-RUNS
+        // AUTOMATICALLY with the same filters so the result can be verified
+        // immediately.
+        $bulk_sids = array_values(array_unique(array_filter(
+            array_map(static fn($v) => trim((string)$v), (array)($_POST['bulk_sids'] ?? [])),
+            static fn(string $v): bool => $v !== ''
+        )));
+        if (!$bulk_sids) {
+            $errors[] = 'No students were selected for the bulk auto-fix.';
+        } else {
+            $fixed_students = 0;
+            $fixed_payments = 0;
+            $bulk_errors    = [];
+            foreach ($bulk_sids as $bsid) {
+                [$moved_n, $bulk_err] = oerm_apply_student_fix($bsid);
+                if ($bulk_err !== null) {
+                    $bulk_errors[] = $bulk_err;
+                } elseif ($moved_n > 0) {
+                    $fixed_students++;
+                    $fixed_payments += $moved_n;
+                }
             }
-            [$cfixed, $cmovable] = oerm_load_payments((int)$cand['package_id']);
-            if (!$cmovable) {
-                continue;
+            $msg = 'Bulk auto-fix: <strong>' . $fixed_payments . '</strong> old-ERP payment(s) moved onto the correct month(s) across <strong>'
+                . $fixed_students . '</strong> student(s). Amounts, vouchers and receipts were not changed. The list below was rescanned automatically.';
+            if ($bulk_errors) {
+                $msg .= ' ' . count($bulk_errors) . ' student(s) could not be fixed: ' . h(implode(' ', $bulk_errors));
             }
-            $cplan = oerm_build_plan($csum, $cfixed, $cmovable);
-            if ($cplan['changed'] > 0) {
-                $scan_rows[] = [
-                    'student_id' => (string)$cand['student_id'],
-                    'full_name'  => (string)$cand['full_name'],
-                    'movable'    => count($cmovable),
-                    'changed'    => (int)$cplan['changed'],
-                ];
-            }
+            flash_set($bulk_errors ? 'warning' : 'success', $msg);
         }
+        // Auto rescan with the same filters so the fix is verifiable at once.
+        $scan_rows = oerm_scan_affected($f_dept, $f_program, $f_batch);
     } elseif ($action === 'preview' || $action === 'apply') {
         if ($sid_input === '') {
             $errors[] = 'Please enter a Student ID.';
@@ -361,6 +546,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+[$oerm_depts, $oerm_programs, $oerm_batches] = oerm_filter_options();
+
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
@@ -397,6 +584,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <li>The remap re-packs the student's <strong>old-ERP (memo) monthly tuition payments only</strong> onto the schedule from the start month forward, in payment-date order.</li>
                 <li>Payments collected in <strong>this ERP</strong> (cash / bank / mobile banking) keep their slots and are <strong>never touched</strong>.</li>
                 <li>Only the semester/month linkage moves — <strong>amounts, vouchers, dates and receipts never change</strong>, so the books stay balanced.</li>
+                <li>Use the <strong>Department / Program / Batch filters</strong> to scan a specific group, then fix the listed students <strong>in bulk</strong> — the scan <strong>re-runs automatically</strong> after the fix so you can verify the result right away.</li>
                 <li>Nothing is saved until you confirm; every change is recorded in the change log.</li>
             </ul>
         </div>
@@ -405,54 +593,133 @@ require_once __DIR__ . '/../includes/header.php';
 
 <!-- ── Scan for affected students ── -->
 <div class="card border-0 shadow-sm mb-4">
-    <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <span class="fw-semibold"><i class="fas fa-magnifying-glass-chart me-2 text-primary"></i>Scan for Affected Students</span>
-        <form method="post">
+    <div class="card-header py-3 px-4 fw-semibold">
+        <i class="fas fa-magnifying-glass-chart me-2 text-primary"></i>Scan for Affected Students
+    </div>
+    <div class="card-body p-4 pb-3 border-bottom">
+        <form method="post" class="row g-3 align-items-end">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="scan">
-            <button type="submit" class="btn btn-outline-primary btn-sm">
-                <i class="fas fa-radar me-1"></i> Scan Now
-            </button>
+            <div class="col-md-3">
+                <label class="form-label fw-semibold small mb-1">Department</label>
+                <select name="f_dept" class="form-select form-select-sm">
+                    <option value="0">All Departments</option>
+                    <?php foreach ($oerm_depts as $fd): ?>
+                    <option value="<?= (int)$fd['id'] ?>" <?= $f_dept === (int)$fd['id'] ? 'selected' : '' ?>><?= h((string)$fd['name']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label fw-semibold small mb-1">Program</label>
+                <select name="f_program" class="form-select form-select-sm">
+                    <option value="0">All Programs</option>
+                    <?php foreach ($oerm_programs as $fp): ?>
+                    <option value="<?= (int)$fp['id'] ?>" <?= $f_program === (int)$fp['id'] ? 'selected' : '' ?>><?= h((string)$fp['program_name']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label fw-semibold small mb-1">Batch</label>
+                <select name="f_batch" class="form-select form-select-sm">
+                    <option value="0">All Batches</option>
+                    <?php foreach ($oerm_batches as $fb): ?>
+                    <option value="<?= (int)$fb['id'] ?>" <?= $f_batch === (int)$fb['id'] ? 'selected' : '' ?>><?= h((string)$fb['name']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-outline-primary btn-sm w-100">
+                    <i class="fas fa-radar me-1"></i> Scan Now
+                </button>
+            </div>
         </form>
     </div>
     <div class="card-body p-0">
         <?php if ($scan_rows === null): ?>
-        <p class="text-muted small px-4 py-3 mb-0">Scans every student with old-ERP monthly tuition payments (up to 500) and lists only those whose payments would move. This can take a moment.</p>
+        <p class="text-muted small px-4 py-3 mb-0">Scans every student with old-ERP monthly tuition payments (up to 1000 — narrow it with the filters above) and lists only those whose months are <strong>misaligned</strong>: an earlier month left unpaid while a later month shows paid (e.g. April empty but May paid). This can take a moment.</p>
         <?php elseif (!$scan_rows): ?>
-        <div class="alert alert-success m-3 mb-3"><i class="fas fa-check-circle me-1"></i> No affected students found — every old-ERP monthly payment is already on the correct slot.</div>
+        <div class="alert alert-success m-3 mb-3"><i class="fas fa-check-circle me-1"></i> No affected students found for the selected filters — every old-ERP monthly payment is already on the correct slot.</div>
         <?php else: ?>
-        <div class="table-responsive">
-            <table class="table table-sm table-hover mb-0 align-middle">
-                <thead class="table-light"><tr>
-                    <th class="ps-4">Student ID</th><th>Student</th>
-                    <th class="text-end">Old-ERP Monthly Payments</th>
-                    <th class="text-end">Would Move</th><th class="text-end pe-4">Action</th>
-                </tr></thead>
-                <tbody>
-                <?php foreach ($scan_rows as $sr): ?>
-                <tr>
-                    <td class="ps-4 fw-semibold"><?= h($sr['student_id']) ?></td>
-                    <td><?= h($sr['full_name']) ?></td>
-                    <td class="text-end"><?= (int)$sr['movable'] ?></td>
-                    <td class="text-end text-danger fw-semibold"><?= (int)$sr['changed'] ?></td>
-                    <td class="text-end pe-4">
-                        <form method="post" class="d-inline">
-                            <?= csrf_field() ?>
-                            <input type="hidden" name="action" value="preview">
-                            <input type="hidden" name="student_sid" value="<?= h($sr['student_id']) ?>">
-                            <button type="submit" class="btn btn-outline-warning btn-sm py-0 px-2">
+        <form method="post" id="oerm-bulk-form"
+              onsubmit="return confirm('Auto-fix the selected student(s)? Their old-ERP monthly payments will be moved onto the earliest unpaid month(s) — amounts, vouchers and receipts never change — and the list will be rescanned automatically.');">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="bulk_apply">
+            <input type="hidden" name="f_dept" value="<?= (int)$f_dept ?>">
+            <input type="hidden" name="f_program" value="<?= (int)$f_program ?>">
+            <input type="hidden" name="f_batch" value="<?= (int)$f_batch ?>">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0 align-middle">
+                    <thead class="table-light"><tr>
+                        <th class="ps-4" style="width:36px;"><input type="checkbox" class="form-check-input" id="oerm-sel-all" checked aria-label="Select all students"></th>
+                        <th>Student ID</th><th>Student</th>
+                        <th>Department</th><th>Program</th><th>Batch</th>
+                        <th class="text-end">Old-ERP Monthly Payments</th>
+                        <th class="text-end">Would Move</th><th class="text-end pe-4">Action</th>
+                    </tr></thead>
+                    <tbody>
+                    <?php foreach ($scan_rows as $sr): ?>
+                    <tr>
+                        <td class="ps-4"><input type="checkbox" class="form-check-input oerm-sel" name="bulk_sids[]" value="<?= h($sr['student_id']) ?>" checked aria-label="Select student <?= h($sr['student_id']) ?>"></td>
+                        <td class="fw-semibold"><?= h($sr['student_id']) ?></td>
+                        <td><?= h($sr['full_name']) ?></td>
+                        <td class="small"><?= h($sr['dept_name'] !== '' ? $sr['dept_name'] : '—') ?></td>
+                        <td class="small"><?= h($sr['program_name'] !== '' ? $sr['program_name'] : '—') ?></td>
+                        <td class="small"><?= h($sr['batch_name'] !== '' ? $sr['batch_name'] : '—') ?></td>
+                        <td class="text-end"><?= (int)$sr['movable'] ?></td>
+                        <td class="text-end text-danger fw-semibold"><?= (int)$sr['changed'] ?></td>
+                        <td class="text-end pe-4">
+                            <button type="submit" form="oerm-preview-form" name="student_sid" value="<?= h($sr['student_id']) ?>" class="btn btn-outline-warning btn-sm py-0 px-2">
                                 <i class="fas fa-eye me-1"></i>Preview
                             </button>
-                        </form>
-                    </td>
-                </tr>
-                <?php endforeach; ?>
-                </tbody>
-            </table>
-        </div>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+            <div class="card-footer py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <span class="small text-muted">
+                    <strong><span id="oerm-sel-count"><?= count($scan_rows) ?></span></strong> of <?= count($scan_rows) ?> student(s) selected.
+                    The auto-fix moves <strong>old-ERP (memo)</strong> monthly tuition payments onto the earliest unpaid month(s);
+                    amounts, vouchers and receipts never change, and the list <strong>rescans automatically</strong> afterwards.
+                </span>
+                <button type="submit" class="btn btn-warning" id="oerm-bulk-btn">
+                    <i class="fas fa-wand-magic-sparkles me-1"></i> Auto-Fix Selected &amp; Rescan
+                </button>
+            </div>
+        </form>
         <?php endif; ?>
     </div>
 </div>
+
+<!-- External form target for the per-row Preview buttons (avoids nesting forms) -->
+<form method="post" id="oerm-preview-form">
+    <?= csrf_field() ?>
+    <input type="hidden" name="action" value="preview">
+</form>
+
+<script>
+(function () {
+    'use strict';
+    var all = document.getElementById('oerm-sel-all');
+    if (!all) { return; }
+    var boxes   = Array.prototype.slice.call(document.querySelectorAll('.oerm-sel'));
+    var countEl = document.getElementById('oerm-sel-count');
+    var bulkBtn = document.getElementById('oerm-bulk-btn');
+    function refresh() {
+        var n = boxes.filter(function (b) { return b.checked; }).length;
+        if (countEl) { countEl.textContent = n; }
+        if (bulkBtn) { bulkBtn.disabled = n === 0; }
+        all.checked = boxes.length > 0 && n === boxes.length;
+    }
+    all.addEventListener('change', function () {
+        boxes.forEach(function (b) { b.checked = all.checked; });
+        refresh();
+    });
+    boxes.forEach(function (b) { b.addEventListener('change', refresh); });
+    refresh();
+})();
+</script>
 
 <!-- ── Per-student preview ── -->
 <div class="card border-0 shadow-sm mb-4">
