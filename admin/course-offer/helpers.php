@@ -592,10 +592,23 @@ function co_batch_students_filtered(int $batch_id, array $filters = [], int $pag
 
     $q = trim($filters['q'] ?? '');
     if ($q !== '') {
-        $where[]  = '(s.student_id LIKE ? OR s.full_name LIKE ?)';
-        $like     = '%' . $q . '%';
-        $params[] = $like;
-        $params[] = $like;
+        // Bulk ID search: multiple student IDs separated by commas,
+        // semicolons, spaces or new lines are matched all together.
+        $tokens = preg_split('/[\s,;]+/', $q, -1, PREG_SPLIT_NO_EMPTY);
+        $tokens = array_slice($tokens, 0, 300);
+        if (count($tokens) > 1) {
+            $parts = [];
+            foreach ($tokens as $t) {
+                $parts[]  = 's.student_id LIKE ?';
+                $params[] = '%' . $t . '%';
+            }
+            $where[] = '(' . implode(' OR ', $parts) . ')';
+        } else {
+            $where[]  = '(s.student_id LIKE ? OR s.full_name LIKE ?)';
+            $like     = '%' . $q . '%';
+            $params[] = $like;
+            $params[] = $like;
+        }
     }
     $section = trim($filters['section'] ?? '');
     if ($section !== '') {

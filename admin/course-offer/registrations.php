@@ -346,6 +346,10 @@ require_once __DIR__ . '/../includes/header.php';
                 Adjust the <strong>Department</strong>, <strong>Program</strong> or <strong>Batch</strong>
                 filters to pull a student who is continuing with another department, program or batch,
                 or choose the <strong>All</strong> options to search everyone.
+                <strong>Bulk search:</strong> paste multiple student IDs (separated by comma, space or
+                new line) into the <strong>Search</strong> box to find them all together across all
+                students, then tick them one by one or use the header checkbox to select all,
+                and click <strong>Enroll Selected</strong>.
             </div>
             <div class="row g-2 align-items-end mb-3">
                 <div class="col-md-3">
@@ -383,7 +387,9 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
                 <div class="col-md-3">
                     <label class="form-label small mb-1">Search</label>
-                    <input type="text" id="stu-q" class="form-control form-control-sm" placeholder="Student ID or name…">
+                    <input type="text" id="stu-q" class="form-control form-control-sm"
+                           placeholder="Student ID(s) or name…"
+                           title="Paste multiple student IDs separated by comma, space or new line to search them all together">
                 </div>
                 <div class="col-md-2">
                     <label class="form-label small mb-1">Section</label>
@@ -704,21 +710,33 @@ function toggleAllSubs(on) {
         pager.appendChild(item('»', page + 1, page >= pages, false));
     }
 
+    function isBulkQuery(q) {
+        return q.split(/[\s,;]+/).filter(Boolean).length > 1;
+    }
+
     function load() {
+        var q    = qInput.value.trim();
+        var bulk = isBulkQuery(q);
+        // Bulk ID lists are searched across ALL students so no pasted ID is
+        // silently excluded by the department/program/batch filters, and the
+        // whole result is shown on one page so it can be selected at once.
         var params = new URLSearchParams({
-            batch_id: batchSel.value,
-            dept_id: deptSel.value,
-            program_id: progSel.value,
-            q: qInput.value.trim(),
-            section: secSel.value,
-            shift: shiftSel.value,
+            batch_id: bulk ? 0 : batchSel.value,
+            dept_id: bulk ? 0 : deptSel.value,
+            program_id: bulk ? 0 : progSel.value,
+            q: q,
+            section: bulk ? '' : secSel.value,
+            shift: bulk ? '' : shiftSel.value,
             page: curPage,
-            per_page: PER_PAGE
+            per_page: bulk ? 200 : PER_PAGE
         });
         tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Loading…</td></tr>';
         fetch(API + '?' + params.toString())
             .then(function (r) { return r.json(); })
-            .then(render)
+            .then(function (data) {
+                render(data);
+                if (bulk) meta.textContent += ' — bulk ID search (all students, filters ignored)';
+            })
             .catch(function () {
                 tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger py-3">Failed to load students.</td></tr>';
             });
@@ -758,6 +776,16 @@ function toggleAllSubs(on) {
     qInput.addEventListener('input', function () {
         clearTimeout(debounce);
         debounce = setTimeout(reloadFirstPage, 300);
+    });
+    // Normalize pasted multi-line ID lists into a comma-separated list.
+    qInput.addEventListener('paste', function (e) {
+        var text = (e.clipboardData || window.clipboardData).getData('text');
+        if (text && /[\r\n\t]/.test(text)) {
+            e.preventDefault();
+            qInput.value = text.split(/[\s,;]+/).filter(Boolean).join(', ');
+            clearTimeout(debounce);
+            debounce = setTimeout(reloadFirstPage, 300);
+        }
     });
     secSel.addEventListener('change', reloadFirstPage);
     shiftSel.addEventListener('change', reloadFirstPage);
