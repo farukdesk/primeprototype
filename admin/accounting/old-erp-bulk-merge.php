@@ -2639,9 +2639,14 @@ require_once __DIR__ . '/../includes/header.php';
             <li class="breadcrumb-item active">Old ERP Bulk CSV Merge</li>
         </ol></nav>
     </div>
-    <a href="<?= APP_URL ?>/accounting/collect-payment.php" class="btn btn-outline-secondary btn-sm">
-        <i class="fas fa-arrow-left me-1"></i> Back to Collect Payment
-    </a>
+    <div class="d-flex gap-2 flex-wrap">
+        <a href="<?= APP_URL ?>/accounting/old-erp-remap.php" class="btn btn-warning btn-sm">
+            <i class="fas fa-screwdriver-wrench me-1"></i> Fix Misaligned Months (Remap)
+        </a>
+        <a href="<?= APP_URL ?>/accounting/collect-payment.php" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-arrow-left me-1"></i> Back to Collect Payment
+        </a>
+    </div>
 </div>
 
 <?= flash_show() ?>
