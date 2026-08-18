@@ -287,6 +287,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <tr>
                             <th class="ps-4" style="min-width:260px;">Subject (registered course) <span class="text-danger">*</span></th>
                             <th>Code</th>
+                            <th style="min-width:140px;">Teacher</th>
                             <th class="text-center">Students</th>
                             <th style="min-width:150px;">Date <span class="text-danger">*</span></th>
                             <th>Start</th>
@@ -297,7 +298,7 @@ require_once __DIR__ . '/../includes/header.php';
                         </tr>
                     </thead>
                     <tbody id="routine_rows">
-                        <tr id="empty_hint"><td colspan="9" class="text-center text-muted py-4">
+                        <tr id="empty_hint"><td colspan="10" class="text-center text-muted py-4">
                             Select the exam and class above, then add subjects.
                         </td></tr>
                     </tbody>
@@ -448,6 +449,7 @@ require_once __DIR__ . '/../includes/header.php';
         tr.innerHTML =
             '<td class="ps-4"><select name="item_subject_id[]" class="form-select form-select-sm" required></select></td>' +
             '<td class="small text-muted js-code">—</td>' +
+            '<td class="small js-teacher">—</td>' +
             '<td class="text-center js-count">—</td>' +
             '<td><input type="date" name="item_date[]" class="form-control form-control-sm" value="' + esc(data.exam_date) + '" required></td>' +
             '<td><input type="time" name="item_start[]" class="form-control form-control-sm" value="' + esc(data.start) + '"></td>' +
@@ -460,8 +462,9 @@ require_once __DIR__ . '/../includes/header.php';
         fillSubjectOptions(sel, data.offer_subject_id);
         sel.addEventListener('change', () => {
             const s = SUBJECTS.find(x => Number(x.offer_subject_id) === Number(sel.value));
-            tr.querySelector('.js-code').textContent  = s ? (s.course_code || '—') : '—';
-            tr.querySelector('.js-count').textContent = s ? s.registered_count : '—';
+            tr.querySelector('.js-code').textContent    = s ? (s.course_code || '—') : '—';
+            tr.querySelector('.js-teacher').textContent = s ? (s.teachers || '—') : '—';
+            tr.querySelector('.js-count').textContent   = s ? s.registered_count : '—';
         });
         sel.dispatchEvent(new Event('change'));
 

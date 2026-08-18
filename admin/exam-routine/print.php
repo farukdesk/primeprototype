@@ -9,6 +9,7 @@ require_once __DIR__ . '/helpers.php';
 $routine = er_get_routine((int)($_GET['id'] ?? 0));
 if (!$routine) { flash_set('error', 'Routine not found.'); redirect(APP_URL . '/exam-routine/index.php'); }
 $items = er_get_items((int)$routine['id']);
+$teacher_map = er_subject_teacher_map(array_column($items, 'offer_subject_id'));
 
 $ctx = array_filter([
     'Batch'    => $routine['batch_name'],
@@ -63,6 +64,7 @@ $ctx = array_filter([
             <th class="c" style="width:34px;">SL</th>
             <th style="width:110px;">Course Code</th>
             <th>Course Title</th>
+            <th style="width:150px;">Course Teacher</th>
             <th class="c" style="width:70px;">Students</th>
             <th style="width:120px;">Date</th>
             <th style="width:130px;">Time</th>
@@ -76,6 +78,7 @@ $ctx = array_filter([
             <td class="c"><?= $n + 1 ?></td>
             <td><?= h($it['course_code'] ?? '') ?></td>
             <td><?= h($it['course_title']) ?></td>
+            <td><?= h($teacher_map[(int)($it['offer_subject_id'] ?? 0)] ?? '') ?></td>
             <td class="c"><?= (int)$it['student_count'] ?></td>
             <td><?= h(date('d M Y (D)', strtotime($it['exam_date']))) ?></td>
             <td><?= h(er_fmt_time($it['start_time'])) ?><?= $it['end_time'] ? ' – ' . h(er_fmt_time($it['end_time'])) : '' ?></td>
@@ -85,7 +88,7 @@ $ctx = array_filter([
     <?php endforeach; ?>
     <?php if ($items): ?>
         <tr>
-            <th colspan="3" style="text-align:right;">Total students</th>
+            <th colspan="4" style="text-align:right;">Total students</th>
             <th class="c"><?= $total ?></th>
             <th colspan="4"></th>
         </tr>
