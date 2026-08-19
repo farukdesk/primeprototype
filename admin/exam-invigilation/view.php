@@ -279,13 +279,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
             $daily_workload[(int)$row['faculty_id']][(string)$row['slot_date']] = (int)$row['c'];
         }
 
-        // Helper: sort a pool of faculty by workload (fewest assignments first), shuffle ties
-        $sort_by_workload = static function (array $pool) use (&$workload): array {
-            usort($pool, static function ($a, $b) use ($workload) {
-                $wa = $workload[(int)$a['id']] ?? 0;
-                $wb = $workload[(int)$b['id']] ?? 0;
-                if ($wa !== $wb) return $wa <=> $wb;
-                return random_int(0, 1) ? -1 : 1; // shuffle within same workload tier
+        // Track per-day working time span: [faculty_id][date] => ['start' => min, 'end' => max] (minutes)
+        $daily_span = [];
+        $span_st = db()->prepare(
+            "SELECT faculty_id, slot_date, time_slot
+             FROM (
+                 SELECT s.faculty1_id AS faculty_id, s.slot_date, s.time_slot
+                 FROM ei_slots s
+                 JOIN ei_exams e ON e.id = s.exam_id
+                 WHERE e.is_active = 1
+                   AND s.faculty1_id IS NOT NULL{$daily_count_scope_sql}
+                 UNION ALL
+                 SELECT s.faculty2_id, s.slot_date, s.time_slot
+                 FROM ei_slots s
+                 JOIN ei_exams e ON e.id = s.exam_id
+                 WHERE e.is_active = 1
+                   AND s.faculty2_id IS NOT NULL{$daily_count_scope_sql}
+             ) t"
+        );
+        $span_st->execute($assignment_params);
+        foreach ($span_st->fetchAll() as $row) {
+            $mins = ei_time_slot_minutes((string)$row['time_slot']);
+            if ($mins === null) continue;
+            $fid = (int)$row['faculty_id'];
+            $d   = (string)$row['slot_date'];
+            if (!isset($daily_span[$fid][$d])) {
+                $daily_span[$fid][$d] = ['start' => $mins[0], 'end' => $mins[1]];
+            } else {
+                $daily_span[$fid][$d]['start'] = min($daily_span[$fid][$d]['start'], $mins[0]);
+                $daily_span[$fid][$d]['end']   = max($daily_span[$fid][$d]['end'], $mins[1]);
+            }
+        }
+
+        // Helper: sort a pool by seniority-weighted workload (juniors get more slots),
+        // then junior-first on ties, then shuffle
+        $sort_by_workload = static function (array $pool) use (&$workload, $faculty_weight_map): array {
+            usort($pool, static function ($a, $b) use (&$workload, $faculty_weight_map) {
+                $ida = (int)$a['id'];
+                $idb = (int)$b['id'];
+                $ea  = ($workload[$ida] ?? 0) / max(1, $faculty_weight_map[$ida] ?? 1);
+                $eb  = ($workload[$idb] ?? 0) / max(1, $faculty_weight_map[$idb] ?? 1);
+                if ($ea !== $eb) return $ea <=> $eb;
+                // Junior first on ties (higher rank number = more junior)
+                $ra = ei_designation_rank($a['designation'] ?? null);
+                $rb = ei_designation_rank($b['designation'] ?? null);
+                if ($ra !== $rb) return $rb <=> $ra;
+                return random_int(0, 1) ? -1 : 1; // shuffle within same tier
             });
             return $pool;
         };
