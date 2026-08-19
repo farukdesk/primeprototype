@@ -335,23 +335,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
             $key             = $slot_date . '|' . $time_slot;
             $slot_pref_dept  = isset($slot['dept_id']) ? (int)$slot['dept_id'] : 0;
 
-            $day_of_week  = (int)date('w', strtotime($slot_date));
-
-            $slot_starts_after_6pm = ei_slot_starts_after_6pm($time_slot);
+            $slot_minutes = ei_time_slot_minutes($time_slot);
 
             // Filter eligible faculty
+            // (weekend and female-after-6PM restrictions have been removed)
             $eligible = [];
             foreach ($all_faculty as $f) {
-                $faculty_weekend_days = $faculty_weekend_map[(int)$f['id']] ?? [];
-                if (in_array($day_of_week, $faculty_weekend_days, true)) continue;
+                $fid = (int)$f['id'];
                 // Skip if already busy in this date+time_slot
-                if (isset($busy_map[$key][(int)$f['id']])) continue;
+                if (isset($busy_map[$key][$fid])) continue;
                 // Skip if the faculty has already reached the configured total limit
-                if (($workload[(int)$f['id']] ?? 0) >= $auto_assign_max_slots) continue;
+                if (($workload[$fid] ?? 0) >= $auto_assign_max_slots) continue;
                 // Skip if the faculty has reached the per-day limit for this slot's date
-                if (($daily_workload[(int)$f['id']][$slot_date] ?? 0) >= $auto_assign_max_slots_per_day) continue;
-                // Female faculty are not assigned to slots starting at or after 6 PM
-                if ($slot_starts_after_6pm && !empty($f['gender']) && $f['gender'] === 'Female') continue;
+                if (($daily_workload[$fid][$slot_date] ?? 0) >= $auto_assign_max_slots_per_day) continue;
+                // Daily working-window rule: combined with existing shifts that day,
+                // a start before 2 PM must finish by 6 PM; a start at/after 2 PM by 10 PM
+                if ($slot_minutes !== null && isset($daily_span[$fid][$slot_date])) {
+                    $span      = $daily_span[$fid][$slot_date];
+                    $new_start = min($span['start'], $slot_minutes[0]);
+                    $new_end   = max($span['end'], $slot_minutes[1]);
+                    if ($new_end > ei_day_window_end_minutes($new_start)) continue;
+                }
                 $eligible[] = $f;
             }
 
