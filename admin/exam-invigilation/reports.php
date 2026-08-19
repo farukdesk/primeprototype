@@ -100,6 +100,28 @@ function ei_report_designation_short(string $designation): string
     return $short;
 }
 
+/**
+ * HTML block for the 2nd invigilator cell in the duty report PDFs:
+ * name, designation, department, and contact number.
+ */
+function ei_report_partner_cell_html(array $row): string
+{
+    if (empty($row['partner_name'])) {
+        return '<span style="color:#dc2626;">Not assigned</span>';
+    }
+    $html = '<span style="font-weight:700;">' . ei_report_escape((string)$row['partner_name']) . '</span>';
+    if (!empty($row['partner_designation'])) {
+        $html .= '<br><span style="color:#64748b;font-size:8pt;">' . ei_report_escape((string)$row['partner_designation']) . '</span>';
+    }
+    if (!empty($row['partner_dept_name'])) {
+        $html .= '<br><span style="color:#2563eb;font-size:8pt;">' . ei_report_escape((string)$row['partner_dept_name']) . '</span>';
+    }
+    if (!empty($row['partner_contact'])) {
+        $html .= '<br><span style="color:#0f172a;font-size:8pt;">Contact: ' . ei_report_escape((string)$row['partner_contact']) . '</span>';
+    }
+    return $html;
+}
+
 // ── Faculty availability stats ────────────────────────────────────────────────
 $total_active_faculty = (int)db()->query('SELECT COUNT(*) FROM ei_faculty WHERE is_active = 1')->fetchColumn();
 // Faculty already assigned in at least one slot across all active exams
@@ -362,11 +384,17 @@ $report_query = "
             f.name AS faculty_name,
             f.designation,
             d.name AS dept_name,
-            d.code AS dept_code
+            d.code AS dept_code,
+            p.name AS partner_name,
+            p.designation AS partner_designation,
+            p.contact_number AS partner_contact,
+            pd.name AS partner_dept_name
         FROM ei_slots s
         JOIN ei_exams e ON e.id = s.exam_id
         JOIN ei_faculty f ON f.id = s.faculty1_id
         JOIN dept_departments d ON d.id = f.dept_id
+        LEFT JOIN ei_faculty p ON p.id = s.faculty2_id
+        LEFT JOIN dept_departments pd ON pd.id = p.dept_id
         {$report_sql_where}
 
         UNION ALL
@@ -382,11 +410,17 @@ $report_query = "
             f.name AS faculty_name,
             f.designation,
             d.name AS dept_name,
-            d.code AS dept_code
+            d.code AS dept_code,
+            p.name AS partner_name,
+            p.designation AS partner_designation,
+            p.contact_number AS partner_contact,
+            pd.name AS partner_dept_name
         FROM ei_slots s
         JOIN ei_exams e ON e.id = s.exam_id
         JOIN ei_faculty f ON f.id = s.faculty2_id
         JOIN dept_departments d ON d.id = f.dept_id
+        LEFT JOIN ei_faculty p ON p.id = s.faculty1_id
+        LEFT JOIN dept_departments pd ON pd.id = p.dept_id
         {$report_sql_where}
     ) duty
     ORDER BY duty.faculty_name ASC,
@@ -446,6 +480,163 @@ if ($report_date_from !== '') $report_filter_query['report_date_from'] = $report
 if ($report_date_to !== '') $report_filter_query['report_date_to'] = $report_date_to;
 $report_pdf_url = APP_URL . '/exam-invigilation/reports.php?' . http_build_query(array_merge($report_filter_query, ['report_export' => 'pdf']));
 
+$report_pdf_all_query = $report_filter_query;
+unset($report_pdf_all_query['report_faculty_id']);
+$report_pdf_all_url = APP_URL . '/exam-invigilation/reports.php?' . http_build_query(array_merge($report_pdf_all_query, ['report_export' => 'pdf_all']));
+
+// ── Export ALL faculty individual duty reports (one PDF per faculty) ────────
+if ($report_export === 'pdf_all') {
+    require_once __DIR__ . '/../../vendor/autoload.php';
+
+    $generated_at_label = date('d M Y, h:i A');
+    $logo_path = dirname(dirname(__DIR__)) . '/assets/img/logo/logo-black.png';
+    $logo_data_uri = '';
+    if (is_file($logo_path) && is_readable($logo_path)) {
+        $logo_binary = file_get_contents($logo_path);
+        if ($logo_binary !== false) {
+            $logo_data_uri = 'data:image/png;base64,' . base64_encode($logo_binary);
+        }
+    }
+    $logo_html = $logo_data_uri !== ''
+        ? '<img src="' . $logo_data_uri . '" alt="Prime University" style="height:56px;width:auto;">'
+        : '';
+
+    // Group the filtered duty rows by faculty (faculty filter is ignored for "export all")
+    $duties_by_faculty = [];
+    foreach ($faculty_duty_rows as $duty_row) {
+        $duties_by_faculty[(int)$duty_row['faculty_id']][] = $duty_row;
+    }
+
+    if (empty($duties_by_faculty)) {
+        flash_set('warning', 'No faculty duties found for the selected report filters.');
+        redirect(APP_URL . '/exam-invigilation/reports.php?' . http_build_query($report_pdf_all_query));
+    }
+
+    // Builds the white report card for one faculty (same layout as the single export)
+    $build_faculty_card = static function (array $rows) use ($logo_html, $generated_at_label, $report_scope_label): string {
+        $first = $rows[0];
+        $cell  = 'padding:10px 12px;border:1px solid #d7deea;color:#0f172a;vertical-align:top;';
+
+        $rows_html = '';
+        $total = count($rows);
+        $i = 0;
+        while ($i < $total) {
+            $slot_date = (string)$rows[$i]['slot_date'];
+            $run_start = $i;
+            while ($i < $total && (string)$rows[$i]['slot_date'] === $slot_date) {
+                $i++;
+            }
+            $rowspan = $i - $run_start;
+            for ($j = $run_start; $j < $i; $j++) {
+                $r = $rows[$j];
+                $rows_html .= '<tr>';
+                if ($j === $run_start) {
+                    $rows_html .= '<td rowspan="' . $rowspan . '" style="padding:10px 12px;border:1px solid #d7deea;vertical-align:middle;font-weight:700;color:#0f172a;background:#f8fafc;">'
+                        . ei_report_escape(ei_report_format_date((string)$r['slot_date'], 'd F Y'))
+                        . '</td>';
+                }
+                $rows_html .= '<td style="' . $cell . '">' . ei_report_escape((string)$r['time_slot']) . '</td>'
+                    . '<td style="' . $cell . '">' . ei_report_escape((string)$r['room_number']) . '</td>'
+                    . '<td style="' . $cell . '">' . ei_report_partner_cell_html($r) . '</td>'
+                    . '</tr>';
+            }
+        }
+
+        $designation = trim((string)($first['designation'] ?? '')) ?: '—';
+
+        return '<div style="background:#ffffff;border:1px solid #d7deea;border-radius:16px;overflow:hidden;">'
+            . '<div style="padding:18px 24px 14px;border-bottom:1px solid #d7deea;">'
+            . '<table style="width:100%;border-collapse:collapse;"><tr>'
+            . '<td style="width:90px;vertical-align:middle;">' . $logo_html . '</td>'
+            . '<td style="vertical-align:middle;text-align:center;">'
+            . '<div style="font-size:16pt;font-weight:800;color:#0f172a;line-height:1.2;">Faculty Invigilation Duty Schedule</div>'
+            . '</td>'
+            . '<td style="width:90px;"></td>'
+            . '</tr></table>'
+            . '<table style="width:100%;border-collapse:collapse;margin-top:12px;font-size:9.5pt;">'
+            . '<tr><td style="width:24%;padding:6px 0;color:#475569;font-weight:700;">Exam Title</td><td style="width:76%;padding:6px 0;color:#0f172a;">: ' . ei_report_escape($report_scope_label) . '</td></tr>'
+            . '<tr><td style="padding:6px 0;color:#475569;font-weight:700;">Department Name</td><td style="padding:6px 0;color:#0f172a;">: ' . ei_report_escape((string)$first['dept_name']) . '</td></tr>'
+            . '<tr><td style="padding:6px 0;color:#475569;font-weight:700;">Faculty Name</td><td style="padding:6px 0;color:#0f172a;">: ' . ei_report_escape((string)$first['faculty_name']) . '</td></tr>'
+            . '<tr><td style="padding:6px 0;color:#475569;font-weight:700;">Faculty Designation</td><td style="padding:6px 0;color:#0f172a;">: ' . ei_report_escape($designation) . '</td></tr>'
+            . '<tr><td style="padding:6px 0;color:#475569;font-weight:700;">Assigned Slots</td><td style="padding:6px 0;color:#0f172a;">: ' . $total . '</td></tr>'
+            . '</table>'
+            . '</div>'
+            . '<div style="padding:14px 24px 14px;">'
+            . '<table style="width:100%;border-collapse:collapse;font-size:9pt;">'
+            . '<thead><tr style="background:#0f172a;color:#ffffff;">'
+            . '<th style="padding:9px 10px;border:1px solid #0f172a;text-align:left;width:20%;">Date</th>'
+            . '<th style="padding:9px 10px;border:1px solid #0f172a;text-align:left;width:20%;">Duty Time</th>'
+            . '<th style="padding:9px 10px;border:1px solid #0f172a;text-align:left;width:18%;">Room Number</th>'
+            . '<th style="padding:9px 10px;border:1px solid #0f172a;text-align:left;">2nd Invigilator</th>'
+            . '</tr></thead>'
+            . '<tbody>' . $rows_html . '</tbody>'
+            . '</table>'
+            . '<div style="margin:14px 0 0;font-size:8.5pt;color:#64748b;text-align:center;">This is a software-generated schedule. If you have any issues, please contact the Controller of Examinations.</div>'
+            . '<div style="margin:4px 0 0;font-size:8.5pt;color:#64748b;text-align:center;">Generated ' . ei_report_escape($generated_at_label) . '</div>'
+            . '</div>'
+            . '</div>';
+    };
+
+    $wrap_pdf_doc = static function (string $inner): string {
+        return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Faculty Invigilation Duty Schedule</title></head>'
+            . '<body style="font-family:DejaVu Sans, Arial, sans-serif;background:#eef3f8;margin:0;padding:18px;">'
+            . $inner
+            . '</body></html>';
+    };
+
+    // One card + one filename per faculty: "Faculty name_Designation.pdf"
+    $faculty_pdfs = [];
+    $used_filenames = [];
+    foreach ($duties_by_faculty as $fid => $rows) {
+        $name_part  = ei_report_filename_part((string)$rows[0]['faculty_name']);
+        $desig_part = ei_report_filename_part((string)($rows[0]['designation'] ?? ''));
+        $filename = $name_part !== '' ? $name_part : ('Faculty-' . $fid);
+        if ($desig_part !== '') {
+            $filename .= '_' . $desig_part;
+        }
+        $filename_base = $filename;
+        $dupe = 2;
+        while (isset($used_filenames[$filename])) {
+            $filename = $filename_base . '_' . $dupe;
+            $dupe++;
+        }
+        $used_filenames[$filename] = true;
+        $faculty_pdfs[$filename . '.pdf'] = $build_faculty_card($rows);
+    }
+
+    if (class_exists('ZipArchive')) {
+        $zip_path = tempnam(sys_get_temp_dir(), 'eiduty');
+        $zip = new ZipArchive();
+        if ($zip_path === false || $zip->open($zip_path, ZipArchive::OVERWRITE) !== true) {
+            flash_set('error', 'Could not create the ZIP archive on the server.');
+            redirect(APP_URL . '/exam-invigilation/reports.php?' . http_build_query($report_pdf_all_query));
+        }
+        foreach ($faculty_pdfs as $pdf_name => $card_html) {
+            $dompdf = new \Dompdf\Dompdf(['isRemoteEnabled' => false]);
+            $dompdf->loadHtml($wrap_pdf_doc($card_html), 'UTF-8');
+            $dompdf->setPaper('A4', 'portrait');
+            $dompdf->render();
+            $zip->addFromString($pdf_name, $dompdf->output());
+        }
+        $zip->close();
+        header('Content-Type: application/zip');
+        header('Content-Disposition: attachment; filename="faculty-duty-reports-' . date('Ymd') . '.zip"');
+        header('Content-Length: ' . (string)filesize($zip_path));
+        readfile($zip_path);
+        @unlink($zip_path);
+        exit;
+    }
+
+    // Fallback without ZipArchive: one combined PDF, one faculty per page
+    $combined_html = $wrap_pdf_doc(implode('<div style="page-break-before:always;"></div>', array_values($faculty_pdfs)));
+    $dompdf = new \Dompdf\Dompdf(['isRemoteEnabled' => false]);
+    $dompdf->loadHtml($combined_html, 'UTF-8');
+    $dompdf->setPaper('A4', 'portrait');
+    $dompdf->render();
+    $dompdf->stream('faculty-duty-reports-' . date('Ymd') . '.pdf', ['Attachment' => true]);
+    exit;
+}
+
 if ($report_export === 'pdf') {
     require_once __DIR__ . '/../../vendor/autoload.php';
     $generated_at_label = date('d M Y, h:i A');
@@ -490,7 +681,7 @@ if ($report_export === 'pdf') {
 
     $report_rows_html = '';
     if (empty($faculty_duty_rows)) {
-        $report_rows_html = '<tr><td colspan="3" style="padding:30px 14px;text-align:center;color:#6b7280;">No invigilation schedule found for the selected filters.</td></tr>';
+        $report_rows_html = '<tr><td colspan="4" style="padding:30px 14px;text-align:center;color:#6b7280;">No invigilation schedule found for the selected filters.</td></tr>';
     } else {
         $report_row_total = count($faculty_duty_rows);
         $row_index = 0;
@@ -512,6 +703,7 @@ if ($report_export === 'pdf') {
                 }
                 $report_rows_html .= '<td style="padding:10px 12px;border:1px solid #d7deea;color:#0f172a;">' . ei_report_escape((string)$report_row['time_slot']) . '</td>'
                     . '<td style="padding:10px 12px;border:1px solid #d7deea;color:#0f172a;">' . ei_report_escape((string)$report_row['room_number']) . '</td>'
+                    . '<td style="padding:10px 12px;border:1px solid #d7deea;color:#0f172a;vertical-align:top;">' . ei_report_partner_cell_html($report_row) . '</td>'
                     . '</tr>';
             }
         }
@@ -559,9 +751,10 @@ if ($report_export === 'pdf') {
         . '<table style="width:100%;border-collapse:collapse;font-size:9pt;">'
         . '<thead>'
         . '<tr style="background:#0f172a;color:#ffffff;">'
-        . '<th style="padding:9px 10px;border:1px solid #0f172a;text-align:left;width:34%;">Date</th>'
-        . '<th style="padding:9px 10px;border:1px solid #0f172a;text-align:left;">Duty Time</th>'
-        . '<th style="padding:9px 10px;border:1px solid #0f172a;text-align:left;">Room Number</th>'
+        . '<th style="padding:9px 10px;border:1px solid #0f172a;text-align:left;width:20%;">Date</th>'
+        . '<th style="padding:9px 10px;border:1px solid #0f172a;text-align:left;width:20%;">Duty Time</th>'
+        . '<th style="padding:9px 10px;border:1px solid #0f172a;text-align:left;width:18%;">Room Number</th>'
+        . '<th style="padding:9px 10px;border:1px solid #0f172a;text-align:left;">2nd Invigilator</th>'
         . '</tr>'
         . '</thead>'
         . '<tbody>' . $report_rows_html . '</tbody>'
@@ -822,6 +1015,10 @@ require_once __DIR__ . '/../includes/header.php';
             <a href="<?= h($report_pdf_url) ?>" target="_blank" class="btn btn-primary btn-sm" style="border-radius:10px;">
                 <i class="fas fa-file-pdf me-1"></i> Export PDF
             </a>
+            <a href="<?= h($report_pdf_all_url) ?>" class="btn btn-outline-primary btn-sm" style="border-radius:10px;"
+               title="Downloads a ZIP with one PDF per faculty, named Faculty name_Designation.pdf">
+                <i class="fas fa-file-archive me-1"></i> Export All Faculty PDFs
+            </a>
             <a href="<?= APP_URL ?>/exam-invigilation/reports.php" class="btn btn-outline-secondary btn-sm" style="border-radius:10px;">
                 <i class="fas fa-undo me-1"></i> Reset Report
             </a>
@@ -920,12 +1117,13 @@ require_once __DIR__ . '/../includes/header.php';
                         <th>Invigilation Duty</th>
                         <th>Duty Time</th>
                         <th>Room Number</th>
+                        <th>2nd Invigilator</th>
                     </tr>
                 </thead>
                 <tbody>
                 <?php if (empty($faculty_duty_rows)): ?>
                     <tr>
-                        <td colspan="7" class="text-center text-muted py-5">
+                        <td colspan="8" class="text-center text-muted py-5">
                             <i class="fas fa-inbox fa-2x mb-2 d-block text-muted"></i>
                             No faculty duty found for the selected report filters.
                         </td>
@@ -945,6 +1143,16 @@ require_once __DIR__ . '/../includes/header.php';
                         </td>
                         <td><?= h($report_row['time_slot']) ?></td>
                         <td class="fw-medium"><?= h($report_row['room_number']) ?></td>
+                        <td>
+                            <?php if (!empty($report_row['partner_name'])): ?>
+                            <div class="fw-medium"><?= h($report_row['partner_name']) ?></div>
+                            <?php if (!empty($report_row['partner_designation'])): ?><small class="text-muted"><?= h($report_row['partner_designation']) ?></small><?php endif; ?>
+                            <?php if (!empty($report_row['partner_dept_name'])): ?><small class="text-primary d-block"><?= h($report_row['partner_dept_name']) ?></small><?php endif; ?>
+                            <?php if (!empty($report_row['partner_contact'])): ?><small class="d-block text-muted"><i class="fas fa-phone me-1"></i><?= h($report_row['partner_contact']) ?></small><?php endif; ?>
+                            <?php else: ?>
+                            <span class="text-danger"><i class="fas fa-exclamation-circle me-1"></i>Not assigned</span>
+                            <?php endif; ?>
+                        </td>
                     </tr>
                     <?php endforeach; ?>
                 <?php endif; ?>
