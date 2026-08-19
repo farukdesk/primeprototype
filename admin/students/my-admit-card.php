@@ -58,9 +58,20 @@ try { $db->query('SELECT is_allowlist FROM ac_student_tokens LIMIT 1'); $has_all
 // Token-based visibility must only consider ALLOWLIST tokens (pre-seeded by
 // bulk import). QR/download tokens are created lazily for every student who
 // downloads a card — counting those would hide the card from all other
-// eligible students as soon as the first download happens.
-// See admin/admit-card-token-allowlist.sql.
-$allow_flag = $has_allowlist_col ? ' AND t.is_allowlist = 1' : '';
+// eligible students as soon as the first download happens. When the
+// is_allowlist column does not exist yet (see
+// admin/admit-card-token-allowlist.sql) the two kinds of token cannot be
+// told apart, so NO token restriction is applied at all — restricting on
+// plain download tokens would hide cards from every other eligible student.
+$token_sql = '';
+if ($has_allowlist_col) {
+    $token_sql = ' AND (
+           NOT EXISTS (SELECT 1 FROM ac_student_tokens t
+                        WHERE t.admit_card_id = ac.id AND t.is_allowlist = 1)
+           OR EXISTS  (SELECT 1 FROM ac_student_tokens t
+                        WHERE t.admit_card_id = ac.id AND t.student_id = ? AND t.is_allowlist = 1)
+       )';
+}
 
 $match_parts  = ['(ac.dept_id = ? AND ac.program_id = ? AND (ac.batch_id IS NULL OR ac.batch_id = ?))'];
 $match_params = [$student['dept_id'], $student['program_id'], (int)($student['batch_id'] ?? 0)];
@@ -74,8 +85,17 @@ if ($has_routine_col) {
 }
 $match_parts[] = 'ac.id IN (SELECT admit_card_id FROM ac_student_overrides WHERE student_id = ?)';
 $match_params[] = $student_id;
+// A token already issued to this student for a card (bulk-import allowlist
+// or a previously generated download/QR token) proves the student belongs on
+// that card — qualify it even when the student's profile dept / program /
+// batch no longer matches the card.
+$match_parts[] = 'ac.id IN (SELECT admit_card_id FROM ac_student_tokens WHERE student_id = ?)';
+$match_params[] = $student_id;
 
-$params = array_merge($match_params, [$student_id]);
+$params = $match_params;
+if ($has_allowlist_col) {
+    $params[] = $student_id;
+}
 
 $cards_stmt = $db->prepare(
     'SELECT ac.*,
@@ -86,11 +106,7 @@ $cards_stmt = $db->prepare(
      JOIN dept_departments d ON d.id = ac.dept_id
      JOIN dept_academic_programs p ON p.id = ac.program_id
      WHERE ac.is_active = 1
-       AND (' . implode(' OR ', $match_parts) . ')
-       AND (
-           NOT EXISTS (SELECT 1 FROM ac_student_tokens t WHERE t.admit_card_id = ac.id' . $allow_flag . ')
-           OR EXISTS  (SELECT 1 FROM ac_student_tokens t WHERE t.admit_card_id = ac.id AND t.student_id = ?' . $allow_flag . ')
-       )
+       AND (' . implode(' OR ', $match_parts) . ')' . $token_sql . '
      ORDER BY ac.created_at DESC'
 );
 $cards_stmt->execute($params);
