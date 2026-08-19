@@ -374,24 +374,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
             $slot_groups[$slot['slot_date'] . '|' . $slot['time_slot']][] = $slot;
         }
 
-        // Fill the closest dates first: process groups strictly in chronological
-        // order (earliest date, then earliest start time). Faculty capacity is
-        // consumed by the earliest dates first, so any slots that cannot be
-        // filled (partially assigned / unassigned) are pushed to the last
-        // time slots of the last dates.
-        uksort($slot_groups, static function (string $a, string $b): int {
-            [$date_a, $time_a] = explode('|', $a, 2);
-            [$date_b, $time_b] = explode('|', $b, 2);
-            if ($date_a !== $date_b) {
-                return strcmp($date_a, $date_b);
-            }
-            $mins_a = ei_time_slot_minutes($time_a);
-            $mins_b = ei_time_slot_minutes($time_b);
-            $start_a = $mins_a !== null ? $mins_a[0] : PHP_INT_MAX;
-            $start_b = $mins_b !== null ? $mins_b[0] : PHP_INT_MAX;
-            return $start_a <=> $start_b;
-        });
-
         $no_same_dept_count = 0;
 
         foreach ($slot_groups as $group) {
