@@ -143,16 +143,19 @@ require_once __DIR__ . '/../includes/header.php';
             <li class="breadcrumb-item active">Admit Cards</li>
         </ol></nav>
     </div>
-    <?php if (ac_can_create()): ?>
     <div class="d-flex gap-2 flex-wrap">
+        <a href="<?= APP_URL ?>/admit-card/conflicts.php" class="btn btn-outline-warning" style="border-radius:10px;">
+            <i class="fas fa-flag me-1"></i> Clash Report
+        </a>
+        <?php if (ac_can_create()): ?>
         <a href="<?= APP_URL ?>/admit-card/bulk-import.php" class="btn btn-outline-primary" style="border-radius:10px;">
             <i class="fas fa-file-csv me-1"></i> Bulk Import CSV
         </a>
         <a href="<?= APP_URL ?>/admit-card/create.php" class="btn btn-primary" style="border-radius:10px;">
             <i class="fas fa-plus me-1"></i> New Admit Card
         </a>
+        <?php endif; ?>
     </div>
-    <?php endif; ?>
 </div>
 
 <?php flash_show(); ?>
