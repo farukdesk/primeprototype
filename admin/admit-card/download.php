@@ -78,6 +78,12 @@ if (is_portal_student()) {
 // makes one card per routine, which scatters a student's subjects).
 $courses = ac_get_merged_courses_for_student($card_id, $student_id);
 
+// Lab courses are never listed on the admit card PDF: any course whose
+// title contains the standalone word "Lab" (case-insensitive) is dropped.
+$courses = array_values(array_filter($courses, static function ($c) {
+    return !preg_match('/\blab\b/i', (string)($c['course_title'] ?? ''));
+}));
+
 // Get/create token and QR
 $token      = ac_get_or_create_token($card_id, $student_id);
 $verify_url = ac_verify_url($token);
