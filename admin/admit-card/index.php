@@ -10,6 +10,7 @@ require_once __DIR__ . '/helpers.php';
 $page_title = 'Admit Cards';
 
 $f_search = trim($_GET['search'] ?? '');
+$f_id     = (int)($_GET['card_id'] ?? 0);
 $per_page  = 25;
 $cur_page  = max(1, (int)($_GET['page'] ?? 1));
 $offset    = ($cur_page - 1) * $per_page;
@@ -17,10 +18,21 @@ $offset    = ($cur_page - 1) * $per_page;
 $db = db();
 $where  = '1=1';
 $params = [];
+if ($f_id > 0) {
+    // Direct lookup by admit card ID
+    $where .= ' AND ac.id = ?';
+    $params[] = $f_id;
+}
 if ($f_search !== '') {
-    $where .= ' AND (ac.exam_name LIKE ? OR ac.semester LIKE ? OR d.name LIKE ? OR p.program_name LIKE ?)';
+    $where .= ' AND (ac.exam_name LIKE ? OR ac.semester LIKE ? OR d.name LIKE ? OR p.program_name LIKE ?';
     $like = '%' . $f_search . '%';
     $params = array_merge($params, [$like, $like, $like, $like]);
+    if (ctype_digit($f_search)) {
+        // A purely numeric search also matches the card ID
+        $where .= ' OR ac.id = ?';
+        $params[] = (int)$f_search;
+    }
+    $where .= ')';
 }
 
 $cnt_stmt = $db->prepare(
@@ -85,9 +97,13 @@ require_once __DIR__ . '/../includes/header.php';
                 <input type="text" name="search" class="form-control" placeholder="Search exam name, semester, dept…"
                        value="<?= h($f_search) ?>">
             </div>
+            <div class="col-md-2">
+                <input type="number" name="card_id" class="form-control" min="1" placeholder="Card ID"
+                       value="<?= $f_id > 0 ? $f_id : '' ?>">
+            </div>
             <div class="col-auto">
                 <button class="btn btn-outline-primary"><i class="fas fa-search me-1"></i>Search</button>
-                <?php if ($f_search !== ''): ?>
+                <?php if ($f_search !== '' || $f_id > 0): ?>
                     <a href="?" class="btn btn-outline-secondary ms-1">Clear</a>
                 <?php endif; ?>
             </div>
@@ -171,7 +187,7 @@ require_once __DIR__ . '/../includes/header.php';
             <ul class="pagination pagination-sm mb-0">
                 <?php for ($p = 1; $p <= $pages; $p++): ?>
                 <li class="page-item <?= $p === $cur_page ? 'active' : '' ?>">
-                    <a class="page-link" href="?page=<?= $p ?>&search=<?= urlencode($f_search) ?>"><?= $p ?></a>
+                    <a class="page-link" href="?page=<?= $p ?>&search=<?= urlencode($f_search) ?><?= $f_id > 0 ? '&card_id=' . $f_id : '' ?>"><?= $p ?></a>
                 </li>
                 <?php endfor; ?>
             </ul>
