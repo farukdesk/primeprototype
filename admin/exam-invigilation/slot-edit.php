@@ -26,6 +26,16 @@ $faculty_list  = ei_get_faculty_list();
 $dept_list     = ei_get_departments();
 [$slot_start_time, $slot_end_time] = ei_parse_time_slot_range((string)($slot['time_slot'] ?? ''));
 
+// Only offer invigilators who are free at this slot's date + time.
+// Faculty already assigned to another room at the same date/time are hidden
+// from the dropdowns, but this slot's current invigilators stay selectable.
+$busy_ids    = ei_get_busy_faculty_ids((string)($slot['slot_date'] ?? ''), (string)($slot['time_slot'] ?? ''), $sid);
+$current_ids = [(int)($slot['faculty1_id'] ?? 0), (int)($slot['faculty2_id'] ?? 0)];
+$faculty_list = array_values(array_filter(
+    $faculty_list,
+    static fn ($f) => !isset($busy_ids[(int)$f['id']]) || in_array((int)$f['id'], $current_ids, true)
+));
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
