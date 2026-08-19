@@ -256,13 +256,46 @@ function ac_get_merged_courses_for_student(int $admit_card_id, int $student_id):
         $picked[] = $c;
     }
 
+    // Shift of every offer subject involved (student registrations + card
+    // rows). The code fallback must not show a row of ANOTHER shift: a Day
+    // row carries the Day exam date / time, which is wrong (and dangerous)
+    // on an Evening student's admit card.
+    $shift_of = [];
+    try {
+        $ids = array_keys($reg);
+        foreach ($all as $c) {
+            $osid = (int)($c['offer_subject_id'] ?? 0);
+            if ($osid > 0) $ids[] = $osid;
+        }
+        $ids = array_values(array_unique($ids));
+        if ($ids) {
+            $ph = implode(',', array_fill(0, count($ids), '?'));
+            $st = db()->prepare(
+                "SELECT cos.id, o.shift
+                   FROM co_offer_subjects cos
+                   JOIN co_offers o ON o.id = cos.offer_id
+                  WHERE cos.id IN ($ph)"
+            );
+            $st->execute($ids);
+            foreach ($st->fetchAll() as $r) {
+                $shift_of[(int)$r['id']] = $norm((string)($r['shift'] ?? ''));
+            }
+        }
+    } catch (Throwable $e) {
+        // shift unknown — the fallback stays shift-agnostic
+    }
+
     // Pass 2 — code fallback: registered courses that have NO exact card
     // row (e.g. the routine was built from another section's offer). Take
-    // the first card row with the same course code.
-    foreach ($reg as $ck) {
+    // the first card row with the same course code AND a compatible shift
+    // (same shift as the offer the student registered in, or unknown).
+    foreach ($reg as $osid => $ck) {
         if ($ck === '' || isset($covered_codes[$ck])) continue;
+        $want = $shift_of[$osid] ?? '';
         foreach ($all as $c) {
             if ($codeKey($c['course_code'] ?? '') !== $ck) continue;
+            $row_shift = $shift_of[(int)($c['offer_subject_id'] ?? 0)] ?? '';
+            if ($want !== '' && $row_shift !== '' && $row_shift !== $want) continue;
             $covered_codes[$ck] = true;
             $picked[] = $c;
             break;
