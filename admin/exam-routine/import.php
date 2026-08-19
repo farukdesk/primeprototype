@@ -5,7 +5,8 @@
  * Step 1: choose an active exam and upload (or paste) a CSV.
  * Step 2: every row is fuzzy-matched server-side — department (aliases such
  *         as CSE, EEE, Bangla, FDAE, Civil/CE, acronyms and parenthetical
- *         short names), program (BBA, CSE…), batch ("59" = "59th"), section,
+ *         short names), program (BBA, CSE…), batch ("59" = "59th"), shift
+ *         (Day / Night from the course offer),
  *         course code / course title against the active course offers, and
  *         the exam date / time in many common spellings — and shown in a
  *         preview table with a per-row status.
@@ -15,7 +16,7 @@
  *         skipped.
  *
  * Expected CSV header (order free, extra columns ignored):
- *   Department, Program, Batch, Section, Course Code, Course Title,
+ *   Department, Program, Batch, Shift, Course Code, Course Title,
  *   Teacher, Date, Start Time, End Time, Room, Remarks
  */
 require_once __DIR__ . '/../includes/auth.php';
@@ -37,7 +38,7 @@ function er_csv_col(string $header): ?string
             'department'   => ['department', 'dept'],
             'program'      => ['program', 'programme', 'prog'],
             'batch'        => ['batch'],
-            'section'      => ['section', 'sec'],
+            'shift'        => ['shift', 'day night', 'day or night'],
             'course_code'  => ['course code', 'code', 'coursecode'],
             'course_title' => ['course title', 'course name', 'course', 'title', 'subject'],
             'teacher'      => ['course teacher', 'teacher', 'faculty', 'instructor'],
@@ -94,7 +95,7 @@ function er_build_preview(array $csv, array &$errors): array
     $out = [];
     foreach (array_slice($csv, 1) as $line_no => $cells) {
         $row = [
-            'department' => '', 'program' => '', 'batch' => '', 'section' => '',
+            'department' => '', 'program' => '', 'batch' => '', 'shift' => '',
             'course_code' => '', 'course_title' => '', 'teacher' => '',
             'date' => '', 'start' => '', 'end' => '', 'room' => '', 'remarks' => '',
         ];
@@ -167,12 +168,16 @@ function er_build_preview(array $csv, array &$errors): array
             continue;
         }
 
-        // ── Section narrows when it matches at least one offer ──
-        if ($row['section'] !== '') {
-            $sec  = er_norm($row['section']);
-            $with = array_values(array_filter($offers, fn($o) => er_norm((string)($o['section'] ?? '')) === $sec));
+        // ── Shift (Day / Night) narrows when it matches at least one offer ──
+        if ($row['shift'] !== '') {
+            $sh   = er_norm($row['shift']);
+            $with = array_values(array_filter($offers, function ($o) use ($sh) {
+                $os = er_norm((string)($o['shift'] ?? ''));
+                if ($os === '' || $sh === '') return false;
+                return $os === $sh || $os[0] === $sh; // "d" → Day, "n" → Night
+            }));
             if ($with) $offers = $with;
-            else $p['messages'][] = 'Section "' . $row['section'] . '" matched no offer — section ignored.';
+            else $p['messages'][] = 'Shift "' . $row['shift'] . '" matched no offer — shift ignored.';
         }
 
         // ── Subjects of the candidate offers ──
@@ -219,7 +224,7 @@ function er_build_preview(array $csv, array &$errors): array
         }
         if (count($matches) > 1) {
             $p['messages'][] = count($matches) . ' offers carry this course — the first match was used. '
-                . 'Add Batch / Section columns to disambiguate.';
+                . 'Add Batch / Shift columns to disambiguate.';
         }
         $subject = $matches[0];
         $offer   = null;
@@ -256,7 +261,6 @@ function er_build_preview(array $csv, array &$errors): array
             'offer_label'      => trim(
                 ($offer && $offer['batch_name'] ? 'Batch ' . $offer['batch_name'] : 'Offer #' . $subject['offer_id'])
                 . ($offer && $offer['semester'] ? ' · ' . $offer['semester'] : '')
-                . ($offer && $offer['section']  ? ' · Sec ' . $offer['section'] : '')
                 . ($offer && $offer['shift']    ? ' · ' . $offer['shift'] : '')
             ),
             'program'          => $p['resolved']['program'] ?? (string)($offer['program_name'] ?? ''),
@@ -482,14 +486,15 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="col-12">
                     <label class="form-label fw-medium">…or paste CSV rows</label>
                     <textarea name="csv_text" class="form-control font-monospace" rows="5"
-                              placeholder="Department,Program,Batch,Section,Course Code,Course Title,Date,Start Time,End Time&#10;CSE,CSE,59,A,CSE-101,Introduction to Programming,05/01/2026,9:30 AM,12:30 PM"></textarea>
+                              placeholder="Department,Program,Batch,Shift,Course Code,Course Title,Date,Start Time,End Time&#10;CSE,CSE,59,Day,CSE-101,Introduction to Programming,05/01/2026,9:30 AM,12:30 PM"></textarea>
                 </div>
             </div>
             <div class="form-text mt-2">
                 Expected columns (order free, extra columns ignored):
-                <code>Department, Program, Batch, Section, Course Code, Course Title, Teacher, Date, Start Time, End Time, Room, Remarks</code>.
+                <code>Department, Program, Batch, Shift, Course Code, Course Title, Teacher, Date, Start Time, End Time, Room, Remarks</code>.
                 Short names are understood — e.g. <strong>CSE</strong>, <strong>EEE</strong>, <strong>Bangla</strong>,
                 <strong>FDAE</strong>, <strong>Civil</strong>/<strong>CE</strong>, <strong>BBA</strong>;
+                shift is <strong>Day</strong> or <strong>Night</strong> (also <strong>D</strong>/<strong>N</strong>);
                 batch <strong>59</strong> matches “59th”; dates and times in most common formats are accepted.
                 The teacher, student count, course code and title always come from the matched course offer.
             </div>
@@ -565,7 +570,7 @@ require_once __DIR__ . '/../includes/header.php';
                                 <span class="text-muted"><?= h($p['raw']['department']) ?></span>
                                 <?php endif; ?>
                             </td>
-                            <td class="small"><?= $p['ok'] ? h($r['offer_label']) : h(trim($p['raw']['batch'] . ' ' . $p['raw']['section'])) ?></td>
+                            <td class="small"><?= $p['ok'] ? h($r['offer_label']) : h(trim($p['raw']['batch'] . ' ' . $p['raw']['shift'])) ?></td>
                             <td>
                                 <?php if ($p['ok']): ?>
                                 <?php if ($r['course_code']): ?><span class="badge bg-light text-dark border me-1" style="font-family:monospace;"><?= h($r['course_code']) ?></span><?php endif; ?>
