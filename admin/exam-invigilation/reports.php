@@ -122,6 +122,27 @@ function ei_report_partner_cell_html(array $row): string
     return $html;
 }
 
+/**
+ * HTML block for the Room cell in the duty report PDFs: room number,
+ * the department whose exam runs in that room, and that department's
+ * course coordinator (name + contact number).
+ */
+function ei_report_room_cell_html(array $row, array $dept_coordinators): string
+{
+    $html = '<span style="font-weight:700;">' . ei_report_escape((string)$row['room_number']) . '</span>';
+    if (!empty($row['room_dept_name'])) {
+        $html .= '<br><span style="color:#2563eb;font-size:8pt;">' . ei_report_escape((string)$row['room_dept_name']) . '</span>';
+        $coordinator = $dept_coordinators[(int)($row['room_dept_id'] ?? 0)] ?? null;
+        if ($coordinator) {
+            $html .= '<br><span style="color:#64748b;font-size:8pt;">Coordinator: ' . ei_report_escape((string)$coordinator['name']) . '</span>';
+            if (!empty($coordinator['contact_number'])) {
+                $html .= '<br><span style="color:#0f172a;font-size:8pt;">' . ei_report_escape((string)$coordinator['contact_number']) . '</span>';
+            }
+        }
+    }
+    return $html;
+}
+
 // ── Faculty availability stats ────────────────────────────────────────────────
 $total_active_faculty = (int)db()->query('SELECT COUNT(*) FROM ei_faculty WHERE is_active = 1')->fetchColumn();
 // Faculty already assigned in at least one slot across all active exams
@@ -388,13 +409,16 @@ $report_query = "
             p.name AS partner_name,
             p.designation AS partner_designation,
             p.contact_number AS partner_contact,
-            pd.name AS partner_dept_name
+            pd.name AS partner_dept_name,
+            s.dept_id AS room_dept_id,
+            rd.name AS room_dept_name
         FROM ei_slots s
         JOIN ei_exams e ON e.id = s.exam_id
         JOIN ei_faculty f ON f.id = s.faculty1_id
         JOIN dept_departments d ON d.id = f.dept_id
         LEFT JOIN ei_faculty p ON p.id = s.faculty2_id
         LEFT JOIN dept_departments pd ON pd.id = p.dept_id
+        LEFT JOIN dept_departments rd ON rd.id = s.dept_id
         {$report_sql_where}
 
         UNION ALL
@@ -414,13 +438,16 @@ $report_query = "
             p.name AS partner_name,
             p.designation AS partner_designation,
             p.contact_number AS partner_contact,
-            pd.name AS partner_dept_name
+            pd.name AS partner_dept_name,
+            s.dept_id AS room_dept_id,
+            rd.name AS room_dept_name
         FROM ei_slots s
         JOIN ei_exams e ON e.id = s.exam_id
         JOIN ei_faculty f ON f.id = s.faculty2_id
         JOIN dept_departments d ON d.id = f.dept_id
         LEFT JOIN ei_faculty p ON p.id = s.faculty1_id
         LEFT JOIN dept_departments pd ON pd.id = p.dept_id
+        LEFT JOIN dept_departments rd ON rd.id = s.dept_id
         {$report_sql_where}
     ) duty
     ORDER BY duty.faculty_name ASC,
@@ -480,6 +507,21 @@ if ($report_date_from !== '') $report_filter_query['report_date_from'] = $report
 if ($report_date_to !== '') $report_filter_query['report_date_to'] = $report_date_to;
 $report_pdf_url = APP_URL . '/exam-invigilation/reports.php?' . http_build_query(array_merge($report_filter_query, ['report_export' => 'pdf']));
 
+// Course coordinator per department: active faculty whose designation
+// contains "coordinator" (first match per department, alphabetically).
+$dept_coordinators = [];
+foreach (db()->query(
+    "SELECT f.dept_id, f.name, f.designation, f.contact_number
+     FROM ei_faculty f
+     WHERE f.is_active = 1 AND LOWER(COALESCE(f.designation, '')) LIKE '%coordinator%'
+     ORDER BY f.dept_id ASC, f.name ASC"
+)->fetchAll() as $coordinator_row) {
+    $coordinator_dept = (int)$coordinator_row['dept_id'];
+    if (!isset($dept_coordinators[$coordinator_dept])) {
+        $dept_coordinators[$coordinator_dept] = $coordinator_row;
+    }
+}
+
 $report_pdf_all_query = $report_filter_query;
 unset($report_pdf_all_query['report_faculty_id']);
 $report_pdf_all_url = APP_URL . '/exam-invigilation/reports.php?' . http_build_query(array_merge($report_pdf_all_query, ['report_export' => 'pdf_all']));
@@ -513,7 +555,7 @@ if ($report_export === 'pdf_all') {
     }
 
     // Builds the white report card for one faculty (same layout as the single export)
-    $build_faculty_card = static function (array $rows) use ($logo_html, $generated_at_label, $report_scope_label): string {
+    $build_faculty_card = static function (array $rows) use ($logo_html, $generated_at_label, $report_scope_label, $dept_coordinators): string {
         $first = $rows[0];
         $cell  = 'padding:10px 12px;border:1px solid #d7deea;color:#0f172a;vertical-align:top;';
 
@@ -536,7 +578,7 @@ if ($report_export === 'pdf_all') {
                         . '</td>';
                 }
                 $rows_html .= '<td style="' . $cell . '">' . ei_report_escape((string)$r['time_slot']) . '</td>'
-                    . '<td style="' . $cell . '">' . ei_report_escape((string)$r['room_number']) . '</td>'
+                    . '<td style="' . $cell . '">' . ei_report_room_cell_html($r, $dept_coordinators) . '</td>'
                     . '<td style="' . $cell . '">' . ei_report_partner_cell_html($r) . '</td>'
                     . '</tr>';
             }
@@ -564,9 +606,9 @@ if ($report_export === 'pdf_all') {
             . '<div style="padding:14px 24px 14px;">'
             . '<table style="width:100%;border-collapse:collapse;font-size:9pt;">'
             . '<thead><tr style="background:#0f172a;color:#ffffff;">'
-            . '<th style="padding:9px 10px;border:1px solid #0f172a;text-align:left;width:20%;">Date</th>'
-            . '<th style="padding:9px 10px;border:1px solid #0f172a;text-align:left;width:20%;">Duty Time</th>'
-            . '<th style="padding:9px 10px;border:1px solid #0f172a;text-align:left;width:18%;">Room Number</th>'
+            . '<th style="padding:9px 10px;border:1px solid #0f172a;text-align:left;width:17%;">Date</th>'
+            . '<th style="padding:9px 10px;border:1px solid #0f172a;text-align:left;width:17%;">Duty Time</th>'
+            . '<th style="padding:9px 10px;border:1px solid #0f172a;text-align:left;width:30%;">Room (Dept &amp; Coordinator)</th>'
             . '<th style="padding:9px 10px;border:1px solid #0f172a;text-align:left;">2nd Invigilator</th>'
             . '</tr></thead>'
             . '<tbody>' . $rows_html . '</tbody>'
@@ -702,7 +744,7 @@ if ($report_export === 'pdf') {
                         . '</td>';
                 }
                 $report_rows_html .= '<td style="padding:10px 12px;border:1px solid #d7deea;color:#0f172a;">' . ei_report_escape((string)$report_row['time_slot']) . '</td>'
-                    . '<td style="padding:10px 12px;border:1px solid #d7deea;color:#0f172a;">' . ei_report_escape((string)$report_row['room_number']) . '</td>'
+                    . '<td style="padding:10px 12px;border:1px solid #d7deea;color:#0f172a;vertical-align:top;">' . ei_report_room_cell_html($report_row, $dept_coordinators) . '</td>'
                     . '<td style="padding:10px 12px;border:1px solid #d7deea;color:#0f172a;vertical-align:top;">' . ei_report_partner_cell_html($report_row) . '</td>'
                     . '</tr>';
             }
@@ -751,9 +793,9 @@ if ($report_export === 'pdf') {
         . '<table style="width:100%;border-collapse:collapse;font-size:9pt;">'
         . '<thead>'
         . '<tr style="background:#0f172a;color:#ffffff;">'
-        . '<th style="padding:9px 10px;border:1px solid #0f172a;text-align:left;width:20%;">Date</th>'
-        . '<th style="padding:9px 10px;border:1px solid #0f172a;text-align:left;width:20%;">Duty Time</th>'
-        . '<th style="padding:9px 10px;border:1px solid #0f172a;text-align:left;width:18%;">Room Number</th>'
+        . '<th style="padding:9px 10px;border:1px solid #0f172a;text-align:left;width:17%;">Date</th>'
+        . '<th style="padding:9px 10px;border:1px solid #0f172a;text-align:left;width:17%;">Duty Time</th>'
+        . '<th style="padding:9px 10px;border:1px solid #0f172a;text-align:left;width:30%;">Room (Dept &amp; Coordinator)</th>'
         . '<th style="padding:9px 10px;border:1px solid #0f172a;text-align:left;">2nd Invigilator</th>'
         . '</tr>'
         . '</thead>'
