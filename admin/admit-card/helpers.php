@@ -210,55 +210,80 @@ function ac_get_merged_courses_for_student(int $admit_card_id, int $student_id):
     } catch (Throwable $e) {
         return $courses;
     }
-    if (!$siblings) return $courses;
-
-    // The student's registrations — sibling courses are only merged in when
-    // the student is actually registered (by offer subject or course code),
-    // so the fail-open fallback of ac_get_courses_for_student() cannot pull
-    // in unrelated courses from other sections.
+    // The student's registrations: offer_subject_id => normalised course
+    // code. The merge is built FROM the registrations (student-centric),
+    // so a row from another shift / section can never replace the row of
+    // the offer subject the student is actually registered in.
     $codeKey = static fn($s) => strtolower((string)preg_replace('/[^a-z0-9]+/i', '', (string)$s));
     try {
-        $st = db()->prepare('SELECT offer_subject_id FROM co_registrations WHERE student_id = ?');
-        $st->execute([$student_id]);
-        $reg = array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
-
-        $cst = db()->prepare(
-            'SELECT c.course_code
+        $st = db()->prepare(
+            'SELECT r.offer_subject_id, c.course_code
                FROM co_registrations r
                JOIN co_offer_subjects cos ON cos.id = r.offer_subject_id
                JOIN course_curriculum c   ON c.id  = cos.curriculum_id
               WHERE r.student_id = ?'
         );
-        $cst->execute([$student_id]);
-        $reg_codes = array_values(array_unique(array_filter(
-            array_map($codeKey, $cst->fetchAll(PDO::FETCH_COLUMN))
-        )));
+        $st->execute([$student_id]);
+        $reg = [];
+        foreach ($st->fetchAll() as $r) {
+            $reg[(int)$r['offer_subject_id']] = $codeKey((string)$r['course_code']);
+        }
     } catch (Throwable $e) {
         return $courses;
     }
+    if (!$reg) return $courses;
 
-    $seen = [];
-    foreach ($courses as $c) {
-        $k = $codeKey($c['course_code'] ?? '') ?: $norm((string)($c['course_title'] ?? ''));
-        if ($k !== '') $seen[$k] = true;
+    // Every course row of this exam's cards — the shown card first so its
+    // rows win ties in the code-fallback pass.
+    $all = [];
+    foreach (array_merge([$admit_card_id], $siblings) as $cid) {
+        foreach (ac_get_courses($cid) as $c) $all[] = $c;
     }
-    foreach ($siblings as $cid) {
-        foreach (ac_get_courses($cid) as $c) {
-            $osid = (int)($c['offer_subject_id'] ?? 0);
-            $ck   = $codeKey($c['course_code'] ?? '');
-            $registered = ($osid > 0 && in_array($osid, $reg, true))
-                || ($ck !== '' && in_array($ck, $reg_codes, true));
-            if (!$registered) continue;
-            $k = $ck !== '' ? $ck : $norm((string)($c['course_title'] ?? ''));
-            if ($k === '' || isset($seen[$k])) continue;
-            $seen[$k] = true;
-            $courses[] = $c;
+
+    $picked        = [];
+    $covered_codes = [];
+
+    // Pass 1 — EXACT matches: card rows pointing at the very offer subject
+    // the student registered in. These carry the student's own shift /
+    // section, date and time, so they always win over same-code rows of
+    // other sections.
+    foreach ($all as $c) {
+        $osid = (int)($c['offer_subject_id'] ?? 0);
+        if ($osid <= 0 || !isset($reg[$osid])) continue;
+        $ck = $codeKey($c['course_code'] ?? '') ?: $reg[$osid];
+        if ($ck !== '' && isset($covered_codes[$ck])) continue;
+        if ($ck !== '') $covered_codes[$ck] = true;
+        $picked[] = $c;
+    }
+
+    // Pass 2 — code fallback: registered courses that have NO exact card
+    // row (e.g. the routine was built from another section's offer). Take
+    // the first card row with the same course code.
+    foreach ($reg as $ck) {
+        if ($ck === '' || isset($covered_codes[$ck])) continue;
+        foreach ($all as $c) {
+            if ($codeKey($c['course_code'] ?? '') !== $ck) continue;
+            $covered_codes[$ck] = true;
+            $picked[] = $c;
+            break;
         }
     }
 
+    // Pass 3 — manually added rows of the shown card (no offer-subject
+    // link) are kept: they were put on the card intentionally.
+    foreach (ac_get_courses($admit_card_id) as $c) {
+        if ((int)($c['offer_subject_id'] ?? 0) > 0) continue;
+        $ck = $codeKey($c['course_code'] ?? '') ?: $norm((string)($c['course_title'] ?? ''));
+        if ($ck !== '' && isset($covered_codes[$ck])) continue;
+        if ($ck !== '') $covered_codes[$ck] = true;
+        $picked[] = $c;
+    }
+
+    if (!$picked) return $courses; // fail open — never blank out the card
+
     // Order by exam date (undated rows last); rows of the same date keep
     // their original relative order.
-    usort($courses, static function ($a, $b) {
+    usort($picked, static function ($a, $b) {
         $da = (string)($a['exam_date'] ?? '');
         $dbv = (string)($b['exam_date'] ?? '');
         if ($da === $dbv) return 0;
@@ -267,7 +292,7 @@ function ac_get_merged_courses_for_student(int $admit_card_id, int $student_id):
         return strcmp($da, $dbv);
     });
 
-    return $courses;
+    return $picked;
 }
 
 // ── Get or create a unique QR token for a student+card combination ────────────
