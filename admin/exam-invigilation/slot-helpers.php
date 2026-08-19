@@ -182,6 +182,60 @@ function ei_slot_starts_after_6pm(string $time_slot): bool
     return $parsed_start ? ((int)$parsed_start->format('H') >= 18) : false;
 }
 
+/**
+ * Parse a "start – end" time slot into [start_minutes, end_minutes] since midnight.
+ * Returns null when the time slot cannot be parsed.
+ */
+function ei_time_slot_minutes(string $time_slot): ?array
+{
+    [$start, $end] = ei_parse_time_slot_range($time_slot);
+    if ($start === '' || $end === '') return null;
+    [$sh, $sm] = array_map('intval', explode(':', $start));
+    [$eh, $em] = array_map('intval', explode(':', $end));
+    return [$sh * 60 + $sm, $eh * 60 + $em];
+}
+
+/**
+ * Daily working-window rule: if a faculty's first shift of the day starts
+ * before 2 PM they must finish by 6 PM; if it starts at/after 2 PM they may
+ * work until 10 PM. Returns the latest allowed end time in minutes.
+ */
+function ei_day_window_end_minutes(int $earliest_start_minutes): int
+{
+    return $earliest_start_minutes < 14 * 60 ? 18 * 60 : 22 * 60;
+}
+
+/**
+ * Numeric seniority rank for a free-text designation (lower = more senior).
+ * Mirrors ei_designation_rank_sql().
+ */
+function ei_designation_rank(?string $designation): int
+{
+    $c = strtolower(trim((string)$designation));
+    if ($c === '') return 20;
+    if (strpos($c, 'dean') !== false) return 1;
+    if (strpos($c, 'head') !== false || strpos($c, 'chairman') !== false || strpos($c, 'chairperson') !== false) return 2;
+    if (strpos($c, 'associate professor') !== false) return 4;
+    if (strpos($c, 'assistant professor') !== false) return 5;
+    if (strpos($c, 'professor') !== false) return 3;
+    if (strpos($c, 'senior lecturer') !== false) return 6;
+    if (strpos($c, 'lecturer') !== false) return 7;
+    if (strpos($c, 'senior section officer') !== false) return 8;
+    if (strpos($c, 'section officer') !== false) return 9;
+    if (strpos($c, 'mlss') !== false || strpos($c, 'peon') !== false) return 30;
+    if (strpos($c, 'cleaner') !== false) return 31;
+    return 20;
+}
+
+/**
+ * Workload weight used by auto-assign: juniors get proportionally more slots
+ * than seniors (e.g. a Lecturer receives several times the slots of a Dean).
+ */
+function ei_designation_weight(?string $designation): int
+{
+    return max(1, min(ei_designation_rank($designation), 8));
+}
+
 function ei_is_faculty_eligible_for_slot(array $faculty, array $slot, array $busy_map = []): bool
 {
     $slot_date = (string)($slot['slot_date'] ?? '');
@@ -192,17 +246,10 @@ function ei_is_faculty_eligible_for_slot(array $faculty, array $slot, array $bus
         return false;
     }
 
-    $day_of_week = (int)date('w', strtotime($slot_date));
-    if (in_array($day_of_week, ei_get_faculty_weekend_days($faculty), true)) {
-        return false;
-    }
-
+    // Weekend restriction removed: faculty may be assigned on their weekend days.
+    // Female-evening restriction removed: female faculty may work after 6 PM.
     $busy_key = $slot_date . '|' . $time_slot;
     if (isset($busy_map[$busy_key][$faculty_id])) {
-        return false;
-    }
-
-    if (ei_slot_starts_after_6pm($time_slot) && (($faculty['gender'] ?? '') === 'Female')) {
         return false;
     }
 
