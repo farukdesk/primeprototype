@@ -106,7 +106,85 @@ if ($pre_dept > 0) {
 
 $errors = [];
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+// ── Bulk create: one admit card per selected exam routine ──
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_create'])) {
+    csrf_check();
+
+    $ids = array_values(array_unique(array_filter(array_map('intval', (array)($_POST['routine_ids'] ?? [])))));
+    if (!$ids) {
+        $errors[] = 'Please select at least one exam routine for bulk creation.';
+    } else {
+        $bulk_active = isset($_POST['bulk_is_active']) ? 1 : 0;
+        $created = 0;
+        $skipped = [];
+
+        foreach ($ids as $rid) {
+            $routine = er_get_routine($rid);
+            if (!$routine) {
+                $skipped[] = "Routine #$rid: not found.";
+                continue;
+            }
+
+            $exam_name   = $routine['exam_name'] . ($routine['exam_year'] ? ' – ' . $routine['exam_year'] : '');
+            $semester    = trim((string)($routine['semester'] ?? ''));
+            $dept_id     = (int)$routine['dept_id'];
+            $program_id  = (int)($routine['program_id'] ?? 0);
+            $batch_id    = (int)($routine['batch_id'] ?? 0) ?: null;
+            $batch_label = trim((string)($routine['batch_name'] ?? '')) ?: null;
+
+            if ($semester === '' || $dept_id <= 0 || $program_id <= 0) {
+                $skipped[] = "Routine #$rid (" . $exam_name . '): missing semester, department or program.';
+                continue;
+            }
+
+            if ($has_routine_col) {
+                $db->prepare(
+                    'INSERT INTO ac_admit_cards (exam_name, semester, dept_id, program_id, batch_id, batch_label, routine_id, is_active, created_by)
+                     VALUES (?,?,?,?,?,?,?,?,?)'
+                )->execute([$exam_name, $semester, $dept_id, $program_id, $batch_id, $batch_label, $rid, $bulk_active, auth_user()['id']]);
+            } else {
+                $db->prepare(
+                    'INSERT INTO ac_admit_cards (exam_name, semester, dept_id, program_id, batch_id, batch_label, is_active, created_by)
+                     VALUES (?,?,?,?,?,?,?,?)'
+                )->execute([$exam_name, $semester, $dept_id, $program_id, $batch_id, $batch_label, $bulk_active, auth_user()['id']]);
+            }
+            $card_id = (int)$db->lastInsertId();
+
+            $sect = trim((string)((($routine['section'] ?? '') !== '') ? $routine['section'] : ($routine['shift'] ?? ''))) ?: null;
+            foreach (er_get_items($rid) as $i => $it) {
+                $code  = trim((string)$it['course_code']);
+                $title = trim((string)$it['course_title']);
+                if ($code === '' && $title === '') continue;
+                $date = trim((string)($it['exam_date'] ?? '')) ?: null;
+                $slot = trim(er_fmt_time($it['start_time'] ?? null)
+                    . (($it['end_time'] ?? null) ? ' - ' . er_fmt_time($it['end_time']) : '')) ?: null;
+                $osid = (int)($it['offer_subject_id'] ?? 0) ?: null;
+                if ($has_subject_col) {
+                    $db->prepare(
+                        'INSERT INTO ac_admit_card_courses (admit_card_id, offer_subject_id, course_code, course_title, exam_date, time_slot, section, sort_order)
+                         VALUES (?,?,?,?,?,?,?,?)'
+                    )->execute([$card_id, $osid, $code, $title, $date, $slot, $sect, $i]);
+                } else {
+                    $db->prepare(
+                        'INSERT INTO ac_admit_card_courses (admit_card_id, course_code, course_title, exam_date, time_slot, section, sort_order)
+                         VALUES (?,?,?,?,?,?,?)'
+                    )->execute([$card_id, $code, $title, $date, $slot, $sect, $i]);
+                }
+            }
+            $created++;
+        }
+
+        if ($created > 0) {
+            $msg = $created . ' admit card(s) created from exam routines.';
+            if ($skipped) $msg .= ' Skipped ' . count($skipped) . ' routine(s): ' . implode(' ', $skipped);
+            flash_set('success', $msg);
+            redirect(APP_URL . '/admit-card/index.php');
+        }
+        foreach ($skipped as $s) $errors[] = $s;
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['bulk_create'])) {
     csrf_check();
 
     $exam_name   = trim($_POST['exam_name']   ?? '');
@@ -239,6 +317,39 @@ require_once __DIR__ . '/../includes/header.php';
             Only these enrolled students will be able to view / download this admit card.
         </div>
         <?php endif; ?>
+
+        <hr class="my-4">
+
+        <form method="post" class="row g-2 align-items-end">
+            <?= csrf_field() ?>
+            <div class="col-md-9">
+                <label class="form-label fw-semibold small">
+                    Bulk Create &mdash; select multiple routines (hold Ctrl / Cmd to select more than one)
+                </label>
+                <select name="routine_ids[]" class="form-select" multiple size="6">
+                    <?php foreach ($routines as $r): ?>
+                    <option value="<?= (int)$r['id'] ?>">
+                        <?= h($r['exam_name'] . ($r['exam_year'] ? ' – ' . $r['exam_year'] : '')
+                            . ' | ' . $r['dept_name']
+                            . ($r['program_name'] ? ' | ' . $r['program_name'] : '')
+                            . ($r['batch_name'] ? ' | Batch ' . $r['batch_name'] : '')
+                            . ($r['shift'] ? ' | ' . $r['shift'] : '')
+                            . ($r['semester'] ? ' | ' . $r['semester'] : '')) ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+                <div class="form-check mt-2">
+                    <input type="checkbox" name="bulk_is_active" id="bulk_is_active" class="form-check-input" value="1" checked>
+                    <label class="form-check-label small" for="bulk_is_active">Active (visible to students)</label>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <button type="submit" name="bulk_create" value="1" class="btn btn-primary w-100"
+                        onclick="return confirm('Create one admit card for each selected routine?');">
+                    <i class="fas fa-layer-group me-1"></i> Bulk Create Admit Cards
+                </button>
+            </div>
+        </form>
     </div>
 </div>
 <?php endif; ?>
