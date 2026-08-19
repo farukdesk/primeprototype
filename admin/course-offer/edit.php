@@ -38,6 +38,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $dept_id         = (int)($_POST['dept_id']         ?? 0);
     $program_id      = (int)($_POST['program_id']      ?? 0);
     $batch_id        = (int)($_POST['batch_id']        ?? 0);
+    $shift           = trim($_POST['shift']            ?? '');
+    $section         = trim($_POST['section']          ?? '');
     $semester        = trim($_POST['semester']         ?? '');
     $academic_intake = trim($_POST['academic_intake']  ?? '');
     $status          = ($_POST['status'] ?? '') === 'inactive' ? 'inactive' : 'active';
@@ -72,10 +74,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'You do not have permission to assign course offers to the selected department.';
     }
 
+    // Verify batch exists + shift/section are valid for that batch.
+    // Not every batch has shifts/sections: when the batch has none the value
+    // is silently cleared; when it has some, a submitted value must match.
     if ($batch_id > 0) {
         $chk = db()->prepare("SELECT id FROM student_batches WHERE id = ? LIMIT 1");
         $chk->execute([$batch_id]);
-        if (!$chk->fetch()) $errors[] = 'Selected batch does not exist.';
+        if (!$chk->fetch()) {
+            $errors[] = 'Selected batch does not exist.';
+        } else {
+            $batch_shifts   = co_batch_shifts($batch_id);
+            $batch_sections = co_batch_sections($batch_id);
+            if (empty($batch_shifts))   $shift   = '';
+            if (empty($batch_sections)) $section = '';
+            if ($shift !== '' && !in_array($shift, $batch_shifts, true)) {
+                $errors[] = 'Selected shift is not available for the selected batch.';
+            }
+            if ($section !== '' && !in_array($section, $batch_sections, true)) {
+                $errors[] = 'Selected section is not available for the selected batch.';
+            }
+        }
     }
 
     $seen_cids = [];
@@ -110,9 +128,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         db()->prepare(
             "UPDATE co_offers
                 SET dept_id = ?, program_id = ?, batch_id = ?,
+                    shift = ?, section = ?,
                     semester = ?, academic_intake = ?, status = ?
               WHERE id = ?"
         )->execute([$dept_id, $program_id, $batch_id,
+                    $shift ?: null, $section ?: null,
                     $semester ?: null, $academic_intake ?: null, $status, $id]);
 
         co_save_subjects_teachers($id, $rows);
@@ -128,6 +148,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'dept_id'         => $dept_id,
         'program_id'      => $program_id,
         'batch_id'        => $batch_id,
+        'shift'           => $shift,
+        'section'         => $section,
         'semester'        => $semester,
         'academic_intake' => $academic_intake,
         'rows'            => $rows,
@@ -138,6 +160,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'dept_id'         => $dept_id,
         'program_id'      => $program_id,
         'batch_id'        => $batch_id,
+        'shift'           => $shift,
+        'section'         => $section,
         'semester'        => $semester,
         'academic_intake' => $academic_intake,
         'status'          => $status,
@@ -155,6 +179,8 @@ $programs      = co_programs((int)$offer['dept_id']);
 
 $cur_semester = $_SESSION['old']['semester']        ?? ($offer['semester']        ?? '');
 $cur_intake   = $_SESSION['old']['academic_intake'] ?? ($offer['academic_intake'] ?? '');
+$cur_shift    = $_SESSION['old']['shift']           ?? ($offer['shift']           ?? '');
+$cur_section  = $_SESSION['old']['section']         ?? ($offer['section']         ?? '');
 
 // Academic Intake options depend on the department's calendar (Law is
 // bi-semester, everything else is trimester).
@@ -314,6 +340,23 @@ echo '<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-sel
                             <?php endforeach; ?>
                         </select>
                         <div class="form-text">Batches from the Student Batches registry.</div>
+                    </div>
+
+                    <div class="row g-3 mt-0">
+                        <div class="col-md-6">
+                            <label class="form-label fw-medium">Shift</label>
+                            <select name="shift" id="sel-shift" class="form-select" disabled>
+                                <option value="">— No shift for this batch —</option>
+                            </select>
+                            <div class="form-text">Enabled only when the selected batch has shifts.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-medium">Section</label>
+                            <select name="section" id="sel-section" class="form-select" disabled>
+                                <option value="">— No section for this batch —</option>
+                            </select>
+                            <div class="form-text">Enabled only when the selected batch has sections.</div>
+                        </div>
                     </div>
 
                 </div>
@@ -544,7 +587,53 @@ deptSelect.addEventListener('change', function() {
 
 new TomSelect('#sel-dept',    { allowEmptyOption: true, sortField: 'text' });
 var tsProgram = new TomSelect('#sel-program', { allowEmptyOption: true, sortField: 'text' });
-new TomSelect('#sel-batch',   { allowEmptyOption: true, sortField: 'text' });
+new TomSelect('#sel-batch',   { allowEmptyOption: true, sortField: 'text',
+    onChange: function(v) { loadBatchMeta(v, '', ''); } });
+
+// ── Cascade: batch → shift / section ─────────────────────────────────────────
+// Shift and Section stay disabled unless the selected batch actually has
+// shifts/sections (derived from the students of that batch).
+var shiftSelect   = document.getElementById('sel-shift');
+var sectionSelect = document.getElementById('sel-section');
+
+function fillMetaSelect(sel, list, emptyLabel, pickLabel, pre) {
+    sel.innerHTML = '';
+    if (!list || !list.length) {
+        var none = document.createElement('option');
+        none.value = ''; none.textContent = emptyLabel;
+        sel.appendChild(none);
+        sel.disabled = true;
+        return;
+    }
+    var opt = document.createElement('option');
+    opt.value = ''; opt.textContent = pickLabel;
+    sel.appendChild(opt);
+    list.forEach(function(v) {
+        var o = document.createElement('option');
+        o.value = v; o.textContent = v;
+        if (pre && pre === v) o.selected = true;
+        sel.appendChild(o);
+    });
+    sel.disabled = false;
+}
+
+function loadBatchMeta(batchId, preShift, preSection) {
+    fillMetaSelect(shiftSelect,   [], '— No shift for this batch —');
+    fillMetaSelect(sectionSelect, [], '— No section for this batch —');
+    if (!batchId) return;
+    fetch(APP_URL + '/course-offer/get-batch-meta.php?batch_id=' + encodeURIComponent(batchId))
+        .then(r => r.json())
+        .then(function(data) {
+            fillMetaSelect(shiftSelect,   data.shifts   || [], '— No shift for this batch —',   '— Select Shift —',   preShift);
+            fillMetaSelect(sectionSelect, data.sections || [], '— No section for this batch —', '— Select Section —', preSection);
+        })
+        .catch(function() {});
+}
+
+// Preselect the offer's current shift/section for its batch.
+<?php if ((int)$offer['batch_id'] > 0): ?>
+loadBatchMeta(<?= (int)$offer['batch_id'] ?>, <?= json_encode((string)$cur_shift) ?>, <?= json_encode((string)$cur_section) ?>);
+<?php endif; ?>
 
 var semesterInput = document.getElementById('semester-input');
 new TomSelect('#sel-semester', {
