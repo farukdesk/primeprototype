@@ -614,6 +614,72 @@ foreach ($slots as $s) {
     $by_date[$s['slot_date']][] = $s;
 }
 
+// ── Room overlap / conflict report ──────────────────────────────────
+// Same room + same date with overlapping times, across ALL active exams.
+// Highlights conflicts where the clashing slots belong to different departments.
+$room_conflicts = [];
+{
+    $conf_rows = db()->query(
+        "SELECT s.id, s.exam_id, s.slot_date, s.time_slot, s.room_number, s.dept_id,
+                e.exam_name, e.exam_year, d.name AS dept_name
+         FROM ei_slots s
+         JOIN ei_exams e ON e.id = s.exam_id
+         LEFT JOIN dept_departments d ON d.id = s.dept_id
+         WHERE e.is_active = 1
+         ORDER BY s.slot_date ASC, s.room_number ASC, s.time_slot ASC"
+    )->fetchAll();
+
+    $conf_groups = [];
+    foreach ($conf_rows as $cr) {
+        $room_key = strtoupper(preg_replace('/\s+/', '', (string)$cr['room_number']));
+        $conf_groups[$cr['slot_date'] . '|' . $room_key][] = $cr;
+    }
+
+    foreach ($conf_groups as $group_rows) {
+        $n = count($group_rows);
+        if ($n < 2) continue;
+
+        // Pairwise time-overlap check; fall back to exact time-slot text match
+        // when the times cannot be parsed.
+        $in_conflict = [];
+        for ($ci = 0; $ci < $n; $ci++) {
+            for ($cj = $ci + 1; $cj < $n; $cj++) {
+                $mi = ei_time_slot_minutes((string)$group_rows[$ci]['time_slot']);
+                $mj = ei_time_slot_minutes((string)$group_rows[$cj]['time_slot']);
+                if ($mi !== null && $mj !== null) {
+                    $overlaps = ($mi[0] < $mj[1] && $mj[0] < $mi[1]);
+                } else {
+                    $overlaps = trim((string)$group_rows[$ci]['time_slot']) === trim((string)$group_rows[$cj]['time_slot']);
+                }
+                if ($overlaps) {
+                    $in_conflict[$ci] = true;
+                    $in_conflict[$cj] = true;
+                }
+            }
+        }
+        if (empty($in_conflict)) continue;
+
+        $conflict_slots = array_values(array_intersect_key($group_rows, $in_conflict));
+
+        // Only report conflicts that involve the exam currently being viewed
+        $involves_this_exam = false;
+        $conflict_depts = [];
+        foreach ($conflict_slots as $cs) {
+            if ((int)$cs['exam_id'] === $id) $involves_this_exam = true;
+            $conflict_depts[(int)$cs['dept_id']] = true;
+        }
+        if (!$involves_this_exam) continue;
+
+        $room_conflicts[] = [
+            'slot_date'  => (string)$conflict_slots[0]['slot_date'],
+            'room'       => (string)$conflict_slots[0]['room_number'],
+            'rows'       => $conflict_slots,
+            'multi_dept' => count($conflict_depts) > 1,
+        ];
+    }
+}
+$room_conflict_count = count($room_conflicts);
+
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
@@ -785,6 +851,96 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
     </div>
 </div>
+
+<!-- Room overlap / conflict report -->
+<?php if (!$print_mode): ?>
+<div class="card mb-4" style="border-left:4px solid <?= $room_conflict_count > 0 ? '#e74c3c' : '#27ae60' ?>;">
+    <div class="card-header py-2 px-4 d-flex align-items-center justify-content-between">
+        <h6 class="mb-0 fw-semibold">
+            <i class="fas fa-exclamation-triangle me-2 <?= $room_conflict_count > 0 ? 'text-danger' : 'text-success' ?>"></i>
+            Room Overlap / Conflict Report
+        </h6>
+        <?php if ($room_conflict_count > 0): ?>
+        <button class="btn btn-sm btn-outline-danger" style="border-radius:8px;white-space:nowrap;"
+                type="button" data-bs-toggle="collapse" data-bs-target="#roomConflictReport" aria-expanded="true">
+            <i class="fas fa-list me-1"></i> <?= $room_conflict_count ?> conflict<?= $room_conflict_count === 1 ? '' : 's' ?> found
+        </button>
+        <?php else: ?>
+        <span class="badge bg-success bg-opacity-15 text-success">No conflicts</span>
+        <?php endif; ?>
+    </div>
+    <?php if ($room_conflict_count > 0): ?>
+    <div class="collapse show" id="roomConflictReport">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="px-3 text-center" style="width:50px;">#</th>
+                            <th>Date</th>
+                            <th>Room</th>
+                            <th>Type</th>
+                            <th>Department</th>
+                            <th>Time Slot</th>
+                            <th>Exam</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <?php foreach ($room_conflicts as $conflict_index => $conflict): ?>
+                    <?php $conflict_rowspan = count($conflict['rows']); ?>
+                    <?php foreach ($conflict['rows'] as $ci => $conflict_slot): ?>
+                    <tr class="<?= $conflict['multi_dept'] ? 'table-danger' : 'table-warning' ?>">
+                        <?php if ($ci === 0): ?>
+                        <td class="px-3 text-center fw-bold" rowspan="<?= $conflict_rowspan ?>"><?= $conflict_index + 1 ?></td>
+                        <td class="fw-semibold" rowspan="<?= $conflict_rowspan ?>"><?= date('d M Y', strtotime($conflict['slot_date'])) ?></td>
+                        <td class="fw-semibold" rowspan="<?= $conflict_rowspan ?>"><?= h($conflict['room']) ?></td>
+                        <td rowspan="<?= $conflict_rowspan ?>">
+                            <?php if ($conflict['multi_dept']): ?>
+                            <span class="badge bg-danger">Different departments</span>
+                            <?php else: ?>
+                            <span class="badge bg-warning text-dark">Same department duplicate</span>
+                            <?php endif; ?>
+                        </td>
+                        <?php endif; ?>
+                        <td>
+                            <?php if (!empty($conflict_slot['dept_name'])): ?>
+                            <span class="badge bg-primary bg-opacity-10 text-primary"><?= h($conflict_slot['dept_name']) ?></span>
+                            <?php else: ?>
+                            <span class="text-muted">No department set</span>
+                            <?php endif; ?>
+                        </td>
+                        <td><?= h($conflict_slot['time_slot']) ?></td>
+                        <td>
+                            <?php if ((int)$conflict_slot['exam_id'] === $id): ?>
+                            <span class="text-muted">This exam</span>
+                            <?php if (is_super_admin() || can_access('exam-invigilation', 'can_edit')): ?>
+                            <a href="<?= APP_URL ?>/exam-invigilation/slot-edit.php?id=<?= (int)$conflict_slot['id'] ?>&exam_id=<?= $id ?>"
+                               class="btn btn-sm btn-outline-primary ms-1 py-0" style="border-radius:6px;" title="Edit this slot">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                            <?php endif; ?>
+                            <?php else: ?>
+                            <a href="<?= APP_URL ?>/exam-invigilation/view.php?id=<?= (int)$conflict_slot['exam_id'] ?>" class="text-decoration-none">
+                                <?= h($conflict_slot['exam_name']) ?> (<?= h($conflict_slot['exam_year']) ?>)
+                            </a>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+            <div class="px-4 py-2 text-muted" style="font-size:.78rem;">
+                <i class="fas fa-info-circle me-1"></i>
+                A conflict means two or more slots are booked in the <strong>same room on the same date with overlapping times</strong> (checked across all active exams).
+                Red rows involve different departments; yellow rows are duplicates within the same department.
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
+</div>
+<?php endif; ?>
 
 <!-- Auto-assign panel -->
 <?php if (!$print_mode && (is_super_admin() || can_access('exam-invigilation', 'can_edit'))): ?>
