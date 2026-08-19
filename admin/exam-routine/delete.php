@@ -7,12 +7,28 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 csrf_check();
 
-$id = (int)($_POST['id'] ?? 0);
-if ($id > 0) {
+// Accepts a single id (row delete button) and/or ids[] (bulk delete).
+$ids = [];
+if (isset($_POST['ids']) && is_array($_POST['ids'])) {
+    foreach ($_POST['ids'] as $v) {
+        $v = (int)$v;
+        if ($v > 0) $ids[] = $v;
+    }
+}
+$single = (int)($_POST['id'] ?? 0);
+if ($single > 0) {
+    $ids[] = $single;
+}
+$ids = array_values(array_unique($ids));
+
+if ($ids) {
     // Items cascade-delete with the routine (fk_eri_routine).
-    db()->prepare('DELETE FROM exam_routines WHERE id = ?')->execute([$id]);
-    flash_set('success', 'Exam routine deleted.');
+    $ph = implode(',', array_fill(0, count($ids), '?'));
+    db()->prepare("DELETE FROM exam_routines WHERE id IN ($ph)")->execute($ids);
+    flash_set('success', count($ids) === 1
+        ? 'Exam routine deleted.'
+        : count($ids) . ' exam routines deleted.');
 } else {
-    flash_set('error', 'Routine not found.');
+    flash_set('error', 'No routines selected.');
 }
 redirect(APP_URL . '/exam-routine/index.php');
