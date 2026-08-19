@@ -246,8 +246,10 @@ function er_build_preview(array $csv, array &$errors): array
             $out[] = $p;
             continue;
         }
-        // One preview row per matching offer when several batches / shifts
-        // were listed — the same routine row is applied to each of them.
+        // One preview row per matching offer — the same routine row (same
+        // date & time) is applied to every offer that carries this course.
+        // When the offers were not explicitly listed via Batch / Shift, the
+        // rows are flagged "Check" so the user can untick unwanted ones.
         $multi     = count($batch_ids) > 1 || count($shift_toks) > 1;
         $per_offer = [];
         foreach ($matches as $m) {
@@ -256,9 +258,8 @@ function er_build_preview(array $csv, array &$errors): array
         }
         $per_offer = array_values($per_offer);
         if (!$multi && count($per_offer) > 1) {
-            $p['messages'][] = count($per_offer) . ' offers carry this course — the first match was used. '
-                . 'Add Batch / Shift columns to disambiguate.';
-            $per_offer = [$per_offer[0]];
+            $p['messages'][] = count($per_offer) . ' offers carry this course — the same date & time was applied to all of them. '
+                . 'Untick the ones you do not want, or add Batch / Shift columns to narrow the match.';
         }
 
         // ── Date & time ──
