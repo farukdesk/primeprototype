@@ -508,6 +508,17 @@ $time_slots_st->execute([$id]);
 $time_slots = array_values(array_filter(array_map(static fn ($r) => (string)$r['time_slot'], $time_slots_st->fetchAll()), static fn ($v) => trim($v) !== ''));
 $invigilators = db()->query('SELECT id, name, designation FROM ei_faculty WHERE is_active = 1 ORDER BY name ASC')->fetchAll();
 
+// Label for the currently selected invigilator (searchable filter box)
+$f_invigilator_label = '';
+if ($f_invigilator > 0) {
+    foreach ($invigilators as $inv) {
+        if ((int)$inv['id'] === $f_invigilator) {
+            $f_invigilator_label = $inv['name'] . ($inv['designation'] ? ' (' . $inv['designation'] . ')' : '');
+            break;
+        }
+    }
+}
+
 // ── Load slots ────────────────────────────────────────────────────────────────
 $where = ['s.exam_id = ?'];
 $params = [$id];
@@ -516,9 +527,8 @@ if ($f_date !== '') {
     $params[] = $f_date;
 }
 if ($f_dept > 0) {
-    $where[] = '(s.dept_id = ? OR f1.dept_id = ? OR f2.dept_id = ?)';
-    $params[] = $f_dept;
-    $params[] = $f_dept;
+    // Room department only: show slots whose room belongs to the selected department
+    $where[] = 's.dept_id = ?';
     $params[] = $f_dept;
 }
 if ($f_room !== '') {
@@ -650,15 +660,61 @@ require_once __DIR__ . '/../includes/header.php';
                     <?php endforeach; ?>
                 </select>
             </div>
-            <div class="col-12 col-md-2">
-                <select name="invigilator" class="form-select form-select-sm">
-                    <option value="0">All Invigilators</option>
+            <div class="col-12 col-md-2 position-relative">
+                <input type="hidden" name="invigilator" id="invFilterValue" value="<?= $f_invigilator ?>">
+                <input type="text" id="invFilterSearch" class="form-control form-control-sm"
+                       placeholder="All Invigilators — type to search" autocomplete="off"
+                       value="<?= h($f_invigilator_label) ?>">
+                <div id="invFilterList" class="dropdown-menu w-100 shadow-sm" style="max-height:240px;overflow-y:auto;">
+                    <button type="button" class="dropdown-item inv-filter-item" data-id="0" data-name="">All Invigilators</button>
                     <?php foreach ($invigilators as $inv): ?>
-                    <option value="<?= $inv['id'] ?>" <?= $f_invigilator === (int)$inv['id'] ? 'selected' : '' ?>>
-                        <?= h($inv['name']) ?><?= $inv['designation'] ? ' (' . h($inv['designation']) . ')' : '' ?>
-                    </option>
+                    <?php $inv_label = $inv['name'] . ($inv['designation'] ? ' (' . $inv['designation'] . ')' : ''); ?>
+                    <button type="button" class="dropdown-item inv-filter-item<?= $f_invigilator === (int)$inv['id'] ? ' active' : '' ?>"
+                            data-id="<?= (int)$inv['id'] ?>" data-name="<?= h($inv_label) ?>"><?= h($inv_label) ?></button>
                     <?php endforeach; ?>
-                </select>
+                    <div id="invFilterEmpty" class="dropdown-item text-muted d-none">No match found</div>
+                </div>
+                <script>
+                (function () {
+                    var search = document.getElementById('invFilterSearch');
+                    var hidden = document.getElementById('invFilterValue');
+                    var list   = document.getElementById('invFilterList');
+                    if (!search || !hidden || !list) return;
+                    var items = Array.prototype.slice.call(list.querySelectorAll('.inv-filter-item'));
+                    var empty = document.getElementById('invFilterEmpty');
+
+                    function open()  { list.classList.add('show'); }
+                    function close() { list.classList.remove('show'); }
+
+                    function filter() {
+                        var q = search.value.trim().toLowerCase();
+                        var visible = 0;
+                        items.forEach(function (btn) {
+                            var match = q === '' || btn.textContent.toLowerCase().indexOf(q) !== -1;
+                            btn.classList.toggle('d-none', !match);
+                            if (match) visible++;
+                        });
+                        if (empty) empty.classList.toggle('d-none', visible > 0);
+                    }
+
+                    search.addEventListener('focus', function () { filter(); open(); });
+                    search.addEventListener('input', function () {
+                        hidden.value = '0'; // typing invalidates previous selection
+                        filter();
+                        open();
+                    });
+                    items.forEach(function (btn) {
+                        btn.addEventListener('click', function () {
+                            hidden.value = btn.getAttribute('data-id');
+                            search.value = btn.getAttribute('data-name');
+                            close();
+                        });
+                    });
+                    document.addEventListener('click', function (e) {
+                        if (!list.contains(e.target) && e.target !== search) close();
+                    });
+                })();
+                </script>
             </div>
             <div class="col-auto d-flex gap-2">
                 <button class="btn btn-sm btn-primary">Filter</button>
