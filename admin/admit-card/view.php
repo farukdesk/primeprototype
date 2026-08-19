@@ -68,17 +68,35 @@ if ($card['batch_id']) {
     $batch_params = [$card['batch_id']];
 }
 
-$students_stmt = $db->prepare(
-    "SELECT s.id, s.student_id, s.full_name, s.status, s.photo,
-            p.id AS pkg_id
-     FROM students s
-     LEFT JOIN sfp_packages p ON p.student_id = s.id
-     WHERE s.dept_id = ? AND s.program_id = ? $batch_cond
-       AND s.status NOT IN ('Withdrawn','Expelled')
-     GROUP BY s.id
-     ORDER BY s.full_name ASC"
-);
-$students_stmt->execute(array_merge([$card['dept_id'], $card['program_id']], $batch_params));
+$routine_id = (int)($card['routine_id'] ?? 0);
+if ($routine_id > 0) {
+    // Routine-linked card: only students enrolled (registered) in the
+    // routine's courses are eligible.
+    $students_stmt = $db->prepare(
+        "SELECT s.id, s.student_id, s.full_name, s.status, s.photo,
+                p.id AS pkg_id
+         FROM students s
+         JOIN co_registrations reg ON reg.student_id = s.id
+         JOIN exam_routine_items i ON i.offer_subject_id = reg.offer_subject_id AND i.routine_id = ?
+         LEFT JOIN sfp_packages p ON p.student_id = s.id
+         WHERE s.status NOT IN ('Withdrawn','Expelled')
+         GROUP BY s.id
+         ORDER BY s.full_name ASC"
+    );
+    $students_stmt->execute([$routine_id]);
+} else {
+    $students_stmt = $db->prepare(
+        "SELECT s.id, s.student_id, s.full_name, s.status, s.photo,
+                p.id AS pkg_id
+         FROM students s
+         LEFT JOIN sfp_packages p ON p.student_id = s.id
+         WHERE s.dept_id = ? AND s.program_id = ? $batch_cond
+           AND s.status NOT IN ('Withdrawn','Expelled')
+         GROUP BY s.id
+         ORDER BY s.full_name ASC"
+    );
+    $students_stmt->execute(array_merge([$card['dept_id'], $card['program_id']], $batch_params));
+}
 $students = $students_stmt->fetchAll();
 
 // Existing overrides

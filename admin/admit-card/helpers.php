@@ -80,6 +80,63 @@ function ac_has_override(int $admit_card_id, int $student_id): bool
     return $stmt->fetchColumn() !== false;
 }
 
+// ── Exam-routine linkage (see admin/admit-card-routine-link.sql) ─────────────
+
+/** Routine linked to a card, or 0 (also 0 when the column doesn't exist yet). */
+function ac_card_routine_id(int $admit_card_id): int
+{
+    try {
+        $st = db()->prepare('SELECT routine_id FROM ac_admit_cards WHERE id = ?');
+        $st->execute([$admit_card_id]);
+        return (int)$st->fetchColumn();
+    } catch (Throwable $e) {
+        return 0;
+    }
+}
+
+/** Is the student registered in at least one course of the routine? */
+function ac_is_enrolled_in_routine(int $routine_id, int $student_id): bool
+{
+    try {
+        $st = db()->prepare(
+            'SELECT 1
+               FROM exam_routine_items i
+               JOIN co_registrations r ON r.offer_subject_id = i.offer_subject_id
+              WHERE i.routine_id = ? AND r.student_id = ?
+              LIMIT 1'
+        );
+        $st->execute([$routine_id, $student_id]);
+        return $st->fetchColumn() !== false;
+    } catch (Throwable $e) {
+        return true; // fail open if routine tables are unavailable
+    }
+}
+
+/**
+ * Courses of a card for one student. For routine-linked cards the list is
+ * filtered to the courses the student actually registered for; manually
+ * added rows (no offer_subject_id) are always kept.
+ */
+function ac_get_courses_for_student(int $admit_card_id, int $student_id): array
+{
+    $courses = ac_get_courses($admit_card_id);
+    if (ac_card_routine_id($admit_card_id) <= 0) return $courses;
+
+    try {
+        $st = db()->prepare('SELECT offer_subject_id FROM co_registrations WHERE student_id = ?');
+        $st->execute([$student_id]);
+        $reg = array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+    } catch (Throwable $e) {
+        return $courses;
+    }
+
+    $filtered = array_values(array_filter($courses, function ($c) use ($reg) {
+        $osid = (int)($c['offer_subject_id'] ?? 0);
+        return $osid <= 0 || in_array($osid, $reg, true);
+    }));
+    return $filtered ?: $courses;
+}
+
 // ── Get or create a unique QR token for a student+card combination ────────────
 
 function ac_get_or_create_token(int $admit_card_id, int $student_id): string
@@ -117,6 +174,17 @@ function ac_check_access(int $admit_card_id, int $student_id): array
     // Check for admin override first
     if (ac_has_override($admit_card_id, $student_id)) {
         return ['allowed' => true];
+    }
+
+    // Routine-linked cards: only students actually enrolled (registered)
+    // in the routine's courses may access the card.
+    $routine_id = ac_card_routine_id($admit_card_id);
+    if ($routine_id > 0 && !ac_is_enrolled_in_routine($routine_id, $student_id)) {
+        return [
+            'allowed' => false,
+            'due'     => 0.0,
+            'reason'  => 'You are not enrolled in any course of this exam routine. Please contact your department office.',
+        ];
     }
 
     // Find the student's package and compute outstanding balance
