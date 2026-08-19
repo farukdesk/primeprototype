@@ -49,7 +49,8 @@ if ($f_invigilator > 0) $filter_query['invigilator'] = $f_invigilator;
 $view_url  = APP_URL . '/exam-invigilation/view.php?' . http_build_query(array_merge(['id' => $id], $filter_query));
 $print_url = APP_URL . '/exam-invigilation/view.php?' . http_build_query(array_merge(['id' => $id], $filter_query, ['print' => 1]));
 $auto_assign_max_slots         = ei_get_auto_assign_max_slots();
-$auto_assign_max_slots_per_day = ei_get_auto_assign_max_slots_per_day();
+// Hard cap: no faculty may ever receive 3 or more shifts on the same day
+$auto_assign_max_slots_per_day = min(ei_get_auto_assign_max_slots_per_day(), 2);
 
 // ── Handle POST actions ───────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
