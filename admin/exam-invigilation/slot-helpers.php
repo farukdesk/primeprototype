@@ -33,6 +33,36 @@ function ei_faculty_has_overlap(int $faculty_id, string $slot_date, string $time
     return (bool)$st->fetchColumn();
 }
 
+/**
+ * Return the IDs of faculty already assigned to any slot at the same
+ * date + time_slot, keyed by faculty ID (optionally excluding one slot,
+ * e.g. the slot currently being edited).
+ *
+ * @return array<int, true>
+ */
+function ei_get_busy_faculty_ids(string $slot_date, string $time_slot, ?int $exclude_slot_id = null): array
+{
+    if ($slot_date === '' || $time_slot === '') return [];
+
+    $sql = 'SELECT faculty1_id, faculty2_id FROM ei_slots
+            WHERE slot_date = ? AND time_slot = ?';
+    $params = [$slot_date, $time_slot];
+    if ($exclude_slot_id !== null) {
+        $sql .= ' AND id != ?';
+        $params[] = $exclude_slot_id;
+    }
+
+    $st = db()->prepare($sql);
+    $st->execute($params);
+
+    $busy = [];
+    foreach ($st->fetchAll() as $row) {
+        if (!empty($row['faculty1_id'])) $busy[(int)$row['faculty1_id']] = true;
+        if (!empty($row['faculty2_id'])) $busy[(int)$row['faculty2_id']] = true;
+    }
+    return $busy;
+}
+
 function ei_get_faculty_list(): array
 {
     return db()->query(
