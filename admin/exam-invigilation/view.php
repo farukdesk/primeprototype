@@ -49,7 +49,8 @@ if ($f_invigilator > 0) $filter_query['invigilator'] = $f_invigilator;
 $view_url  = APP_URL . '/exam-invigilation/view.php?' . http_build_query(array_merge(['id' => $id], $filter_query));
 $print_url = APP_URL . '/exam-invigilation/view.php?' . http_build_query(array_merge(['id' => $id], $filter_query, ['print' => 1]));
 $auto_assign_max_slots         = ei_get_auto_assign_max_slots();
-$auto_assign_max_slots_per_day = ei_get_auto_assign_max_slots_per_day();
+// Hard cap: no faculty may ever receive 3 or more shifts on the same day
+$auto_assign_max_slots_per_day = min(ei_get_auto_assign_max_slots_per_day(), 2);
 
 // ── Handle POST actions ───────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
@@ -175,9 +176,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
             redirect($view_url);
         }
 
-        $faculty_weekend_map = [];
+        // Designation-based weight: juniors get proportionally more slots than seniors
+        $faculty_weight_map = [];
         foreach ($all_faculty as $f) {
-            $faculty_weekend_map[(int)$f['id']] = ei_get_faculty_weekend_days($f);
+            $faculty_weight_map[(int)$f['id']] = ei_designation_weight($f['designation'] ?? null);
         }
 
         // Build a map: date+time_slot → array of already-assigned faculty_ids
@@ -277,13 +279,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
             $daily_workload[(int)$row['faculty_id']][(string)$row['slot_date']] = (int)$row['c'];
         }
 
-        // Helper: sort a pool of faculty by workload (fewest assignments first), shuffle ties
-        $sort_by_workload = static function (array $pool) use (&$workload): array {
-            usort($pool, static function ($a, $b) use ($workload) {
-                $wa = $workload[(int)$a['id']] ?? 0;
-                $wb = $workload[(int)$b['id']] ?? 0;
-                if ($wa !== $wb) return $wa <=> $wb;
-                return random_int(0, 1) ? -1 : 1; // shuffle within same workload tier
+        // Track per-day working time span: [faculty_id][date] => ['start' => min, 'end' => max] (minutes)
+        $daily_span = [];
+        $span_st = db()->prepare(
+            "SELECT faculty_id, slot_date, time_slot
+             FROM (
+                 SELECT s.faculty1_id AS faculty_id, s.slot_date, s.time_slot
+                 FROM ei_slots s
+                 JOIN ei_exams e ON e.id = s.exam_id
+                 WHERE e.is_active = 1
+                   AND s.faculty1_id IS NOT NULL{$daily_count_scope_sql}
+                 UNION ALL
+                 SELECT s.faculty2_id, s.slot_date, s.time_slot
+                 FROM ei_slots s
+                 JOIN ei_exams e ON e.id = s.exam_id
+                 WHERE e.is_active = 1
+                   AND s.faculty2_id IS NOT NULL{$daily_count_scope_sql}
+             ) t"
+        );
+        $span_st->execute($assignment_params);
+        foreach ($span_st->fetchAll() as $row) {
+            $mins = ei_time_slot_minutes((string)$row['time_slot']);
+            if ($mins === null) continue;
+            $fid = (int)$row['faculty_id'];
+            $d   = (string)$row['slot_date'];
+            if (!isset($daily_span[$fid][$d])) {
+                $daily_span[$fid][$d] = ['start' => $mins[0], 'end' => $mins[1]];
+            } else {
+                $daily_span[$fid][$d]['start'] = min($daily_span[$fid][$d]['start'], $mins[0]);
+                $daily_span[$fid][$d]['end']   = max($daily_span[$fid][$d]['end'], $mins[1]);
+            }
+        }
+
+        // Helper: sort a pool by seniority-weighted workload (juniors get more slots),
+        // then junior-first on ties, then shuffle
+        $sort_by_workload = static function (array $pool) use (&$workload, $faculty_weight_map): array {
+            usort($pool, static function ($a, $b) use (&$workload, $faculty_weight_map) {
+                $ida = (int)$a['id'];
+                $idb = (int)$b['id'];
+                $ea  = ($workload[$ida] ?? 0) / max(1, $faculty_weight_map[$ida] ?? 1);
+                $eb  = ($workload[$idb] ?? 0) / max(1, $faculty_weight_map[$idb] ?? 1);
+                if ($ea !== $eb) return $ea <=> $eb;
+                // Junior first on ties (higher rank number = more junior)
+                $ra = ei_designation_rank($a['designation'] ?? null);
+                $rb = ei_designation_rank($b['designation'] ?? null);
+                if ($ra !== $rb) return $rb <=> $ra;
+                return random_int(0, 1) ? -1 : 1; // shuffle within same tier
             });
             return $pool;
         };
@@ -294,23 +335,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
             $key             = $slot_date . '|' . $time_slot;
             $slot_pref_dept  = isset($slot['dept_id']) ? (int)$slot['dept_id'] : 0;
 
-            $day_of_week  = (int)date('w', strtotime($slot_date));
-
-            $slot_starts_after_6pm = ei_slot_starts_after_6pm($time_slot);
+            $slot_minutes = ei_time_slot_minutes($time_slot);
 
             // Filter eligible faculty
+            // (weekend and female-after-6PM restrictions have been removed)
             $eligible = [];
             foreach ($all_faculty as $f) {
-                $faculty_weekend_days = $faculty_weekend_map[(int)$f['id']] ?? [];
-                if (in_array($day_of_week, $faculty_weekend_days, true)) continue;
+                $fid = (int)$f['id'];
                 // Skip if already busy in this date+time_slot
-                if (isset($busy_map[$key][(int)$f['id']])) continue;
+                if (isset($busy_map[$key][$fid])) continue;
                 // Skip if the faculty has already reached the configured total limit
-                if (($workload[(int)$f['id']] ?? 0) >= $auto_assign_max_slots) continue;
+                if (($workload[$fid] ?? 0) >= $auto_assign_max_slots) continue;
                 // Skip if the faculty has reached the per-day limit for this slot's date
-                if (($daily_workload[(int)$f['id']][$slot_date] ?? 0) >= $auto_assign_max_slots_per_day) continue;
-                // Female faculty are not assigned to slots starting at or after 6 PM
-                if ($slot_starts_after_6pm && !empty($f['gender']) && $f['gender'] === 'Female') continue;
+                if (($daily_workload[$fid][$slot_date] ?? 0) >= $auto_assign_max_slots_per_day) continue;
+                // Daily working-window rule: combined with existing shifts that day,
+                // a start before 2 PM must finish by 6 PM; a start at/after 2 PM by 10 PM
+                if ($slot_minutes !== null && isset($daily_span[$fid][$slot_date])) {
+                    $span      = $daily_span[$fid][$slot_date];
+                    $new_start = min($span['start'], $slot_minutes[0]);
+                    $new_end   = max($span['end'], $slot_minutes[1]);
+                    if ($new_end > ei_day_window_end_minutes($new_start)) continue;
+                }
                 $eligible[] = $f;
             }
 
@@ -383,15 +428,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
             ]);
 
             // Mark these faculty as busy for subsequent slots in the same run
-            if ($f1) {
-                $busy_map[$key][(int)$f1['id']] = true;
-                $workload[(int)$f1['id']] = ($workload[(int)$f1['id']] ?? 0) + 1;
-                $daily_workload[(int)$f1['id']][$slot_date] = ($daily_workload[(int)$f1['id']][$slot_date] ?? 0) + 1;
-            }
-            if ($f2) {
-                $busy_map[$key][(int)$f2['id']] = true;
-                $workload[(int)$f2['id']] = ($workload[(int)$f2['id']] ?? 0) + 1;
-                $daily_workload[(int)$f2['id']][$slot_date] = ($daily_workload[(int)$f2['id']][$slot_date] ?? 0) + 1;
+            foreach ([$f1, $f2] as $fx) {
+                if (!$fx) continue;
+                $fid = (int)$fx['id'];
+                $busy_map[$key][$fid] = true;
+                $workload[$fid] = ($workload[$fid] ?? 0) + 1;
+                $daily_workload[$fid][$slot_date] = ($daily_workload[$fid][$slot_date] ?? 0) + 1;
+                if ($slot_minutes !== null) {
+                    if (!isset($daily_span[$fid][$slot_date])) {
+                        $daily_span[$fid][$slot_date] = ['start' => $slot_minutes[0], 'end' => $slot_minutes[1]];
+                    } else {
+                        $daily_span[$fid][$slot_date]['start'] = min($daily_span[$fid][$slot_date]['start'], $slot_minutes[0]);
+                        $daily_span[$fid][$slot_date]['end']   = max($daily_span[$fid][$slot_date]['end'], $slot_minutes[1]);
+                    }
+                }
             }
 
             if ($f1 && $f2) {
