@@ -318,6 +318,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $multi = count($selected_keys) > 1;
 
+        // Allowlist marker column (see admin/admit-card-token-allowlist.sql):
+        // pre-seeded tokens must be distinguishable from lazily created
+        // QR/download tokens, otherwise the portal visibility check breaks.
+        $has_allowlist_col = false;
+        try { $db->query('SELECT is_allowlist FROM ac_student_tokens LIMIT 1'); $has_allowlist_col = true; } catch (Throwable $e) {}
+
         foreach ($selected_keys as $key) {
             $g = $groups[$key];
 
@@ -367,11 +373,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
             }
 
-            // Pre-seed tokens for matched students so each student only sees their
-            // own section's admit card on the portal (not all cards for the program).
+            // Pre-seed ALLOWLIST tokens for matched students so each student only
+            // sees their own section's admit card on the portal (not all cards
+            // for the program).
             $token_stmt = $db->prepare(
-                'INSERT IGNORE INTO ac_student_tokens (admit_card_id, student_id, token)
-                 VALUES (?, ?, ?)'
+                $has_allowlist_col
+                    ? 'INSERT IGNORE INTO ac_student_tokens (admit_card_id, student_id, token, is_allowlist)
+                       VALUES (?, ?, ?, 1)'
+                    : 'INSERT IGNORE INTO ac_student_tokens (admit_card_id, student_id, token)
+                       VALUES (?, ?, ?)'
             );
             foreach ($g['students'] as $stu) {
                 if ($stu['matched'] && !empty($stu['db_id'])) {

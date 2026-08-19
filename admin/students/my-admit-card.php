@@ -57,8 +57,17 @@ $page_title = 'My Admit Card';
 //   - an admin override always makes the card visible.
 $has_routine_col = false;
 $has_subject_col = false;
+$has_allowlist_col = false;
 try { $db->query('SELECT routine_id FROM ac_admit_cards LIMIT 1'); $has_routine_col = true; } catch (Throwable $e) {}
 try { $db->query('SELECT offer_subject_id FROM ac_admit_card_courses LIMIT 1'); $has_subject_col = true; } catch (Throwable $e) {}
+try { $db->query('SELECT is_allowlist FROM ac_student_tokens LIMIT 1'); $has_allowlist_col = true; } catch (Throwable $e) {}
+
+// Token-based visibility must only consider ALLOWLIST tokens (pre-seeded by
+// bulk import). QR/download tokens are created lazily for every student who
+// downloads a card — counting those would hide the card from all other
+// eligible students as soon as the first download happens.
+// See admin/admit-card-token-allowlist.sql.
+$allow_flag = $has_allowlist_col ? ' AND t.is_allowlist = 1' : '';
 
 $params = [$student['dept_id'], $student['program_id'], $student_id];
 
@@ -102,8 +111,8 @@ $cards_stmt = $db->prepare(
        AND ac.dept_id    = ?
        AND ac.program_id = ?
        AND (
-           NOT EXISTS (SELECT 1 FROM ac_student_tokens t WHERE t.admit_card_id = ac.id)
-           OR EXISTS  (SELECT 1 FROM ac_student_tokens t WHERE t.admit_card_id = ac.id AND t.student_id = ?)
+           NOT EXISTS (SELECT 1 FROM ac_student_tokens t WHERE t.admit_card_id = ac.id' . $allow_flag . ')
+           OR EXISTS  (SELECT 1 FROM ac_student_tokens t WHERE t.admit_card_id = ac.id AND t.student_id = ?' . $allow_flag . ')
        )' . $enroll_sql . '
      ORDER BY ac.created_at DESC'
 );
