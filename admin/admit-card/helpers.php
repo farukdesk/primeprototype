@@ -187,20 +187,22 @@ function ac_get_merged_courses_for_student(int $admit_card_id, int $student_id):
 
     $norm = static fn($s) => strtolower((string)preg_replace('/[^a-z0-9]+/i', '', (string)$s));
 
-    // Sibling cards: active, same dept + program, same normalised exam name
-    // and semester; when both cards are batch-specific the batches must match.
+    // Sibling cards: active, same dept + program and the same normalised
+    // exam name. Semester and batch are deliberately NOT compared: students
+    // sometimes register for courses in offers of OTHER batches (retakes /
+    // continuing with a different batch — see course-offer/registrations.php),
+    // and those offers produce cards with a different batch_id and semester
+    // label. Merging across them is safe because a sibling course is only
+    // added when the student is actually registered in it (see below).
     try {
         $st = db()->prepare(
-            'SELECT id, exam_name, semester, batch_id FROM ac_admit_cards
+            'SELECT id, exam_name FROM ac_admit_cards
               WHERE is_active = 1 AND dept_id = ? AND program_id = ? AND id <> ?'
         );
         $st->execute([(int)$card['dept_id'], (int)$card['program_id'], $admit_card_id]);
         $siblings = [];
         foreach ($st->fetchAll() as $c) {
             if ($norm($c['exam_name']) !== $norm($card['exam_name'])) continue;
-            if ($norm($c['semester'])  !== $norm($card['semester']))  continue;
-            if (!empty($card['batch_id']) && !empty($c['batch_id'])
-                && (int)$c['batch_id'] !== (int)$card['batch_id']) continue;
             $siblings[] = (int)$c['id'];
         }
     } catch (Throwable $e) {
