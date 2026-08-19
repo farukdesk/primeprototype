@@ -283,7 +283,6 @@ function acg_build_preview(string $schedule_text, array &$errors): ?array
         foreach ($subjects_by_offer[(int)$o['id']] ?? [] as $s) {
             $osid = (int)$s['offer_subject_id'];
             if (isset($g['osids'][$osid])) continue;
-            if ((int)$s['reg_count'] <= 0) { $skipped_no_reg++; continue; }
             $label = trim((string)$s['course_code'] . ' ' . (string)$s['course_name']);
 
             // Match by course code first, then by title (exact → fuzzy).
@@ -303,6 +302,15 @@ function acg_build_preview(string $schedule_text, array &$errors): ?array
                     }
                 }
             }
+
+            // Only courses that are actually part of the uploaded schedule
+            // count as "skipped without registrations" — empty offer
+            // subjects outside this exam's schedule are ignored silently.
+            if ((int)$s['reg_count'] <= 0) {
+                if ($idxs) $skipped_no_reg++;
+                continue;
+            }
+
             if (!$idxs) {
                 $g['warnings'][] = $label . ' (' . (int)$s['reg_count'] . ' students): not in the schedule — skipped.';
                 continue;
