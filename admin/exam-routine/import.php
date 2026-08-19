@@ -5,8 +5,9 @@
  * Step 1: choose an active exam and upload (or paste) a CSV.
  * Step 2: every row is fuzzy-matched server-side — department (aliases such
  *         as CSE, EEE, Bangla, FDAE, Civil/CE, acronyms and parenthetical
- *         short names), program (BBA, CSE…), batch ("59" = "59th"), shift
- *         (Day / Night from the course offer),
+ *         short names), program (BBA, CSE…), batch ("59" = "59th"; a list
+ *         such as "68, 14, 67, 66" applies the row to every listed batch),
+ *         shift (Day / Night from the course offer),
  *         course code / course title against the active course offers, and
  *         the exam date / time in many common spellings — and shown in a
  *         preview table with a per-row status.
@@ -135,18 +136,30 @@ function er_build_preview(array $csv, array &$errors): array
             }
         }
 
-        // ── Batch (optional – narrows the offer search) ──
-        $batch = null;
+        // ── Batch(es) (optional – narrows the offer search) ──
+        // Several batches may share one row ("68, 14, 67, 66") — the same
+        // routine row is then applied to every listed batch.
+        $batch_ids   = [];
+        $batch_names = [];
         if ($row['batch'] !== '') {
-            [$batch, $bamb] = er_match_batch($batches, $row['batch']);
-            if (!$batch) {
-                $p['messages'][] = ($bamb
-                    ? 'Batch "' . $row['batch'] . '" is ambiguous'
-                    : 'Batch "' . $row['batch'] . '" not recognised')
-                    . ' — searching all batches.';
-            } else {
-                $p['resolved']['batch'] = $batch['name'];
+            foreach (preg_split('/[,;\/&+]+|\band\b/i', $row['batch']) as $tok) {
+                $tok = trim((string)$tok);
+                if ($tok === '') continue;
+                [$b, $bamb] = er_match_batch($batches, $tok);
+                if ($b) {
+                    if (!in_array((int)$b['id'], $batch_ids, true)) {
+                        $batch_ids[]   = (int)$b['id'];
+                        $batch_names[] = (string)$b['name'];
+                    }
+                } else {
+                    $p['messages'][] = ($bamb
+                        ? 'Batch "' . $tok . '" is ambiguous'
+                        : 'Batch "' . $tok . '" not recognised')
+                        . ' — this batch was skipped.';
+                }
             }
+            if ($batch_ids) $p['resolved']['batch'] = implode(', ', $batch_names);
+            else $p['messages'][] = 'No listed batch recognised — searching all batches.';
         }
 
         // ── Candidate active offers ──
@@ -158,7 +171,10 @@ function er_build_preview(array $csv, array &$errors): array
                   WHERE o.status = 'active' AND o.dept_id = ?";
         $args = [(int)$dept['id']];
         if ($program) { $sql .= ' AND o.program_id = ?'; $args[] = (int)$program['id']; }
-        if ($batch)   { $sql .= ' AND o.batch_id = ?';   $args[] = (int)$batch['id']; }
+        if ($batch_ids) {
+            $sql .= ' AND o.batch_id IN (' . implode(',', array_fill(0, count($batch_ids), '?')) . ')';
+            $args = array_merge($args, $batch_ids);
+        }
         $st = db()->prepare($sql);
         $st->execute($args);
         $offers = $st->fetchAll();
@@ -168,16 +184,24 @@ function er_build_preview(array $csv, array &$errors): array
             continue;
         }
 
-        // ── Shift (Day / Night) narrows when it matches at least one offer ──
+        // ── Shift(s) (Day / Night) narrow when they match at least one offer ──
+        // "Day/Night" or "Day, Night" keeps the offers of both shifts.
+        $shift_toks = [];
         if ($row['shift'] !== '') {
-            $sh   = er_norm($row['shift']);
-            $with = array_values(array_filter($offers, function ($o) use ($sh) {
+            foreach (preg_split('/[,;\/&+]+|\band\b/i', $row['shift']) as $tok) {
+                $t = er_norm((string)$tok);
+                if ($t !== '') $shift_toks[] = $t;
+            }
+            $with = array_values(array_filter($offers, function ($o) use ($shift_toks) {
                 $os = er_norm((string)($o['shift'] ?? ''));
-                if ($os === '' || $sh === '') return false;
-                return $os === $sh || $os[0] === $sh; // "d" → Day, "n" → Night
+                if ($os === '') return false;
+                foreach ($shift_toks as $sh) {
+                    if ($os === $sh || $os[0] === $sh) return true; // "d" → Day, "n" → Night
+                }
+                return false;
             }));
             if ($with) $offers = $with;
-            else $p['messages'][] = 'Shift "' . $row['shift'] . '" matched no offer — shift ignored.';
+            elseif ($shift_toks) $p['messages'][] = 'Shift "' . $row['shift'] . '" matched no offer — shift ignored.';
         }
 
         // ── Subjects of the candidate offers ──
@@ -222,14 +246,19 @@ function er_build_preview(array $csv, array &$errors): array
             $out[] = $p;
             continue;
         }
-        if (count($matches) > 1) {
-            $p['messages'][] = count($matches) . ' offers carry this course — the first match was used. '
-                . 'Add Batch / Shift columns to disambiguate.';
+        // One preview row per matching offer when several batches / shifts
+        // were listed — the same routine row is applied to each of them.
+        $multi     = count($batch_ids) > 1 || count($shift_toks) > 1;
+        $per_offer = [];
+        foreach ($matches as $m) {
+            $oid = (int)$m['offer_id'];
+            if (!isset($per_offer[$oid])) $per_offer[$oid] = $m;
         }
-        $subject = $matches[0];
-        $offer   = null;
-        foreach ($offers as $o) {
-            if ((int)$o['id'] === (int)$subject['offer_id']) { $offer = $o; break; }
+        $per_offer = array_values($per_offer);
+        if (!$multi && count($per_offer) > 1) {
+            $p['messages'][] = count($per_offer) . ' offers carry this course — the first match was used. '
+                . 'Add Batch / Shift columns to disambiguate.';
+            $per_offer = [$per_offer[0]];
         }
 
         // ── Date & time ──
@@ -254,27 +283,34 @@ function er_build_preview(array $csv, array &$errors): array
             $start = $end = null;
         }
 
-        $p['ok'] = true;
-        $p['resolved'] = array_merge($p['resolved'], [
-            'offer_id'         => (int)$subject['offer_id'],
-            'offer_subject_id' => (int)$subject['offer_subject_id'],
-            'offer_label'      => trim(
-                ($offer && $offer['batch_name'] ? 'Batch ' . $offer['batch_name'] : 'Offer #' . $subject['offer_id'])
-                . ($offer && $offer['semester'] ? ' · ' . $offer['semester'] : '')
-                . ($offer && $offer['shift']    ? ' · ' . $offer['shift'] : '')
-            ),
-            'program'          => $p['resolved']['program'] ?? (string)($offer['program_name'] ?? ''),
-            'course_code'      => (string)$subject['course_code'],
-            'course_title'     => (string)$subject['course_name'],
-            'teachers'         => (string)($subject['teachers'] ?? ''),
-            'students'         => er_registered_count((int)$subject['offer_subject_id']),
-            'date'             => $date,
-            'start'            => $start,
-            'end'              => $end,
-            'room'             => $row['room'],
-            'remarks'          => $row['remarks'],
-        ]);
-        $out[] = $p;
+        foreach ($per_offer as $subject) {
+            $offer = null;
+            foreach ($offers as $o) {
+                if ((int)$o['id'] === (int)$subject['offer_id']) { $offer = $o; break; }
+            }
+            $q = $p;
+            $q['ok'] = true;
+            $q['resolved'] = array_merge($q['resolved'], [
+                'offer_id'         => (int)$subject['offer_id'],
+                'offer_subject_id' => (int)$subject['offer_subject_id'],
+                'offer_label'      => trim(
+                    ($offer && $offer['batch_name'] ? 'Batch ' . $offer['batch_name'] : 'Offer #' . $subject['offer_id'])
+                    . ($offer && $offer['semester'] ? ' · ' . $offer['semester'] : '')
+                    . ($offer && $offer['shift']    ? ' · ' . $offer['shift'] : '')
+                ),
+                'program'          => $p['resolved']['program'] ?? (string)($offer['program_name'] ?? ''),
+                'course_code'      => (string)$subject['course_code'],
+                'course_title'     => (string)$subject['course_name'],
+                'teachers'         => (string)($subject['teachers'] ?? ''),
+                'students'         => er_registered_count((int)$subject['offer_subject_id']),
+                'date'             => $date,
+                'start'            => $start,
+                'end'              => $end,
+                'room'             => $row['room'],
+                'remarks'          => $row['remarks'],
+            ]);
+            $out[] = $q;
+        }
     }
 
     if (!$out) $errors[] = 'No data rows found in the CSV.';
@@ -495,7 +531,9 @@ require_once __DIR__ . '/../includes/header.php';
                 Short names are understood — e.g. <strong>CSE</strong>, <strong>EEE</strong>, <strong>Bangla</strong>,
                 <strong>FDAE</strong>, <strong>Civil</strong>/<strong>CE</strong>, <strong>BBA</strong>;
                 shift is <strong>Day</strong> or <strong>Night</strong> (also <strong>D</strong>/<strong>N</strong>);
-                batch <strong>59</strong> matches “59th”; dates and times in most common formats are accepted.
+                batch <strong>59</strong> matches “59th”; several batches in one cell
+                (e.g. <strong>“68, 14, 67, 66”</strong>) apply the same row to every listed batch;
+                dates and times in most common formats are accepted.
                 The teacher, student count, course code and title always come from the matched course offer.
             </div>
             <button type="submit" class="btn btn-primary mt-3" style="border-radius:10px;">
