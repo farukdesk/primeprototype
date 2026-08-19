@@ -31,6 +31,7 @@ $page_title = 'Generate Admit Cards';
 $db         = db();
 $errors     = [];
 $preview    = null;
+$dup_cards  = [];
 
 $exam_name     = trim((string)($_POST['exam_name'] ?? ''));
 $semester      = trim((string)($_POST['semester']  ?? ''));
@@ -87,6 +88,25 @@ function acg_parse_text(string $text): array
 function acg_code_key(string $s): string
 {
     return strtolower((string)preg_replace('/[^a-z0-9]+/i', '', $s));
+}
+
+/**
+ * Level key of a course title: its digits / roman numerals as tokens
+ * ("Physics II" → "2", "Math 3" → "3", "Physics" → ""). Fuzzy title
+ * matching is only allowed between titles with the SAME level key, so
+ * "Physics I" can never take the "Physics II" schedule row.
+ */
+function acg_level_key(string $title): string
+{
+    static $roman = ['i' => 1, 'ii' => 2, 'iii' => 3, 'iv' => 4, 'v' => 5,
+                     'vi' => 6, 'vii' => 7, 'viii' => 8, 'ix' => 9, 'x' => 10];
+    $out = [];
+    foreach (preg_split('/[^a-z0-9]+/i', strtolower($title)) ?: [] as $tok) {
+        if ($tok === '') continue;
+        if (ctype_digit($tok))      { $out[] = (int)$tok; continue; }
+        if (isset($roman[$tok]))    { $out[] = $roman[$tok]; }
+    }
+    return implode('.', $out);
 }
 
 /** Parse a time cell ("11:00 AM - 1:00 PM") → [start 'H:i'|null, label]. */
@@ -286,19 +306,25 @@ function acg_build_preview(string $schedule_text, array &$errors): ?array
             $label = trim((string)$s['course_code'] . ' ' . (string)$s['course_name']);
 
             // Match by course code first, then by title (exact → fuzzy).
-            $idxs = [];
+            $idxs      = [];
+            $via_title = false;
             $ck = acg_code_key((string)$s['course_code']);
             if ($ck !== '' && isset($by_code[$ck])) {
                 $idxs = $by_code[$ck];
             } else {
                 $tn = er_norm((string)$s['course_name']);
                 if ($tn !== '' && isset($by_title[$tn])) {
-                    $idxs = $by_title[$tn];
+                    $idxs      = $by_title[$tn];
+                    $via_title = true;
                 } elseif (strlen($tn) >= 5) {
+                    // Fuzzy fallback — only between titles with the same
+                    // level key, so "Physics I" never gets "Physics II".
+                    $lvl = acg_level_key((string)$s['course_name']);
                     foreach ($by_title as $k => $list) {
-                        if (strpos($k, $tn) !== false || strpos($tn, $k) !== false) { $idxs = $list; break; }
+                        if (acg_level_key((string)$entries[$list[0]]['title']) !== $lvl) continue;
+                        if (strpos($k, $tn) !== false || strpos($tn, $k) !== false) { $idxs = $list; $via_title = true; break; }
                         similar_text($k, $tn, $pct);
-                        if ($pct >= 85) { $idxs = $list; break; }
+                        if ($pct >= 85) { $idxs = $list; $via_title = true; break; }
                     }
                 }
             }
@@ -323,6 +349,11 @@ function acg_build_preview(string $schedule_text, array &$errors): ?array
                 continue;
             }
             if ($warn !== null) $g['warnings'][] = $label . ': ' . $warn . '.';
+            if ($via_title) {
+                $g['warnings'][] = $label . ': matched by course TITLE (schedule line '
+                    . (int)$entries[$pick]['line'] . ', code "' . trim((string)$entries[$pick]['code'])
+                    . '") because the course code was not found in the schedule — please verify.';
+            }
             $entries[$pick]['used'] = true;
 
             $g['osids'][$osid] = true;
@@ -365,10 +396,50 @@ function acg_build_preview(string $schedule_text, array &$errors): ?array
             . ' (' . date('d M Y', strtotime($en['date'])) . ($en['slot'] !== '' ? ', ' . $en['slot'] : '') . ')';
     }
 
+    // ── Student-level clash check ───────────────────────────────────
+    // A student registered in TWO different courses that landed on the same
+    // date + time slot (retakes across batches / sections are the usual
+    // cause) would get two exams at once — surfaced BEFORE generating.
+    $slot_of = [];
+    foreach ($groups as $cg) {
+        foreach ($cg['courses'] as $c) $slot_of[(int)$c['offer_subject_id']] = $c;
+    }
+    $clashes = [];
+    if ($slot_of) {
+        $ids = array_keys($slot_of);
+        $iph = implode(',', array_fill(0, count($ids), '?'));
+        $rs  = $db->prepare(
+            "SELECT r.offer_subject_id, r.student_id,
+                    s.student_id AS student_no, s.full_name
+               FROM co_registrations r
+               JOIN students s ON s.id = r.student_id
+              WHERE r.offer_subject_id IN ($iph) AND s.status = 'Active'"
+        );
+        $rs->execute($ids);
+        $per = [];
+        foreach ($rs->fetchAll() as $r) {
+            $c   = $slot_of[(int)$r['offer_subject_id']];
+            $key = $c['exam_date'] . '|' . $c['time_slot'];
+            $sid = (int)$r['student_id'];
+            $per[$sid]['who'] = $r['full_name'] . ' (' . $r['student_no'] . ')';
+            $per[$sid]['slots'][$key][acg_code_key((string)$c['course_code'])] =
+                trim((string)$c['course_code'] . ' ' . (string)$c['course_title']);
+        }
+        foreach ($per as $p) {
+            foreach ($p['slots'] as $key => $courses) {
+                if (count($courses) < 2) continue;
+                [$d, $t] = explode('|', $key, 2);
+                $clashes[] = ['who' => $p['who'], 'date' => $d, 'slot' => $t, 'courses' => array_values($courses)];
+            }
+        }
+        usort($clashes, static fn($a, $b) => [$a['date'], $a['who']] <=> [$b['date'], $b['who']]);
+    }
+
     return [
         'groups'         => array_values($groups),
         'unused'         => $unused,
         'skipped_no_reg' => $skipped_no_reg,
+        'clashes'        => $clashes,
     ];
 }
 
@@ -391,6 +462,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (empty($errors)) {
         $preview = acg_build_preview($schedule_text, $errors);
+
+        // Active cards with the same exam name already exist? Student PDFs
+        // merge courses from ALL active cards of the same exam name, so a
+        // stale earlier generation would mix its old dates/times into the
+        // new cards — they must be deactivated or deleted first.
+        if ($preview !== null && $exam_name !== '') {
+            $nx = acg_code_key($exam_name);
+            foreach ($db->query('SELECT id, exam_name, semester FROM ac_admit_cards WHERE is_active = 1')->fetchAll() as $c) {
+                if (acg_code_key((string)$c['exam_name']) === $nx) $dup_cards[] = $c;
+            }
+        }
     }
 
     if ($action === 'generate' && empty($errors) && $preview) {
@@ -551,6 +633,39 @@ require_once __DIR__ . '/../includes/header.php';
             <button type="button" class="btn btn-link btn-sm p-0" id="sel_none">none</button>
         </span>
     </div>
+
+    <?php if ($dup_cards): ?>
+    <div class="alert alert-danger small">
+        <strong><?= count($dup_cards) ?> ACTIVE admit card(s) with this exam name already exist.</strong>
+        Student PDFs merge the courses of every active card with the same exam name, so generating
+        again now would mix the old dates/times into the new cards. Deactivate or delete these first:
+        <ul class="mb-0 ps-3">
+            <?php foreach ($dup_cards as $c): ?>
+            <li><a href="<?= APP_URL ?>/admit-card/view.php?id=<?= (int)$c['id'] ?>">Card #<?= (int)$c['id'] ?></a>
+                — <?= h($c['exam_name']) ?> (<?= h($c['semester']) ?>)</li>
+            <?php endforeach; ?>
+        </ul>
+    </div>
+    <?php endif; ?>
+
+    <?php if (!empty($preview['clashes'])): ?>
+    <div class="alert alert-danger small">
+        <strong><i class="fas fa-flag me-1"></i><?= count($preview['clashes']) ?> student exam clash(es) detected</strong>
+        — these students are registered in two different courses that fall on the SAME date and time
+        slot in this schedule. Fix the schedule (or the registrations) before generating:
+        <ul class="mb-0 ps-3">
+            <?php foreach (array_slice($preview['clashes'], 0, 50) as $cl): ?>
+            <li>
+                <?= h($cl['who']) ?> — <?= h(date('d M Y', strtotime($cl['date']))) ?><?= $cl['slot'] !== '' ? h(', ' . $cl['slot']) : '' ?>:
+                <?= h(implode('  +  ', $cl['courses'])) ?>
+            </li>
+            <?php endforeach; ?>
+            <?php if (count($preview['clashes']) > 50): ?>
+            <li class="text-muted">… and <?= count($preview['clashes']) - 50 ?> more.</li>
+            <?php endif; ?>
+        </ul>
+    </div>
+    <?php endif; ?>
 
     <?php if ($preview['unused']): ?>
     <div class="alert alert-warning small">
