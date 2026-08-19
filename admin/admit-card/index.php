@@ -9,8 +9,8 @@ require_once __DIR__ . '/helpers.php';
 
 $page_title = 'Admit Cards';
 
-$f_search = trim($_GET['search'] ?? '');
-$f_id     = (int)($_GET['card_id'] ?? 0);
+$f_search  = trim($_GET['search'] ?? '');
+$f_student = trim($_GET['student_id'] ?? '');
 $per_page  = 25;
 $cur_page  = max(1, (int)($_GET['page'] ?? 1));
 $offset    = ($cur_page - 1) * $per_page;
@@ -18,10 +18,47 @@ $offset    = ($cur_page - 1) * $per_page;
 $db = db();
 $where  = '1=1';
 $params = [];
-if ($f_id > 0) {
-    // Direct lookup by admit card ID
-    $where .= ' AND ac.id = ?';
-    $params[] = $f_id;
+
+// ── Find a student's admit cards by their Student ID (includes inactive cards) ──
+$f_student_row = null;
+if ($f_student !== '') {
+    $st = $db->prepare(
+        'SELECT id, student_id, full_name, status, dept_id, program_id, batch_id
+         FROM students WHERE student_id = ? LIMIT 1'
+    );
+    $st->execute([$f_student]);
+    $f_student_row = $st->fetch();
+
+    if ($f_student_row) {
+        $sid = (int)$f_student_row['id'];
+
+        // Optional routine link column (see admin/admit-card-routine-link.sql)
+        $has_routine_col = false;
+        try { $db->query('SELECT routine_id FROM ac_admit_cards LIMIT 1'); $has_routine_col = true; } catch (Throwable $e) {}
+
+        // Cards matching the student's dept + program (+ batch when the card is batch-specific)
+        $cond    = '(ac.dept_id = ? AND ac.program_id = ? AND (ac.batch_id IS NULL OR ac.batch_id = ?))';
+        $cparams = [(int)$f_student_row['dept_id'], (int)$f_student_row['program_id'], (int)($f_student_row['batch_id'] ?? 0)];
+
+        // Routine-linked cards where the student is registered in a routine course
+        if ($has_routine_col) {
+            $cond .= ' OR (ac.routine_id IS NOT NULL AND ac.routine_id IN (
+                            SELECT i.routine_id
+                              FROM exam_routine_items i
+                              JOIN co_registrations r ON r.offer_subject_id = i.offer_subject_id
+                             WHERE r.student_id = ?))';
+            $cparams[] = $sid;
+        }
+
+        // Cards where the student has an admin override
+        $cond .= ' OR ac.id IN (SELECT admit_card_id FROM ac_student_overrides WHERE student_id = ?)';
+        $cparams[] = $sid;
+
+        $where .= " AND ($cond)";
+        $params = array_merge($params, $cparams);
+    } else {
+        $where .= ' AND 1=0'; // unknown student → no results
+    }
 }
 if ($f_search !== '') {
     $where .= ' AND (ac.exam_name LIKE ? OR ac.semester LIKE ? OR d.name LIKE ? OR p.program_name LIKE ?';
@@ -97,17 +134,31 @@ require_once __DIR__ . '/../includes/header.php';
                 <input type="text" name="search" class="form-control" placeholder="Search exam name, semester, dept…"
                        value="<?= h($f_search) ?>">
             </div>
-            <div class="col-md-2">
-                <input type="number" name="card_id" class="form-control" min="1" placeholder="Card ID"
-                       value="<?= $f_id > 0 ? $f_id : '' ?>">
+            <div class="col-md-3">
+                <input type="text" name="student_id" class="form-control" placeholder="Student ID (e.g. 123-456-789)"
+                       value="<?= h($f_student) ?>">
             </div>
             <div class="col-auto">
                 <button class="btn btn-outline-primary"><i class="fas fa-search me-1"></i>Search</button>
-                <?php if ($f_search !== '' || $f_id > 0): ?>
+                <?php if ($f_search !== '' || $f_student !== ''): ?>
                     <a href="?" class="btn btn-outline-secondary ms-1">Clear</a>
                 <?php endif; ?>
             </div>
         </form>
+        <?php if ($f_student !== ''): ?>
+            <?php if ($f_student_row): ?>
+            <div class="alert alert-info small mt-3 mb-0">
+                Showing all admit cards (including <strong>inactive</strong> ones) for
+                <strong><?= h($f_student_row['full_name']) ?></strong>
+                (ID: <strong><?= h($f_student_row['student_id']) ?></strong>,
+                Status: <?= h($f_student_row['status']) ?>).
+            </div>
+            <?php else: ?>
+            <div class="alert alert-warning small mt-3 mb-0">
+                No student found with ID “<?= h($f_student) ?>”.
+            </div>
+            <?php endif; ?>
+        <?php endif; ?>
     </div>
 </div>
 
@@ -187,7 +238,7 @@ require_once __DIR__ . '/../includes/header.php';
             <ul class="pagination pagination-sm mb-0">
                 <?php for ($p = 1; $p <= $pages; $p++): ?>
                 <li class="page-item <?= $p === $cur_page ? 'active' : '' ?>">
-                    <a class="page-link" href="?page=<?= $p ?>&search=<?= urlencode($f_search) ?><?= $f_id > 0 ? '&card_id=' . $f_id : '' ?>"><?= $p ?></a>
+                    <a class="page-link" href="?page=<?= $p ?>&search=<?= urlencode($f_search) ?><?= $f_student !== '' ? '&student_id=' . urlencode($f_student) : '' ?>"><?= $p ?></a>
                 </li>
                 <?php endfor; ?>
             </ul>
