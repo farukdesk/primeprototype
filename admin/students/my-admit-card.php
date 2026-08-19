@@ -119,6 +119,21 @@ $cards_stmt = $db->prepare(
 $cards_stmt->execute($params);
 $cards = $cards_stmt->fetchAll();
 
+// When a student is eligible for more than one admit card of the same exam +
+// semester (e.g. duplicates or partial re-creations), show only the card that
+// lists the MAXIMUM number of courses for this student. Ties keep the newest
+// card (the list is ordered by created_at DESC).
+$best = [];
+foreach ($cards as $c) {
+    $c['_student_courses'] = ac_get_courses_for_student((int)$c['id'], $student_id);
+    $key = mb_strtolower(trim((string)$c['exam_name'])) . '||' . mb_strtolower(trim((string)$c['semester']));
+    if (!isset($best[$key])
+        || count($c['_student_courses']) > count($best[$key]['_student_courses'])) {
+        $best[$key] = $c;
+    }
+}
+$cards = array_values($best);
+
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
@@ -149,8 +164,9 @@ require_once __DIR__ . '/../includes/header.php';
 <?php foreach ($cards as $card):
     $card_id  = (int)$card['id'];
     $access   = ac_check_access($card_id, $student_id);
-    // Only the courses this student is registered for (routine-linked cards)
-    $courses  = ac_get_courses_for_student($card_id, $student_id);
+    // Only the courses this student is registered for (computed above while
+    // picking the card with the most courses)
+    $courses  = $card['_student_courses'];
     $token    = $access['allowed'] ? ac_get_or_create_token($card_id, $student_id) : null;
     $verify_url = $token ? ac_verify_url($token) : null;
     $qr_img_url = $token ? APP_URL . '/admit-card/qr.php?url=' . urlencode($verify_url) : null;
