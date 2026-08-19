@@ -35,6 +35,8 @@ $st = db()->prepare(
 $st->execute($params);
 $routines = $st->fetchAll();
 
+$can_delete = is_super_admin() || can_access('exam-routine', 'can_delete');
+
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
@@ -90,13 +92,36 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
+<?php if ($can_delete): ?>
+<!-- Bulk-delete form: row checkboxes reference it via the HTML form attribute,
+     so the per-row delete forms inside the table stay valid (no nesting). -->
+<form id="bulkDeleteForm" method="POST" action="<?= APP_URL ?>/exam-routine/delete.php"
+      onsubmit="return erBulkConfirm();">
+    <?= csrf_field() ?>
+</form>
+<?php endif; ?>
+
 <div class="card" style="border-radius:12px;">
+    <?php if ($can_delete): ?>
+    <div class="card-header bg-transparent d-flex justify-content-between align-items-center py-2 px-4">
+        <small class="text-muted">Select routines to delete them in bulk.</small>
+        <button type="submit" form="bulkDeleteForm" id="erBulkBtn" class="btn btn-sm btn-outline-danger"
+                style="border-radius:8px;" disabled>
+            <i class="fas fa-trash me-1"></i> Delete Selected
+        </button>
+    </div>
+    <?php endif; ?>
     <div class="card-body p-0">
         <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th class="ps-4">Exam</th>
+                        <?php if ($can_delete): ?>
+                        <th class="ps-4" style="width:36px;">
+                            <input type="checkbox" class="form-check-input" id="erCheckAll" title="Select all">
+                        </th>
+                        <?php endif; ?>
+                        <th class="<?= $can_delete ? '' : 'ps-4' ?>">Exam</th>
                         <th>Department / Program</th>
                         <th>Class</th>
                         <th class="text-center">Subjects</th>
@@ -107,7 +132,7 @@ require_once __DIR__ . '/../includes/header.php';
                 </thead>
                 <tbody>
                 <?php if (empty($routines)): ?>
-                    <tr><td colspan="7" class="text-center text-muted py-5">
+                    <tr><td colspan="<?= $can_delete ? 8 : 7 ?>" class="text-center text-muted py-5">
                         No exam routines yet.
                         <?php if (is_super_admin() || can_access('exam-routine', 'can_create')): ?>
                         <a href="<?= APP_URL ?>/exam-routine/create.php">Create the first one</a>.
@@ -115,7 +140,13 @@ require_once __DIR__ . '/../includes/header.php';
                     </td></tr>
                 <?php else: foreach ($routines as $r): ?>
                     <tr>
+                        <?php if ($can_delete): ?>
                         <td class="ps-4">
+                            <input type="checkbox" class="form-check-input er-check"
+                                   name="ids[]" value="<?= (int)$r['id'] ?>" form="bulkDeleteForm">
+                        </td>
+                        <?php endif; ?>
+                        <td class="<?= $can_delete ? '' : 'ps-4' ?>">
                             <a href="<?= APP_URL ?>/exam-routine/view.php?id=<?= $r['id'] ?>" class="fw-semibold text-decoration-none">
                                 <?= h($r['exam_name']) ?><?= $r['exam_year'] ? ' – ' . h($r['exam_year']) : '' ?>
                             </a>
@@ -137,7 +168,7 @@ require_once __DIR__ . '/../includes/header.php';
                             <?php if (is_super_admin() || can_access('exam-routine', 'can_edit')): ?>
                             <a href="<?= APP_URL ?>/exam-routine/create.php?id=<?= $r['id'] ?>" class="btn btn-sm btn-light" title="Edit"><i class="fas fa-pen"></i></a>
                             <?php endif; ?>
-                            <?php if (is_super_admin() || can_access('exam-routine', 'can_delete')): ?>
+                            <?php if ($can_delete): ?>
                             <form method="POST" action="<?= APP_URL ?>/exam-routine/delete.php" class="d-inline"
                                   onsubmit="return confirm('Delete this routine and all of its rows?');">
                                 <?= csrf_field() ?>
@@ -153,5 +184,40 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
     </div>
 </div>
+
+<?php if ($can_delete): ?>
+<script>
+(function () {
+    var all   = document.getElementById('erCheckAll');
+    var btn   = document.getElementById('erBulkBtn');
+    var boxes = Array.prototype.slice.call(document.querySelectorAll('.er-check'));
+
+    function refresh() {
+        var n = boxes.filter(function (b) { return b.checked; }).length;
+        btn.disabled = n === 0;
+        btn.innerHTML = '<i class="fas fa-trash me-1"></i> Delete Selected' + (n ? ' (' + n + ')' : '');
+        if (all) {
+            all.checked = boxes.length > 0 && n === boxes.length;
+            all.indeterminate = n > 0 && n < boxes.length;
+        }
+    }
+
+    if (all) {
+        all.addEventListener('change', function () {
+            boxes.forEach(function (b) { b.checked = all.checked; });
+            refresh();
+        });
+    }
+    boxes.forEach(function (b) { b.addEventListener('change', refresh); });
+    refresh();
+})();
+
+function erBulkConfirm() {
+    var n = document.querySelectorAll('.er-check:checked').length;
+    if (n === 0) { alert('Select at least one routine.'); return false; }
+    return confirm('Delete ' + n + ' selected routine(s) and all of their rows? This cannot be undone.');
+}
+</script>
+<?php endif; ?>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
