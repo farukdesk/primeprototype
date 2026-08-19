@@ -67,7 +67,8 @@ if (is_portal_student()) {
     }
 }
 
-$courses = ac_get_courses($card_id);
+// Routine-linked cards list only the courses the student registered for
+$courses = ac_get_courses_for_student($card_id, $student_id);
 
 // Get/create token and QR
 $token      = ac_get_or_create_token($card_id, $student_id);
