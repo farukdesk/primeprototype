@@ -150,15 +150,19 @@ $cards_stmt = $db->prepare(
 $cards_stmt->execute($params);
 $cards = $cards_stmt->fetchAll();
 
-// When a student qualifies for more than one admit card (e.g. duplicates or
-// partial re-creations, even with differing exam-name/semester spellings),
-// show ONLY the single card with the MAXIMUM number of courses:
+// When a student qualifies for more than one admit card the cards are often
+// COMPLEMENTARY, not duplicates: bulk creation makes one card per exam
+// routine (one routine per course offer), so the student's subjects for one
+// exam may be scattered across several cards.
+// ac_get_merged_courses_for_student() combines the student's registered
+// courses from all sibling cards of the same exam + semester, so the ONE
+// card shown below carries ALL the student's subjects. Representative card:
 //   1. most courses listed for this student,
 //   2. tie → most courses on the card overall,
 //   3. tie → newest card (the list is ordered by created_at DESC).
 $best = null;
 foreach ($cards as $c) {
-    $c['_student_courses'] = ac_get_courses_for_student((int)$c['id'], $student_id);
+    $c['_student_courses'] = ac_get_merged_courses_for_student((int)$c['id'], $student_id);
     if ($best === null) { $best = $c; continue; }
     $c_cnt = count($c['_student_courses']);
     $b_cnt = count($best['_student_courses']);
@@ -336,7 +340,7 @@ require_once __DIR__ . '/../includes/header.php';
 
     <div class="card-footer bg-transparent px-4 py-2 text-muted small">
         <i class="fas fa-info-circle me-1"></i>
-        <?= (int)$card['course_count'] ?> course<?= $card['course_count'] != 1 ? 's' : '' ?> &mdash;
+        <?= count($courses) ?> course<?= count($courses) != 1 ? 's' : '' ?> &mdash;
         <?= $access['allowed'] ? 'You are eligible to download this admit card.' : 'Blocked due to outstanding dues.' ?>
     </div>
 </div>

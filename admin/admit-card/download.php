@@ -73,8 +73,10 @@ if (is_portal_student()) {
     }
 }
 
-// Routine-linked cards list only the courses the student registered for
-$courses = ac_get_courses_for_student($card_id, $student_id);
+// Routine-linked cards list only the courses the student registered for,
+// merged from sibling cards of the same exam + semester (bulk creation
+// makes one card per routine, which scatters a student's subjects).
+$courses = ac_get_merged_courses_for_student($card_id, $student_id);
 
 // Get/create token and QR
 $token      = ac_get_or_create_token($card_id, $student_id);
