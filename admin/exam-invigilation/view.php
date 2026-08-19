@@ -176,9 +176,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
             redirect($view_url);
         }
 
-        $faculty_weekend_map = [];
+        // Designation-based weight: juniors get proportionally more slots than seniors
+        $faculty_weight_map = [];
         foreach ($all_faculty as $f) {
-            $faculty_weekend_map[(int)$f['id']] = ei_get_faculty_weekend_days($f);
+            $faculty_weight_map[(int)$f['id']] = ei_designation_weight($f['designation'] ?? null);
         }
 
         // Build a map: date+time_slot → array of already-assigned faculty_ids
