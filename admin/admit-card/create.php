@@ -118,30 +118,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_create'])) {
         $created = 0;
         $skipped = [];
 
+        // Group the selected routines by exam + dept + program + batch +
+        // shift: ONE admit card is created per class group. Routines are
+        // stored per course offer, so creating one card per routine used to
+        // scatter a student's subjects across many single-course cards.
+        $groups = [];
         foreach ($ids as $rid) {
             $routine = er_get_routine($rid);
             if (!$routine) {
                 $skipped[] = "Routine #$rid: not found.";
                 continue;
             }
-
-            $exam_name   = $routine['exam_name'] . ($routine['exam_year'] ? ' – ' . $routine['exam_year'] : '');
-            $semester    = trim((string)($routine['semester'] ?? ''));
-            $dept_id     = (int)$routine['dept_id'];
-            $program_id  = (int)($routine['program_id'] ?? 0);
-            $batch_id    = (int)($routine['batch_id'] ?? 0) ?: null;
-            $batch_label = trim((string)($routine['batch_name'] ?? '')) ?: null;
-
+            $semester   = trim((string)($routine['semester'] ?? ''));
+            $dept_id    = (int)$routine['dept_id'];
+            $program_id = (int)($routine['program_id'] ?? 0);
             if ($semester === '' || $dept_id <= 0 || $program_id <= 0) {
-                $skipped[] = "Routine #$rid (" . $exam_name . '): missing semester, department or program.';
+                $skipped[] = "Routine #$rid (" . $routine['exam_name'] . '): missing semester, department or program.';
                 continue;
             }
+            $key = implode('|', [
+                (int)$routine['exam_id'],
+                $dept_id,
+                $program_id,
+                (int)($routine['batch_id'] ?? 0),
+                strtolower(trim((string)($routine['shift'] ?? ''))),
+            ]);
+            $groups[$key][] = $routine;
+        }
+
+        foreach ($groups as $group) {
+            $head        = $group[0];
+            $exam_name   = $head['exam_name'] . ($head['exam_year'] ? ' – ' . $head['exam_year'] : '');
+            $semester    = trim((string)($head['semester'] ?? ''));
+            $dept_id     = (int)$head['dept_id'];
+            $program_id  = (int)($head['program_id'] ?? 0);
+            $batch_id    = (int)($head['batch_id'] ?? 0) ?: null;
+            $batch_label = trim((string)($head['batch_name'] ?? '')) ?: null;
 
             if ($has_routine_col) {
                 $db->prepare(
                     'INSERT INTO ac_admit_cards (exam_name, semester, dept_id, program_id, batch_id, batch_label, routine_id, is_active, created_by)
                      VALUES (?,?,?,?,?,?,?,?,?)'
-                )->execute([$exam_name, $semester, $dept_id, $program_id, $batch_id, $batch_label, $rid, $bulk_active, auth_user()['id']]);
+                )->execute([$exam_name, $semester, $dept_id, $program_id, $batch_id, $batch_label, (int)$head['id'], $bulk_active, auth_user()['id']]);
             } else {
                 $db->prepare(
                     'INSERT INTO ac_admit_cards (exam_name, semester, dept_id, program_id, batch_id, batch_label, is_active, created_by)
@@ -150,25 +168,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_create'])) {
             }
             $card_id = (int)$db->lastInsertId();
 
-            $sect = trim((string)((($routine['section'] ?? '') !== '') ? $routine['section'] : ($routine['shift'] ?? ''))) ?: null;
-            foreach (er_get_items($rid) as $i => $it) {
-                $code  = trim((string)$it['course_code']);
-                $title = trim((string)$it['course_title']);
-                if ($code === '' && $title === '') continue;
-                $date = trim((string)($it['exam_date'] ?? '')) ?: null;
-                $slot = trim(er_fmt_time($it['start_time'] ?? null)
-                    . (($it['end_time'] ?? null) ? ' - ' . er_fmt_time($it['end_time']) : '')) ?: null;
-                $osid = (int)($it['offer_subject_id'] ?? 0) ?: null;
-                if ($has_subject_col) {
-                    $db->prepare(
-                        'INSERT INTO ac_admit_card_courses (admit_card_id, offer_subject_id, course_code, course_title, exam_date, time_slot, section, sort_order)
-                         VALUES (?,?,?,?,?,?,?,?)'
-                    )->execute([$card_id, $osid, $code, $title, $date, $slot, $sect, $i]);
-                } else {
-                    $db->prepare(
-                        'INSERT INTO ac_admit_card_courses (admit_card_id, course_code, course_title, exam_date, time_slot, section, sort_order)
-                         VALUES (?,?,?,?,?,?,?)'
-                    )->execute([$card_id, $code, $title, $date, $slot, $sect, $i]);
+            // Union of all routine items of the group, deduplicated by
+            // offer subject (fallback: course code).
+            $sort = 0;
+            $seen = [];
+            foreach ($group as $routine) {
+                $sect = trim((string)((($routine['section'] ?? '') !== '') ? $routine['section'] : ($routine['shift'] ?? ''))) ?: null;
+                foreach (er_get_items((int)$routine['id']) as $it) {
+                    $code  = trim((string)$it['course_code']);
+                    $title = trim((string)$it['course_title']);
+                    if ($code === '' && $title === '') continue;
+                    $osid = (int)($it['offer_subject_id'] ?? 0) ?: null;
+                    $k = $osid
+                        ? 'osid:' . $osid
+                        : 'code:' . strtolower((string)preg_replace('/[^a-z0-9]+/i', '', $code !== '' ? $code : $title));
+                    if (isset($seen[$k])) continue;
+                    $seen[$k] = true;
+                    $date = trim((string)($it['exam_date'] ?? '')) ?: null;
+                    $slot = trim(er_fmt_time($it['start_time'] ?? null)
+                        . (($it['end_time'] ?? null) ? ' - ' . er_fmt_time($it['end_time']) : '')) ?: null;
+                    if ($has_subject_col) {
+                        $db->prepare(
+                            'INSERT INTO ac_admit_card_courses (admit_card_id, offer_subject_id, course_code, course_title, exam_date, time_slot, section, sort_order)
+                             VALUES (?,?,?,?,?,?,?,?)'
+                        )->execute([$card_id, $osid, $code, $title, $date, $slot, $sect, $sort++]);
+                    } else {
+                        $db->prepare(
+                            'INSERT INTO ac_admit_card_courses (admit_card_id, course_code, course_title, exam_date, time_slot, section, sort_order)
+                             VALUES (?,?,?,?,?,?,?)'
+                        )->execute([$card_id, $code, $title, $date, $slot, $sect, $sort++]);
+                    }
                 }
             }
             $created++;

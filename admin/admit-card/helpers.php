@@ -94,6 +94,135 @@ function ac_card_routine_id(int $admit_card_id): int
     }
 }
 
+/** Exam behind a card (via its linked routine), or 0. */
+function ac_card_exam_id(int $admit_card_id): int
+{
+    $rid = ac_card_routine_id($admit_card_id);
+    if ($rid <= 0) return 0;
+    try {
+        $st = db()->prepare('SELECT exam_id FROM exam_routines WHERE id = ?');
+        $st->execute([$rid]);
+        return (int)$st->fetchColumn();
+    } catch (Throwable $e) {
+        return 0;
+    }
+}
+
+/**
+ * Student-centric course resolution for an exam.
+ *
+ * WHAT the student sits comes from the course-offer registrations (the
+ * single source of truth for enrollment); WHEN comes from the exam's
+ * routine items:
+ *   1. a routine item pointing at the student's exact offer subject wins
+ *      (it carries the student's own shift / section / date / time);
+ *   2. otherwise, among routine items with the same course code, the item
+ *      whose offer matches the student's SHIFT and BATCH is preferred,
+ *      then shift only, then batch only, then the first item;
+ *   3. a registered course with no routine item in this exam is omitted
+ *      (it is not part of this exam).
+ */
+function ac_resolve_student_courses(int $exam_id, int $student_id): array
+{
+    require_once __DIR__ . '/../exam-routine/helpers.php';
+
+    $norm = static fn($s) => strtolower((string)preg_replace('/[^a-z0-9]+/i', '', (string)$s));
+
+    try {
+        // The student's registrations with their offer context.
+        $st = db()->prepare(
+            'SELECT r.offer_subject_id, o.batch_id, o.shift, o.section,
+                    c.course_code, c.course_name
+               FROM co_registrations r
+               JOIN co_offer_subjects cos ON cos.id = r.offer_subject_id
+               JOIN co_offers o           ON o.id  = cos.offer_id
+               JOIN course_curriculum c   ON c.id  = cos.curriculum_id
+              WHERE r.student_id = ?'
+        );
+        $st->execute([$student_id]);
+        $regs = $st->fetchAll();
+        if (!$regs) return [];
+
+        // The exam's routine items with their offer context.
+        $it = db()->prepare(
+            'SELECT i.offer_subject_id, i.course_code, i.course_title,
+                    i.exam_date, i.start_time, i.end_time,
+                    o.batch_id AS item_batch_id, o.shift AS item_shift
+               FROM exam_routine_items i
+               JOIN exam_routines rt      ON rt.id  = i.routine_id
+          LEFT JOIN co_offer_subjects cos ON cos.id = i.offer_subject_id
+          LEFT JOIN co_offers o           ON o.id   = cos.offer_id
+              WHERE rt.exam_id = ?'
+        );
+        $it->execute([$exam_id]);
+        $items = $it->fetchAll();
+    } catch (Throwable $e) {
+        return [];
+    }
+
+    $by_osid = [];
+    $by_code = [];
+    foreach ($items as $i) {
+        $osid = (int)($i['offer_subject_id'] ?? 0);
+        if ($osid > 0 && !isset($by_osid[$osid])) $by_osid[$osid] = $i;
+        $ck = $norm((string)$i['course_code']);
+        if ($ck !== '') $by_code[$ck][] = $i;
+    }
+
+    // Registrations with an exact routine item first, so a code-level
+    // fallback of another registration can never shadow an exact match.
+    usort($regs, static fn($a, $b) =>
+        (int)isset($by_osid[(int)$b['offer_subject_id']]) <=> (int)isset($by_osid[(int)$a['offer_subject_id']]));
+
+    $out  = [];
+    $seen = [];
+    foreach ($regs as $r) {
+        $ck = $norm((string)$r['course_code']);
+        if ($ck === '' || isset($seen[$ck])) continue;
+
+        $item = $by_osid[(int)$r['offer_subject_id']] ?? null;
+        if (!$item && !empty($by_code[$ck])) {
+            // Several offers (sections / shifts / batches) may carry this
+            // course with different dates — prefer shift + batch matches.
+            $best = null;
+            $best_score = -1;
+            foreach ($by_code[$ck] as $cand) {
+                $score = 0;
+                $cs = $norm((string)($cand['item_shift'] ?? ''));
+                if ($cs !== '' && $cs === $norm((string)($r['shift'] ?? ''))) $score += 2;
+                $cb = (int)($cand['item_batch_id'] ?? 0);
+                if ($cb > 0 && $cb === (int)($r['batch_id'] ?? 0)) $score += 1;
+                if ($score > $best_score) { $best = $cand; $best_score = $score; }
+            }
+            $item = $best;
+        }
+        if (!$item) continue; // course is not part of this exam
+        $seen[$ck] = true;
+
+        $slot = trim(er_fmt_time($item['start_time'] ?? null)
+            . (($item['end_time'] ?? null) ? ' - ' . er_fmt_time($item['end_time']) : ''));
+        $out[] = [
+            'offer_subject_id' => (int)$r['offer_subject_id'],
+            'course_code'      => (string)$r['course_code'],
+            'course_title'     => (string)(($item['course_title'] ?? '') !== '' ? $item['course_title'] : $r['course_name']),
+            'exam_date'        => (string)($item['exam_date'] ?? '') ?: null,
+            'time_slot'        => $slot !== '' ? $slot : null,
+            'section'          => trim((string)((($r['section'] ?? '') !== '') ? $r['section'] : ($r['shift'] ?? ''))) ?: null,
+        ];
+    }
+
+    usort($out, static function ($a, $b) {
+        $da  = (string)($a['exam_date'] ?? '');
+        $dbv = (string)($b['exam_date'] ?? '');
+        if ($da === $dbv) return 0;
+        if ($da === '')  return 1;
+        if ($dbv === '') return -1;
+        return strcmp($da, $dbv);
+    });
+
+    return $out;
+}
+
 /**
  * Is the student registered in at least one course of the routine?
  * Matches by offer subject first, then by course code — the student may be
@@ -180,6 +309,17 @@ function ac_get_courses_for_student(int $admit_card_id, int $student_id): array
  */
 function ac_get_merged_courses_for_student(int $admit_card_id, int $student_id): array
 {
+    // Rebuilt (student-centric): for exam-linked cards the course list is
+    // resolved directly from the student's course-offer registrations
+    // matched against the exam's routine items — see
+    // ac_resolve_student_courses(). The legacy card/sibling merge below
+    // only runs for cards that cannot be tied to an exam.
+    $exam_id = ac_card_exam_id($admit_card_id);
+    if ($exam_id > 0) {
+        $resolved = ac_resolve_student_courses($exam_id, $student_id);
+        if ($resolved) return $resolved;
+    }
+
     $courses = ac_get_courses_for_student($admit_card_id, $student_id);
 
     $card = ac_get_card($admit_card_id);
@@ -367,10 +507,21 @@ function ac_check_access(int $admit_card_id, int $student_id): array
         return ['allowed' => true];
     }
 
-    // Routine-linked cards: only students actually enrolled (registered)
-    // in the routine's courses may access the card.
+    // Exam-linked cards: only students actually enrolled (registered) in
+    // at least one course of the card's EXAM may access the card. The
+    // exam-wide check is used because a card links one routine while the
+    // student's courses may sit in other routines of the same exam.
+    $exam_id    = ac_card_exam_id($admit_card_id);
     $routine_id = ac_card_routine_id($admit_card_id);
-    if ($routine_id > 0 && !ac_is_enrolled_in_routine($routine_id, $student_id)) {
+    if ($exam_id > 0) {
+        if (!ac_resolve_student_courses($exam_id, $student_id)) {
+            return [
+                'allowed' => false,
+                'due'     => 0.0,
+                'reason'  => 'You are not enrolled in any course of this exam. Please contact your department office.',
+            ];
+        }
+    } elseif ($routine_id > 0 && !ac_is_enrolled_in_routine($routine_id, $student_id)) {
         return [
             'allowed' => false,
             'due'     => 0.0,
