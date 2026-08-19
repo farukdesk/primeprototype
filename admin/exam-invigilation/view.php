@@ -329,133 +329,167 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
             return $pool;
         };
 
+        // Eligibility check: busy, total cap, daily cap, daily working-window rule
+        $is_eligible = static function (array $f, string $slot_date, string $key, ?array $slot_minutes) use (
+            &$busy_map, &$workload, &$daily_workload, &$daily_span,
+            $auto_assign_max_slots, $auto_assign_max_slots_per_day
+        ): bool {
+            $fid = (int)$f['id'];
+            if (isset($busy_map[$key][$fid])) return false;
+            if (($workload[$fid] ?? 0) >= $auto_assign_max_slots) return false;
+            if (($daily_workload[$fid][$slot_date] ?? 0) >= $auto_assign_max_slots_per_day) return false;
+            // Daily working-window rule: combined with existing shifts that day,
+            // a start before 2 PM must finish by 6 PM; a start at/after 2 PM by 10 PM
+            if ($slot_minutes !== null && isset($daily_span[$fid][$slot_date])) {
+                $span      = $daily_span[$fid][$slot_date];
+                $new_start = min($span['start'], $slot_minutes[0]);
+                $new_end   = max($span['end'], $slot_minutes[1]);
+                if ($new_end > ei_day_window_end_minutes($new_start)) return false;
+            }
+            return true;
+        };
+
+        // Mark a faculty as assigned for the rest of this run
+        $mark_assigned = static function (array $f, string $slot_date, string $key, ?array $slot_minutes) use (
+            &$busy_map, &$workload, &$daily_workload, &$daily_span
+        ): void {
+            $fid = (int)$f['id'];
+            $busy_map[$key][$fid] = true;
+            $workload[$fid] = ($workload[$fid] ?? 0) + 1;
+            $daily_workload[$fid][$slot_date] = ($daily_workload[$fid][$slot_date] ?? 0) + 1;
+            if ($slot_minutes !== null) {
+                if (!isset($daily_span[$fid][$slot_date])) {
+                    $daily_span[$fid][$slot_date] = ['start' => $slot_minutes[0], 'end' => $slot_minutes[1]];
+                } else {
+                    $daily_span[$fid][$slot_date]['start'] = min($daily_span[$fid][$slot_date]['start'], $slot_minutes[0]);
+                    $daily_span[$fid][$slot_date]['end']   = max($daily_span[$fid][$slot_date]['end'], $slot_minutes[1]);
+                }
+            }
+        };
+
+        // Group slots by date + time_slot so same-department invigilators can be
+        // reserved for their own department's rooms before other rooms take them
+        $slot_groups = [];
         foreach ($slots as $slot) {
-            $slot_date       = $slot['slot_date'];
-            $time_slot       = $slot['time_slot'];
-            $key             = $slot_date . '|' . $time_slot;
-            $slot_pref_dept  = isset($slot['dept_id']) ? (int)$slot['dept_id'] : 0;
+            $slot_groups[$slot['slot_date'] . '|' . $slot['time_slot']][] = $slot;
+        }
 
-            $slot_minutes = ei_time_slot_minutes($time_slot);
+        $no_same_dept_count = 0;
 
-            // Filter eligible faculty
-            // (weekend and female-after-6PM restrictions have been removed)
-            $eligible = [];
-            foreach ($all_faculty as $f) {
-                $fid = (int)$f['id'];
-                // Skip if already busy in this date+time_slot
-                if (isset($busy_map[$key][$fid])) continue;
-                // Skip if the faculty has already reached the configured total limit
-                if (($workload[$fid] ?? 0) >= $auto_assign_max_slots) continue;
-                // Skip if the faculty has reached the per-day limit for this slot's date
-                if (($daily_workload[$fid][$slot_date] ?? 0) >= $auto_assign_max_slots_per_day) continue;
-                // Daily working-window rule: combined with existing shifts that day,
-                // a start before 2 PM must finish by 6 PM; a start at/after 2 PM by 10 PM
-                if ($slot_minutes !== null && isset($daily_span[$fid][$slot_date])) {
-                    $span      = $daily_span[$fid][$slot_date];
-                    $new_start = min($span['start'], $slot_minutes[0]);
-                    $new_end   = max($span['end'], $slot_minutes[1]);
-                    if ($new_end > ei_day_window_end_minutes($new_start)) continue;
+        foreach ($slot_groups as $group) {
+            $picks = [];
+
+            // Phase 1: every room with a department gets one same-department invigilator FIRST
+            foreach ($group as $i => $slot) {
+                $picks[$i] = null;
+                $slot_pref_dept = isset($slot['dept_id']) ? (int)$slot['dept_id'] : 0;
+                if ($slot_pref_dept <= 0) continue;
+
+                $slot_date    = $slot['slot_date'];
+                $key          = $slot_date . '|' . $slot['time_slot'];
+                $slot_minutes = ei_time_slot_minutes($slot['time_slot']);
+
+                $same_dept_pool = [];
+                foreach ($all_faculty as $f) {
+                    if ((int)$f['dept_id'] !== $slot_pref_dept) continue;
+                    if (!$is_eligible($f, $slot_date, $key, $slot_minutes)) continue;
+                    $same_dept_pool[] = $f;
                 }
-                $eligible[] = $f;
+                if (!empty($same_dept_pool)) {
+                    $same_dept_pool = $sort_by_workload($same_dept_pool);
+                    $picks[$i] = $same_dept_pool[0];
+                    $mark_assigned($same_dept_pool[0], $slot_date, $key, $slot_minutes);
+                }
             }
 
-            // Group by department
-            $by_dept = [];
-            foreach ($eligible as $f) {
-                $by_dept[(int)$f['dept_id']][] = $f;
-            }
-            // Sort each department pool by workload
-            foreach ($by_dept as $did => $pool) {
-                $by_dept[$did] = $sort_by_workload($pool);
-            }
+            // Phase 2: fill the remaining seats from any department
+            foreach ($group as $i => $slot) {
+                $slot_date      = $slot['slot_date'];
+                $key            = $slot_date . '|' . $slot['time_slot'];
+                $slot_minutes   = ei_time_slot_minutes($slot['time_slot']);
+                $slot_pref_dept = isset($slot['dept_id']) ? (int)$slot['dept_id'] : 0;
 
-            $f1 = null;
-            $f2 = null;
-
-            if ($slot_pref_dept > 0 && isset($by_dept[$slot_pref_dept])) {
-                // Preferred dept set on the slot: f1 from that dept (least-loaded), f2 from any other dept
-                $f1 = $by_dept[$slot_pref_dept][0];
-                // Pick f2 from the other dept with the globally least-loaded available person
-                $other_eligible = [];
-                foreach ($by_dept as $did => $pool) {
-                    if ($did !== $slot_pref_dept) {
-                        $other_eligible[] = $pool[0];
+                $eligible = [];
+                foreach ($all_faculty as $f) {
+                    if ($is_eligible($f, $slot_date, $key, $slot_minutes)) {
+                        $eligible[] = $f;
                     }
                 }
-                if (!empty($other_eligible)) {
-                    $other_eligible = $sort_by_workload($other_eligible);
-                    $f2 = $other_eligible[0];
-                }
-                // If no other dept available, fall back to same dept (second least-loaded person)
-                if ($f2 === null && isset($by_dept[$slot_pref_dept][1])) {
-                    $f2 = $by_dept[$slot_pref_dept][1];
-                }
-            } else {
-                // No preferred dept: pick two least-loaded faculty from different depts if possible
-                // Build a single sorted list of all eligible, then pick two from different depts
-                $all_eligible_sorted = $sort_by_workload($eligible);
-                foreach ($all_eligible_sorted as $candidate) {
-                    if ($f1 === null) {
-                        $f1 = $candidate;
-                    } elseif ((int)$candidate['dept_id'] !== (int)$f1['dept_id']) {
-                        $f2 = $candidate;
-                        break;
+                $eligible = $sort_by_workload($eligible);
+
+                $f1 = $picks[$i];
+                $f2 = null;
+                $f1_reserved = ($f1 !== null);
+
+                if ($f1 === null) {
+                    // No same-department faculty was available for this room
+                    if ($slot_pref_dept > 0) {
+                        $no_same_dept_count++;
+                    }
+                    // Pick two least-loaded faculty from different depts if possible
+                    foreach ($eligible as $candidate) {
+                        if ($f1 === null) {
+                            $f1 = $candidate;
+                        } elseif ((int)$candidate['dept_id'] !== (int)$f1['dept_id']) {
+                            $f2 = $candidate;
+                            break;
+                        }
+                    }
+                } else {
+                    // Same-dept invigilator reserved as f1: prefer f2 from another dept
+                    foreach ($eligible as $candidate) {
+                        if ((int)$candidate['dept_id'] !== (int)$f1['dept_id']) {
+                            $f2 = $candidate;
+                            break;
+                        }
                     }
                 }
-                // If we couldn't find two from different depts, take same dept
+                // Fallback: take same dept for f2 if no other dept is available
                 if ($f1 !== null && $f2 === null) {
-                    foreach ($all_eligible_sorted as $candidate) {
+                    foreach ($eligible as $candidate) {
                         if ((int)$candidate['id'] !== (int)$f1['id']) {
                             $f2 = $candidate;
                             break;
                         }
                     }
                 }
-            }
 
-            if ($f1 === null && $f2 === null) {
-                $failed_count++;
-                continue;
-            }
-
-            // Update the slot
-            db()->prepare(
-                'UPDATE ei_slots SET faculty1_id=?, faculty2_id=? WHERE id=?'
-            )->execute([
-                $f1 ? (int)$f1['id'] : null,
-                $f2 ? (int)$f2['id'] : null,
-                (int)$slot['id'],
-            ]);
-
-            // Mark these faculty as busy for subsequent slots in the same run
-            foreach ([$f1, $f2] as $fx) {
-                if (!$fx) continue;
-                $fid = (int)$fx['id'];
-                $busy_map[$key][$fid] = true;
-                $workload[$fid] = ($workload[$fid] ?? 0) + 1;
-                $daily_workload[$fid][$slot_date] = ($daily_workload[$fid][$slot_date] ?? 0) + 1;
-                if ($slot_minutes !== null) {
-                    if (!isset($daily_span[$fid][$slot_date])) {
-                        $daily_span[$fid][$slot_date] = ['start' => $slot_minutes[0], 'end' => $slot_minutes[1]];
-                    } else {
-                        $daily_span[$fid][$slot_date]['start'] = min($daily_span[$fid][$slot_date]['start'], $slot_minutes[0]);
-                        $daily_span[$fid][$slot_date]['end']   = max($daily_span[$fid][$slot_date]['end'], $slot_minutes[1]);
-                    }
+                if ($f1 === null && $f2 === null) {
+                    $failed_count++;
+                    continue;
                 }
-            }
 
-            if ($f1 && $f2) {
-                $assigned_count++;
-            } else {
-                $partial_count++;
+                // Update the slot
+                db()->prepare(
+                    'UPDATE ei_slots SET faculty1_id=?, faculty2_id=? WHERE id=?'
+                )->execute([
+                    $f1 ? (int)$f1['id'] : null,
+                    $f2 ? (int)$f2['id'] : null,
+                    (int)$slot['id'],
+                ]);
+
+                // Mark as busy for subsequent slots (the phase-1 pick is already marked)
+                if ($f1 !== null && !$f1_reserved) {
+                    $mark_assigned($f1, $slot_date, $key, $slot_minutes);
+                }
+                if ($f2 !== null) {
+                    $mark_assigned($f2, $slot_date, $key, $slot_minutes);
+                }
+
+                if ($f1 && $f2) {
+                    $assigned_count++;
+                } else {
+                    $partial_count++;
+                }
             }
         }
 
         $msg = "Auto-assign complete: {$assigned_count} slot(s) fully assigned";
         if ($partial_count > 0) $msg .= ", {$partial_count} partially assigned";
+        if ($no_same_dept_count > 0) $msg .= ", {$no_same_dept_count} room(s) got no same-department invigilator (no eligible faculty left in that department)";
         if ($failed_count  > 0) $msg .= ", {$failed_count} could not be assigned (insufficient eligible faculty within the current availability rules, {$auto_assign_max_slots}-slot total cap, and {$auto_assign_max_slots_per_day}-slot daily cap)";
         $msg .= '.';
-        flash_set($failed_count > 0 ? 'warning' : 'success', $msg);
+        flash_set(($failed_count > 0 || $no_same_dept_count > 0) ? 'warning' : 'success', $msg);
 
         // Save a version snapshot after the auto-assign operation
         $scope_label = ($scope === 'all') ? 'Re-assign all' : 'Assign unassigned';
