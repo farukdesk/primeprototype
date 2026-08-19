@@ -41,25 +41,18 @@ if (!$student) {
 $student_id = (int)$student['id'];
 $page_title = 'My Admit Card';
 
-// Find active admit cards for this student's dept+program.
-// If any tokens are pre-seeded for a card (e.g. from bulk import) only show cards
-// where this student has a token. Cards with no tokens at all (manually created)
-// remain visible to all matching students.
-//
-// Enrollment restriction: students only see admit cards for courses they are
-// actually enrolled (registered) in via a course offer:
-//   - routine-linked cards: the student must be registered in at least one
-//     course of the linked exam routine;
-//   - cards whose courses reference offer subjects: the student must be
-//     registered in at least one of those offer subjects;
-//   - fully manual cards (no routine, no offer-subject links) stay visible
-//     to all dept+program matching students;
-//   - an admin override always makes the card visible.
-$has_routine_col = false;
-$has_subject_col = false;
+// Find active admit cards this student qualifies for, using the SAME
+// qualification rules as the admin admit-card search (admit-card/index.php):
+//   - the card matches the student's dept + program (and batch, when the
+//     card is batch-specific), or
+//   - the card is linked to an exam routine the student is registered in, or
+//   - the student has an admin override.
+// Anything stricter here (e.g. requiring offer-subject registrations) makes
+// the portal hide cards the admin search says the student has — which is how
+// students ended up seeing a lesser duplicate instead of their real card.
+$has_routine_col   = false;
 $has_allowlist_col = false;
 try { $db->query('SELECT routine_id FROM ac_admit_cards LIMIT 1'); $has_routine_col = true; } catch (Throwable $e) {}
-try { $db->query('SELECT offer_subject_id FROM ac_admit_card_courses LIMIT 1'); $has_subject_col = true; } catch (Throwable $e) {}
 try { $db->query('SELECT is_allowlist FROM ac_student_tokens LIMIT 1'); $has_allowlist_col = true; } catch (Throwable $e) {}
 
 // Token-based visibility must only consider ALLOWLIST tokens (pre-seeded by
@@ -69,35 +62,20 @@ try { $db->query('SELECT is_allowlist FROM ac_student_tokens LIMIT 1'); $has_all
 // See admin/admit-card-token-allowlist.sql.
 $allow_flag = $has_allowlist_col ? ' AND t.is_allowlist = 1' : '';
 
-$params = [$student['dept_id'], $student['program_id'], $student_id];
-
-$enroll_parts  = [];
-$enroll_params = [];
+$match_parts  = ['(ac.dept_id = ? AND ac.program_id = ? AND (ac.batch_id IS NULL OR ac.batch_id = ?))'];
+$match_params = [$student['dept_id'], $student['program_id'], (int)($student['batch_id'] ?? 0)];
 if ($has_routine_col) {
-    $enroll_parts[] = '(ac.routine_id IS NULL OR EXISTS (
-            SELECT 1 FROM exam_routine_items i
-            JOIN co_registrations r ON r.offer_subject_id = i.offer_subject_id
-           WHERE i.routine_id = ac.routine_id AND r.student_id = ?))';
-    $enroll_params[] = $student_id;
+    $match_parts[] = '(ac.routine_id IS NOT NULL AND ac.routine_id IN (
+            SELECT i.routine_id
+              FROM exam_routine_items i
+              JOIN co_registrations r ON r.offer_subject_id = i.offer_subject_id
+             WHERE r.student_id = ?))';
+    $match_params[] = $student_id;
 }
-if ($has_subject_col) {
-    $enroll_parts[] = '(NOT EXISTS (
-            SELECT 1 FROM ac_admit_card_courses cc2
-           WHERE cc2.admit_card_id = ac.id AND cc2.offer_subject_id IS NOT NULL)
-        OR EXISTS (
-            SELECT 1 FROM ac_admit_card_courses cc3
-            JOIN co_registrations r3 ON r3.offer_subject_id = cc3.offer_subject_id
-           WHERE cc3.admit_card_id = ac.id AND r3.student_id = ?))';
-    $enroll_params[] = $student_id;
-}
+$match_parts[] = 'ac.id IN (SELECT admit_card_id FROM ac_student_overrides WHERE student_id = ?)';
+$match_params[] = $student_id;
 
-$enroll_sql = '';
-if ($enroll_parts) {
-    $enroll_sql = ' AND (EXISTS (SELECT 1 FROM ac_student_overrides ov
-                                  WHERE ov.admit_card_id = ac.id AND ov.student_id = ?)
-                     OR (' . implode(' AND ', $enroll_parts) . '))';
-    $params = array_merge($params, [$student_id], $enroll_params);
-}
+$params = array_merge($match_params, [$student_id]);
 
 $cards_stmt = $db->prepare(
     'SELECT ac.*,
@@ -108,26 +86,30 @@ $cards_stmt = $db->prepare(
      JOIN dept_departments d ON d.id = ac.dept_id
      JOIN dept_academic_programs p ON p.id = ac.program_id
      WHERE ac.is_active = 1
-       AND ac.dept_id    = ?
-       AND ac.program_id = ?
+       AND (' . implode(' OR ', $match_parts) . ')
        AND (
            NOT EXISTS (SELECT 1 FROM ac_student_tokens t WHERE t.admit_card_id = ac.id' . $allow_flag . ')
            OR EXISTS  (SELECT 1 FROM ac_student_tokens t WHERE t.admit_card_id = ac.id AND t.student_id = ?' . $allow_flag . ')
-       )' . $enroll_sql . '
+       )
      ORDER BY ac.created_at DESC'
 );
 $cards_stmt->execute($params);
 $cards = $cards_stmt->fetchAll();
 
-// When a student is eligible for more than one admit card (e.g. duplicates or
+// When a student qualifies for more than one admit card (e.g. duplicates or
 // partial re-creations, even with differing exam-name/semester spellings),
-// show ONLY the single card that lists the MAXIMUM number of courses for this
-// student. Ties keep the newest card (the list is ordered by created_at DESC).
+// show ONLY the single card with the MAXIMUM number of courses:
+//   1. most courses listed for this student,
+//   2. tie → most courses on the card overall,
+//   3. tie → newest card (the list is ordered by created_at DESC).
 $best = null;
 foreach ($cards as $c) {
     $c['_student_courses'] = ac_get_courses_for_student((int)$c['id'], $student_id);
-    if ($best === null
-        || count($c['_student_courses']) > count($best['_student_courses'])) {
+    if ($best === null) { $best = $c; continue; }
+    $c_cnt = count($c['_student_courses']);
+    $b_cnt = count($best['_student_courses']);
+    if ($c_cnt > $b_cnt
+        || ($c_cnt === $b_cnt && (int)$c['course_count'] > (int)$best['course_count'])) {
         $best = $c;
     }
 }
