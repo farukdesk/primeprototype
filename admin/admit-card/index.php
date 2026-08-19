@@ -152,6 +152,8 @@ require_once __DIR__ . '/../includes/header.php';
                 <strong><?= h($f_student_row['full_name']) ?></strong>
                 (ID: <strong><?= h($f_student_row['student_id']) ?></strong>,
                 Status: <?= h($f_student_row['status']) ?>).
+                Click <span class="badge bg-success"><i class="fas fa-download me-1"></i>PDF</span>
+                on a row to download this student's admit card.
             </div>
             <?php else: ?>
             <div class="alert alert-warning small mt-3 mb-0">
@@ -205,6 +207,13 @@ require_once __DIR__ . '/../includes/header.php';
                         <td class="text-muted small"><?= date('d M Y', strtotime($row['created_at'])) ?></td>
                         <td>
                             <div class="d-flex gap-1">
+                                <?php if ($f_student_row): ?>
+                                <a href="<?= APP_URL ?>/admit-card/download.php?card=<?= $row['id'] ?>&student=<?= (int)$f_student_row['id'] ?>"
+                                   class="btn btn-sm btn-success"
+                                   title="Download <?= h($f_student_row['full_name']) ?>'s admit card PDF">
+                                    <i class="fas fa-download me-1"></i>PDF
+                                </a>
+                                <?php endif; ?>
                                 <a href="<?= APP_URL ?>/admit-card/view.php?id=<?= $row['id'] ?>"
                                    class="btn btn-sm btn-outline-primary" title="View">
                                     <i class="fas fa-eye"></i>

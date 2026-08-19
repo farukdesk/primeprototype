@@ -31,7 +31,13 @@ if (!is_portal_student() && !ac_can_view()) {
 }
 
 $card = ac_get_card($card_id);
-if (!$card || !$card['is_active']) {
+if (!$card) {
+    http_response_code(404);
+    die('Admit card not found.');
+}
+// Portal students may only download active cards; admins can download
+// a student's admit card even when the card is inactive.
+if (!$card['is_active'] && is_portal_student()) {
     http_response_code(404);
     die('Admit card not found or not active.');
 }
