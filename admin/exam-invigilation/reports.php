@@ -628,10 +628,15 @@ if ($report_export === 'pdf_all') {
             . '</body></html>';
     };
 
-    // One card + one filename per faculty: "Faculty name_Designation.pdf"
+    // One card + one file per faculty, grouped into a folder per department:
+    // "Department Name/Faculty name_Designation.pdf"
     $faculty_pdfs = [];
     $used_filenames = [];
     foreach ($duties_by_faculty as $fid => $rows) {
+        $dept_folder = ei_report_filename_part((string)($rows[0]['dept_name'] ?? ''));
+        if ($dept_folder === '') {
+            $dept_folder = 'No Department';
+        }
         $name_part  = ei_report_filename_part((string)$rows[0]['faculty_name']);
         $desig_part = ei_report_filename_part((string)($rows[0]['designation'] ?? ''));
         $filename = $name_part !== '' ? $name_part : ('Faculty-' . $fid);
@@ -640,13 +645,15 @@ if ($report_export === 'pdf_all') {
         }
         $filename_base = $filename;
         $dupe = 2;
-        while (isset($used_filenames[$filename])) {
+        while (isset($used_filenames[$dept_folder][$filename])) {
             $filename = $filename_base . '_' . $dupe;
             $dupe++;
         }
-        $used_filenames[$filename] = true;
-        $faculty_pdfs[$filename . '.pdf'] = $build_faculty_card($rows);
+        $used_filenames[$dept_folder][$filename] = true;
+        $faculty_pdfs[$dept_folder . '/' . $filename . '.pdf'] = $build_faculty_card($rows);
     }
+    // Alphabetical department folders (and faculty inside each folder)
+    ksort($faculty_pdfs, SORT_NATURAL | SORT_FLAG_CASE);
 
     if (class_exists('ZipArchive')) {
         $zip_path = tempnam(sys_get_temp_dir(), 'eiduty');
@@ -1060,7 +1067,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <i class="fas fa-file-pdf me-1"></i> Export PDF
             </a>
             <a href="<?= h($report_pdf_all_url) ?>" class="btn btn-outline-primary btn-sm" style="border-radius:10px;"
-               title="Downloads a ZIP with one PDF per faculty, named Faculty name_Designation.pdf">
+               title="Downloads a ZIP with a folder per department, each containing one PDF per invigilator (Faculty name_Designation.pdf)">
                 <i class="fas fa-file-archive me-1"></i> Export All Faculty PDFs
             </a>
             <a href="<?= APP_URL ?>/exam-invigilation/reports.php" class="btn btn-outline-secondary btn-sm" style="border-radius:10px;">
