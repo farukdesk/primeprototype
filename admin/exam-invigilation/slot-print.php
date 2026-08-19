@@ -77,13 +77,15 @@ foreach ($slots as $s) {
 }
 
 // ── Human-readable filter summary for the report header ────────────────────
-$filter_parts = [];
+$dept_name = '';
 if ($f_dept > 0) {
     $dept_st = db()->prepare('SELECT name FROM dept_departments WHERE id = ?');
     $dept_st->execute([$f_dept]);
     $dept_name = (string)$dept_st->fetchColumn();
-    if ($dept_name !== '') $filter_parts[] = 'Department: ' . $dept_name;
 }
+
+$filter_parts = [];
+if ($dept_name !== '') $filter_parts[] = 'Department: ' . $dept_name;
 if ($f_date !== '')      $filter_parts[] = 'Date: ' . date('d M Y', strtotime($f_date));
 if ($f_room !== '')      $filter_parts[] = 'Room: ' . $f_room;
 if ($f_time_slot !== '') $filter_parts[] = 'Time Slot: ' . $f_time_slot;
@@ -94,6 +96,16 @@ if ($f_invigilator > 0) {
     if ($inv_name !== '') $filter_parts[] = 'Invigilator: ' . $inv_name;
 }
 $filter_summary = implode('  •  ', $filter_parts);
+
+// ── Export file name: DepartmentName_ExamName_Duty Roster ───────────────────
+// Browsers use the document title as the suggested file name in the
+// Save as PDF dialog. Falls back to ExamName_Duty Roster without a
+// department filter.
+$export_name_parts = [];
+if ($dept_name !== '') $export_name_parts[] = $dept_name;
+$export_name_parts[] = trim((string)$exam['exam_name'] . (!empty($exam['exam_year']) ? ' ' . $exam['exam_year'] : ''));
+$export_name_parts[] = 'Duty Roster';
+$export_title = preg_replace('/[\\\\\/:*?"<>|]+/', '-', implode('_', $export_name_parts));
 
 /** Render one invigilator cell: name, designation, department, phone. */
 function ei_print_invigilator_cell(?string $name, ?string $desig, ?string $dept, ?string $phone): string
@@ -119,13 +131,14 @@ function ei_print_invigilator_cell(?string $name, ?string $desig, ?string $dept,
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title><?= h($exam['exam_name']) ?> – Invigilation Duty Roster</title>
+<title><?= h($export_title) ?></title>
 <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { background: #fff; color: #000; font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; }
     .page { max-width: 190mm; margin: 0 auto; padding: 10mm 0; }
 
     .report-header { text-align: center; margin-bottom: 12px; border-bottom: 2px solid #000; padding-bottom: 8px; }
+    .report-header .uni-logo { height: 54px; width: auto; display: block; margin: 0 auto 5px; }
     .report-header .uni { font-size: 16px; font-weight: 700; }
     .report-header .exam { font-size: 13px; font-weight: 600; margin-top: 2px; }
     .report-header .sub { font-size: 11px; margin-top: 2px; }
@@ -182,6 +195,8 @@ function ei_print_invigilator_cell(?string $name, ?string $desig, ?string $dept,
     </div>
 
     <div class="report-header">
+        <img class="uni-logo" src="<?= APP_URL ?>/../assets/img/logo/favicon.png"
+             alt="Prime University" onerror="this.style.display='none'">
         <div class="uni">Prime University</div>
         <div class="exam"><?= h($exam['exam_name']) ?><?= !empty($exam['exam_year']) ? ' – ' . h($exam['exam_year']) : '' ?></div>
         <div class="sub">Invigilation Duty Roster</div>
