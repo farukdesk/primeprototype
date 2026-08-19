@@ -34,7 +34,9 @@ if ($f_student !== '') {
 
         // Optional routine link column (see admin/admit-card-routine-link.sql)
         $has_routine_col = false;
+        $has_subject_col = false;
         try { $db->query('SELECT routine_id FROM ac_admit_cards LIMIT 1'); $has_routine_col = true; } catch (Throwable $e) {}
+        try { $db->query('SELECT offer_subject_id FROM ac_admit_card_courses LIMIT 1'); $has_subject_col = true; } catch (Throwable $e) {}
 
         // Cards matching the student's dept + program (+ batch when the card is batch-specific)
         $cond    = '(ac.dept_id = ? AND ac.program_id = ? AND (ac.batch_id IS NULL OR ac.batch_id = ?))';
@@ -56,6 +58,35 @@ if ($f_student !== '') {
 
         $where .= " AND ($cond)";
         $params = array_merge($params, $cparams);
+
+        // Enrollment restriction (same rule as the student portal): only show
+        // admit cards for courses the student is actually registered in via a
+        // course offer. Fully manual / bulk-imported cards (no routine, no
+        // offer-subject links) stay visible; an admin override always bypasses.
+        $enroll_parts  = [];
+        $enroll_params = [];
+        if ($has_routine_col) {
+            $enroll_parts[] = '(ac.routine_id IS NULL OR EXISTS (
+                    SELECT 1 FROM exam_routine_items i
+                    JOIN co_registrations r ON r.offer_subject_id = i.offer_subject_id
+                   WHERE i.routine_id = ac.routine_id AND r.student_id = ?))';
+            $enroll_params[] = $sid;
+        }
+        if ($has_subject_col) {
+            $enroll_parts[] = '(NOT EXISTS (
+                    SELECT 1 FROM ac_admit_card_courses cc2
+                   WHERE cc2.admit_card_id = ac.id AND cc2.offer_subject_id IS NOT NULL)
+                OR EXISTS (
+                    SELECT 1 FROM ac_admit_card_courses cc3
+                    JOIN co_registrations r3 ON r3.offer_subject_id = cc3.offer_subject_id
+                   WHERE cc3.admit_card_id = ac.id AND r3.student_id = ?))';
+            $enroll_params[] = $sid;
+        }
+        if ($enroll_parts) {
+            $where .= ' AND (ac.id IN (SELECT admit_card_id FROM ac_student_overrides WHERE student_id = ?)
+                         OR (' . implode(' AND ', $enroll_parts) . '))';
+            $params = array_merge($params, [$sid], $enroll_params);
+        }
     } else {
         $where .= ' AND 1=0'; // unknown student → no results
     }
