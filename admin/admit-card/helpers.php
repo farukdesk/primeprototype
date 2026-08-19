@@ -272,7 +272,8 @@ function ac_build_html(array $card, array $student, array $courses, string $qr_d
     $student_name = h($student['full_name']);
     $student_id   = h($student['student_id']);
 
-    // Student photo
+    // Student photo — when the student has no photo, the photo field is
+    // omitted from the PDF entirely (no empty placeholder box).
     $photo_html = '';
     if (!empty($student['photo'])) {
         $photo_abs = dirname(__DIR__) . '/uploads/students/photos/' . $student['photo'];
@@ -287,11 +288,6 @@ function ac_build_html(array $card, array $student, array $courses, string $qr_d
                                 style="width:95px;height:115px;object-fit:cover;border:1px solid #ddd;"
                                 alt="Student Photo">';
         }
-    }
-    if ($photo_html === '') {
-        $photo_html = '<div style="width:95px;height:115px;border:1px solid #ddd;display:flex;
-                                    align-items:center;justify-content:center;font-size:11px;
-                                    color:#777;">No Photo</div>';
     }
 
     // Course rows
@@ -323,16 +319,19 @@ function ac_build_html(array $card, array $student, array $courses, string $qr_d
 </head><body>
 <div style="max-width:750px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;color:#000;padding:20px;background:#fff;">
 
-  <!-- Header -->
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">
-    <div style="width:120px;text-align:center;">' . $logo_img . '</div>
-    <div style="text-align:center;line-height:1.4;">
-      <h1 style="margin:0;font-size:22px;font-weight:bold;">Prime University</h1>
-      <div style="font-size:15px;font-weight:bold;">' . $dept_label . '</div>
-      <div style="font-size:15px;font-weight:bold;">' . $program_label . '</div>
-    </div>
-    <div style="width:120px;text-align:center;">' . $photo_html . '</div>
-  </div>
+  <!-- Header: logo + university/faculty/program (+ photo) on one line.
+       Table layout is used because dompdf does not support flexbox. -->
+  <table style="width:100%;border-collapse:collapse;margin-bottom:15px;">
+    <tr>
+      <td style="width:120px;text-align:center;vertical-align:middle;">' . $logo_img . '</td>
+      <td style="text-align:center;vertical-align:middle;line-height:1.4;">
+        <h1 style="margin:0;font-size:22px;font-weight:bold;">Prime University</h1>
+        <div style="font-size:15px;font-weight:bold;">' . $dept_label . '</div>
+        <div style="font-size:15px;font-weight:bold;">' . $program_label . '</div>
+      </td>
+      <td style="width:120px;text-align:center;vertical-align:middle;">' . $photo_html . '</td>
+    </tr>
+  </table>
 
   <!-- Admit Card title -->
   <div style="text-align:center;margin:20px 0 14px 0;">
@@ -364,18 +363,20 @@ function ac_build_html(array $card, array $student, array $courses, string $qr_d
     </tbody>
   </table>
 
-  <!-- Footer with QR -->
-  <div style="margin-top:20px;display:flex;justify-content:space-between;align-items:flex-end;">
-    <div style="font-size:11px;color:#555;max-width:500px;line-height:1.5;">
-      <p style="margin:8px 0 0 0;font-style:italic;color:#444;">
-        This is a digitally generated admit card. You can authenticate it by scanning the QR code.
-      </p>
-    </div>
-    <div style="text-align:center;">
-      <img src="' . $qr_data_uri . '" style="width:100px;height:100px;" alt="QR Code">
-      <div style="font-size:9px;color:#666;margin-top:2px;">Scan to verify</div>
-    </div>
-  </div>
+  <!-- Footer with QR (table layout — dompdf does not support flexbox) -->
+  <table style="width:100%;border-collapse:collapse;margin-top:20px;">
+    <tr>
+      <td style="font-size:11px;color:#555;line-height:1.5;vertical-align:bottom;">
+        <p style="margin:8px 0 0 0;font-style:italic;color:#444;">
+          This is a digitally generated admit card. You can authenticate it by scanning the QR code.
+        </p>
+      </td>
+      <td style="width:110px;text-align:center;vertical-align:bottom;">
+        <img src="' . $qr_data_uri . '" style="width:100px;height:100px;" alt="QR Code">
+        <div style="font-size:9px;color:#666;margin-top:2px;">Scan to verify</div>
+      </td>
+    </tr>
+  </table>
 
 </div>
 </body></html>';
