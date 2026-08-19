@@ -119,20 +119,19 @@ $cards_stmt = $db->prepare(
 $cards_stmt->execute($params);
 $cards = $cards_stmt->fetchAll();
 
-// When a student is eligible for more than one admit card of the same exam +
-// semester (e.g. duplicates or partial re-creations), show only the card that
-// lists the MAXIMUM number of courses for this student. Ties keep the newest
-// card (the list is ordered by created_at DESC).
-$best = [];
+// When a student is eligible for more than one admit card (e.g. duplicates or
+// partial re-creations, even with differing exam-name/semester spellings),
+// show ONLY the single card that lists the MAXIMUM number of courses for this
+// student. Ties keep the newest card (the list is ordered by created_at DESC).
+$best = null;
 foreach ($cards as $c) {
     $c['_student_courses'] = ac_get_courses_for_student((int)$c['id'], $student_id);
-    $key = mb_strtolower(trim((string)$c['exam_name'])) . '||' . mb_strtolower(trim((string)$c['semester']));
-    if (!isset($best[$key])
-        || count($c['_student_courses']) > count($best[$key]['_student_courses'])) {
-        $best[$key] = $c;
+    if ($best === null
+        || count($c['_student_courses']) > count($best['_student_courses'])) {
+        $best = $c;
     }
 }
-$cards = array_values($best);
+$cards = $best !== null ? [$best] : [];
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
