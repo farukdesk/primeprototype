@@ -229,11 +229,22 @@ function ei_designation_rank(?string $designation): int
 
 /**
  * Workload weight used by auto-assign: juniors get proportionally more slots
- * than seniors (e.g. a Lecturer receives several times the slots of a Dean).
+ * than seniors. Higher weight = larger share of slots.
+ * Lecturer (8) > Senior Lecturer (7) > Assistant Professor (6)
+ * > Associate Professor (4) > Professor (2) > Head/Chairman/Dean (1).
  */
 function ei_designation_weight(?string $designation): int
 {
-    return max(1, min(ei_designation_rank($designation), 8));
+    $c = strtolower(trim((string)$designation));
+    if ($c === '') return 5;
+    if (strpos($c, 'dean') !== false) return 1;
+    if (strpos($c, 'head') !== false || strpos($c, 'chairman') !== false || strpos($c, 'chairperson') !== false) return 1;
+    if (strpos($c, 'associate professor') !== false) return 4;
+    if (strpos($c, 'assistant professor') !== false) return 6;
+    if (strpos($c, 'professor') !== false) return 2;
+    if (strpos($c, 'senior lecturer') !== false) return 7;
+    if (strpos($c, 'lecturer') !== false) return 8;
+    return 5;
 }
 
 function ei_is_faculty_eligible_for_slot(array $faculty, array $slot, array $busy_map = []): bool

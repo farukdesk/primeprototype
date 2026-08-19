@@ -417,6 +417,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
                 }
                 $eligible = $sort_by_workload($eligible);
 
+                // Room department first: candidates from the room's own department
+                // take priority over other departments (workload order preserved
+                // within each group)
+                if ($slot_pref_dept > 0) {
+                    $same_dept_first = [];
+                    $other_depts     = [];
+                    foreach ($eligible as $candidate) {
+                        if ((int)$candidate['dept_id'] === $slot_pref_dept) {
+                            $same_dept_first[] = $candidate;
+                        } else {
+                            $other_depts[] = $candidate;
+                        }
+                    }
+                    $eligible = array_merge($same_dept_first, $other_depts);
+                }
+
                 $f1 = $picks[$i];
                 $f2 = null;
                 $f1_reserved = ($f1 !== null);
