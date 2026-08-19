@@ -260,7 +260,16 @@ function ac_is_enrolled_in_routine(int $routine_id, int $student_id): bool
 function ac_get_courses_for_student(int $admit_card_id, int $student_id): array
 {
     $courses = ac_get_courses($admit_card_id);
-    if (ac_card_routine_id($admit_card_id) <= 0) return $courses;
+    // Student-filtering applies to routine-linked cards AND to cards whose
+    // rows point at course-offer subjects (cards built by the generator in
+    // create.php) — each student only sees the courses they registered in.
+    $linked = ac_card_routine_id($admit_card_id) > 0;
+    if (!$linked) {
+        foreach ($courses as $c) {
+            if ((int)($c['offer_subject_id'] ?? 0) > 0) { $linked = true; break; }
+        }
+    }
+    if (!$linked) return $courses;
 
     $codeKey = static fn($s) => strtolower((string)preg_replace('/[^a-z0-9]+/i', '', (string)$s));
 
