@@ -153,6 +153,22 @@ function er_name_keys(string $name): array
     if ($short !== '' && $short !== $norm) $keys[] = $short;
     $acr = er_acronym($norm);
     if (strlen($acr) >= 2) $keys[] = $acr;
+    // Degree-aware keys: "BSc in Electrical and Electronic Engineering" →
+    // "electrical and electronic engineering", "eee", "bsc in eee", "bsc eee",
+    // so tokens like "B.Sc. in EEE" or plain "EEE" resolve to the program.
+    if (preg_match('/^(b\s?sc|m\s?sc|bba|mba|bss|mss|llb|llm|bfa|mfa|ba|ma)\s+(?:hons\s+)?(?:in\s+)?(.+)$/', $norm, $dm)) {
+        $deg  = str_replace(' ', '', $dm[1]);
+        $rest = trim($dm[2]);
+        if ($rest !== '') {
+            $keys[] = $rest;
+            $racr = er_acronym($rest);
+            if (strlen($racr) >= 2) {
+                $keys[] = $racr;
+                $keys[] = $deg . ' in ' . $racr;
+                $keys[] = $deg . ' ' . $racr;
+            }
+        }
+    }
     return array_values(array_unique($keys));
 }
 
@@ -164,11 +180,18 @@ function er_match_by_name(array $rows, string $token, string $name_field = 'name
 {
     $tok = er_norm($token);
     if ($tok === '') return [null, false];
+    $tokc = str_replace(' ', '', $tok); // "b sc in eee" → "bscineee"
     $exact = [];
     $partial = [];
     foreach ($rows as $r) {
         $keys = er_name_keys((string)$r[$name_field]);
-        if (in_array($tok, $keys, true)) { $exact[] = $r; continue; }
+        $hit  = in_array($tok, $keys, true);
+        if (!$hit) {
+            foreach ($keys as $k) {
+                if (str_replace(' ', '', $k) === $tokc) { $hit = true; break; }
+            }
+        }
+        if ($hit) { $exact[] = $r; continue; }
         foreach ($keys as $k) {
             if (strlen($tok) >= 3 && (strpos($k, $tok) !== false || strpos($tok, $k) !== false)) {
                 $partial[] = $r;
