@@ -167,6 +167,105 @@ function ac_get_courses_for_student(int $admit_card_id, int $student_id): array
     return $filtered ?: $courses;
 }
 
+/**
+ * Merged course list for one student: the card's own courses PLUS the
+ * student's registered courses from SIBLING cards.
+ *
+ * Bulk creation makes one admit card per exam routine, and routines are
+ * stored one per course offer — so one exam's subjects may be scattered
+ * across several cards of the same exam + semester + dept + program
+ * (+ batch). This merges the student's courses from all those sibling
+ * cards so a single card / PDF lists every subject, deduplicated by
+ * course code and ordered by exam date.
+ */
+function ac_get_merged_courses_for_student(int $admit_card_id, int $student_id): array
+{
+    $courses = ac_get_courses_for_student($admit_card_id, $student_id);
+
+    $card = ac_get_card($admit_card_id);
+    if (!$card) return $courses;
+
+    $norm = static fn($s) => strtolower((string)preg_replace('/[^a-z0-9]+/i', '', (string)$s));
+
+    // Sibling cards: active, same dept + program, same normalised exam name
+    // and semester; when both cards are batch-specific the batches must match.
+    try {
+        $st = db()->prepare(
+            'SELECT id, exam_name, semester, batch_id FROM ac_admit_cards
+              WHERE is_active = 1 AND dept_id = ? AND program_id = ? AND id <> ?'
+        );
+        $st->execute([(int)$card['dept_id'], (int)$card['program_id'], $admit_card_id]);
+        $siblings = [];
+        foreach ($st->fetchAll() as $c) {
+            if ($norm($c['exam_name']) !== $norm($card['exam_name'])) continue;
+            if ($norm($c['semester'])  !== $norm($card['semester']))  continue;
+            if (!empty($card['batch_id']) && !empty($c['batch_id'])
+                && (int)$c['batch_id'] !== (int)$card['batch_id']) continue;
+            $siblings[] = (int)$c['id'];
+        }
+    } catch (Throwable $e) {
+        return $courses;
+    }
+    if (!$siblings) return $courses;
+
+    // The student's registrations — sibling courses are only merged in when
+    // the student is actually registered (by offer subject or course code),
+    // so the fail-open fallback of ac_get_courses_for_student() cannot pull
+    // in unrelated courses from other sections.
+    $codeKey = static fn($s) => strtolower((string)preg_replace('/[^a-z0-9]+/i', '', (string)$s));
+    try {
+        $st = db()->prepare('SELECT offer_subject_id FROM co_registrations WHERE student_id = ?');
+        $st->execute([$student_id]);
+        $reg = array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+
+        $cst = db()->prepare(
+            'SELECT c.course_code
+               FROM co_registrations r
+               JOIN co_offer_subjects cos ON cos.id = r.offer_subject_id
+               JOIN course_curriculum c   ON c.id  = cos.curriculum_id
+              WHERE r.student_id = ?'
+        );
+        $cst->execute([$student_id]);
+        $reg_codes = array_values(array_unique(array_filter(
+            array_map($codeKey, $cst->fetchAll(PDO::FETCH_COLUMN))
+        )));
+    } catch (Throwable $e) {
+        return $courses;
+    }
+
+    $seen = [];
+    foreach ($courses as $c) {
+        $k = $codeKey($c['course_code'] ?? '') ?: $norm((string)($c['course_title'] ?? ''));
+        if ($k !== '') $seen[$k] = true;
+    }
+    foreach ($siblings as $cid) {
+        foreach (ac_get_courses($cid) as $c) {
+            $osid = (int)($c['offer_subject_id'] ?? 0);
+            $ck   = $codeKey($c['course_code'] ?? '');
+            $registered = ($osid > 0 && in_array($osid, $reg, true))
+                || ($ck !== '' && in_array($ck, $reg_codes, true));
+            if (!$registered) continue;
+            $k = $ck !== '' ? $ck : $norm((string)($c['course_title'] ?? ''));
+            if ($k === '' || isset($seen[$k])) continue;
+            $seen[$k] = true;
+            $courses[] = $c;
+        }
+    }
+
+    // Order by exam date (undated rows last); rows of the same date keep
+    // their original relative order.
+    usort($courses, static function ($a, $b) {
+        $da = (string)($a['exam_date'] ?? '');
+        $dbv = (string)($b['exam_date'] ?? '');
+        if ($da === $dbv) return 0;
+        if ($da === '')  return 1;
+        if ($dbv === '') return -1;
+        return strcmp($da, $dbv);
+    });
+
+    return $courses;
+}
+
 // ── Get or create a unique QR token for a student+card combination ────────────
 
 function ac_get_or_create_token(int $admit_card_id, int $student_id): string
