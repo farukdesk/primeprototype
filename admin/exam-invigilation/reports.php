@@ -602,6 +602,197 @@ if ($report_export === 'pdf') {
     exit;
 }
 
+// ── Department Room Invigilation Report ──────────────────────────────
+// For one department: the rooms where that department's exams are held and
+// both invigilators of each room, with each invigilator's own department.
+$dept_report_id        = max(0, (int)($_GET['dept_report_id'] ?? 0));
+$dept_report_exam_id   = max(0, (int)($_GET['dept_report_exam_id'] ?? 0));
+$dept_report_date_from = trim((string)($_GET['dept_report_date_from'] ?? ''));
+$dept_report_date_to   = trim((string)($_GET['dept_report_date_to'] ?? ''));
+$dept_report_export    = trim((string)($_GET['dept_report_export'] ?? ''));
+
+if ($dept_report_date_from !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dept_report_date_from)) {
+    $dept_report_date_from = '';
+}
+if ($dept_report_date_to !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dept_report_date_to)) {
+    $dept_report_date_to = '';
+}
+if ($dept_report_date_from !== '' && $dept_report_date_to !== '' && $dept_report_date_from > $dept_report_date_to) {
+    [$dept_report_date_from, $dept_report_date_to] = [$dept_report_date_to, $dept_report_date_from];
+}
+
+$dept_report_rows = [];
+if ($dept_report_id > 0) {
+    $dr_where  = ['s.dept_id = ?'];
+    $dr_params = [$dept_report_id];
+    if ($dept_report_exam_id > 0) {
+        $dr_where[]  = 'e.id = ?';
+        $dr_params[] = $dept_report_exam_id;
+    } else {
+        $dr_where[] = 'e.is_active = 1';
+    }
+    if ($dept_report_date_from !== '') { $dr_where[] = 's.slot_date >= ?'; $dr_params[] = $dept_report_date_from; }
+    if ($dept_report_date_to !== '')   { $dr_where[] = 's.slot_date <= ?'; $dr_params[] = $dept_report_date_to; }
+
+    $dr_time_order = ei_index_time_order_expr('s.time_slot');
+    $dr_st = db()->prepare(
+        "SELECT s.slot_date, s.time_slot, s.room_number,
+                e.exam_name, e.exam_year,
+                dp.name AS room_dept_name,
+                f1.name AS f1_name, f1.designation AS f1_desig, d1.name AS f1_dept,
+                f2.name AS f2_name, f2.designation AS f2_desig, d2.name AS f2_dept
+         FROM ei_slots s
+         JOIN ei_exams e ON e.id = s.exam_id
+         JOIN dept_departments dp ON dp.id = s.dept_id
+         LEFT JOIN ei_faculty f1 ON f1.id = s.faculty1_id
+         LEFT JOIN dept_departments d1 ON d1.id = f1.dept_id
+         LEFT JOIN ei_faculty f2 ON f2.id = s.faculty2_id
+         LEFT JOIN dept_departments d2 ON d2.id = f2.dept_id
+         WHERE " . implode(' AND ', $dr_where) . "
+         ORDER BY s.slot_date ASC, {$dr_time_order} ASC, s.time_slot ASC, s.room_number ASC"
+    );
+    $dr_st->execute($dr_params);
+    $dept_report_rows = $dr_st->fetchAll();
+}
+
+$dept_report_name = ($dept_report_id > 0 && isset($report_department_map[$dept_report_id]))
+    ? (string)$report_department_map[$dept_report_id]
+    : '';
+
+$dept_report_query = [];
+if ($dept_report_id > 0)             $dept_report_query['dept_report_id'] = $dept_report_id;
+if ($dept_report_exam_id > 0)        $dept_report_query['dept_report_exam_id'] = $dept_report_exam_id;
+if ($dept_report_date_from !== '')   $dept_report_query['dept_report_date_from'] = $dept_report_date_from;
+if ($dept_report_date_to !== '')     $dept_report_query['dept_report_date_to'] = $dept_report_date_to;
+$dept_report_pdf_url = APP_URL . '/exam-invigilation/reports.php?' . http_build_query(array_merge($dept_report_query, ['dept_report_export' => 'pdf']));
+
+if ($dept_report_export === 'pdf' && $dept_report_id > 0) {
+    require_once __DIR__ . '/../../vendor/autoload.php';
+
+    $generated_at_label = date('d M Y, h:i A');
+    $logo_path = dirname(dirname(__DIR__)) . '/assets/img/logo/logo-black.png';
+    $logo_data_uri = '';
+    if (is_file($logo_path) && is_readable($logo_path)) {
+        $logo_binary = file_get_contents($logo_path);
+        if ($logo_binary !== false) {
+            $logo_data_uri = 'data:image/png;base64,' . base64_encode($logo_binary);
+        }
+    }
+
+    $dr_exam_label = 'All Active Exams';
+    if ($dept_report_exam_id > 0 && isset($report_exam_map[$dept_report_exam_id])) {
+        $dr_exam_label = $report_exam_map[$dept_report_exam_id]['exam_name'] . ' (' . $report_exam_map[$dept_report_exam_id]['exam_year'] . ')';
+    }
+    $dr_date_label = '';
+    if ($dept_report_date_from !== '' && $dept_report_date_to !== '') {
+        $dr_date_label = ei_report_format_date($dept_report_date_from) . ' to ' . ei_report_format_date($dept_report_date_to);
+    } elseif ($dept_report_date_from !== '') {
+        $dr_date_label = 'From ' . ei_report_format_date($dept_report_date_from);
+    } elseif ($dept_report_date_to !== '') {
+        $dr_date_label = 'Up to ' . ei_report_format_date($dept_report_date_to);
+    }
+
+    $dr_cell = 'padding:8px 10px;border:1px solid #d7deea;color:#0f172a;vertical-align:top;';
+    $dr_invigilator_html = static function (?string $name, ?string $desig, ?string $dept): string {
+        if (!$name) {
+            return '<span style="color:#dc2626;">Not assigned</span>';
+        }
+        $html = '<span style="font-weight:700;">' . ei_report_escape((string)$name) . '</span>';
+        if ($desig) {
+            $html .= '<br><span style="color:#64748b;font-size:8pt;">' . ei_report_escape((string)$desig) . '</span>';
+        }
+        if ($dept) {
+            $html .= '<br><span style="color:#2563eb;font-size:8pt;">' . ei_report_escape((string)$dept) . '</span>';
+        }
+        return $html;
+    };
+
+    $dr_rows_html = '';
+    if (empty($dept_report_rows)) {
+        $dr_rows_html = '<tr><td colspan="5" style="padding:30px 14px;text-align:center;color:#6b7280;">No invigilation rooms found for this department with the selected filters.</td></tr>';
+    } else {
+        foreach ($dept_report_rows as $dr_row) {
+            $dr_rows_html .= '<tr>'
+                . '<td style="' . $dr_cell . 'white-space:nowrap;">' . ei_report_escape(ei_report_format_date((string)$dr_row['slot_date'], 'd M Y')) . '</td>'
+                . '<td style="' . $dr_cell . '">' . ei_report_escape((string)$dr_row['time_slot']) . '</td>'
+                . '<td style="' . $dr_cell . 'font-weight:700;">' . ei_report_escape((string)$dr_row['room_number']) . '</td>'
+                . '<td style="' . $dr_cell . '">' . $dr_invigilator_html($dr_row['f1_name'], $dr_row['f1_desig'], $dr_row['f1_dept']) . '</td>'
+                . '<td style="' . $dr_cell . '">' . $dr_invigilator_html($dr_row['f2_name'], $dr_row['f2_desig'], $dr_row['f2_dept']) . '</td>'
+                . '</tr>';
+        }
+    }
+
+    $logo_html = $logo_data_uri !== ''
+        ? '<img src="' . $logo_data_uri . '" alt="Prime University" style="height:56px;width:auto;">'
+        : '';
+
+    $dr_meta_rows = '<tr>'
+            . '<td style="width:24%;padding:6px 0;color:#475569;font-weight:700;">Department</td>'
+            . '<td style="width:76%;padding:6px 0;color:#0f172a;">: ' . ei_report_escape($dept_report_name) . '</td>'
+        . '</tr>'
+        . '<tr>'
+            . '<td style="padding:6px 0;color:#475569;font-weight:700;">Exam Title</td>'
+            . '<td style="padding:6px 0;color:#0f172a;">: ' . ei_report_escape($dr_exam_label) . '</td>'
+        . '</tr>';
+    if ($dr_date_label !== '') {
+        $dr_meta_rows .= '<tr>'
+            . '<td style="padding:6px 0;color:#475569;font-weight:700;">Duty Dates</td>'
+            . '<td style="padding:6px 0;color:#0f172a;">: ' . ei_report_escape($dr_date_label) . '</td>'
+        . '</tr>';
+    }
+    $dr_meta_rows .= '<tr>'
+            . '<td style="padding:6px 0;color:#475569;font-weight:700;">Total Room Slots</td>'
+            . '<td style="padding:6px 0;color:#0f172a;">: ' . count($dept_report_rows) . '</td>'
+        . '</tr>';
+
+    $dr_pdf_html = '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Department Invigilation Room Report</title></head>'
+        . '<body style="font-family:DejaVu Sans, Arial, sans-serif;background:#eef3f8;margin:0;padding:18px;">'
+        . '<div style="background:#ffffff;border:1px solid #d7deea;border-radius:16px;overflow:hidden;">'
+        . '<div style="padding:18px 24px 14px;border-bottom:1px solid #d7deea;">'
+        . '<table style="width:100%;border-collapse:collapse;"><tr>'
+        . '<td style="width:90px;vertical-align:middle;">' . $logo_html . '</td>'
+        . '<td style="vertical-align:middle;text-align:center;">'
+        . '<div style="font-size:16pt;font-weight:800;color:#0f172a;line-height:1.2;">Department Invigilation Room Report</div>'
+        . '</td>'
+        . '<td style="width:90px;"></td>'
+        . '</tr></table>'
+        . '<table style="width:100%;border-collapse:collapse;margin-top:12px;font-size:9.5pt;">'
+        . $dr_meta_rows
+        . '</table>'
+        . '</div>'
+        . '<div style="padding:14px 24px 14px;">'
+        . '<table style="width:100%;border-collapse:collapse;font-size:9pt;">'
+        . '<thead>'
+        . '<tr style="background:#0f172a;color:#ffffff;">'
+        . '<th style="padding:9px 10px;border:1px solid #0f172a;text-align:left;width:14%;">Date</th>'
+        . '<th style="padding:9px 10px;border:1px solid #0f172a;text-align:left;width:18%;">Duty Time</th>'
+        . '<th style="padding:9px 10px;border:1px solid #0f172a;text-align:left;width:14%;">Room</th>'
+        . '<th style="padding:9px 10px;border:1px solid #0f172a;text-align:left;">Invigilator 1</th>'
+        . '<th style="padding:9px 10px;border:1px solid #0f172a;text-align:left;">Invigilator 2</th>'
+        . '</tr>'
+        . '</thead>'
+        . '<tbody>' . $dr_rows_html . '</tbody>'
+        . '</table>'
+        . '<div style="margin:14px 0 0;font-size:8.5pt;color:#64748b;text-align:center;">This is a software-generated schedule. If you have any issues, please contact the Controller of Examinations.</div>'
+        . '<div style="margin:4px 0 0;font-size:8.5pt;color:#64748b;text-align:center;">Generated ' . ei_report_escape($generated_at_label) . '</div>'
+        . '</div>'
+        . '</div>'
+        . '</body></html>';
+
+    $dompdf = new \Dompdf\Dompdf(['isRemoteEnabled' => false]);
+    $dompdf->loadHtml($dr_pdf_html, 'UTF-8');
+    $dompdf->setPaper('A4', 'landscape');
+    $dompdf->render();
+
+    $dr_filename = preg_replace('/[^A-Za-z0-9\-]+/', '-', strtolower($dept_report_name));
+    $dr_filename = trim((string)$dr_filename, '-');
+    if ($dr_filename === '') {
+        $dr_filename = 'department';
+    }
+    $dompdf->stream('dept-invigilation-' . $dr_filename . '-' . date('Ymd') . '.pdf', ['Attachment' => true]);
+    exit;
+}
+
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
@@ -760,6 +951,131 @@ require_once __DIR__ . '/../includes/header.php';
                 </tbody>
             </table>
         </div>
+    </div>
+</div>
+
+<!-- Department Room Invigilation Report -->
+<div class="card mb-4" id="dept-room-report" style="border-left:4px solid #198754;">
+    <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <div>
+            <h6 class="mb-1 fw-semibold"><i class="fas fa-building me-2 text-success"></i>Department Room Invigilation Report</h6>
+            <p class="mb-0 text-muted" style="font-size:.85rem;">
+                Pick a department to see the rooms where its exams run and who invigilates each room (with each invigilator's own department).
+            </p>
+        </div>
+        <?php if ($dept_report_id > 0): ?>
+        <a href="<?= h($dept_report_pdf_url) ?>" target="_blank" class="btn btn-success btn-sm" style="border-radius:10px;">
+            <i class="fas fa-file-pdf me-1"></i> Export PDF
+        </a>
+        <?php endif; ?>
+    </div>
+    <div class="card-body">
+        <form method="GET" action="<?= APP_URL ?>/exam-invigilation/reports.php#dept-room-report" class="row g-2 align-items-end mb-3">
+            <div class="col-12 col-lg-4">
+                <label class="form-label small text-muted mb-1">Department</label>
+                <select name="dept_report_id" class="form-select form-select-sm" required>
+                    <option value="">Select a department…</option>
+                    <?php foreach ($report_departments as $dr_dept): ?>
+                    <option value="<?= (int)$dr_dept['id'] ?>" <?= $dept_report_id === (int)$dr_dept['id'] ? 'selected' : '' ?>>
+                        <?= h($dr_dept['name']) ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-12 col-lg-3">
+                <label class="form-label small text-muted mb-1">Exam</label>
+                <select name="dept_report_exam_id" class="form-select form-select-sm">
+                    <option value="0">All Active Exams</option>
+                    <?php foreach ($report_exam_options as $dr_exam): ?>
+                    <option value="<?= (int)$dr_exam['id'] ?>" <?= $dept_report_exam_id === (int)$dr_exam['id'] ? 'selected' : '' ?>>
+                        <?= h($dr_exam['exam_name']) ?> (<?= h($dr_exam['exam_year']) ?>)<?= (int)$dr_exam['is_active'] === 1 ? '' : ' • Inactive' ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-6 col-lg-2">
+                <label class="form-label small text-muted mb-1">From</label>
+                <input type="date" name="dept_report_date_from" class="form-control form-control-sm" value="<?= h($dept_report_date_from) ?>">
+            </div>
+            <div class="col-6 col-lg-2">
+                <label class="form-label small text-muted mb-1">To</label>
+                <input type="date" name="dept_report_date_to" class="form-control form-control-sm" value="<?= h($dept_report_date_to) ?>">
+            </div>
+            <div class="col-12 col-lg-1 d-grid">
+                <button class="btn btn-sm btn-outline-success" style="border-radius:8px;">
+                    <i class="fas fa-filter me-1"></i> View
+                </button>
+            </div>
+        </form>
+
+        <?php if ($dept_report_id > 0): ?>
+        <div class="alert alert-light border d-flex flex-wrap align-items-center gap-2 mb-3" style="font-size:.85rem;">
+            <span class="fw-semibold text-dark"><?= h($dept_report_name) ?></span>
+            <span class="text-muted">• <?= count($dept_report_rows) ?> room slot<?= count($dept_report_rows) === 1 ? '' : 's' ?></span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover table-bordered align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="px-3 text-center" style="width:50px;">#</th>
+                        <th>Date</th>
+                        <th>Duty Time</th>
+                        <th>Room</th>
+                        <th>Invigilator 1</th>
+                        <th>Invigilator 2</th>
+                        <?php if ($dept_report_exam_id === 0): ?>
+                        <th>Exam</th>
+                        <?php endif; ?>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php if (empty($dept_report_rows)): ?>
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-5">
+                            <i class="fas fa-inbox fa-2x mb-2 d-block text-muted"></i>
+                            No invigilation rooms found for this department with the selected filters.
+                        </td>
+                    </tr>
+                <?php else: ?>
+                    <?php foreach ($dept_report_rows as $dr_index => $dr_row): ?>
+                    <tr>
+                        <td class="px-3 text-center"><?= $dr_index + 1 ?></td>
+                        <td class="fw-semibold"><?= h(ei_report_format_date((string)$dr_row['slot_date'], 'd M Y')) ?></td>
+                        <td><?= h($dr_row['time_slot']) ?></td>
+                        <td class="fw-medium"><?= h($dr_row['room_number']) ?></td>
+                        <td>
+                            <?php if ($dr_row['f1_name']): ?>
+                            <div class="fw-medium"><?= h($dr_row['f1_name']) ?></div>
+                            <?php if ($dr_row['f1_desig']): ?><small class="text-muted"><?= h($dr_row['f1_desig']) ?></small><?php endif; ?>
+                            <?php if ($dr_row['f1_dept']): ?><small class="text-primary d-block"><?= h($dr_row['f1_dept']) ?></small><?php endif; ?>
+                            <?php else: ?>
+                            <span class="text-danger"><i class="fas fa-exclamation-circle me-1"></i>Not assigned</span>
+                            <?php endif; ?>
+                        </td>
+                        <td>
+                            <?php if ($dr_row['f2_name']): ?>
+                            <div class="fw-medium"><?= h($dr_row['f2_name']) ?></div>
+                            <?php if ($dr_row['f2_desig']): ?><small class="text-muted"><?= h($dr_row['f2_desig']) ?></small><?php endif; ?>
+                            <?php if ($dr_row['f2_dept']): ?><small class="text-primary d-block"><?= h($dr_row['f2_dept']) ?></small><?php endif; ?>
+                            <?php else: ?>
+                            <span class="text-danger"><i class="fas fa-exclamation-circle me-1"></i>Not assigned</span>
+                            <?php endif; ?>
+                        </td>
+                        <?php if ($dept_report_exam_id === 0): ?>
+                        <td><small class="text-muted"><?= h($dr_row['exam_name']) ?> (<?= h($dr_row['exam_year']) ?>)</small></td>
+                        <?php endif; ?>
+                    </tr>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+        <?php else: ?>
+        <div class="text-center text-muted py-4">
+            <i class="fas fa-building fa-2x mb-2 d-block" style="opacity:.2;"></i>
+            Select a department above to view its room invigilation report.
+        </div>
+        <?php endif; ?>
     </div>
 </div>
 
