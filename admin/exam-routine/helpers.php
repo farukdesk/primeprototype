@@ -153,14 +153,37 @@ function er_name_keys(string $name): array
     if ($short !== '' && $short !== $norm) $keys[] = $short;
     $acr = er_acronym($norm);
     if (strlen($acr) >= 2) $keys[] = $acr;
-    // Degree-aware keys: "BSc in Electrical and Electronic Engineering" →
-    // "electrical and electronic engineering", "eee", "bsc in eee", "bsc eee",
-    // so tokens like "B.Sc. in EEE" or plain "EEE" resolve to the program.
-    if (preg_match('/^(b\s?sc|m\s?sc|bba|mba|bss|mss|llb|llm|bfa|mfa|ba|ma)\s+(?:hons\s+)?(?:in\s+)?(.+)$/', $norm, $dm)) {
+    // Degree-aware keys: long degree names are canonicalised first, so
+    // "Bachelor of Science in Civil Engineering (CE)" and
+    // "BSc in Electrical and Electronic Engineering" both yield keys such as
+    // "civil engineering", "ce", "bsc in civil engineering", "bsc in ce" —
+    // matching tokens like "B.Sc. in Civil Engineering" or plain "EEE".
+    $dnorm = $norm;
+    $long  = [
+        'bachelor of business administration' => 'bba',
+        'master of business administration'   => 'mba',
+        'bachelor of social sciences?'        => 'bss',
+        'master of social sciences?'          => 'mss',
+        'bachelor of fine arts'               => 'bfa',
+        'master of fine arts'                 => 'mfa',
+        'bachelor of science'                 => 'bsc',
+        'master of science'                   => 'msc',
+        'bachelor of arts'                    => 'ba',
+        'master of arts'                      => 'ma',
+        'bachelor of laws'                    => 'llb',
+        'master of laws'                      => 'llm',
+    ];
+    foreach ($long as $l => $s) {
+        $r = preg_replace('/^' . $l . '\b/', $s, $dnorm, 1, $n);
+        if ($n > 0) { $dnorm = (string)$r; break; }
+    }
+    if (preg_match('/^(b\s?sc|m\s?sc|bba|mba|bss|mss|llb|llm|bfa|mfa|ba|ma)\s+(?:hons\s+)?(?:in\s+)?(.+)$/', $dnorm, $dm)) {
         $deg  = str_replace(' ', '', $dm[1]);
         $rest = trim($dm[2]);
         if ($rest !== '') {
             $keys[] = $rest;
+            $keys[] = $deg . ' in ' . $rest;
+            $keys[] = $deg . ' ' . $rest;
             $racr = er_acronym($rest);
             if (strlen($racr) >= 2) {
                 $keys[] = $racr;
