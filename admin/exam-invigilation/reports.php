@@ -507,16 +507,14 @@ if ($report_date_from !== '') $report_filter_query['report_date_from'] = $report
 if ($report_date_to !== '') $report_filter_query['report_date_to'] = $report_date_to;
 $report_pdf_url = APP_URL . '/exam-invigilation/reports.php?' . http_build_query(array_merge($report_filter_query, ['report_export' => 'pdf']));
 
-// Course coordinator per department: faculty whose designation contains
-// "coordinator". Inactive coordinators are included too (their name and
-// contact still print in the Room cell), but active ones are preferred
-// when a department has more than one.
+// Course coordinator per department: active faculty whose designation
+// contains "coordinator" (first match per department, alphabetically).
 $dept_coordinators = [];
 foreach (db()->query(
     "SELECT f.dept_id, f.name, f.designation, f.contact_number
      FROM ei_faculty f
-     WHERE LOWER(COALESCE(f.designation, '')) LIKE '%coordinator%'
-     ORDER BY f.dept_id ASC, f.is_active DESC, f.name ASC"
+     WHERE f.is_active = 1 AND LOWER(COALESCE(f.designation, '')) LIKE '%coordinator%'
+     ORDER BY f.dept_id ASC, f.name ASC"
 )->fetchAll() as $coordinator_row) {
     $coordinator_dept = (int)$coordinator_row['dept_id'];
     if (!isset($dept_coordinators[$coordinator_dept])) {
