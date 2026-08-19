@@ -94,18 +94,29 @@ function ac_card_routine_id(int $admit_card_id): int
     }
 }
 
-/** Is the student registered in at least one course of the routine? */
+/**
+ * Is the student registered in at least one course of the routine?
+ * Matches by offer subject first, then by course code — the student may be
+ * registered for the same course through a different offer / section than
+ * the one the routine row points at.
+ */
 function ac_is_enrolled_in_routine(int $routine_id, int $student_id): bool
 {
     try {
         $st = db()->prepare(
             'SELECT 1
                FROM exam_routine_items i
-               JOIN co_registrations r ON r.offer_subject_id = i.offer_subject_id
-              WHERE i.routine_id = ? AND r.student_id = ?
+               JOIN co_offer_subjects ros ON ros.id = i.offer_subject_id
+               JOIN course_curriculum rc  ON rc.id = ros.curriculum_id
+               JOIN co_registrations r    ON r.student_id = ?
+               JOIN co_offer_subjects ss  ON ss.id = r.offer_subject_id
+               JOIN course_curriculum sc  ON sc.id = ss.curriculum_id
+              WHERE i.routine_id = ?
+                AND (r.offer_subject_id = i.offer_subject_id
+                     OR sc.course_code = rc.course_code)
               LIMIT 1'
         );
-        $st->execute([$routine_id, $student_id]);
+        $st->execute([$student_id, $routine_id]);
         return $st->fetchColumn() !== false;
     } catch (Throwable $e) {
         return true; // fail open if routine tables are unavailable
@@ -122,17 +133,36 @@ function ac_get_courses_for_student(int $admit_card_id, int $student_id): array
     $courses = ac_get_courses($admit_card_id);
     if (ac_card_routine_id($admit_card_id) <= 0) return $courses;
 
+    $codeKey = static fn($s) => strtolower((string)preg_replace('/[^a-z0-9]+/i', '', (string)$s));
+
     try {
         $st = db()->prepare('SELECT offer_subject_id FROM co_registrations WHERE student_id = ?');
         $st->execute([$student_id]);
         $reg = array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+
+        // Course codes the student is registered in — the registration may
+        // sit on a different offer / section than the offer subject the
+        // admit-card row points at, so codes are matched as a fallback.
+        $cst = db()->prepare(
+            'SELECT c.course_code
+               FROM co_registrations r
+               JOIN co_offer_subjects cos ON cos.id = r.offer_subject_id
+               JOIN course_curriculum c   ON c.id  = cos.curriculum_id
+              WHERE r.student_id = ?'
+        );
+        $cst->execute([$student_id]);
+        $reg_codes = array_values(array_unique(array_filter(
+            array_map($codeKey, $cst->fetchAll(PDO::FETCH_COLUMN))
+        )));
     } catch (Throwable $e) {
         return $courses;
     }
 
-    $filtered = array_values(array_filter($courses, function ($c) use ($reg) {
+    $filtered = array_values(array_filter($courses, function ($c) use ($reg, $reg_codes, $codeKey) {
         $osid = (int)($c['offer_subject_id'] ?? 0);
-        return $osid <= 0 || in_array($osid, $reg, true);
+        if ($osid <= 0 || in_array($osid, $reg, true)) return true;
+        $ck = $codeKey($c['course_code'] ?? '');
+        return $ck !== '' && in_array($ck, $reg_codes, true);
     }));
     return $filtered ?: $courses;
 }
