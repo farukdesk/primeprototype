@@ -428,15 +428,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
             ]);
 
             // Mark these faculty as busy for subsequent slots in the same run
-            if ($f1) {
-                $busy_map[$key][(int)$f1['id']] = true;
-                $workload[(int)$f1['id']] = ($workload[(int)$f1['id']] ?? 0) + 1;
-                $daily_workload[(int)$f1['id']][$slot_date] = ($daily_workload[(int)$f1['id']][$slot_date] ?? 0) + 1;
-            }
-            if ($f2) {
-                $busy_map[$key][(int)$f2['id']] = true;
-                $workload[(int)$f2['id']] = ($workload[(int)$f2['id']] ?? 0) + 1;
-                $daily_workload[(int)$f2['id']][$slot_date] = ($daily_workload[(int)$f2['id']][$slot_date] ?? 0) + 1;
+            foreach ([$f1, $f2] as $fx) {
+                if (!$fx) continue;
+                $fid = (int)$fx['id'];
+                $busy_map[$key][$fid] = true;
+                $workload[$fid] = ($workload[$fid] ?? 0) + 1;
+                $daily_workload[$fid][$slot_date] = ($daily_workload[$fid][$slot_date] ?? 0) + 1;
+                if ($slot_minutes !== null) {
+                    if (!isset($daily_span[$fid][$slot_date])) {
+                        $daily_span[$fid][$slot_date] = ['start' => $slot_minutes[0], 'end' => $slot_minutes[1]];
+                    } else {
+                        $daily_span[$fid][$slot_date]['start'] = min($daily_span[$fid][$slot_date]['start'], $slot_minutes[0]);
+                        $daily_span[$fid][$slot_date]['end']   = max($daily_span[$fid][$slot_date]['end'], $slot_minutes[1]);
+                    }
+                }
             }
 
             if ($f1 && $f2) {
