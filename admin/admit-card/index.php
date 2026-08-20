@@ -9,6 +9,28 @@ require_once __DIR__ . '/helpers.php';
 
 $page_title = 'Admit Cards';
 
+// ── Bulk activate / deactivate ──────────────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['bulk_action'] ?? '') !== '')) {
+    csrf_check();
+    $ret = APP_URL . '/admit-card/index.php'
+         . ((string)($_SERVER['QUERY_STRING'] ?? '') !== '' ? '?' . $_SERVER['QUERY_STRING'] : '');
+    if (!ac_can_edit()) {
+        flash_set('danger', 'You do not have permission to change admit card status.');
+        redirect($ret);
+    }
+    $bulk_ids = array_values(array_filter(array_map('intval', (array)($_POST['card_ids'] ?? [])), static fn($v) => $v > 0));
+    $bulk_act = (string)$_POST['bulk_action'];
+    if (!$bulk_ids) {
+        flash_set('warning', 'Select at least one admit card first.');
+    } elseif ($bulk_act === 'activate' || $bulk_act === 'deactivate') {
+        $ph = implode(',', array_fill(0, count($bulk_ids), '?'));
+        $st = db()->prepare("UPDATE ac_admit_cards SET is_active = ? WHERE id IN ($ph)");
+        $st->execute(array_merge([$bulk_act === 'activate' ? 1 : 0], $bulk_ids));
+        flash_set('success', $st->rowCount() . ' admit card(s) ' . ($bulk_act === 'activate' ? 'activated' : 'deactivated') . '.');
+    }
+    redirect($ret);
+}
+
 $f_search  = trim($_GET['search'] ?? '');
 $f_student = trim($_GET['student_id'] ?? '');
 $f_course  = trim($_GET['course'] ?? '');
@@ -315,12 +337,33 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <!-- Table -->
+<form method="POST" action="?<?= h($flt_qs) ?>" id="bulk_form">
+    <?= csrf_field() ?>
 <div class="card">
+    <?php if (ac_can_edit()): ?>
+    <div class="card-header py-2 px-4 d-flex flex-wrap align-items-center gap-2">
+        <span class="small fw-semibold text-muted"><i class="fas fa-tasks me-1"></i>Bulk status:</span>
+        <button type="submit" name="bulk_action" value="activate" class="btn btn-sm btn-outline-success" style="border-radius:8px;"
+                onclick="return confirm('Activate the selected admit card(s)? They become visible to students.')">
+            <i class="fas fa-toggle-on me-1"></i>Activate selected
+        </button>
+        <button type="submit" name="bulk_action" value="deactivate" class="btn btn-sm btn-outline-secondary" style="border-radius:8px;"
+                onclick="return confirm('Deactivate the selected admit card(s)? They are hidden from students.')">
+            <i class="fas fa-toggle-off me-1"></i>Deactivate selected
+        </button>
+        <span class="small text-muted ms-auto"><span id="bulk_count">0</span> selected</span>
+    </div>
+    <?php endif; ?>
     <div class="card-body p-0">
         <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
                 <thead class="table-light">
                     <tr>
+                        <?php if (ac_can_edit()): ?>
+                        <th class="ps-4" style="width:36px;">
+                            <input type="checkbox" class="form-check-input" id="bulk_all" title="Select all on this page">
+                        </th>
+                        <?php endif; ?>
                         <th class="px-4">#</th>
                         <th>Exam Name</th>
                         <th>Semester</th>
@@ -334,10 +377,15 @@ require_once __DIR__ . '/../includes/header.php';
                 </thead>
                 <tbody>
                 <?php if (empty($rows)): ?>
-                    <tr><td colspan="9" class="text-center text-muted py-5">No admit cards found.</td></tr>
+                    <tr><td colspan="<?= ac_can_edit() ? 10 : 9 ?>" class="text-center text-muted py-5">No admit cards found.</td></tr>
                 <?php else: ?>
                     <?php foreach ($rows as $row): ?>
                     <tr>
+                        <?php if (ac_can_edit()): ?>
+                        <td class="ps-4">
+                            <input type="checkbox" class="form-check-input bulk-sel" name="card_ids[]" value="<?= (int)$row['id'] ?>">
+                        </td>
+                        <?php endif; ?>
                         <td class="px-4"><?= (int)$row['id'] ?></td>
                         <td class="fw-semibold"><?= h($row['exam_name']) ?></td>
                         <td><?= h($row['semester']) ?></td>
@@ -405,5 +453,30 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
     <?php endif; ?>
 </div>
+</form>
+
+<script>
+(function () {
+    var all   = document.getElementById('bulk_all');
+    var boxes = document.querySelectorAll('.bulk-sel');
+    var count = document.getElementById('bulk_count');
+    function upd() {
+        var n = 0;
+        boxes.forEach(function (b) { if (b.checked) n++; });
+        if (count) count.textContent = n;
+    }
+    if (all) all.addEventListener('change', function () {
+        boxes.forEach(function (b) { b.checked = all.checked; });
+        upd();
+    });
+    boxes.forEach(function (b) { b.addEventListener('change', upd); });
+    var form = document.getElementById('bulk_form');
+    if (form) form.addEventListener('submit', function (e) {
+        var any = false;
+        boxes.forEach(function (b) { if (b.checked) any = true; });
+        if (!any) { e.preventDefault(); alert('Select at least one admit card first.'); }
+    });
+})();
+</script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
