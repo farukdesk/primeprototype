@@ -26,7 +26,6 @@ $db         = db();
 $errors     = [];
 $batches    = null;   // loaded batch-wise course data
 $dup_cards  = [];
-$clashes    = [];
 
 $exam_name   = trim((string)($_POST['exam_name'] ?? ''));
 $semester    = trim((string)($_POST['semester'] ?? ''));
@@ -165,6 +164,7 @@ function acg_load_batches(string $offer_sem, int $dept_id, int $batch_id, array 
         $g = &$batches[$bid]['groups'][$gkey];
         foreach ($subjects_by_offer[(int)$o['id']] ?? [] as $s) {
             $osid = (int)$s['offer_subject_id'];
+            if (preg_match('/\blab\b/i', $s['course_name'] . ' ' . $s['course_code'])) continue; // lab courses excluded
             if ((int)$s['reg_count'] <= 0) continue;          // no registered students
             if (isset($g['osids'][$osid])) continue;
             $g['osids'][$osid] = true;
@@ -267,47 +267,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (empty($plan) && empty($errors)) {
             $errors[] = 'Set an exam date for at least one course in a selected group.';
-        }
-
-        // ── Student-level clash check ────────────────────────────────────
-        // A student registered in TWO different courses that landed on the
-        // same date + time slot would get two exams at once.
-        if (empty($errors) && $plan) {
-            $slot_of = [];
-            foreach ($plan as $p) {
-                foreach ($p['courses'] as $c) $slot_of[(int)$c['offer_subject_id']] = $c;
-            }
-            $ids = array_keys($slot_of);
-            $iph = implode(',', array_fill(0, count($ids), '?'));
-            $rs  = $db->prepare(
-                "SELECT r.offer_subject_id, r.student_id,
-                        s.student_id AS student_no, s.full_name
-                   FROM co_registrations r
-                   JOIN students s ON s.id = r.student_id
-                  WHERE r.offer_subject_id IN ($iph) AND s.status = 'Active'"
-            );
-            $rs->execute($ids);
-            $per = [];
-            foreach ($rs->fetchAll() as $r) {
-                $c = $slot_of[(int)$r['offer_subject_id']];
-                if (($c['time_slot'] ?? '') === '') continue; // clash needs a time
-                $key = $c['exam_date'] . '|' . $c['time_slot'];
-                $sid = (int)$r['student_id'];
-                $per[$sid]['who'] = $r['full_name'] . ' (' . $r['student_no'] . ')';
-                $per[$sid]['slots'][$key][acg_code_key((string)$c['course_code'])] =
-                    trim((string)$c['course_code'] . ' ' . (string)$c['course_title']);
-            }
-            foreach ($per as $p) {
-                foreach ($p['slots'] as $key => $cc) {
-                    if (count($cc) < 2) continue;
-                    [$d, $t] = explode('|', $key, 2);
-                    $clashes[] = ['who' => $p['who'], 'date' => $d, 'slot' => $t, 'courses' => array_values($cc)];
-                }
-            }
-            usort($clashes, static fn($a, $b) => [$a['date'], $a['who']] <=> [$b['date'], $b['who']]);
-            if ($clashes) {
-                $errors[] = count($clashes) . ' student exam clash(es) detected — adjust the dates/times below before generating.';
-            }
         }
 
         // ── Create the admit cards ───────────────────────────────────────
@@ -499,25 +458,6 @@ require_once __DIR__ . '/../includes/header.php';
             <li><a href="<?= APP_URL ?>/admit-card/view.php?id=<?= (int)$c['id'] ?>">Card #<?= (int)$c['id'] ?></a>
                 — <?= h($c['exam_name']) ?> (<?= h($c['semester']) ?>)</li>
             <?php endforeach; ?>
-        </ul>
-    </div>
-    <?php endif; ?>
-
-    <?php if ($clashes): ?>
-    <div class="alert alert-danger small">
-        <strong><i class="fas fa-flag me-1"></i><?= count($clashes) ?> student exam clash(es) detected</strong>
-        — these students are registered in two different courses that fall on the SAME date and time
-        slot. Adjust the dates/times before generating:
-        <ul class="mb-0 ps-3">
-            <?php foreach (array_slice($clashes, 0, 50) as $cl): ?>
-            <li>
-                <?= h($cl['who']) ?> — <?= h(date('d M Y', strtotime($cl['date']))) ?><?= $cl['slot'] !== '' ? h(', ' . $cl['slot']) : '' ?>:
-                <?= h(implode('  +  ', $cl['courses'])) ?>
-            </li>
-            <?php endforeach; ?>
-            <?php if (count($clashes) > 50): ?>
-            <li class="text-muted">… and <?= count($clashes) - 50 ?> more.</li>
-            <?php endif; ?>
         </ul>
     </div>
     <?php endif; ?>
