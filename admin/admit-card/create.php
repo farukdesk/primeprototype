@@ -1,44 +1,47 @@
 <?php
 /**
- * Admit Card – Generator (rebuilt, course-offer driven).
+ * Admit Card – Generator (course-offer driven, batch wise).
  *
- * The old exam-routine selection is gone. New flow:
+ * Rebuilt flow (the old CSV schedule upload is gone):
  *
- *   1. Enter the exam name + semester and upload (or paste) the exam
- *      schedule: Course Title, Course Code, Date, Time (order free, tab or
- *      comma separated, extra columns ignored).
- *   2. Preview — ALL active course offers are loaded in one click. Every
- *      offered course that has registered (active) students is matched
- *      against the schedule by course code (fallback: course title, fuzzy).
- *      When the same course appears in several schedule rows (Day +
- *      Evening), the slot is chosen by the offer's shift:
- *      EVENING offers only take slots starting at or after 3:00 PM,
- *      DAY offers only take slots before 3:00 PM.
+ *   1. Enter the exam name + semester and load the registered courses of
+ *      every ACTIVE course offer, grouped BATCH WISE (optional filters:
+ *      offer semester, department, batch).
+ *   2. Set the exam DATE and TIME for every course directly on the page.
+ *      Batch-level quick-fill helpers copy one date/time to all courses of
+ *      a batch. Courses left without a date are skipped.
  *   3. Generate — ONE admit card per class group (department + program +
- *      batch + shift) containing that group's matched courses with date and
- *      time. Course rows are linked to the course-offer subjects, so every
- *      student sees only the courses they are actually registered in —
- *      students enrolled across different batches / sections (retakes) are
- *      merged onto one card by the student-centric resolution in
- *      helpers.php (ac_get_merged_courses_for_student).
+ *      batch + shift) containing that group's dated courses. Course rows
+ *      are linked to the course-offer subjects, so every student only sees
+ *      the courses they are actually registered in (retakes across batches
+ *      are merged onto one card by the student-centric resolution in
+ *      helpers.php — ac_get_merged_courses_for_student).
  */
 require_once __DIR__ . '/../includes/auth.php';
 require_access('admit-card', 'can_create');
 require_once __DIR__ . '/helpers.php';
-require_once __DIR__ . '/../exam-routine/helpers.php'; // er_norm / er_parse_date / er_parse_time / er_fmt_time
 
 $page_title = 'Generate Admit Cards';
 $db         = db();
 $errors     = [];
-$preview    = null;
+$batches    = null;   // loaded batch-wise course data
 $dup_cards  = [];
+$clashes    = [];
 
-$exam_name     = trim((string)($_POST['exam_name'] ?? ''));
-$semester      = trim((string)($_POST['semester']  ?? ''));
-$is_active     = ($_SERVER['REQUEST_METHOD'] === 'POST') ? ((int)($_POST['is_active'] ?? 0) ? 1 : 0) : 1;
-$schedule_text = '';
+$exam_name   = trim((string)($_POST['exam_name'] ?? ''));
+$semester    = trim((string)($_POST['semester'] ?? ''));
+$is_active   = ($_SERVER['REQUEST_METHOD'] === 'POST') ? ((int)($_POST['is_active'] ?? 0) ? 1 : 0) : 1;
+$f_offer_sem = trim((string)($_POST['offer_semester'] ?? ''));
+$f_dept_id   = (int)($_POST['dept_id'] ?? 0);
+$f_batch_id  = (int)($_POST['batch_id'] ?? 0);
 
-// Predefined semester options
+$in_dates  = (array)($_POST['exam_date'] ?? []);
+$in_starts = (array)($_POST['start_time'] ?? []);
+$in_ends   = (array)($_POST['end_time'] ?? []);
+$in_sel    = array_map('strval', (array)($_POST['sel'] ?? []));
+$was_generate = ($_POST['action'] ?? '') === 'generate';
+
+// Predefined semester options for the card label
 $year = (int)date('Y');
 $semester_opts = [];
 foreach ([$year - 1, $year, $year + 1] as $y) {
@@ -48,41 +51,14 @@ foreach ([$year - 1, $year, $year + 1] as $y) {
 }
 if ($semester !== '' && !in_array($semester, $semester_opts, true)) array_unshift($semester_opts, $semester);
 
+// Filter dropdown data
+$filter_depts   = $db->query("SELECT id, name FROM dept_departments WHERE is_active = 1 ORDER BY name ASC")->fetchAll();
+$filter_batches = $db->query("SELECT id, name FROM student_batches WHERE is_active = 1 ORDER BY sort_order ASC, name ASC")->fetchAll();
+$filter_sems    = $db->query("SELECT DISTINCT semester FROM co_offers WHERE status = 'active' AND semester IS NOT NULL AND semester <> '' ORDER BY semester ASC")->fetchAll(PDO::FETCH_COLUMN);
+
 // Optional schema column (course rows are linked to offer subjects when present)
 $has_subject_col = false;
 try { $db->query('SELECT offer_subject_id FROM ac_admit_card_courses LIMIT 1'); $has_subject_col = true; } catch (Throwable $e) {}
-
-/** Map a schedule header cell to an internal field name (fuzzy). */
-function acg_col(string $header): ?string
-{
-    static $map = null;
-    if ($map === null) {
-        $defs = [
-            'course_title' => ['course title', 'course name', 'course', 'title', 'subject'],
-            'course_code'  => ['course code', 'code', 'coursecode'],
-            'date'         => ['date', 'exam date'],
-            'time'         => ['time', 'exam time', 'time slot', 'start time'],
-        ];
-        $map = [];
-        foreach ($defs as $field => $aliases) {
-            foreach ($aliases as $a) $map[$a] = $field;
-        }
-    }
-    return $map[er_norm($header)] ?? null;
-}
-
-/** Split pasted/uploaded schedule text into rows (tab or comma separated). */
-function acg_parse_text(string $text): array
-{
-    $text = (string)preg_replace('/^\xEF\xBB\xBF/', '', $text);
-    $rows = [];
-    foreach (preg_split('/\r\n|\r|\n/', $text) as $line) {
-        if (trim($line) === '') continue;
-        $delim  = (strpos($line, "\t") !== false) ? "\t" : ',';
-        $rows[] = str_getcsv($line, $delim, '"', '');
-    }
-    return $rows;
-}
 
 /** "EEE 1105" → "eee1105" (lowercase alphanumerics only). */
 function acg_code_key(string $s): string
@@ -90,169 +66,55 @@ function acg_code_key(string $s): string
     return strtolower((string)preg_replace('/[^a-z0-9]+/i', '', $s));
 }
 
-/**
- * Level key of a course title: its digits / roman numerals as tokens
- * ("Physics II" → "2", "Math 3" → "3", "Physics" → ""). Fuzzy title
- * matching is only allowed between titles with the SAME level key, so
- * "Physics I" can never take the "Physics II" schedule row.
- */
-function acg_level_key(string $title): string
+/** "13:00" (+ optional end) → "1:00 PM - 3:00 PM". */
+function acg_slot_label(string $start, string $end): string
 {
-    static $roman = ['i' => 1, 'ii' => 2, 'iii' => 3, 'iv' => 4, 'v' => 5,
-                     'vi' => 6, 'vii' => 7, 'viii' => 8, 'ix' => 9, 'x' => 10];
-    $out = [];
-    foreach (preg_split('/[^a-z0-9]+/i', strtolower($title)) ?: [] as $tok) {
-        if ($tok === '') continue;
-        if (ctype_digit($tok))      { $out[] = (int)$tok; continue; }
-        if (isset($roman[$tok]))    { $out[] = $roman[$tok]; }
-    }
-    return implode('.', $out);
-}
-
-/** Parse a time cell ("11:00 AM - 1:00 PM") → [start 'H:i'|null, label]. */
-function acg_parse_slot(string $raw): array
-{
-    $raw = trim($raw);
-    if ($raw === '') return [null, ''];
-    $startRaw = $raw;
-    $endRaw   = '';
-    if (preg_match('/^(.+?)\s*(?:-|\x{2013}|to)\s*(.+)$/iu', $raw, $m)) {
-        $startRaw = $m[1];
-        $endRaw   = $m[2];
-    }
-    $start = er_parse_time($startRaw);
-    $end   = $endRaw !== '' ? er_parse_time($endRaw) : null;
-    if ($start === null) return [null, $raw];
-    $label = er_fmt_time($start . ':00') . ($end !== null ? ' - ' . er_fmt_time($end . ':00') : '');
-    return [$start, $label];
-}
-
-/** Day or Evening for an offer's shift value ('' when unknown). */
-function acg_shift_kind(?string $shift): string
-{
-    $s = er_norm((string)$shift);
-    if ($s === '') return '';
-    if (strpos($s, 'even') !== false || strpos($s, 'night') !== false) return 'evening';
-    if (strpos($s, 'day') !== false || strpos($s, 'morn') !== false) return 'day';
-    return '';
+    if ($start === '') return '';
+    $fmt = static fn(string $t): string => date('g:i A', strtotime($t));
+    return $fmt($start) . ($end !== '' ? ' - ' . $fmt($end) : '');
 }
 
 /**
- * Parse the schedule → [entries, by_code, by_title].
- * Every entry: code, title, date (Y-m-d), slot (label), kind (day|evening|''),
- * line, used. Evening = start time at or after 3:00 PM, Day = before 3:00 PM.
+ * Load the registered courses of every matching ACTIVE course offer,
+ * grouped BATCH WISE. Every batch bucket contains one class group per
+ * department + program + batch + shift (= one future admit card).
+ *
+ * Returns a list of batches:
+ *   [batch_id, batch_name, groups => [
+ *       [hash, dept_id, program_id, batch_id, batch_label, shift, label,
+ *        students, courses => [[offer_subject_id, course_code,
+ *        course_title, section, reg_count], …]], …]]
  */
-function acg_build_schedule(string $text, array &$errors): array
+function acg_load_batches(string $offer_sem, int $dept_id, int $batch_id, array &$errors): array
 {
-    $rows = acg_parse_text($text);
-    if (count($rows) < 2) {
-        $errors[] = 'The schedule needs a header row plus at least one data row.';
-        return [[], [], []];
-    }
-    $fields = [];
-    foreach ($rows[0] as $i => $cell) {
-        $f = acg_col((string)$cell);
-        if ($f !== null && !in_array($f, $fields, true)) $fields[$i] = $f;
-    }
-    if (!in_array('course_code', $fields, true) && !in_array('course_title', $fields, true)) {
-        $errors[] = 'The schedule must contain a "Course Code" or "Course Title" column.';
-    }
-    if (!in_array('date', $fields, true)) $errors[] = 'The schedule must contain a "Date" column.';
-    if ($errors) return [[], [], []];
+    $db     = db();
+    $where  = ["o.status = 'active'"];
+    $params = [];
+    if ($offer_sem !== '') { $where[] = 'o.semester = ?'; $params[] = $offer_sem; }
+    if ($dept_id  > 0)     { $where[] = 'o.dept_id = ?';  $params[] = $dept_id; }
+    if ($batch_id > 0)     { $where[] = 'o.batch_id = ?'; $params[] = $batch_id; }
+    $whereSQL = implode(' AND ', $where);
 
-    $entries = [];
-    foreach (array_slice($rows, 1) as $n => $cells) {
-        $row = ['course_title' => '', 'course_code' => '', 'date' => '', 'time' => ''];
-        foreach ($fields as $i => $f) $row[$f] = trim((string)($cells[$i] ?? ''));
-        if (implode('', $row) === '') continue;
-        $line = $n + 2;
-        $date = er_parse_date($row['date']);
-        if (!$date) {
-            $errors[] = 'Schedule line ' . $line . ': could not understand the date "' . $row['date'] . '".';
-            continue;
-        }
-        [$start, $slot] = acg_parse_slot($row['time']);
-        $kind = '';
-        if ($start !== null) {
-            [$h, $m] = explode(':', $start);
-            $kind = ((int)$h * 60 + (int)$m) >= 15 * 60 ? 'evening' : 'day';
-        }
-        $entries[] = [
-            'code'  => $row['course_code'],
-            'title' => $row['course_title'],
-            'date'  => $date,
-            'slot'  => $slot,
-            'kind'  => $kind,
-            'line'  => $line,
-            'used'  => false,
-        ];
-    }
-    $by_code  = [];
-    $by_title = [];
-    foreach ($entries as $i => $en) {
-        $ck = acg_code_key((string)$en['code']);
-        if ($ck !== '') $by_code[$ck][] = $i;
-        $tk = er_norm((string)$en['title']);
-        if ($tk !== '') $by_title[$tk][] = $i;
-    }
-    return [$entries, $by_code, $by_title];
-}
-
-/**
- * Choose the schedule entry for one offered course. A slot of the OTHER
- * shift is never used when the offer's shift is known ("evening always
- * starts at or after 3:00 PM"). Sets $warn for advisory notes.
- */
-function acg_pick(array $entries, array $idxs, string $shift_kind, ?string &$warn): ?int
-{
-    $warn  = null;
-    $cands = [];
-    foreach ($idxs as $i) {
-        $k = $entries[$i]['kind'];
-        if ($k === '' || $shift_kind === '' || $k === $shift_kind) $cands[] = $i;
-    }
-    if (!$cands) {
-        $warn = $shift_kind === 'evening'
-            ? 'the schedule only has a Day slot (before 3:00 PM) for this course'
-            : 'the schedule only has an Evening slot (3:00 PM or later) for this course';
-        return null;
-    }
-    if (count($cands) > 1) {
-        $warn = $shift_kind === ''
-            ? 'the offer has no shift and the schedule has ' . count($cands) . ' slots for this course — the first one was used, please verify'
-            : count($cands) . ' ' . ucfirst($shift_kind) . ' slots exist in the schedule for this course — the first one was used, please verify';
-    }
-    return $cands[0];
-}
-
-/**
- * Load ALL active course offers, match every registered course against the
- * schedule and build one class group (dept + program + batch + shift) per
- * future admit card.
- */
-function acg_build_preview(string $schedule_text, array &$errors): ?array
-{
-    [$entries, $by_code, $by_title] = acg_build_schedule($schedule_text, $errors);
-    if (!$entries) return null;
-
-    $db = db();
-    $offers = $db->query(
-        "SELECT o.id, o.dept_id, o.program_id, o.batch_id, o.shift, o.section,
+    $st = $db->prepare(
+        "SELECT o.id, o.dept_id, o.program_id, o.batch_id, o.shift, o.section, o.semester,
                 d.name AS dept_name, p.program_name, b.name AS batch_name
            FROM co_offers o
            JOIN dept_departments d            ON d.id = o.dept_id
       LEFT JOIN dept_academic_programs p      ON p.id = o.program_id
       LEFT JOIN student_batches b             ON b.id = o.batch_id
-          WHERE o.status = 'active'
-          ORDER BY d.name ASC, p.program_name ASC, b.sort_order ASC, b.name ASC, o.shift ASC"
-    )->fetchAll();
+          WHERE $whereSQL
+          ORDER BY b.sort_order ASC, b.name ASC, d.name ASC, p.program_name ASC, o.shift ASC"
+    );
+    $st->execute($params);
+    $offers = $st->fetchAll();
     if (!$offers) {
-        $errors[] = 'No active course offers found.';
-        return null;
+        $errors[] = 'No active course offers matched the filters.';
+        return [];
     }
 
+    // Offered subjects with their ACTIVE-student registration counts
     $ph = implode(',', array_fill(0, count($offers), '?'));
-    $st = $db->prepare(
+    $ss = $db->prepare(
         "SELECT cos.id AS offer_subject_id, cos.offer_id, c.course_code, c.course_name,
                 (SELECT COUNT(*)
                    FROM co_registrations r
@@ -260,109 +122,56 @@ function acg_build_preview(string $schedule_text, array &$errors): ?array
                   WHERE r.offer_subject_id = cos.id AND s.status = 'Active') AS reg_count
            FROM co_offer_subjects cos
            JOIN course_curriculum c ON c.id = cos.curriculum_id
-          WHERE cos.offer_id IN ($ph)"
+          WHERE cos.offer_id IN ($ph)
+          ORDER BY cos.sort_order ASC, cos.id ASC"
     );
-    $st->execute(array_map(fn($o) => (int)$o['id'], $offers));
+    $ss->execute(array_map(static fn($o) => (int)$o['id'], $offers));
     $subjects_by_offer = [];
-    foreach ($st->fetchAll() as $s) $subjects_by_offer[(int)$s['offer_id']][] = $s;
+    foreach ($ss->fetchAll() as $s) $subjects_by_offer[(int)$s['offer_id']][] = $s;
 
-    $groups         = [];
-    $skipped_no_reg = 0;
-
+    $batches = [];
     foreach ($offers as $o) {
-        $key = implode('|', [
-            (int)$o['dept_id'], (int)$o['program_id'], (int)$o['batch_id'],
-            er_norm((string)($o['shift'] ?? '')),
+        $bid = (int)$o['batch_id'];
+        if (!isset($batches[$bid])) {
+            $batches[$bid] = [
+                'batch_id'   => $bid,
+                'batch_name' => trim((string)($o['batch_name'] ?? '')) !== '' ? (string)$o['batch_name'] : '— No batch —',
+                'groups'     => [],
+            ];
+        }
+        $gkey = implode('|', [
+            (int)$o['dept_id'], (int)$o['program_id'], $bid,
+            strtolower(trim((string)($o['shift'] ?? ''))),
         ]);
-        if (!isset($groups[$key])) {
-            $groups[$key] = [
-                'hash'        => md5($key),
+        if (!isset($batches[$bid]['groups'][$gkey])) {
+            $batches[$bid]['groups'][$gkey] = [
+                'hash'        => md5($gkey),
                 'dept_id'     => (int)$o['dept_id'],
                 'program_id'  => (int)$o['program_id'],
-                'batch_id'    => (int)$o['batch_id'] ?: null,
+                'batch_id'    => $bid ?: null,
                 'batch_label' => (string)($o['batch_name'] ?? ''),
                 'shift'       => (string)($o['shift'] ?? ''),
                 'label'       => trim(
                     $o['dept_name']
                     . ($o['program_name'] ? ' — ' . $o['program_name'] : '')
-                    . ($o['batch_name'] ? ' · Batch ' . $o['batch_name'] : '')
                     . ($o['shift'] ? ' · ' . $o['shift'] : '')
                 ),
-                'courses'     => [],
-                'warnings'    => [],
-                'osids'       => [],
+                'no_program'  => (int)$o['program_id'] <= 0,
                 'students'    => 0,
+                'osids'       => [],
+                'courses'     => [],
             ];
-            if ((int)$o['program_id'] <= 0) {
-                $groups[$key]['warnings'][] = 'This offer has no program — an admit card cannot be created for this group.';
-            }
         }
-        $g    = &$groups[$key];
-        $kind = acg_shift_kind($o['shift'] ?? null);
-
+        $g = &$batches[$bid]['groups'][$gkey];
         foreach ($subjects_by_offer[(int)$o['id']] ?? [] as $s) {
             $osid = (int)$s['offer_subject_id'];
+            if ((int)$s['reg_count'] <= 0) continue;          // no registered students
             if (isset($g['osids'][$osid])) continue;
-            $label = trim((string)$s['course_code'] . ' ' . (string)$s['course_name']);
-
-            // Match by course code first, then by title (exact → fuzzy).
-            $idxs      = [];
-            $via_title = false;
-            $ck = acg_code_key((string)$s['course_code']);
-            if ($ck !== '' && isset($by_code[$ck])) {
-                $idxs = $by_code[$ck];
-            } else {
-                $tn = er_norm((string)$s['course_name']);
-                if ($tn !== '' && isset($by_title[$tn])) {
-                    $idxs      = $by_title[$tn];
-                    $via_title = true;
-                } elseif (strlen($tn) >= 5) {
-                    // Fuzzy fallback — only between titles with the same
-                    // level key, so "Physics I" never gets "Physics II".
-                    $lvl = acg_level_key((string)$s['course_name']);
-                    foreach ($by_title as $k => $list) {
-                        if (acg_level_key((string)$entries[$list[0]]['title']) !== $lvl) continue;
-                        if (strpos($k, $tn) !== false || strpos($tn, $k) !== false) { $idxs = $list; $via_title = true; break; }
-                        similar_text($k, $tn, $pct);
-                        if ($pct >= 85) { $idxs = $list; $via_title = true; break; }
-                    }
-                }
-            }
-
-            // Only courses that are actually part of the uploaded schedule
-            // count as "skipped without registrations" — empty offer
-            // subjects outside this exam's schedule are ignored silently.
-            if ((int)$s['reg_count'] <= 0) {
-                if ($idxs) $skipped_no_reg++;
-                continue;
-            }
-
-            if (!$idxs) {
-                $g['warnings'][] = $label . ' (' . (int)$s['reg_count'] . ' students): not in the schedule — skipped.';
-                continue;
-            }
-
-            $warn = null;
-            $pick = acg_pick($entries, $idxs, $kind, $warn);
-            if ($pick === null) {
-                $g['warnings'][] = $label . ' (' . (int)$s['reg_count'] . ' students): ' . $warn . ' — skipped.';
-                continue;
-            }
-            if ($warn !== null) $g['warnings'][] = $label . ': ' . $warn . '.';
-            if ($via_title) {
-                $g['warnings'][] = $label . ': matched by course TITLE (schedule line '
-                    . (int)$entries[$pick]['line'] . ', code "' . trim((string)$entries[$pick]['code'])
-                    . '") because the course code was not found in the schedule — please verify.';
-            }
-            $entries[$pick]['used'] = true;
-
             $g['osids'][$osid] = true;
             $g['courses'][]    = [
                 'offer_subject_id' => $osid,
                 'course_code'      => (string)$s['course_code'],
                 'course_title'     => (string)$s['course_name'],
-                'exam_date'        => (string)$entries[$pick]['date'],
-                'time_slot'        => (string)$entries[$pick]['slot'],
                 'section'          => trim((string)((($o['section'] ?? '') !== '') ? $o['section'] : ($o['shift'] ?? ''))),
                 'reg_count'        => (int)$s['reg_count'],
             ];
@@ -370,14 +179,13 @@ function acg_build_preview(string $schedule_text, array &$errors): ?array
         unset($g);
     }
 
-    foreach ($groups as $k => &$g) {
-        if (!$g['courses'] && !$g['warnings']) { unset($groups[$k]); continue; }
-        usort($g['courses'], static fn($a, $b) =>
-            [$a['exam_date'], $a['course_code']] <=> [$b['exam_date'], $b['course_code']]);
-        if ($g['osids']) {
+    // Unique enrolled student counts per group + drop empty groups/batches
+    foreach ($batches as $bid => &$b) {
+        foreach ($b['groups'] as $k => &$g) {
+            if (!$g['courses']) { unset($b['groups'][$k]); continue; }
             $ids = array_keys($g['osids']);
             $iph = implode(',', array_fill(0, count($ids), '?'));
-            $cs  = db()->prepare(
+            $cs  = $db->prepare(
                 "SELECT COUNT(DISTINCT r.student_id)
                    FROM co_registrations r
                    JOIN students s ON s.id = r.student_id
@@ -386,61 +194,17 @@ function acg_build_preview(string $schedule_text, array &$errors): ?array
             $cs->execute($ids);
             $g['students'] = (int)$cs->fetchColumn();
         }
+        unset($g);
+        $b['groups'] = array_values($b['groups']);
+        if (!$b['groups']) unset($batches[$bid]);
     }
-    unset($g);
+    unset($b);
 
-    $unused = [];
-    foreach ($entries as $en) {
-        if ($en['used']) continue;
-        $unused[] = 'Line ' . $en['line'] . ': ' . trim($en['code'] . ' ' . $en['title'])
-            . ' (' . date('d M Y', strtotime($en['date'])) . ($en['slot'] !== '' ? ', ' . $en['slot'] : '') . ')';
+    if (!$batches) {
+        $errors[] = 'No offered courses with registered (active) students were found for these filters.';
+        return [];
     }
-
-    // ── Student-level clash check ───────────────────────────────────
-    // A student registered in TWO different courses that landed on the same
-    // date + time slot (retakes across batches / sections are the usual
-    // cause) would get two exams at once — surfaced BEFORE generating.
-    $slot_of = [];
-    foreach ($groups as $cg) {
-        foreach ($cg['courses'] as $c) $slot_of[(int)$c['offer_subject_id']] = $c;
-    }
-    $clashes = [];
-    if ($slot_of) {
-        $ids = array_keys($slot_of);
-        $iph = implode(',', array_fill(0, count($ids), '?'));
-        $rs  = $db->prepare(
-            "SELECT r.offer_subject_id, r.student_id,
-                    s.student_id AS student_no, s.full_name
-               FROM co_registrations r
-               JOIN students s ON s.id = r.student_id
-              WHERE r.offer_subject_id IN ($iph) AND s.status = 'Active'"
-        );
-        $rs->execute($ids);
-        $per = [];
-        foreach ($rs->fetchAll() as $r) {
-            $c   = $slot_of[(int)$r['offer_subject_id']];
-            $key = $c['exam_date'] . '|' . $c['time_slot'];
-            $sid = (int)$r['student_id'];
-            $per[$sid]['who'] = $r['full_name'] . ' (' . $r['student_no'] . ')';
-            $per[$sid]['slots'][$key][acg_code_key((string)$c['course_code'])] =
-                trim((string)$c['course_code'] . ' ' . (string)$c['course_title']);
-        }
-        foreach ($per as $p) {
-            foreach ($p['slots'] as $key => $courses) {
-                if (count($courses) < 2) continue;
-                [$d, $t] = explode('|', $key, 2);
-                $clashes[] = ['who' => $p['who'], 'date' => $d, 'slot' => $t, 'courses' => array_values($courses)];
-            }
-        }
-        usort($clashes, static fn($a, $b) => [$a['date'], $a['who']] <=> [$b['date'], $b['who']]);
-    }
-
-    return [
-        'groups'         => array_values($groups),
-        'unused'         => $unused,
-        'skipped_no_reg' => $skipped_no_reg,
-        'clashes'        => $clashes,
-    ];
+    return array_values($batches);
 }
 
 // ── POST ──────────────────────────────────────────────────────────────────
@@ -451,78 +215,148 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($exam_name === '') $errors[] = 'Exam name is required.';
     if ($semester === '')  $errors[] = 'Semester is required.';
 
-    if (!empty($_FILES['schedule_file']['tmp_name']) && is_uploaded_file($_FILES['schedule_file']['tmp_name'])) {
-        $schedule_text = (string)file_get_contents($_FILES['schedule_file']['tmp_name']);
-    } elseif (trim((string)($_POST['schedule_text'] ?? '')) !== '') {
-        $schedule_text = (string)$_POST['schedule_text'];
-    }
-    if (trim($schedule_text) === '') {
-        $errors[] = 'Upload or paste the exam schedule (Course Title, Course Code, Date, Time).';
-    }
-
     if (empty($errors)) {
-        $preview = acg_build_preview($schedule_text, $errors);
+        $batches = acg_load_batches($f_offer_sem, $f_dept_id, $f_batch_id, $errors);
+        if (!$batches) $batches = null;
+    }
 
-        // Active cards with the same exam name already exist? Student PDFs
-        // merge courses from ALL active cards of the same exam name, so a
-        // stale earlier generation would mix its old dates/times into the
-        // new cards — they must be deactivated or deleted first.
-        if ($preview !== null && $exam_name !== '') {
-            $nx = acg_code_key($exam_name);
-            foreach ($db->query('SELECT id, exam_name, semester FROM ac_admit_cards WHERE is_active = 1')->fetchAll() as $c) {
-                if (acg_code_key((string)$c['exam_name']) === $nx) $dup_cards[] = $c;
-            }
+    // ACTIVE cards with the same exam name already exist? Student PDFs merge
+    // the courses of every active card with the same exam name, so a stale
+    // earlier generation would mix its old dates/times into the new cards.
+    if ($batches !== null && $exam_name !== '') {
+        $nx = acg_code_key($exam_name);
+        foreach ($db->query('SELECT id, exam_name, semester FROM ac_admit_cards WHERE is_active = 1')->fetchAll() as $c) {
+            if (acg_code_key((string)$c['exam_name']) === $nx) $dup_cards[] = $c;
         }
     }
 
-    if ($action === 'generate' && empty($errors) && $preview) {
-        $sel      = array_map('strval', (array)($_POST['sel'] ?? []));
-        $created  = 0;
-        $rows_n   = 0;
-        foreach ($preview['groups'] as $g) {
-            if (!in_array($g['hash'], $sel, true)) continue;
-            if (!$g['courses'] || (int)$g['program_id'] <= 0) continue;
-
-            $db->prepare(
-                'INSERT INTO ac_admit_cards
-                   (exam_name, semester, dept_id, program_id, batch_id, batch_label, is_active, created_by)
-                 VALUES (?,?,?,?,?,?,?,?)'
-            )->execute([
-                $exam_name, $semester, $g['dept_id'], $g['program_id'],
-                $g['batch_id'], $g['batch_label'] !== '' ? $g['batch_label'] : null,
-                $is_active, auth_user()['id'],
-            ]);
-            $card_id = (int)$db->lastInsertId();
-
-            foreach ($g['courses'] as $i => $c) {
-                if ($has_subject_col) {
-                    $db->prepare(
-                        'INSERT INTO ac_admit_card_courses
-                           (admit_card_id, offer_subject_id, course_code, course_title, exam_date, time_slot, section, sort_order)
-                         VALUES (?,?,?,?,?,?,?,?)'
-                    )->execute([
-                        $card_id, $c['offer_subject_id'], $c['course_code'], $c['course_title'],
-                        $c['exam_date'], $c['time_slot'] !== '' ? $c['time_slot'] : null,
-                        $c['section'] !== '' ? $c['section'] : null, $i,
-                    ]);
-                } else {
-                    $db->prepare(
-                        'INSERT INTO ac_admit_card_courses
-                           (admit_card_id, course_code, course_title, exam_date, time_slot, section, sort_order)
-                         VALUES (?,?,?,?,?,?,?)'
-                    )->execute([
-                        $card_id, $c['course_code'], $c['course_title'],
-                        $c['exam_date'], $c['time_slot'] !== '' ? $c['time_slot'] : null,
-                        $c['section'] !== '' ? $c['section'] : null, $i,
-                    ]);
+    if ($action === 'generate' && empty($errors) && $batches !== null) {
+        // ── Build the generation plan from the posted dates / times ─────
+        $plan = []; // group hash => ['group' => …, 'courses' => […]]
+        foreach ($batches as $b) {
+            foreach ($b['groups'] as $g) {
+                if (!in_array($g['hash'], $in_sel, true)) continue;
+                if ($g['no_program']) continue;
+                $courses = [];
+                foreach ($g['courses'] as $c) {
+                    $osid = (int)$c['offer_subject_id'];
+                    $date = trim((string)($in_dates[$osid] ?? ''));
+                    if ($date === '') continue; // no date set — skipped
+                    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) || !strtotime($date)) {
+                        $errors[] = trim($c['course_code'] . ' ' . $c['course_title']) . ': invalid exam date.';
+                        continue;
+                    }
+                    $start = trim((string)($in_starts[$osid] ?? ''));
+                    $end   = trim((string)($in_ends[$osid] ?? ''));
+                    if ($start !== '' && !preg_match('/^\d{1,2}:\d{2}$/', $start)) {
+                        $errors[] = trim($c['course_code'] . ' ' . $c['course_title']) . ': invalid start time.';
+                        continue;
+                    }
+                    if ($end !== '' && !preg_match('/^\d{1,2}:\d{2}$/', $end)) {
+                        $errors[] = trim($c['course_code'] . ' ' . $c['course_title']) . ': invalid end time.';
+                        continue;
+                    }
+                    if ($start === '') $end = ''; // an end time needs a start time
+                    $c['exam_date'] = $date;
+                    $c['time_slot'] = acg_slot_label($start, $end);
+                    $courses[] = $c;
                 }
-                $rows_n++;
+                if ($courses) $plan[$g['hash']] = ['group' => $g, 'courses' => $courses];
             }
-            $created++;
         }
-        if ($created === 0) {
-            $errors[] = 'Select at least one class group with matched courses.';
-        } else {
+
+        if (empty($plan) && empty($errors)) {
+            $errors[] = 'Set an exam date for at least one course in a selected group.';
+        }
+
+        // ── Student-level clash check ────────────────────────────────────
+        // A student registered in TWO different courses that landed on the
+        // same date + time slot would get two exams at once.
+        if (empty($errors) && $plan) {
+            $slot_of = [];
+            foreach ($plan as $p) {
+                foreach ($p['courses'] as $c) $slot_of[(int)$c['offer_subject_id']] = $c;
+            }
+            $ids = array_keys($slot_of);
+            $iph = implode(',', array_fill(0, count($ids), '?'));
+            $rs  = $db->prepare(
+                "SELECT r.offer_subject_id, r.student_id,
+                        s.student_id AS student_no, s.full_name
+                   FROM co_registrations r
+                   JOIN students s ON s.id = r.student_id
+                  WHERE r.offer_subject_id IN ($iph) AND s.status = 'Active'"
+            );
+            $rs->execute($ids);
+            $per = [];
+            foreach ($rs->fetchAll() as $r) {
+                $c = $slot_of[(int)$r['offer_subject_id']];
+                if (($c['time_slot'] ?? '') === '') continue; // clash needs a time
+                $key = $c['exam_date'] . '|' . $c['time_slot'];
+                $sid = (int)$r['student_id'];
+                $per[$sid]['who'] = $r['full_name'] . ' (' . $r['student_no'] . ')';
+                $per[$sid]['slots'][$key][acg_code_key((string)$c['course_code'])] =
+                    trim((string)$c['course_code'] . ' ' . (string)$c['course_title']);
+            }
+            foreach ($per as $p) {
+                foreach ($p['slots'] as $key => $cc) {
+                    if (count($cc) < 2) continue;
+                    [$d, $t] = explode('|', $key, 2);
+                    $clashes[] = ['who' => $p['who'], 'date' => $d, 'slot' => $t, 'courses' => array_values($cc)];
+                }
+            }
+            usort($clashes, static fn($a, $b) => [$a['date'], $a['who']] <=> [$b['date'], $b['who']]);
+            if ($clashes) {
+                $errors[] = count($clashes) . ' student exam clash(es) detected — adjust the dates/times below before generating.';
+            }
+        }
+
+        // ── Create the admit cards ───────────────────────────────────────
+        if (empty($errors)) {
+            $created = 0;
+            $rows_n  = 0;
+            foreach ($plan as $p) {
+                $g = $p['group'];
+                $db->prepare(
+                    'INSERT INTO ac_admit_cards
+                       (exam_name, semester, dept_id, program_id, batch_id, batch_label, is_active, created_by)
+                     VALUES (?,?,?,?,?,?,?,?)'
+                )->execute([
+                    $exam_name, $semester, $g['dept_id'], $g['program_id'],
+                    $g['batch_id'], $g['batch_label'] !== '' ? $g['batch_label'] : null,
+                    $is_active, auth_user()['id'],
+                ]);
+                $card_id = (int)$db->lastInsertId();
+
+                $courses = $p['courses'];
+                usort($courses, static fn($a, $b) =>
+                    [$a['exam_date'], $a['course_code']] <=> [$b['exam_date'], $b['course_code']]);
+
+                foreach ($courses as $i => $c) {
+                    if ($has_subject_col) {
+                        $db->prepare(
+                            'INSERT INTO ac_admit_card_courses
+                               (admit_card_id, offer_subject_id, course_code, course_title, exam_date, time_slot, section, sort_order)
+                             VALUES (?,?,?,?,?,?,?,?)'
+                        )->execute([
+                            $card_id, $c['offer_subject_id'], $c['course_code'], $c['course_title'],
+                            $c['exam_date'], $c['time_slot'] !== '' ? $c['time_slot'] : null,
+                            $c['section'] !== '' ? $c['section'] : null, $i,
+                        ]);
+                    } else {
+                        $db->prepare(
+                            'INSERT INTO ac_admit_card_courses
+                               (admit_card_id, course_code, course_title, exam_date, time_slot, section, sort_order)
+                             VALUES (?,?,?,?,?,?,?)'
+                        )->execute([
+                            $card_id, $c['course_code'], $c['course_title'],
+                            $c['exam_date'], $c['time_slot'] !== '' ? $c['time_slot'] : null,
+                            $c['section'] !== '' ? $c['section'] : null, $i,
+                        ]);
+                    }
+                    $rows_n++;
+                }
+                $created++;
+            }
             flash_set('success', $created . ' admit card(s) created with ' . $rows_n
                 . ' course row(s). Every student only sees the courses they are registered in.');
             redirect(APP_URL . '/admit-card/index.php');
@@ -553,15 +387,15 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 <?php endif; ?>
 
-<!-- ── Step 1: exam details + schedule ── -->
+<!-- ── Step 1: exam details + filters ── -->
 <div class="card mb-4" style="border-radius:12px;">
     <div class="card-header py-3 px-4 fw-semibold">
-        <i class="fas fa-file-csv me-2 text-primary"></i>Exam Details &amp; Schedule
+        <i class="fas fa-layer-group me-2 text-primary"></i>Exam Details &amp; Course Filters
     </div>
     <div class="card-body px-4 py-4">
-        <form method="POST" enctype="multipart/form-data">
+        <form method="POST">
             <?= csrf_field() ?>
-            <input type="hidden" name="action" value="preview">
+            <input type="hidden" name="action" value="load">
             <div class="row g-3">
                 <div class="col-md-6">
                     <label class="form-label fw-semibold">Exam Name <span class="text-danger">*</span></label>
@@ -583,50 +417,71 @@ require_once __DIR__ . '/../includes/header.php';
                         <label class="form-check-label small" for="is_active">Active (visible to students)</label>
                     </div>
                 </div>
-                <div class="col-md-6">
-                    <label class="form-label fw-semibold">Schedule file (CSV / TSV)</label>
-                    <input type="file" name="schedule_file" class="form-control" accept=".csv,.tsv,.txt,text/csv,text/plain">
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Offer Semester <span class="text-muted fw-normal">(optional filter)</span></label>
+                    <select name="offer_semester" class="form-select">
+                        <option value="">— All semesters —</option>
+                        <?php foreach ($filter_sems as $s): ?>
+                        <option value="<?= h($s) ?>" <?= $f_offer_sem === $s ? 'selected' : '' ?>><?= h($s) ?></option>
+                        <?php endforeach; ?>
+                    </select>
                 </div>
-                <div class="col-12">
-                    <label class="form-label fw-semibold">…or paste the schedule</label>
-                    <textarea name="schedule_text" class="form-control font-monospace" rows="6"
-                              placeholder="Course Title,Course Code,Date,Time&#10;Electrical Circuits I,EEE 1105,27.08.2026,11:00 AM - 1:00 PM"><?= h($schedule_text) ?></textarea>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Department <span class="text-muted fw-normal">(optional filter)</span></label>
+                    <select name="dept_id" class="form-select">
+                        <option value="">— All departments —</option>
+                        <?php foreach ($filter_depts as $d): ?>
+                        <option value="<?= (int)$d['id'] ?>" <?= $f_dept_id === (int)$d['id'] ? 'selected' : '' ?>><?= h($d['name']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Batch <span class="text-muted fw-normal">(optional filter)</span></label>
+                    <select name="batch_id" class="form-select">
+                        <option value="">— All batches —</option>
+                        <?php foreach ($filter_batches as $b): ?>
+                        <option value="<?= (int)$b['id'] ?>" <?= $f_batch_id === (int)$b['id'] ? 'selected' : '' ?>><?= h($b['name']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
                 </div>
             </div>
             <div class="form-text mt-2">
-                Columns (order free, tab or comma separated, extra columns ignored):
-                <code>Course Title, Course Code, Date, Time</code>.
-                Courses are matched against <strong>every active course offer</strong> by course code
-                (title as fallback). When the same course has a Day and an Evening slot,
-                <strong>Evening</strong> offers only take slots starting <strong>at or after 3:00 PM</strong>;
-                <strong>Day</strong> offers only take slots <strong>before 3:00 PM</strong>.
+                Loads every offered course with <strong>registered (active) students</strong> from the
+                Course Offer module, grouped <strong>batch wise</strong>. You then set the exam
+                <strong>date</strong> and <strong>time</strong> per course and generate the admit cards.
             </div>
             <button type="submit" class="btn btn-primary mt-3" style="border-radius:10px;">
-                <i class="fas fa-search me-1"></i> Load All Course Offers &amp; Preview
+                <i class="fas fa-search me-1"></i> Load Registered Courses (Batch Wise)
             </button>
         </form>
     </div>
 </div>
 
-<?php if ($preview !== null): ?>
+<?php if ($batches !== null): ?>
 <?php
-    $selectable = array_values(array_filter($preview['groups'], static fn($g) => $g['courses'] && (int)$g['program_id'] > 0));
+    $total_groups  = 0;
+    $total_courses = 0;
+    foreach ($batches as $b) {
+        $total_groups += count($b['groups']);
+        foreach ($b['groups'] as $g) $total_courses += count($g['courses']);
+    }
 ?>
-<!-- ── Step 2: preview & generate ── -->
+<!-- ── Step 2: set dates/times batch wise & generate ── -->
 <form method="POST" id="generate_form">
     <?= csrf_field() ?>
     <input type="hidden" name="action" value="generate">
     <input type="hidden" name="exam_name" value="<?= h($exam_name) ?>">
     <input type="hidden" name="semester" value="<?= h($semester) ?>">
     <input type="hidden" name="is_active" value="<?= (int)$is_active ?>">
-    <textarea name="schedule_text" hidden><?= h($schedule_text) ?></textarea>
+    <input type="hidden" name="offer_semester" value="<?= h($f_offer_sem) ?>">
+    <input type="hidden" name="dept_id" value="<?= (int)$f_dept_id ?>">
+    <input type="hidden" name="batch_id" value="<?= (int)$f_batch_id ?>">
 
     <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
-        <h5 class="mb-0 fw-semibold"><i class="fas fa-eye me-2 text-muted"></i>Preview</h5>
-        <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle"><?= count($selectable) ?> card(s) ready</span>
-        <?php if ($preview['skipped_no_reg'] > 0): ?>
-        <span class="badge bg-light text-muted border"><?= (int)$preview['skipped_no_reg'] ?> offered course(s) without registrations skipped</span>
-        <?php endif; ?>
+        <h5 class="mb-0 fw-semibold"><i class="fas fa-calendar-alt me-2 text-muted"></i>Set Exam Dates &amp; Times</h5>
+        <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle"><?= count($batches) ?> batch(es)</span>
+        <span class="badge bg-light text-dark border"><?= $total_groups ?> class group(s)</span>
+        <span class="badge bg-light text-dark border"><?= $total_courses ?> registered course(s)</span>
         <span class="ms-auto small">
             <button type="button" class="btn btn-link btn-sm p-0" id="sel_all">Select all</button>
             <span class="text-muted">/</span>
@@ -648,92 +503,108 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
     <?php endif; ?>
 
-    <?php if (!empty($preview['clashes'])): ?>
+    <?php if ($clashes): ?>
     <div class="alert alert-danger small">
-        <strong><i class="fas fa-flag me-1"></i><?= count($preview['clashes']) ?> student exam clash(es) detected</strong>
+        <strong><i class="fas fa-flag me-1"></i><?= count($clashes) ?> student exam clash(es) detected</strong>
         — these students are registered in two different courses that fall on the SAME date and time
-        slot in this schedule. Fix the schedule (or the registrations) before generating:
+        slot. Adjust the dates/times before generating:
         <ul class="mb-0 ps-3">
-            <?php foreach (array_slice($preview['clashes'], 0, 50) as $cl): ?>
+            <?php foreach (array_slice($clashes, 0, 50) as $cl): ?>
             <li>
                 <?= h($cl['who']) ?> — <?= h(date('d M Y', strtotime($cl['date']))) ?><?= $cl['slot'] !== '' ? h(', ' . $cl['slot']) : '' ?>:
                 <?= h(implode('  +  ', $cl['courses'])) ?>
             </li>
             <?php endforeach; ?>
-            <?php if (count($preview['clashes']) > 50): ?>
-            <li class="text-muted">… and <?= count($preview['clashes']) - 50 ?> more.</li>
+            <?php if (count($clashes) > 50): ?>
+            <li class="text-muted">… and <?= count($clashes) - 50 ?> more.</li>
             <?php endif; ?>
         </ul>
     </div>
     <?php endif; ?>
 
-    <?php if ($preview['unused']): ?>
-    <div class="alert alert-warning small">
-        <strong><?= count($preview['unused']) ?> schedule row(s) matched no offered course</strong> (check for typos in the code / title):
-        <ul class="mb-0 ps-3">
-            <?php foreach ($preview['unused'] as $u): ?><li><?= h($u) ?></li><?php endforeach; ?>
-        </ul>
-    </div>
-    <?php endif; ?>
-
-    <?php foreach ($preview['groups'] as $g): $ok = $g['courses'] && (int)$g['program_id'] > 0; ?>
-    <div class="card mb-3" style="border-radius:12px;">
+    <?php foreach ($batches as $bi => $b): ?>
+    <div class="card mb-4" style="border-radius:12px;" data-batch="<?= $bi ?>">
         <div class="card-header py-3 px-4 d-flex flex-wrap align-items-center gap-2">
-            <?php if ($ok): ?>
-            <input type="checkbox" class="form-check-input mt-0 grp-sel" name="sel[]" value="<?= h($g['hash']) ?>" checked>
-            <?php endif; ?>
-            <span class="fw-semibold"><?= h($g['label']) ?></span>
-            <span class="badge bg-secondary"><?= count($g['courses']) ?> course(s)</span>
-            <span class="badge bg-light text-dark border"><?= (int)$g['students'] ?> enrolled student(s)</span>
-            <?php if (!$ok): ?>
-            <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle">Nothing to generate</span>
-            <?php endif; ?>
-        </div>
-        <?php if ($g['courses']): ?>
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-sm table-hover align-middle mb-0" style="font-size:.85rem;">
-                    <thead class="table-light">
-                        <tr>
-                            <th class="ps-4">Code</th>
-                            <th>Course Title</th>
-                            <th>Date</th>
-                            <th>Time</th>
-                            <th>Section / Shift</th>
-                            <th class="text-center pe-4">Students</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                    <?php foreach ($g['courses'] as $c): ?>
-                        <tr>
-                            <td class="ps-4"><span class="badge bg-light text-dark border" style="font-family:monospace;"><?= h($c['course_code']) ?></span></td>
-                            <td><?= h($c['course_title']) ?></td>
-                            <td><?= h(date('d M Y (D)', strtotime($c['exam_date']))) ?></td>
-                            <td><?= $c['time_slot'] !== '' ? h($c['time_slot']) : '<span class="text-muted">—</span>' ?></td>
-                            <td><?= $c['section'] !== '' ? h($c['section']) : '<span class="text-muted">—</span>' ?></td>
-                            <td class="text-center pe-4"><?= (int)$c['reg_count'] ?></td>
-                        </tr>
-                    <?php endforeach; ?>
-                    </tbody>
-                </table>
+            <span class="fw-bold"><i class="fas fa-users me-2 text-primary"></i>Batch <?= h($b['batch_name']) ?></span>
+            <span class="badge bg-secondary"><?= count($b['groups']) ?> class group(s)</span>
+            <div class="ms-auto d-flex flex-wrap align-items-center gap-2 small">
+                <span class="text-muted">Quick fill:</span>
+                <input type="date" class="form-control form-control-sm qf-date" style="width:auto;">
+                <input type="time" class="form-control form-control-sm qf-start" style="width:auto;" title="Start time">
+                <input type="time" class="form-control form-control-sm qf-end" style="width:auto;" title="End time">
+                <button type="button" class="btn btn-sm btn-outline-primary qf-apply" style="border-radius:8px;">
+                    <i class="fas fa-fill-drip me-1"></i>Apply to batch
+                </button>
             </div>
         </div>
-        <?php endif; ?>
-        <?php if ($g['warnings']): ?>
-        <div class="card-footer py-2 px-4">
-            <?php foreach ($g['warnings'] as $w): ?>
-            <div class="small text-warning-emphasis"><i class="fas fa-exclamation-triangle me-1"></i><?= h($w) ?></div>
+        <div class="card-body p-0">
+            <?php foreach ($b['groups'] as $g): ?>
+            <?php $checked = !$was_generate || in_array($g['hash'], $in_sel, true); ?>
+            <div class="border-bottom">
+                <div class="px-4 py-2 d-flex flex-wrap align-items-center gap-2 bg-light-subtle">
+                    <?php if (!$g['no_program']): ?>
+                    <input type="checkbox" class="form-check-input mt-0 grp-sel" name="sel[]"
+                           value="<?= h($g['hash']) ?>" <?= $checked ? 'checked' : '' ?>>
+                    <?php endif; ?>
+                    <span class="fw-semibold small"><?= h($g['label']) ?></span>
+                    <span class="badge bg-light text-dark border"><?= count($g['courses']) ?> course(s)</span>
+                    <span class="badge bg-light text-dark border"><?= (int)$g['students'] ?> enrolled student(s)</span>
+                    <?php if ($g['no_program']): ?>
+                    <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle">No program — cannot generate</span>
+                    <?php endif; ?>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover align-middle mb-0" style="font-size:.85rem;">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-4" style="width:110px;">Code</th>
+                                <th>Course Title</th>
+                                <th class="text-center" style="width:80px;">Students</th>
+                                <th style="width:160px;">Exam Date</th>
+                                <th style="width:130px;">Start Time</th>
+                                <th class="pe-4" style="width:130px;">End Time</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        <?php foreach ($g['courses'] as $c): $osid = (int)$c['offer_subject_id']; ?>
+                            <tr>
+                                <td class="ps-4"><span class="badge bg-light text-dark border" style="font-family:monospace;"><?= h($c['course_code']) ?></span></td>
+                                <td>
+                                    <?= h($c['course_title']) ?>
+                                    <?php if ($c['section'] !== ''): ?>
+                                    <span class="text-muted small">· <?= h($c['section']) ?></span>
+                                    <?php endif; ?>
+                                </td>
+                                <td class="text-center"><?= (int)$c['reg_count'] ?></td>
+                                <td>
+                                    <input type="date" name="exam_date[<?= $osid ?>]" class="form-control form-control-sm ac-date"
+                                           value="<?= h((string)($in_dates[$osid] ?? '')) ?>">
+                                </td>
+                                <td>
+                                    <input type="time" name="start_time[<?= $osid ?>]" class="form-control form-control-sm ac-start"
+                                           value="<?= h((string)($in_starts[$osid] ?? '')) ?>">
+                                </td>
+                                <td class="pe-4">
+                                    <input type="time" name="end_time[<?= $osid ?>]" class="form-control form-control-sm ac-end"
+                                           value="<?= h((string)($in_ends[$osid] ?? '')) ?>">
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
             <?php endforeach; ?>
         </div>
-        <?php endif; ?>
     </div>
     <?php endforeach; ?>
 
     <div class="d-flex gap-2 mb-5">
-        <button type="submit" class="btn btn-primary" style="border-radius:10px;" <?= $selectable ? '' : 'disabled' ?>>
-            <i class="fas fa-id-card me-1"></i> Generate Admit Cards for Selected Groups
+        <button type="submit" class="btn btn-primary" style="border-radius:10px;">
+            <i class="fas fa-id-card me-1"></i> Generate Admit Cards
         </button>
         <a href="<?= APP_URL ?>/admit-card/create.php" class="btn btn-light" style="border-radius:10px;">Start Over</a>
+        <span class="text-muted small align-self-center">Courses without an exam date are skipped.</span>
     </div>
 </form>
 
@@ -744,10 +615,30 @@ require_once __DIR__ . '/../includes/header.php';
     var none  = document.getElementById('sel_none');
     if (all)  all.addEventListener('click',  function () { boxes.forEach(function (b) { b.checked = true;  }); });
     if (none) none.addEventListener('click', function () { boxes.forEach(function (b) { b.checked = false; }); });
+
+    // Batch-level quick fill: copy the header date/time to every course
+    // row of the batch (only overwrites empty fields when nothing is set
+    // in the quick-fill input).
+    document.querySelectorAll('[data-batch]').forEach(function (card) {
+        var btn = card.querySelector('.qf-apply');
+        if (!btn) return;
+        btn.addEventListener('click', function () {
+            var d = card.querySelector('.qf-date').value;
+            var s = card.querySelector('.qf-start').value;
+            var e = card.querySelector('.qf-end').value;
+            if (d) card.querySelectorAll('.ac-date').forEach(function (i)  { i.value = d; });
+            if (s) card.querySelectorAll('.ac-start').forEach(function (i) { i.value = s; });
+            if (e) card.querySelectorAll('.ac-end').forEach(function (i)   { i.value = e; });
+        });
+    });
+
     document.getElementById('generate_form').addEventListener('submit', function (e) {
         var any = false;
         boxes.forEach(function (b) { if (b.checked) any = true; });
-        if (!any) { e.preventDefault(); alert('Select at least one class group to generate.'); }
+        if (!any) { e.preventDefault(); alert('Select at least one class group to generate.'); return; }
+        var dated = false;
+        document.querySelectorAll('.ac-date').forEach(function (i) { if (i.value) dated = true; });
+        if (!dated) { e.preventDefault(); alert('Set an exam date for at least one course.'); }
     });
 })();
 </script>

@@ -152,7 +152,7 @@ require_once __DIR__ . '/../includes/header.php';
             <i class="fas fa-file-csv me-1"></i> Bulk Import CSV
         </a>
         <a href="<?= APP_URL ?>/admit-card/create.php" class="btn btn-primary" style="border-radius:10px;">
-            <i class="fas fa-plus me-1"></i> New Admit Card
+            <i class="fas fa-plus me-1"></i> Generate Admit Cards
         </a>
         <?php endif; ?>
     </div>
