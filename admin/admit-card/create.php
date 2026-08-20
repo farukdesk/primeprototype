@@ -448,6 +448,27 @@ require_once __DIR__ . '/../includes/header.php';
         </span>
     </div>
 
+    <!-- ── CSV schedule fill ── -->
+    <div class="card mb-3" style="border-radius:12px;">
+        <div class="card-body py-3 px-4">
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <span class="fw-semibold small"><i class="fas fa-file-csv me-1 text-success"></i>Fill from CSV</span>
+                <input type="file" id="csv_file" class="form-control form-control-sm" style="max-width:320px;" accept=".csv,.txt,text/csv,text/plain">
+                <button type="button" class="btn btn-sm btn-outline-success" id="csv_apply" style="border-radius:8px;">
+                    <i class="fas fa-fill-drip me-1"></i>Apply CSV
+                </button>
+                <span class="small text-muted" id="csv_status"></span>
+            </div>
+            <div class="form-text mt-1">
+                Columns: <strong>Batch, Course Code, Course Title, Exam Date, Start Time, End Time</strong>
+                (comma or tab separated, first row = header). Rows are matched to the loaded courses by
+                <strong>batch + course code</strong> and the date/time fields below are filled in.
+                Leave the Batch cell empty to apply a row to every batch. Nothing is generated until you
+                review and press <strong>Generate Admit Cards</strong>.
+            </div>
+        </div>
+    </div>
+
     <?php if ($dup_cards): ?>
     <div class="alert alert-danger small">
         <strong><?= count($dup_cards) ?> ACTIVE admit card(s) with this exam name already exist.</strong>
@@ -463,7 +484,7 @@ require_once __DIR__ . '/../includes/header.php';
     <?php endif; ?>
 
     <?php foreach ($batches as $bi => $b): ?>
-    <div class="card mb-4" style="border-radius:12px;" data-batch="<?= $bi ?>">
+    <div class="card mb-4" style="border-radius:12px;" data-batch="<?= $bi ?>" data-batch-name="<?= h(acg_code_key($b['batch_name'])) ?>">
         <div class="card-header py-3 px-4 d-flex flex-wrap align-items-center gap-2">
             <span class="fw-bold"><i class="fas fa-users me-2 text-primary"></i>Batch <?= h($b['batch_name']) ?></span>
             <span class="badge bg-secondary"><?= count($b['groups']) ?> class group(s)</span>
@@ -507,7 +528,7 @@ require_once __DIR__ . '/../includes/header.php';
                         </thead>
                         <tbody>
                         <?php foreach ($g['courses'] as $c): $osid = (int)$c['offer_subject_id']; ?>
-                            <tr>
+                            <tr data-code="<?= h(acg_code_key($c['course_code'])) ?>">
                                 <td class="ps-4"><span class="badge bg-light text-dark border" style="font-family:monospace;"><?= h($c['course_code']) ?></span></td>
                                 <td>
                                     <?= h($c['course_title']) ?>
@@ -579,6 +600,108 @@ require_once __DIR__ . '/../includes/header.php';
         var dated = false;
         document.querySelectorAll('.ac-date').forEach(function (i) { if (i.value) dated = true; });
         if (!dated) { e.preventDefault(); alert('Set an exam date for at least one course.'); }
+    });
+
+    // ── CSV schedule fill ──────────────────────────────────────────────
+    // Columns: Batch | Course Code | Course Title | Exam Date | Start Time | End Time
+    function csvNorm(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ''); }
+    function csvPad(n)  { n = String(parseInt(n, 10)); return n.length < 2 ? '0' + n : n; }
+
+    function csvParse(text) {
+        text = String(text || '').replace(/^\uFEFF/, '');
+        var first = text.split(/\r?\n/, 1)[0] || '';
+        var d = first.indexOf('\t') !== -1 ? '\t' : ',';
+        var rows = [], row = [], cur = '', q = false;
+        for (var i = 0; i < text.length; i++) {
+            var ch = text[i];
+            if (q) {
+                if (ch === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; }
+                else cur += ch;
+            } else if (ch === '"') q = true;
+            else if (ch === d) { row.push(cur); cur = ''; }
+            else if (ch === '\n' || ch === '\r') {
+                if (ch === '\r' && text[i + 1] === '\n') i++;
+                row.push(cur); cur = '';
+                if (row.length > 1 || row[0].trim() !== '') rows.push(row);
+                row = [];
+            } else cur += ch;
+        }
+        row.push(cur);
+        if (row.length > 1 || row[0].trim() !== '') rows.push(row);
+        return rows;
+    }
+
+    function csvDate(s) {
+        s = String(s || '').trim();
+        if (!s) return '';
+        var m;
+        if ((m = s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})$/)))  return m[1] + '-' + csvPad(m[2]) + '-' + csvPad(m[3]);
+        if ((m = s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})$/)))  return m[3] + '-' + csvPad(m[2]) + '-' + csvPad(m[1]); // DD/MM/YYYY
+        var mo = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+        if ((m = s.match(/^(\d{1,2})[\s-]+([a-z]{3,})[\s,-]+(\d{4})$/i)) && mo[m[2].slice(0, 3).toLowerCase()])
+            return m[3] + '-' + csvPad(mo[m[2].slice(0, 3).toLowerCase()]) + '-' + csvPad(m[1]); // 5 Jan 2026
+        if ((m = s.match(/^([a-z]{3,})[\s-]+(\d{1,2})[\s,-]+(\d{4})$/i)) && mo[m[1].slice(0, 3).toLowerCase()])
+            return m[3] + '-' + csvPad(mo[m[1].slice(0, 3).toLowerCase()]) + '-' + csvPad(m[2]); // Jan 5, 2026
+        return '';
+    }
+
+    function csvTime(s) {
+        s = String(s || '').trim();
+        if (!s) return '';
+        var m = s.match(/^(\d{1,2})(?:[:.](\d{2}))?(?:[:.]\d{2})?\s*(AM|PM)?$/i);
+        if (!m) return '';
+        var h = parseInt(m[1], 10), mi = m[2] || '00', ap = (m[3] || '').toUpperCase();
+        if (ap === 'PM' && h < 12) h += 12;
+        if (ap === 'AM' && h === 12) h = 0;
+        if (h > 23 || parseInt(mi, 10) > 59) return '';
+        return csvPad(h) + ':' + mi;
+    }
+
+    var csvBtn = document.getElementById('csv_apply');
+    if (csvBtn) csvBtn.addEventListener('click', function () {
+        var input  = document.getElementById('csv_file');
+        var status = document.getElementById('csv_status');
+        var f = input.files && input.files[0];
+        if (!f) { alert('Choose a CSV file first.'); return; }
+        var reader = new FileReader();
+        reader.onload = function () {
+            var rows = csvParse(reader.result);
+            if (!rows.length) { status.textContent = 'Empty file.'; return; }
+            var start = 0;
+            var head = rows[0].map(csvNorm).join('|');
+            if (head.indexOf('coursecode') !== -1 || head.indexOf('examdate') !== -1 || head.indexOf('batch') !== -1) start = 1;
+            var applied = 0, badDate = 0, unmatched = [];
+            for (var r = start; r < rows.length; r++) {
+                var cells = rows[r];
+                var batch = csvNorm(cells[0]);
+                var code  = csvNorm(cells[1]);
+                if (!code) continue;
+                var dateV  = csvDate(cells[3]);
+                var startV = csvTime(cells[4]);
+                var endV   = csvTime(cells[5]);
+                if (String(cells[3] || '').trim() !== '' && !dateV) badDate++;
+                var hit = 0;
+                document.querySelectorAll('[data-batch]').forEach(function (card) {
+                    if (batch) {
+                        var bn = card.getAttribute('data-batch-name') || '';
+                        if (bn !== batch && !(batch.length >= 3 && bn.indexOf(batch) !== -1)) return;
+                    }
+                    card.querySelectorAll('tr[data-code="' + code + '"]').forEach(function (tr) {
+                        if (dateV)  tr.querySelector('.ac-date').value  = dateV;
+                        if (startV) tr.querySelector('.ac-start').value = startV;
+                        if (endV)   tr.querySelector('.ac-end').value   = endV;
+                        hit++;
+                    });
+                });
+                if (hit) applied++;
+                else unmatched.push(((cells[0] || '').trim() ? (cells[0] || '').trim() + ' / ' : '') + (cells[1] || '').trim());
+            }
+            var msg = applied + ' row(s) applied.';
+            if (badDate)          msg += ' ' + badDate + ' row(s) had an unreadable date.';
+            if (unmatched.length) msg += ' Unmatched: ' + unmatched.slice(0, 10).join(', ') + (unmatched.length > 10 ? ' …' : '') + '.';
+            status.textContent = msg;
+        };
+        reader.readAsText(f);
     });
 })();
 </script>
