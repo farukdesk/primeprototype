@@ -9,7 +9,10 @@
  *      offer semester, department, batch).
  *   2. Set the exam DATE and TIME for every course directly on the page.
  *      Batch-level quick-fill helpers copy one date/time to all courses of
- *      a batch. Courses left without a date are skipped.
+ *      a batch; every row also has copy / paste buttons to move one row's
+ *      date + times to other rows. Courses left without a date are skipped.
+ *      The whole entry can be SAVED AS A DRAFT (ac_generation_drafts) and
+ *      resumed later before actually generating.
  *   3. Generate — ONE admit card per class group (department + program +
  *      batch + shift) containing that group's dated courses. Course rows
  *      are linked to the course-offer subjects, so every student only sees
@@ -35,11 +38,64 @@ $f_offer_sem = trim((string)($_POST['offer_semester'] ?? ''));
 $f_dept_id   = (int)($_POST['dept_id'] ?? 0);
 $f_batch_id  = (int)($_POST['batch_id'] ?? 0);
 
-$in_dates  = (array)($_POST['exam_date'] ?? []);
-$in_starts = (array)($_POST['start_time'] ?? []);
-$in_ends   = (array)($_POST['end_time'] ?? []);
-$in_sel    = array_map('strval', (array)($_POST['sel'] ?? []));
-$was_generate = ($_POST['action'] ?? '') === 'generate';
+$in_dates   = (array)($_POST['exam_date'] ?? []);
+$in_starts  = (array)($_POST['start_time'] ?? []);
+$in_ends    = (array)($_POST['end_time'] ?? []);
+$in_sel     = array_map('strval', (array)($_POST['sel'] ?? []));
+$sticky_sel = in_array(($_POST['action'] ?? ''), ['generate', 'save_draft'], true);
+$draft_id   = (int)($_POST['draft_id'] ?? ($_GET['draft'] ?? 0));
+
+// ── Draft storage (saved date/time entries, resumable later) ──────────────
+try {
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS ac_generation_drafts (
+            id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            exam_name VARCHAR(255) NOT NULL,
+            semester VARCHAR(100) NOT NULL DEFAULT '',
+            payload MEDIUMTEXT NOT NULL,
+            created_by INT UNSIGNED NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            KEY idx_acgd_user (created_by)
+        )"
+    );
+} catch (Throwable $e) {}
+
+// Delete a draft
+if (isset($_GET['delete_draft'])) {
+    try {
+        $db->prepare('DELETE FROM ac_generation_drafts WHERE id = ? AND created_by = ?')
+           ->execute([(int)$_GET['delete_draft'], (int)auth_user()['id']]);
+        flash_set('success', 'Draft deleted.');
+    } catch (Throwable $e) {}
+    redirect(APP_URL . '/admit-card/create.php');
+}
+
+// Resume a draft (GET ?draft=ID): restore the saved form state
+$loaded_draft = null;
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' && $draft_id > 0) {
+    try {
+        $st = $db->prepare('SELECT * FROM ac_generation_drafts WHERE id = ? AND created_by = ?');
+        $st->execute([$draft_id, (int)auth_user()['id']]);
+        $loaded_draft = $st->fetch() ?: null;
+    } catch (Throwable $e) {}
+    if ($loaded_draft) {
+        $p = json_decode((string)$loaded_draft['payload'], true) ?: [];
+        $exam_name   = (string)$loaded_draft['exam_name'];
+        $semester    = (string)$loaded_draft['semester'];
+        $is_active   = (int)($p['is_active'] ?? 1) ? 1 : 0;
+        $f_offer_sem = (string)($p['offer_semester'] ?? '');
+        $f_dept_id   = (int)($p['dept_id'] ?? 0);
+        $f_batch_id  = (int)($p['batch_id'] ?? 0);
+        $in_dates    = (array)($p['exam_date'] ?? []);
+        $in_starts   = (array)($p['start_time'] ?? []);
+        $in_ends     = (array)($p['end_time'] ?? []);
+        $in_sel      = array_map('strval', (array)($p['sel'] ?? []));
+        $sticky_sel  = true;
+    } else {
+        $draft_id = 0;
+    }
+}
 
 // Predefined semester options for the card label
 $year = (int)date('Y');
@@ -55,6 +111,14 @@ if ($semester !== '' && !in_array($semester, $semester_opts, true)) array_unshif
 $filter_depts   = $db->query("SELECT id, name FROM dept_departments WHERE is_active = 1 ORDER BY name ASC")->fetchAll();
 $filter_batches = $db->query("SELECT id, name FROM student_batches WHERE is_active = 1 ORDER BY sort_order ASC, name ASC")->fetchAll();
 $filter_sems    = $db->query("SELECT DISTINCT semester FROM co_offers WHERE status = 'active' AND semester IS NOT NULL AND semester <> '' ORDER BY semester ASC")->fetchAll(PDO::FETCH_COLUMN);
+
+// Saved drafts of the current user
+$my_drafts = [];
+try {
+    $st = $db->prepare('SELECT id, exam_name, semester, updated_at FROM ac_generation_drafts WHERE created_by = ? ORDER BY updated_at DESC');
+    $st->execute([(int)auth_user()['id']]);
+    $my_drafts = $st->fetchAll();
+} catch (Throwable $e) {}
 
 // Optional schema column (course rows are linked to offer subjects when present)
 $has_subject_col = false;
@@ -215,6 +279,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($exam_name === '') $errors[] = 'Exam name is required.';
     if ($semester === '')  $errors[] = 'Semester is required.';
 
+    // ── Save as draft (dates/times kept, nothing generated) ───────────────
+    if ($action === 'save_draft' && empty($errors)) {
+        $payload = json_encode([
+            'is_active'      => $is_active,
+            'offer_semester' => $f_offer_sem,
+            'dept_id'        => $f_dept_id,
+            'batch_id'       => $f_batch_id,
+            'sel'            => $in_sel,
+            'exam_date'      => $in_dates,
+            'start_time'     => $in_starts,
+            'end_time'       => $in_ends,
+        ]);
+        try {
+            if ($draft_id > 0) {
+                $chk = $db->prepare('SELECT id FROM ac_generation_drafts WHERE id = ? AND created_by = ?');
+                $chk->execute([$draft_id, (int)auth_user()['id']]);
+                if (!$chk->fetch()) $draft_id = 0;
+            }
+            if ($draft_id > 0) {
+                $db->prepare('UPDATE ac_generation_drafts SET exam_name = ?, semester = ?, payload = ? WHERE id = ? AND created_by = ?')
+                   ->execute([$exam_name, $semester, $payload, $draft_id, (int)auth_user()['id']]);
+            } else {
+                $db->prepare('INSERT INTO ac_generation_drafts (exam_name, semester, payload, created_by) VALUES (?,?,?,?)')
+                   ->execute([$exam_name, $semester, $payload, (int)auth_user()['id']]);
+                $draft_id = (int)$db->lastInsertId();
+            }
+            flash_set('success', 'Draft saved. Resume it any time from the "Saved Drafts" list on this page.');
+            redirect(APP_URL . '/admit-card/create.php?draft=' . $draft_id);
+        } catch (Throwable $e) {
+            $errors[] = 'Could not save the draft: ' . $e->getMessage();
+        }
+    }
+
     if (empty($errors)) {
         $batches = acg_load_batches($f_offer_sem, $f_dept_id, $f_batch_id, $errors);
         if (!$batches) $batches = null;
@@ -357,11 +454,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 $created++;
             }
+            // The draft is finished — remove it.
+            if ($draft_id > 0) {
+                try {
+                    $db->prepare('DELETE FROM ac_generation_drafts WHERE id = ? AND created_by = ?')
+                       ->execute([$draft_id, (int)auth_user()['id']]);
+                } catch (Throwable $e) {}
+            }
             flash_set('success', $created . ' admit card(s) created with ' . $rows_n
                 . ' course row(s). Every student only sees the courses they are registered in.');
             redirect(APP_URL . '/admit-card/index.php');
         }
     }
+}
+
+// Resumed draft — load the batch-wise data so the saved values are shown
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' && $loaded_draft) {
+    $batches = acg_load_batches($f_offer_sem, $f_dept_id, $f_batch_id, $errors);
+    if (!$batches) $batches = null;
 }
 
 require_once __DIR__ . '/../includes/header.php';
@@ -387,6 +497,49 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 <?php endif; ?>
 
+<?php if ($my_drafts): ?>
+<!-- ── Saved drafts ── -->
+<div class="card mb-4" style="border-radius:12px;">
+    <div class="card-header py-3 px-4 fw-semibold">
+        <i class="fas fa-save me-2 text-primary"></i>Saved Drafts
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-4">Exam Name</th>
+                        <th>Semester</th>
+                        <th>Last saved</th>
+                        <th class="pe-4" style="width:180px;"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($my_drafts as $d): ?>
+                    <tr class="<?= (int)$d['id'] === $draft_id ? 'table-primary' : '' ?>">
+                        <td class="ps-4 fw-semibold"><?= h($d['exam_name']) ?></td>
+                        <td><?= h($d['semester']) ?></td>
+                        <td class="text-muted small"><?= h(date('d M Y, g:i A', strtotime($d['updated_at']))) ?></td>
+                        <td class="pe-4 text-end">
+                            <a href="<?= APP_URL ?>/admit-card/create.php?draft=<?= (int)$d['id'] ?>"
+                               class="btn btn-sm btn-outline-primary" style="border-radius:8px;">
+                                <i class="fas fa-folder-open me-1"></i>Resume
+                            </a>
+                            <a href="<?= APP_URL ?>/admit-card/create.php?delete_draft=<?= (int)$d['id'] ?>"
+                               class="btn btn-sm btn-outline-danger" style="border-radius:8px;"
+                               onclick="return confirm('Delete this draft? This cannot be undone.')">
+                                <i class="fas fa-trash"></i>
+                            </a>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
+
 <!-- ── Step 1: exam details + filters ── -->
 <div class="card mb-4" style="border-radius:12px;">
     <div class="card-header py-3 px-4 fw-semibold">
@@ -396,6 +549,7 @@ require_once __DIR__ . '/../includes/header.php';
         <form method="POST">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="load">
+            <input type="hidden" name="draft_id" value="<?= (int)$draft_id ?>">
             <div class="row g-3">
                 <div class="col-md-6">
                     <label class="form-label fw-semibold">Exam Name <span class="text-danger">*</span></label>
@@ -448,7 +602,8 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="form-text mt-2">
                 Loads every offered course with <strong>registered (active) students</strong> from the
                 Course Offer module, grouped <strong>batch wise</strong>. You then set the exam
-                <strong>date</strong> and <strong>time</strong> per course and generate the admit cards.
+                <strong>date</strong> and <strong>time</strong> per course, save your progress as a
+                <strong>draft</strong> whenever needed, and generate the admit cards when ready.
             </div>
             <button type="submit" class="btn btn-primary mt-3" style="border-radius:10px;">
                 <i class="fas fa-search me-1"></i> Load Registered Courses (Batch Wise)
@@ -469,7 +624,7 @@ require_once __DIR__ . '/../includes/header.php';
 <!-- ── Step 2: set dates/times batch wise & generate ── -->
 <form method="POST" id="generate_form">
     <?= csrf_field() ?>
-    <input type="hidden" name="action" value="generate">
+    <input type="hidden" name="draft_id" value="<?= (int)$draft_id ?>">
     <input type="hidden" name="exam_name" value="<?= h($exam_name) ?>">
     <input type="hidden" name="semester" value="<?= h($semester) ?>">
     <input type="hidden" name="is_active" value="<?= (int)$is_active ?>">
@@ -482,6 +637,9 @@ require_once __DIR__ . '/../includes/header.php';
         <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle"><?= count($batches) ?> batch(es)</span>
         <span class="badge bg-light text-dark border"><?= $total_groups ?> class group(s)</span>
         <span class="badge bg-light text-dark border"><?= $total_courses ?> registered course(s)</span>
+        <?php if ($draft_id > 0): ?>
+        <span class="badge bg-primary-subtle text-primary-emphasis border border-primary-subtle"><i class="fas fa-save me-1"></i>Draft #<?= (int)$draft_id ?></span>
+        <?php endif; ?>
         <span class="ms-auto small">
             <button type="button" class="btn btn-link btn-sm p-0" id="sel_all">Select all</button>
             <span class="text-muted">/</span>
@@ -539,7 +697,7 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
         <div class="card-body p-0">
             <?php foreach ($b['groups'] as $g): ?>
-            <?php $checked = !$was_generate || in_array($g['hash'], $in_sel, true); ?>
+            <?php $checked = !$sticky_sel || in_array($g['hash'], $in_sel, true); ?>
             <div class="border-bottom">
                 <div class="px-4 py-2 d-flex flex-wrap align-items-center gap-2 bg-light-subtle">
                     <?php if (!$g['no_program']): ?>
@@ -562,7 +720,8 @@ require_once __DIR__ . '/../includes/header.php';
                                 <th class="text-center" style="width:80px;">Students</th>
                                 <th style="width:160px;">Exam Date</th>
                                 <th style="width:130px;">Start Time</th>
-                                <th class="pe-4" style="width:130px;">End Time</th>
+                                <th style="width:130px;">End Time</th>
+                                <th class="pe-4 text-center" style="width:95px;">Copy / Paste</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -584,9 +743,19 @@ require_once __DIR__ . '/../includes/header.php';
                                     <input type="time" name="start_time[<?= $osid ?>]" class="form-control form-control-sm ac-start"
                                            value="<?= h((string)($in_starts[$osid] ?? '')) ?>">
                                 </td>
-                                <td class="pe-4">
+                                <td>
                                     <input type="time" name="end_time[<?= $osid ?>]" class="form-control form-control-sm ac-end"
                                            value="<?= h((string)($in_ends[$osid] ?? '')) ?>">
+                                </td>
+                                <td class="pe-4 text-center text-nowrap">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary row-copy"
+                                            title="Copy this row's date &amp; times">
+                                        <i class="fas fa-copy"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary row-paste" disabled
+                                            title="Paste the copied date &amp; times here">
+                                        <i class="fas fa-paste"></i>
+                                    </button>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
@@ -599,12 +768,15 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
     <?php endforeach; ?>
 
-    <div class="d-flex gap-2 mb-5">
-        <button type="submit" class="btn btn-primary" style="border-radius:10px;">
+    <div class="d-flex gap-2 mb-5 flex-wrap">
+        <button type="submit" name="action" value="save_draft" class="btn btn-outline-primary" style="border-radius:10px;">
+            <i class="fas fa-save me-1"></i> Save as Draft
+        </button>
+        <button type="submit" name="action" value="generate" class="btn btn-primary" style="border-radius:10px;">
             <i class="fas fa-id-card me-1"></i> Generate Admit Cards
         </button>
         <a href="<?= APP_URL ?>/admit-card/create.php" class="btn btn-light" style="border-radius:10px;">Start Over</a>
-        <span class="text-muted small align-self-center">Courses without an exam date are skipped.</span>
+        <span class="text-muted small align-self-center">Courses without an exam date are skipped. Save as draft to continue later.</span>
     </div>
 </form>
 
@@ -617,8 +789,7 @@ require_once __DIR__ . '/../includes/header.php';
     if (none) none.addEventListener('click', function () { boxes.forEach(function (b) { b.checked = false; }); });
 
     // Batch-level quick fill: copy the header date/time to every course
-    // row of the batch (only overwrites empty fields when nothing is set
-    // in the quick-fill input).
+    // row of the batch.
     document.querySelectorAll('[data-batch]').forEach(function (card) {
         var btn = card.querySelector('.qf-apply');
         if (!btn) return;
@@ -632,7 +803,36 @@ require_once __DIR__ . '/../includes/header.php';
         });
     });
 
+    // Row-level copy / paste: copy one course row's date + start + end and
+    // paste them into any other row (across batches too).
+    var clip = null;
+    document.querySelectorAll('.row-copy').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var tr = btn.closest('tr');
+            clip = {
+                d: tr.querySelector('.ac-date').value,
+                s: tr.querySelector('.ac-start').value,
+                e: tr.querySelector('.ac-end').value
+            };
+            document.querySelectorAll('.row-paste').forEach(function (p) { p.disabled = false; });
+            document.querySelectorAll('.row-copy').forEach(function (c) { c.classList.remove('btn-secondary'); c.classList.add('btn-outline-secondary'); });
+            btn.classList.remove('btn-outline-secondary');
+            btn.classList.add('btn-secondary');
+        });
+    });
+    document.querySelectorAll('.row-paste').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            if (!clip) return;
+            var tr = btn.closest('tr');
+            tr.querySelector('.ac-date').value  = clip.d;
+            tr.querySelector('.ac-start').value = clip.s;
+            tr.querySelector('.ac-end').value   = clip.e;
+        });
+    });
+
     document.getElementById('generate_form').addEventListener('submit', function (e) {
+        var act = (e.submitter && e.submitter.value) || 'generate';
+        if (act !== 'generate') return; // drafts can be saved in any state
         var any = false;
         boxes.forEach(function (b) { if (b.checked) any = true; });
         if (!any) { e.preventDefault(); alert('Select at least one class group to generate.'); return; }
