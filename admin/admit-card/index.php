@@ -190,13 +190,49 @@ $cnt_stmt->execute($params);
 $total = (int)$cnt_stmt->fetchColumn();
 $pages = (int)ceil($total / $per_page);
 
+// ── Student counts ──────────────────────────────────────────────────────
+// Per card: registered ACTIVE students of the card's linked course-offer
+// subjects. Manual / bulk cards without subject links fall back to the
+// active students of the card's dept + program (+ batch when set).
+$has_subject_col_g = false;
+try { $db->query('SELECT offer_subject_id FROM ac_admit_card_courses LIMIT 1'); $has_subject_col_g = true; } catch (Throwable $e) {}
+$student_cnt_sql = $has_subject_col_g
+    ? "CASE WHEN EXISTS (SELECT 1 FROM ac_admit_card_courses ccx
+                          WHERE ccx.admit_card_id = ac.id AND ccx.offer_subject_id IS NOT NULL)
+            THEN (SELECT COUNT(DISTINCT r.student_id)
+                    FROM ac_admit_card_courses cc
+                    JOIN co_registrations r ON r.offer_subject_id = cc.offer_subject_id
+                    JOIN students s ON s.id = r.student_id
+                   WHERE cc.admit_card_id = ac.id AND s.status = 'Active')
+            ELSE (SELECT COUNT(*) FROM students s2
+                   WHERE s2.dept_id = ac.dept_id AND s2.program_id = ac.program_id
+                     AND (ac.batch_id IS NULL OR s2.batch_id = ac.batch_id)
+                     AND s2.status = 'Active')
+       END"
+    : "(SELECT COUNT(*) FROM students s2
+         WHERE s2.dept_id = ac.dept_id AND s2.program_id = ac.program_id
+           AND (ac.batch_id IS NULL OR s2.batch_id = ac.batch_id)
+           AND s2.status = 'Active')";
+
+$sum_stmt = $db->prepare(
+    "SELECT COALESCE(SUM(sc), 0) FROM (
+        SELECT $student_cnt_sql AS sc
+          FROM ac_admit_cards ac
+          JOIN dept_departments d ON d.id = ac.dept_id
+          JOIN dept_academic_programs p ON p.id = ac.program_id
+         WHERE $where) t"
+);
+$sum_stmt->execute($params);
+$total_students = (int)$sum_stmt->fetchColumn();
+
 $rows_stmt = $db->prepare(
     "SELECT ac.*,
             d.name AS dept_name,
             p.program_name,
             b.name AS batch_name_db,
             u.full_name AS created_by_name,
-            (SELECT COUNT(*) FROM ac_admit_card_courses cc WHERE cc.admit_card_id = ac.id) AS course_count
+            (SELECT COUNT(*) FROM ac_admit_card_courses cc WHERE cc.admit_card_id = ac.id) AS course_count,
+            $student_cnt_sql AS student_count
      FROM ac_admit_cards ac
      JOIN dept_departments d ON d.id = ac.dept_id
      JOIN dept_academic_programs p ON p.id = ac.program_id
@@ -236,6 +272,16 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <?php flash_show(); ?>
+
+<!-- Totals -->
+<div class="d-flex flex-wrap gap-2 mb-3">
+    <span class="badge bg-primary-subtle text-primary-emphasis border border-primary-subtle px-3 py-2">
+        <i class="fas fa-id-card me-1"></i><?= (int)$total ?> admit card batch(es)
+    </span>
+    <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle px-3 py-2">
+        <i class="fas fa-user-graduate me-1"></i><?= number_format($total_students) ?> student admit card(s) generated
+    </span>
+</div>
 
 <!-- Search -->
 <div class="card mb-4">
@@ -370,6 +416,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <th>Dept / Program</th>
                         <th>Batch</th>
                         <th>Courses</th>
+                        <th>Students</th>
                         <th>Status</th>
                         <th>Created</th>
                         <th></th>
@@ -377,7 +424,7 @@ require_once __DIR__ . '/../includes/header.php';
                 </thead>
                 <tbody>
                 <?php if (empty($rows)): ?>
-                    <tr><td colspan="<?= ac_can_edit() ? 10 : 9 ?>" class="text-center text-muted py-5">No admit cards found.</td></tr>
+                    <tr><td colspan="<?= ac_can_edit() ? 11 : 10 ?>" class="text-center text-muted py-5">No admit cards found.</td></tr>
                 <?php else: ?>
                     <?php foreach ($rows as $row): ?>
                     <tr>
@@ -395,6 +442,7 @@ require_once __DIR__ . '/../includes/header.php';
                         </td>
                         <td><?= h($row['batch_label'] ?? ($row['batch_name_db'] ?? '—')) ?></td>
                         <td><span class="badge bg-secondary"><?= (int)$row['course_count'] ?></span></td>
+                        <td><span class="badge bg-info-subtle text-info-emphasis border border-info-subtle"><?= (int)$row['student_count'] ?></span></td>
                         <td>
                             <?php if ($row['is_active']): ?>
                                 <span class="badge bg-success">Active</span>
