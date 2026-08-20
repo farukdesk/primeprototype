@@ -11,6 +11,14 @@ $page_title = 'Admit Cards';
 
 $f_search  = trim($_GET['search'] ?? '');
 $f_student = trim($_GET['student_id'] ?? '');
+$f_course  = trim($_GET['course'] ?? '');
+$f_dept    = (int)($_GET['dept_id'] ?? 0);
+$f_program = (int)($_GET['program_id'] ?? 0);
+$f_batch   = (int)($_GET['batch_id'] ?? 0);
+$f_sem     = trim($_GET['semester'] ?? '');
+$f_status  = trim($_GET['status'] ?? '');      // '' = all, '1' = active, '0' = inactive
+$f_from    = trim($_GET['date_from'] ?? '');   // exam date range (course rows)
+$f_to      = trim($_GET['date_to'] ?? '');
 $per_page  = 25;
 $cur_page  = max(1, (int)($_GET['page'] ?? 1));
 $offset    = ($cur_page - 1) * $per_page;
@@ -103,6 +111,53 @@ if ($f_search !== '') {
     $where .= ')';
 }
 
+// ── Structured filters ─────────────────────────────────────────────────
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $f_from)) $f_from = '';
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $f_to))   $f_to   = '';
+if ($f_dept    > 0) { $where .= ' AND ac.dept_id = ?';    $params[] = $f_dept; }
+if ($f_program > 0) { $where .= ' AND ac.program_id = ?'; $params[] = $f_program; }
+if ($f_batch   > 0) { $where .= ' AND ac.batch_id = ?';   $params[] = $f_batch; }
+if ($f_sem !== '')  { $where .= ' AND ac.semester = ?';   $params[] = $f_sem; }
+if ($f_status === '1' || $f_status === '0') { $where .= ' AND ac.is_active = ?'; $params[] = (int)$f_status; }
+if ($f_course !== '') {
+    $where .= ' AND EXISTS (SELECT 1 FROM ac_admit_card_courses cf
+                             WHERE cf.admit_card_id = ac.id
+                               AND (cf.course_code LIKE ? OR cf.course_title LIKE ?))';
+    $clike    = '%' . $f_course . '%';
+    $params[] = $clike;
+    $params[] = $clike;
+}
+if ($f_from !== '' || $f_to !== '') {
+    $dcond = [];
+    if ($f_from !== '') { $dcond[] = 'df.exam_date >= ?'; }
+    if ($f_to   !== '') { $dcond[] = 'df.exam_date <= ?'; }
+    $where .= ' AND EXISTS (SELECT 1 FROM ac_admit_card_courses df
+                             WHERE df.admit_card_id = ac.id AND ' . implode(' AND ', $dcond) . ')';
+    if ($f_from !== '') $params[] = $f_from;
+    if ($f_to   !== '') $params[] = $f_to;
+}
+
+// Dropdown data for the filter bar
+$flt_depts    = $db->query('SELECT id, name FROM dept_departments ORDER BY name ASC')->fetchAll();
+$flt_programs = $db->query('SELECT id, program_name FROM dept_academic_programs ORDER BY program_name ASC')->fetchAll();
+$flt_batches  = $db->query('SELECT id, name FROM student_batches ORDER BY sort_order ASC, name ASC')->fetchAll();
+$flt_sems     = $db->query("SELECT DISTINCT semester FROM ac_admit_cards WHERE semester IS NOT NULL AND semester <> '' ORDER BY semester ASC")->fetchAll(PDO::FETCH_COLUMN);
+
+// Query string with every active filter (pagination links reuse it)
+$flt_qs = http_build_query(array_filter([
+    'search'     => $f_search,
+    'student_id' => $f_student,
+    'course'     => $f_course,
+    'dept_id'    => $f_dept    ?: '',
+    'program_id' => $f_program ?: '',
+    'batch_id'   => $f_batch   ?: '',
+    'semester'   => $f_sem,
+    'status'     => $f_status,
+    'date_from'  => $f_from,
+    'date_to'    => $f_to,
+], static fn($v) => $v !== '' && $v !== null));
+$has_filters = $flt_qs !== '';
+
 $cnt_stmt = $db->prepare(
     "SELECT COUNT(*) FROM ac_admit_cards ac
      JOIN dept_departments d ON d.id = ac.dept_id
@@ -163,19 +218,80 @@ require_once __DIR__ . '/../includes/header.php';
 <!-- Search -->
 <div class="card mb-4">
     <div class="card-body py-3 px-4">
-        <form method="get" class="row g-2 align-items-end">
-            <div class="col-md-5">
-                <input type="text" name="search" class="form-control" placeholder="Search exam name, semester, dept…"
-                       value="<?= h($f_search) ?>">
+        <form method="get" class="row g-2">
+            <div class="col-md-4">
+                <label class="form-label small fw-semibold mb-1">Search</label>
+                <input type="text" name="search" class="form-control form-control-sm"
+                       placeholder="Exam name, semester, dept, program or card #" value="<?= h($f_search) ?>">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small fw-semibold mb-1">Course</label>
+                <input type="text" name="course" class="form-control form-control-sm"
+                       placeholder="Course code or title (e.g. EEE 1105)" value="<?= h($f_course) ?>">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small fw-semibold mb-1">Student ID</label>
+                <input type="text" name="student_id" class="form-control form-control-sm"
+                       placeholder="e.g. 123-456-789" value="<?= h($f_student) ?>">
             </div>
             <div class="col-md-3">
-                <input type="text" name="student_id" class="form-control" placeholder="Student ID (e.g. 123-456-789)"
-                       value="<?= h($f_student) ?>">
+                <label class="form-label small fw-semibold mb-1">Department</label>
+                <select name="dept_id" class="form-select form-select-sm">
+                    <option value="">All departments</option>
+                    <?php foreach ($flt_depts as $d): ?>
+                    <option value="<?= (int)$d['id'] ?>" <?= $f_dept === (int)$d['id'] ? 'selected' : '' ?>><?= h($d['name']) ?></option>
+                    <?php endforeach; ?>
+                </select>
             </div>
-            <div class="col-auto">
-                <button class="btn btn-outline-primary"><i class="fas fa-search me-1"></i>Search</button>
-                <?php if ($f_search !== '' || $f_student !== ''): ?>
-                    <a href="?" class="btn btn-outline-secondary ms-1">Clear</a>
+            <div class="col-md-3">
+                <label class="form-label small fw-semibold mb-1">Program</label>
+                <select name="program_id" class="form-select form-select-sm">
+                    <option value="">All programs</option>
+                    <?php foreach ($flt_programs as $p): ?>
+                    <option value="<?= (int)$p['id'] ?>" <?= $f_program === (int)$p['id'] ? 'selected' : '' ?>><?= h($p['program_name']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-semibold mb-1">Batch</label>
+                <select name="batch_id" class="form-select form-select-sm">
+                    <option value="">All batches</option>
+                    <?php foreach ($flt_batches as $b): ?>
+                    <option value="<?= (int)$b['id'] ?>" <?= $f_batch === (int)$b['id'] ? 'selected' : '' ?>><?= h($b['name']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-semibold mb-1">Semester</label>
+                <select name="semester" class="form-select form-select-sm">
+                    <option value="">All semesters</option>
+                    <?php foreach ($flt_sems as $s): ?>
+                    <option value="<?= h($s) ?>" <?= $f_sem === $s ? 'selected' : '' ?>><?= h($s) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-semibold mb-1">Status</label>
+                <select name="status" class="form-select form-select-sm">
+                    <option value="">All</option>
+                    <option value="1" <?= $f_status === '1' ? 'selected' : '' ?>>Active</option>
+                    <option value="0" <?= $f_status === '0' ? 'selected' : '' ?>>Inactive</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-semibold mb-1">Exam date from</label>
+                <input type="date" name="date_from" class="form-control form-control-sm" value="<?= h($f_from) ?>">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-semibold mb-1">Exam date to</label>
+                <input type="date" name="date_to" class="form-control form-control-sm" value="<?= h($f_to) ?>">
+            </div>
+            <div class="col-md-6 d-flex align-items-end gap-2">
+                <button class="btn btn-sm btn-outline-primary" style="border-radius:8px;">
+                    <i class="fas fa-filter me-1"></i>Apply Filters
+                </button>
+                <?php if ($has_filters): ?>
+                <a href="?" class="btn btn-sm btn-outline-secondary" style="border-radius:8px;">Clear</a>
                 <?php endif; ?>
             </div>
         </form>
@@ -281,7 +397,7 @@ require_once __DIR__ . '/../includes/header.php';
             <ul class="pagination pagination-sm mb-0">
                 <?php for ($p = 1; $p <= $pages; $p++): ?>
                 <li class="page-item <?= $p === $cur_page ? 'active' : '' ?>">
-                    <a class="page-link" href="?page=<?= $p ?>&search=<?= urlencode($f_search) ?><?= $f_student !== '' ? '&student_id=' . urlencode($f_student) : '' ?>"><?= $p ?></a>
+                    <a class="page-link" href="?page=<?= $p ?><?= $flt_qs !== '' ? '&' . h($flt_qs) : '' ?>"><?= $p ?></a>
                 </li>
                 <?php endfor; ?>
             </ul>
