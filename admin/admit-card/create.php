@@ -56,6 +56,21 @@ $filter_depts   = $db->query("SELECT id, name FROM dept_departments WHERE is_act
 $filter_batches = $db->query("SELECT id, name FROM student_batches WHERE is_active = 1 ORDER BY sort_order ASC, name ASC")->fetchAll();
 $filter_sems    = $db->query("SELECT DISTINCT semester FROM co_offers WHERE status = 'active' AND semester IS NOT NULL AND semester <> '' ORDER BY semester ASC")->fetchAll(PDO::FETCH_COLUMN);
 
+// Active exams (Exam Invigilation module) — the admit card's exam name is
+// picked from these instead of being typed manually.
+$active_exams = [];
+try {
+    foreach ($db->query("SELECT exam_name, exam_year FROM ei_exams WHERE is_active = 1 ORDER BY exam_year DESC, exam_name ASC")->fetchAll() as $ex) {
+        $label = trim((string)$ex['exam_name']);
+        if ($label === '') continue;
+        $yr = trim((string)($ex['exam_year'] ?? ''));
+        if ($yr !== '' && stripos($label, $yr) === false) $label .= ' – ' . $yr;
+        $active_exams[] = $label;
+    }
+    $active_exams = array_values(array_unique($active_exams));
+} catch (Throwable $e) {}
+if ($exam_name !== '' && !in_array($exam_name, $active_exams, true)) array_unshift($active_exams, $exam_name);
+
 // Optional schema column (course rows are linked to offer subjects when present)
 $has_subject_col = false;
 try { $db->query('SELECT offer_subject_id FROM ac_admit_card_courses LIMIT 1'); $has_subject_col = true; } catch (Throwable $e) {}
@@ -399,8 +414,19 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="row g-3">
                 <div class="col-md-6">
                     <label class="form-label fw-semibold">Exam Name <span class="text-danger">*</span></label>
+                    <?php if ($active_exams): ?>
+                    <select name="exam_name" class="form-select" required>
+                        <option value="">— Select Exam —</option>
+                        <?php foreach ($active_exams as $en): ?>
+                        <option value="<?= h($en) ?>" <?= $exam_name === $en ? 'selected' : '' ?>><?= h($en) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <div class="form-text">Active exams from the <a href="<?= APP_URL ?>/exam-invigilation/index.php">Exam Invigilation</a> module.</div>
+                    <?php else: ?>
                     <input type="text" name="exam_name" class="form-control" value="<?= h($exam_name) ?>"
                            placeholder="e.g. Mid Term-1 Exam – Summer 2026" required>
+                    <div class="form-text text-warning">No active exams found in <a href="<?= APP_URL ?>/exam-invigilation/index.php">Exam Invigilation</a> — enter the exam name manually.</div>
+                    <?php endif; ?>
                 </div>
                 <div class="col-md-4">
                     <label class="form-label fw-semibold">Semester <span class="text-danger">*</span></label>
