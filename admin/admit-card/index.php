@@ -260,6 +260,9 @@ require_once __DIR__ . '/../includes/header.php';
         <a href="<?= APP_URL ?>/admit-card/conflicts.php" class="btn btn-outline-warning" style="border-radius:10px;">
             <i class="fas fa-flag me-1"></i> Clash Report
         </a>
+        <a href="<?= APP_URL ?>/admit-card/missing-schedule.php" class="btn btn-outline-danger" style="border-radius:10px;">
+            <i class="fas fa-user-clock me-1"></i> Unscheduled Courses
+        </a>
         <?php if (ac_can_create()): ?>
         <a href="<?= APP_URL ?>/admit-card/bulk-import.php" class="btn btn-outline-primary" style="border-radius:10px;">
             <i class="fas fa-file-csv me-1"></i> Bulk Import CSV
