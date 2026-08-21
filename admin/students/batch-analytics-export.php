@@ -283,13 +283,6 @@ $html = '<!DOCTYPE html>
             </tr>
         </tbody>
     </table>
-
-    <p class="note">
-        Total Admitted counts every student regardless of status (Active, Inactive, Graduated, Dropped, Not Admitted Yet).
-        Exam Attended counts distinct students with an active admit card created for them for ' . h($exam_label) . '
-        (via registered courses, dept/program/batch match for manual cards, or admin override) as of today.
-        Dropout = Total Admitted − Exam Attended.
-    </p>
 </body>
 </html>';
 
