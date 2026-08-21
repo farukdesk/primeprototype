@@ -445,7 +445,23 @@ require_once __DIR__ . '/../includes/header.php';
                         </td>
                         <td><?= h($row['batch_label'] ?? ($row['batch_name_db'] ?? '—')) ?></td>
                         <td><span class="badge bg-secondary"><?= (int)$row['course_count'] ?></span></td>
-                        <td><span class="badge bg-info-subtle text-info-emphasis border border-info-subtle"><?= (int)$row['student_count'] ?></span></td>
+                        <td>
+                            <?php $elig = ac_card_eligibility_summary((int)$row['id']); ?>
+                            <div class="d-flex flex-column gap-1">
+                                <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle"
+                                      title="Total students covered by this admit card">
+                                    <i class="fas fa-users me-1"></i>Total: <?= (int)$elig['total'] ?>
+                                </span>
+                                <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle"
+                                      title="Due as of today is within ৳<?= number_format(AC_DUE_THRESHOLD) ?> — eligible to download">
+                                    <i class="fas fa-circle-check me-1"></i>Eligible: <?= (int)$elig['eligible'] ?>
+                                </span>
+                                <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle"
+                                      title="Due as of today exceeds ৳<?= number_format(AC_DUE_THRESHOLD) ?> — not eligible to download">
+                                    <i class="fas fa-circle-xmark me-1"></i>Not eligible: <?= (int)$elig['blocked'] ?>
+                                </span>
+                            </div>
+                        </td>
                         <td>
                             <?php if ($row['is_active']): ?>
                                 <span class="badge bg-success">Active</span>
