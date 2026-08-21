@@ -217,6 +217,9 @@ require_once __DIR__ . '/../includes/header.php';
         <a href="<?= APP_URL ?>/students/portal-login-report.php" class="btn btn-outline-dark" style="border-radius:10px;font-size:.875rem;">
             <i class="fas fa-sign-in-alt me-1"></i> Login Report
         </a>
+        <a href="<?= APP_URL ?>/students/batch-analytics.php" class="btn btn-outline-primary" style="border-radius:10px;font-size:.875rem;">
+            <i class="fas fa-chart-pie me-1"></i> Batch Analytics
+        </a>
         <?php if (sm_can_delete()): ?>
         <a href="<?= APP_URL ?>/students/merge-duplicates.php" class="btn btn-outline-danger" style="border-radius:10px;font-size:.875rem;">
             <i class="fas fa-compress-arrows-alt me-1"></i> Merge Duplicates
