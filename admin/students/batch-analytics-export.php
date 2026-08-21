@@ -2,13 +2,13 @@
 /**
  * Batch Analytics – Student Dropout Analysis Report (PDF)
  *
- * Streams a department → program wise dropout analysis as a PDF.
+ * Streams a department → program wise dropout analysis as a single PDF.
  *
  * Layout:
  *   ┌────────────────────────────────────────┐
  *   │                 [University Logo]              │
  *   │        Student Dropout Analysis Report         │
- *   │              Department: <name/All>            │
+ *   │              Department: <name/s/All>          │
  *   │                 Batch: <name/All>              │
  *   ├────────────────────────────────────────┤
  *   │ Department / Program table with Total Admitted,│
@@ -16,7 +16,9 @@
  *   └────────────────────────────────────────┘
  *
  * Filters mirror admin/students/batch-analytics.php (dept, program, batch,
- * admitted semester, exam) so the PDF always matches the on-screen report.
+ * admitted semester, exam). Additionally accepts depts[] – an array of
+ * department ids (from the checkbox picker) – so several departments can be
+ * combined in one PDF.
  */
 require_once __DIR__ . '/../includes/auth.php';
 require_access('students');
@@ -25,17 +27,25 @@ require_once dirname(__DIR__) . '/../vendor/autoload.php';
 
 $dept_scope = get_dept_scope();
 
-// ── Filters (identical to batch-analytics.php) ───────────────────────────
+// ── Filters (identical to batch-analytics.php, plus depts[] checkboxes) ──────
 $f_dept    = (int)($_GET['dept']    ?? 0);
 $f_program = (int)($_GET['program'] ?? 0);
 $f_batch   = (int)($_GET['batch']   ?? 0);
 $f_sem     = trim($_GET['semester'] ?? '');
 $f_exam    = trim($_GET['exam']     ?? '');
+$f_depts   = array_values(array_filter(
+    array_map('intval', (array)($_GET['depts'] ?? [])),
+    static fn($v) => $v > 0
+));
 
 $where  = [];
 $params = [];
 
-if ($f_dept > 0) {
+if ($f_depts) {
+    $phs      = implode(',', array_fill(0, count($f_depts), '?'));
+    $where[]  = "s.dept_id IN ($phs)";
+    array_push($params, ...$f_depts);
+} elseif ($f_dept > 0) {
     $where[]  = 's.dept_id = ?';
     $params[] = $f_dept;
 }
@@ -159,7 +169,16 @@ if (!function_exists('ba_pct')) {
 $university = 'Prime University';
 
 $dept_label = 'All Departments';
-if ($f_dept > 0) {
+if ($f_depts) {
+    $phs = implode(',', array_fill(0, count($f_depts), '?'));
+    $st  = db()->prepare("SELECT name FROM dept_departments WHERE id IN ($phs) ORDER BY name ASC");
+    $st->execute($f_depts);
+    $names        = $st->fetchAll(PDO::FETCH_COLUMN);
+    $total_active = (int)db()->query('SELECT COUNT(*) FROM dept_departments WHERE is_active = 1')->fetchColumn();
+    if ($names && count($names) < $total_active) {
+        $dept_label = implode(', ', $names);
+    }
+} elseif ($f_dept > 0) {
     $st = db()->prepare('SELECT name FROM dept_departments WHERE id = ?');
     $st->execute([$f_dept]);
     $dept_label = (string)($st->fetchColumn() ?: 'All Departments');
@@ -247,7 +266,6 @@ $html = '<!DOCTYPE html>
     tr.subtotal td { background: #f5f5f5; font-weight: bold; }
     tr.grand td    { background: #3A6FD8; color: #fff; font-weight: bold; }
     tr.grand td.good, tr.grand td.bad { color: #fff; }
-    .note { margin-top: 10px; font-size: 9px; color: #666; }
 </style>
 </head>
 <body>

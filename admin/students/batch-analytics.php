@@ -360,6 +360,92 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
+<!-- Batch Dropout PDF generator -->
+<div class="card mb-4">
+    <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <h6 class="mb-0 fw-semibold"><i class="fas fa-file-pdf me-2 text-danger"></i>Generate Batch Dropout PDF</h6>
+        <small class="text-muted">Select a batch, tick the departments to include, then generate one PDF (all programs, department wise).</small>
+    </div>
+    <div class="card-body py-3 px-4">
+        <form method="GET" action="<?= APP_URL ?>/students/batch-analytics-export.php" target="_blank" rel="noopener" id="ba-pdf-form">
+            <div class="row g-2 align-items-end mb-3">
+                <div class="col-6 col-md-3">
+                    <label class="form-label fw-semibold" style="font-size:.8rem;">Batch</label>
+                    <select name="batch" class="form-select form-select-sm">
+                        <option value="">All Batches</option>
+                        <?php foreach ($batches as $b): ?>
+                        <option value="<?= $b['id'] ?>" <?= $f_batch == $b['id'] ? 'selected' : '' ?>><?= h($b['name']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-6 col-md-3">
+                    <label class="form-label fw-semibold" style="font-size:.8rem;">Exam</label>
+                    <select name="exam" class="form-select form-select-sm">
+                        <option value="">All Exams</option>
+                        <?php foreach ($exam_names as $en): ?>
+                        <option value="<?= h($en) ?>" <?= $f_exam === $en ? 'selected' : '' ?>><?= h($en) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-12 col-md-6 text-md-end">
+                    <button type="submit" class="btn btn-danger btn-sm" style="border-radius:8px;">
+                        <i class="fas fa-file-pdf me-1"></i> Generate PDF
+                    </button>
+                </div>
+            </div>
+            <div class="d-flex align-items-center gap-3 mb-2">
+                <span class="fw-semibold" style="font-size:.8rem;">Departments</span>
+                <div class="form-check mb-0">
+                    <input type="checkbox" class="form-check-input" id="ba-dept-all" checked>
+                    <label class="form-check-label" for="ba-dept-all" style="font-size:.8rem;">Select all</label>
+                </div>
+            </div>
+            <div class="row g-2">
+                <?php foreach ($departments as $d): ?>
+                <div class="col-6 col-md-3">
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input ba-dept-check" name="depts[]"
+                               value="<?= $d['id'] ?>" id="ba-dept-<?= $d['id'] ?>" checked>
+                        <label class="form-check-label" for="ba-dept-<?= $d['id'] ?>" style="font-size:.85rem;">
+                            <?= h($d['name']) ?>
+                        </label>
+                    </div>
+                </div>
+                <?php endforeach; ?>
+            </div>
+        </form>
+    </div>
+</div>
+<script>
+(function () {
+    var all    = document.getElementById('ba-dept-all');
+    var form   = document.getElementById('ba-pdf-form');
+    if (!all || !form) return;
+    var checks = form.querySelectorAll('.ba-dept-check');
+
+    all.addEventListener('change', function () {
+        checks.forEach(function (c) { c.checked = all.checked; });
+    });
+    checks.forEach(function (c) {
+        c.addEventListener('change', function () {
+            var allChecked = true;
+            checks.forEach(function (x) { if (!x.checked) allChecked = false; });
+            all.checked = allChecked;
+            all.indeterminate = !allChecked &&
+                Array.prototype.some.call(checks, function (x) { return x.checked; });
+        });
+    });
+    form.addEventListener('submit', function (e) {
+        var any = false;
+        checks.forEach(function (c) { if (c.checked) any = true; });
+        if (!any) {
+            e.preventDefault();
+            alert('Select at least one department for the PDF report.');
+        }
+    });
+})();
+</script>
+
 <!-- Report table -->
 <div class="card">
     <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between">
