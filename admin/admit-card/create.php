@@ -498,7 +498,9 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="form-text mt-1">
                 Columns: <strong>Batch, Course Code, Course Title, Exam Date, Start Time, End Time</strong>
                 (comma or tab separated, first row = header). Rows are matched to the loaded courses by
-                <strong>batch + course code</strong> and the date/time fields below are filled in.
+                <strong>batch + course code or course title</strong>, checked both ways — hyphens, spaces
+                and case are ignored, so <strong>BUS-4201</strong> matches <strong>BUS 4201</strong>
+                — and the date/time fields below are filled in.
                 Leave the Batch cell empty to apply a row to every batch. Nothing is generated until you
                 review and press <strong>Generate Admit Cards</strong>.
             </div>
@@ -564,7 +566,7 @@ require_once __DIR__ . '/../includes/header.php';
                         </thead>
                         <tbody>
                         <?php foreach ($g['courses'] as $c): $osid = (int)$c['offer_subject_id']; ?>
-                            <tr data-code="<?= h(acg_code_key($c['course_code'])) ?>">
+                            <tr data-code="<?= h(acg_code_key($c['course_code'])) ?>" data-title="<?= h(acg_code_key($c['course_title'])) ?>">
                                 <td class="ps-4"><span class="badge bg-light text-dark border" style="font-family:monospace;"><?= h($c['course_code']) ?></span></td>
                                 <td>
                                     <?= h($c['course_title']) ?>
@@ -711,7 +713,8 @@ require_once __DIR__ . '/../includes/header.php';
                 var cells = rows[r];
                 var batch = csvNorm(cells[0]);
                 var code  = csvNorm(cells[1]);
-                if (!code) continue;
+                var title = csvNorm(cells[2]);
+                if (!code && !title) continue;
                 var dateV  = csvDate(cells[3]);
                 var startV = csvTime(cells[4]);
                 var endV   = csvTime(cells[5]);
@@ -722,7 +725,16 @@ require_once __DIR__ . '/../includes/header.php';
                         var bn = card.getAttribute('data-batch-name') || '';
                         if (bn !== batch && !(batch.length >= 3 && bn.indexOf(batch) !== -1)) return;
                     }
-                    card.querySelectorAll('tr[data-code="' + code + '"]').forEach(function (tr) {
+                    card.querySelectorAll('tr[data-code]').forEach(function (tr) {
+                        // Match by course code OR course title, checked both ways
+                        // (the code column may hold the title and vice versa).
+                        // Normalisation strips hyphens/spaces/case, so BUS-4201,
+                        // BUS 4201 and bus4201 are all the same.
+                        var rc = tr.getAttribute('data-code')  || '';
+                        var rt = tr.getAttribute('data-title') || '';
+                        var ok = (code  && (rc === code  || rt === code))
+                              || (title && (rc === title || rt === title));
+                        if (!ok) return;
                         if (dateV)  tr.querySelector('.ac-date').value  = dateV;
                         if (startV) tr.querySelector('.ac-start').value = startV;
                         if (endV)   tr.querySelector('.ac-end').value   = endV;
@@ -730,7 +742,7 @@ require_once __DIR__ . '/../includes/header.php';
                     });
                 });
                 if (hit) applied++;
-                else unmatched.push(((cells[0] || '').trim() ? (cells[0] || '').trim() + ' / ' : '') + (cells[1] || '').trim());
+                else unmatched.push(((cells[0] || '').trim() ? (cells[0] || '').trim() + ' / ' : '') + ((cells[1] || '').trim() || (cells[2] || '').trim()));
             }
             var msg = applied + ' row(s) applied.';
             if (badDate)          msg += ' ' + badDate + ' row(s) had an unreadable date.';
