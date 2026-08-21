@@ -696,6 +696,35 @@ function ac_qr_data_uri(string $url): string
     return ''; // nothing worked – caller should handle empty URI gracefully
 }
 
+// ── Bangla (Bengali) font for the PDF ─────────────────────────────────────
+//
+// dompdf's bundled fonts have no Bengali glyphs, so Bangla text on a card
+// (exam names, course titles, student names) renders as "???" in the PDF.
+// Drop any Bengali-capable .ttf font into admin/admit-card/fonts/ (e.g.
+// Noto Sans Bengali, SolaimanLipi, Kalpurush) and it is embedded
+// automatically. A few well-known filenames are also looked up in
+// assets/fonts as a fallback location.
+
+function ac_bangla_font_file(): ?string
+{
+    static $checked = false, $path = null;
+    if ($checked) return $path;
+    $checked = true;
+
+    foreach ((glob(__DIR__ . '/fonts/*.ttf') ?: []) as $f) {
+        if (is_file($f)) return $path = $f;
+    }
+
+    $known  = ['NotoSansBengali-Regular.ttf', 'NotoSerifBengali-Regular.ttf',
+               'SolaimanLipi.ttf', 'solaimanlipi.ttf', 'Kalpurush.ttf', 'kalpurush.ttf',
+               'Nikosh.ttf', 'SiyamRupali.ttf', 'siyamrupali.ttf', 'bangla.ttf'];
+    $assets = dirname(__DIR__, 2) . '/assets/fonts';
+    foreach ($known as $n) {
+        if (is_file($assets . '/' . $n)) return $path = $assets . '/' . $n;
+    }
+    return $path = null;
+}
+
 // ── Verification URL for a token ─────────────────────────────────────────────
 
 function ac_verify_url(string $token): string
@@ -755,13 +784,29 @@ function ac_build_html(array $card, array $student, array $courses, string $qr_d
         : '<div style="width:80px;height:100px;border:1px solid #ccc;display:flex;align-items:center;
                        justify-content:center;font-size:11px;color:#777;">Logo</div>';
 
+    // Bangla-capable font (when available): dompdf's core fonts render
+    // Bengali text as "???", so an embedded font is declared and put first
+    // in the family stack. The same file is registered for bold too —
+    // otherwise bold cells (exam name, student name) would fall back to a
+    // glyph-less face. Latin text keeps working: Bengali fonts ship Latin
+    // glyphs as well.
+    $bangla_font = ac_bangla_font_file();
+    $font_face   = '';
+    $font_stack  = 'Arial, Helvetica, sans-serif';
+    if ($bangla_font !== null) {
+        $src        = str_replace("'", '', $bangla_font);
+        $font_face  = "@font-face { font-family: 'acbangla'; font-style: normal; font-weight: normal; src: url('" . $src . "') format('truetype'); }\n"
+                    . "  @font-face { font-family: 'acbangla'; font-style: normal; font-weight: bold; src: url('" . $src . "') format('truetype'); }\n  ";
+        $font_stack = "'acbangla', Arial, Helvetica, sans-serif";
+    }
+
     $html = '<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>
-  body { margin:0; padding:0; font-family:Arial, Helvetica, sans-serif; }
+  ' . $font_face . 'body { margin:0; padding:0; font-family:' . $font_stack . '; }
   @page { margin:15mm; }
 </style>
 </head><body>
-<div style="max-width:750px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;color:#000;padding:20px;background:#fff;">
+<div style="max-width:750px;margin:0 auto;font-family:' . $font_stack . ';color:#000;padding:20px;background:#fff;">
 
   <!-- Header: logo + university/faculty/program (+ photo) on one line.
        Table layout is used because dompdf does not support flexbox. -->
