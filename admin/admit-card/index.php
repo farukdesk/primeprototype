@@ -14,12 +14,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['bulk_action'] ?? '') !== 
     csrf_check();
     $ret = APP_URL . '/admit-card/index.php'
          . ((string)($_SERVER['QUERY_STRING'] ?? '') !== '' ? '?' . $_SERVER['QUERY_STRING'] : '');
-    if (!ac_can_edit()) {
-        flash_set('danger', 'You do not have permission to change admit card status.');
-        redirect($ret);
-    }
     $bulk_ids = array_values(array_filter(array_map('intval', (array)($_POST['card_ids'] ?? [])), static fn($v) => $v > 0));
     $bulk_act = (string)$_POST['bulk_action'];
+    if ($bulk_act === 'delete' ? !ac_can_delete() : !ac_can_edit()) {
+        flash_set('danger', $bulk_act === 'delete'
+            ? 'You do not have permission to delete admit cards.'
+            : 'You do not have permission to change admit card status.');
+        redirect($ret);
+    }
     if (!$bulk_ids) {
         flash_set('warning', 'Select at least one admit card first.');
     } elseif ($bulk_act === 'activate' || $bulk_act === 'deactivate') {
@@ -27,6 +29,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['bulk_action'] ?? '') !== 
         $st = db()->prepare("UPDATE ac_admit_cards SET is_active = ? WHERE id IN ($ph)");
         $st->execute(array_merge([$bulk_act === 'activate' ? 1 : 0], $bulk_ids));
         flash_set('success', $st->rowCount() . ' admit card(s) ' . ($bulk_act === 'activate' ? 'activated' : 'deactivated') . '.');
+    } elseif ($bulk_act === 'delete') {
+        $ph = implode(',', array_fill(0, count($bulk_ids), '?'));
+        $st = db()->prepare("DELETE FROM ac_admit_cards WHERE id IN ($ph)");
+        $st->execute($bulk_ids);
+        flash_set('success', $st->rowCount() . ' admit card(s) deleted.');
     }
     redirect($ret);
 }
@@ -245,6 +252,9 @@ $rows_stmt = $db->prepare(
 $rows_stmt->execute($params);
 $rows = $rows_stmt->fetchAll();
 
+// Bulk toolbar / checkboxes: visible with either edit (status) or delete permission
+$can_bulk = ac_can_edit() || ac_can_delete();
+
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
@@ -389,9 +399,10 @@ require_once __DIR__ . '/../includes/header.php';
 <form method="POST" action="?<?= h($flt_qs) ?>" id="bulk_form">
     <?= csrf_field() ?>
 <div class="card">
-    <?php if (ac_can_edit()): ?>
+    <?php if ($can_bulk): ?>
     <div class="card-header py-2 px-4 d-flex flex-wrap align-items-center gap-2">
-        <span class="small fw-semibold text-muted"><i class="fas fa-tasks me-1"></i>Bulk status:</span>
+        <span class="small fw-semibold text-muted"><i class="fas fa-tasks me-1"></i>Bulk actions:</span>
+        <?php if (ac_can_edit()): ?>
         <button type="submit" name="bulk_action" value="activate" class="btn btn-sm btn-outline-success" style="border-radius:8px;"
                 onclick="return confirm('Activate the selected admit card(s)? They become visible to students.')">
             <i class="fas fa-toggle-on me-1"></i>Activate selected
@@ -400,6 +411,13 @@ require_once __DIR__ . '/../includes/header.php';
                 onclick="return confirm('Deactivate the selected admit card(s)? They are hidden from students.')">
             <i class="fas fa-toggle-off me-1"></i>Deactivate selected
         </button>
+        <?php endif; ?>
+        <?php if (ac_can_delete()): ?>
+        <button type="submit" name="bulk_action" value="delete" class="btn btn-sm btn-outline-danger" style="border-radius:8px;"
+                onclick="return confirm('DELETE the selected admit card(s)? This permanently removes the card(s) and their course rows. This cannot be undone.')">
+            <i class="fas fa-trash me-1"></i>Delete selected
+        </button>
+        <?php endif; ?>
         <span class="small text-muted ms-auto"><span id="bulk_count">0</span> selected</span>
     </div>
     <?php endif; ?>
@@ -408,7 +426,7 @@ require_once __DIR__ . '/../includes/header.php';
             <table class="table table-hover align-middle mb-0">
                 <thead class="table-light">
                     <tr>
-                        <?php if (ac_can_edit()): ?>
+                        <?php if ($can_bulk): ?>
                         <th class="ps-4" style="width:36px;">
                             <input type="checkbox" class="form-check-input" id="bulk_all" title="Select all on this page">
                         </th>
@@ -427,11 +445,11 @@ require_once __DIR__ . '/../includes/header.php';
                 </thead>
                 <tbody>
                 <?php if (empty($rows)): ?>
-                    <tr><td colspan="<?= ac_can_edit() ? 11 : 10 ?>" class="text-center text-muted py-5">No admit cards found.</td></tr>
+                    <tr><td colspan="<?= $can_bulk ? 11 : 10 ?>" class="text-center text-muted py-5">No admit cards found.</td></tr>
                 <?php else: ?>
                     <?php foreach ($rows as $row): ?>
                     <tr>
-                        <?php if (ac_can_edit()): ?>
+                        <?php if ($can_bulk): ?>
                         <td class="ps-4">
                             <input type="checkbox" class="form-check-input bulk-sel" name="card_ids[]" value="<?= (int)$row['id'] ?>">
                         </td>
