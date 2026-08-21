@@ -91,8 +91,14 @@ $qr_uri     = ac_qr_data_uri($verify_url);
 
 $html = ac_build_html($card, $student, $courses, $qr_uri);
 
-// Generate PDF
-$dompdf = new \Dompdf\Dompdf(['isRemoteEnabled' => false]);
+// Generate PDF. Font subsetting keeps the file small when the Bangla font
+// is embedded; chroot is widened to the project root so dompdf may load the
+// @font-face file from admin/admit-card/fonts/ (remote URLs stay blocked).
+$dompdf = new \Dompdf\Dompdf([
+    'isRemoteEnabled'         => false,
+    'isFontSubsettingEnabled' => true,
+    'chroot'                  => dirname(__DIR__, 2),
+]);
 $dompdf->loadHtml($html, 'UTF-8');
 $dompdf->setPaper('A4', 'portrait');
 $dompdf->render();
