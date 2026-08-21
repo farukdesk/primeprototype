@@ -232,6 +232,11 @@ require_once __DIR__ . '/../includes/header.php';
         </ol></nav>
     </div>
     <div class="d-flex gap-2 flex-wrap">
+        <?php $ba_qs = http_build_query(array_filter($_GET, fn($v) => $v !== '')); ?>
+        <a href="<?= APP_URL ?>/students/batch-analytics-export.php<?= $ba_qs !== '' ? '?' . h($ba_qs) : '' ?>"
+           class="btn btn-outline-danger btn-sm" style="border-radius:10px;" target="_blank" rel="noopener">
+            <i class="fas fa-file-pdf me-1"></i> Download PDF Report
+        </a>
         <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle px-3 py-2">
             <i class="fas fa-file-signature me-1"></i>Exam: <?= h($exam_label) ?>
         </span>
