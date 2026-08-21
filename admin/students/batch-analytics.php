@@ -4,8 +4,9 @@
  *
  * Department / Program / Batch-wise totals of admitted students (all
  * statuses: Active, Inactive, Graduated, Dropped, Not Admitted Yet),
- * how many attended exams as of today (based on an ACTIVE admit card
- * created for them), how many did not attend, and the percentages.
+ * how many attended a given exam as of today (based on an ACTIVE admit
+ * card created for them), how many did not attend, and the percentages.
+ * An exam filter narrows attendance to a specific exam name.
  */
 require_once __DIR__ . '/../includes/auth.php';
 require_access('students');
@@ -21,6 +22,7 @@ $f_dept    = (int)($_GET['dept']    ?? 0);
 $f_program = (int)($_GET['program'] ?? 0);
 $f_batch   = (int)($_GET['batch']   ?? 0);
 $f_sem     = trim($_GET['semester'] ?? '');
+$f_exam    = trim($_GET['exam']     ?? '');
 $group     = $_GET['group'] ?? 'dept';
 if (!in_array($group, ['dept', 'program', 'batch'], true)) {
     $group = 'dept';
@@ -65,8 +67,9 @@ $where_sql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
 // A student "attended the exam" as of today when an active admit card was
 // created covering them via: (a) a registered course-offer subject linked to
 // the card, (b) dept + program (+ batch) fallback for manual/bulk cards
-// without subject links, or (c) an admin override. Optional tables/columns
-// are feature-probed exactly like admin/admit-card/index.php does.
+// without subject links, or (c) an admin override. When an exam is selected
+// in the filter, only admit cards of that exam name are counted. Optional
+// tables/columns are feature-probed exactly like admin/admit-card/index.php.
 $has_cards       = false;
 $has_subject_col = false;
 $has_overrides   = false;
@@ -76,24 +79,32 @@ if ($has_cards) {
     try { db()->query('SELECT 1 FROM ac_student_overrides LIMIT 1'); $has_overrides = true; } catch (Throwable $e) {}
 }
 
-$card_union = [];
+$card_union  = [];
+$card_params = [];
 if ($has_cards) {
+    $exam_cond1 = $f_exam !== '' ? ' AND ac.exam_name = ?'  : '';
+    $exam_cond2 = $f_exam !== '' ? ' AND ac2.exam_name = ?' : '';
+    $exam_cond3 = $f_exam !== '' ? ' AND ac3.exam_name = ?' : '';
+
     if ($has_subject_col) {
         $card_union[] = 'SELECT r.student_id AS student_id
                            FROM ac_admit_card_courses cc
                            JOIN co_registrations r ON r.offer_subject_id = cc.offer_subject_id
                            JOIN ac_admit_cards ac ON ac.id = cc.admit_card_id
-                          WHERE ac.is_active = 1';
+                          WHERE ac.is_active = 1' . $exam_cond1;
+        if ($f_exam !== '') $card_params[] = $f_exam;
+
         $card_union[] = 'SELECT s2.id AS student_id
                            FROM students s2
                            JOIN ac_admit_cards ac2
                              ON ac2.dept_id = s2.dept_id
                             AND ac2.program_id = s2.program_id
                             AND (ac2.batch_id IS NULL OR ac2.batch_id = s2.batch_id)
-                          WHERE ac2.is_active = 1
+                          WHERE ac2.is_active = 1' . $exam_cond2 . '
                             AND NOT EXISTS (SELECT 1 FROM ac_admit_card_courses cx
                                              WHERE cx.admit_card_id = ac2.id
                                                AND cx.offer_subject_id IS NOT NULL)';
+        if ($f_exam !== '') $card_params[] = $f_exam;
     } else {
         $card_union[] = 'SELECT s2.id AS student_id
                            FROM students s2
@@ -101,13 +112,15 @@ if ($has_cards) {
                              ON ac2.dept_id = s2.dept_id
                             AND ac2.program_id = s2.program_id
                             AND (ac2.batch_id IS NULL OR ac2.batch_id = s2.batch_id)
-                          WHERE ac2.is_active = 1';
+                          WHERE ac2.is_active = 1' . $exam_cond2;
+        if ($f_exam !== '') $card_params[] = $f_exam;
     }
     if ($has_overrides) {
         $card_union[] = 'SELECT o.student_id AS student_id
                            FROM ac_student_overrides o
                            JOIN ac_admit_cards ac3 ON ac3.id = o.admit_card_id
-                          WHERE ac3.is_active = 1';
+                          WHERE ac3.is_active = 1' . $exam_cond3;
+        if ($f_exam !== '') $card_params[] = $f_exam;
     }
 }
 
@@ -151,8 +164,9 @@ $sql = "SELECT $sel,
          GROUP BY gid, glabel
          ORDER BY glabel ASC';
 
+// Placeholder order: JOIN subquery params first, then WHERE params
 $stmt = db()->prepare($sql);
-$stmt->execute($params);
+$stmt->execute(array_merge($card_params, $params));
 $rows = $stmt->fetchAll();
 
 // ── Grand totals ──────────────────────────────────────────────────────────────
@@ -195,6 +209,16 @@ if ($dept_scope !== null) {
 
 $batches = sm_batches();
 
+// Exam names for the exam filter (from admit cards)
+$exam_names = [];
+if ($has_cards) {
+    $exam_names = db()->query(
+        "SELECT DISTINCT exam_name FROM ac_admit_cards\n          WHERE exam_name IS NOT NULL AND exam_name <> ''\n          ORDER BY exam_name ASC"
+    )->fetchAll(PDO::FETCH_COLUMN);
+}
+
+$exam_label = $f_exam !== '' ? $f_exam : 'Any Exam';
+
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
@@ -207,9 +231,14 @@ require_once __DIR__ . '/../includes/header.php';
             <li class="breadcrumb-item active">Batch Analytics</li>
         </ol></nav>
     </div>
-    <span class="badge bg-light text-muted border px-3 py-2">
-        <i class="fas fa-calendar-day me-1"></i>As of <?= date('d M Y') ?>
-    </span>
+    <div class="d-flex gap-2 flex-wrap">
+        <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle px-3 py-2">
+            <i class="fas fa-file-signature me-1"></i>Exam: <?= h($exam_label) ?>
+        </span>
+        <span class="badge bg-light text-muted border px-3 py-2">
+            <i class="fas fa-calendar-day me-1"></i>As of <?= date('d M Y') ?>
+        </span>
+    </div>
 </div>
 
 <!-- Summary -->
@@ -232,7 +261,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <div class="stat-val"><?= number_format($tot['card']) ?>
                         <small style="font-size:.85rem;">(<?= ba_pct($tot['card'], $tot['total']) ?>)</small>
                     </div>
-                    <div class="stat-label">Exam Attended (admit card created)</div>
+                    <div class="stat-label">Exam Attended — <?= h($exam_label) ?></div>
                 </div>
                 <div class="stat-icon"><i class="fas fa-id-card"></i></div>
             </div>
@@ -263,6 +292,15 @@ require_once __DIR__ . '/../includes/header.php';
                     <option value="dept"    <?= $group === 'dept'    ? 'selected' : '' ?>>Department</option>
                     <option value="program" <?= $group === 'program' ? 'selected' : '' ?>>Program</option>
                     <option value="batch"   <?= $group === 'batch'   ? 'selected' : '' ?>>Batch</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold" style="font-size:.8rem;">Exam</label>
+                <select name="exam" class="form-select form-select-sm">
+                    <option value="">All Exams</option>
+                    <?php foreach ($exam_names as $en): ?>
+                    <option value="<?= h($en) ?>" <?= $f_exam === $en ? 'selected' : '' ?>><?= h($en) ?></option>
+                    <?php endforeach; ?>
                 </select>
             </div>
             <div class="col-6 col-md-2">
@@ -322,6 +360,7 @@ require_once __DIR__ . '/../includes/header.php';
     <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between">
         <h6 class="mb-0 fw-semibold">
             <i class="fas fa-table me-2 text-muted"></i><?= h($group_label) ?>-wise Admission &amp; Exam Attendance
+            <span class="text-muted fw-normal">— <?= h($exam_label) ?></span>
         </h6>
         <span class="badge bg-primary bg-opacity-10 text-primary"><?= count($rows) ?> row<?= count($rows) !== 1 ? 's' : '' ?></span>
     </div>
@@ -333,7 +372,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <th class="px-4" style="width:40px;">#</th>
                         <th><?= h($group_label) ?></th>
                         <th class="text-end">Total Admitted</th>
-                        <th class="text-end">Exam Attended</th>
+                        <th class="text-end">Exam Attended<br><small class="text-muted fw-normal"><?= h($exam_label) ?></small></th>
                         <th class="text-end">Attended %</th>
                         <th class="text-end">Not Attended</th>
                         <th class="text-end pe-4">Not Attended %</th>
@@ -378,6 +417,7 @@ require_once __DIR__ . '/../includes/header.php';
             <i class="fas fa-info-circle me-1"></i>
             <strong>Total Admitted</strong> counts every student regardless of status (Active, Inactive, Graduated, Dropped, Not Admitted Yet).
             <strong>Exam Attended</strong> counts distinct students with an <strong>active</strong> admit card created for them
+            for <strong><?= h($exam_label) ?></strong>
             (via registered courses, dept/program/batch match for manual cards, or admin override) as of today.
             <strong>Not Attended</strong> = Total Admitted − Exam Attended.
         </small>
