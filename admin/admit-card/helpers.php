@@ -555,13 +555,106 @@ function ac_check_access(int $admit_card_id, int $student_id): array
             'allowed' => false,
             'due'     => $due,
             'reason'  => sprintf(
-                'You have a current due of ৳%s. Please clear your dues to download your admit card.',
-                number_format($due, 2)
+                'You have a due of ৳%s as of today (allowed limit: ৳%s). Please clear your dues to download your admit card.',
+                number_format($due, 2),
+                number_format(AC_DUE_THRESHOLD, 0)
             ),
         ];
     }
 
     return ['allowed' => true];
+}
+
+// ── Card-level download eligibility (due as of today ≤ AC_DUE_THRESHOLD) ─────
+
+/**
+ * Active students covered by an admit card.
+ * Cards whose course rows are linked to course-offer subjects count the
+ * registered students of those subjects; manual / bulk cards fall back to
+ * the active students of the card's dept + program (+ batch when set).
+ *
+ * @return int[]
+ */
+function ac_card_student_ids(int $admit_card_id): array
+{
+    $db = db();
+
+    $has_subject_col = false;
+    try { $db->query('SELECT offer_subject_id FROM ac_admit_card_courses LIMIT 1'); $has_subject_col = true; } catch (Throwable $e) {}
+
+    if ($has_subject_col) {
+        $chk = $db->prepare('SELECT 1 FROM ac_admit_card_courses WHERE admit_card_id = ? AND offer_subject_id IS NOT NULL LIMIT 1');
+        $chk->execute([$admit_card_id]);
+        if ($chk->fetchColumn()) {
+            $st = $db->prepare(
+                "SELECT DISTINCT r.student_id
+                   FROM ac_admit_card_courses cc
+                   JOIN co_registrations r ON r.offer_subject_id = cc.offer_subject_id
+                   JOIN students s ON s.id = r.student_id
+                  WHERE cc.admit_card_id = ? AND s.status = 'Active'"
+            );
+            $st->execute([$admit_card_id]);
+            return array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+        }
+    }
+
+    $st = $db->prepare('SELECT dept_id, program_id, batch_id FROM ac_admit_cards WHERE id = ?');
+    $st->execute([$admit_card_id]);
+    $card = $st->fetch();
+    if (!$card) return [];
+
+    $sql    = "SELECT id FROM students WHERE dept_id = ? AND program_id = ? AND status = 'Active'";
+    $params = [(int)$card['dept_id'], (int)$card['program_id']];
+    if (!empty($card['batch_id'])) { $sql .= ' AND batch_id = ?'; $params[] = (int)$card['batch_id']; }
+    $st = $db->prepare($sql);
+    $st->execute($params);
+    return array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+}
+
+/**
+ * Outstanding due of a student as of TODAY (fees fallen due through the
+ * current month, minus payments). Cached per request — the index page asks
+ * for the same student across several cards (retakes, sibling cards).
+ */
+function ac_student_due_today(int $student_id): float
+{
+    static $cache = [];
+    if (array_key_exists($student_id, $cache)) return $cache[$student_id];
+
+    $st = db()->prepare('SELECT id FROM sfp_packages WHERE student_id = ? ORDER BY id DESC LIMIT 1');
+    $st->execute([$student_id]);
+    $pkg_id = (int)$st->fetchColumn();
+
+    return $cache[$student_id] = $pkg_id > 0 ? acc_outstanding_through_current_month($pkg_id) : 0.0;
+}
+
+/**
+ * Download-eligibility summary of an admit card, using the exact rule of
+ * ac_check_access(): a due as of today up to AC_DUE_THRESHOLD (৳500) is OK
+ * (eligible to download); more than that blocks the download. Students
+ * with an admin override always count as eligible.
+ *
+ * @return array{total:int, eligible:int, blocked:int}
+ */
+function ac_card_eligibility_summary(int $admit_card_id): array
+{
+    $ids = ac_card_student_ids($admit_card_id);
+    if (!$ids) return ['total' => 0, 'eligible' => 0, 'blocked' => 0];
+
+    $ov = [];
+    try {
+        $st = db()->prepare('SELECT student_id FROM ac_student_overrides WHERE admit_card_id = ?');
+        $st->execute([$admit_card_id]);
+        foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $sid) $ov[(int)$sid] = true;
+    } catch (Throwable $e) {
+        // overrides unavailable — eligibility falls back to the due check only
+    }
+
+    $eligible = 0;
+    foreach ($ids as $sid) {
+        if (isset($ov[$sid]) || ac_student_due_today($sid) <= AC_DUE_THRESHOLD) $eligible++;
+    }
+    return ['total' => count($ids), 'eligible' => $eligible, 'blocked' => count($ids) - $eligible];
 }
 
 // ── Generate QR code as base64 data URI ──────────────────────────────────────
