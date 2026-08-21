@@ -317,8 +317,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $created++;
             }
             flash_set('success', $created . ' admit card(s) created with ' . $rows_n
-                . ' course row(s). Every student only sees the courses they are registered in.');
-            redirect(APP_URL . '/admit-card/index.php');
+                . ' course row(s). Every student only sees the courses they are registered in.'
+                . ' Courses left without a date were skipped — the report below shows any student'
+                . ' still enrolled in a course with no exam date/time.');
+            redirect(APP_URL . '/admit-card/missing-schedule.php');
         }
     }
 }
