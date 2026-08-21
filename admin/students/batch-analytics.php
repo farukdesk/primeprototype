@@ -1,11 +1,11 @@
 <?php
 /**
- * Batch Analytics – Admission & Retention Report
+ * Batch Analytics – Admission & Exam Attendance Report
  *
  * Department / Program / Batch-wise totals of admitted students (all
  * statuses: Active, Inactive, Graduated, Dropped, Not Admitted Yet),
- * how many are Active as of today, how many hold an ACTIVE admit card,
- * and the corresponding percentages (rest = no admit card / dropped out).
+ * how many attended exams as of today (based on an ACTIVE admit card
+ * created for them), how many did not attend, and the percentages.
  */
 require_once __DIR__ . '/../includes/auth.php';
 require_access('students');
@@ -61,12 +61,12 @@ if ($dept_scope !== null) {
 
 $where_sql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
 
-// ── Admit card holders (distinct students, ACTIVE cards only) ────────────────
-// A student "has an admit card" as of today when an active admit card covers
-// them via: (a) a registered course-offer subject linked to the card,
-// (b) dept + program (+ batch) fallback for manual/bulk cards without subject
-// links, or (c) an admin override. Optional tables/columns are feature-probed
-// exactly like admin/admit-card/index.php does.
+// ── Exam attendance (distinct students with an ACTIVE admit card) ────────────
+// A student "attended the exam" as of today when an active admit card was
+// created covering them via: (a) a registered course-offer subject linked to
+// the card, (b) dept + program (+ batch) fallback for manual/bulk cards
+// without subject links, or (c) an admin override. Optional tables/columns
+// are feature-probed exactly like admin/admit-card/index.php does.
 $has_cards       = false;
 $has_subject_col = false;
 $has_overrides   = false;
@@ -214,7 +214,7 @@ require_once __DIR__ . '/../includes/header.php';
 
 <!-- Summary -->
 <div class="row g-3 mb-4">
-    <div class="col-6 col-md-3">
+    <div class="col-6 col-md-4">
         <div class="stat-card" style="background:linear-gradient(135deg,#4f8ef7,#3a6fd8);">
             <div class="d-flex justify-content-between align-items-start">
                 <div>
@@ -225,40 +225,27 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
         </div>
     </div>
-    <div class="col-6 col-md-3">
+    <div class="col-6 col-md-4">
         <div class="stat-card" style="background:linear-gradient(135deg,#28a745,#1d7a34);">
-            <div class="d-flex justify-content-between align-items-start">
-                <div>
-                    <div class="stat-val"><?= number_format($tot['active']) ?>
-                        <small style="font-size:.85rem;">(<?= ba_pct($tot['active'], $tot['total']) ?>)</small>
-                    </div>
-                    <div class="stat-label">Active Today</div>
-                </div>
-                <div class="stat-icon"><i class="fas fa-user-check"></i></div>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-md-3">
-        <div class="stat-card" style="background:linear-gradient(135deg,#17a2b8,#117a8b);">
             <div class="d-flex justify-content-between align-items-start">
                 <div>
                     <div class="stat-val"><?= number_format($tot['card']) ?>
                         <small style="font-size:.85rem;">(<?= ba_pct($tot['card'], $tot['total']) ?>)</small>
                     </div>
-                    <div class="stat-label">Have Admit Card</div>
+                    <div class="stat-label">Exam Attended (admit card created)</div>
                 </div>
                 <div class="stat-icon"><i class="fas fa-id-card"></i></div>
             </div>
         </div>
     </div>
-    <div class="col-6 col-md-3">
+    <div class="col-6 col-md-4">
         <div class="stat-card" style="background:linear-gradient(135deg,#dc3545,#a71d2a);">
             <div class="d-flex justify-content-between align-items-start">
                 <div>
                     <div class="stat-val"><?= number_format($tot['total'] - $tot['card']) ?>
                         <small style="font-size:.85rem;">(<?= ba_pct($tot['total'] - $tot['card'], $tot['total']) ?>)</small>
                     </div>
-                    <div class="stat-label">No Admit Card</div>
+                    <div class="stat-label">Not Attended</div>
                 </div>
                 <div class="stat-icon"><i class="fas fa-user-times"></i></div>
             </div>
@@ -334,7 +321,7 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="card">
     <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between">
         <h6 class="mb-0 fw-semibold">
-            <i class="fas fa-table me-2 text-muted"></i><?= h($group_label) ?>-wise Admission &amp; Retention
+            <i class="fas fa-table me-2 text-muted"></i><?= h($group_label) ?>-wise Admission &amp; Exam Attendance
         </h6>
         <span class="badge bg-primary bg-opacity-10 text-primary"><?= count($rows) ?> row<?= count($rows) !== 1 ? 's' : '' ?></span>
     </div>
@@ -346,53 +333,26 @@ require_once __DIR__ . '/../includes/header.php';
                         <th class="px-4" style="width:40px;">#</th>
                         <th><?= h($group_label) ?></th>
                         <th class="text-end">Total Admitted</th>
-                        <th class="text-end">Active</th>
-                        <th class="text-end">Graduated</th>
-                        <th class="text-end">Inactive</th>
-                        <th class="text-end">Dropped</th>
-                        <th class="text-end">Not Admitted Yet</th>
-                        <th class="text-end">Admit Card</th>
-                        <th class="text-end pe-4">No Card</th>
+                        <th class="text-end">Exam Attended</th>
+                        <th class="text-end">Attended %</th>
+                        <th class="text-end">Not Attended</th>
+                        <th class="text-end pe-4">Not Attended %</th>
                     </tr>
                 </thead>
                 <tbody>
                 <?php if (empty($rows)): ?>
-                    <tr><td colspan="10" class="text-center text-muted py-5">No students found for the selected filters.</td></tr>
+                    <tr><td colspan="7" class="text-center text-muted py-5">No students found for the selected filters.</td></tr>
                 <?php else: ?>
                     <?php foreach ($rows as $i => $r): ?>
-                    <?php $t = (int)$r['total_cnt']; ?>
+                    <?php $t = (int)$r['total_cnt']; $att = (int)$r['card_cnt']; ?>
                     <tr>
                         <td class="px-4"><?= $i + 1 ?></td>
                         <td class="fw-medium"><?= h($r['glabel']) ?></td>
                         <td class="text-end fw-semibold"><?= number_format($t) ?></td>
-                        <td class="text-end">
-                            <span class="text-success fw-semibold"><?= number_format((int)$r['active_cnt']) ?></span>
-                            <small class="text-muted d-block"><?= ba_pct((int)$r['active_cnt'], $t) ?></small>
-                        </td>
-                        <td class="text-end">
-                            <?= number_format((int)$r['graduated_cnt']) ?>
-                            <small class="text-muted d-block"><?= ba_pct((int)$r['graduated_cnt'], $t) ?></small>
-                        </td>
-                        <td class="text-end">
-                            <?= number_format((int)$r['inactive_cnt']) ?>
-                            <small class="text-muted d-block"><?= ba_pct((int)$r['inactive_cnt'], $t) ?></small>
-                        </td>
-                        <td class="text-end">
-                            <span class="text-danger"><?= number_format((int)$r['dropped_cnt']) ?></span>
-                            <small class="text-muted d-block"><?= ba_pct((int)$r['dropped_cnt'], $t) ?></small>
-                        </td>
-                        <td class="text-end">
-                            <?= number_format((int)$r['pending_cnt']) ?>
-                            <small class="text-muted d-block"><?= ba_pct((int)$r['pending_cnt'], $t) ?></small>
-                        </td>
-                        <td class="text-end">
-                            <span class="text-info fw-semibold"><?= number_format((int)$r['card_cnt']) ?></span>
-                            <small class="text-muted d-block"><?= ba_pct((int)$r['card_cnt'], $t) ?></small>
-                        </td>
-                        <td class="text-end pe-4">
-                            <span class="text-danger fw-semibold"><?= number_format($t - (int)$r['card_cnt']) ?></span>
-                            <small class="text-muted d-block"><?= ba_pct($t - (int)$r['card_cnt'], $t) ?></small>
-                        </td>
+                        <td class="text-end"><span class="text-success fw-semibold"><?= number_format($att) ?></span></td>
+                        <td class="text-end text-success"><?= ba_pct($att, $t) ?></td>
+                        <td class="text-end"><span class="text-danger fw-semibold"><?= number_format($t - $att) ?></span></td>
+                        <td class="text-end pe-4 text-danger"><?= ba_pct($t - $att, $t) ?></td>
                     </tr>
                     <?php endforeach; ?>
                 <?php endif; ?>
@@ -403,20 +363,10 @@ require_once __DIR__ . '/../includes/header.php';
                         <td class="px-4"></td>
                         <td>Total</td>
                         <td class="text-end"><?= number_format($tot['total']) ?></td>
-                        <td class="text-end"><?= number_format($tot['active']) ?>
-                            <small class="text-muted d-block"><?= ba_pct($tot['active'], $tot['total']) ?></small></td>
-                        <td class="text-end"><?= number_format($tot['graduated']) ?>
-                            <small class="text-muted d-block"><?= ba_pct($tot['graduated'], $tot['total']) ?></small></td>
-                        <td class="text-end"><?= number_format($tot['inactive']) ?>
-                            <small class="text-muted d-block"><?= ba_pct($tot['inactive'], $tot['total']) ?></small></td>
-                        <td class="text-end"><?= number_format($tot['dropped']) ?>
-                            <small class="text-muted d-block"><?= ba_pct($tot['dropped'], $tot['total']) ?></small></td>
-                        <td class="text-end"><?= number_format($tot['pending']) ?>
-                            <small class="text-muted d-block"><?= ba_pct($tot['pending'], $tot['total']) ?></small></td>
-                        <td class="text-end"><?= number_format($tot['card']) ?>
-                            <small class="text-muted d-block"><?= ba_pct($tot['card'], $tot['total']) ?></small></td>
-                        <td class="text-end pe-4"><?= number_format($tot['total'] - $tot['card']) ?>
-                            <small class="text-muted d-block"><?= ba_pct($tot['total'] - $tot['card'], $tot['total']) ?></small></td>
+                        <td class="text-end text-success"><?= number_format($tot['card']) ?></td>
+                        <td class="text-end text-success"><?= ba_pct($tot['card'], $tot['total']) ?></td>
+                        <td class="text-end text-danger"><?= number_format($tot['total'] - $tot['card']) ?></td>
+                        <td class="text-end pe-4 text-danger"><?= ba_pct($tot['total'] - $tot['card'], $tot['total']) ?></td>
                     </tr>
                 </tfoot>
                 <?php endif; ?>
@@ -426,10 +376,10 @@ require_once __DIR__ . '/../includes/header.php';
     <div class="card-footer py-2 px-4">
         <small class="text-muted">
             <i class="fas fa-info-circle me-1"></i>
-            <strong>Total Admitted</strong> counts every student regardless of status.
-            <strong>Admit Card</strong> counts distinct students covered by an <strong>active</strong> admit card
+            <strong>Total Admitted</strong> counts every student regardless of status (Active, Inactive, Graduated, Dropped, Not Admitted Yet).
+            <strong>Exam Attended</strong> counts distinct students with an <strong>active</strong> admit card created for them
             (via registered courses, dept/program/batch match for manual cards, or admin override) as of today.
-            <strong>No Card</strong> = Total Admitted − Admit Card holders.
+            <strong>Not Attended</strong> = Total Admitted − Exam Attended.
         </small>
     </div>
 </div>
