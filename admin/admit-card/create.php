@@ -50,6 +50,27 @@ foreach ([$year - 1, $year, $year + 1] as $y) {
 }
 if ($semester !== '' && !in_array($semester, $semester_opts, true)) array_unshift($semester_opts, $semester);
 
+// Exam name options: ACTIVE exams from Exam Invigilation (ei_exams). The
+// exam year is appended when the name does not already contain it, so two
+// years of the same exam never collide on the card label.
+$exam_name_opts = [];
+try {
+    foreach ($db->query("SELECT exam_name, exam_year FROM ei_exams WHERE is_active = 1 ORDER BY exam_year DESC, exam_name ASC")->fetchAll() as $ex) {
+        $nm = trim((string)$ex['exam_name']);
+        if ($nm === '') continue;
+        $yr = (string)(int)$ex['exam_year'];
+        $label = ($yr !== '0' && strpos($nm, $yr) === false) ? $nm . ' ' . $yr : $nm;
+        if (!in_array($label, $exam_name_opts, true)) $exam_name_opts[] = $label;
+    }
+} catch (Throwable $e) {
+    // ei_exams unavailable — the form falls back to the free-text input
+}
+// Keep a previously posted value selectable (e.g. the exam was deactivated
+// between loading the courses and generating the cards).
+if ($exam_name !== '' && $exam_name_opts && !in_array($exam_name, $exam_name_opts, true)) {
+    array_unshift($exam_name_opts, $exam_name);
+}
+
 // Filter dropdown data
 $filter_depts   = $db->query("SELECT id, name FROM dept_departments WHERE is_active = 1 ORDER BY name ASC")->fetchAll();
 $filter_batches = $db->query("SELECT id, name FROM student_batches WHERE is_active = 1 ORDER BY sort_order ASC, name ASC")->fetchAll();
@@ -360,8 +381,21 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="row g-3">
                 <div class="col-md-6">
                     <label class="form-label fw-semibold">Exam Name <span class="text-danger">*</span></label>
+                    <?php if ($exam_name_opts): ?>
+                    <select name="exam_name" class="form-select" required>
+                        <option value="">— Select Exam —</option>
+                        <?php foreach ($exam_name_opts as $opt): ?>
+                        <option value="<?= h($opt) ?>" <?= $exam_name === $opt ? 'selected' : '' ?>><?= h($opt) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <div class="form-text">Active exams from <a href="<?= APP_URL ?>/exam-invigilation/index.php" target="_blank">Exam Invigilation</a>.</div>
+                    <?php else: ?>
                     <input type="text" name="exam_name" class="form-control" value="<?= h($exam_name) ?>"
                            placeholder="e.g. Mid Term-1 Exam – Summer 2026" required>
+                    <div class="form-text text-warning">No active exam found in
+                        <a href="<?= APP_URL ?>/exam-invigilation/index.php" target="_blank">Exam Invigilation</a>
+                        — type the exam name manually.</div>
+                    <?php endif; ?>
                 </div>
                 <div class="col-md-4">
                     <label class="form-label fw-semibold">Semester <span class="text-danger">*</span></label>
