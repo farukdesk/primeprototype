@@ -2959,7 +2959,13 @@ require_once __DIR__ . '/../includes/header.php';
             <i class="fas fa-user-clock me-2 text-warning"></i>Needs Human Review — Total Paid vs CSV Total
             <span class="badge bg-warning text-dark ms-1"><?= count($review_flags) ?></span>
         </span>
-        <span class="small text-muted">Tolerance: ±<?= h(number_format(OEBM_REVIEW_TOLERANCE)) ?> BDT</span>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <span class="small text-muted">Tolerance: ±<?= h(number_format(OEBM_REVIEW_TOLERANCE)) ?> BDT</span>
+            <input type="search" id="oebm-review-search" class="form-control form-control-sm" style="max-width: 220px;" placeholder="Search Student ID or name…" aria-label="Search flagged students">
+            <button type="button" id="oebm-review-csv" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-file-csv me-1"></i> Download CSV
+            </button>
+        </div>
     </div>
     <div class="card-body p-0">
         <div class="px-4 pt-3 small text-muted">
@@ -2989,23 +2995,32 @@ require_once __DIR__ . '/../includes/header.php';
                         <th>Why flagged</th>
                     </tr>
                 </thead>
-                <tbody>
-                    <?php foreach ($review_flags as $rf): ?>
-                    <tr class="table-warning">
-                        <td class="fw-semibold"><?= h($rf['sid']) ?></td>
-                        <td><?= h($rf['name'] !== '' ? $rf['name'] : '—') ?></td>
-                        <td class="text-end"><?= h(number_format((float)$rf['csv_total'], 2)) ?></td>
-                        <td class="text-end"><?= h(number_format((float)($rf['old_erp_paid'] ?? 0), 2)) ?></td>
-                        <td class="text-end"><?= h(number_format((float)($rf['new_erp_paid'] ?? 0), 2)) ?></td>
-                        <td class="text-end"><?= h(number_format((float)$rf['total_paid'], 2)) ?></td>
-                        <td class="text-end fw-semibold <?= (float)$rf['diff'] > 0 ? 'text-danger' : 'text-primary' ?>">
-                            <?= ((float)$rf['diff'] > 0 ? '+' : '') . h(number_format((float)$rf['diff'], 2)) ?>
-                        </td>
-                        <td class="small"><?= h((string)($rf['reason'] ?? '')) ?></td>
-                    </tr>
-                    <?php endforeach; ?>
-                </tbody>
+                <tbody id="oebm-review-tbody"></tbody>
             </table>
+        </div>
+        <?php
+            // The flagged students are shipped as JSON and rendered client-side
+            // in pages of 50, sorted by mismatch size (largest first), so even a
+            // very large review list never freezes the browser.
+            $review_rows_js = array_map(static fn(array $rf): array => [
+                'sid'   => (string)$rf['sid'],
+                'name'  => (string)$rf['name'],
+                'csv'   => (float)$rf['csv_total'],
+                'old'   => (float)($rf['old_erp_paid'] ?? 0),
+                'new'   => (float)($rf['new_erp_paid'] ?? 0),
+                'total' => (float)$rf['total_paid'],
+                'diff'  => (float)$rf['diff'],
+                'why'   => (string)($rf['reason'] ?? ''),
+            ], $review_flags);
+            usort($review_rows_js, static fn(array $a, array $b): int => abs($b['diff']) <=> abs($a['diff']));
+        ?>
+        <script type="application/json" id="oebm-review-data"><?= json_encode($review_rows_js, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?></script>
+        <div class="px-4 py-2 d-flex justify-content-between align-items-center flex-wrap gap-2 border-top">
+            <span class="small text-muted" id="oebm-review-pageinfo"></span>
+            <div class="btn-group btn-group-sm" role="group" aria-label="Needs-review pagination">
+                <button type="button" class="btn btn-outline-secondary" id="oebm-review-prev"><i class="fas fa-chevron-left me-1"></i>Prev</button>
+                <button type="button" class="btn btn-outline-secondary" id="oebm-review-next">Next<i class="fas fa-chevron-right ms-1"></i></button>
+            </div>
         </div>
         <div class="px-4 py-2 small text-muted">
             A <span class="text-danger fw-semibold">positive</span> difference means old-ERP records exceed the CSV total;
