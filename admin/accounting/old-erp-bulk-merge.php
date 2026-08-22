@@ -2759,10 +2759,20 @@ require_once __DIR__ . '/../includes/header.php';
                                 <i class="fas fa-user-clock me-1"></i><?= count($b_review) ?> student(s)
                             </span>
                             <div class="text-muted mt-1" style="max-width: 260px;">
-                                <?php foreach ($b_review as $rv): ?>
+                                <?php foreach (array_slice($b_review, 0, 5) as $rv): ?>
                                 <div title="<?= h((string)($rv['reason'] ?? '')) ?>"><?= h((string)($rv['sid'] ?? '')) ?> <span class="<?= (float)($rv['diff'] ?? 0) > 0 ? 'text-danger' : 'text-primary' ?>">(<?= ((float)($rv['diff'] ?? 0) > 0 ? '+' : '') . h(number_format((float)($rv['diff'] ?? 0), 2)) ?>)</span></div>
                                 <?php endforeach; ?>
                             </div>
+                            <?php if (count($b_review) > 5): ?>
+                            <?php // The remaining flagged students are shipped as JSON and only rendered on demand, so a huge review list never bloats the page. ?>
+                            <script type="application/json" class="oebm-batch-review-data"><?= json_encode(array_map(static fn(array $rv): array => [
+                                'sid'  => (string)($rv['sid'] ?? ''),
+                                'diff' => (float)($rv['diff'] ?? 0),
+                                'why'  => (string)($rv['reason'] ?? ''),
+                            ], array_slice($b_review, 5)), JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?></script>
+                            <button type="button" class="btn btn-link btn-sm p-0 oebm-batch-review-more" data-label="Show all <?= count($b_review) ?>">Show all <?= count($b_review) ?></button>
+                            <div class="oebm-batch-review-extra text-muted" style="max-width: 260px; max-height: 220px; overflow: auto; display: none;"></div>
+                            <?php endif; ?>
                             <?php else: ?>
                             <span class="text-muted">—</span>
                             <?php endif; ?>
@@ -2923,6 +2933,9 @@ require_once __DIR__ . '/../includes/header.php';
                 </tbody>
             </table>
         </div>
+        <div class="text-center py-2 border-top d-none" id="oebm-more-wrap">
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="oebm-show-more"></button>
+        </div>
     </div>
     <?php if (!$did_commit): ?>
     <div class="card-footer py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -2949,7 +2962,13 @@ require_once __DIR__ . '/../includes/header.php';
             <i class="fas fa-user-clock me-2 text-warning"></i>Needs Human Review — Total Paid vs CSV Total
             <span class="badge bg-warning text-dark ms-1"><?= count($review_flags) ?></span>
         </span>
-        <span class="small text-muted">Tolerance: ±<?= h(number_format(OEBM_REVIEW_TOLERANCE)) ?> BDT</span>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <span class="small text-muted">Tolerance: ±<?= h(number_format(OEBM_REVIEW_TOLERANCE)) ?> BDT</span>
+            <input type="search" id="oebm-review-search" class="form-control form-control-sm" style="max-width: 220px;" placeholder="Search Student ID or name…" aria-label="Search flagged students">
+            <button type="button" id="oebm-review-csv" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-file-csv me-1"></i> Download CSV
+            </button>
+        </div>
     </div>
     <div class="card-body p-0">
         <div class="px-4 pt-3 small text-muted">
@@ -2979,23 +2998,32 @@ require_once __DIR__ . '/../includes/header.php';
                         <th>Why flagged</th>
                     </tr>
                 </thead>
-                <tbody>
-                    <?php foreach ($review_flags as $rf): ?>
-                    <tr class="table-warning">
-                        <td class="fw-semibold"><?= h($rf['sid']) ?></td>
-                        <td><?= h($rf['name'] !== '' ? $rf['name'] : '—') ?></td>
-                        <td class="text-end"><?= h(number_format((float)$rf['csv_total'], 2)) ?></td>
-                        <td class="text-end"><?= h(number_format((float)($rf['old_erp_paid'] ?? 0), 2)) ?></td>
-                        <td class="text-end"><?= h(number_format((float)($rf['new_erp_paid'] ?? 0), 2)) ?></td>
-                        <td class="text-end"><?= h(number_format((float)$rf['total_paid'], 2)) ?></td>
-                        <td class="text-end fw-semibold <?= (float)$rf['diff'] > 0 ? 'text-danger' : 'text-primary' ?>">
-                            <?= ((float)$rf['diff'] > 0 ? '+' : '') . h(number_format((float)$rf['diff'], 2)) ?>
-                        </td>
-                        <td class="small"><?= h((string)($rf['reason'] ?? '')) ?></td>
-                    </tr>
-                    <?php endforeach; ?>
-                </tbody>
+                <tbody id="oebm-review-tbody"></tbody>
             </table>
+        </div>
+        <?php
+            // The flagged students are shipped as JSON and rendered client-side
+            // in pages of 50, sorted by mismatch size (largest first), so even a
+            // very large review list never freezes the browser.
+            $review_rows_js = array_map(static fn(array $rf): array => [
+                'sid'   => (string)$rf['sid'],
+                'name'  => (string)$rf['name'],
+                'csv'   => (float)$rf['csv_total'],
+                'old'   => (float)($rf['old_erp_paid'] ?? 0),
+                'new'   => (float)($rf['new_erp_paid'] ?? 0),
+                'total' => (float)$rf['total_paid'],
+                'diff'  => (float)$rf['diff'],
+                'why'   => (string)($rf['reason'] ?? ''),
+            ], $review_flags);
+            usort($review_rows_js, static fn(array $a, array $b): int => abs($b['diff']) <=> abs($a['diff']));
+        ?>
+        <script type="application/json" id="oebm-review-data"><?= json_encode($review_rows_js, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?></script>
+        <div class="px-4 py-2 d-flex justify-content-between align-items-center flex-wrap gap-2 border-top">
+            <span class="small text-muted" id="oebm-review-pageinfo"></span>
+            <div class="btn-group btn-group-sm" role="group" aria-label="Needs-review pagination">
+                <button type="button" class="btn btn-outline-secondary" id="oebm-review-prev"><i class="fas fa-chevron-left me-1"></i>Prev</button>
+                <button type="button" class="btn btn-outline-secondary" id="oebm-review-next">Next<i class="fas fa-chevron-right ms-1"></i></button>
+            </div>
         </div>
         <div class="px-4 py-2 small text-muted">
             A <span class="text-danger fw-semibold">positive</span> difference means old-ERP records exceed the CSV total;
@@ -3228,36 +3256,186 @@ require_once __DIR__ . '/../includes/header.php';
 <script>
 (function () {
     'use strict';
-    var table = document.getElementById('oebm-preview-table');
-    if (!table) { return; }
-    var rows    = Array.prototype.slice.call(table.querySelectorAll('tbody tr'));
-    var buttons = Array.prototype.slice.call(document.querySelectorAll('[data-oebm-filter]'));
-    var search  = document.getElementById('oebm-search');
-    var countEl = document.getElementById('oebm-filter-count');
-    var active  = 'all';
 
-    function apply() {
-        var q = (search && search.value ? search.value : '').trim().toLowerCase();
-        var shown = 0;
-        rows.forEach(function (tr) {
-            var okStatus = active === 'all' || tr.getAttribute('data-status') === active;
-            var okSearch = q === '' || (tr.getAttribute('data-search') || '').indexOf(q) !== -1;
-            var show = okStatus && okSearch;
-            tr.style.display = show ? '' : 'none';
-            if (show) { shown++; }
+    function esc(s) {
+        return String(s === null || s === undefined ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
         });
-        if (countEl) { countEl.textContent = 'Showing ' + shown + ' of ' + rows.length + ' row(s)'; }
+    }
+    function fmt(n) {
+        var v = Math.abs(Number(n) || 0).toFixed(2);
+        return (Number(n) < 0 ? '-' : '') + v.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    }
+    function debounce(fn, ms) {
+        var t = null;
+        return function () {
+            if (t) { clearTimeout(t); }
+            t = setTimeout(fn, ms);
+        };
     }
 
-    buttons.forEach(function (btn) {
+    // ── Preview table: status filter + debounced search + chunked display ──
+    // Only PAGE matching rows are laid out at a time; "Show more" reveals the
+    // next chunk. Keeps the page responsive even with huge CSVs.
+    var table = document.getElementById('oebm-preview-table');
+    if (table) {
+        var rows     = Array.prototype.slice.call(table.querySelectorAll('tbody tr'));
+        var buttons  = Array.prototype.slice.call(document.querySelectorAll('[data-oebm-filter]'));
+        var search   = document.getElementById('oebm-search');
+        var countEl  = document.getElementById('oebm-filter-count');
+        var moreWrap = document.getElementById('oebm-more-wrap');
+        var moreBtn  = document.getElementById('oebm-show-more');
+        var PAGE     = 300;
+        var limit    = PAGE;
+        var active   = 'all';
+
+        var apply = function () {
+            var q = (search && search.value ? search.value : '').trim().toLowerCase();
+            var matched = 0, shown = 0;
+            rows.forEach(function (tr) {
+                var ok = (active === 'all' || tr.getAttribute('data-status') === active)
+                    && (q === '' || (tr.getAttribute('data-search') || '').indexOf(q) !== -1);
+                var show = false;
+                if (ok) {
+                    matched++;
+                    show = matched <= limit;
+                }
+                tr.style.display = show ? '' : 'none';
+                if (show) { shown++; }
+            });
+            if (countEl) {
+                countEl.textContent = 'Showing ' + shown + ' of ' + matched + ' matching row(s) — ' + rows.length + ' total';
+            }
+            if (moreWrap && moreBtn) {
+                var left = matched - shown;
+                moreWrap.classList.toggle('d-none', left <= 0);
+                if (left > 0) {
+                    moreBtn.textContent = 'Show ' + Math.min(PAGE, left) + ' more row(s) (' + left + ' hidden)';
+                }
+            }
+        };
+
+        buttons.forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                active = btn.getAttribute('data-oebm-filter') || 'all';
+                limit = PAGE;
+                buttons.forEach(function (b) { b.classList.toggle('active', b === btn); });
+                apply();
+            });
+        });
+        if (search) {
+            search.addEventListener('input', debounce(function () { limit = PAGE; apply(); }, 200));
+        }
+        if (moreBtn) {
+            moreBtn.addEventListener('click', function () { limit += PAGE; apply(); });
+        }
+        apply();
+    }
+
+    // ── Needs Human Review: JSON-driven table (paged, searchable, CSV) ──
+    var reviewDataEl = document.getElementById('oebm-review-data');
+    if (reviewDataEl) {
+        var reviewRows = [];
+        try { reviewRows = JSON.parse(reviewDataEl.textContent || '[]') || []; } catch (e) { reviewRows = []; }
+        var rvBody   = document.getElementById('oebm-review-tbody');
+        var rvSearch = document.getElementById('oebm-review-search');
+        var rvInfo   = document.getElementById('oebm-review-pageinfo');
+        var rvPrev   = document.getElementById('oebm-review-prev');
+        var rvNext   = document.getElementById('oebm-review-next');
+        var rvCsv    = document.getElementById('oebm-review-csv');
+        var PER = 50, rvPage = 0, rvQuery = '';
+
+        var rvFiltered = function () {
+            if (rvQuery === '') { return reviewRows; }
+            return reviewRows.filter(function (r) {
+                return ((r.sid || '') + ' ' + (r.name || '')).toLowerCase().indexOf(rvQuery) !== -1;
+            });
+        };
+        var rvRender = function () {
+            var f = rvFiltered();
+            var pages = Math.max(1, Math.ceil(f.length / PER));
+            if (rvPage > pages - 1) { rvPage = pages - 1; }
+            if (rvPage < 0) { rvPage = 0; }
+            var slice = f.slice(rvPage * PER, rvPage * PER + PER);
+            rvBody.innerHTML = slice.length ? slice.map(function (r) {
+                var pos = Number(r.diff) > 0;
+                return '<tr class="table-warning">'
+                    + '<td class="fw-semibold">' + esc(r.sid) + '</td>'
+                    + '<td>' + (r.name ? esc(r.name) : '&mdash;') + '</td>'
+                    + '<td class="text-end">' + fmt(r.csv) + '</td>'
+                    + '<td class="text-end">' + fmt(r.old) + '</td>'
+                    + '<td class="text-end">' + fmt(r['new']) + '</td>'
+                    + '<td class="text-end">' + fmt(r.total) + '</td>'
+                    + '<td class="text-end fw-semibold ' + (pos ? 'text-danger' : 'text-primary') + '">' + (pos ? '+' : '') + fmt(r.diff) + '</td>'
+                    + '<td class="small">' + esc(r.why) + '</td>'
+                    + '</tr>';
+            }).join('') : '<tr><td colspan="8" class="text-center text-muted py-3">No flagged students match the search.</td></tr>';
+            if (rvInfo) {
+                var from = f.length ? rvPage * PER + 1 : 0;
+                var to = Math.min(f.length, (rvPage + 1) * PER);
+                rvInfo.textContent = 'Showing ' + from + '–' + to + ' of ' + f.length + ' flagged student(s)'
+                    + (rvQuery !== '' ? ' (filtered from ' + reviewRows.length + ')' : '')
+                    + ' — biggest mismatch first';
+            }
+            if (rvPrev) { rvPrev.disabled = rvPage <= 0; }
+            if (rvNext) { rvNext.disabled = rvPage >= pages - 1; }
+        };
+        if (rvSearch) {
+            rvSearch.addEventListener('input', debounce(function () {
+                rvQuery = rvSearch.value.trim().toLowerCase();
+                rvPage = 0;
+                rvRender();
+            }, 200));
+        }
+        if (rvPrev) { rvPrev.addEventListener('click', function () { rvPage--; rvRender(); }); }
+        if (rvNext) { rvNext.addEventListener('click', function () { rvPage++; rvRender(); }); }
+        if (rvCsv) {
+            rvCsv.addEventListener('click', function () {
+                var quote = function (v) { return '"' + String(v === null || v === undefined ? '' : v).replace(/"/g, '""') + '"'; };
+                var lines = [['Student ID', 'Student', 'CSV Total', 'Old ERP Paid', 'New ERP Paid', 'Total Paid', 'Difference', 'Why flagged'].map(quote).join(',')];
+                rvFiltered().forEach(function (r) {
+                    lines.push([r.sid, r.name, r.csv, r.old, r['new'], r.total, r.diff, r.why].map(quote).join(','));
+                });
+                var blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+                var a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = 'old-erp-needs-review-' + new Date().toISOString().slice(0, 10) + '.csv';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(a.href);
+            });
+        }
+        rvRender();
+    }
+
+    // ── Recent batches: render the full flagged-student list only on demand ──
+    Array.prototype.forEach.call(document.querySelectorAll('.oebm-batch-review-more'), function (btn) {
         btn.addEventListener('click', function () {
-            active = btn.getAttribute('data-oebm-filter') || 'all';
-            buttons.forEach(function (b) { b.classList.toggle('active', b === btn); });
-            apply();
+            var td = btn.closest('td');
+            if (!td) { return; }
+            var extra  = td.querySelector('.oebm-batch-review-extra');
+            var dataEl = td.querySelector('.oebm-batch-review-data');
+            if (!extra || !dataEl) { return; }
+            if (extra.style.display === 'none') {
+                if (!extra.getAttribute('data-rendered')) {
+                    var list = [];
+                    try { list = JSON.parse(dataEl.textContent || '[]') || []; } catch (e) { list = []; }
+                    extra.innerHTML = list.map(function (rv) {
+                        var pos = Number(rv.diff) > 0;
+                        return '<div title="' + esc(rv.why) + '">' + esc(rv.sid)
+                            + ' <span class="' + (pos ? 'text-danger' : 'text-primary') + '">(' + (pos ? '+' : '') + fmt(rv.diff) + ')</span></div>';
+                    }).join('');
+                    extra.setAttribute('data-rendered', '1');
+                }
+                extra.style.display = '';
+                btn.textContent = 'Hide list';
+            } else {
+                extra.style.display = 'none';
+                btn.textContent = btn.getAttribute('data-label') || 'Show all';
+            }
         });
     });
-    if (search) { search.addEventListener('input', apply); }
-    apply();
 })();
 </script>
 
