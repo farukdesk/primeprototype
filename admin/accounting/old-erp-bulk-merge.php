@@ -2759,10 +2759,20 @@ require_once __DIR__ . '/../includes/header.php';
                                 <i class="fas fa-user-clock me-1"></i><?= count($b_review) ?> student(s)
                             </span>
                             <div class="text-muted mt-1" style="max-width: 260px;">
-                                <?php foreach ($b_review as $rv): ?>
+                                <?php foreach (array_slice($b_review, 0, 5) as $rv): ?>
                                 <div title="<?= h((string)($rv['reason'] ?? '')) ?>"><?= h((string)($rv['sid'] ?? '')) ?> <span class="<?= (float)($rv['diff'] ?? 0) > 0 ? 'text-danger' : 'text-primary' ?>">(<?= ((float)($rv['diff'] ?? 0) > 0 ? '+' : '') . h(number_format((float)($rv['diff'] ?? 0), 2)) ?>)</span></div>
                                 <?php endforeach; ?>
                             </div>
+                            <?php if (count($b_review) > 5): ?>
+                            <?php // The remaining flagged students are shipped as JSON and only rendered on demand, so a huge review list never bloats the page. ?>
+                            <script type="application/json" class="oebm-batch-review-data"><?= json_encode(array_map(static fn(array $rv): array => [
+                                'sid'  => (string)($rv['sid'] ?? ''),
+                                'diff' => (float)($rv['diff'] ?? 0),
+                                'why'  => (string)($rv['reason'] ?? ''),
+                            ], array_slice($b_review, 5)), JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?></script>
+                            <button type="button" class="btn btn-link btn-sm p-0 oebm-batch-review-more" data-label="Show all <?= count($b_review) ?>">Show all <?= count($b_review) ?></button>
+                            <div class="oebm-batch-review-extra text-muted" style="max-width: 260px; max-height: 220px; overflow: auto; display: none;"></div>
+                            <?php endif; ?>
                             <?php else: ?>
                             <span class="text-muted">—</span>
                             <?php endif; ?>
