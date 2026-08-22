@@ -2933,6 +2933,9 @@ require_once __DIR__ . '/../includes/header.php';
                 </tbody>
             </table>
         </div>
+        <div class="text-center py-2 border-top d-none" id="oebm-more-wrap">
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="oebm-show-more"></button>
+        </div>
     </div>
     <?php if (!$did_commit): ?>
     <div class="card-footer py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
