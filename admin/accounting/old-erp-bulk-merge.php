@@ -3256,36 +3256,186 @@ require_once __DIR__ . '/../includes/header.php';
 <script>
 (function () {
     'use strict';
-    var table = document.getElementById('oebm-preview-table');
-    if (!table) { return; }
-    var rows    = Array.prototype.slice.call(table.querySelectorAll('tbody tr'));
-    var buttons = Array.prototype.slice.call(document.querySelectorAll('[data-oebm-filter]'));
-    var search  = document.getElementById('oebm-search');
-    var countEl = document.getElementById('oebm-filter-count');
-    var active  = 'all';
 
-    function apply() {
-        var q = (search && search.value ? search.value : '').trim().toLowerCase();
-        var shown = 0;
-        rows.forEach(function (tr) {
-            var okStatus = active === 'all' || tr.getAttribute('data-status') === active;
-            var okSearch = q === '' || (tr.getAttribute('data-search') || '').indexOf(q) !== -1;
-            var show = okStatus && okSearch;
-            tr.style.display = show ? '' : 'none';
-            if (show) { shown++; }
+    function esc(s) {
+        return String(s === null || s === undefined ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
         });
-        if (countEl) { countEl.textContent = 'Showing ' + shown + ' of ' + rows.length + ' row(s)'; }
+    }
+    function fmt(n) {
+        var v = Math.abs(Number(n) || 0).toFixed(2);
+        return (Number(n) < 0 ? '-' : '') + v.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    }
+    function debounce(fn, ms) {
+        var t = null;
+        return function () {
+            if (t) { clearTimeout(t); }
+            t = setTimeout(fn, ms);
+        };
     }
 
-    buttons.forEach(function (btn) {
+    // ── Preview table: status filter + debounced search + chunked display ──
+    // Only PAGE matching rows are laid out at a time; "Show more" reveals the
+    // next chunk. Keeps the page responsive even with huge CSVs.
+    var table = document.getElementById('oebm-preview-table');
+    if (table) {
+        var rows     = Array.prototype.slice.call(table.querySelectorAll('tbody tr'));
+        var buttons  = Array.prototype.slice.call(document.querySelectorAll('[data-oebm-filter]'));
+        var search   = document.getElementById('oebm-search');
+        var countEl  = document.getElementById('oebm-filter-count');
+        var moreWrap = document.getElementById('oebm-more-wrap');
+        var moreBtn  = document.getElementById('oebm-show-more');
+        var PAGE     = 300;
+        var limit    = PAGE;
+        var active   = 'all';
+
+        var apply = function () {
+            var q = (search && search.value ? search.value : '').trim().toLowerCase();
+            var matched = 0, shown = 0;
+            rows.forEach(function (tr) {
+                var ok = (active === 'all' || tr.getAttribute('data-status') === active)
+                    && (q === '' || (tr.getAttribute('data-search') || '').indexOf(q) !== -1);
+                var show = false;
+                if (ok) {
+                    matched++;
+                    show = matched <= limit;
+                }
+                tr.style.display = show ? '' : 'none';
+                if (show) { shown++; }
+            });
+            if (countEl) {
+                countEl.textContent = 'Showing ' + shown + ' of ' + matched + ' matching row(s) — ' + rows.length + ' total';
+            }
+            if (moreWrap && moreBtn) {
+                var left = matched - shown;
+                moreWrap.classList.toggle('d-none', left <= 0);
+                if (left > 0) {
+                    moreBtn.textContent = 'Show ' + Math.min(PAGE, left) + ' more row(s) (' + left + ' hidden)';
+                }
+            }
+        };
+
+        buttons.forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                active = btn.getAttribute('data-oebm-filter') || 'all';
+                limit = PAGE;
+                buttons.forEach(function (b) { b.classList.toggle('active', b === btn); });
+                apply();
+            });
+        });
+        if (search) {
+            search.addEventListener('input', debounce(function () { limit = PAGE; apply(); }, 200));
+        }
+        if (moreBtn) {
+            moreBtn.addEventListener('click', function () { limit += PAGE; apply(); });
+        }
+        apply();
+    }
+
+    // ── Needs Human Review: JSON-driven table (paged, searchable, CSV) ──
+    var reviewDataEl = document.getElementById('oebm-review-data');
+    if (reviewDataEl) {
+        var reviewRows = [];
+        try { reviewRows = JSON.parse(reviewDataEl.textContent || '[]') || []; } catch (e) { reviewRows = []; }
+        var rvBody   = document.getElementById('oebm-review-tbody');
+        var rvSearch = document.getElementById('oebm-review-search');
+        var rvInfo   = document.getElementById('oebm-review-pageinfo');
+        var rvPrev   = document.getElementById('oebm-review-prev');
+        var rvNext   = document.getElementById('oebm-review-next');
+        var rvCsv    = document.getElementById('oebm-review-csv');
+        var PER = 50, rvPage = 0, rvQuery = '';
+
+        var rvFiltered = function () {
+            if (rvQuery === '') { return reviewRows; }
+            return reviewRows.filter(function (r) {
+                return ((r.sid || '') + ' ' + (r.name || '')).toLowerCase().indexOf(rvQuery) !== -1;
+            });
+        };
+        var rvRender = function () {
+            var f = rvFiltered();
+            var pages = Math.max(1, Math.ceil(f.length / PER));
+            if (rvPage > pages - 1) { rvPage = pages - 1; }
+            if (rvPage < 0) { rvPage = 0; }
+            var slice = f.slice(rvPage * PER, rvPage * PER + PER);
+            rvBody.innerHTML = slice.length ? slice.map(function (r) {
+                var pos = Number(r.diff) > 0;
+                return '<tr class="table-warning">'
+                    + '<td class="fw-semibold">' + esc(r.sid) + '</td>'
+                    + '<td>' + (r.name ? esc(r.name) : '&mdash;') + '</td>'
+                    + '<td class="text-end">' + fmt(r.csv) + '</td>'
+                    + '<td class="text-end">' + fmt(r.old) + '</td>'
+                    + '<td class="text-end">' + fmt(r['new']) + '</td>'
+                    + '<td class="text-end">' + fmt(r.total) + '</td>'
+                    + '<td class="text-end fw-semibold ' + (pos ? 'text-danger' : 'text-primary') + '">' + (pos ? '+' : '') + fmt(r.diff) + '</td>'
+                    + '<td class="small">' + esc(r.why) + '</td>'
+                    + '</tr>';
+            }).join('') : '<tr><td colspan="8" class="text-center text-muted py-3">No flagged students match the search.</td></tr>';
+            if (rvInfo) {
+                var from = f.length ? rvPage * PER + 1 : 0;
+                var to = Math.min(f.length, (rvPage + 1) * PER);
+                rvInfo.textContent = 'Showing ' + from + '–' + to + ' of ' + f.length + ' flagged student(s)'
+                    + (rvQuery !== '' ? ' (filtered from ' + reviewRows.length + ')' : '')
+                    + ' — biggest mismatch first';
+            }
+            if (rvPrev) { rvPrev.disabled = rvPage <= 0; }
+            if (rvNext) { rvNext.disabled = rvPage >= pages - 1; }
+        };
+        if (rvSearch) {
+            rvSearch.addEventListener('input', debounce(function () {
+                rvQuery = rvSearch.value.trim().toLowerCase();
+                rvPage = 0;
+                rvRender();
+            }, 200));
+        }
+        if (rvPrev) { rvPrev.addEventListener('click', function () { rvPage--; rvRender(); }); }
+        if (rvNext) { rvNext.addEventListener('click', function () { rvPage++; rvRender(); }); }
+        if (rvCsv) {
+            rvCsv.addEventListener('click', function () {
+                var quote = function (v) { return '"' + String(v === null || v === undefined ? '' : v).replace(/"/g, '""') + '"'; };
+                var lines = [['Student ID', 'Student', 'CSV Total', 'Old ERP Paid', 'New ERP Paid', 'Total Paid', 'Difference', 'Why flagged'].map(quote).join(',')];
+                rvFiltered().forEach(function (r) {
+                    lines.push([r.sid, r.name, r.csv, r.old, r['new'], r.total, r.diff, r.why].map(quote).join(','));
+                });
+                var blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+                var a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = 'old-erp-needs-review-' + new Date().toISOString().slice(0, 10) + '.csv';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(a.href);
+            });
+        }
+        rvRender();
+    }
+
+    // ── Recent batches: render the full flagged-student list only on demand ──
+    Array.prototype.forEach.call(document.querySelectorAll('.oebm-batch-review-more'), function (btn) {
         btn.addEventListener('click', function () {
-            active = btn.getAttribute('data-oebm-filter') || 'all';
-            buttons.forEach(function (b) { b.classList.toggle('active', b === btn); });
-            apply();
+            var td = btn.closest('td');
+            if (!td) { return; }
+            var extra  = td.querySelector('.oebm-batch-review-extra');
+            var dataEl = td.querySelector('.oebm-batch-review-data');
+            if (!extra || !dataEl) { return; }
+            if (extra.style.display === 'none') {
+                if (!extra.getAttribute('data-rendered')) {
+                    var list = [];
+                    try { list = JSON.parse(dataEl.textContent || '[]') || []; } catch (e) { list = []; }
+                    extra.innerHTML = list.map(function (rv) {
+                        var pos = Number(rv.diff) > 0;
+                        return '<div title="' + esc(rv.why) + '">' + esc(rv.sid)
+                            + ' <span class="' + (pos ? 'text-danger' : 'text-primary') + '">(' + (pos ? '+' : '') + fmt(rv.diff) + ')</span></div>';
+                    }).join('');
+                    extra.setAttribute('data-rendered', '1');
+                }
+                extra.style.display = '';
+                btn.textContent = 'Hide list';
+            } else {
+                extra.style.display = 'none';
+                btn.textContent = btn.getAttribute('data-label') || 'Show all';
+            }
         });
     });
-    if (search) { search.addEventListener('input', apply); }
-    apply();
 })();
 </script>
 
