@@ -11,7 +11,7 @@
  *   { "ok": true, "message": "Push token registered." }
  */
 
-require_once __DIR__ . '/../../includes/auth_student_api.php';
+require_once __DIR__ . '/../includes/auth_student_api.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     sp_api_error(405, 'Method Not Allowed. Use POST.');

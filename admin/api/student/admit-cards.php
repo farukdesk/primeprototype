@@ -49,9 +49,22 @@ try {
     sp_api_error(500, 'Could not load admit cards. Please try again.');
 }
 
-$cards = [];
+$cards      = [];
+$seen_exams = [];
+$norm_exam  = static fn($s) => strtolower((string)preg_replace('/[^a-z0-9]+/i', '', (string)$s));
+
 foreach ($rows as $card) {
     $card_id = (int)$card['id'];
+
+    // Bulk creation makes one card per exam routine, so one exam may have
+    // several sibling cards with the same (normalised) exam name. The PDF
+    // already merges the student's courses across siblings (see
+    // ac_get_merged_courses_for_student), so only one card per exam — the
+    // newest — is listed to the app.
+    $exam_key = $norm_exam($card['exam_name']);
+    if ($exam_key !== '' && isset($seen_exams[$exam_key])) {
+        continue;
+    }
 
     // Hide cards of exams the student is not enrolled in (unless the
     // student has an admin override for this card).
@@ -71,6 +84,10 @@ foreach ($rows as $card) {
 
     // Same eligibility rule as the web portal (due-amount check, overrides).
     $access = ac_check_access($card_id, $sid);
+
+    if ($exam_key !== '') {
+        $seen_exams[$exam_key] = true;
+    }
 
     $cards[] = [
         'id'           => $card_id,
