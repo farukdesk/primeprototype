@@ -75,6 +75,22 @@
             android:exported="false"
             android:parentActivityName=".ui.main.MainActivity" />
 
+        <activity
+            android:name=".ui.admitcard.AdmitCardsActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.main.MainActivity" />
+
+        <!-- Shares downloaded admit card PDFs with external viewer apps. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <!-- Staff / Employee view -->
         <activity
             android:name=".ui.staff.StaffMainActivity"

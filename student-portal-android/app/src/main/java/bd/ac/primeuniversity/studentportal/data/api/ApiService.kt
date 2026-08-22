@@ -1,5 +1,6 @@
 package bd.ac.primeuniversity.studentportal.data.api
 
+import bd.ac.primeuniversity.studentportal.data.model.AdmitCardsResponse
 import bd.ac.primeuniversity.studentportal.data.model.AppNotificationsResponse
 import bd.ac.primeuniversity.studentportal.data.model.CourseOffersResponse
 import bd.ac.primeuniversity.studentportal.data.model.FinancesResponse
@@ -8,12 +9,14 @@ import bd.ac.primeuniversity.studentportal.data.model.MeResponse
 import bd.ac.primeuniversity.studentportal.data.model.NoticeDetailResponse
 import bd.ac.primeuniversity.studentportal.data.model.NoticesResponse
 import bd.ac.primeuniversity.studentportal.data.model.SimpleResponse
+import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Field
 import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Query
+import retrofit2.http.Streaming
 
 /**
  * Retrofit definition of the Prime University student portal API.
@@ -61,6 +64,14 @@ interface ApiService {
 
     @GET("course-offers.php")
     suspend fun getCourseOffers(): Response<CourseOffersResponse>
+
+    @GET("admit-cards.php")
+    suspend fun getAdmitCards(): Response<AdmitCardsResponse>
+
+    /** Streams the admit card PDF; save the body to a file and open it. */
+    @Streaming
+    @GET("admit-card-download.php")
+    suspend fun downloadAdmitCard(@Query("card") cardId: Int): Response<ResponseBody>
 
     @GET("notifications.php")
     suspend fun getAppNotifications(

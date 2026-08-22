@@ -103,6 +103,12 @@ class DashboardFragment : Fragment() {
             Feature.SETTINGS -> openSettings()
             Feature.THEME -> openSettings(openTheme = true)
             Feature.ID_CARD -> startActivity(Intent(requireContext(), IdCardActivity::class.java))
+            Feature.ADMIT_CARD -> startActivity(
+                Intent(
+                    requireContext(),
+                    bd.ac.primeuniversity.studentportal.ui.admitcard.AdmitCardsActivity::class.java,
+                )
+            )
             Feature.PASSWORD_CHANGE -> startActivity(
                 Intent(
                     requireContext(),

@@ -144,6 +144,41 @@ class StudentRepository private constructor(context: Context) {
     suspend fun getCourseOffers(): AppResult<CourseOffersResponse> =
         call { api.getCourseOffers() }
 
+    // ── Admit cards (students only) ────────────────────────────────────────────────
+
+    /** Active admit cards published for the student's dept + program. */
+    suspend fun getAdmitCards(): AppResult<bd.ac.primeuniversity.studentportal.data.model.AdmitCardsResponse> =
+        call { api.getAdmitCards() }
+
+    /**
+     * Downloads an admit card PDF into [target] and returns the file.
+     * The server enforces the same eligibility rules as the web portal and
+     * responds with a JSON error (surfaced here) when the download is blocked.
+     */
+    suspend fun downloadAdmitCard(cardId: Int, target: java.io.File): AppResult<java.io.File> =
+        withContext(Dispatchers.IO) {
+            try {
+                val response = api.downloadAdmitCard(cardId)
+                val body = response.body()
+                when {
+                    response.code() == 401 ->
+                        AppResult.Error("Your session has expired. Please sign in again.", unauthorized = true)
+                    response.isSuccessful && body != null -> {
+                        target.parentFile?.mkdirs()
+                        body.byteStream().use { input ->
+                            target.outputStream().use { output -> input.copyTo(output) }
+                        }
+                        AppResult.Success(target)
+                    }
+                    else -> AppResult.Error(parseError(response))
+                }
+            } catch (e: IOException) {
+                AppResult.Error("No internet connection. Please check your network.")
+            } catch (e: Exception) {
+                AppResult.Error(e.message ?: "Something went wrong. Please try again.")
+            }
+        }
+
     // ── Announcements (push notification history) ─────────────────────────────────────
 
     /** Announcements published from the admin panel's App Notification module. */

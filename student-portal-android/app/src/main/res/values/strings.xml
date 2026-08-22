@@ -111,6 +111,16 @@
     <string name="feat_admit_card">Admit Card</string>
     <string name="feat_transcript">Transcript (Unofficial)</string>
 
+    <!-- Admit card screen -->
+    <string name="admit_cards_empty">No admit card has been published for you yet. Admit cards appear here when your department releases them before an exam.</string>
+    <string name="admit_card_download">Tap to download PDF</string>
+    <string name="admit_card_blocked">Not available – tap for details</string>
+    <string name="admit_card_blocked_title">Admit card unavailable</string>
+    <string name="admit_card_blocked_body">You are not eligible to download this admit card right now. Please contact your department office.</string>
+    <string name="admit_card_share">Share admit card</string>
+    <string name="admit_card_no_viewer">No app found to open PDF files.</string>
+    <string name="badge_batch">Batch: %1$s</string>
+
     <!-- Campus -->
     <string name="feat_notices">Notices</string>
     <string name="feat_academic_calendar">Academic Calendar</string>
