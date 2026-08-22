@@ -5,9 +5,9 @@
 // Shorts / 9:16 video ID (the part after "v=" or "shorts/").
 // ============================================================
 $YOUTUBE_VIDEO_ID = 'tTRdKca_JJU';
-$APK_URL          = 'https://primeuniversity.ac.bd/downloads/app/pu-portal-v1.0.7.apk';
+$APK_URL          = 'https://primeuniversity.ac.bd/downloads/app/pu-portal-v1.0.8.apk';
 $WEB_PORTAL_URL   = 'https://primeuniversity.ac.bd/admin/index.php';
-$APP_VERSION      = 'v1.0.7';
+$APP_VERSION      = 'v1.0.8';
 ?>
 <!DOCTYPE html>
 <html lang="en">
