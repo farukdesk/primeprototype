@@ -5,7 +5,8 @@
  * Lists the active admit cards available to the signed-in student, with a
  * per-card download eligibility flag. Delegates to the admit-card module
  * helpers so the mobile app follows exactly the same rules as the web
- * portal (exam enrollment, due-amount threshold, admin overrides).
+ * portal (batch restriction, exam enrollment, due-amount threshold,
+ * admin overrides).
  *
  * Success response:
  *   { "ok": true, "admit_cards": [ { id, exam_name, semester, batch,
@@ -21,6 +22,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 $ctx     = sp_api_auth();
 $student = $ctx['student'];
 $sid     = (int)$student['student_db_id'];
+$sbatch  = (int)($student['batch_id'] ?? 0);
 
 try {
     require_once dirname(__DIR__, 2) . '/admit-card/helpers.php';
@@ -29,6 +31,10 @@ try {
 }
 
 try {
+    // Same visibility rule as the web portal: the card must match the
+    // student's dept + program AND either be batch-agnostic or belong to
+    // the student's own batch. Cards of the student's batch are preferred
+    // when several siblings of the same exam exist.
     $stmt = db()->prepare(
         'SELECT ac.*,
                 d.name AS dept_name,
@@ -40,23 +46,54 @@ try {
          LEFT JOIN student_batches b   ON b.id = ac.batch_id
          WHERE ac.is_active = 1
            AND ac.dept_id = ? AND ac.program_id = ?
-         ORDER BY ac.id DESC'
+           AND (ac.batch_id IS NULL OR ac.batch_id = ?)
+         ORDER BY (ac.batch_id = ?) DESC, ac.id DESC'
     );
-    $stmt->execute([(int)$student['dept_id'], (int)$student['program_id']]);
+    $stmt->execute([(int)$student['dept_id'], (int)$student['program_id'], $sbatch, $sbatch]);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Throwable $e) {
     error_log('Student admit-cards: query failed – ' . $e->getMessage());
     sp_api_error(500, 'Could not load admit cards. Please try again.');
 }
 
-$cards = [];
+$cards     = [];
+$seen_keys = [];
+$norm_exam = static fn($s) => strtolower((string)preg_replace('/[^a-z0-9]+/i', '', (string)$s));
+
 foreach ($rows as $card) {
     $card_id = (int)$card['id'];
+
+    // Bulk creation makes one card per exam routine, so one exam may have
+    // several sibling cards. The PDF already merges the student's courses
+    // across siblings (see ac_get_merged_courses_for_student), so only ONE
+    // card per exam is listed to the app. Siblings are grouped by both the
+    // linked exam id and the normalised exam name (the same key the
+    // sibling-merge uses); the row order above makes the student's own
+    // batch card win the group.
+    $keys    = [];
+    $nk      = $norm_exam($card['exam_name']);
+    if ($nk !== '') {
+        $keys[] = 'name:' . $nk;
+    }
+    $exam_id = ac_card_exam_id($card_id);
+    if ($exam_id > 0) {
+        $keys[] = 'exam:' . $exam_id;
+    }
+
+    $dup = false;
+    foreach ($keys as $k) {
+        if (isset($seen_keys[$k])) {
+            $dup = true;
+            break;
+        }
+    }
+    if ($dup) {
+        continue;
+    }
 
     // Hide cards of exams the student is not enrolled in (unless the
     // student has an admin override for this card).
     if (!ac_has_override($card_id, $sid)) {
-        $exam_id = ac_card_exam_id($card_id);
         if ($exam_id > 0) {
             if (!ac_resolve_student_courses($exam_id, $sid)) {
                 continue;
@@ -71,6 +108,10 @@ foreach ($rows as $card) {
 
     // Same eligibility rule as the web portal (due-amount check, overrides).
     $access = ac_check_access($card_id, $sid);
+
+    foreach ($keys as $k) {
+        $seen_keys[$k] = true;
+    }
 
     $cards[] = [
         'id'           => $card_id,
