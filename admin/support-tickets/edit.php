@@ -45,7 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $student_program    = trim($_POST['student_program']    ?? '');
     $student_batch      = trim($_POST['student_batch']      ?? '');
 
-    $valid_cats   = ['Hardware','Software','Network','Email','Student Finance Issues','Student Issue','Other'];
+    $valid_cats   = ['Hardware','Software','Network','Email','Student Finances','Other Student Issues','Other'];
     $valid_prios  = ['Low','Medium','High','Critical'];
     $valid_utypes = ['','Student','Faculty','Administrative Employee'];
 
@@ -217,7 +217,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <div class="mb-3">
                         <label class="form-label fw-medium">Category</label>
                         <select name="category" class="form-select">
-                            <?php foreach (['Hardware','Software','Network','Email','Student Finance Issues','Student Issue','Other'] as $cat): ?>
+                            <?php foreach (['Hardware','Software','Network','Email','Student Finances','Other Student Issues','Other'] as $cat): ?>
                             <option value="<?= $cat ?>" <?= old('category') === $cat ? 'selected' : '' ?>><?= $cat ?></option>
                             <?php endforeach; ?>
                         </select>

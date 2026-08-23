@@ -73,7 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    $valid_cats   = ['Hardware','Software','Network','Email','Student Finance Issues','Student Issue','Other'];
+    $valid_cats   = ['Hardware','Software','Network','Email','Student Finances','Other Student Issues','Other'];
     $valid_prios  = ['Low','Medium','High','Critical'];
     $valid_utypes = ['','Student','Faculty','Administrative Employee'];
 
@@ -312,7 +312,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <div class="mb-3">
                         <label class="form-label fw-medium">Category <span class="text-danger">*</span></label>
                         <select name="category" class="form-select">
-                            <?php foreach (['Hardware','Software','Network','Email','Student Finance Issues','Student Issue','Other'] as $cat): ?>
+                            <?php foreach (['Hardware','Software','Network','Email','Student Finances','Other Student Issues','Other'] as $cat): ?>
                             <option value="<?= $cat ?>" <?= old('category','Other') === $cat ? 'selected' : '' ?>><?= $cat ?></option>
                             <?php endforeach; ?>
                         </select>
