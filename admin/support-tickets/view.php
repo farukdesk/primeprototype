@@ -92,6 +92,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Handle @mention notifications
             st_notify_mentions($ticket, $user, $comment);
 
+            // Push notification to the ticket creator's mobile app (public comments only)
+            if (!$is_internal && (int)$ticket['created_by'] !== (int)$user['id']) {
+                st_push_to_user(
+                    (int)$ticket['created_by'],
+                    'New reply on ' . $ticket['ticket_number'],
+                    $user['full_name'] . ': ' . mb_substr(trim(strip_tags($comment)), 0, 150),
+                    ['type' => 'support_ticket', 'ticket_id' => (string)$id, 'ticket_number' => $ticket['ticket_number']]
+                );
+            }
+
             flash_set('success', 'Comment posted.');
         }
         redirect(APP_URL . '/support-tickets/view.php?id=' . $id . '#comments');
@@ -129,6 +139,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($old_status !== $new_status) {
                 $updated = array_merge($ticket, ['status' => $new_status]);
                 st_notify_status_changed($updated, $creator, $old_status, $new_status);
+
+                // Push notification to the ticket creator's mobile app
+                if ((int)$ticket['created_by'] !== (int)$user['id']) {
+                    st_push_to_user(
+                        (int)$ticket['created_by'],
+                        'Ticket ' . $ticket['ticket_number'] . ' status updated',
+                        $old_status . ' → ' . $new_status . ' – ' . $ticket['title'],
+                        ['type' => 'support_ticket', 'ticket_id' => (string)$id, 'ticket_number' => $ticket['ticket_number']]
+                    );
+                }
             }
             flash_set('success', 'Status updated to <strong>' . h($new_status) . '</strong>.');
         }
