@@ -1,7 +1,9 @@
 package bd.ac.primeuniversity.studentportal.data.repo
 
 import android.content.Context
+import android.net.Uri
 import android.os.Build
+import android.provider.OpenableColumns
 import bd.ac.primeuniversity.studentportal.BuildConfig
 import bd.ac.primeuniversity.studentportal.data.api.ApiService
 import bd.ac.primeuniversity.studentportal.data.api.RetrofitClient
@@ -25,12 +27,18 @@ import bd.ac.primeuniversity.studentportal.data.model.SaveStudentAttendanceRespo
 import bd.ac.primeuniversity.studentportal.data.model.StaffLoginResponse
 import bd.ac.primeuniversity.studentportal.data.model.StaffMeResponse
 import bd.ac.primeuniversity.studentportal.data.model.SubjectStudentsResponse
+import bd.ac.primeuniversity.studentportal.data.model.SupportTicketCommentResponse
 import bd.ac.primeuniversity.studentportal.data.model.SupportTicketCreateResponse
+import bd.ac.primeuniversity.studentportal.data.model.SupportTicketDetailResponse
 import bd.ac.primeuniversity.studentportal.data.model.SupportTicketsResponse
 import bd.ac.primeuniversity.studentportal.data.model.TeachSubjectsResponse
 import bd.ac.primeuniversity.studentportal.util.AppResult
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import kotlinx.coroutines.withContext
 import retrofit2.Response
 import java.io.IOException
@@ -194,8 +202,58 @@ class StudentRepository private constructor(context: Context) {
         title: String,
         description: String,
         category: String,
+        attachments: List<Uri> = emptyList(),
     ): AppResult<SupportTicketCreateResponse> =
-        call { api.createSupportTicket(title, description, category) }
+        call {
+            api.createSupportTicket(
+                title.asTextPart(),
+                description.asTextPart(),
+                category.asTextPart(),
+                buildAttachmentParts(attachments),
+            )
+        }
+
+    /** One ticket with its attachments and the public comment thread. */
+    suspend fun getSupportTicketDetail(id: Int): AppResult<SupportTicketDetailResponse> =
+        call { api.getSupportTicketDetail(id) }
+
+    /** Post a comment (optionally with attachments) on the student's own ticket. */
+    suspend fun addSupportTicketComment(
+        ticketId: Int,
+        comment: String,
+        attachments: List<Uri> = emptyList(),
+    ): AppResult<SupportTicketCommentResponse> =
+        call {
+            api.addSupportTicketComment(
+                ticketId.toString().asTextPart(),
+                comment.asTextPart(),
+                buildAttachmentParts(attachments),
+            )
+        }
+
+    private fun String.asTextPart(): RequestBody =
+        toRequestBody("text/plain".toMediaTypeOrNull())
+
+    /** Reads each content Uri and wraps it as a multipart "attachments[]" file part. */
+    private fun buildAttachmentParts(uris: List<Uri>): List<MultipartBody.Part> {
+        val resolver = appContext.contentResolver
+        return uris.mapNotNull { uri ->
+            try {
+                val name = resolver.query(uri, null, null, null, null)?.use { c ->
+                    val idx = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (c.moveToFirst() && idx >= 0) c.getString(idx) else null
+                } ?: uri.lastPathSegment ?: "attachment"
+                val bytes = resolver.openInputStream(uri)?.use { it.readBytes() }
+                    ?: return@mapNotNull null
+                val mime = resolver.getType(uri) ?: "application/octet-stream"
+                MultipartBody.Part.createFormData(
+                    "attachments[]", name, bytes.toRequestBody(mime.toMediaTypeOrNull())
+                )
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
 
     /** Announcements published from the admin panel's App Notification module. */
     suspend fun getAppNotifications(page: Int = 1): AppResult<AppNotificationsResponse> =

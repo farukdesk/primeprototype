@@ -9,14 +9,20 @@ import bd.ac.primeuniversity.studentportal.data.model.MeResponse
 import bd.ac.primeuniversity.studentportal.data.model.NoticeDetailResponse
 import bd.ac.primeuniversity.studentportal.data.model.NoticesResponse
 import bd.ac.primeuniversity.studentportal.data.model.SimpleResponse
+import bd.ac.primeuniversity.studentportal.data.model.SupportTicketCommentResponse
 import bd.ac.primeuniversity.studentportal.data.model.SupportTicketCreateResponse
+import bd.ac.primeuniversity.studentportal.data.model.SupportTicketDetailResponse
 import bd.ac.primeuniversity.studentportal.data.model.SupportTicketsResponse
+import okhttp3.MultipartBody
+import okhttp3.RequestBody
 import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Field
 import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
+import retrofit2.http.Multipart
 import retrofit2.http.POST
+import retrofit2.http.Part
 import retrofit2.http.Query
 import retrofit2.http.Streaming
 
@@ -87,13 +93,28 @@ interface ApiService {
         @Query("limit") limit: Int = 50,
     ): Response<SupportTicketsResponse>
 
-    @FormUrlEncoded
+    /** One ticket with its attachments and public comments. */
+    @GET("support-ticket-detail.php")
+    suspend fun getSupportTicketDetail(@Query("id") id: Int): Response<SupportTicketDetailResponse>
+
+    /** Multipart so the student can attach files to the new ticket. */
+    @Multipart
     @POST("support-ticket-create.php")
     suspend fun createSupportTicket(
-        @Field("title") title: String,
-        @Field("description") description: String,
-        @Field("category") category: String,
+        @Part("title") title: RequestBody,
+        @Part("description") description: RequestBody,
+        @Part("category") category: RequestBody,
+        @Part attachments: List<MultipartBody.Part>,
     ): Response<SupportTicketCreateResponse>
+
+    /** Adds a comment (optionally with attachments) to the student's own ticket. */
+    @Multipart
+    @POST("support-ticket-comment.php")
+    suspend fun addSupportTicketComment(
+        @Part("ticket_id") ticketId: RequestBody,
+        @Part("comment") comment: RequestBody,
+        @Part attachments: List<MultipartBody.Part>,
+    ): Response<SupportTicketCommentResponse>
 
     @FormUrlEncoded
     @POST("push/register.php")

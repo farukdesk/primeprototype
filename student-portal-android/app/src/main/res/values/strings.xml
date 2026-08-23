@@ -190,6 +190,17 @@
     <string name="support_detail_category">Category: %1$s</string>
     <string name="support_detail_created">Created: %1$s</string>
     <string name="support_deadline">Expected resolution: %1$s</string>
+    <string name="support_detail_title">Ticket Details</string>
+    <string name="support_attachments">Attachments</string>
+    <string name="support_attachments_optional">Attachments (optional)</string>
+    <string name="support_add_attachment">Add Attachment</string>
+    <string name="support_comments_count">Comments (%1$d)</string>
+    <string name="support_no_comments">No comments yet. Replies from the IT team will appear here.</string>
+    <string name="support_comment_hint">Write a comment…</string>
+    <string name="support_post_comment">Post</string>
+    <string name="support_comment_posted">Comment posted.</string>
+    <string name="support_err_comment">Please write a comment.</string>
+    <string name="support_open_attachment_error">No app found to open this file.</string>
 
     <!-- Self-hosted app update prompt -->
     <string name="update_title">Update available</string>
