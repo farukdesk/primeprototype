@@ -24,6 +24,7 @@ import bd.ac.primeuniversity.studentportal.ui.login.LoginActivity
 import bd.ac.primeuniversity.studentportal.ui.notices.NoticesFragment
 import bd.ac.primeuniversity.studentportal.ui.notifications.NotificationsActivity
 import bd.ac.primeuniversity.studentportal.ui.profile.ProfileFragment
+import bd.ac.primeuniversity.studentportal.ui.support.SupportTicketDetailActivity
 import bd.ac.primeuniversity.studentportal.util.AppResult
 import bd.ac.primeuniversity.studentportal.util.UpdateChecker
 import kotlinx.coroutines.launch
@@ -102,9 +103,16 @@ class MainActivity : AppCompatActivity() {
         maybeRequestNotificationPermission()
         PushRegistrar.registerCurrentToken(this)
 
-        // Tapping a push notification (delivered in the foreground) routes the
-        // user straight to the announcements inbox.
-        if (savedInstanceState == null &&
+        // Tapping a push notification routes the user straight to the
+        // announcements inbox, or to the support ticket thread when the push
+        // was a ticket reply / status update.
+        val pushTicketId = intent.getIntExtra(NotificationHelper.EXTRA_OPEN_TICKET_ID, 0)
+        if (savedInstanceState == null && pushTicketId > 0) {
+            startActivity(
+                Intent(this, SupportTicketDetailActivity::class.java)
+                    .putExtra(SupportTicketDetailActivity.EXTRA_TICKET_ID, pushTicketId)
+            )
+        } else if (savedInstanceState == null &&
             intent.getBooleanExtra(NotificationHelper.EXTRA_OPEN_INBOX, false)
         ) {
             startActivity(Intent(this, NotificationsActivity::class.java))
