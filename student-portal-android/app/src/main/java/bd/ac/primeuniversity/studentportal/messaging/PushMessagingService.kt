@@ -35,20 +35,13 @@ class PushMessagingService : FirebaseMessagingService() {
         val title = message.notification?.title ?: data["title"]
         val body  = message.notification?.body  ?: data["body"]
         val url   = data["url"]
-        // Support-ticket pushes (new reply / status update) carry the ticket
-        // id so tapping the notification opens the ticket thread directly.
-        val ticketId = if (data["type"] == "support_ticket") {
-            data["ticket_id"]?.toIntOrNull() ?: 0
-        } else {
-            0
-        }
 
         if (title.isNullOrBlank() && body.isNullOrBlank()) {
             Log.d(TAG, "Received push with no displayable content; ignoring.")
             return
         }
 
-        NotificationHelper.show(applicationContext, title, body, url, ticketId)
+        NotificationHelper.show(applicationContext, title, body, url)
     }
 
     companion object {

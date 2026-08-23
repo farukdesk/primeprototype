@@ -63,22 +63,13 @@ class SplashActivity : AppCompatActivity() {
 
     private fun goTo(target: Class<*>) {
         val next = Intent(this, target)
-        // Forward push-tap routing. Extras are set directly when a
-        // foreground-delivered notification is tapped, and arrive as FCM data
-        // extras ("type", "ticket_id") when a background (system-tray)
+        // Forward the "open announcements inbox" flag. It is set directly when a
+        // foreground-delivered notification is tapped, and arrives as FCM data
+        // extras ("type" = app_notification) when a background (system-tray)
         // notification is tapped.
-        val ticketId = intent.getIntExtra(NotificationHelper.EXTRA_OPEN_TICKET_ID, 0)
-            .takeIf { it > 0 }
-            ?: if (intent.getStringExtra("type") == "support_ticket") {
-                intent.getStringExtra("ticket_id")?.toIntOrNull() ?: 0
-            } else {
-                0
-            }
         val fromPush = intent.getBooleanExtra(NotificationHelper.EXTRA_OPEN_INBOX, false) ||
             intent.getStringExtra("type") == "app_notification"
-        if (ticketId > 0) {
-            next.putExtra(NotificationHelper.EXTRA_OPEN_TICKET_ID, ticketId)
-        } else if (fromPush) {
+        if (fromPush) {
             next.putExtra(NotificationHelper.EXTRA_OPEN_INBOX, true)
         }
         startActivity(next)

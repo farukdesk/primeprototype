@@ -21,7 +21,6 @@ object NotificationHelper {
     const val CHANNEL_ID = "pu_announcements"
     const val EXTRA_URL = "notification_url"
     const val EXTRA_OPEN_INBOX = "open_notifications_inbox"
-    const val EXTRA_OPEN_TICKET_ID = "open_ticket_id"
 
     /** Creates the announcements channel (no-op below Android O). */
     fun ensureChannel(context: Context) {
@@ -39,12 +38,8 @@ object NotificationHelper {
         manager.createNotificationChannel(channel)
     }
 
-    /**
-     * Posts a notification, opening the app on tap. Support-ticket pushes
-     * (ticketId > 0) deep-link to the ticket thread; everything else routes
-     * to the announcements inbox. A deep-link URL adds an "Open" action.
-     */
-    fun show(context: Context, title: String?, body: String?, url: String?, ticketId: Int = 0) {
+    /** Posts a notification, opening the app (and any deep-link URL) on tap. */
+    fun show(context: Context, title: String?, body: String?, url: String?) {
         ensureChannel(context)
 
         // A stable-per-call base id in the positive Int range, used to derive
@@ -54,13 +49,8 @@ object NotificationHelper {
         val intent = Intent(context, SplashActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             if (!url.isNullOrBlank()) putExtra(EXTRA_URL, url)
-            if (ticketId > 0) {
-                // Route the user straight to the support ticket thread.
-                putExtra(EXTRA_OPEN_TICKET_ID, ticketId)
-            } else {
-                // Route the user to the announcements inbox after launch.
-                putExtra(EXTRA_OPEN_INBOX, true)
-            }
+            // Route the user to the announcements inbox after launch.
+            putExtra(EXTRA_OPEN_INBOX, true)
         }
         var flags = PendingIntent.FLAG_UPDATE_CURRENT
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
