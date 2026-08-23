@@ -91,6 +91,43 @@ try {
     ]);
     $ticket_id = (int)$db->lastInsertId();
 
+    // ── Attachments (optional multipart field "attachments[]") ────────────
+    // Same rules as the web portal: 10 MB max per file, safe-listed types.
+    $allowed_exts  = ['jpg','jpeg','png','gif','webp','pdf','doc','docx','xls','xlsx','ppt','pptx','zip','txt'];
+    $allowed_mimes = [
+        'image/jpeg','image/png','image/gif','image/webp',
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.ms-powerpoint',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'application/zip','application/x-zip-compressed',
+        'text/plain',
+    ];
+    if (!empty($_FILES['attachments']['name'][0])) {
+        $dir = UPLOAD_DIR . '/support-tickets';
+        if (!is_dir($dir)) mkdir($dir, 0755, true);
+        foreach ($_FILES['attachments']['tmp_name'] as $i => $tmp) {
+            if ($_FILES['attachments']['error'][$i] !== UPLOAD_ERR_OK) continue;
+            if ((int)$_FILES['attachments']['size'][$i] > 10 * 1024 * 1024) continue;
+            $orig = (string)$_FILES['attachments']['name'][$i];
+            $ext  = strtolower(pathinfo($orig, PATHINFO_EXTENSION));
+            if (!in_array($ext, $allowed_exts, true)) continue;
+            $finfo = new finfo(FILEINFO_MIME_TYPE);
+            $mime  = (string)$finfo->file($tmp);
+            if (!in_array($mime, $allowed_mimes, true)) continue;
+            $stored = bin2hex(random_bytes(12)) . '.' . $ext;
+            if (!move_uploaded_file($tmp, $dir . '/' . $stored)) continue;
+            $db->prepare(
+                'INSERT INTO support_ticket_attachments
+                   (ticket_id, original_name, stored_name, mime_type, file_size, uploaded_by)
+                 VALUES (?,?,?,?,?,?)'
+            )->execute([$ticket_id, $orig, $stored, $mime, (int)$_FILES['attachments']['size'][$i], $user_id]);
+        }
+    }
+
     // ── Best-effort notifications (never block ticket creation) ───────────
 
     // Push notification to IT staff

@@ -5,7 +5,6 @@ import android.os.Bundle
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.text.HtmlCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import bd.ac.primeuniversity.studentportal.PrimeApp
@@ -13,12 +12,12 @@ import bd.ac.primeuniversity.studentportal.R
 import bd.ac.primeuniversity.studentportal.data.model.SupportTicket
 import bd.ac.primeuniversity.studentportal.databinding.ActivitySupportTicketsBinding
 import bd.ac.primeuniversity.studentportal.util.AppResult
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.launch
 
 /**
  * IT Support tickets. Lists the student's own tickets (from
- * admin/api/student/support-tickets.php) and lets them open a new one.
+ * admin/api/student/support-tickets.php) and lets them open a new one
+ * or drill into the full ticket thread.
  */
 class SupportTicketsActivity : AppCompatActivity() {
 
@@ -74,28 +73,11 @@ class SupportTicketsActivity : AppCompatActivity() {
         }
     }
 
-    /** Full ticket in a dialog: status, priority, category, dates and description. */
+    /** Opens the full ticket thread (description, attachments and comments). */
     private fun showDetail(ticket: SupportTicket) {
-        val details = buildString {
-            append(getString(R.string.support_detail_status, ticket.status, ticket.priority))
-            append('\n')
-            append(getString(R.string.support_detail_category, ticket.category))
-            append('\n')
-            append(getString(R.string.support_detail_created, ticket.date))
-            ticket.deadline?.let {
-                append('\n')
-                append(getString(R.string.support_deadline, it))
-            }
-            append("\n\n")
-            append(
-                HtmlCompat.fromHtml(ticket.description, HtmlCompat.FROM_HTML_MODE_LEGACY)
-                    .toString().trim()
-            )
-        }
-        MaterialAlertDialogBuilder(this)
-            .setTitle("${ticket.ticketNumber} \u00b7 ${ticket.title}")
-            .setMessage(details)
-            .setPositiveButton(R.string.close, null)
-            .show()
+        startActivity(
+            Intent(this, SupportTicketDetailActivity::class.java)
+                .putExtra(SupportTicketDetailActivity.EXTRA_TICKET_ID, ticket.id)
+        )
     }
 }

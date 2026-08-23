@@ -421,9 +421,38 @@ function st_push_to_user(?int $user_id, string $title, string $body, array $data
 {
     if (!$user_id) return;
     try {
-        require_once __DIR__ . '/../api/includes/fcm.php';
-        if (function_exists('send_push_notification')) {
-            send_push_notification([$user_id], $title, $body, $data);
+        // FCM HTTP v1 sender (the legacy server-key API was shut down by
+        // Google in 2024). Students register their devices in
+        // student_push_tokens; employees in api_push_tokens.
+        require_once __DIR__ . '/../app-notifications/helpers.php';
+        $sa = apn_fcm_service_account();
+        if ($sa === null) return;
+        $access = apn_fcm_access_token($sa);
+        if ($access === null) return;
+
+        $targets = [];
+        foreach (['student_push_tokens', 'api_push_tokens'] as $table) {
+            try {
+                $stmt = db()->prepare(
+                    "SELECT id, fcm_token FROM {$table}\n                     WHERE user_id = ? AND fcm_token IS NOT NULL AND fcm_token != ''"
+                );
+                $stmt->execute([$user_id]);
+                foreach ($stmt->fetchAll() as $row) {
+                    $targets[] = ['table' => $table, 'id' => (int)$row['id'], 'token' => (string)$row['fcm_token']];
+                }
+            } catch (Throwable $e) {
+                // Table missing on this install – ignore.
+            }
+        }
+
+        foreach ($targets as $t) {
+            $r = apn_fcm_send_single($access, $sa['project_id'], $t['token'], $title, $body, $data);
+            if (!$r['ok'] && $r['unregister']) {
+                try {
+                    db()->prepare("DELETE FROM {$t['table']} WHERE id = ?")->execute([$t['id']]);
+                } catch (Throwable $e) {
+                }
+            }
         }
     } catch (Throwable $e) {
         error_log('support-tickets: push to user ' . $user_id . ' failed – ' . $e->getMessage());
