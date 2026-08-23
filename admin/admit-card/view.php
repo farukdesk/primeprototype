@@ -56,6 +56,78 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash_set('success', 'Override removed.');
         redirect(APP_URL . '/admit-card/view.php?id=' . $id);
     }
+
+    // Batch-wise override: grant to EVERY student of a batch at once, so the
+    // whole batch can download the card even when their dues exceed ৳500.
+    if ($action === 'add_batch_override' && ac_can_edit()) {
+        $bid  = (int)($_POST['batch_id'] ?? 0);
+        $note = trim($_POST['override_note'] ?? '');
+        if ($bid > 0) {
+            try {
+                // Batch name for the audit note
+                $bst = $db->prepare('SELECT name FROM student_batches WHERE id = ?');
+                $bst->execute([$bid]);
+                $batch_name = (string)$bst->fetchColumn();
+                $batch_lbl  = $batch_name !== '' ? $batch_name : ('#' . $bid);
+
+                // Students of this batch within the card's scope: for a
+                // routine-linked card only students registered in the routine's
+                // courses; otherwise the card's dept + program.
+                $ov_routine_id = (int)($card['routine_id'] ?? 0);
+                if ($ov_routine_id > 0) {
+                    $sst = $db->prepare(
+                        "SELECT DISTINCT s.id
+                           FROM students s
+                           JOIN co_registrations reg ON reg.student_id = s.id
+                           JOIN exam_routine_items i ON i.offer_subject_id = reg.offer_subject_id AND i.routine_id = ?
+                          WHERE s.batch_id = ? AND s.status NOT IN ('Withdrawn','Expelled')"
+                    );
+                    $sst->execute([$ov_routine_id, $bid]);
+                } else {
+                    $sst = $db->prepare(
+                        "SELECT s.id FROM students s
+                          WHERE s.dept_id = ? AND s.program_id = ? AND s.batch_id = ?
+                            AND s.status NOT IN ('Withdrawn','Expelled')"
+                    );
+                    $sst->execute([(int)$card['dept_id'], (int)$card['program_id'], $bid]);
+                }
+                $sids = array_map('intval', $sst->fetchAll(PDO::FETCH_COLUMN));
+
+                if ($sids) {
+                    $ov_note = 'Batch override: ' . $batch_lbl . ($note !== '' ? ' — ' . $note : '');
+                    $ins = $db->prepare(
+                        'INSERT INTO ac_student_overrides (admit_card_id, student_id, allowed_by, note)
+                         VALUES (?,?,?,?)
+                         ON DUPLICATE KEY UPDATE allowed_by=VALUES(allowed_by), note=VALUES(note), created_at=NOW()'
+                    );
+                    foreach ($sids as $ov_sid) {
+                        $ins->execute([$id, $ov_sid, auth_user()['id'], $ov_note]);
+                    }
+                    flash_set('success', 'Override granted to ' . count($sids) . ' student(s) of batch ' . $batch_lbl . '.');
+                } else {
+                    flash_set('warning', 'No students of this batch match this admit card.');
+                }
+            } catch (Throwable $e) {
+                flash_set('error', 'Could not add batch override: ' . $e->getMessage());
+            }
+        }
+        redirect(APP_URL . '/admit-card/view.php?id=' . $id);
+    }
+
+    // Remove every override of a batch on this card
+    if ($action === 'remove_batch_override' && ac_can_edit()) {
+        $bid = (int)($_POST['batch_id'] ?? 0);
+        if ($bid > 0) {
+            $st = $db->prepare(
+                'DELETE ov FROM ac_student_overrides ov
+                   JOIN students s ON s.id = ov.student_id
+                  WHERE ov.admit_card_id = ? AND s.batch_id = ?'
+            );
+            $st->execute([$id, $bid]);
+            flash_set('success', $st->rowCount() . ' override(s) removed for the batch.');
+        }
+        redirect(APP_URL . '/admit-card/view.php?id=' . $id);
+    }
 }
 
 $courses = ac_get_courses($id);
@@ -111,6 +183,25 @@ $ov_stmt = $db->prepare(
 $ov_stmt->execute([$id]);
 $overrides = $ov_stmt->fetchAll();
 $override_ids = array_column($overrides, 'student_id');
+
+// Batches offered for the batch-wise override: a batch-specific card offers
+// only its own batch; otherwise every batch that has students in the card's
+// dept + program is listed.
+if ($card['batch_id']) {
+    $bt = $db->prepare('SELECT id, name FROM student_batches WHERE id = ?');
+    $bt->execute([(int)$card['batch_id']]);
+} else {
+    $bt = $db->prepare(
+        "SELECT DISTINCT b.id, b.name, b.sort_order
+           FROM student_batches b
+           JOIN students s ON s.batch_id = b.id
+          WHERE s.dept_id = ? AND s.program_id = ?
+            AND s.status NOT IN ('Withdrawn','Expelled')
+          ORDER BY b.sort_order ASC, b.name ASC"
+    );
+    $bt->execute([(int)$card['dept_id'], (int)$card['program_id']]);
+}
+$ov_batches = $bt->fetchAll();
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -223,6 +314,40 @@ require_once __DIR__ . '/../includes/header.php';
                     <div class="col-auto">
                         <button class="btn btn-sm btn-warning"><i class="fas fa-plus me-1"></i>Grant Override</button>
                     </div>
+                </form>
+
+                <hr class="my-3">
+                <p class="text-muted small mb-2">Or grant the override to <strong>every student of a batch</strong> at once (batch-wise manual override).</p>
+                <form method="post" class="row g-2"
+                      onsubmit="return confirm('Grant download override to ALL students of the selected batch, even if they have dues?')">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="action" value="add_batch_override">
+                    <div class="col-md-5">
+                        <select name="batch_id" class="form-select form-select-sm" required>
+                            <option value="">— Select Batch —</option>
+                            <?php foreach ($ov_batches as $b): ?>
+                            <option value="<?= (int)$b['id'] ?>"><?= h($b['name']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <input type="text" name="override_note" class="form-control form-control-sm" placeholder="Reason (optional)">
+                    </div>
+                    <div class="col-auto">
+                        <button class="btn btn-sm btn-warning"><i class="fas fa-layer-group me-1"></i>Grant for Batch</button>
+                    </div>
+                </form>
+                <form method="post" class="d-flex gap-2 align-items-center mt-2"
+                      onsubmit="return confirm('Remove overrides from ALL students of the selected batch?')">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="action" value="remove_batch_override">
+                    <select name="batch_id" class="form-select form-select-sm w-auto" required>
+                        <option value="">— Remove overrides of batch —</option>
+                        <?php foreach ($ov_batches as $b): ?>
+                        <option value="<?= (int)$b['id'] ?>"><?= h($b['name']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <button class="btn btn-sm btn-outline-danger"><i class="fas fa-times me-1"></i>Remove for Batch</button>
                 </form>
             </div>
         </div>
