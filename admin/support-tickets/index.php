@@ -16,7 +16,7 @@ $assigned_me = $is_staff && isset($_GET['assigned_me']);
 
 $valid_statuses   = ['Open','In Progress','Pending','Resolved','Closed','Reopened'];
 $valid_priorities = ['Low','Medium','High','Critical'];
-$valid_categories = ['Hardware','Software','Network','Email','Other'];
+$valid_categories = ['Hardware','Software','Network','Email','Student Finances','Other Student Issues','Other'];
 
 $where  = [];
 $params = [];
