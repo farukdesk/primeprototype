@@ -50,6 +50,9 @@ enum class Feature(
     // Finances – one entry; the Finances tab shows dues, paid totals and history.
     MY_FINANCES(R.string.feat_my_finances, R.drawable.ic_wallet, R.color.cat_finance, R.string.feat_my_finances_desc),
 
+    // Support
+    IT_SUPPORT(R.string.feat_it_support, R.drawable.ic_contacts, R.color.cat_campus, R.string.feat_it_support_desc),
+
     // Staff / Employee (Administrative + Faculty)
     MY_ATTENDANCE(R.string.feat_my_attendance, R.drawable.ic_check_circle, R.color.icon_attendance, R.string.feat_my_attendance_desc, R.color.tint_attendance),
     LEAVE_MANAGEMENT(R.string.feat_leave_management, R.drawable.ic_event, R.color.icon_leave, R.string.feat_leave_management_desc, R.color.tint_leave),
@@ -87,6 +90,7 @@ fun buildDashboardMenu(): List<MenuRow> = buildList {
     add(MenuRow.Item(Feature.CLASS_SCHEDULE))
     add(MenuRow.Item(Feature.OVERALL_ATTENDANCE))
     add(MenuRow.Item(Feature.DAILY_ATTENDANCE))
+    add(MenuRow.Item(Feature.IT_SUPPORT))
 
     add(MenuRow.Header(R.string.section_profile))
     add(MenuRow.Item(Feature.STUDENT_PROFILE))

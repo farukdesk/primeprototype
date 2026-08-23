@@ -115,6 +115,12 @@ class DashboardFragment : Fragment() {
                     bd.ac.primeuniversity.studentportal.ui.settings.ChangePasswordActivity::class.java,
                 )
             )
+            Feature.IT_SUPPORT -> startActivity(
+                Intent(
+                    requireContext(),
+                    bd.ac.primeuniversity.studentportal.ui.support.SupportTicketsActivity::class.java,
+                )
+            )
             else -> startActivity(FeatureActivity.intent(requireContext(), feature))
         }
     }

@@ -172,6 +172,25 @@
     <string name="announcements_open_link">Open Link</string>
     <string name="close">Close</string>
 
+    <!-- IT Support tickets -->
+    <string name="feat_it_support">IT Support</string>
+    <string name="feat_it_support_desc">Report an issue &amp; track your tickets</string>
+    <string name="support_title">IT Support</string>
+    <string name="support_empty">You have not created any support tickets yet. Tap \"New Ticket\" to report an issue.</string>
+    <string name="support_new_ticket">New Ticket</string>
+    <string name="support_create_title">New Support Ticket</string>
+    <string name="support_hint_title">Title</string>
+    <string name="support_hint_description">Describe the issue</string>
+    <string name="support_category">Category</string>
+    <string name="support_submit">Submit Ticket</string>
+    <string name="support_submitted">Your support ticket has been created.</string>
+    <string name="support_err_title">Please enter a title.</string>
+    <string name="support_err_description">Please describe the issue.</string>
+    <string name="support_detail_status">Status: %1$s · Priority: %2$s</string>
+    <string name="support_detail_category">Category: %1$s</string>
+    <string name="support_detail_created">Created: %1$s</string>
+    <string name="support_deadline">Expected resolution: %1$s</string>
+
     <!-- Self-hosted app update prompt -->
     <string name="update_title">Update available</string>
     <string name="update_body">Version %1$s of Prime University Portal is available. Please update to get the latest features and fixes.</string>
