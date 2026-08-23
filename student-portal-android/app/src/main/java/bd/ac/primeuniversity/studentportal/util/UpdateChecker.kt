@@ -11,20 +11,21 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.launch
 
 /**
- * Self-hosted update prompt. Asks the server (admin/api/app-version.php) for
- * the latest published versionCode and, when it is newer than this build,
- * shows a dialog that opens the APK download link. When the server marks the
- * update as forced, the dialog cannot be dismissed.
+ * Update prompt shown right after sign-in (MainActivity / StaffMainActivity).
+ *
+ * Asks the server (admin/api/app-version.php) for the latest published
+ * versionCode and, when it is newer than this build, shows a dialog:
+ *  - Self-hosted builds open the APK download link published by the server.
+ *  - Google Play builds open the app's Play Store listing instead – prompting
+ *    users to update via Play is allowed; only self-updating APKs are not
+ *    (Device and Network Abuse policy).
+ * When the server marks the update as forced, the dialog cannot be dismissed.
  */
 object UpdateChecker {
 
     private var checkedThisProcess = false
 
     fun maybePromptForUpdate(activity: AppCompatActivity) {
-        // Google Play builds must never self-update outside the Play Store
-        // (Device and Network Abuse policy); only the self-hosted flavor
-        // keeps this prompt.
-        if (!BuildConfig.SELF_UPDATE_ENABLED) return
         if (checkedThisProcess) return
         checkedThisProcess = true
 
@@ -34,9 +35,10 @@ object UpdateChecker {
             if (result !is AppResult.Success) return@launch
 
             val latest = result.data
-            if (latest.versionCode <= BuildConfig.VERSION_CODE || latest.apkUrl.isBlank()) {
-                return@launch
-            }
+            if (latest.versionCode <= BuildConfig.VERSION_CODE) return@launch
+            // Self-hosted builds need a published APK URL; Play builds fall
+            // back to the Play Store listing, so no URL is required.
+            if (BuildConfig.SELF_UPDATE_ENABLED && latest.apkUrl.isBlank()) return@launch
             if (activity.isFinishing || activity.isDestroyed) return@launch
 
             val message = buildString {
@@ -52,18 +54,46 @@ object UpdateChecker {
                 .setMessage(message)
                 .setCancelable(!latest.force)
                 .setPositiveButton(R.string.update_now) { _, _ ->
-                    try {
-                        activity.startActivity(
-                            Intent(Intent.ACTION_VIEW, Uri.parse(latest.apkUrl))
-                        )
-                    } catch (_: Exception) {
-                        // No browser available; ignore.
-                    }
+                    openUpdateTarget(activity, latest.apkUrl)
                 }
             if (!latest.force) {
                 dialog.setNegativeButton(R.string.update_later, null)
             }
             dialog.show()
+        }
+    }
+
+    /**
+     * Self-hosted flavor: open the APK download link.
+     * Play flavor: open the Play Store listing (market:// first, then the
+     * web URL when the Play Store app is unavailable).
+     */
+    private fun openUpdateTarget(activity: AppCompatActivity, apkUrl: String) {
+        if (BuildConfig.SELF_UPDATE_ENABLED && apkUrl.isNotBlank()) {
+            try {
+                activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(apkUrl)))
+            } catch (_: Exception) {
+                // No browser available; ignore.
+            }
+            return
+        }
+
+        val packageName = BuildConfig.APPLICATION_ID.removeSuffix(".debug")
+        try {
+            activity.startActivity(
+                Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$packageName"))
+            )
+        } catch (_: Exception) {
+            try {
+                activity.startActivity(
+                    Intent(
+                        Intent.ACTION_VIEW,
+                        Uri.parse("https://play.google.com/store/apps/details?id=$packageName")
+                    )
+                )
+            } catch (_: Exception) {
+                // Neither the Play Store app nor a browser is available; ignore.
+            }
         }
     }
 }
