@@ -8,8 +8,29 @@ $user       = auth_user();
 $errors     = [];
 clear_old();
 
-// All active users for tagging (excludes self)
-$all_users = db()->query(
+// ── Student portal users: tagging disabled, identity comes from their profile ─
+$is_portal      = is_portal_student();
+$portal_student = null;
+if ($is_portal) {
+    try {
+        $st = db()->prepare(
+            'SELECT s.student_id, s.full_name, s.section,
+                    d.name AS dept_name, p.program_name, b.name AS batch_name
+             FROM students s
+             LEFT JOIN dept_departments d ON d.id = s.dept_id
+             LEFT JOIN dept_academic_programs p ON p.id = s.program_id
+             LEFT JOIN student_batches b ON b.id = s.batch_id
+             WHERE s.portal_user_id = ? LIMIT 1'
+        );
+        $st->execute([(int)$user['id']]);
+        $portal_student = $st->fetch() ?: null;
+    } catch (Throwable $e) {
+        error_log('support-tickets/create.php: could not load student profile – ' . $e->getMessage());
+    }
+}
+
+// All active users for tagging (excludes self) – not loaded for portal students
+$all_users = $is_portal ? [] : db()->query(
     'SELECT id, full_name, username FROM users WHERE is_active = 1 ORDER BY full_name'
 )->fetchAll();
 
@@ -29,6 +50,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $student_department = trim($_POST['student_department'] ?? '');
     $student_program    = trim($_POST['student_program']    ?? '');
     $student_batch      = trim($_POST['student_batch']      ?? '');
+
+    // Portal students: force identity fields from their profile and drop any tags
+    if ($is_portal) {
+        $tag_users = [];
+        $user_type = 'Student';
+        if ($portal_student) {
+            $student_id         = (string)($portal_student['student_id'] ?? '');
+            $student_department = (string)($portal_student['dept_name'] ?? '');
+            $student_program    = (string)($portal_student['program_name'] ?? '');
+            $batch_label        = (string)($portal_student['batch_name'] ?? '');
+            $section_label      = trim((string)($portal_student['section'] ?? ''));
+            if ($section_label !== '') {
+                $batch_label .= ($batch_label !== '' ? ' – ' : '') . 'Section ' . $section_label;
+            }
+            $student_batch = $batch_label;
+        }
+        if ($department === '' && $student_department !== '') {
+            $department = $student_department;
+        }
+    }
 
     $valid_cats   = ['Hardware','Software','Network','Email','Other'];
     $valid_prios  = ['Low','Medium','High','Critical'];
@@ -246,6 +287,15 @@ require_once __DIR__ . '/../includes/header.php';
                     <?php if (!empty($user['username'])): ?>
                     <p class="mb-0 text-muted" style="font-size:.82rem;">@<?= h($user['username']) ?></p>
                     <?php endif; ?>
+                    <?php if ($portal_student): ?>
+                    <hr class="my-2">
+                    <p class="mb-1" style="font-size:.82rem;"><strong>Student ID:</strong> <?= h($portal_student['student_id'] ?? '—') ?></p>
+                    <p class="mb-1" style="font-size:.82rem;"><strong>Department:</strong> <?= h($portal_student['dept_name'] ?? '—') ?></p>
+                    <p class="mb-1" style="font-size:.82rem;"><strong>Program:</strong> <?= h($portal_student['program_name'] ?? '—') ?></p>
+                    <p class="mb-1" style="font-size:.82rem;"><strong>Batch:</strong> <?= h($portal_student['batch_name'] ?? '—') ?></p>
+                    <p class="mb-0" style="font-size:.82rem;"><strong>Section:</strong> <?= h($portal_student['section'] ?? '—') ?></p>
+                    <div class="form-text mt-2" style="font-size:.75rem;">This information is attached to your ticket automatically.</div>
+                    <?php endif; ?>
                 </div>
             </div>
 
@@ -280,9 +330,10 @@ require_once __DIR__ . '/../includes/header.php';
                     <div class="mb-3">
                         <label class="form-label fw-medium">Department</label>
                         <input type="text" name="department" class="form-control"
-                               value="<?= old('department') ?>" placeholder="e.g. Computer Science" maxlength="200">
+                               value="<?= old('department', $portal_student['dept_name'] ?? '') ?>" placeholder="e.g. Computer Science" maxlength="200">
                     </div>
 
+                    <?php if (!$is_portal): ?>
                     <!-- User Type section -->
                     <div class="mb-3">
                         <label class="form-label fw-medium">User Type</label>
@@ -327,6 +378,7 @@ require_once __DIR__ . '/../includes/header.php';
                                    value="<?= old('student_department') ?>" placeholder="e.g. Computer Science" maxlength="200">
                         </div>
                     </div>
+                    <?php endif; ?>
 
                     <div class="mb-3">
                         <label class="form-label fw-medium">Custom Deadline</label>
@@ -335,6 +387,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <div class="form-text">Leave blank to use the SLA-based deadline.</div>
                     </div>
 
+                    <?php if (!$is_portal): ?>
                     <div class="mb-4">
                         <label class="form-label fw-medium">
                             <i class="fas fa-tags me-1 text-muted"></i> Tag Users
@@ -348,6 +401,7 @@ require_once __DIR__ . '/../includes/header.php';
                         </select>
                         <div class="form-text">Hold Ctrl/⌘ to select multiple. Tagged users receive an email notification.<br>You can also <code>@username</code> in comments to notify specific users.</div>
                     </div>
+                    <?php endif; ?>
 
                     <div class="d-grid gap-2">
                         <button type="submit" class="btn btn-primary" style="border-radius:10px;">
@@ -400,11 +454,14 @@ document.getElementById('attachments').addEventListener('change', function () {
 });
 
 function toggleUserTypeFields(val) {
-    document.getElementById('student_fields').style.display = (val === 'Student') ? '' : 'none';
-    document.getElementById('faculty_fields').style.display = (val === 'Faculty' || val === 'Administrative Employee') ? '' : 'none';
+    const sf = document.getElementById('student_fields');
+    const ff = document.getElementById('faculty_fields');
+    if (sf) sf.style.display = (val === 'Student') ? '' : 'none';
+    if (ff) ff.style.display = (val === 'Faculty' || val === 'Administrative Employee') ? '' : 'none';
 }
-// Init on page load
-toggleUserTypeFields(document.getElementById('user_type_select').value);
+// Init on page load (elements are absent for student portal users)
+const _utSel = document.getElementById('user_type_select');
+if (_utSel) toggleUserTypeFields(_utSel.value);
 </script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
