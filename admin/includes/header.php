@@ -368,6 +368,14 @@ if (is_portal_student()) {
                 <i class="fas fa-id-card"></i> My Admit Card
             </a>
         </li>
+        <?php if (can_access('support-tickets')): ?>
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/support-tickets/index.php"
+               class="<?= strpos($current_path, '/support-tickets/') !== false ? 'active' : '' ?>">
+                <i class="fas fa-ticket-alt"></i> IT Support
+            </a>
+        </li>
+        <?php endif; ?>
     </ul>
     <?php else: ?>
 
