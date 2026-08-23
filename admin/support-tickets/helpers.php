@@ -412,6 +412,24 @@ function st_notify_tagged(array $ticket, array $tagged_user, array $tagger): voi
     ]);
 }
 
+/**
+ * Best-effort FCM push notification to a user's registered mobile devices
+ * (student portal app). Never throws – failures are logged and the web
+ * flow continues normally.
+ */
+function st_push_to_user(?int $user_id, string $title, string $body, array $data = []): void
+{
+    if (!$user_id) return;
+    try {
+        require_once __DIR__ . '/../api/includes/fcm.php';
+        if (function_exists('send_push_notification')) {
+            send_push_notification([$user_id], $title, $body, $data);
+        }
+    } catch (Throwable $e) {
+        error_log('support-tickets: push to user ' . $user_id . ' failed – ' . $e->getMessage());
+    }
+}
+
 // ── Fetch + access-gate a single ticket ──────────────────────────────────────
 
 function st_get_ticket(int $id): array
