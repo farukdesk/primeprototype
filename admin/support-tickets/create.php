@@ -55,8 +55,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($is_portal) {
         $tag_users = [];
         $user_type = 'Student';
-        $priority  = 'Medium';   // students cannot choose a priority
-        $deadline  = '';         // students always get the SLA-based deadline
         if ($portal_student) {
             $student_id         = (string)($portal_student['student_id'] ?? '');
             $student_department = (string)($portal_student['dept_name'] ?? '');
@@ -68,12 +66,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $student_batch = $batch_label;
         }
-        if ($student_department !== '') {
+        if ($department === '' && $student_department !== '') {
             $department = $student_department;
         }
     }
 
-    $valid_cats   = ['Hardware','Software','Network','Email','Student Finance Issues','Student Issue','Other'];
+    $valid_cats   = ['Hardware','Software','Network','Email','Other'];
     $valid_prios  = ['Low','Medium','High','Critical'];
     $valid_utypes = ['','Student','Faculty','Administrative Employee'];
 
@@ -312,13 +310,12 @@ require_once __DIR__ . '/../includes/header.php';
                     <div class="mb-3">
                         <label class="form-label fw-medium">Category <span class="text-danger">*</span></label>
                         <select name="category" class="form-select">
-                            <?php foreach (['Hardware','Software','Network','Email','Student Finance Issues','Student Issue','Other'] as $cat): ?>
+                            <?php foreach (['Hardware','Software','Network','Email','Other'] as $cat): ?>
                             <option value="<?= $cat ?>" <?= old('category','Other') === $cat ? 'selected' : '' ?>><?= $cat ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
 
-                    <?php if (!$is_portal): ?>
                     <div class="mb-3">
                         <label class="form-label fw-medium">Priority <span class="text-danger">*</span></label>
                         <select name="priority" id="priority_select" class="form-select"
@@ -329,15 +326,12 @@ require_once __DIR__ . '/../includes/header.php';
                         </select>
                         <div id="sla_hint" class="form-text text-muted mt-1"></div>
                     </div>
-                    <?php endif; ?>
 
-                    <?php if (!$is_portal): ?>
                     <div class="mb-3">
                         <label class="form-label fw-medium">Department</label>
                         <input type="text" name="department" class="form-control"
-                               value="<?= old('department') ?>" placeholder="e.g. Computer Science" maxlength="200">
+                               value="<?= old('department', $portal_student['dept_name'] ?? '') ?>" placeholder="e.g. Computer Science" maxlength="200">
                     </div>
-                    <?php endif; ?>
 
                     <?php if (!$is_portal): ?>
                     <!-- User Type section -->
@@ -386,14 +380,12 @@ require_once __DIR__ . '/../includes/header.php';
                     </div>
                     <?php endif; ?>
 
-                    <?php if (!$is_portal): ?>
                     <div class="mb-3">
                         <label class="form-label fw-medium">Custom Deadline</label>
                         <input type="datetime-local" name="deadline" class="form-control"
                                value="<?= old('deadline') ?>" min="<?= date('Y-m-d\TH:i') ?>">
                         <div class="form-text">Leave blank to use the SLA-based deadline.</div>
                     </div>
-                    <?php endif; ?>
 
                     <?php if (!$is_portal): ?>
                     <div class="mb-4">
@@ -442,11 +434,9 @@ tinymce.init({
 const slaMap = { Low: '5 days', Medium: '3 days', High: '1 day', Critical: '4 hours' };
 function updateSlaHint(priority) {
     const hint = document.getElementById('sla_hint');
-    if (hint) hint.textContent = slaMap[priority] ? 'SLA: ' + slaMap[priority] : '';
+    hint.textContent = slaMap[priority] ? 'SLA: ' + slaMap[priority] : '';
 }
-// Priority select is absent for student portal users
-const _prioSel = document.getElementById('priority_select');
-if (_prioSel) updateSlaHint(_prioSel.value);
+updateSlaHint(document.getElementById('priority_select').value);
 
 document.getElementById('attachments').addEventListener('change', function () {
     const preview = document.getElementById('file-preview');
