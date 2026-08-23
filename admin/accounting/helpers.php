@@ -1571,15 +1571,11 @@ function acc_package_bi_tri_shift_fee(array $pkg): float
 
 function acc_package_payment_start(array $pkg, array $semester_fees = []): array
 {
-    $note = (string)($pkg['note'] ?? '');
-    if (preg_match('/Payment start:\s*(\d{1,2})-(\d{4})/i', $note, $m)) {
-        $month = (int)$m[1];
-        $year  = (int)$m[2];
-        if ($month >= 1 && $month <= 12) {
-            return ['month' => $month, 'year' => $year];
-        }
-    }
-
+    // Month: the snapshotted package start-month columns win over the legacy
+    // "Payment start: M-YYYY" import note (see acc_package_start_month), so
+    // editing the start month on a student account actually moves the schedule.
+    // Year: still taken from the import note when present (the columns only
+    // store a month), falling back to semester labels / admitted semester.
     return [
         'month' => acc_package_start_month($pkg),
         'year'  => acc_package_start_year($pkg, $semester_fees),
@@ -3196,6 +3192,22 @@ function acc_find_payment_by_transaction_number(string $transaction_number): ?ar
  */
 function acc_package_start_month(array $pkg): int
 {
+    // 1. Explicitly snapshotted start month on the package. This is what the
+    //    admin edits (single or bulk edit), so it must take precedence over the
+    //    legacy "Payment start: M-YYYY" import note. The old-ERP import writes
+    //    both the note and these columns with the same value, so untouched
+    //    imported packages behave exactly as before.
+    $total_semesters = (int)($pkg['total_semesters'] ?? 0);
+    $is_bi = $total_semesters > 0 && $total_semesters <= 8;
+    $start = $is_bi
+        ? (int)($pkg['bi_semester_start_month'] ?? 0)
+        : (int)($pkg['tri_semester_start_month'] ?? 0);
+    if ($start >= 1 && $start <= 12) {
+        return $start;
+    }
+
+    // 2. Legacy import note marker (packages imported before the start-month
+    //    columns were backfilled).
     $note = (string)($pkg['note'] ?? '');
     if (preg_match('/Payment start:\s*(\d{1,2})-(\d{4})/i', $note, $m)) {
         $month = (int)$m[1];
@@ -3204,16 +3216,10 @@ function acc_package_start_month(array $pkg): int
         }
     }
 
-    $total_semesters = (int)($pkg['total_semesters'] ?? 0);
-    $is_bi = $total_semesters > 0 && $total_semesters <= 8;
+    // 3. Live linked programme settings, then a safe default.
     $start = $is_bi
-        ? (int)($pkg['bi_semester_start_month'] ?? 0)
-        : (int)($pkg['tri_semester_start_month'] ?? 0);
-    if ($start < 1 || $start > 12) {
-        $start = $is_bi
-            ? (int)($pkg['linked_bi_semester_start_month'] ?? 0)
-            : (int)($pkg['linked_tri_semester_start_month'] ?? 0);
-    }
+        ? (int)($pkg['linked_bi_semester_start_month'] ?? 0)
+        : (int)($pkg['linked_tri_semester_start_month'] ?? 0);
     return ($start >= 1 && $start <= 12) ? $start : 1;
 }
 
