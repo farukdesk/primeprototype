@@ -29,6 +29,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['bulk_action'] ?? '') !== 
         $st = db()->prepare("UPDATE ac_admit_cards SET is_active = ? WHERE id IN ($ph)");
         $st->execute(array_merge([$bulk_act === 'activate' ? 1 : 0], $bulk_ids));
         flash_set('success', $st->rowCount() . ' admit card(s) ' . ($bulk_act === 'activate' ? 'activated' : 'deactivated') . '.');
+    } elseif ($bulk_act === 'grant_override') {
+        // Batch-wise override from the index: every student covered by each
+        // selected card gets a download override (bypasses the ৳500 due limit).
+        $granted = 0;
+        try {
+            $ins = db()->prepare(
+                'INSERT INTO ac_student_overrides (admit_card_id, student_id, allowed_by, note)
+                 VALUES (?,?,?,?)
+                 ON DUPLICATE KEY UPDATE allowed_by=VALUES(allowed_by), note=VALUES(note), created_at=NOW()'
+            );
+            foreach ($bulk_ids as $ov_cid) {
+                $ov_note = 'Bulk override: all students of card #' . $ov_cid;
+                foreach (ac_card_student_ids($ov_cid) as $ov_sid) {
+                    $ins->execute([$ov_cid, $ov_sid, auth_user()['id'], $ov_note]);
+                    $granted++;
+                }
+            }
+            flash_set('success', 'Override granted to ' . $granted . ' student(s) across ' . count($bulk_ids) . ' admit card(s). They can now download even with dues.');
+        } catch (Throwable $e) {
+            flash_set('danger', 'Could not grant overrides: ' . $e->getMessage());
+        }
+    } elseif ($bulk_act === 'remove_override') {
+        $ph = implode(',', array_fill(0, count($bulk_ids), '?'));
+        $st = db()->prepare("DELETE FROM ac_student_overrides WHERE admit_card_id IN ($ph)");
+        $st->execute($bulk_ids);
+        flash_set('success', $st->rowCount() . ' override(s) removed from ' . count($bulk_ids) . ' admit card(s).');
     } elseif ($bulk_act === 'delete') {
         $ph = implode(',', array_fill(0, count($bulk_ids), '?'));
         $st = db()->prepare("DELETE FROM ac_admit_cards WHERE id IN ($ph)");
@@ -410,6 +436,14 @@ require_once __DIR__ . '/../includes/header.php';
         <button type="submit" name="bulk_action" value="deactivate" class="btn btn-sm btn-outline-secondary" style="border-radius:8px;"
                 onclick="return confirm('Deactivate the selected admit card(s)? They are hidden from students.')">
             <i class="fas fa-toggle-off me-1"></i>Deactivate selected
+        </button>
+        <button type="submit" name="bulk_action" value="grant_override" class="btn btn-sm btn-outline-warning" style="border-radius:8px;"
+                onclick="return confirm('Grant download override to ALL students of the selected admit card(s)? They can download their admit cards even if their dues exceed ৳500.')">
+            <i class="fas fa-unlock-alt me-1"></i>Grant override (all students)
+        </button>
+        <button type="submit" name="bulk_action" value="remove_override" class="btn btn-sm btn-outline-dark" style="border-radius:8px;"
+                onclick="return confirm('Remove ALL download overrides of the selected admit card(s)? The ৳500 due limit applies again.')">
+            <i class="fas fa-lock me-1"></i>Remove overrides
         </button>
         <?php endif; ?>
         <?php if (ac_can_delete()): ?>
