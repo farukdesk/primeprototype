@@ -80,6 +80,17 @@
             android:exported="false"
             android:parentActivityName=".ui.main.MainActivity" />
 
+        <activity
+            android:name=".ui.support.SupportTicketsActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.main.MainActivity" />
+
+        <activity
+            android:name=".ui.support.SupportTicketCreateActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.support.SupportTicketsActivity"
+            android:windowSoftInputMode="adjustResize" />
+
         <!-- Shares downloaded admit card PDFs with external viewer apps. -->
         <provider
             android:name="androidx.core.content.FileProvider"

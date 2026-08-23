@@ -25,6 +25,8 @@ import bd.ac.primeuniversity.studentportal.data.model.SaveStudentAttendanceRespo
 import bd.ac.primeuniversity.studentportal.data.model.StaffLoginResponse
 import bd.ac.primeuniversity.studentportal.data.model.StaffMeResponse
 import bd.ac.primeuniversity.studentportal.data.model.SubjectStudentsResponse
+import bd.ac.primeuniversity.studentportal.data.model.SupportTicketCreateResponse
+import bd.ac.primeuniversity.studentportal.data.model.SupportTicketsResponse
 import bd.ac.primeuniversity.studentportal.data.model.TeachSubjectsResponse
 import bd.ac.primeuniversity.studentportal.util.AppResult
 import com.google.gson.Gson
@@ -180,6 +182,20 @@ class StudentRepository private constructor(context: Context) {
         }
 
     // ── Announcements (push notification history) ─────────────────────────────────────
+
+    // ── IT Support tickets (students only) ──────────────────────────────────────────
+
+    /** The signed-in student's IT support tickets (newest first). */
+    suspend fun getSupportTickets(): AppResult<SupportTicketsResponse> =
+        call { api.getSupportTickets() }
+
+    /** Create a new IT support ticket. Priority/deadline follow the server-side SLA rules. */
+    suspend fun createSupportTicket(
+        title: String,
+        description: String,
+        category: String,
+    ): AppResult<SupportTicketCreateResponse> =
+        call { api.createSupportTicket(title, description, category) }
 
     /** Announcements published from the admin panel's App Notification module. */
     suspend fun getAppNotifications(page: Int = 1): AppResult<AppNotificationsResponse> =

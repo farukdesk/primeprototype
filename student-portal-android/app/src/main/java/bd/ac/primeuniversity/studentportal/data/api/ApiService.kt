@@ -9,6 +9,8 @@ import bd.ac.primeuniversity.studentportal.data.model.MeResponse
 import bd.ac.primeuniversity.studentportal.data.model.NoticeDetailResponse
 import bd.ac.primeuniversity.studentportal.data.model.NoticesResponse
 import bd.ac.primeuniversity.studentportal.data.model.SimpleResponse
+import bd.ac.primeuniversity.studentportal.data.model.SupportTicketCreateResponse
+import bd.ac.primeuniversity.studentportal.data.model.SupportTicketsResponse
 import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Field
@@ -78,6 +80,20 @@ interface ApiService {
         @Query("page") page: Int = 1,
         @Query("limit") limit: Int = 50,
     ): Response<AppNotificationsResponse>
+
+    @GET("support-tickets.php")
+    suspend fun getSupportTickets(
+        @Query("page") page: Int = 1,
+        @Query("limit") limit: Int = 50,
+    ): Response<SupportTicketsResponse>
+
+    @FormUrlEncoded
+    @POST("support-ticket-create.php")
+    suspend fun createSupportTicket(
+        @Field("title") title: String,
+        @Field("description") description: String,
+        @Field("category") category: String,
+    ): Response<SupportTicketCreateResponse>
 
     @FormUrlEncoded
     @POST("push/register.php")
