@@ -605,10 +605,14 @@ function fmt(n) {
 function feeTypeLabel(type) {
     const map = {
         admission:        'Admission Fee',
+        form_fee:         'Form Fee',
+        id_card_fee:      'ID Card Fee',
         registration:     'Registration Fee',
         semester_tuition: 'Tuition Fee',
         fixed_fee:        'Institutional Fee',
         english_fee:      'English Course Fee',
+        project_fee:      'Project Fee',
+        bi_tri_shift_fee: 'Bi-Tri Shift Merge Fee',
         other:            'Other Fee',
     };
     return map[type] || type;
@@ -751,6 +755,12 @@ function renderFeeSummary(data) {
 
     addSectionRow('Admission', []);
     addRow('Admission Fee', t.admission.due, t.admission.paid, t.admission.out, null, null);
+    if (t.form_fee && (t.form_fee.due > 0 || t.form_fee.paid > 0)) {
+        addRow('Form Fee', t.form_fee.due, t.form_fee.paid, t.form_fee.out, null, null);
+    }
+    if (t.id_card_fee && (t.id_card_fee.due > 0 || t.id_card_fee.paid > 0)) {
+        addRow('ID Card Fee', t.id_card_fee.due, t.id_card_fee.paid, t.id_card_fee.out, null, null);
+    }
 
     s.semesters.forEach(sf => {
         const semLabel = sf.semester_label || ('Semester ' + sf.semester_number);
@@ -770,6 +780,34 @@ function renderFeeSummary(data) {
             );
         });
     });
+
+    // Bi-Tri Shift Merge fee – extra months appended after the last semester
+    const bitriMonths = (s.bi_tri_shift && s.bi_tri_shift.months) ? s.bi_tri_shift.months : [];
+    if (bitriMonths.length > 0) {
+        addSectionRow('Bi-Tri Shift Merge Fee', []);
+        bitriMonths.forEach(mr => {
+            addRow(
+                'Extra Month ' + mr.month_number + (mr.month_label ? ' (' + mr.month_label + ')' : ''),
+                mr.due, mr.paid, mr.out,
+                mr.cal_month || null,
+                mr.cal_year  || null
+            );
+        });
+    }
+
+    // One-time Project Fee (falls due with the final semester)
+    if (t.project_fee && (t.project_fee.due > 0 || t.project_fee.paid > 0)) {
+        let projCalMonth = null, projCalYear = null;
+        const lastRows = bitriMonths.length > 0
+            ? bitriMonths
+            : (s.semesters.length > 0 ? (s.semesters[s.semesters.length - 1].monthly_rows || []) : []);
+        if (lastRows.length > 0) {
+            projCalMonth = lastRows[lastRows.length - 1].cal_month || null;
+            projCalYear  = lastRows[lastRows.length - 1].cal_year  || null;
+        }
+        addSectionRow('Project Fee', []);
+        addRow('Project Fee (one-time)', t.project_fee.due, t.project_fee.paid, t.project_fee.out, projCalMonth, projCalYear);
+    }
 
     document.getElementById('footTotalDue').textContent  = fmt(grandDue);
     document.getElementById('footTotalPaid').textContent = fmt(grandPaid);
