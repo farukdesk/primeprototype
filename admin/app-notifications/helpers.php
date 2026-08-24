@@ -335,6 +335,8 @@ function apn_device_count(): int
 function apn_status_badge(string $status): string
 {
     return match ($status) {
+        'queued'  => '<span class="badge bg-secondary">Queued</span>',
+        'sending' => '<span class="badge bg-info text-dark">Sending…</span>',
         'sent'    => '<span class="badge bg-success">Sent</span>',
         'partial' => '<span class="badge bg-warning text-dark">Partial</span>',
         default   => '<span class="badge bg-danger">Failed</span>',

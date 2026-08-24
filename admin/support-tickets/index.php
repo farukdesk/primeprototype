@@ -12,7 +12,20 @@ $search      = trim($_GET['search']   ?? '');
 $f_status    = $_GET['status']        ?? '';
 $f_priority  = $_GET['priority']      ?? '';
 $f_category  = $_GET['category']      ?? '';
+$f_from      = trim($_GET['from']     ?? '');
+$f_to        = trim($_GET['to']       ?? '');
 $assigned_me = $is_staff && isset($_GET['assigned_me']);
+
+// Only accept real calendar dates (YYYY-MM-DD) from the date pickers.
+$st_valid_date = static function (string $d): bool {
+    $t = DateTime::createFromFormat('Y-m-d', $d);
+    return $t !== false && $t->format('Y-m-d') === $d;
+};
+if ($f_from !== '' && !$st_valid_date($f_from)) $f_from = '';
+if ($f_to   !== '' && !$st_valid_date($f_to))   $f_to = '';
+if ($f_from !== '' && $f_to !== '' && $f_from > $f_to) {
+    [$f_from, $f_to] = [$f_to, $f_from];
+}
 
 $valid_statuses   = ['Open','In Progress','Pending','Resolved','Closed','Reopened'];
 $valid_priorities = ['Low','Medium','High','Critical'];
