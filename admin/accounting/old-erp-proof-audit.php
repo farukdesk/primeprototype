@@ -215,10 +215,15 @@ function oepa_student_snapshot(int $student_pk): ?array
 
     // Everything RECEIVED for this student in the current ERP — every fee
     // head (admission, form, ID card, registration, tuition, other) and every
-    // method (old-ERP memos and this-ERP collections alike). Compared with
-    // the sum of the proof's "Received amount" column.
+    // method (old-ERP memos and this-ERP collections alike), plus the
+    // old-ERP-method share per fee head. The old-ERP share across ALL heads
+    // is reconciled against the proof total: what was collected in the OLD
+    // ERP must match what was merged into THIS ERP as old-ERP records
+    // (±100 BDT), otherwise the student is flagged with the actual issue.
     $rcv = db()->prepare(
-        "SELECT sp.fee_type, COALESCE(SUM(sp.amount), 0) AS total
+        "SELECT sp.fee_type,
+                COALESCE(SUM(sp.amount), 0) AS total,
+                COALESCE(SUM(CASE WHEN sp.payment_method = 'old_erp' THEN sp.amount ELSE 0 END), 0) AS old_erp_amt
          FROM sfp_payments sp
          JOIN acc_vouchers v ON v.id = sp.voucher_id
          WHERE sp.student_id = ?
@@ -228,9 +233,11 @@ function oepa_student_snapshot(int $student_pk): ?array
     );
     $rcv->execute([$student_pk]);
     $received_total = 0.0;
+    $old_erp_all    = 0.0;
     $heads = ['admission' => 0.0, 'form_fee' => 0.0, 'id_card_fee' => 0.0, 'registration' => 0.0];
     foreach ($rcv->fetchAll() as $r) {
         $received_total += (float)$r['total'];
+        $old_erp_all    += (float)$r['old_erp_amt'];
         $ft = (string)$r['fee_type'];
         if (array_key_exists($ft, $heads)) {
             $heads[$ft] = round((float)$r['total'], 2);
@@ -244,6 +251,7 @@ function oepa_student_snapshot(int $student_pk): ?array
         'old_erp_total'      => round($oe_total, 2),
         'old_erp_count'      => $oe_count,
         'old_erp_unlinked'   => round($unlinked, 2),
+        'old_erp_all_total'  => round($old_erp_all, 2),
         'erp_received_total' => round($received_total, 2),
         'erp_heads'          => $heads,
     ];
@@ -978,7 +986,12 @@ require_once __DIR__ . '/../includes/header.php';
             tuition + Admission + Registration + the bottom <em>Admission Form &amp; ID Card
             Fee</em> line) and compares it with the <strong>total received in this ERP</strong>
             across all fee heads and payment methods; a shortfall is flagged as
-            <strong>RECEIVED TOTAL SHORT</strong>. The old ERP's own printed Total is never
+            <strong>RECEIVED TOTAL SHORT</strong>. On top of that it reconciles the
+            <strong>old-ERP merge</strong>: the proof's total (money collected in the OLD ERP)
+            must match the money merged into this ERP with the old-ERP method across all fee
+            heads — up to 100 BDT difference is fine, anything more is flagged
+            <strong>OLD-ERP MERGE MISMATCH</strong> with the exact issue written on the row.
+            The old ERP's own printed Total is never
             trusted: the line-by-line sum is used, and a wrong printed Total is reported.
             The fix is recomputed server-side, capped at the outstanding balance <em>and</em> at
             the <strong>global old-ERP deficit</strong> (proof total minus ALL old-ERP records,
@@ -1407,6 +1420,40 @@ require_once __DIR__ . '/../includes/header.php';
             notes.push('The ERP holds ' + fmt(-recvDiff)
                 + ' MORE than the proof sum - payments collected in this ERP after the screenshot are normal.');
         }
+        // OLD-ERP MERGE reconciliation (the main check): money collected in
+        // the OLD ERP (the proof's line-by-line total) must equal the money
+        // merged into THIS ERP with the old-ERP method across ALL fee heads.
+        // Up to CFG.flagTol (100 BDT) difference is fine; beyond that the
+        // student is flagged with the actual issue spelled out.
+        var mergedOldErp = item.old_erp_all_total || 0;
+        var mergeDiff = Math.round((parsed.sum - mergedOldErp) * 100) / 100;
+        var mergeMismatch = Math.abs(mergeDiff) > CFG.flagTol;
+        if (mergeMismatch) {
+            if (mergeDiff > 0) {
+                var monthlyShort = Math.round(Math.min(missing, mergeDiff) * 100) / 100;
+                var headsShort   = Math.round((mergeDiff - monthlyShort) * 100) / 100;
+                var why = [];
+                if (monthlyShort > CFG.lineTol) {
+                    why.push(fmt(monthlyShort) + ' is missing monthly tuition (auto-fixable with the Fix button)');
+                }
+                if (headsShort > CFG.lineTol) {
+                    why.push(fmt(headsShort) + ' sits on one-time heads (Admission / Registration / Form & ID Card) or unreadable proof lines - merge or record these manually');
+                }
+                notes.push('OLD-ERP MERGE MISMATCH: the proof shows ' + fmt(parsed.sum)
+                    + ' collected in the OLD ERP but only ' + fmt(mergedOldErp)
+                    + ' is merged into this ERP as old-ERP records - ' + fmt(mergeDiff) + ' short'
+                    + (why.length ? ': ' + why.join('; ') : '') + '.');
+            } else {
+                notes.push('OLD-ERP MERGE MISMATCH: this ERP holds ' + fmt(-mergeDiff)
+                    + ' MORE old-ERP records than the proof shows collected in the OLD ERP - '
+                    + 'duplicate merge, or a payment wrongly recorded with the old-ERP method. '
+                    + 'Monthly duplicates are cleaned by Fix (delete & re-merge); check other fee heads manually.');
+            }
+        } else {
+            notes.push('Old-ERP merge matches the proof: ' + fmt(parsed.sum)
+                + ' collected in the OLD ERP vs ' + fmt(mergedOldErp)
+                + ' merged here (difference ' + fmt(Math.abs(mergeDiff)) + ', within 100).');
+        }
         if (skipped > 0) {
             notes.push(skipped + ' suspicious OCR line(s) skipped.');
         }
@@ -1422,12 +1469,14 @@ require_once __DIR__ . '/../includes/header.php';
             recvDiff: recvDiff,
             missing: Math.round(missing * 100) / 100,
             dup: dup,
+            mergeDiff: mergeDiff,
+            mergeMismatch: mergeMismatch,
             fixable: Math.min(missing, item.total_out),
             skipped: skipped,
             notes: notes,
             canFix: canFix,
             totalShort: totalShort,
-            flagged: canFix || totalShort
+            flagged: canFix || totalShort || mergeMismatch
         };
     }
 
@@ -1440,7 +1489,8 @@ require_once __DIR__ . '/../includes/header.php';
         var badge = status === 'ok'
             ? '<span class="badge bg-success">OK</span>'
             : status === 'issue'
-                ? ((cmp && cmp.dup > CFG.flagTol ? '<span class="badge bg-danger">DUPLICATE IMPORT</span> ' : '')
+                ? ((cmp && cmp.mergeMismatch ? '<span class="badge bg-danger">OLD-ERP MERGE MISMATCH</span> ' : '')
+                    + (cmp && cmp.dup > CFG.flagTol ? '<span class="badge bg-danger">DUPLICATE IMPORT</span> ' : '')
                     + (cmp && cmp.canFix && cmp.missing > CFG.flagTol ? '<span class="badge bg-danger">MISSING PAYMENTS</span> ' : '')
                     + (cmp && cmp.totalShort ? '<span class="badge bg-danger">RECEIVED TOTAL SHORT</span>' : ''))
                 : status === 'fixed'
@@ -1457,7 +1507,8 @@ require_once __DIR__ . '/../includes/header.php';
         tr.innerHTML =
             '<td>' + esc(item.name) + '<br><small class="text-muted">' + esc(item.sid) + '</small></td>' +
             '<td class="text-end">' + (cmp ? fmt(cmp.proofSum) : '—') + '</td>' +
-            '<td class="text-end">' + fmt(item.erp_received_total) + '</td>' +
+            '<td class="text-end">' + fmt(item.erp_received_total)
+                + '<br><small class="text-muted">old-ERP: ' + fmt(item.old_erp_all_total || 0) + '</small></td>' +
             '<td class="text-end fw-semibold">' + (cmp ? fmt(cmp.recvDiff) : '—') + '</td>' +
             '<td class="text-end">' + fmt(item.total_out) + '</td>' +
             '<td class="text-end fw-semibold">' + (cmp ? fmt(cmp.missing) : '—') + '</td>' +
