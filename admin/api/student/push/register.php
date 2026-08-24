@@ -94,4 +94,22 @@ try {
     sp_api_error(500, 'Could not register the device. Please try again later.');
 }
 
+// A physical device only ever belongs to the account that is currently signed
+// in on it. Remove rows that map this token (or this device) to any OTHER
+// account — otherwise every account that ever signed in on the phone keeps
+// receiving its own copy of each push (duplicate notifications).
+try {
+    db()->prepare('DELETE FROM student_push_tokens WHERE fcm_token = ? AND user_id != ?')
+       ->execute([$fcm_token, $user_id]);
+    if ($device_id !== '') {
+        db()->prepare('DELETE FROM student_push_tokens WHERE device_id = ? AND user_id != ?')
+           ->execute([$device_id, $user_id]);
+    }
+    // The device may also still be registered under an employee account that
+    // signed in to the app earlier (api_push_tokens).
+    db()->prepare('DELETE FROM api_push_tokens WHERE fcm_token = ?')->execute([$fcm_token]);
+} catch (Throwable $e) {
+    error_log('Student push register: stale token cleanup failed – ' . $e->getMessage());
+}
+
 sp_api_ok(['message' => 'Push token registered.']);

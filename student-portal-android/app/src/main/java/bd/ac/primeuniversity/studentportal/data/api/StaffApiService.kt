@@ -140,4 +140,12 @@ interface StaffApiService {
         @Field("platform") platform: String = "android",
         @Field("app_version") appVersion: String = "",
     ): Response<SimpleResponse>
+
+    /** Removes this device's push registration (called on logout). */
+    @FormUrlEncoded
+    @POST("push/unregister.php")
+    suspend fun unregisterPushToken(
+        @Field("fcm_token") fcmToken: String,
+        @Field("device_id") deviceId: String,
+    ): Response<SimpleResponse>
 }

@@ -222,9 +222,12 @@ function apn_send_to_all_students(string $title, string $body, ?string $url = nu
         return $result;
     }
 
+    // GROUP BY fcm_token: one send per physical device, even when several
+    // accounts on the same phone registered the same token.
     $tokens = db()->query(
-        "SELECT id, fcm_token FROM student_push_tokens
-         WHERE fcm_token IS NOT NULL AND fcm_token != ''"
+        "SELECT MIN(id) AS id, fcm_token FROM student_push_tokens
+         WHERE fcm_token IS NOT NULL AND fcm_token != ''
+         GROUP BY fcm_token"
     )->fetchAll(PDO::FETCH_ASSOC);
 
     $result['total'] = count($tokens);
@@ -467,6 +470,20 @@ function apn_send_to_audience(string $audience, string $title, string $body, ?st
     $collected        = apn_collect_tokens($audience, $user_id, $group_id, $employee_type);
     $tokens           = $collected['tokens'];
     $result['detail'] = $collected['detail'];
+
+    // The same physical device can be registered more than once (several
+    // accounts signed in on one phone, or the same user in both token tables).
+    // Send at most one push per FCM token so nobody receives duplicate copies
+    // of the same notification.
+    $seen   = [];
+    $tokens = array_values(array_filter($tokens, static function (array $t) use (&$seen): bool {
+        if (isset($seen[$t['fcm_token']])) {
+            return false;
+        }
+        $seen[$t['fcm_token']] = true;
+        return true;
+    }));
+
     $result['total']  = count($tokens);
     if ($result['total'] === 0) {
         $result['status'] = 'sent';

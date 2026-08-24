@@ -445,7 +445,14 @@ function st_push_to_user(?int $user_id, string $title, string $body, array $data
             }
         }
 
+        // One push per FCM token: the same device may appear in both token
+        // tables or in multiple rows.
+        $seen = [];
         foreach ($targets as $t) {
+            if (isset($seen[$t['token']])) {
+                continue;
+            }
+            $seen[$t['token']] = true;
             $r = apn_fcm_send_single($access, $sa['project_id'], $t['token'], $title, $body, $data);
             if (!$r['ok'] && $r['unregister']) {
                 try {

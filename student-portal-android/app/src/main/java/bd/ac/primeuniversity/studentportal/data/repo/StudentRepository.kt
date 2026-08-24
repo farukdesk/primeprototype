@@ -111,12 +111,47 @@ class StudentRepository private constructor(context: Context) {
     suspend fun logout() {
         withContext(Dispatchers.IO) {
             try {
+                // Detach this device's push registration first so the next
+                // account that signs in on this phone does not keep receiving
+                // this user's notifications (and vice versa).
+                val fcm = storage.fcmToken
+                if (!fcm.isNullOrBlank()) {
+                    if (isStaff) staffApi.unregisterPushToken(fcm, storage.deviceId)
+                    else api.unregisterPushToken(fcm, storage.deviceId)
+                }
+            } catch (_: Exception) {
+                // Best-effort only.
+            }
+            try {
                 if (isStaff) staffApi.logout() else api.logout()
             } catch (_: Exception) {
                 // Best-effort; clear the local session regardless.
             }
             storage.clear()
             sessionExpired = false
+        }
+    }
+
+    /** Uploads a new profile photo for the signed-in student. */
+    suspend fun uploadProfilePhoto(photo: Uri): AppResult<SimpleResponse> {
+        val part = buildPhotoPart(photo)
+            ?: return AppResult.Error("Could not read the selected image.")
+        return call { api.uploadProfilePhoto(part) }
+    }
+
+    /** Reads a content Uri and wraps it as the multipart "photo" file part. */
+    private fun buildPhotoPart(uri: Uri): MultipartBody.Part? {
+        val resolver = appContext.contentResolver
+        return try {
+            val name = resolver.query(uri, null, null, null, null)?.use { c ->
+                val idx = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (c.moveToFirst() && idx >= 0) c.getString(idx) else null
+            } ?: uri.lastPathSegment ?: "photo.jpg"
+            val bytes = resolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
+            val mime = resolver.getType(uri) ?: "image/jpeg"
+            MultipartBody.Part.createFormData("photo", name, bytes.toRequestBody(mime.toMediaTypeOrNull()))
+        } catch (_: Exception) {
+            null
         }
     }
 

@@ -61,4 +61,25 @@ try {
     sp_api_error(500, 'Could not update the password. Please try again.');
 }
 
+// Changing the password signs the account out everywhere else: revoke every
+// other API session and drop the push registrations of all other devices so
+// they stop receiving this account's notifications.
+try {
+    db()->prepare('DELETE FROM api_tokens WHERE user_id = ? AND id != ?')
+       ->execute([$uid, (int)$ctx['user']['token_id']]);
+
+    $device_id = trim((string)($ctx['user']['device_id'] ?? ''));
+    if ($device_id !== '') {
+        db()->prepare(
+            'DELETE FROM student_push_tokens
+             WHERE user_id = ? AND (device_id IS NULL OR device_id != ?)'
+        )->execute([$uid, $device_id]);
+    } else {
+        db()->prepare('DELETE FROM student_push_tokens WHERE user_id = ?')->execute([$uid]);
+    }
+} catch (Throwable $e) {
+    // Best-effort: the password change itself already succeeded.
+    error_log('Student change-password: session revocation failed – ' . $e->getMessage());
+}
+
 sp_api_ok(['message' => 'Password changed successfully.']);
