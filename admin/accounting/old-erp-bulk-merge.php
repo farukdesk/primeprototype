@@ -2640,6 +2640,9 @@ require_once __DIR__ . '/../includes/header.php';
         </ol></nav>
     </div>
     <div class="d-flex gap-2 flex-wrap">
+        <a href="<?= APP_URL ?>/accounting/old-erp-proof-audit.php" class="btn btn-success btn-sm">
+            <i class="fas fa-magnifying-glass-dollar me-1"></i> Proof Audit &amp; Auto-Fix
+        </a>
         <a href="<?= APP_URL ?>/accounting/old-erp-remap.php" class="btn btn-warning btn-sm">
             <i class="fas fa-screwdriver-wrench me-1"></i> Fix Misaligned Months (Remap)
         </a>
