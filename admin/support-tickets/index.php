@@ -12,7 +12,20 @@ $search      = trim($_GET['search']   ?? '');
 $f_status    = $_GET['status']        ?? '';
 $f_priority  = $_GET['priority']      ?? '';
 $f_category  = $_GET['category']      ?? '';
+$f_from      = trim($_GET['from']     ?? '');
+$f_to        = trim($_GET['to']       ?? '');
 $assigned_me = $is_staff && isset($_GET['assigned_me']);
+
+// Only accept real calendar dates (YYYY-MM-DD) from the date pickers.
+$st_valid_date = static function (string $d): bool {
+    $t = DateTime::createFromFormat('Y-m-d', $d);
+    return $t !== false && $t->format('Y-m-d') === $d;
+};
+if ($f_from !== '' && !$st_valid_date($f_from)) $f_from = '';
+if ($f_to   !== '' && !$st_valid_date($f_to))   $f_to = '';
+if ($f_from !== '' && $f_to !== '' && $f_from > $f_to) {
+    [$f_from, $f_to] = [$f_to, $f_from];
+}
 
 $valid_statuses   = ['Open','In Progress','Pending','Resolved','Closed','Reopened'];
 $valid_priorities = ['Low','Medium','High','Critical'];
@@ -61,6 +74,14 @@ if (in_array($f_category, $valid_categories, true)) {
 if ($assigned_me) {
     $where[]  = 't.assigned_to = ?';
     $params[] = $user['id'];
+}
+if ($f_from !== '') {
+    $where[]  = 't.created_at >= ?';
+    $params[] = $f_from . ' 00:00:00';
+}
+if ($f_to !== '') {
+    $where[]  = 't.created_at <= ?';
+    $params[] = $f_to . ' 23:59:59';
 }
 
 $sql = 'SELECT t.*, COALESCE(u.full_name, t.submitter_name) AS creator_name, a.full_name AS assignee_name
@@ -210,6 +231,16 @@ require_once __DIR__ . '/../includes/header.php';
                 <option value="<?= h($c) ?>" <?= $f_category === $c ? 'selected' : '' ?>><?= h($c) ?></option>
                 <?php endforeach; ?>
             </select>
+            <div class="d-flex align-items-center gap-1">
+                <label class="text-muted" style="font-size:.8rem;white-space:nowrap;">From</label>
+                <input type="date" name="from" class="form-control" style="max-width:160px;border-radius:10px;"
+                       value="<?= h($f_from) ?>" title="Created on or after this date">
+            </div>
+            <div class="d-flex align-items-center gap-1">
+                <label class="text-muted" style="font-size:.8rem;white-space:nowrap;">To</label>
+                <input type="date" name="to" class="form-control" style="max-width:160px;border-radius:10px;"
+                       value="<?= h($f_to) ?>" title="Created on or before this date">
+            </div>
             <?php if ($is_staff): ?>
             <label class="form-check-label d-flex align-items-center gap-2" style="cursor:pointer;font-size:.875rem;white-space:nowrap;">
                 <input type="checkbox" class="form-check-input mt-0" name="assigned_me" value="1" <?= $assigned_me ? 'checked' : '' ?>> Assigned to me
@@ -218,7 +249,7 @@ require_once __DIR__ . '/../includes/header.php';
             <button class="btn btn-outline-primary" style="border-radius:10px;">
                 <i class="fas fa-search me-1"></i> Filter
             </button>
-            <?php if ($search || $f_status || $f_priority || $f_category || $assigned_me): ?>
+            <?php if ($search || $f_status || $f_priority || $f_category || $f_from || $f_to || $assigned_me): ?>
             <a href="<?= APP_URL ?>/support-tickets/index.php" class="btn btn-light" style="border-radius:10px;">Clear</a>
             <?php endif; ?>
         </form>

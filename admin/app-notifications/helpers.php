@@ -335,6 +335,8 @@ function apn_device_count(): int
 function apn_status_badge(string $status): string
 {
     return match ($status) {
+        'queued'  => '<span class="badge bg-secondary">Queued</span>',
+        'sending' => '<span class="badge bg-info text-dark">Sending…</span>',
         'sent'    => '<span class="badge bg-success">Sent</span>',
         'partial' => '<span class="badge bg-warning text-dark">Partial</span>',
         default   => '<span class="badge bg-danger">Failed</span>',
@@ -343,13 +345,14 @@ function apn_status_badge(string $status): string
 
 // ── Audience targeting ─────────────────────────────────────────────────────────
 
-const APN_AUDIENCES = ['students', 'all_users', 'all_employees', 'user', 'group', 'employee_type', 'everyone'];
+const APN_AUDIENCES = ['students', 'batch', 'all_users', 'all_employees', 'user', 'group', 'employee_type', 'everyone'];
 
 /** Human label for an audience code (recorded in history). */
 function apn_audience_label(string $audience, ?string $detail = null): string
 {
     $label = match ($audience) {
         'students'      => 'All students',
+        'batch'         => 'Student batch',
         'all_users'     => 'All users / employees',
         'all_employees' => 'All employees (administrative + faculty)',
         'user'          => 'Individual user',
@@ -679,4 +682,395 @@ function apn_recipients(int $notification_id, int $limit = 25, int $offset = 0):
     );
     $stmt->execute([$notification_id]);
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+/*
+ * =============================================================================
+ * Queued (chunked) delivery
+ * =============================================================================
+ * Sending thousands of pushes inside one web request exhausts PHP memory and
+ * hits max_execution_time. Instead, send.php / resend.php only INSERT the
+ * recipients into app_notification_queue with pure SQL (device tokens are
+ * never loaded into PHP), and process.php is polled from the module page to
+ * deliver the queue in small, time-boxed chunks. Peak PHP memory is bounded
+ * by the chunk size regardless of the audience size.
+ */
+
+/** Ensure the queue table + history columns exist (cheap, safe to repeat). */
+function apn_queue_ensure_schema(): void
+{
+    try {
+        db()->exec(
+            "CREATE TABLE IF NOT EXISTS `app_notification_queue` (
+                `id`                int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+                `notification_id`   int(10) UNSIGNED NOT NULL COMMENT 'FK app_notifications.id',
+                `source`            enum('student','user') NOT NULL DEFAULT 'student',
+                `recipient_user_id` int(10) UNSIGNED DEFAULT NULL,
+                `fcm_token`         varchar(512) NOT NULL,
+                `status`            enum('pending','processing','sent','failed') NOT NULL DEFAULT 'pending',
+                `error`             varchar(120) DEFAULT NULL,
+                `claimed_at`        datetime DEFAULT NULL,
+                `processed_at`      datetime DEFAULT NULL,
+                `created_at`        datetime NOT NULL DEFAULT current_timestamp(),
+                PRIMARY KEY (`id`),
+                KEY `idx_apnq_pending` (`notification_id`, `status`, `id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        );
+    } catch (Throwable $e) {
+        error_log('APN queue: could not ensure queue table - ' . $e->getMessage());
+    }
+    try {
+        $col = db()->query("SHOW COLUMNS FROM app_notifications LIKE 'status'")->fetch(PDO::FETCH_ASSOC);
+        if ($col && strpos((string)$col['Type'], 'queued') === false) {
+            db()->exec(
+                "ALTER TABLE `app_notifications`
+                 MODIFY `status` enum('queued','sending','sent','partial','failed') NOT NULL DEFAULT 'sent'"
+            );
+        }
+    } catch (Throwable $e) {
+        error_log('APN queue: could not migrate status enum - ' . $e->getMessage());
+    }
+    try {
+        $col = db()->query("SHOW COLUMNS FROM app_notifications LIKE 'target_batch_id'")->fetch(PDO::FETCH_ASSOC);
+        if (!$col) {
+            db()->exec("ALTER TABLE `app_notifications` ADD COLUMN `target_batch_id` int(10) UNSIGNED DEFAULT NULL");
+        }
+    } catch (Throwable $e) {
+        error_log('APN queue: could not add target_batch_id - ' . $e->getMessage());
+    }
+}
+
+/** Whether the queue schema is ready (table exists, history enum migrated). */
+function apn_queue_is_available(): bool
+{
+    try {
+        $col = db()->query("SHOW COLUMNS FROM app_notifications LIKE 'status'")->fetch(PDO::FETCH_ASSOC);
+        if (!$col || strpos((string)$col['Type'], 'queued') === false) {
+            return false;
+        }
+        db()->query('SELECT 1 FROM app_notification_queue LIMIT 1');
+        return true;
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+/** Student batches for the audience picker (with department when available). */
+function apn_batch_options(): array
+{
+    try {
+        return db()->query(
+            'SELECT b.id, b.name, d.name AS dept_name
+               FROM student_batches b
+          LEFT JOIN dept_departments d ON d.id = b.dept_id
+              ORDER BY b.name ASC'
+        )->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        // dept_id column may not exist on this install - plain list fallback.
+        try {
+            return db()->query('SELECT id, name FROM student_batches ORDER BY name ASC')
+                ->fetchAll(PDO::FETCH_ASSOC);
+        } catch (Throwable $e2) {
+            return [];
+        }
+    }
+}
+
+/** Human detail for an audience (user / group / batch name), for the label. */
+function apn_audience_detail(string $audience, int $user_id = 0, int $group_id = 0, string $employee_type = '', int $batch_id = 0): string
+{
+    try {
+        switch ($audience) {
+            case 'user':
+                $s = db()->prepare('SELECT full_name FROM users WHERE id = ?');
+                $s->execute([$user_id]);
+                return (string)$s->fetchColumn();
+            case 'group':
+                $s = db()->prepare('SELECT name FROM user_groups WHERE id = ?');
+                $s->execute([$group_id]);
+                return (string)$s->fetchColumn();
+            case 'employee_type':
+                return $employee_type === 'educational' ? 'Faculty' : 'Administrative';
+            case 'batch':
+                $s = db()->prepare('SELECT name FROM student_batches WHERE id = ?');
+                $s->execute([$batch_id]);
+                return (string)$s->fetchColumn();
+        }
+    } catch (Throwable $e) {
+    }
+    return '';
+}
+
+/**
+ * Queue every device of an audience using pure SQL INSERT ... SELECT - no
+ * tokens are ever loaded into PHP memory, so audiences of any size are safe.
+ * Rows are de-duplicated per FCM token (one push per physical device).
+ *
+ * @return int Number of queued devices.
+ */
+function apn_queue_audience(int $notification_id, string $audience, int $user_id = 0, int $group_id = 0, string $employee_type = '', int $batch_id = 0): int
+{
+    apn_queue_ensure_schema();
+    $pdo = db();
+
+    $queueStudents = static function (string $join = '', string $cond = '', array $params = []) use ($pdo, $notification_id): void {
+        $sql = "INSERT INTO app_notification_queue (notification_id, source, recipient_user_id, fcm_token)
+                SELECT ?, 'student', MIN(t.user_id), t.fcm_token
+                  FROM student_push_tokens t {$join}
+                 WHERE t.fcm_token IS NOT NULL AND t.fcm_token != ''"
+             . ($cond !== '' ? " AND {$cond}" : '')
+             . " AND NOT EXISTS (SELECT 1 FROM app_notification_queue q
+                                  WHERE q.notification_id = ? AND q.fcm_token = t.fcm_token)
+                 GROUP BY t.fcm_token";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute(array_merge([$notification_id], $params, [$notification_id]));
+    };
+
+    $queueUsers = static function (string $cond = '', array $params = []) use ($pdo, $notification_id): void {
+        $sql = "INSERT INTO app_notification_queue (notification_id, source, recipient_user_id, fcm_token)
+                SELECT ?, 'user', MIN(t.user_id), t.fcm_token
+                  FROM api_push_tokens t
+                  JOIN users u ON u.id = t.user_id AND u.is_active = 1
+                 WHERE t.fcm_token IS NOT NULL AND t.fcm_token != ''"
+             . ($cond !== '' ? " AND {$cond}" : '')
+             . " AND NOT EXISTS (SELECT 1 FROM app_notification_queue q
+                                  WHERE q.notification_id = ? AND q.fcm_token = t.fcm_token)
+                 GROUP BY t.fcm_token";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute(array_merge([$notification_id], $params, [$notification_id]));
+    };
+
+    try {
+        switch ($audience) {
+            case 'students':
+                $queueStudents();
+                break;
+            case 'batch':
+                $queueStudents(
+                    'JOIN students s ON s.portal_user_id = t.user_id',
+                    's.batch_id = ?',
+                    [$batch_id]
+                );
+                break;
+            case 'all_users':
+                $queueUsers();
+                break;
+            case 'all_employees':
+                $queueUsers(
+                    "EXISTS (SELECT 1 FROM staff_profiles sp WHERE sp.user_id = u.id AND sp.department_type IN ('administrative', 'educational'))"
+                );
+                break;
+            case 'user':
+                $queueUsers('u.id = ?', [$user_id]);
+                break;
+            case 'group':
+                $queueUsers('u.group_id = ?', [$group_id]);
+                break;
+            case 'employee_type':
+                $queueUsers(
+                    'EXISTS (SELECT 1 FROM staff_profiles sp WHERE sp.user_id = u.id AND sp.department_type = ?)',
+                    [$employee_type]
+                );
+                break;
+            case 'everyone':
+                $queueStudents();
+                $queueUsers();
+                break;
+        }
+    } catch (Throwable $e) {
+        error_log('APN queue: could not queue audience - ' . $e->getMessage());
+    }
+
+    $total = 0;
+    try {
+        $stmt = $pdo->prepare('SELECT COUNT(*) FROM app_notification_queue WHERE notification_id = ?');
+        $stmt->execute([$notification_id]);
+        $total = (int)$stmt->fetchColumn();
+        $pdo->prepare('UPDATE app_notifications SET total_tokens = ?, status = ? WHERE id = ?')
+            ->execute([$total, $total > 0 ? 'queued' : 'sent', $notification_id]);
+    } catch (Throwable $e) {
+        error_log('APN queue: could not count queue - ' . $e->getMessage());
+    }
+    return $total;
+}
+
+/**
+ * Deliver one time-boxed chunk of a queued notification. Rows are claimed
+ * atomically (status 'processing') so overlapping calls never double-send;
+ * rows claimed by a worker that died are recovered after 5 minutes.
+ *
+ * @return array{done:bool, total:int, sent:int, failed:int, pending:int, error:?string}
+ */
+function apn_process_queue(int $notification_id, int $batch = 40, int $time_budget = 20): array
+{
+    $out = ['done' => false, 'total' => 0, 'sent' => 0, 'failed' => 0, 'pending' => 0, 'error' => null];
+
+    apn_queue_ensure_schema();
+    $pdo = db();
+
+    $n = apn_find($notification_id);
+    if (!$n) {
+        $out['error'] = 'Notification not found.';
+        return $out;
+    }
+
+    $sa = apn_fcm_service_account();
+    if ($sa === null) {
+        $out['error'] = 'FCM is not configured. Add the service-account JSON on the Settings page.';
+        return $out;
+    }
+    $access = apn_fcm_access_token($sa);
+    if ($access === null) {
+        $out['error'] = 'Could not obtain an FCM access token. Check the service-account credential.';
+        return $out;
+    }
+
+    // Recover rows claimed by a worker that died (e.g. the page was closed).
+    try {
+        $pdo->prepare(
+            "UPDATE app_notification_queue SET status = 'pending', claimed_at = NULL
+              WHERE notification_id = ? AND status = 'processing'
+                AND claimed_at < (NOW() - INTERVAL 5 MINUTE)"
+        )->execute([$notification_id]);
+    } catch (Throwable $e) {
+    }
+
+    try {
+        $pdo->prepare("UPDATE app_notifications SET status = 'sending' WHERE id = ? AND status IN ('queued', 'sending')")
+            ->execute([$notification_id]);
+    } catch (Throwable $e) {
+    }
+
+    $data = ['type' => 'app_notification', 'title' => $n['title'], 'body' => $n['body']];
+    if (!empty($n['url'])) {
+        $data['url'] = $n['url'];
+    }
+
+    $batch    = max(1, min(200, $batch));
+    $deadline = time() + max(5, min(60, $time_budget));
+
+    while (time() < $deadline) {
+        // Atomically claim the next chunk.
+        $rows = [];
+        $pdo->beginTransaction();
+        try {
+            $sel = $pdo->prepare(
+                "SELECT id, source, recipient_user_id, fcm_token
+                   FROM app_notification_queue
+                  WHERE notification_id = ? AND status = 'pending'
+                  ORDER BY id ASC
+                  LIMIT {$batch} FOR UPDATE"
+            );
+            $sel->execute([$notification_id]);
+            $rows = $sel->fetchAll(PDO::FETCH_ASSOC);
+            if ($rows) {
+                $ph = implode(',', array_fill(0, count($rows), '?'));
+                $pdo->prepare("UPDATE app_notification_queue SET status = 'processing', claimed_at = NOW() WHERE id IN ($ph)")
+                    ->execute(array_column($rows, 'id'));
+            }
+            $pdo->commit();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            $rows = [];
+        }
+        if (!$rows) {
+            break;
+        }
+
+        $sent_ids = [];
+        $failures = []; // queue row id => short error
+        foreach ($rows as $row) {
+            $r = apn_fcm_send_single($access, $sa['project_id'], $row['fcm_token'], $n['title'], $n['body'], $data);
+            if ($r['ok']) {
+                $sent_ids[] = (int)$row['id'];
+            } else {
+                $failures[(int)$row['id']] = substr((string)$r['error'], 0, 120);
+                if ($r['unregister']) {
+                    // Prune the dead token from both registration tables.
+                    foreach (['student_push_tokens', 'api_push_tokens'] as $table) {
+                        try {
+                            $pdo->prepare("DELETE FROM {$table} WHERE fcm_token = ?")->execute([$row['fcm_token']]);
+                        } catch (Throwable $e) {
+                        }
+                    }
+                }
+            }
+        }
+
+        if ($sent_ids) {
+            $ph = implode(',', array_fill(0, count($sent_ids), '?'));
+            $pdo->prepare("UPDATE app_notification_queue SET status = 'sent', processed_at = NOW() WHERE id IN ($ph)")
+                ->execute($sent_ids);
+        }
+        if ($failures) {
+            $upd = $pdo->prepare("UPDATE app_notification_queue SET status = 'failed', error = ?, processed_at = NOW() WHERE id = ?");
+            foreach ($failures as $qid => $err) {
+                $upd->execute([$err !== '' ? $err : null, $qid]);
+            }
+        }
+
+        // Advance the history counters + per-recipient delivery log.
+        try {
+            $pdo->prepare('UPDATE app_notifications SET sent_count = sent_count + ?, failed_count = failed_count + ? WHERE id = ?')
+                ->execute([count($sent_ids), count($failures), $notification_id]);
+        } catch (Throwable $e) {
+        }
+        try {
+            $ins = $pdo->prepare(
+                'INSERT INTO app_notification_recipients (notification_id, source, recipient_user_id, fcm_status)
+                 VALUES (?, ?, ?, ?)'
+            );
+            foreach ($rows as $row) {
+                $ins->execute([
+                    $notification_id,
+                    $row['source'],
+                    $row['recipient_user_id'] !== null ? (int)$row['recipient_user_id'] : null,
+                    isset($failures[(int)$row['id']]) ? 'failed' : 'sent',
+                ]);
+            }
+        } catch (Throwable $e) {
+            // recipients table missing (migration not applied) - ignore.
+        }
+    }
+
+    // Progress snapshot + finalisation.
+    try {
+        $st = $pdo->prepare(
+            "SELECT COUNT(*) AS total,
+                    COALESCE(SUM(status = 'sent'), 0)   AS sent,
+                    COALESCE(SUM(status = 'failed'), 0) AS failed,
+                    COALESCE(SUM(status IN ('pending', 'processing')), 0) AS pending
+               FROM app_notification_queue
+              WHERE notification_id = ?"
+        );
+        $st->execute([$notification_id]);
+        $p = $st->fetch(PDO::FETCH_ASSOC) ?: [];
+        $out['total']   = (int)($p['total'] ?? 0);
+        $out['sent']    = (int)($p['sent'] ?? 0);
+        $out['failed']  = (int)($p['failed'] ?? 0);
+        $out['pending'] = (int)($p['pending'] ?? 0);
+    } catch (Throwable $e) {
+    }
+
+    if ($out['pending'] === 0) {
+        $out['done'] = true;
+        if ($out['sent'] > 0 && $out['failed'] === 0) {
+            $final = 'sent';
+        } elseif ($out['sent'] > 0) {
+            $final = 'partial';
+        } elseif ($out['total'] === 0) {
+            $final = 'sent';
+        } else {
+            $final = 'failed';
+        }
+        try {
+            $pdo->prepare('UPDATE app_notifications SET status = ?, sent_count = ?, failed_count = ?, total_tokens = ? WHERE id = ?')
+                ->execute([$final, $out['sent'], $out['failed'], $out['total'], $notification_id]);
+        } catch (Throwable $e) {
+        }
+    }
+
+    return $out;
 }
