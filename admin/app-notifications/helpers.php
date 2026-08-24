@@ -467,6 +467,20 @@ function apn_send_to_audience(string $audience, string $title, string $body, ?st
     $collected        = apn_collect_tokens($audience, $user_id, $group_id, $employee_type);
     $tokens           = $collected['tokens'];
     $result['detail'] = $collected['detail'];
+
+    // The same physical device can be registered more than once (several
+    // accounts signed in on one phone, or the same user in both token tables).
+    // Send at most one push per FCM token so nobody receives duplicate copies
+    // of the same notification.
+    $seen   = [];
+    $tokens = array_values(array_filter($tokens, static function (array $t) use (&$seen): bool {
+        if (isset($seen[$t['fcm_token']])) {
+            return false;
+        }
+        $seen[$t['fcm_token']] = true;
+        return true;
+    }));
+
     $result['total']  = count($tokens);
     if ($result['total'] === 0) {
         $result['status'] = 'sent';

@@ -70,4 +70,20 @@ if ($device_id !== '') {
     }
 }
 
+// A device belongs to exactly one signed-in account: drop rows that map this
+// token (or device) to another user, plus any student registration left over
+// from a previous student session on the same phone (prevents duplicate
+// notifications on shared devices).
+try {
+    db()->prepare('DELETE FROM api_push_tokens WHERE fcm_token = ? AND user_id != ?')
+       ->execute([$fcm_token, $user_id]);
+    if ($device_id !== '') {
+        db()->prepare('DELETE FROM api_push_tokens WHERE device_id = ? AND user_id != ?')
+           ->execute([$device_id, $user_id]);
+    }
+    db()->prepare('DELETE FROM student_push_tokens WHERE fcm_token = ?')->execute([$fcm_token]);
+} catch (Throwable $e) {
+    error_log('Push register: stale token cleanup failed - ' . $e->getMessage());
+}
+
 api_ok(['message' => 'Push token registered.']);
