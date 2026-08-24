@@ -790,7 +790,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') ==
     }
 }
 
-// ── POST: clear the ENTIRE old-ERP import (super admin only) ───────────────
+// ── POST: clear the old-ERP import (super admin only; optional student scope) ───────────────
+// Scoped: with a Student ID only THAT student's old-ERP vouchers are cleared;
+// left empty it clears the WHOLE old-ERP import. One set-based UPDATE is used
+// (no per-voucher loop), so even tens of thousands of vouchers cannot time
+// out / crash the request. Every cleared voucher carries the marker reason
+// 'Old ERP import cleared…' — the Restore action matches on that marker.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') === 'clear_import') {
     csrf_check();
     if (!is_super_admin()) {
@@ -799,41 +804,95 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') ==
         flash_set('danger', 'Confirmation text did not match — nothing was deleted.');
     } else {
         set_time_limit(0);
-        // Every live voucher whose payments ALL use the old_erp method — pure
-        // old-ERP imports (bulk merge, single old-ERP collections, proof-audit
-        // fixes). Vouchers carrying ANY payment collected in this ERP (cash /
-        // bank / mobile banking / online) are NEVER touched, so money actually
-        // collected in this ERP stays exactly as it is.
-        $vid_stmt = db()->query(
-            "SELECT v.id
-             FROM acc_vouchers v
-             JOIN sfp_payments sp ON sp.voucher_id = v.id
-             WHERE v.is_deleted = 0
-             GROUP BY v.id
-             HAVING SUM(sp.payment_method <> 'old_erp') = 0"
-        );
-        $cleared = 0;
-        $clear_failed = 0;
-        foreach ($vid_stmt->fetchAll() as $vrow) {
-            try {
-                acc_soft_delete_voucher((int)$vrow['id'],
-                    'Old ERP import cleared: every old-ERP transaction removed (payments collected in this ERP are kept).');
-                $cleared++;
-            } catch (Throwable $e) {
-                $clear_failed++;
+        $user      = auth_user();
+        $clear_sid = trim((string)($_POST['clear_student_id'] ?? ''));
+        $clear_stu = $clear_sid !== '' ? oepa_lookup_student($clear_sid) : null;
+        if ($clear_sid !== '' && !$clear_stu) {
+            flash_set('danger', 'Student "' . h($clear_sid) . '" was not found — nothing was deleted.');
+        } else {
+            // Only vouchers whose payments ALL use the old_erp method — pure
+            // old-ERP imports (bulk merge, single old-ERP collections and
+            // proof-audit fixes). Vouchers carrying ANY payment collected in
+            // this ERP (cash / bank / mobile banking / online) are NEVER
+            // touched, so money actually collected in this ERP stays as it is.
+            if ($clear_stu) {
+                $reason = 'Old ERP import cleared for student ' . (string)$clear_stu['student_id']
+                    . ': old-ERP transactions removed (payments collected in this ERP are kept).';
+                $upd = db()->prepare(
+                    "UPDATE acc_vouchers v
+                     JOIN (SELECT sp.voucher_id
+                             FROM sfp_payments sp
+                            GROUP BY sp.voucher_id
+                           HAVING SUM(sp.payment_method <> 'old_erp') = 0
+                              AND SUM(COALESCE(sp.student_id, 0) <> ?) = 0) t ON t.voucher_id = v.id
+                     SET v.is_deleted = 1, v.deleted_by = ?, v.deleted_at = NOW(), v.delete_reason = ?
+                     WHERE v.is_deleted = 0"
+                );
+                $upd->execute([(int)$clear_stu['id'], (int)($user['id'] ?? 0), $reason]);
+                $cleared = (int)$upd->rowCount();
+                oepa_ensure_batch_table();
+                db()->prepare('DELETE FROM oepa_fix_batches WHERE student_pk = ?')
+                    ->execute([(int)$clear_stu['id']]);
+                $label = 'student ' . (string)$clear_stu['student_id'];
+            } else {
+                $reason = 'Old ERP import cleared: every old-ERP transaction removed (payments collected in this ERP are kept).';
+                $upd = db()->prepare(
+                    "UPDATE acc_vouchers v
+                     JOIN (SELECT sp.voucher_id
+                             FROM sfp_payments sp
+                            GROUP BY sp.voucher_id
+                           HAVING SUM(sp.payment_method <> 'old_erp') = 0) t ON t.voucher_id = v.id
+                     SET v.is_deleted = 1, v.deleted_by = ?, v.deleted_at = NOW(), v.delete_reason = ?
+                     WHERE v.is_deleted = 0"
+                );
+                $upd->execute([(int)($user['id'] ?? 0), $reason]);
+                $cleared = (int)$upd->rowCount();
+                oepa_ensure_batch_table();
+                db()->exec('DELETE FROM oepa_fix_batches'); // wipe the audit report / undo log
+                $label = 'ALL students';
             }
+            log_change('accounting', 'DELETE', (int)($clear_stu['id'] ?? 0),
+                'Old ERP import (' . $label . ')', 'old_erp_clear_import',
+                (string)$cleared, '0',
+                'Old ERP import cleared for ' . $label . ': ' . $cleared
+                . ' old-ERP voucher(s) soft-deleted with a restorable marker; proof-audit report reset.'
+                . ' Payments collected in this ERP were not touched.');
+            flash_set('success',
+                'Old ERP import cleared for ' . $label . ': ' . $cleared . ' voucher(s) removed.'
+                . ' Payments collected in this ERP are untouched.'
+                . ' Cleared by mistake? Use "Restore Cleared Old-ERP Vouchers" below.');
         }
-        oepa_ensure_batch_table();
-        db()->exec('DELETE FROM oepa_fix_batches'); // wipe the audit report / undo log
-        log_change('accounting', 'DELETE', 0, 'Old ERP import', 'old_erp_clear_import',
-            (string)$cleared, '0',
-            'Old ERP import cleared: ' . $cleared . ' old-ERP voucher(s) soft-deleted'
-            . ($clear_failed ? ', ' . $clear_failed . ' failed' : '')
-            . '; proof-audit report wiped. Payments collected in this ERP were not touched.');
-        flash_set($clear_failed ? 'warning' : 'success',
-            'Old ERP import cleared: ' . $cleared . ' voucher(s) removed'
-            . ($clear_failed ? ', ' . $clear_failed . ' could not be removed' : '')
-            . '. The proof-audit report was reset. Payments collected in this ERP are untouched.');
+    }
+}
+
+// ── POST: restore a mistaken clear (super admin only) ──────────────────────
+// Un-deletes ONLY vouchers the Clear action soft-deleted (matched on the
+// 'Old ERP import cleared…' marker reason) whose payments are all old_erp.
+// Vouchers deleted through the normal delete workflow, voucher reversals or
+// proof-audit rebuilds are never resurrected.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') === 'restore_clear') {
+    csrf_check();
+    if (!is_super_admin()) {
+        flash_set('danger', 'Only a Super Administrator can restore cleared old-ERP vouchers.');
+    } else {
+        set_time_limit(0);
+        $upd = db()->prepare(
+            "UPDATE acc_vouchers v
+             JOIN (SELECT sp.voucher_id
+                     FROM sfp_payments sp
+                    GROUP BY sp.voucher_id
+                   HAVING SUM(sp.payment_method <> 'old_erp') = 0) t ON t.voucher_id = v.id
+             SET v.is_deleted = 0, v.deleted_by = NULL, v.deleted_at = NULL,
+                 v.delete_reason = NULL, v.delete_request_id = NULL
+             WHERE v.is_deleted = 1
+               AND v.delete_reason LIKE 'Old ERP import cleared%'"
+        );
+        $upd->execute();
+        $restored = (int)$upd->rowCount();
+        log_change('accounting', 'UPDATE', 0, 'Old ERP import', 'old_erp_restore_clear',
+            '0', (string)$restored,
+            'Old ERP clear restored: ' . $restored . ' old-ERP voucher(s) un-deleted (marker-matched only).');
+        flash_set('success', $restored . ' old-ERP voucher(s) restored — balances, dues and reports include them again.');
     }
 }
 
@@ -1115,28 +1174,43 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <?php if (is_super_admin()): ?>
-<!-- ── Danger zone: clear the entire old-ERP import ── -->
+<!-- ── Danger zone: clear / restore the old-ERP import ── -->
 <div class="card border-danger mt-4">
     <div class="card-header py-3 px-4 fw-semibold text-danger">
         <i class="fas fa-trash-can me-2"></i>Danger Zone — Clear Old ERP Import &amp; Report
     </div>
     <div class="card-body">
         <p class="small mb-3">
-            Permanently removes <strong>every old-ERP transaction</strong> imported into this
-            system — bulk-merge rows, single Old-ERP collections and proof-audit fixes — and
-            resets the proof-audit report above. Payments <strong>collected in this ERP</strong>
-            (cash, bank, mobile banking, online) are <strong>never touched</strong>. Vouchers are
-            soft-deleted, so the audit trail is kept. Type <code>DELETE OLD ERP</code> to confirm.
+            Removes old-ERP transactions — bulk-merge rows, single Old-ERP collections and
+            proof-audit fixes. <strong>With a Student ID it clears ONLY that student</strong>;
+            <strong>left empty it clears the ENTIRE old-ERP import for ALL students</strong> and
+            resets the proof-audit report. Payments <strong>collected in this ERP</strong> (cash,
+            bank, mobile banking, online) are <strong>never touched</strong>. Vouchers are
+            soft-deleted with a restorable marker — a mistaken clear can be undone with the
+            Restore button below. Type <code>DELETE OLD ERP</code> to confirm.
         </p>
-        <form method="post" class="d-flex gap-2 flex-wrap align-items-center"
-              onsubmit="return confirm('Really delete EVERY old-ERP transaction import and reset the report? Payments collected in this ERP will stay.');">
+        <form method="post" class="d-flex gap-2 flex-wrap align-items-center mb-3"
+              onsubmit="return confirm(this.clear_student_id.value.trim()
+                  ? 'Clear the old-ERP import for student ' + this.clear_student_id.value.trim() + ' only?'
+                  : 'No Student ID entered - this clears the ENTIRE old-ERP import for ALL students. Continue?');">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="clear_import">
+            <input type="text" name="clear_student_id" class="form-control form-control-sm"
+                   style="max-width:250px;" placeholder="Student ID (empty = ALL students)" autocomplete="off">
             <input type="text" name="confirm_text" class="form-control form-control-sm"
                    style="max-width:220px;" placeholder="Type: DELETE OLD ERP" autocomplete="off" required>
             <button class="btn btn-danger btn-sm" type="submit">
-                <i class="fas fa-trash-can me-1"></i>Clear Old ERP Import &amp; Report
+                <i class="fas fa-trash-can me-1"></i>Clear Old ERP Import
             </button>
+        </form>
+        <form method="post" class="d-flex gap-2 flex-wrap align-items-center"
+              onsubmit="return confirm('Restore every old-ERP voucher removed by the Clear action? Vouchers deleted through the normal delete workflow are not affected.');">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="restore_clear">
+            <button class="btn btn-outline-success btn-sm" type="submit">
+                <i class="fas fa-rotate-left me-1"></i>Restore Cleared Old-ERP Vouchers
+            </button>
+            <span class="small text-muted">Un-deletes only vouchers removed by the Clear action (marker-matched) — nothing else.</span>
         </form>
     </div>
 </div>
