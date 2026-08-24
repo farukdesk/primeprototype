@@ -110,6 +110,21 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, NotificationsActivity::class.java))
         }
 
+        // Tapping a support-ticket push (new reply / status change) routes the
+        // user straight to that ticket's comment thread.
+        val pushTicketId = intent.getIntExtra(NotificationHelper.EXTRA_TICKET_ID, 0)
+        if (savedInstanceState == null && pushTicketId > 0) {
+            startActivity(
+                Intent(
+                    this,
+                    bd.ac.primeuniversity.studentportal.ui.support.SupportTicketDetailActivity::class.java
+                ).putExtra(
+                    bd.ac.primeuniversity.studentportal.ui.support.SupportTicketDetailActivity.EXTRA_TICKET_ID,
+                    pushTicketId
+                )
+            )
+        }
+
         // Self-hosted distribution: prompt when the server has a newer APK.
         UpdateChecker.maybePromptForUpdate(this)
     }

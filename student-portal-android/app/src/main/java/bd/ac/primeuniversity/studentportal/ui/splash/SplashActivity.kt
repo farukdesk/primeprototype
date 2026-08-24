@@ -72,6 +72,16 @@ class SplashActivity : AppCompatActivity() {
         if (fromPush) {
             next.putExtra(NotificationHelper.EXTRA_OPEN_INBOX, true)
         }
+        // Support-ticket pushes carry the ticket id: as an Int extra when the
+        // notification was posted by the app (foreground delivery) or as a
+        // String FCM data extra when tapped from the system tray (background).
+        val ticketId = intent.getIntExtra(NotificationHelper.EXTRA_TICKET_ID, 0)
+            .takeIf { it > 0 }
+            ?: intent.getStringExtra("ticket_id")?.toIntOrNull()
+            ?: 0
+        if (ticketId > 0) {
+            next.putExtra(NotificationHelper.EXTRA_TICKET_ID, ticketId)
+        }
         startActivity(next)
         finish()
     }

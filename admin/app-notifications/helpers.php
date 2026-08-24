@@ -222,9 +222,12 @@ function apn_send_to_all_students(string $title, string $body, ?string $url = nu
         return $result;
     }
 
+    // GROUP BY fcm_token: one send per physical device, even when several
+    // accounts on the same phone registered the same token.
     $tokens = db()->query(
-        "SELECT id, fcm_token FROM student_push_tokens
-         WHERE fcm_token IS NOT NULL AND fcm_token != ''"
+        "SELECT MIN(id) AS id, fcm_token FROM student_push_tokens
+         WHERE fcm_token IS NOT NULL AND fcm_token != ''
+         GROUP BY fcm_token"
     )->fetchAll(PDO::FETCH_ASSOC);
 
     $result['total'] = count($tokens);

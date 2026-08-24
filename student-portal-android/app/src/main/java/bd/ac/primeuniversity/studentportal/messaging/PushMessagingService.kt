@@ -35,13 +35,14 @@ class PushMessagingService : FirebaseMessagingService() {
         val title = message.notification?.title ?: data["title"]
         val body  = message.notification?.body  ?: data["body"]
         val url   = data["url"]
+        val ticketId = data["ticket_id"]
 
         if (title.isNullOrBlank() && body.isNullOrBlank()) {
             Log.d(TAG, "Received push with no displayable content; ignoring.")
             return
         }
 
-        NotificationHelper.show(applicationContext, title, body, url)
+        NotificationHelper.show(applicationContext, title, body, url, ticketId)
     }
 
     companion object {

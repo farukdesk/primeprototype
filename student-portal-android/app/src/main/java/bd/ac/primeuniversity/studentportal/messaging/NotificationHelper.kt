@@ -21,6 +21,7 @@ object NotificationHelper {
     const val CHANNEL_ID = "pu_announcements"
     const val EXTRA_URL = "notification_url"
     const val EXTRA_OPEN_INBOX = "open_notifications_inbox"
+    const val EXTRA_TICKET_ID = "notification_ticket_id"
 
     /** Creates the announcements channel (no-op below Android O). */
     fun ensureChannel(context: Context) {
