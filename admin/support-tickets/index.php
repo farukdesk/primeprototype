@@ -231,6 +231,16 @@ require_once __DIR__ . '/../includes/header.php';
                 <option value="<?= h($c) ?>" <?= $f_category === $c ? 'selected' : '' ?>><?= h($c) ?></option>
                 <?php endforeach; ?>
             </select>
+            <div class="d-flex align-items-center gap-1">
+                <label class="text-muted" style="font-size:.8rem;white-space:nowrap;">From</label>
+                <input type="date" name="from" class="form-control" style="max-width:160px;border-radius:10px;"
+                       value="<?= h($f_from) ?>" title="Created on or after this date">
+            </div>
+            <div class="d-flex align-items-center gap-1">
+                <label class="text-muted" style="font-size:.8rem;white-space:nowrap;">To</label>
+                <input type="date" name="to" class="form-control" style="max-width:160px;border-radius:10px;"
+                       value="<?= h($f_to) ?>" title="Created on or before this date">
+            </div>
             <?php if ($is_staff): ?>
             <label class="form-check-label d-flex align-items-center gap-2" style="cursor:pointer;font-size:.875rem;white-space:nowrap;">
                 <input type="checkbox" class="form-check-input mt-0" name="assigned_me" value="1" <?= $assigned_me ? 'checked' : '' ?>> Assigned to me
@@ -239,7 +249,7 @@ require_once __DIR__ . '/../includes/header.php';
             <button class="btn btn-outline-primary" style="border-radius:10px;">
                 <i class="fas fa-search me-1"></i> Filter
             </button>
-            <?php if ($search || $f_status || $f_priority || $f_category || $assigned_me): ?>
+            <?php if ($search || $f_status || $f_priority || $f_category || $f_from || $f_to || $assigned_me): ?>
             <a href="<?= APP_URL ?>/support-tickets/index.php" class="btn btn-light" style="border-radius:10px;">Clear</a>
             <?php endif; ?>
         </form>
