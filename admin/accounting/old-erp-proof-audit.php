@@ -213,13 +213,39 @@ function oepa_student_snapshot(int $student_pk): ?array
         $oe_count  += (int)$oe['count'];
     }
 
+    // Everything RECEIVED for this student in the current ERP — every fee
+    // head (admission, form, ID card, registration, tuition, other) and every
+    // method (old-ERP memos and this-ERP collections alike). Compared with
+    // the sum of the proof's "Received amount" column.
+    $rcv = db()->prepare(
+        "SELECT sp.fee_type, COALESCE(SUM(sp.amount), 0) AS total
+         FROM sfp_payments sp
+         JOIN acc_vouchers v ON v.id = sp.voucher_id
+         WHERE sp.student_id = ?
+           AND v.is_deleted = 0
+           AND v.status IN ('posted','memo')
+         GROUP BY sp.fee_type"
+    );
+    $rcv->execute([$student_pk]);
+    $received_total = 0.0;
+    $heads = ['admission' => 0.0, 'form_fee' => 0.0, 'id_card_fee' => 0.0, 'registration' => 0.0];
+    foreach ($rcv->fetchAll() as $r) {
+        $received_total += (float)$r['total'];
+        $ft = (string)$r['fee_type'];
+        if (array_key_exists($ft, $heads)) {
+            $heads[$ft] = round((float)$r['total'], 2);
+        }
+    }
+
     return [
-        'months'           => $months,
-        'total_out'        => round($total_out, 2),
-        'max_month_due'    => round($max_due, 2),
-        'old_erp_total'    => round($oe_total, 2),
-        'old_erp_count'    => $oe_count,
-        'old_erp_unlinked' => round($unlinked, 2),
+        'months'             => $months,
+        'total_out'          => round($total_out, 2),
+        'max_month_due'      => round($max_due, 2),
+        'old_erp_total'      => round($oe_total, 2),
+        'old_erp_count'      => $oe_count,
+        'old_erp_unlinked'   => round($unlinked, 2),
+        'erp_received_total' => round($received_total, 2),
+        'erp_heads'          => $heads,
     ];
 }
 
@@ -753,6 +779,12 @@ require_once __DIR__ . '/../includes/header.php';
             Balance</em>. Students whose proof shows money that was never imported — while they
             still show dues — are <strong>flagged</strong>, and <strong>Auto-Fix</strong> records
             the missing amounts as Old ERP memo payments on the earliest months with room.
+            It also <strong>sums the proof's entire Received-amount column</strong> (monthly
+            tuition + Admission + Registration + the bottom <em>Admission Form &amp; ID Card
+            Fee</em> line) and compares it with the <strong>total received in this ERP</strong>
+            across all fee heads and payment methods; a shortfall is flagged as
+            <strong>RECEIVED TOTAL SHORT</strong>. The old ERP's own printed Total is never
+            trusted: the line-by-line sum is used, and a wrong printed Total is reported.
             The fix is recomputed server-side, capped at the outstanding balance (it can never
             overpay), skips suspicious OCR amounts, and every fix batch can be
             <strong>undone</strong> from the list at the bottom. <strong>Keep this tab open</strong>
@@ -877,16 +909,17 @@ require_once __DIR__ . '/../includes/header.php';
                 <thead class="table-light sticky-top">
                     <tr>
                         <th>Student</th>
-                        <th class="text-end">Proof monthly total</th>
-                        <th class="text-end">Imported (old ERP)</th>
+                        <th class="text-end">Proof received (line sum)</th>
+                        <th class="text-end">ERP received</th>
+                        <th class="text-end">&Delta; received</th>
                         <th class="text-end">Outstanding</th>
-                        <th class="text-end">Missing from import</th>
+                        <th class="text-end">Missing monthly</th>
                         <th>Status</th>
                         <th class="text-end">Actions</th>
                     </tr>
                 </thead>
                 <tbody id="results-body">
-                    <tr id="empty-row"><td colspan="7" class="text-center text-muted py-4">Not started yet.</td></tr>
+                    <tr id="empty-row"><td colspan="8" class="text-center text-muted py-4">Not started yet.</td></tr>
                 </tbody>
             </table>
         </div>
@@ -979,47 +1012,87 @@ require_once __DIR__ . '/../includes/header.php';
     // duplicate-month case this tool exists for.
     var MONTHS = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12 };
     var MONTH_RE = /\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b[\s\-\/\.]{0,3}((?:20)?\d{2})?/i;
-    var SKIP_RE  = /payable|monthly\s*pay|old\s*data|current\s*due|grand|total|balance|schedule/i;
+    var SKIP_RE  = /payable|monthly\s*pay|old\s*data|current\s*due|balance|schedule/i;
+    var TOTAL_RE = /grand\s*total|total\s*received|received\s*total|^\s*total\b/i;
     var DATE_RE  = /\b\d{1,2}[\/\-\.]\d{1,2}[\/\-\.](\d{2,4})\b/;
+    // One-time fee heads on the proof (checked most-specific first, so the
+    // bottom "Admission Form & ID Card Fee" line is never taken as Admission).
+    var HEADS = [
+        { key: 'form_id',      label: 'Admission Form & ID Card Fee', re: /admission\s*form|form\s*(?:fee)?\s*&\s*id\s*card|id\s*card\s*&\s*form/i },
+        { key: 'form_fee',     label: 'Form Fee',                     re: /form\s*fee/i },
+        { key: 'id_card_fee',  label: 'ID Card Fee',                  re: /id\s*card/i },
+        { key: 'admission',    label: 'Admission Fee',                re: /admission/i },
+        { key: 'registration', label: 'Registration Fee',             re: /registration|\breg\.?\s*fee/i },
+        { key: 'other',        label: 'Other Fee',                    re: /re-?take|improvement|special\s*exam|remedial|misc/i }
+    ];
 
-    function parseProofRows(text) {
-        var rows = [];
+    // First plausible amount on the line from the given index, with date
+    // tokens stripped so day/year digits are never mistaken for money.
+    function lineAmount(line, fromIdx) {
+        var tail = line.slice(fromIdx).replace(new RegExp(DATE_RE.source, 'g'), ' ');
+        var nums = tail.match(/\d[\d,]*(?:\.\d+)?/g) || [];
+        for (var i = 0; i < nums.length; i++) {
+            var v = parseFloat(nums[i].replace(/,/g, ''));
+            if (!isNaN(v) && v >= 100 && v <= 500000) return v;
+        }
+        return null;
+    }
+
+    function parseProof(text) {
+        var monthly = [], heads = [], printedTotal = null, sum = 0;
         String(text).split(/\n/).forEach(function (line) {
+            // The old ERP's own printed Total is read but NEVER trusted: the
+            // line-by-line sum of the Received-amount column is authoritative.
+            var t = TOTAL_RE.exec(line);
+            if (t) {
+                var tv = lineAmount(line, t.index + t[0].length);
+                if (tv !== null && (printedTotal === null || tv > printedTotal)) printedTotal = tv;
+                return;
+            }
             if (SKIP_RE.test(line)) return;
             var m = MONTH_RE.exec(line);
-            if (!m) return;
-            var month = MONTHS[m[1].slice(0, 3).toLowerCase()];
-            if (!month) return;
-            var year = null;
-            if (m[2]) {
-                year = parseInt(m[2], 10);
-                if (year < 100) year += 2000;
-                if (year < 2000 || year > 2100) year = null;
+            if (m) {
+                var month = MONTHS[m[1].slice(0, 3).toLowerCase()];
+                if (!month) return;
+                var year = null;
+                if (m[2]) {
+                    year = parseInt(m[2], 10);
+                    if (year < 100) year += 2000;
+                    if (year < 2000 || year > 2100) year = null;
+                }
+                // Fall back to a dd/mm/yyyy date on the same line for the year.
+                var dm = DATE_RE.exec(line);
+                if (year === null && dm) {
+                    var dy = parseInt(dm[1], 10);
+                    if (dy < 100) dy += 2000;
+                    if (dy >= 2000 && dy <= 2100) year = dy;
+                }
+                var amount = lineAmount(line, m.index + m[0].length);
+                if (amount === null) return;
+                monthly.push({ m: month, y: year, amount: amount });
+                sum += amount;
+                return;
             }
-            // Fall back to a dd/mm/yyyy date on the same line for the year.
-            var dm = DATE_RE.exec(line);
-            if (year === null && dm) {
-                var dy = parseInt(dm[1], 10);
-                if (dy < 100) dy += 2000;
-                if (dy >= 2000 && dy <= 2100) year = dy;
+            // One-time heads: Admission / Registration / the bottom
+            // "Admission Form & ID Card Fee" line, etc.
+            for (var hIdx = 0; hIdx < HEADS.length; hIdx++) {
+                var hm = HEADS[hIdx].re.exec(line);
+                if (!hm) continue;
+                var ha = lineAmount(line, hm.index + hm[0].length);
+                if (ha === null) ha = lineAmount(line, 0);
+                if (ha !== null) {
+                    heads.push({ key: HEADS[hIdx].key, label: HEADS[hIdx].label, amount: ha });
+                    sum += ha;
+                }
+                return;
             }
-            // Amount: first plausible number after the month token, with the
-            // date tokens stripped so day/year digits are never mistaken.
-            var tail = line.slice(m.index + m[0].length).replace(new RegExp(DATE_RE.source, 'g'), ' ');
-            var nums = tail.match(/\d[\d,]*(?:\.\d+)?/g) || [];
-            var amount = null;
-            for (var i = 0; i < nums.length; i++) {
-                var v = parseFloat(nums[i].replace(/,/g, ''));
-                if (!isNaN(v) && v >= 100 && v <= 500000) { amount = v; break; }
-            }
-            if (amount === null) return;
-            rows.push({ m: month, y: year, amount: amount });
         });
-        return rows;
+        return { monthly: monthly, heads: heads, printedTotal: printedTotal, sum: Math.round(sum * 100) / 100 };
     }
 
     // ── Compare the proof rows with the imported state ─────────────────────
-    function compare(item, rows) {
+    function compare(item, parsed) {
+        var rows = parsed.monthly;
         var recorded = {}, yearsByMonth = {};
         item.months.forEach(function (mo) {
             var key = mo.cy + '-' + mo.cm;
@@ -1051,12 +1124,51 @@ require_once __DIR__ . '/../includes/header.php';
             var gap = proof[key] - (recorded[key] || 0);
             if (gap > CFG.lineTol) missing += gap;
         });
+        // Received-total reconciliation: the sum of EVERY Received-amount
+        // line on the proof (monthly + admission + registration + the bottom
+        // Admission Form & ID Card Fee line) vs everything received in this
+        // ERP across all fee heads and methods.
+        var notes = [];
+        if (parsed.printedTotal !== null && Math.abs(parsed.printedTotal - parsed.sum) > CFG.lineTol) {
+            notes.push('The old ERP\'s own printed Total (' + fmt(parsed.printedTotal)
+                + ') does not match the line-by-line sum (' + fmt(parsed.sum)
+                + ') - the old ERP total is WRONG; the line sum is used.');
+        }
+        var ph = {};
+        parsed.heads.forEach(function (hd) { ph[hd.key] = (ph[hd.key] || 0) + hd.amount; });
+        var eh = item.erp_heads || {};
+        [
+            { label: 'Admission Fee', proof: ph.admission || 0, erp: eh.admission || 0 },
+            { label: 'Registration Fee', proof: ph.registration || 0, erp: eh.registration || 0 },
+            { label: 'Admission Form & ID Card Fee',
+              proof: (ph.form_id || 0) + (ph.form_fee || 0) + (ph.id_card_fee || 0),
+              erp: (eh.form_fee || 0) + (eh.id_card_fee || 0) }
+        ].forEach(function (hc) {
+            if (hc.proof > hc.erp + CFG.lineTol) {
+                notes.push(hc.label + ': the proof shows ' + fmt(hc.proof)
+                    + ' but the ERP holds only ' + fmt(hc.erp) + '.');
+            }
+        });
+        var recvDiff = Math.round((parsed.sum - item.erp_received_total) * 100) / 100;
+        if (recvDiff < -CFG.flagTol) {
+            notes.push('The ERP holds ' + fmt(-recvDiff)
+                + ' MORE than the proof sum - payments collected in this ERP after the screenshot are normal.');
+        }
+        if (skipped > 0) {
+            notes.push(skipped + ' suspicious OCR line(s) skipped.');
+        }
+        var canFix = missing > CFG.flagTol && item.total_out > CFG.flagTol;
+        var totalShort = recvDiff > CFG.flagTol;
         return {
-            proofTotal: proofTotal,
+            proofSum: parsed.sum,
+            recvDiff: recvDiff,
             missing: Math.round(missing * 100) / 100,
             fixable: Math.min(missing, item.total_out),
             skipped: skipped,
-            flagged: missing > CFG.flagTol && item.total_out > CFG.flagTol
+            notes: notes,
+            canFix: canFix,
+            totalShort: totalShort,
+            flagged: canFix || totalShort
         };
     }
 
@@ -1069,23 +1181,27 @@ require_once __DIR__ . '/../includes/header.php';
         var badge = status === 'ok'
             ? '<span class="badge bg-success">OK</span>'
             : status === 'issue'
-                ? '<span class="badge bg-danger">MISSING PAYMENTS</span>'
+                ? ((cmp && cmp.canFix ? '<span class="badge bg-danger">MISSING PAYMENTS</span> ' : '')
+                    + (cmp && cmp.totalShort ? '<span class="badge bg-danger">RECEIVED TOTAL SHORT</span>' : ''))
                 : status === 'fixed'
                     ? '<span class="badge bg-primary">FIXED</span>'
                     : '<span class="badge bg-warning text-dark">OCR failed – check manually</span>';
         if (status === 'issue') tr.className = 'table-danger';
+        var notesHtml = (cmp && cmp.notes && cmp.notes.length)
+            ? '<div class="small text-muted">' + esc(cmp.notes.join(' ')) + '</div>' : '';
         var actions = '<a href="' + esc(item.view_url) + '" target="_blank" class="btn btn-outline-primary btn-sm py-0">Open</a>';
-        if (status === 'issue') {
+        if (status === 'issue' && cmp && cmp.canFix) {
             actions = '<button type="button" class="btn btn-danger btn-sm py-0 me-1 oepa-fix-btn">'
                 + '<i class="fas fa-wand-magic-sparkles me-1"></i>Fix</button>' + actions;
         }
         tr.innerHTML =
             '<td>' + esc(item.name) + '<br><small class="text-muted">' + esc(item.sid) + '</small></td>' +
-            '<td class="text-end">' + (cmp ? fmt(cmp.proofTotal) : '—') + '</td>' +
-            '<td class="text-end">' + fmt(item.old_erp_total) + '</td>' +
+            '<td class="text-end">' + (cmp ? fmt(cmp.proofSum) : '—') + '</td>' +
+            '<td class="text-end">' + fmt(item.erp_received_total) + '</td>' +
+            '<td class="text-end fw-semibold">' + (cmp ? fmt(cmp.recvDiff) : '—') + '</td>' +
             '<td class="text-end">' + fmt(item.total_out) + '</td>' +
             '<td class="text-end fw-semibold">' + (cmp ? fmt(cmp.missing) : '—') + '</td>' +
-            '<td class="oepa-status">' + badge + '</td>' +
+            '<td class="oepa-status">' + badge + notesHtml + '</td>' +
             '<td class="text-end oepa-actions">' + actions + '</td>';
         var fixBtn = tr.querySelector('.oepa-fix-btn');
         if (fixBtn) {
@@ -1187,28 +1303,29 @@ require_once __DIR__ . '/../includes/header.php';
 
         worker.recognize(item.proof_url).then(function (res) {
             var text = (res && res.data && res.data.text) || '';
-            var rows = parseProofRows(text);
-            if (rows.length === 0) {
+            var parsed = parseProof(text);
+            if (parsed.monthly.length === 0 && parsed.heads.length === 0) {
                 nFailed++; nDone++;
                 addRow(item, null, null, 'failed');
                 setProgress();
                 setTimeout(processNext, 50);
                 return;
             }
-            var cmp = compare(item, rows);
+            var cmp = compare(item, parsed);
             if (cmp.flagged) {
                 nIssue++; nDone++;
-                var tr = addRow(item, cmp, rows, 'issue');
+                var tr = addRow(item, cmp, parsed.monthly, 'issue');
                 setProgress();
-                if ($id('autofix-toggle').checked) {
-                    doFix(item, rows, tr, tr.querySelector('.oepa-fix-btn'), function () {
+                var autoBtn = tr.querySelector('.oepa-fix-btn');
+                if ($id('autofix-toggle').checked && autoBtn) {
+                    doFix(item, parsed.monthly, tr, autoBtn, function () {
                         setTimeout(processNext, 50);
                     });
                     return;
                 }
             } else {
                 nOk++; nDone++;
-                addRow(item, cmp, rows, 'ok');
+                addRow(item, cmp, parsed.monthly, 'ok');
                 setProgress();
             }
             setTimeout(processNext, 50);
