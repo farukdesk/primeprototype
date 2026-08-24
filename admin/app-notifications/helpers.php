@@ -345,13 +345,14 @@ function apn_status_badge(string $status): string
 
 // ── Audience targeting ─────────────────────────────────────────────────────────
 
-const APN_AUDIENCES = ['students', 'all_users', 'all_employees', 'user', 'group', 'employee_type', 'everyone'];
+const APN_AUDIENCES = ['students', 'batch', 'all_users', 'all_employees', 'user', 'group', 'employee_type', 'everyone'];
 
 /** Human label for an audience code (recorded in history). */
 function apn_audience_label(string $audience, ?string $detail = null): string
 {
     $label = match ($audience) {
         'students'      => 'All students',
+        'batch'         => 'Student batch',
         'all_users'     => 'All users / employees',
         'all_employees' => 'All employees (administrative + faculty)',
         'user'          => 'Individual user',

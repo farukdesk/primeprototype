@@ -75,6 +75,14 @@ if ($assigned_me) {
     $where[]  = 't.assigned_to = ?';
     $params[] = $user['id'];
 }
+if ($f_from !== '') {
+    $where[]  = 't.created_at >= ?';
+    $params[] = $f_from . ' 00:00:00';
+}
+if ($f_to !== '') {
+    $where[]  = 't.created_at <= ?';
+    $params[] = $f_to . ' 23:59:59';
+}
 
 $sql = 'SELECT t.*, COALESCE(u.full_name, t.submitter_name) AS creator_name, a.full_name AS assignee_name
         FROM support_tickets t
