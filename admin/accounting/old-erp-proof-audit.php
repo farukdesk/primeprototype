@@ -137,7 +137,7 @@ function oepa_month_slots(array $summary): array
 function oepa_old_erp_tuition(int $student_pk): array
 {
     $stmt = db()->prepare(
-        "SELECT sp.id, sp.semester_fee_id, sp.month_number, sp.amount,
+        "SELECT sp.id, sp.voucher_id, sp.semester_fee_id, sp.month_number, sp.amount,
                 sp.transaction_number, v.voucher_date
          FROM sfp_payments sp
          JOIN acc_vouchers v ON v.id = sp.voucher_id
@@ -478,14 +478,87 @@ if (($_GET['action'] ?? '') === 'fix' && $_SERVER['REQUEST_METHOD'] === 'POST') 
         oepa_json(['success' => false, 'error' => 'No usable monthly lines were read from the proof.', 'warnings' => $warnings]);
     }
 
-    // Old-ERP money already recorded, per calendar month (via the slot map).
+    // Old-ERP money already recorded. ONLY old_erp-method vouchers are counted
+    // against the proof: payments collected in THIS ERP with any other method
+    // (cash / bank / mobile banking / online) are genuine new-ERP collections
+    // and are never counted or touched.
+    //
+    // Duplicate-import detection FIRST: money may already exist in this ERP
+    // recorded WITH the old_erp method (e.g. collected again using the old-ERP
+    // method), duplicating the import. When the old-ERP records EXCEED the
+    // proof, the fix deletes every old-ERP tuition MEMO voucher of the student
+    // and re-merges fresh from the proof.
+    $rebuild_deleted = 0;
+    $old_rows        = oepa_old_erp_tuition($student_pk);
+    $recorded_total  = 0.0;
+    foreach ($old_rows as $p) {
+        $recorded_total += (float)$p['amount'];
+    }
+    $recorded_total = round($recorded_total, 2);
+    $proof_total    = round(array_sum($proof), 2);
+
+    if ($recorded_total > $proof_total + OEPA_FLAG_TOLERANCE) {
+        // Same safety guard as Undo: only MEMO vouchers where EVERY linked
+        // payment belongs to this student and uses the old_erp method.
+        $vids = array_values(array_unique(array_map(
+            static fn($p) => (int)($p['voucher_id'] ?? 0), $old_rows
+        )));
+        $chk = db()->prepare(
+            "SELECT v.status,
+                    COUNT(sp.id) AS total_rows,
+                    SUM(sp.payment_method = 'old_erp') AS old_erp_rows,
+                    SUM(sp.student_id = ?) AS student_rows
+             FROM acc_vouchers v
+             LEFT JOIN sfp_payments sp ON sp.voucher_id = v.id
+             WHERE v.id = ? AND v.is_deleted = 0
+             GROUP BY v.id, v.status"
+        );
+        foreach ($vids as $vid) {
+            if ($vid <= 0) {
+                continue;
+            }
+            try {
+                $chk->execute([$student_pk, $vid]);
+                $vrow = $chk->fetch();
+                if (!$vrow) {
+                    continue; // already deleted elsewhere
+                }
+                if ((string)$vrow['status'] !== 'memo'
+                    || (int)$vrow['total_rows'] < 1
+                    || (int)$vrow['old_erp_rows'] !== (int)$vrow['total_rows']
+                    || (int)$vrow['student_rows'] !== (int)$vrow['total_rows']) {
+                    $warnings[] = 'Voucher #' . $vid . ' is not a pure old-ERP memo for this student — kept as is.';
+                    continue;
+                }
+                acc_soft_delete_voucher($vid,
+                    'Old ERP proof audit rebuild: old-ERP records exceeded the proof (duplicate import) — removed before re-merging from the proof.');
+                $rebuild_deleted++;
+            } catch (Throwable $e) {
+                $warnings[] = 'Duplicate voucher #' . $vid . ' could not be removed: ' . $e->getMessage();
+            }
+        }
+        // Recompute the schedule and old-ERP records AFTER the deletions.
+        $summary = acc_student_fee_summary($student_pk);
+        $slots   = $summary ? oepa_month_slots($summary) : [];
+        if (!$slots) {
+            oepa_json(['success' => false, 'error' => 'The fee schedule disappeared during the rebuild — check the student manually.', 'warnings' => $warnings]);
+        }
+        $old_rows       = oepa_old_erp_tuition($student_pk);
+        $recorded_total = 0.0;
+        foreach ($old_rows as $p) {
+            $recorded_total += (float)$p['amount'];
+        }
+        $recorded_total = round($recorded_total, 2);
+    }
+
+    // Per-calendar-month view of the remaining old-ERP records (slot map).
     $slot_cal = [];   // "sfid:month_number" => "year-month"
     foreach ($slots as $slot) {
         $slot_cal[(int)$slot['semester_fee_id'] . ':' . (int)$slot['month_number']]
             = (int)$slot['cal_year'] . '-' . (int)$slot['cal_month'];
     }
     $recorded = [];
-    foreach (oepa_old_erp_tuition($student_pk) as $p) {
+    foreach ($old_rows as $p) {
         $pkey = (int)($p['semester_fee_id'] ?? 0) . ':' . (int)($p['month_number'] ?? 0);
         $ckey = $slot_cal[$pkey] ?? null;
         if ($ckey !== null) {
@@ -493,8 +566,12 @@ if (($_GET['action'] ?? '') === 'fix' && $_SERVER['REQUEST_METHOD'] === 'POST') 
         }
     }
 
-    // Missing money per proof month, then clamp the total to the outstanding
+    // Missing money per proof month decides WHERE to place the fix, but the
+    // amount inserted is capped by the GLOBAL deficit (proof total minus ALL
+    // old-ERP records, wherever earlier fixes placed them) AND the outstanding
     // balance — the fix can NEVER pay more than the student actually owes.
+    // The global cap makes the fix IDEMPOTENT: re-scanning a fixed student
+    // inserts nothing, because the global deficit is already zero.
     $missing = [];
     foreach ($proof as $key => $amt) {
         $gap = round($amt - (float)($recorded[$key] ?? 0.0), 2);
@@ -503,21 +580,27 @@ if (($_GET['action'] ?? '') === 'fix' && $_SERVER['REQUEST_METHOD'] === 'POST') 
         }
     }
     ksort($missing);
-    $total_missing = round(array_sum($missing), 2);
-    $total_out     = 0.0;
+    $total_missing  = round(array_sum($missing), 2);
+    $global_missing = round($proof_total - $recorded_total, 2);
+    $total_out      = 0.0;
     foreach ($slots as $slot) {
         $total_out += (float)$slot['out'];
     }
     $total_out = round($total_out, 2);
 
-    if ($total_missing <= OEPA_FLAG_TOLERANCE) {
-        oepa_json(['success' => false, 'error' => 'Nothing to fix: the proof and the imported old-ERP payments already match (within tolerance).', 'warnings' => $warnings]);
+    if (min($total_missing, $global_missing) <= OEPA_FLAG_TOLERANCE) {
+        if ($rebuild_deleted > 0) {
+            // The rebuild alone already reconciled the account.
+            $total_missing = 0.0;
+        } else {
+            oepa_json(['success' => false, 'error' => 'Nothing to fix: every old-ERP taka on the proof is already recorded (earlier fixes may sit on other months — the totals match).', 'warnings' => $warnings]);
+        }
     }
-    if ($total_out <= OEPA_AMOUNT_TOLERANCE) {
+    if ($rebuild_deleted === 0 && $total_out <= OEPA_AMOUNT_TOLERANCE) {
         oepa_json(['success' => false, 'error' => 'Nothing to fix: the student has no outstanding balance.', 'warnings' => $warnings]);
     }
 
-    $budget = min($total_missing, $total_out);
+    $budget = max(0.0, min($total_missing, $global_missing, $total_out));
 
     $cash_account_id   = acc_received_into_account_id_for_payment_method('old_erp');
     $income_account_id = acc_income_account_id_for_fee_type('semester_tuition');
@@ -615,28 +698,34 @@ if (($_GET['action'] ?? '') === 'fix' && $_SERVER['REQUEST_METHOD'] === 'POST') 
     }
 
     $batch_id = null;
-    if ($voucher_ids) {
-        try {
-            $batch_id = oepa_record_batch($stu, $voucher_ids, $inserted, $details);
-        } catch (Throwable $e) {
-            $errors[] = 'Undo tracking could not be saved: ' . $e->getMessage();
+    if ($voucher_ids || $rebuild_deleted > 0) {
+        if ($voucher_ids) {
+            try {
+                $batch_id = oepa_record_batch($stu, $voucher_ids, $inserted, array_merge($details,
+                    $rebuild_deleted > 0 ? [['rebuild_deleted_vouchers' => $rebuild_deleted]] : []));
+            } catch (Throwable $e) {
+                $errors[] = 'Undo tracking could not be saved: ' . $e->getMessage();
+            }
         }
         log_change('accounting', 'UPDATE', (int)$stu['id'],
             (string)$stu['full_name'] . ' (' . (string)$stu['student_id'] . ')',
             'old_erp_proof_audit', '', acc_fmt($inserted),
-            'Old ERP proof audit auto-fix: ' . count($voucher_ids) . ' payment(s) totalling '
+            'Old ERP proof audit auto-fix: '
+            . ($rebuild_deleted > 0 ? $rebuild_deleted . ' duplicate old-ERP voucher(s) deleted and re-merged; ' : '')
+            . count($voucher_ids) . ' payment(s) totalling '
             . acc_fmt($inserted) . ' recorded from the OLD ERP proof'
             . ($batch_id ? ' (fix batch #' . $batch_id . ')' : '') . '.');
     }
 
     oepa_json([
-        'success'      => (bool)$voucher_ids,
-        'error'        => $voucher_ids ? null : ($errors ? implode(' ', $errors) : 'No payment could be recorded.'),
-        'fixed_count'  => count($voucher_ids),
-        'total_amount' => $inserted,
-        'details'      => $details,
-        'warnings'     => array_merge($warnings, $errors),
-        'batch_id'     => $batch_id,
+        'success'         => (bool)$voucher_ids || $rebuild_deleted > 0,
+        'error'           => ($voucher_ids || $rebuild_deleted > 0) ? null : ($errors ? implode(' ', $errors) : 'No payment could be recorded.'),
+        'fixed_count'     => count($voucher_ids),
+        'total_amount'    => $inserted,
+        'rebuild_deleted' => $rebuild_deleted,
+        'details'         => $details,
+        'warnings'        => array_merge($warnings, $errors),
+        'batch_id'        => $batch_id,
     ]);
 }
 
@@ -698,6 +787,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') ==
             $msg .= ' ' . count($undo_errors) . ' could not be reverted: ' . implode(' ', $undo_errors);
         }
         flash_set($undo_errors ? 'warning' : 'success', $msg);
+    }
+}
+
+// ── POST: clear the ENTIRE old-ERP import (super admin only) ───────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') === 'clear_import') {
+    csrf_check();
+    if (!is_super_admin()) {
+        flash_set('danger', 'Only a Super Administrator can clear the old-ERP import.');
+    } elseif (strtoupper(trim((string)($_POST['confirm_text'] ?? ''))) !== 'DELETE OLD ERP') {
+        flash_set('danger', 'Confirmation text did not match — nothing was deleted.');
+    } else {
+        set_time_limit(0);
+        // Every live voucher whose payments ALL use the old_erp method — pure
+        // old-ERP imports (bulk merge, single old-ERP collections, proof-audit
+        // fixes). Vouchers carrying ANY payment collected in this ERP (cash /
+        // bank / mobile banking / online) are NEVER touched, so money actually
+        // collected in this ERP stays exactly as it is.
+        $vid_stmt = db()->query(
+            "SELECT v.id
+             FROM acc_vouchers v
+             JOIN sfp_payments sp ON sp.voucher_id = v.id
+             WHERE v.is_deleted = 0
+             GROUP BY v.id
+             HAVING SUM(sp.payment_method <> 'old_erp') = 0"
+        );
+        $cleared = 0;
+        $clear_failed = 0;
+        foreach ($vid_stmt->fetchAll() as $vrow) {
+            try {
+                acc_soft_delete_voucher((int)$vrow['id'],
+                    'Old ERP import cleared: every old-ERP transaction removed (payments collected in this ERP are kept).');
+                $cleared++;
+            } catch (Throwable $e) {
+                $clear_failed++;
+            }
+        }
+        oepa_ensure_batch_table();
+        db()->exec('DELETE FROM oepa_fix_batches'); // wipe the audit report / undo log
+        log_change('accounting', 'DELETE', 0, 'Old ERP import', 'old_erp_clear_import',
+            (string)$cleared, '0',
+            'Old ERP import cleared: ' . $cleared . ' old-ERP voucher(s) soft-deleted'
+            . ($clear_failed ? ', ' . $clear_failed . ' failed' : '')
+            . '; proof-audit report wiped. Payments collected in this ERP were not touched.');
+        flash_set($clear_failed ? 'warning' : 'success',
+            'Old ERP import cleared: ' . $cleared . ' voucher(s) removed'
+            . ($clear_failed ? ', ' . $clear_failed . ' could not be removed' : '')
+            . '. The proof-audit report was reset. Payments collected in this ERP are untouched.');
     }
 }
 
@@ -785,8 +921,16 @@ require_once __DIR__ . '/../includes/header.php';
             across all fee heads and payment methods; a shortfall is flagged as
             <strong>RECEIVED TOTAL SHORT</strong>. The old ERP's own printed Total is never
             trusted: the line-by-line sum is used, and a wrong printed Total is reported.
-            The fix is recomputed server-side, capped at the outstanding balance (it can never
-            overpay), skips suspicious OCR amounts, and every fix batch can be
+            The fix is recomputed server-side, capped at the outstanding balance <em>and</em> at
+            the <strong>global old-ERP deficit</strong> (proof total minus ALL old-ERP records,
+            wherever earlier fixes placed them) — so <strong>re-scanning a fixed student adds
+            nothing</strong>; the totals simply match. Only <strong>old-ERP vouchers</strong> are
+            counted against the proof: payments collected in this ERP with any other method are
+            genuine new collections and are never counted or touched. If the old-ERP records
+            <strong>exceed</strong> the proof (duplicate import, e.g. the same payment collected
+            again with the old-ERP method), the student is flagged <strong>DUPLICATE
+            IMPORT</strong> and Fix deletes the old-ERP memos and re-merges them fresh from the
+            proof. Suspicious OCR amounts are skipped, and every fix batch can be
             <strong>undone</strong> from the list at the bottom. <strong>Keep this tab open</strong>
             while a batch scan runs (≈ 3–8 seconds per student).
         </div>
@@ -970,6 +1114,34 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
+<?php if (is_super_admin()): ?>
+<!-- ── Danger zone: clear the entire old-ERP import ── -->
+<div class="card border-danger mt-4">
+    <div class="card-header py-3 px-4 fw-semibold text-danger">
+        <i class="fas fa-trash-can me-2"></i>Danger Zone — Clear Old ERP Import &amp; Report
+    </div>
+    <div class="card-body">
+        <p class="small mb-3">
+            Permanently removes <strong>every old-ERP transaction</strong> imported into this
+            system — bulk-merge rows, single Old-ERP collections and proof-audit fixes — and
+            resets the proof-audit report above. Payments <strong>collected in this ERP</strong>
+            (cash, bank, mobile banking, online) are <strong>never touched</strong>. Vouchers are
+            soft-deleted, so the audit trail is kept. Type <code>DELETE OLD ERP</code> to confirm.
+        </p>
+        <form method="post" class="d-flex gap-2 flex-wrap align-items-center"
+              onsubmit="return confirm('Really delete EVERY old-ERP transaction import and reset the report? Payments collected in this ERP will stay.');">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="clear_import">
+            <input type="text" name="confirm_text" class="form-control form-control-sm"
+                   style="max-width:220px;" placeholder="Type: DELETE OLD ERP" autocomplete="off" required>
+            <button class="btn btn-danger btn-sm" type="submit">
+                <i class="fas fa-trash-can me-1"></i>Clear Old ERP Import &amp; Report
+            </button>
+        </form>
+    </div>
+</div>
+<?php endif; ?>
+
 <script>
 (function () {
     'use strict';
@@ -1119,11 +1291,18 @@ require_once __DIR__ . '/../includes/header.php';
             proof[key] = (proof[key] || 0) + r.amount;
             proofTotal += r.amount;
         });
-        var missing = 0;
+        // Per-month gaps show WHICH months look unpaid, but the amount that
+        // needs fixing is the GLOBAL deficit: proof monthly sum minus EVERY
+        // old-ERP taka recorded (earlier fixes may sit on other months). This
+        // keeps re-scans at zero instead of flagging the same gap over and
+        // over. Old-ERP records ABOVE the proof mean a duplicated import.
+        var perMonthGap = 0;
         Object.keys(proof).forEach(function (key) {
             var gap = proof[key] - (recorded[key] || 0);
-            if (gap > CFG.lineTol) missing += gap;
+            if (gap > CFG.lineTol) perMonthGap += gap;
         });
+        var missing = Math.min(perMonthGap, Math.max(0, proofTotal - item.old_erp_total));
+        var dup = Math.max(0, Math.round((item.old_erp_total - proofTotal) * 100) / 100);
         // Received-total reconciliation: the sum of EVERY Received-amount
         // line on the proof (monthly + admission + registration + the bottom
         // Admission Form & ID Card Fee line) vs everything received in this
@@ -1157,12 +1336,18 @@ require_once __DIR__ . '/../includes/header.php';
         if (skipped > 0) {
             notes.push(skipped + ' suspicious OCR line(s) skipped.');
         }
-        var canFix = missing > CFG.flagTol && item.total_out > CFG.flagTol;
+        if (dup > CFG.flagTol) {
+            notes.push('Old-ERP records exceed the proof by ' + fmt(dup)
+                + ' - the import is DUPLICATED (e.g. the same payment was collected again with the old-ERP method).'
+                + ' Fix deletes the old-ERP memos and re-merges them fresh from the proof.');
+        }
+        var canFix = (missing > CFG.flagTol && item.total_out > CFG.flagTol) || dup > CFG.flagTol;
         var totalShort = recvDiff > CFG.flagTol;
         return {
             proofSum: parsed.sum,
             recvDiff: recvDiff,
             missing: Math.round(missing * 100) / 100,
+            dup: dup,
             fixable: Math.min(missing, item.total_out),
             skipped: skipped,
             notes: notes,
@@ -1181,7 +1366,8 @@ require_once __DIR__ . '/../includes/header.php';
         var badge = status === 'ok'
             ? '<span class="badge bg-success">OK</span>'
             : status === 'issue'
-                ? ((cmp && cmp.canFix ? '<span class="badge bg-danger">MISSING PAYMENTS</span> ' : '')
+                ? ((cmp && cmp.dup > CFG.flagTol ? '<span class="badge bg-danger">DUPLICATE IMPORT</span> ' : '')
+                    + (cmp && cmp.canFix && cmp.missing > CFG.flagTol ? '<span class="badge bg-danger">MISSING PAYMENTS</span> ' : '')
                     + (cmp && cmp.totalShort ? '<span class="badge bg-danger">RECEIVED TOTAL SHORT</span>' : ''))
                 : status === 'fixed'
                     ? '<span class="badge bg-primary">FIXED</span>'
@@ -1216,7 +1402,9 @@ require_once __DIR__ . '/../includes/header.php';
         tr.className = 'table-primary';
         tr.dataset.status = 'fixed';
         tr.querySelector('.oepa-status').innerHTML = '<span class="badge bg-primary">FIXED — '
-            + resp.fixed_count + ' payment(s), ' + fmt(resp.total_amount) + '</span>'
+            + resp.fixed_count + ' payment(s), ' + fmt(resp.total_amount)
+            + (resp.rebuild_deleted ? ' (' + resp.rebuild_deleted + ' duplicate voucher(s) deleted & re-merged)' : '')
+            + '</span>'
             + (resp.warnings && resp.warnings.length
                 ? '<div class="small text-muted">' + esc(resp.warnings.join(' ')) + '</div>' : '');
         var btn = tr.querySelector('.oepa-fix-btn');
