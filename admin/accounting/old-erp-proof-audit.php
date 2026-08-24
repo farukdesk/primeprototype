@@ -610,10 +610,13 @@ if (($_GET['action'] ?? '') === 'fix' && $_SERVER['REQUEST_METHOD'] === 'POST') 
     $total_out = round($total_out, 2);
 
     // ── One-time heads from the proof: Admission / Registration / Form & ID ──
-    // The proof's one-time lines are adjusted too. Old-ERP records per head
-    // are compared with the proof; any shortfall is planned for insertion,
-    // capped at the head's OUTSTANDING so a head already collected in THIS
-    // ERP (cash / bank / mobile banking / online) is never double-counted.
+    // The proof's one-time lines are adjusted too. The amount ACTUALLY paid
+    // in the old ERP is authoritative — it is never clamped to the package's
+    // snapshotted dues (admission_fees, the 500+500 form/ID constants): the
+    // full proof-vs-old-ERP gap is recorded, with a warning when it exceeds
+    // the scheduled due. A head already collected in THIS ERP with another
+    // method (cash / bank / mobile banking / online) is kept as a genuine new
+    // collection and never double-counted — it is warned for manual review.
     $tt        = $summary['totals'] ?? [];
     $heads_raw = json_decode((string)($_POST['proof_heads'] ?? '[]'), true);
     $proof_heads = ['admission' => 0.0, 'registration' => 0.0, 'form_fee' => 0.0, 'id_card_fee' => 0.0, 'form_id' => 0.0];
@@ -655,24 +658,32 @@ if (($_GET['action'] ?? '') === 'fix' && $_SERVER['REQUEST_METHOD'] === 'POST') 
         $oe_heads[(string)$r['fee_type']] = (float)$r['total'];
     }
 
-    $head_alloc = [];   // fee_type => amount to insert
+    $head_alloc = [];   // fee_type => ACTUAL old-ERP amount to insert
     foreach ($proof_heads as $hk => $hamt) {
         if ($hamt <= 0) {
             continue;
         }
-        $h_out = round((float)($tt[$hk]['out'] ?? 0), 2);
-        $h_gap = round($hamt - (float)$oe_heads[$hk], 2);
+        $h_due  = round((float)($tt[$hk]['due'] ?? 0), 2);
+        $h_paid = round((float)($tt[$hk]['paid'] ?? 0), 2);
+        $h_cur  = round(max(0.0, $h_paid - (float)$oe_heads[$hk]), 2); // collected in THIS ERP
+        $h_gap  = round($hamt - (float)$oe_heads[$hk], 2);
         if ($h_gap <= OEPA_AMOUNT_TOLERANCE) {
             continue; // already recorded as old-ERP
         }
-        $h_take = round(min($h_gap, $h_out), 2);
-        if ($h_take <= OEPA_AMOUNT_TOLERANCE) {
+        if ($h_cur > OEPA_FLAG_TOLERANCE) {
             $warnings[] = acc_fee_type_label($hk) . ': the proof shows ' . acc_fmt($h_gap)
-                . ' beyond the old-ERP records but the head has no outstanding'
-                . ' (already collected in this ERP) — nothing inserted.';
+                . ' beyond the old-ERP records, but ' . acc_fmt($h_cur)
+                . ' was collected in THIS ERP — kept as a new collection, nothing inserted; review manually.';
             continue;
         }
-        $head_alloc[$hk] = $h_take;
+        // The ACTUAL old-ERP amount is recorded in full — never clamped to the
+        // snapshotted due. Above-due amounts are reported for verification.
+        if ($h_due > 0 && $h_gap > $h_due + OEPA_AMOUNT_TOLERANCE) {
+            $warnings[] = acc_fee_type_label($hk) . ': the proof shows ' . acc_fmt($h_gap)
+                . ' while the scheduled due is ' . acc_fmt($h_due)
+                . ' — the ACTUAL old-ERP amount is recorded in full; verify if needed.';
+        }
+        $head_alloc[$hk] = $h_gap;
     }
     $head_fixable = round(array_sum($head_alloc), 2);
 
@@ -816,8 +827,29 @@ if (($_GET['action'] ?? '') === 'fix' && $_SERVER['REQUEST_METHOD'] === 'POST') 
                     $left = round($left - $take2, 2);
                 }
                 if ($left > OEPA_AMOUNT_TOLERANCE) {
-                    $warnings[] = 'Registration Fee: ' . acc_fmt($left)
-                        . ' could not be placed — no semester with registration room left.';
+                    // The ACTUAL old-ERP registration exceeds the scheduled
+                    // rooms — record the remainder on the last semester so the
+                    // real old-ERP collection is never lost, and flag it.
+                    $sems = $summary['semesters'] ?? [];
+                    $last_sem = $sems ? $sems[count($sems) - 1] : null;
+                    if ($last_sem) {
+                        $voucher_ids[] = acc_collect_student_fee(
+                            (int)$stu['id'], (int)$stu['package_id'], 'registration',
+                            (int)$last_sem['id'], (int)$last_sem['semester_number'], null,
+                            'old_erp', null, 'OLD-ERP-PROOF', $left,
+                            $cash_account_id, $h_income, $today,
+                            'Old ERP proof audit fix',
+                            'Old ERP proof audit: Registration Fee actually received in the OLD ERP beyond the scheduled per-semester dues — the real amount is recorded on the last semester.',
+                            true
+                        );
+                        $inserted  = round($inserted + $left, 2);
+                        $details[] = ['proof_month' => 'Registration Fee', 'placed_on' => 'Semester ' . (int)$last_sem['semester_number'] . ' (beyond schedule)', 'amount' => $left];
+                        $warnings[] = 'Registration Fee: ' . acc_fmt($left)
+                            . ' is beyond the scheduled registration dues — the ACTUAL old-ERP amount was recorded on the last semester; verify manually.';
+                    } else {
+                        $warnings[] = 'Registration Fee: ' . acc_fmt($left)
+                            . ' could not be placed — the student has no semesters.';
+                    }
                 }
             } else {
                 $voucher_ids[] = acc_collect_student_fee(
@@ -1115,8 +1147,10 @@ require_once __DIR__ . '/../includes/header.php';
             still show dues — are <strong>flagged</strong>, and <strong>Auto-Fix</strong> records
             the missing amounts as Old ERP memo payments on the earliest months with room,
             and also adjusts the <strong>one-time heads</strong> (Admission, Registration,
-            Form &amp; ID Card) shown paid on the proof but missing from the import — each
-            capped at that head's outstanding so nothing is ever double-counted.
+            Form &amp; ID Card) shown paid on the proof but missing from the import — recording
+            the <strong>ACTUAL amounts paid in the old ERP</strong> (never clamped to the
+            package's default dues); a head already collected in this ERP is kept as a new
+            collection and never double-counted.
             It also <strong>sums the proof's entire Received-amount column</strong> (monthly
             tuition + Admission + Registration + the bottom <em>Admission Form &amp; ID Card
             Fee</em> line) and compares it with the <strong>total received in this ERP</strong>
@@ -1556,18 +1590,21 @@ require_once __DIR__ . '/../includes/header.php';
               oe: (ehOe.form_fee || 0) + (ehOe.id_card_fee || 0),
               out: (ehOut.form_fee || 0) + (ehOut.id_card_fee || 0) }
         ].forEach(function (hc) {
-            var gap = hc.proof - hc.oe;                        // paid in OLD ERP, not merged
-            var fixNow = Math.min(Math.max(0, gap), hc.out);   // capped at outstanding
+            var gap = hc.proof - hc.oe;                 // ACTUALLY paid in OLD ERP, not merged
+            var cur = Math.max(0, hc.erp - hc.oe);      // collected in THIS ERP with other methods
             if (gap > CFG.lineTol) {
-                if (fixNow > CFG.lineTol) {
-                    headMissing += fixNow;
+                if (cur <= CFG.flagTol) {
+                    // The ACTUAL old-ERP amount is authoritative - never clamped
+                    // to the package's default dues (e.g. 10,000 / 500+500).
+                    headMissing += gap;
                     notes.push(hc.label + ': the proof shows ' + fmt(hc.proof)
-                        + ' received in the OLD ERP but only ' + fmt(hc.oe)
-                        + ' is merged as old-ERP - Fix will record ' + fmt(fixNow) + '.');
+                        + ' actually received in the OLD ERP but only ' + fmt(hc.oe)
+                        + ' is merged as old-ERP - Fix will record the actual ' + fmt(gap) + '.');
                 } else {
                     notes.push(hc.label + ': the proof shows ' + fmt(hc.proof)
-                        + ' but only ' + fmt(hc.oe) + ' is merged as old-ERP; the head is already'
-                        + ' covered in this ERP (' + fmt(hc.erp) + ' total) - nothing to insert.');
+                        + ' received in the OLD ERP, but ' + fmt(cur)
+                        + ' was collected in THIS ERP - kept as a new collection, nothing inserted;'
+                        + ' review manually if the old-ERP amount is also real.');
                 }
             }
         });
