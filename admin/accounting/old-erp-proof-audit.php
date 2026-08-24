@@ -234,15 +234,26 @@ function oepa_student_snapshot(int $student_pk): ?array
     $rcv->execute([$student_pk]);
     $received_total = 0.0;
     $old_erp_all    = 0.0;
-    $heads = ['admission' => 0.0, 'form_fee' => 0.0, 'id_card_fee' => 0.0, 'registration' => 0.0];
+    $heads    = ['admission' => 0.0, 'form_fee' => 0.0, 'id_card_fee' => 0.0, 'registration' => 0.0];
+    $heads_oe = ['admission' => 0.0, 'form_fee' => 0.0, 'id_card_fee' => 0.0, 'registration' => 0.0];
     foreach ($rcv->fetchAll() as $r) {
         $received_total += (float)$r['total'];
         $old_erp_all    += (float)$r['old_erp_amt'];
         $ft = (string)$r['fee_type'];
         if (array_key_exists($ft, $heads)) {
-            $heads[$ft] = round((float)$r['total'], 2);
+            $heads[$ft]    = round((float)$r['total'], 2);
+            $heads_oe[$ft] = round((float)$r['old_erp_amt'], 2);
         }
     }
+    // Per-head outstanding so the scanner (and the fix) can adjust the
+    // one-time heads too, each capped at its own outstanding.
+    $tt = $summary['totals'] ?? [];
+    $heads_out = [
+        'admission'    => round((float)($tt['admission']['out'] ?? 0), 2),
+        'form_fee'     => round((float)($tt['form_fee']['out'] ?? 0), 2),
+        'id_card_fee'  => round((float)($tt['id_card_fee']['out'] ?? 0), 2),
+        'registration' => round((float)($tt['registration']['out'] ?? 0), 2),
+    ];
 
     return [
         'months'             => $months,
@@ -254,6 +265,8 @@ function oepa_student_snapshot(int $student_pk): ?array
         'old_erp_all_total'  => round($old_erp_all, 2),
         'erp_received_total' => round($received_total, 2),
         'erp_heads'          => $heads,
+        'erp_heads_oe'       => $heads_oe,
+        'erp_heads_out'      => $heads_out,
     ];
 }
 
@@ -596,16 +609,78 @@ if (($_GET['action'] ?? '') === 'fix' && $_SERVER['REQUEST_METHOD'] === 'POST') 
     }
     $total_out = round($total_out, 2);
 
-    if (min($total_missing, $global_missing) <= OEPA_FLAG_TOLERANCE) {
-        if ($rebuild_deleted > 0) {
-            // The rebuild alone already reconciled the account.
-            $total_missing = 0.0;
-        } else {
-            oepa_json(['success' => false, 'error' => 'Nothing to fix: every old-ERP taka on the proof is already recorded (earlier fixes may sit on other months — the totals match).', 'warnings' => $warnings]);
+    // ── One-time heads from the proof: Admission / Registration / Form & ID ──
+    // The proof's one-time lines are adjusted too. Old-ERP records per head
+    // are compared with the proof; any shortfall is planned for insertion,
+    // capped at the head's OUTSTANDING so a head already collected in THIS
+    // ERP (cash / bank / mobile banking / online) is never double-counted.
+    $tt        = $summary['totals'] ?? [];
+    $heads_raw = json_decode((string)($_POST['proof_heads'] ?? '[]'), true);
+    $proof_heads = ['admission' => 0.0, 'registration' => 0.0, 'form_fee' => 0.0, 'id_card_fee' => 0.0, 'form_id' => 0.0];
+    if (is_array($heads_raw) && count($heads_raw) <= 50) {
+        foreach ($heads_raw as $hr) {
+            $hk = (string)($hr['key'] ?? '');
+            $ha = round((float)($hr['amount'] ?? 0), 2);
+            if ($ha <= 0 || $ha > 500000 || !array_key_exists($hk, $proof_heads)) {
+                continue; // variable exam / 'other' fees are never auto-inserted
+            }
+            $proof_heads[$hk] = round($proof_heads[$hk] + $ha, 2);
         }
     }
-    if ($rebuild_deleted === 0 && $total_out <= OEPA_AMOUNT_TOLERANCE) {
-        oepa_json(['success' => false, 'error' => 'Nothing to fix: the student has no outstanding balance.', 'warnings' => $warnings]);
+    // Split the combined bottom "Admission Form & ID Card Fee" line across
+    // the two heads (form fee first, up to its due).
+    if ($proof_heads['form_id'] > 0) {
+        $ff_due  = (float)($tt['form_fee']['due'] ?? 0);
+        $ff_take = round(min($proof_heads['form_id'], $ff_due > 0 ? $ff_due : $proof_heads['form_id'] / 2), 2);
+        $proof_heads['form_fee']    = round($proof_heads['form_fee'] + $ff_take, 2);
+        $proof_heads['id_card_fee'] = round($proof_heads['id_card_fee'] + max(0.0, $proof_heads['form_id'] - $ff_take), 2);
+    }
+    unset($proof_heads['form_id']);
+
+    // Old-ERP money already recorded per one-time head.
+    $oe_heads = ['admission' => 0.0, 'registration' => 0.0, 'form_fee' => 0.0, 'id_card_fee' => 0.0];
+    $oeh_stmt = db()->prepare(
+        "SELECT sp.fee_type, COALESCE(SUM(sp.amount), 0) AS total
+         FROM sfp_payments sp
+         JOIN acc_vouchers v ON v.id = sp.voucher_id
+         WHERE sp.student_id = ?
+           AND sp.payment_method = 'old_erp'
+           AND v.is_deleted = 0
+           AND v.status IN ('posted','memo')
+           AND sp.fee_type IN ('admission','registration','form_fee','id_card_fee')
+         GROUP BY sp.fee_type"
+    );
+    $oeh_stmt->execute([$student_pk]);
+    foreach ($oeh_stmt->fetchAll() as $r) {
+        $oe_heads[(string)$r['fee_type']] = (float)$r['total'];
+    }
+
+    $head_alloc = [];   // fee_type => amount to insert
+    foreach ($proof_heads as $hk => $hamt) {
+        if ($hamt <= 0) {
+            continue;
+        }
+        $h_out = round((float)($tt[$hk]['out'] ?? 0), 2);
+        $h_gap = round($hamt - (float)$oe_heads[$hk], 2);
+        if ($h_gap <= OEPA_AMOUNT_TOLERANCE) {
+            continue; // already recorded as old-ERP
+        }
+        $h_take = round(min($h_gap, $h_out), 2);
+        if ($h_take <= OEPA_AMOUNT_TOLERANCE) {
+            $warnings[] = acc_fee_type_label($hk) . ': the proof shows ' . acc_fmt($h_gap)
+                . ' beyond the old-ERP records but the head has no outstanding'
+                . ' (already collected in this ERP) — nothing inserted.';
+            continue;
+        }
+        $head_alloc[$hk] = $h_take;
+    }
+    $head_fixable = round(array_sum($head_alloc), 2);
+
+    if (min($total_missing, $global_missing) <= OEPA_FLAG_TOLERANCE || $total_out <= OEPA_AMOUNT_TOLERANCE) {
+        $total_missing = 0.0; // monthly tuition already reconciled / no room left
+    }
+    if ($rebuild_deleted === 0 && $total_missing <= 0.0 && $head_fixable <= OEPA_AMOUNT_TOLERANCE) {
+        oepa_json(['success' => false, 'error' => 'Nothing to fix: monthly tuition AND the one-time heads (Admission / Registration / Form & ID Card) already match the proof (within tolerance).', 'warnings' => $warnings]);
     }
 
     $budget = max(0.0, min($total_missing, $global_missing, $total_out));
@@ -702,6 +777,63 @@ if (($_GET['action'] ?? '') === 'fix' && $_SERVER['REQUEST_METHOD'] === 'POST') 
         if ($take > OEPA_AMOUNT_TOLERANCE) {
             $warnings[] = $proof_label . ': ' . acc_fmt($take)
                 . ' could not be placed — no month with room left (the schedule is already fully covered).';
+        }
+    }
+
+    // Insert the planned one-time head adjustments (Admission / Registration /
+    // Form Fee / ID Card Fee) as old-ERP memo payments.
+    foreach ($head_alloc as $hk => $h_take) {
+        $h_income = acc_income_account_id_for_fee_type($hk);
+        if ($h_income <= 0) {
+            $errors[] = acc_fee_type_label($hk) . ': no income account is mapped in Accounting Settings.';
+            continue;
+        }
+        try {
+            if ($hk === 'registration') {
+                // Registration is per semester — fill the earliest semesters
+                // that still have registration outstanding.
+                $left = $h_take;
+                foreach (($summary['semesters'] ?? []) as $sem) {
+                    if ($left <= 0.005) {
+                        break;
+                    }
+                    $sem_room = round((float)($sem['reg_out'] ?? 0), 2);
+                    if ($sem_room <= 0.005) {
+                        continue;
+                    }
+                    $take2 = round(min($left, $sem_room), 2);
+                    $voucher_ids[] = acc_collect_student_fee(
+                        (int)$stu['id'], (int)$stu['package_id'], 'registration',
+                        (int)$sem['id'], (int)$sem['semester_number'], null,
+                        'old_erp', null, 'OLD-ERP-PROOF', $take2,
+                        $cash_account_id, $h_income, $today,
+                        'Old ERP proof audit fix',
+                        'Old ERP proof audit: Registration Fee shown received on the OLD ERP proof but missing from the import — recorded on semester ' . (int)$sem['semester_number'] . '.',
+                        true
+                    );
+                    $inserted  = round($inserted + $take2, 2);
+                    $details[] = ['proof_month' => 'Registration Fee', 'placed_on' => 'Semester ' . (int)$sem['semester_number'], 'amount' => $take2];
+                    $left = round($left - $take2, 2);
+                }
+                if ($left > OEPA_AMOUNT_TOLERANCE) {
+                    $warnings[] = 'Registration Fee: ' . acc_fmt($left)
+                        . ' could not be placed — no semester with registration room left.';
+                }
+            } else {
+                $voucher_ids[] = acc_collect_student_fee(
+                    (int)$stu['id'], (int)$stu['package_id'], $hk,
+                    null, null, null,
+                    'old_erp', null, 'OLD-ERP-PROOF', $h_take,
+                    $cash_account_id, $h_income, $today,
+                    'Old ERP proof audit fix',
+                    'Old ERP proof audit: ' . acc_fee_type_label($hk) . ' shown received on the OLD ERP proof but missing from the import.',
+                    true
+                );
+                $inserted  = round($inserted + $h_take, 2);
+                $details[] = ['proof_month' => acc_fee_type_label($hk), 'placed_on' => acc_fee_type_label($hk), 'amount' => $h_take];
+            }
+        } catch (Throwable $e) {
+            $errors[] = acc_fee_type_label($hk) . ': ' . $e->getMessage();
         }
     }
 
@@ -981,7 +1113,10 @@ require_once __DIR__ . '/../includes/header.php';
             payments imported into this system and the <em>Fee Schedule &amp; Outstanding
             Balance</em>. Students whose proof shows money that was never imported — while they
             still show dues — are <strong>flagged</strong>, and <strong>Auto-Fix</strong> records
-            the missing amounts as Old ERP memo payments on the earliest months with room.
+            the missing amounts as Old ERP memo payments on the earliest months with room,
+            and also adjusts the <strong>one-time heads</strong> (Admission, Registration,
+            Form &amp; ID Card) shown paid on the proof but missing from the import — each
+            capped at that head's outstanding so nothing is ever double-counted.
             It also <strong>sums the proof's entire Received-amount column</strong> (monthly
             tuition + Admission + Registration + the bottom <em>Admission Form &amp; ID Card
             Fee</em> line) and compares it with the <strong>total received in this ERP</strong>
@@ -1402,19 +1537,41 @@ require_once __DIR__ . '/../includes/header.php';
         }
         var ph = {};
         parsed.heads.forEach(function (hd) { ph[hd.key] = (ph[hd.key] || 0) + hd.amount; });
-        var eh = item.erp_heads || {};
+        var eh    = item.erp_heads     || {};
+        var ehOe  = item.erp_heads_oe  || {};
+        var ehOut = item.erp_heads_out || {};
+        // Per-head check against the OLD-ERP records (not all methods): what
+        // the proof shows received in the old ERP must be merged as old-ERP.
+        // The fixable part is capped at the head's outstanding, so a head
+        // already collected in THIS ERP is reported but never re-inserted.
+        var headMissing = 0;
         [
-            { label: 'Admission Fee', proof: ph.admission || 0, erp: eh.admission || 0 },
-            { label: 'Registration Fee', proof: ph.registration || 0, erp: eh.registration || 0 },
+            { label: 'Admission Fee', proof: ph.admission || 0, erp: eh.admission || 0,
+              oe: ehOe.admission || 0, out: ehOut.admission || 0 },
+            { label: 'Registration Fee', proof: ph.registration || 0, erp: eh.registration || 0,
+              oe: ehOe.registration || 0, out: ehOut.registration || 0 },
             { label: 'Admission Form & ID Card Fee',
               proof: (ph.form_id || 0) + (ph.form_fee || 0) + (ph.id_card_fee || 0),
-              erp: (eh.form_fee || 0) + (eh.id_card_fee || 0) }
+              erp: (eh.form_fee || 0) + (eh.id_card_fee || 0),
+              oe: (ehOe.form_fee || 0) + (ehOe.id_card_fee || 0),
+              out: (ehOut.form_fee || 0) + (ehOut.id_card_fee || 0) }
         ].forEach(function (hc) {
-            if (hc.proof > hc.erp + CFG.lineTol) {
-                notes.push(hc.label + ': the proof shows ' + fmt(hc.proof)
-                    + ' but the ERP holds only ' + fmt(hc.erp) + '.');
+            var gap = hc.proof - hc.oe;                        // paid in OLD ERP, not merged
+            var fixNow = Math.min(Math.max(0, gap), hc.out);   // capped at outstanding
+            if (gap > CFG.lineTol) {
+                if (fixNow > CFG.lineTol) {
+                    headMissing += fixNow;
+                    notes.push(hc.label + ': the proof shows ' + fmt(hc.proof)
+                        + ' received in the OLD ERP but only ' + fmt(hc.oe)
+                        + ' is merged as old-ERP - Fix will record ' + fmt(fixNow) + '.');
+                } else {
+                    notes.push(hc.label + ': the proof shows ' + fmt(hc.proof)
+                        + ' but only ' + fmt(hc.oe) + ' is merged as old-ERP; the head is already'
+                        + ' covered in this ERP (' + fmt(hc.erp) + ' total) - nothing to insert.');
+                }
             }
         });
+        headMissing = Math.round(headMissing * 100) / 100;
         var recvDiff = Math.round((parsed.sum - item.erp_received_total) * 100) / 100;
         if (recvDiff < -CFG.flagTol) {
             notes.push('The ERP holds ' + fmt(-recvDiff)
@@ -1462,12 +1619,14 @@ require_once __DIR__ . '/../includes/header.php';
                 + ' - the import is DUPLICATED (e.g. the same payment was collected again with the old-ERP method).'
                 + ' Fix deletes the old-ERP memos and re-merges them fresh from the proof.');
         }
-        var canFix = (missing > CFG.flagTol && item.total_out > CFG.flagTol) || dup > CFG.flagTol;
+        var canFix = (missing > CFG.flagTol && item.total_out > CFG.flagTol)
+            || dup > CFG.flagTol || headMissing > CFG.flagTol;
         var totalShort = recvDiff > CFG.flagTol;
         return {
             proofSum: parsed.sum,
             recvDiff: recvDiff,
             missing: Math.round(missing * 100) / 100,
+            headMissing: headMissing,
             dup: dup,
             mergeDiff: mergeDiff,
             mergeMismatch: mergeMismatch,
@@ -1492,6 +1651,7 @@ require_once __DIR__ . '/../includes/header.php';
                 ? ((cmp && cmp.mergeMismatch ? '<span class="badge bg-danger">OLD-ERP MERGE MISMATCH</span> ' : '')
                     + (cmp && cmp.dup > CFG.flagTol ? '<span class="badge bg-danger">DUPLICATE IMPORT</span> ' : '')
                     + (cmp && cmp.canFix && cmp.missing > CFG.flagTol ? '<span class="badge bg-danger">MISSING PAYMENTS</span> ' : '')
+                    + (cmp && cmp.headMissing > CFG.flagTol ? '<span class="badge bg-danger">ONE-TIME HEADS MISSING</span> ' : '')
                     + (cmp && cmp.totalShort ? '<span class="badge bg-danger">RECEIVED TOTAL SHORT</span>' : ''))
                 : status === 'fixed'
                     ? '<span class="badge bg-primary">FIXED</span>'
@@ -1511,7 +1671,8 @@ require_once __DIR__ . '/../includes/header.php';
                 + '<br><small class="text-muted">old-ERP: ' + fmt(item.old_erp_all_total || 0) + '</small></td>' +
             '<td class="text-end fw-semibold">' + (cmp ? fmt(cmp.recvDiff) : '—') + '</td>' +
             '<td class="text-end">' + fmt(item.total_out) + '</td>' +
-            '<td class="text-end fw-semibold">' + (cmp ? fmt(cmp.missing) : '—') + '</td>' +
+            '<td class="text-end fw-semibold">' + (cmp ? fmt(cmp.missing)
+                + (cmp.headMissing > 0 ? '<br><small class="text-muted">heads: ' + fmt(cmp.headMissing) + '</small>' : '') : '—') + '</td>' +
             '<td class="oepa-status">' + badge + notesHtml + '</td>' +
             '<td class="text-end oepa-actions">' + actions + '</td>';
         var fixBtn = tr.querySelector('.oepa-fix-btn');
@@ -1543,7 +1704,8 @@ require_once __DIR__ . '/../includes/header.php';
         var fd = new FormData();
         fd.append(CFG.csrfField, CFG.csrfToken);
         fd.append('student_pk', item.student_pk);
-        fd.append('proof_rows', JSON.stringify(rows));
+        fd.append('proof_rows', JSON.stringify(rows && rows.monthly ? rows.monthly : (rows || [])));
+        fd.append('proof_heads', JSON.stringify(rows && rows.heads ? rows.heads : []));
         fetch(CFG.fixUrl, { method: 'POST', body: fd })
             .then(function (r) { return r.json(); })
             .then(function (resp) {
@@ -1627,18 +1789,18 @@ require_once __DIR__ . '/../includes/header.php';
             var cmp = compare(item, parsed);
             if (cmp.flagged) {
                 nIssue++; nDone++;
-                var tr = addRow(item, cmp, parsed.monthly, 'issue');
+                var tr = addRow(item, cmp, parsed, 'issue');
                 setProgress();
                 var autoBtn = tr.querySelector('.oepa-fix-btn');
                 if ($id('autofix-toggle').checked && autoBtn) {
-                    doFix(item, parsed.monthly, tr, autoBtn, function () {
+                    doFix(item, parsed, tr, autoBtn, function () {
                         setTimeout(processNext, 50);
                     });
                     return;
                 }
             } else {
                 nOk++; nDone++;
-                addRow(item, cmp, parsed.monthly, 'ok');
+                addRow(item, cmp, parsed, 'ok');
                 setProgress();
             }
             setTimeout(processNext, 50);
