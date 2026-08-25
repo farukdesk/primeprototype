@@ -143,9 +143,8 @@ foreach ($staff as $s) {
         'designation' => (string)($p['designation'] ?? ''),
         'dept'        => (string)($s['dept_name'] ?? ''),
         'appointment' => (string)($p['job_type'] ?? ''),
-        'cl'          => (int)($cl_days[$uid] ?? 0),
-        'ml'          => (int)($ml_days[$uid] ?? 0),
-        'pl'          => (int)($pl_days[$uid] ?? 0),
+        'cl'          => $fmt_dates($cl_dates[$uid] ?? []),
+        'ml'          => $fmt_dates($ml_dates[$uid] ?? []),
         'pa'          => att_late_penalty_days($late_early),
         'absent'      => $absent,
     ];
