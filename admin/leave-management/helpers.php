@@ -464,10 +464,18 @@ function lm_snapshot_flow_for_request(int $request_id, int $requester_group_id):
 /**
  * Re-snapshot the requester's CURRENT active approval flow onto an existing
  * pending request — for requests submitted before the approval chain was
- * configured (or after it changed), as long as no step has been acted on.
+ * configured, or after the chain changed.
+ *
+ * Steps that already carry an APPROVAL are preserved exactly as signed: the
+ * approver, signature image, note and date are kept, and those steps stay at
+ * the front of the rebuilt chain. The current flow's remaining groups are
+ * appended after them; groups that already signed are not asked again. When
+ * every group of the new flow has already signed, the request completes as
+ * approved. Only a recorded rejection blocks the sync.
  *
  * Returns the number of steps applied, 0 when the requester's group still has
- * no active flow configured, or -1 when the request cannot be synced.
+ * no active flow configured, or -1 when the request cannot be synced (not
+ * pending, or a rejection has been recorded).
  */
 function lm_resync_request_flow(int $request_id): int
 {
@@ -481,9 +489,12 @@ function lm_resync_request_flow(int $request_id): int
     $req = $stmt->fetch();
     if (!$req || $req['status'] !== 'pending') return -1;
 
-    // Never discard steps that already carry a decision.
+    // Keep every already-signed (approved) step as-is; a rejection blocks the
+    // sync entirely (a rejected request would not be pending anyway).
+    $signed = [];
     foreach (lm_request_approvals($request_id) as $a) {
-        if ($a['status'] !== 'pending') return -1;
+        if ($a['status'] === 'rejected') return -1;
+        if ($a['status'] !== 'pending') $signed[] = $a;
     }
 
     // Consider ALL of the requester's groups (multi-group aware) so a Head
@@ -494,13 +505,60 @@ function lm_resync_request_flow(int $request_id): int
     ]);
     if (!lm_group_has_flow($flow_group)) return 0;
 
+    // Outstanding steps of the CURRENT flow: skip groups that already signed
+    // so nobody is asked to approve the same request twice.
+    $signed_groups = array_map(static fn(array $a): int => (int)$a['group_id'], $signed);
+    $remaining = [];
+    foreach (lm_active_flow_for_group($flow_group) as $f) {
+        if (in_array((int)$f['group_id'], $signed_groups, true)) continue;
+        $remaining[] = $f;
+    }
+
     $db->beginTransaction();
     try {
         $db->prepare('DELETE FROM leave_request_approvals WHERE request_id = ?')->execute([$request_id]);
-        $steps = lm_snapshot_flow_for_request($request_id, $flow_group);
-        $db->prepare('UPDATE leave_requests SET current_step = 1 WHERE id = ?')->execute([$request_id]);
+        $ins = $db->prepare(
+            'INSERT INTO leave_request_approvals
+                 (request_id, step_order, group_id, label, status, approver_id, signature_file, note, acted_at)
+             VALUES (?,?,?,?,?,?,?,?,?)'
+        );
+        $step = 0;
+        // 1) Already-signed steps first, untouched (signature/approver kept).
+        foreach ($signed as $a) {
+            $step++;
+            $ins->execute([
+                $request_id, $step, (int)$a['group_id'],
+                ($a['label'] ?? '') !== '' ? $a['label'] : null,
+                (string)$a['status'],
+                !empty($a['approver_id']) ? (int)$a['approver_id'] : null,
+                ($a['signature_file'] ?? '') !== '' ? $a['signature_file'] : null,
+                ($a['note'] ?? '') !== '' ? $a['note'] : null,
+                !empty($a['acted_at']) ? $a['acted_at'] : null,
+            ]);
+        }
+        // 2) Then the current flow's outstanding groups as pending steps.
+        foreach ($remaining as $f) {
+            $step++;
+            $ins->execute([
+                $request_id, $step, (int)$f['group_id'],
+                ($f['label'] ?? '') !== '' ? $f['label'] : null,
+                'pending', null, null, null, null,
+            ]);
+        }
+        if ($step === 0) {
+            $db->rollBack();
+            return -1;
+        }
+        if (empty($remaining)) {
+            // Every group of the new flow has already signed – final approval.
+            $db->prepare("UPDATE leave_requests SET status = 'approved', current_step = ? WHERE id = ?")
+               ->execute([$step, $request_id]);
+        } else {
+            $db->prepare('UPDATE leave_requests SET current_step = ? WHERE id = ?')
+               ->execute([count($signed) + 1, $request_id]);
+        }
         $db->commit();
-        return $steps;
+        return $step;
     } catch (Throwable $e) {
         if ($db->inTransaction()) $db->rollBack();
         return -1;

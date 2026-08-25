@@ -57,14 +57,15 @@ if ($can_act) {
     }
 }
 
-// Admin may (re-)sync the approval flow while the request is pending and no
-// step has been acted on — covers requests submitted before the approval
-// chain for the requester's group was configured.
-$flow_untouched = true;
+// Admin may (re-)sync the approval flow while the request is pending — for
+// requests submitted before the chain was configured OR after it changed.
+// Already-signed (approved) steps are preserved exactly as signed by the
+// sync; only a recorded rejection blocks it.
+$has_rejection = false;
 foreach ($approvals as $a) {
-    if ($a['status'] !== 'pending') { $flow_untouched = false; break; }
+    if ($a['status'] === 'rejected') { $has_rejection = true; break; }
 }
-$can_sync = $is_admin && $req['status'] === 'pending' && $flow_untouched;
+$can_sync = $is_admin && $req['status'] === 'pending' && !$has_rejection;
 
 $page_title = 'Leave Request #' . $id;
 require_once __DIR__ . '/../includes/header.php';
@@ -287,7 +288,7 @@ foreach (LM_BALANCE_CATEGORIES as $bc) {
 
                 <?php if ($can_sync): ?>
                 <form method="POST" action="<?= APP_URL ?>/leave-management/action.php" class="mt-3 pt-3 border-top"
-                      onsubmit="return confirm('Sync the current approval flow of the requester group to this request?')">
+                      onsubmit="return confirm('Sync the current approval flow of the requester group to this request? Steps already approved keep their signatures; groups that already signed are not asked again.')">
                     <?= csrf_field() ?>
                     <input type="hidden" name="id" value="<?= $id ?>">
                     <input type="hidden" name="action" value="sync_flow">
@@ -296,7 +297,8 @@ foreach (LM_BALANCE_CATEGORIES as $bc) {
                     </button>
                     <div class="form-text mt-1">
                         Re-applies the current approval chain of the requester's group.
-                        Use this for requests submitted before the approval flow was configured.
+                        Steps that were already approved are kept exactly as signed;
+                        the remaining groups of the current flow are added after them.
                     </div>
                 </form>
                 <?php endif; ?>
