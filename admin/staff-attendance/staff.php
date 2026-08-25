@@ -471,4 +471,93 @@ $weekday_abbr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     </div>
 </div>
 
+<?php if ($can_edit): ?>
+<!-- Quick day-action modal: opened by clicking a calendar day cell. -->
+<div class="modal fade" id="dayActionModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius:12px;">
+            <div class="modal-header py-2 px-3">
+                <h6 class="modal-title fw-semibold"><i class="fas fa-calendar-day me-2 text-primary"></i><span id="damDate"></span></h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body px-3">
+                <div class="small text-muted mb-3">Current status: <span id="damStatus" class="fw-semibold text-dark"></span></div>
+
+                <form method="POST" class="row g-2 align-items-end mb-1">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="day_action" value="set_times">
+                    <input type="hidden" name="date" class="dam-date" value="">
+                    <input type="hidden" name="report" value="<?= h($report) ?>">
+                    <input type="hidden" name="dept" value="<?= (int)$dept_id ?>">
+                    <input type="hidden" name="q" value="<?= h($search) ?>">
+                    <div class="col-4">
+                        <label class="form-label fw-semibold small mb-1">Clock In</label>
+                        <input type="time" name="in_time" id="damIn" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-4">
+                        <label class="form-label fw-semibold small mb-1">Clock Out</label>
+                        <input type="time" name="out_time" id="damOut" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-4">
+                        <button class="btn btn-primary btn-sm w-100"><i class="fas fa-save me-1"></i> Save</button>
+                    </div>
+                </form>
+                <div class="form-text mb-3">Saving times removes any Absent / Weekend / Holiday mark on this day.</div>
+
+                <hr class="my-2">
+                <form method="POST" class="mb-1">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="day_action" value="mark">
+                    <input type="hidden" name="date" class="dam-date" value="">
+                    <input type="hidden" name="report" value="<?= h($report) ?>">
+                    <input type="hidden" name="dept" value="<?= (int)$dept_id ?>">
+                    <input type="hidden" name="q" value="<?= h($search) ?>">
+                    <label class="form-label fw-semibold small mb-1">Mark this day as</label>
+                    <div class="d-flex gap-2 flex-wrap mb-2">
+                        <button name="mark" value="absent" class="btn btn-outline-danger btn-sm"><i class="fas fa-user-slash me-1"></i> Absent</button>
+                        <button name="mark" value="weekend" class="btn btn-outline-secondary btn-sm"><i class="fas fa-couch me-1"></i> Weekend</button>
+                        <button name="mark" value="holiday" class="btn btn-outline-success btn-sm"><i class="fas fa-umbrella-beach me-1"></i> Holiday</button>
+                    </div>
+                    <input type="text" name="note" class="form-control form-control-sm" maxlength="255" placeholder="Note (optional)">
+                    <div class="form-text">Applies to this staff member only. University-wide holidays are managed on the Holidays page.</div>
+                </form>
+
+                <hr class="my-2">
+                <div class="d-flex justify-content-between align-items-center">
+                    <form method="POST" onsubmit="return confirm('Remove the times and any day mark for this date?');">
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="day_action" value="reset">
+                        <input type="hidden" name="date" class="dam-date" value="">
+                        <input type="hidden" name="report" value="<?= h($report) ?>">
+                        <input type="hidden" name="dept" value="<?= (int)$dept_id ?>">
+                        <input type="hidden" name="q" value="<?= h($search) ?>">
+                        <button class="btn btn-outline-dark btn-sm"><i class="fas fa-eraser me-1"></i> Reset Day</button>
+                    </form>
+                    <a href="#" id="damFull" class="small">Open full editor</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+(function () {
+    var modalEl = document.getElementById('dayActionModal');
+    document.querySelectorAll('.js-day').forEach(function (el) {
+        el.addEventListener('click', function (e) {
+            e.preventDefault();
+            document.getElementById('damDate').textContent   = el.dataset.label || el.dataset.date;
+            document.getElementById('damStatus').textContent = el.dataset.status || '\u2014';
+            document.getElementById('damIn').value  = el.dataset.in  || '';
+            document.getElementById('damOut').value = el.dataset.out || '';
+            document.getElementById('damFull').href = el.getAttribute('href');
+            modalEl.querySelectorAll('.dam-date').forEach(function (i) { i.value = el.dataset.date; });
+            (window.bootstrap && bootstrap.Modal.getOrCreateInstance
+                ? bootstrap.Modal.getOrCreateInstance(modalEl)
+                : new bootstrap.Modal(modalEl)).show();
+        });
+    });
+})();
+</script>
+<?php endif; ?>
+
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
