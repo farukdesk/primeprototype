@@ -386,7 +386,13 @@ $weekday_abbr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
                 echo '<td class="' . $cls . $is_today . '">';
                 echo $can_edit
-                    ? '<a class="cal-cell" href="' . $link . '" title="' . h(att_status_label($status)) . ' — click to edit">'
+                    ? '<a class="cal-cell js-day" href="' . $link . '"'
+                        . ' data-date="' . h($d) . '"'
+                        . ' data-label="' . h(date('D, d M Y', strtotime($d))) . '"'
+                        . ' data-in="' . h(att_normalize_time($rec['in_time'] ?? '') ?? '') . '"'
+                        . ' data-out="' . h(att_normalize_time($rec['out_time'] ?? '') ?? '') . '"'
+                        . ' data-status="' . h(att_status_label($status)) . '"'
+                        . ' title="' . h(att_status_label($status)) . ' — click to manage">'
                     : '<span class="cal-cell">';
                 echo '<span class="cal-day">' . (int)date('j', strtotime($d)) . '</span>';
                 if ($rec && !empty($rec['in_time'])) {
