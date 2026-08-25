@@ -604,8 +604,13 @@ function att_on_leave_user_ids(string $date): array
     }
     // Days explicitly marked "Approved Leave / Day Off" by an admin / the
     // Registrar office, or auto-marked when a leave gets its final approval.
+    // Absent / Weekend / Holiday quick marks are handled in att_compute_status()
+    // via att_day_override() and must NOT count as leave.
     try {
-        $stmt = db()->prepare('SELECT DISTINCT user_id FROM att_day_status WHERE status_date = ?');
+        $stmt = db()->prepare(
+            "SELECT DISTINCT user_id FROM att_day_status
+              WHERE status_date = ? AND status IN ('approved_leave', 'day_off')"
+        );
         $stmt->execute([$date]);
         foreach ($stmt->fetchAll() as $r) $ids[] = (int)$r['user_id'];
     } catch (Throwable $e) {
