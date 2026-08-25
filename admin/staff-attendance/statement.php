@@ -99,8 +99,7 @@ foreach ($staff as $s) {
     $p     = $profiles[$uid] ?? [];
     $sched = att_effective_schedule($uid);
 
-    $absent     = [];
-    $late_early = 0; // policy-active Late In / Early Out days → PA (Penalty Absent)
+    $absent = [];
     foreach ($dates as $d) {
         $rec    = $records[$uid . '|' . $d] ?? null;
         $status = att_compute_status($rec, $uid, $d, $sched, $holidays, $leave_by_date[$d] ?? []);
@@ -108,8 +107,6 @@ foreach ($staff as $s) {
             $absent[] = $multi_month
                 ? date('j M', strtotime($d))
                 : (string)(int)date('j', strtotime($d));
-        } elseif (att_policy_active($d) && in_array($status, ['late_in', 'early_out', 'late_and_early'], true)) {
-            $late_early++;
         }
     }
 
@@ -126,8 +123,6 @@ foreach ($staff as $s) {
         'appointment' => (string)($p['job_type'] ?? ''),
         'cl'          => (int)($cl_days[$uid] ?? 0),
         'ml'          => (int)($ml_days[$uid] ?? 0),
-        'pl'          => (int)($pl_days[$uid] ?? 0),
-        'pa'          => att_late_penalty_days($late_early),
         'absent'      => $absent,
     ];
 }
