@@ -61,6 +61,70 @@ if ($self_only) {
     }
 }
 
+// ── Quick day actions (module editors / super admin) ────────────────────
+// Posted from the calendar day modal: set clock in/out times, mark the day
+// Absent / Weekend / Holiday for THIS staff member only, or reset the day.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $can_edit && $member) {
+    csrf_check();
+    $act   = $_POST['day_action'] ?? '';
+    $pdate = att_normalize_date($_POST['date'] ?? '');
+    $me_id = (int)auth_user()['id'];
+    $back  = APP_URL . '/staff-attendance/staff.php?' . http_build_query(array_filter([
+        'user_id' => $user_id,
+        'month'   => substr($pdate, 0, 7),
+        'report'  => $_POST['report'] ?? null,
+        'dept'    => (int)($_POST['dept'] ?? 0) ?: null,
+        'q'       => trim($_POST['q'] ?? '') ?: null,
+    ]));
+
+    if ($act === 'set_times') {
+        $in_t  = att_normalize_time($_POST['in_time'] ?? '');
+        $out_t = att_normalize_time($_POST['out_time'] ?? '');
+        if ($in_t === null && $out_t === null) {
+            flash_set('error', 'Please enter a clock-in and/or clock-out time.');
+        } elseif ($in_t !== null && $out_t !== null && att_time_to_minutes($out_t) < att_time_to_minutes($in_t)) {
+            flash_set('error', 'Out time cannot be earlier than in time.');
+        } else {
+            db()->prepare(
+                'INSERT INTO att_records (user_id, work_date, in_time, out_time, created_by)
+                 VALUES (?,?,?,?,?)
+                 ON DUPLICATE KEY UPDATE in_time = VALUES(in_time), out_time = VALUES(out_time)'
+            )->execute([$user_id, $pdate, $in_t, $out_t, $me_id]);
+            // A manual time entry cancels any Absent / Weekend / Holiday mark.
+            try {
+                db()->prepare(
+                    "DELETE FROM att_day_status
+                      WHERE user_id = ? AND status_date = ? AND status IN ('absent','weekend','holiday')"
+                )->execute([$user_id, $pdate]);
+            } catch (Throwable $e) { /* migration not applied yet */ }
+            log_change('staff-attendance', 'UPDATE', $user_id, 'Attendance ' . $pdate, null, null,
+                'in=' . ($in_t ?? '—') . ', out=' . ($out_t ?? '—'));
+            flash_set('success', 'Clock in/out saved for ' . date('d M Y', strtotime($pdate)) . '.');
+        }
+    } elseif ($act === 'mark' && in_array($_POST['mark'] ?? '', ['absent', 'weekend', 'holiday'], true)) {
+        $mark = $_POST['mark'];
+        $note = trim($_POST['note'] ?? '');
+        try {
+            att_mark_dayoff($user_id, $pdate, $mark, $note !== '' ? mb_substr($note, 0, 255) : null, 'manual', null, $me_id);
+            log_change('staff-attendance', 'UPDATE', $user_id, 'Day mark ' . $pdate, null, null, $mark);
+            flash_set('success', date('d M Y', strtotime($pdate)) . ' marked as ' . ucfirst($mark) . '.');
+        } catch (Throwable $e) {
+            flash_set('error', 'Could not save the mark. Please run the staff-attendance-day-marks-v1.sql migration first.');
+        }
+    } elseif ($act === 'reset') {
+        db()->prepare('DELETE FROM att_records WHERE user_id = ? AND work_date = ?')->execute([$user_id, $pdate]);
+        try {
+            db()->prepare(
+                "DELETE FROM att_day_status
+                  WHERE user_id = ? AND status_date = ? AND status IN ('absent','weekend','holiday')"
+            )->execute([$user_id, $pdate]);
+        } catch (Throwable $e) { /* ignore */ }
+        log_change('staff-attendance', 'DELETE', $user_id, 'Attendance ' . $pdate, null, null, 'day reset');
+        flash_set('success', date('d M Y', strtotime($pdate)) . ' has been reset.');
+    }
+    redirect($back);
+}
+
 // Filters to carry back to the report.
 $dept_id = (int)($_GET['dept'] ?? 0);
 $search  = trim($_GET['q'] ?? '');
