@@ -384,21 +384,43 @@ function att_exam_exempt_group_names(): array
     return $out;
 }
 
-/** Date ranges of ACTIVE exams from the Exam Invigilation module (cached). */
+/**
+ * Date ranges of ACTIVE exams from the Exam Invigilation module (cached).
+ * The range comes from ei_exams.start_date/end_date; when either date is
+ * missing (both are optional on the exam form), it falls back to the exam's
+ * first/last invigilation slot date (ei_slots), so exams entered without an
+ * end date are still covered.
+ */
 function att_exam_date_ranges(): array
 {
     static $cache = null;
     if ($cache !== null) return $cache;
     $cache = [];
+    $clean = static function ($d): ?string {
+        $d = (string)$d;
+        return ($d === '' || $d === '0000-00-00') ? null : $d;
+    };
+    $rows = [];
     try {
         $rows = db()->query(
-            "SELECT start_date, end_date FROM ei_exams\n              WHERE is_active = 1\n                AND start_date IS NOT NULL AND start_date <> '0000-00-00'\n                AND end_date   IS NOT NULL AND end_date   <> '0000-00-00'"
+            'SELECT e.start_date, e.end_date, MIN(s.slot_date) AS first_slot, MAX(s.slot_date) AS last_slot FROM ei_exams e LEFT JOIN ei_slots s ON s.exam_id = e.id WHERE e.is_active = 1 GROUP BY e.id, e.start_date, e.end_date'
         )->fetchAll();
-        foreach ($rows as $r) {
-            $cache[] = ['from' => (string)$r['start_date'], 'to' => (string)$r['end_date']];
-        }
     } catch (Throwable $e) {
-        // Exam Invigilation module not installed - no exam exemption.
+        // ei_slots missing - fall back to the exam dates alone.
+        try {
+            $rows = db()->query(
+                'SELECT start_date, end_date, NULL AS first_slot, NULL AS last_slot FROM ei_exams WHERE is_active = 1'
+            )->fetchAll();
+        } catch (Throwable $e2) {
+            // Exam Invigilation module not installed - no exam exemption.
+        }
+    }
+    foreach ($rows as $r) {
+        $from = $clean($r['start_date']) ?? $clean($r['first_slot']);
+        $to   = $clean($r['end_date'])   ?? $clean($r['last_slot']) ?? $from;
+        if ($from === null) continue;
+        if ($to < $from) { [$from, $to] = [$to, $from]; }
+        $cache[] = ['from' => $from, 'to' => $to];
     }
     return $cache;
 }
@@ -428,7 +450,7 @@ function att_user_exam_exempt(int $user_id): bool
             // Primary group.
             try {
                 $rows = db()->query(
-                    'SELECT u.id AS user_id, g.name\n                       FROM users u JOIN user_groups g ON g.id = u.group_id'
+                    'SELECT u.id AS user_id, g.name FROM users u JOIN user_groups g ON g.id = u.group_id'
                 )->fetchAll();
                 foreach ($rows as $r) {
                     if (in_array(strtolower(trim((string)$r['name'])), $names, true)) {
@@ -442,7 +464,7 @@ function att_user_exam_exempt(int $user_id): bool
             // table may not exist on legacy deployments.
             try {
                 $rows = db()->query(
-                    'SELECT uga.user_id, g.name\n                       FROM user_group_assignments uga\n                       JOIN user_groups g ON g.id = uga.group_id\n                      WHERE g.is_active = 1'
+                    'SELECT uga.user_id, g.name FROM user_group_assignments uga JOIN user_groups g ON g.id = uga.group_id WHERE g.is_active = 1'
                 )->fetchAll();
                 foreach ($rows as $r) {
                     if (in_array(strtolower(trim((string)$r['name'])), $names, true)) {
