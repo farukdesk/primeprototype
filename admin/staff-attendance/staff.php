@@ -119,7 +119,8 @@ foreach ($dates as $d) {
     $on_leave = $leave_by_date[$d] ?? [];
     $status   = att_compute_status($rec, $user_id, $d, $sched, $holidays, $on_leave);
     $mins     = $rec ? att_worked_minutes($rec['in_time'] ?? null, $rec['out_time'] ?? null) : 0;
-    $off      = isset($holidays[$d]) || att_is_weekly_off_for($sched, $d);
+    $off      = isset($holidays[$d]) || att_is_weekly_off_for($sched, $d)
+             || in_array(att_day_override($user_id, $d), ['weekend', 'holiday'], true);
 
     if (!$off) $sum['working_days']++;
     switch ($status) {
