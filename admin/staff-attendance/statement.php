@@ -97,6 +97,19 @@ try {
 // "5 Jul" instead of a bare day number so they stay unambiguous.
 $multi_month = date('Y-m', strtotime($from)) !== date('Y-m', strtotime($to));
 
+// Format a keyed [Y-m-d => true] date set like the Absent column: sorted day
+// numbers, or "j M" when the range spans multiple months.
+$fmt_dates = static function (array $keyed) use ($multi_month): array {
+    $days = array_keys($keyed);
+    sort($days);
+    return array_map(
+        static fn(string $day): string => $multi_month
+            ? date('j M', strtotime($day))
+            : (string)(int)date('j', strtotime($day)),
+        $days
+    );
+};
+
 // ── Group staff by department ────────────────────────────────────────────────
 // Administrative staff → "Administrative Employee"; others → their department.
 $groups = [];
