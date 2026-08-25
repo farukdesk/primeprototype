@@ -62,18 +62,45 @@ if ($action === 'sync_flow') {
     }
     $steps = lm_resync_request_flow($id);
     if ($steps > 0) {
-        log_change('leave-management', 'UPDATE', $id, 'Approval flow synced (' . $steps . ' step(s))');
-        // Alert the first approving group that the request now awaits them.
+        log_change('leave-management', 'UPDATE', $id, 'Approval flow synced (' . $steps . ' step(s), existing signatures kept)');
         $fresh_stmt = db()->prepare('SELECT * FROM leave_requests WHERE id = ?');
         $fresh_stmt->execute([$id]);
-        if ($fresh = $fresh_stmt->fetch()) {
-            lm_notify_step_group($fresh, 1);
+        $fresh = $fresh_stmt->fetch();
+        if ($fresh && $fresh['status'] === 'approved') {
+            // Every group of the new flow had already signed – the sync
+            // completed the request. Mirror the final-approval side effects:
+            // mark the leave days on the attendance calendar + notify.
+            if ($req['category'] !== 'short') {
+                try {
+                    $mark = db()->prepare(
+                        "INSERT INTO att_day_status (user_id, status_date, status, note, source, leave_request_id, created_by)
+                         VALUES (?,?,'approved_leave',?,'leave',?,?)
+                         ON DUPLICATE KEY UPDATE status = VALUES(status), source = VALUES(source),
+                                                 leave_request_id = VALUES(leave_request_id)"
+                    );
+                    $note_txt = lm_category_label($req['category']) . ' (request #' . $id . ')';
+                    for ($d = strtotime($req['start_date']); $d !== false && $d <= strtotime($req['end_date']); $d = strtotime('+1 day', $d)) {
+                        $mark->execute([(int)$req['user_id'], date('Y-m-d', $d), $note_txt, $id, (int)$user['id']]);
+                    }
+                } catch (Throwable $ex) {
+                    // att_day_status table not installed – calendar still shows
+                    // the day as On Leave via the approved request itself.
+                }
+            }
+            lm_notify_decision($id, 'approved');
+            flash_set('success', 'Approval flow synced — every group of the current flow had already signed, so the request is now fully approved.');
+        } else {
+            // Alert the group of the first OUTSTANDING step (already-signed
+            // steps are preserved at the front of the chain).
+            if ($fresh) {
+                lm_notify_step_group($fresh, (int)$fresh['current_step']);
+            }
+            flash_set('success', 'Approval flow synced — ' . $steps . ' step(s) applied; existing signatures were kept. The next approval group has been notified.');
         }
-        flash_set('success', 'Approval flow synced — ' . $steps . ' step(s) applied. The first approval group has been notified.');
     } elseif ($steps === 0) {
         flash_set('error', 'No active approval flow is configured for the requester\'s user group yet. Configure it on the Approval Flow page first.');
     } else {
-        flash_set('error', 'This request cannot be synced: it is not pending, or an approval/rejection has already been recorded.');
+        flash_set('error', 'This request cannot be synced: it is not pending or a rejection has been recorded.');
     }
     redirect($view_url);
 }
