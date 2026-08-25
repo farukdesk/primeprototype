@@ -11,9 +11,11 @@
  *     heading; everyone else is grouped under their assigned department name.
  *     Each department starts on a NEW page.
  *   - Columns: Sl. | Employee ID | Name | Designation | Dept./Section |
- *     Type of Appointment | CL | ML | Absent | Remarks.
- *     CL/ML are the approved Casual / Medical(Sick) leave days that fall inside
- *     the range. Absent shows the day count plus the dates, e.g. "05 (1,5,7,8,9)".
+ *     Type of Appointment | CL | ML | PL | PA | Absent | Remarks.
+ *     CL/ML/PL are the approved Casual / Medical(Sick) / Paternity leave days
+ *     that fall inside the range. PA (Penalty Absent) is the attendance-policy
+ *     penalty: every 4 Late In / Early Out days inside the range = 1 absent day.
+ *     Absent shows the day count plus the dates, e.g. "05 (1,5,7,8,9)".
  *
  * Query string: from=Y-m-d, to=Y-m-d, format=pdf|doc, dept (optional), q (optional).
  */
@@ -64,13 +66,15 @@ try {
     // staff_profiles missing / older schema – columns show "—".
 }
 
-// Approved Casual (CL) / Sick a.k.a. Medical (ML) leave days inside the range.
+// Approved Casual (CL) / Sick a.k.a. Medical (ML) / Paternity (PL) leave days
+// inside the range.
 $cl_days = [];
 $ml_days = [];
+$pl_days = [];
 try {
     $stmt = db()->prepare(
         "SELECT user_id, category, start_date, end_date FROM leave_requests
-          WHERE status = 'approved' AND category IN ('casual','sick')
+          WHERE status = 'approved' AND category IN ('casual','sick','paternity')
             AND start_date <= ? AND end_date >= ?"
     );
     $stmt->execute([$to, $from]);
@@ -80,11 +84,12 @@ try {
         $e    = min(strtotime((string)$r['end_date']),   strtotime($to));
         if ($e < $s) continue;
         $days = (int)floor(($e - $s) / 86400) + 1;
-        if ($r['category'] === 'casual') $cl_days[$uid] = ($cl_days[$uid] ?? 0) + $days;
-        else                             $ml_days[$uid] = ($ml_days[$uid] ?? 0) + $days;
+        if ($r['category'] === 'casual')         $cl_days[$uid] = ($cl_days[$uid] ?? 0) + $days;
+        elseif ($r['category'] === 'paternity')  $pl_days[$uid] = ($pl_days[$uid] ?? 0) + $days;
+        else                                     $ml_days[$uid] = ($ml_days[$uid] ?? 0) + $days;
     }
 } catch (Throwable $e) {
-    // Leave Management not installed – CL/ML show "—".
+    // Leave Management not installed – CL/ML/PL show "—".
 }
 
 // When the range spans more than one calendar month, absent dates are shown as
@@ -99,7 +104,8 @@ foreach ($staff as $s) {
     $p     = $profiles[$uid] ?? [];
     $sched = att_effective_schedule($uid);
 
-    $absent = [];
+    $absent     = [];
+    $late_early = 0; // policy-active Late In / Early Out days → PA (Penalty Absent)
     foreach ($dates as $d) {
         $rec    = $records[$uid . '|' . $d] ?? null;
         $status = att_compute_status($rec, $uid, $d, $sched, $holidays, $leave_by_date[$d] ?? []);
@@ -107,6 +113,8 @@ foreach ($staff as $s) {
             $absent[] = $multi_month
                 ? date('j M', strtotime($d))
                 : (string)(int)date('j', strtotime($d));
+        } elseif (att_policy_active($d) && in_array($status, ['late_in', 'early_out', 'late_and_early'], true)) {
+            $late_early++;
         }
     }
 
@@ -123,6 +131,8 @@ foreach ($staff as $s) {
         'appointment' => (string)($p['job_type'] ?? ''),
         'cl'          => (int)($cl_days[$uid] ?? 0),
         'ml'          => (int)($ml_days[$uid] ?? 0),
+        'pl'          => (int)($pl_days[$uid] ?? 0),
+        'pa'          => att_late_penalty_days($late_early),
         'absent'      => $absent,
     ];
 }
@@ -188,6 +198,8 @@ foreach ($groups as $dept_heading => $rows) {
             . '<td class="c">' . h($r['appointment'] !== '' ? $r['appointment'] : '—') . '</td>'
             . '<td class="c">' . ($r['cl'] > 0 ? sprintf('%02d', $r['cl']) : '—') . '</td>'
             . '<td class="c">' . ($r['ml'] > 0 ? sprintf('%02d', $r['ml']) : '—') . '</td>'
+            . '<td class="c">' . ($r['pl'] > 0 ? sprintf('%02d', $r['pl']) : '—') . '</td>'
+            . '<td class="c">' . ($r['pa'] > 0 ? sprintf('%02d', $r['pa']) : '—') . '</td>'
             . '<td class="l">' . h($abs_text) . '</td>'
             . '<td class="l">&nbsp;</td>'
             . '</tr>';
@@ -199,14 +211,16 @@ foreach ($groups as $dept_heading => $rows) {
         . '<thead><tr>'
         . '<th style="width:4%;">Sl.</th>'
         . '<th style="width:9%;">Employee ID</th>'
-        . '<th style="width:17%;">Name</th>'
-        . '<th style="width:14%;">Designation</th>'
-        . '<th style="width:13%;">Dept./Section</th>'
+        . '<th style="width:15%;">Name</th>'
+        . '<th style="width:12%;">Designation</th>'
+        . '<th style="width:12%;">Dept./Section</th>'
         . '<th style="width:10%;">Type of Appointment</th>'
         . '<th style="width:5%;">CL</th>'
         . '<th style="width:5%;">ML</th>'
-        . '<th style="width:16%;">Absent</th>'
-        . '<th style="width:7%;">Remarks</th>'
+        . '<th style="width:5%;">PL</th>'
+        . '<th style="width:5%;">PA</th>'
+        . '<th style="width:12%;">Absent</th>'
+        . '<th style="width:6%;">Remarks</th>'
         . '</tr></thead>'
         . '<tbody>' . $body . '</tbody>'
         . '</table>'
