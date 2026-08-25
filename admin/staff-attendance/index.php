@@ -212,6 +212,7 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
         <a href="<?= APP_URL ?>/staff-attendance/schedules.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-user-gear me-1"></i> Staff Schedules</a>
         <a href="<?= APP_URL ?>/staff-attendance/holidays.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-calendar-day me-1"></i> Holidays</a>
         <a href="<?= APP_URL ?>/staff-attendance/devices.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-fingerprint me-1"></i> Devices</a>
+        <a href="<?= APP_URL ?>/staff-attendance/duplicate-review.php" class="btn btn-outline-danger btn-sm"><i class="fas fa-people-arrows me-1"></i> Duplicate ID Review</a>
         <?php endif; ?>
     </div>
 </div>
