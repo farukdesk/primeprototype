@@ -474,6 +474,44 @@ function att_user_exam_exempt(int $user_id): bool
             } catch (Throwable $e) {
                 // ignore - primary-group matching above still applies
             }
+            // "Faculty" also matches the staff-profile Employee Type
+            // (department_type = 'educational'): most faculty accounts belong
+            // to differently-named user groups, but the attendance module
+            // identifies faculty by employee type.
+            if (in_array('faculty', $names, true)) {
+                try {
+                    $rows = db()->query(
+                        "SELECT user_id FROM staff_profiles WHERE department_type = 'educational'"
+                    )->fetchAll();
+                    foreach ($rows as $r) {
+                        $map[(int)$r['user_id']] = true;
+                    }
+                } catch (Throwable $e) {
+                    // staff_profiles missing - group matching above still applies
+                }
+            }
+            // Exempt entries also match the member's STAFF DEPARTMENT name
+            // (e.g. a "Controller Section" staff department rather than a
+            // user group), via the module's fuzzy department-name matcher.
+            // The generic "faculty" entry is skipped here (handled above) so
+            // academic departments named "Faculty of X" do not exempt their
+            // administrative staff.
+            try {
+                $rows = db()->query(
+                    'SELECT sp.user_id, sd.name FROM staff_profiles sp JOIN staff_departments sd ON sd.id = sp.staff_dept_id'
+                )->fetchAll();
+                foreach ($rows as $r) {
+                    foreach ($names as $n) {
+                        if ($n === 'faculty') continue;
+                        if (att_dept_names_match((string)$r['name'], $n)) {
+                            $map[(int)$r['user_id']] = true;
+                            break;
+                        }
+                    }
+                }
+            } catch (Throwable $e) {
+                // staff departments missing - group matching above still applies
+            }
         }
     }
     return $map[$user_id] ?? false;
