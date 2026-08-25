@@ -22,6 +22,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $in_buf  = max(0, min(600, (int)($_POST['in_buffer_minutes']  ?? 0)));
     $out_buf = max(0, min(600, (int)($_POST['out_buffer_minutes'] ?? 0)));
     $dedup   = max(0, min(240, (int)($_POST['punch_dedup_minutes'] ?? 15)));
+    $exam_groups = trim((string)($_POST['exam_exempt_groups'] ?? ATT_EXAM_EXEMPT_GROUPS_DEFAULT));
 
     $off = [];
     foreach ((array)($_POST['weekly_off_days'] ?? []) as $d) {
@@ -40,6 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         att_save_setting('in_buffer_minutes',  (string)$in_buf);
         att_save_setting('out_buffer_minutes', (string)$out_buf);
         att_save_setting('punch_dedup_minutes', (string)$dedup);
+        att_save_setting('exam_exempt_groups',  $exam_groups);
         att_save_setting('weekly_off_days',    implode(',', $off));
         log_change('staff-attendance', 'UPDATE', null, 'Global settings', null, null,
             "start=$start, close=$close, in_buf=$in_buf, out_buf=$out_buf, dedup=$dedup, off=" . implode(',', $off));
@@ -51,6 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $g     = att_global_schedule();
 $off   = att_weekly_off_days();
 $dedup = max(0, min(240, (int)att_get_setting('punch_dedup_minutes', '15')));
+$exam_groups = (string)att_get_setting('exam_exempt_groups', ATT_EXAM_EXEMPT_GROUPS_DEFAULT);
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -98,6 +101,11 @@ require_once __DIR__ . '/../includes/header.php';
                         <label class="form-label fw-semibold small mb-1">Duplicate Punch Window (minutes)</label>
                         <input type="number" name="punch_dedup_minutes" class="form-control" min="0" max="240" value="<?= (int)$dedup ?>">
                         <div class="form-text">Repeated punches within this many minutes of the first punch of the day count as a single clock-in (day shows "No Out Time"). For clock-out, the last punch of the day always wins.</div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold small mb-1">Exam-Period Exempt Groups</label>
+                        <input type="text" name="exam_exempt_groups" class="form-control" value="<?= h($exam_groups) ?>" placeholder="Faculty, Controller Section">
+                        <div class="form-text">Comma-separated user group names. During the start–end dates of any <strong>active exam</strong> (Exam Invigilation), members of these groups are never counted Late In / Early Out.</div>
                     </div>
                     <div class="col-12">
                         <label class="form-label fw-semibold small mb-1">Weekend Days (Weekly Off)</label>

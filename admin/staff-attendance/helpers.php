@@ -96,6 +96,7 @@ function att_policy_rules_html(): string
                         <li><strong>Faculty on Friday:</strong> flexible clock in/out — must complete a strict <strong>8 hours</strong> in total; never marked Late In or Early Out.</li>
                         <li><strong>Early birds:</strong> clock in by <strong>8:30 AM</strong> → may leave from <strong>4:30 PM</strong> without Early Out.</li>
                         <li><strong>Penalty:</strong> every <strong>4 Late In / Early Out days</strong> count as <strong>1 Absent day</strong> (salary may be deducted).</li>
+                        <li><strong>Exam period:</strong> during active exam dates (Exam Invigilation), Faculty and Controller Section members are never counted Late In / Early Out.</li>
                     </ul>
                 </div>
             </div>
@@ -360,6 +361,86 @@ function att_prime_month_range(string $month): array
     return ['from' => $from, 'to' => $to, 'label' => $label, 'month' => $month];
 }
 
+// -- Exam-period exemption (Exam Invigilation integration) ------------------
+
+/**
+ * During the date range of any ACTIVE exam (ei_exams.start_date -> end_date,
+ * Exam Invigilation module), members of the exempt user groups are never
+ * counted Late In or Early Out -- exam duty replaces their office schedule.
+ * The group list is configurable in Attendance Settings (comma-separated
+ * group names, matched case-insensitively).
+ */
+const ATT_EXAM_EXEMPT_GROUPS_DEFAULT = 'Faculty, Controller Section';
+
+/** Exempt user-group names, normalised to lowercase. */
+function att_exam_exempt_group_names(): array
+{
+    $raw = (string)att_get_setting('exam_exempt_groups', ATT_EXAM_EXEMPT_GROUPS_DEFAULT);
+    $out = [];
+    foreach (explode(',', $raw) as $g) {
+        $g = strtolower(trim($g));
+        if ($g !== '') $out[] = $g;
+    }
+    return $out;
+}
+
+/** Date ranges of ACTIVE exams from the Exam Invigilation module (cached). */
+function att_exam_date_ranges(): array
+{
+    static $cache = null;
+    if ($cache !== null) return $cache;
+    $cache = [];
+    try {
+        $rows = db()->query(
+            "SELECT start_date, end_date FROM ei_exams\n              WHERE is_active = 1\n                AND start_date IS NOT NULL AND start_date <> '0000-00-00'\n                AND end_date   IS NOT NULL AND end_date   <> '0000-00-00'"
+        )->fetchAll();
+        foreach ($rows as $r) {
+            $cache[] = ['from' => (string)$r['start_date'], 'to' => (string)$r['end_date']];
+        }
+    } catch (Throwable $e) {
+        // Exam Invigilation module not installed - no exam exemption.
+    }
+    return $cache;
+}
+
+/** Whether a Y-m-d date falls inside any active exam period. */
+function att_is_exam_date(string $date): bool
+{
+    foreach (att_exam_date_ranges() as $r) {
+        if ($date >= $r['from'] && $date <= $r['to']) return true;
+    }
+    return false;
+}
+
+/** Whether the user's primary group is on the exempt list (cached per request). */
+function att_user_exam_exempt(int $user_id): bool
+{
+    static $map = null;
+    if ($map === null) {
+        $map   = [];
+        $names = att_exam_exempt_group_names();
+        if (!empty($names)) {
+            try {
+                $rows = db()->query(
+                    'SELECT u.id, g.name FROM users u JOIN user_groups g ON g.id = u.group_id'
+                )->fetchAll();
+                foreach ($rows as $r) {
+                    $map[(int)$r['id']] = in_array(strtolower(trim((string)$r['name'])), $names, true);
+                }
+            } catch (Throwable $e) {
+                // ignore - exemption simply does not apply
+            }
+        }
+    }
+    return $map[$user_id] ?? false;
+}
+
+/** Whether the exam-period Late In / Early Out exemption applies. */
+function att_exam_exempt(int $user_id, string $date): bool
+{
+    return att_is_exam_date($date) && att_user_exam_exempt($user_id);
+}
+
 /** Whether a given Y-m-d date is a GLOBAL weekly-off day. */
 function att_is_weekly_off(string $date): bool
 {
@@ -471,6 +552,11 @@ function att_compute_status(?array $record, int $user_id, string $date, array $s
     $policy = att_policy_active($date);
     $etype  = $policy ? att_employee_type($user_id) : '';
 
+    // Exam-period exemption: during active exam dates (Exam Invigilation),
+    // members of the exempt groups (default: Faculty, Controller Section)
+    // are never counted Late In / Early Out / Insufficient Hours.
+    $exam_exempt = att_exam_exempt($user_id, $date);
+
     if (isset($holidays[$date]))            return $has_in ? 'present' : 'holiday';
 
     // Custom Thursday / Friday slots: when the member defined slots for this
@@ -505,9 +591,8 @@ function att_compute_status(?array $record, int $user_id, string $date, array $s
     // slot window then defines their expected in/out times instead).
     if ($slot_win === null && $policy && $etype === 'educational' && (int)date('N', strtotime($date)) === 5 && $has_in) {
         if (!$has_out) return 'incomplete';
-        return att_worked_minutes($record['in_time'], $record['out_time']) >= ATT_POLICY_FRIDAY_MIN_MINUTES
-            ? 'present'
-            : 'short_hours';
+        if (att_worked_minutes($record['in_time'], $record['out_time']) >= ATT_POLICY_FRIDAY_MIN_MINUTES) return 'present';
+        return $exam_exempt ? 'present' : 'short_hours';
     }
 
     if ($slot_win === null && att_is_weekly_off_for($sched, $date)) return $has_in ? 'present' : 'weekly_off';
@@ -541,6 +626,12 @@ function att_compute_status(?array $record, int $user_id, string $date, array $s
         $early = false;
     }
 
+    // Exam-period exemption: never Late In / Early Out during active exams.
+    if ($exam_exempt) {
+        $late  = false;
+        $early = false;
+    }
+
     if (!$has_out)          return 'incomplete';
 
     // Policy: faculty must complete a minimum of 7h 30m in a day. Their
@@ -550,6 +641,7 @@ function att_compute_status(?array $record, int $user_id, string $date, array $s
     // and on Fridays (handled above with the strict 8-hour rule).
     if ($policy && $etype === 'educational' && $slot_win === null) {
         if (att_worked_minutes($record['in_time'], $record['out_time']) < ATT_POLICY_FACULTY_MIN_MINUTES) {
+            if ($exam_exempt) return 'present'; // exam duty replaces the office schedule
             return $late ? 'late_in' : 'short_hours';
         }
         $early = false;
