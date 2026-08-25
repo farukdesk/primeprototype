@@ -11,9 +11,11 @@
  *     heading; everyone else is grouped under their assigned department name.
  *     Each department starts on a NEW page.
  *   - Columns: Sl. | Employee ID | Name | Designation | Dept./Section |
- *     Type of Appointment | CL | ML | Absent | Remarks.
- *     CL/ML are the approved Casual / Medical(Sick) leave days that fall inside
- *     the range. Absent shows the day count plus the dates, e.g. "05 (1,5,7,8,9)".
+ *     Type of Appointment | CL | ML | PL | PA | Absent | Remarks.
+ *     CL/ML/PL are the approved Casual / Medical(Sick) / Paternity leave days
+ *     that fall inside the range. PA (Penalty Absent) is the attendance-policy
+ *     penalty: every 4 Late In / Early Out days inside the range = 1 absent day.
+ *     Absent shows the day count plus the dates, e.g. "05 (1,5,7,8,9)".
  *
  * Query string: from=Y-m-d, to=Y-m-d, format=pdf|doc, dept (optional), q (optional).
  */
