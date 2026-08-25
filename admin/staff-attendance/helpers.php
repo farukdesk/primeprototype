@@ -412,7 +412,12 @@ function att_is_exam_date(string $date): bool
     return false;
 }
 
-/** Whether the user's primary group is on the exempt list (cached per request). */
+/**
+ * Whether ANY of the user's groups is on the exempt list (cached per request).
+ * Checks the primary group (users.group_id) AND every additional membership
+ * in user_group_assignments (multi-group support), so members whose primary
+ * group differs (e.g. Controller Section as a secondary group) are covered.
+ */
 function att_user_exam_exempt(int $user_id): bool
 {
     static $map = null;
@@ -420,15 +425,32 @@ function att_user_exam_exempt(int $user_id): bool
         $map   = [];
         $names = att_exam_exempt_group_names();
         if (!empty($names)) {
+            // Primary group.
             try {
                 $rows = db()->query(
-                    'SELECT u.id, g.name FROM users u JOIN user_groups g ON g.id = u.group_id'
+                    'SELECT u.id AS user_id, g.name\n                       FROM users u JOIN user_groups g ON g.id = u.group_id'
                 )->fetchAll();
                 foreach ($rows as $r) {
-                    $map[(int)$r['id']] = in_array(strtolower(trim((string)$r['name'])), $names, true);
+                    if (in_array(strtolower(trim((string)$r['name'])), $names, true)) {
+                        $map[(int)$r['user_id']] = true;
+                    }
                 }
             } catch (Throwable $e) {
                 // ignore - exemption simply does not apply
+            }
+            // Additional groups (multi-group accounts). Guarded: the junction
+            // table may not exist on legacy deployments.
+            try {
+                $rows = db()->query(
+                    'SELECT uga.user_id, g.name\n                       FROM user_group_assignments uga\n                       JOIN user_groups g ON g.id = uga.group_id\n                      WHERE g.is_active = 1'
+                )->fetchAll();
+                foreach ($rows as $r) {
+                    if (in_array(strtolower(trim((string)$r['name'])), $names, true)) {
+                        $map[(int)$r['user_id']] = true;
+                    }
+                }
+            } catch (Throwable $e) {
+                // ignore - primary-group matching above still applies
             }
         }
     }
