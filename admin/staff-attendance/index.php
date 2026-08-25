@@ -206,6 +206,7 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
         <?php endif; ?>
         <a href="<?= APP_URL ?>/staff-attendance/weekend-approvals.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-clipboard-check me-1"></i> Schedule Approvals</a>
         <?php if ($is_admin): ?>
+        <a href="<?= APP_URL ?>/staff-attendance/overtime.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-business-time me-1"></i> Overtime</a>
         <a href="<?= APP_URL ?>/staff-attendance/schedule-flow.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-diagram-project me-1"></i> Schedule Approval Flow</a>
         <a href="<?= APP_URL ?>/staff-attendance/settings.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-gear me-1"></i> Settings</a>
         <a href="<?= APP_URL ?>/staff-attendance/schedules.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-user-gear me-1"></i> Staff Schedules</a>
