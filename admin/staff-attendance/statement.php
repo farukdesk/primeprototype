@@ -66,13 +66,15 @@ try {
     // staff_profiles missing / older schema – columns show "—".
 }
 
-// Approved Casual (CL) / Sick a.k.a. Medical (ML) leave days inside the range.
+// Approved Casual (CL) / Sick a.k.a. Medical (ML) / Paternity (PL) leave days
+// inside the range.
 $cl_days = [];
 $ml_days = [];
+$pl_days = [];
 try {
     $stmt = db()->prepare(
         "SELECT user_id, category, start_date, end_date FROM leave_requests
-          WHERE status = 'approved' AND category IN ('casual','sick')
+          WHERE status = 'approved' AND category IN ('casual','sick','paternity')
             AND start_date <= ? AND end_date >= ?"
     );
     $stmt->execute([$to, $from]);
@@ -82,11 +84,12 @@ try {
         $e    = min(strtotime((string)$r['end_date']),   strtotime($to));
         if ($e < $s) continue;
         $days = (int)floor(($e - $s) / 86400) + 1;
-        if ($r['category'] === 'casual') $cl_days[$uid] = ($cl_days[$uid] ?? 0) + $days;
-        else                             $ml_days[$uid] = ($ml_days[$uid] ?? 0) + $days;
+        if ($r['category'] === 'casual')         $cl_days[$uid] = ($cl_days[$uid] ?? 0) + $days;
+        elseif ($r['category'] === 'paternity')  $pl_days[$uid] = ($pl_days[$uid] ?? 0) + $days;
+        else                                     $ml_days[$uid] = ($ml_days[$uid] ?? 0) + $days;
     }
 } catch (Throwable $e) {
-    // Leave Management not installed – CL/ML show "—".
+    // Leave Management not installed – CL/ML/PL show "—".
 }
 
 // When the range spans more than one calendar month, absent dates are shown as
