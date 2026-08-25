@@ -205,7 +205,8 @@ try {
 $mismatches = [];
 try {
     $rows = $db->query(
-        'SELECT device_id, pin, user_id, COUNT(*) c, MIN(work_date) d1, MAX(work_date) d2\n           FROM att_punch_log GROUP BY device_id, pin, user_id'
+        'SELECT device_id, pin, user_id, COUNT(*) c, MIN(work_date) d1, MAX(work_date) d2'
+        . ' FROM att_punch_log GROUP BY device_id, pin, user_id'
     )->fetchAll();
     foreach ($rows as $r) {
         $expected = adms_pin_to_user((int)$r['device_id'], (string)$r['pin']);
