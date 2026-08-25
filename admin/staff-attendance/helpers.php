@@ -604,8 +604,13 @@ function att_on_leave_user_ids(string $date): array
     }
     // Days explicitly marked "Approved Leave / Day Off" by an admin / the
     // Registrar office, or auto-marked when a leave gets its final approval.
+    // Absent / Weekend / Holiday quick marks are handled in att_compute_status()
+    // via att_day_override() and must NOT count as leave.
     try {
-        $stmt = db()->prepare('SELECT DISTINCT user_id FROM att_day_status WHERE status_date = ?');
+        $stmt = db()->prepare(
+            "SELECT DISTINCT user_id FROM att_day_status
+              WHERE status_date = ? AND status IN ('approved_leave', 'day_off')"
+        );
         $stmt->execute([$date]);
         foreach ($stmt->fetchAll() as $r) $ids[] = (int)$r['user_id'];
     } catch (Throwable $e) {
@@ -615,6 +620,32 @@ function att_on_leave_user_ids(string $date): array
 }
 
 // ── Status computation ──────────────────────────────────────────────────────
+
+/**
+ * Admin per-day quick mark (from the staff calendar): 'absent', 'weekend' or
+ * 'holiday' for a user on a date, or null when none. Stored in att_day_status
+ * alongside the Approved Leave / Day Off marks; cached per date so a month
+ * render issues at most one query per day. Wins over every computed status.
+ */
+function att_day_override(int $user_id, string $date): ?string
+{
+    static $cache = [];
+    if (!array_key_exists($date, $cache)) {
+        $map = [];
+        try {
+            $stmt = db()->prepare(
+                "SELECT user_id, status FROM att_day_status
+                  WHERE status_date = ? AND status IN ('absent', 'weekend', 'holiday')"
+            );
+            $stmt->execute([$date]);
+            foreach ($stmt->fetchAll() as $r) $map[(int)$r['user_id']] = (string)$r['status'];
+        } catch (Throwable $e) {
+            // staff-attendance-day-marks-v1.sql migration not applied yet.
+        }
+        $cache[$date] = $map;
+    }
+    return $cache[$date][$user_id] ?? null;
+}
 
 /**
  * Derive the attendance status for a staff member on a date.
@@ -628,6 +659,13 @@ function att_on_leave_user_ids(string $date): array
  */
 function att_compute_status(?array $record, int $user_id, string $date, array $sched, array $holidays, array $on_leave): string
 {
+    // Admin quick mark set on the staff calendar overrides everything else.
+    switch (att_day_override($user_id, $date)) {
+        case 'absent':  return 'absent';
+        case 'weekend': return 'weekly_off';
+        case 'holiday': return 'holiday';
+    }
+
     $has_in  = !empty($record['in_time']);
     $has_out = !empty($record['out_time']);
 
@@ -1064,10 +1102,10 @@ function att_day_status_rows(string $from, string $to): array
     }
 }
 
-/** Mark one day as Approved Leave / Day Off for a staff member (idempotent). */
+/** Mark one day as Approved Leave / Day Off / Absent / Weekend / Holiday for a staff member (idempotent). */
 function att_mark_dayoff(int $user_id, string $date, string $status, ?string $note, string $source = 'manual', ?int $leave_request_id = null, ?int $created_by = null): void
 {
-    if (!in_array($status, ['approved_leave', 'day_off'], true)) $status = 'approved_leave';
+    if (!in_array($status, ['approved_leave', 'day_off', 'absent', 'weekend', 'holiday'], true)) $status = 'approved_leave';
     db()->prepare(
         'INSERT INTO att_day_status (user_id, status_date, status, note, source, leave_request_id, created_by)
          VALUES (?,?,?,?,?,?,?)

@@ -61,6 +61,70 @@ if ($self_only) {
     }
 }
 
+// ── Quick day actions (module editors / super admin) ────────────────────
+// Posted from the calendar day modal: set clock in/out times, mark the day
+// Absent / Weekend / Holiday for THIS staff member only, or reset the day.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $can_edit && $member) {
+    csrf_check();
+    $act   = $_POST['day_action'] ?? '';
+    $pdate = att_normalize_date($_POST['date'] ?? '');
+    $me_id = (int)auth_user()['id'];
+    $back  = APP_URL . '/staff-attendance/staff.php?' . http_build_query(array_filter([
+        'user_id' => $user_id,
+        'month'   => substr($pdate, 0, 7),
+        'report'  => $_POST['report'] ?? null,
+        'dept'    => (int)($_POST['dept'] ?? 0) ?: null,
+        'q'       => trim($_POST['q'] ?? '') ?: null,
+    ]));
+
+    if ($act === 'set_times') {
+        $in_t  = att_normalize_time($_POST['in_time'] ?? '');
+        $out_t = att_normalize_time($_POST['out_time'] ?? '');
+        if ($in_t === null && $out_t === null) {
+            flash_set('error', 'Please enter a clock-in and/or clock-out time.');
+        } elseif ($in_t !== null && $out_t !== null && att_time_to_minutes($out_t) < att_time_to_minutes($in_t)) {
+            flash_set('error', 'Out time cannot be earlier than in time.');
+        } else {
+            db()->prepare(
+                'INSERT INTO att_records (user_id, work_date, in_time, out_time, created_by)
+                 VALUES (?,?,?,?,?)
+                 ON DUPLICATE KEY UPDATE in_time = VALUES(in_time), out_time = VALUES(out_time)'
+            )->execute([$user_id, $pdate, $in_t, $out_t, $me_id]);
+            // A manual time entry cancels any Absent / Weekend / Holiday mark.
+            try {
+                db()->prepare(
+                    "DELETE FROM att_day_status
+                      WHERE user_id = ? AND status_date = ? AND status IN ('absent','weekend','holiday')"
+                )->execute([$user_id, $pdate]);
+            } catch (Throwable $e) { /* migration not applied yet */ }
+            log_change('staff-attendance', 'UPDATE', $user_id, 'Attendance ' . $pdate, null, null,
+                'in=' . ($in_t ?? '—') . ', out=' . ($out_t ?? '—'));
+            flash_set('success', 'Clock in/out saved for ' . date('d M Y', strtotime($pdate)) . '.');
+        }
+    } elseif ($act === 'mark' && in_array($_POST['mark'] ?? '', ['absent', 'weekend', 'holiday'], true)) {
+        $mark = $_POST['mark'];
+        $note = trim($_POST['note'] ?? '');
+        try {
+            att_mark_dayoff($user_id, $pdate, $mark, $note !== '' ? mb_substr($note, 0, 255) : null, 'manual', null, $me_id);
+            log_change('staff-attendance', 'UPDATE', $user_id, 'Day mark ' . $pdate, null, null, $mark);
+            flash_set('success', date('d M Y', strtotime($pdate)) . ' marked as ' . ucfirst($mark) . '.');
+        } catch (Throwable $e) {
+            flash_set('error', 'Could not save the mark. Please run the staff-attendance-day-marks-v1.sql migration first.');
+        }
+    } elseif ($act === 'reset') {
+        db()->prepare('DELETE FROM att_records WHERE user_id = ? AND work_date = ?')->execute([$user_id, $pdate]);
+        try {
+            db()->prepare(
+                "DELETE FROM att_day_status
+                  WHERE user_id = ? AND status_date = ? AND status IN ('absent','weekend','holiday')"
+            )->execute([$user_id, $pdate]);
+        } catch (Throwable $e) { /* ignore */ }
+        log_change('staff-attendance', 'DELETE', $user_id, 'Attendance ' . $pdate, null, null, 'day reset');
+        flash_set('success', date('d M Y', strtotime($pdate)) . ' has been reset.');
+    }
+    redirect($back);
+}
+
 // Filters to carry back to the report.
 $dept_id = (int)($_GET['dept'] ?? 0);
 $search  = trim($_GET['q'] ?? '');
@@ -119,7 +183,8 @@ foreach ($dates as $d) {
     $on_leave = $leave_by_date[$d] ?? [];
     $status   = att_compute_status($rec, $user_id, $d, $sched, $holidays, $on_leave);
     $mins     = $rec ? att_worked_minutes($rec['in_time'] ?? null, $rec['out_time'] ?? null) : 0;
-    $off      = isset($holidays[$d]) || att_is_weekly_off_for($sched, $d);
+    $off      = isset($holidays[$d]) || att_is_weekly_off_for($sched, $d)
+             || in_array(att_day_override($user_id, $d), ['weekend', 'holiday'], true);
 
     if (!$off) $sum['working_days']++;
     switch ($status) {
@@ -312,7 +377,7 @@ $weekday_abbr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
                 $link = APP_URL . '/staff-attendance/entry.php?user_id=' . $user_id . '&date=' . urlencode($d);
                 $tag  = '';
                 if (in_array($status, ['holiday', 'weekly_off'], true)) {
-                    $tag = '<span class="cal-tag">' . ($info['holiday'] ? 'Holiday' : 'Weekend') . '</span>';
+                    $tag = '<span class="cal-tag">' . ($status === 'holiday' ? 'Holiday' : 'Weekend') . '</span>';
                 } elseif ($status === 'absent') {
                     $tag = '<span class="cal-tag text-danger">Absent</span>';
                 } elseif ($status === 'leave') {
@@ -321,7 +386,13 @@ $weekday_abbr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
                 echo '<td class="' . $cls . $is_today . '">';
                 echo $can_edit
-                    ? '<a class="cal-cell" href="' . $link . '" title="' . h(att_status_label($status)) . ' — click to edit">'
+                    ? '<a class="cal-cell js-day" href="' . $link . '"'
+                        . ' data-date="' . h($d) . '"'
+                        . ' data-label="' . h(date('D, d M Y', strtotime($d))) . '"'
+                        . ' data-in="' . h(att_normalize_time($rec['in_time'] ?? '') ?? '') . '"'
+                        . ' data-out="' . h(att_normalize_time($rec['out_time'] ?? '') ?? '') . '"'
+                        . ' data-status="' . h(att_status_label($status)) . '"'
+                        . ' title="' . h(att_status_label($status)) . ' — click to manage">'
                     : '<span class="cal-cell">';
                 echo '<span class="cal-day">' . (int)date('j', strtotime($d)) . '</span>';
                 if ($rec && !empty($rec['in_time'])) {
@@ -399,5 +470,94 @@ $weekday_abbr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
         </div>
     </div>
 </div>
+
+<?php if ($can_edit): ?>
+<!-- Quick day-action modal: opened by clicking a calendar day cell. -->
+<div class="modal fade" id="dayActionModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius:12px;">
+            <div class="modal-header py-2 px-3">
+                <h6 class="modal-title fw-semibold"><i class="fas fa-calendar-day me-2 text-primary"></i><span id="damDate"></span></h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body px-3">
+                <div class="small text-muted mb-3">Current status: <span id="damStatus" class="fw-semibold text-dark"></span></div>
+
+                <form method="POST" class="row g-2 align-items-end mb-1">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="day_action" value="set_times">
+                    <input type="hidden" name="date" class="dam-date" value="">
+                    <input type="hidden" name="report" value="<?= h($report) ?>">
+                    <input type="hidden" name="dept" value="<?= (int)$dept_id ?>">
+                    <input type="hidden" name="q" value="<?= h($search) ?>">
+                    <div class="col-4">
+                        <label class="form-label fw-semibold small mb-1">Clock In</label>
+                        <input type="time" name="in_time" id="damIn" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-4">
+                        <label class="form-label fw-semibold small mb-1">Clock Out</label>
+                        <input type="time" name="out_time" id="damOut" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-4">
+                        <button class="btn btn-primary btn-sm w-100"><i class="fas fa-save me-1"></i> Save</button>
+                    </div>
+                </form>
+                <div class="form-text mb-3">Saving times removes any Absent / Weekend / Holiday mark on this day.</div>
+
+                <hr class="my-2">
+                <form method="POST" class="mb-1">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="day_action" value="mark">
+                    <input type="hidden" name="date" class="dam-date" value="">
+                    <input type="hidden" name="report" value="<?= h($report) ?>">
+                    <input type="hidden" name="dept" value="<?= (int)$dept_id ?>">
+                    <input type="hidden" name="q" value="<?= h($search) ?>">
+                    <label class="form-label fw-semibold small mb-1">Mark this day as</label>
+                    <div class="d-flex gap-2 flex-wrap mb-2">
+                        <button name="mark" value="absent" class="btn btn-outline-danger btn-sm"><i class="fas fa-user-slash me-1"></i> Absent</button>
+                        <button name="mark" value="weekend" class="btn btn-outline-secondary btn-sm"><i class="fas fa-couch me-1"></i> Weekend</button>
+                        <button name="mark" value="holiday" class="btn btn-outline-success btn-sm"><i class="fas fa-umbrella-beach me-1"></i> Holiday</button>
+                    </div>
+                    <input type="text" name="note" class="form-control form-control-sm" maxlength="255" placeholder="Note (optional)">
+                    <div class="form-text">Applies to this staff member only. University-wide holidays are managed on the Holidays page.</div>
+                </form>
+
+                <hr class="my-2">
+                <div class="d-flex justify-content-between align-items-center">
+                    <form method="POST" onsubmit="return confirm('Remove the times and any day mark for this date?');">
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="day_action" value="reset">
+                        <input type="hidden" name="date" class="dam-date" value="">
+                        <input type="hidden" name="report" value="<?= h($report) ?>">
+                        <input type="hidden" name="dept" value="<?= (int)$dept_id ?>">
+                        <input type="hidden" name="q" value="<?= h($search) ?>">
+                        <button class="btn btn-outline-dark btn-sm"><i class="fas fa-eraser me-1"></i> Reset Day</button>
+                    </form>
+                    <a href="#" id="damFull" class="small">Open full editor</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+(function () {
+    var modalEl = document.getElementById('dayActionModal');
+    document.querySelectorAll('.js-day').forEach(function (el) {
+        el.addEventListener('click', function (e) {
+            e.preventDefault();
+            document.getElementById('damDate').textContent   = el.dataset.label || el.dataset.date;
+            document.getElementById('damStatus').textContent = el.dataset.status || '\u2014';
+            document.getElementById('damIn').value  = el.dataset.in  || '';
+            document.getElementById('damOut').value = el.dataset.out || '';
+            document.getElementById('damFull').href = el.getAttribute('href');
+            modalEl.querySelectorAll('.dam-date').forEach(function (i) { i.value = el.dataset.date; });
+            (window.bootstrap && bootstrap.Modal.getOrCreateInstance
+                ? bootstrap.Modal.getOrCreateInstance(modalEl)
+                : new bootstrap.Modal(modalEl)).show();
+        });
+    });
+})();
+</script>
+<?php endif; ?>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
