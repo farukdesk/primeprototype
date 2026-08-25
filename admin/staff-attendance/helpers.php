@@ -1064,10 +1064,10 @@ function att_day_status_rows(string $from, string $to): array
     }
 }
 
-/** Mark one day as Approved Leave / Day Off for a staff member (idempotent). */
+/** Mark one day as Approved Leave / Day Off / Absent / Weekend / Holiday for a staff member (idempotent). */
 function att_mark_dayoff(int $user_id, string $date, string $status, ?string $note, string $source = 'manual', ?int $leave_request_id = null, ?int $created_by = null): void
 {
-    if (!in_array($status, ['approved_leave', 'day_off'], true)) $status = 'approved_leave';
+    if (!in_array($status, ['approved_leave', 'day_off', 'absent', 'weekend', 'holiday'], true)) $status = 'approved_leave';
     db()->prepare(
         'INSERT INTO att_day_status (user_id, status_date, status, note, source, leave_request_id, created_by)
          VALUES (?,?,?,?,?,?,?)
