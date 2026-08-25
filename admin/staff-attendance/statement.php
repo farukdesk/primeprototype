@@ -11,10 +11,11 @@
  *     heading; everyone else is grouped under their assigned department name.
  *     Each department starts on a NEW page.
  *   - Columns: Sl. | Employee ID | Name | Designation | Dept./Section |
- *     Type of Appointment | CL | ML | PL | PA | Absent | Remarks.
- *     CL/ML/PL are the approved Casual / Medical(Sick) / Paternity leave days
- *     that fall inside the range. PA (Penalty Absent) is the attendance-policy
- *     penalty: every 4 Late In / Early Out days inside the range = 1 absent day.
+ *     Type of Appointment | CL | ML | PA | Absent | Remarks.
+ *     CL/ML are the approved Casual / Medical(Sick) leave days inside the
+ *     range, shown like Absent as a count plus the dates, e.g. "02 (5,12)".
+ *     PA (Penalty Absent) is the attendance-policy penalty: every 4 Late In /
+ *     Early Out days inside the range = 1 absent day.
  *     Absent shows the day count plus the dates, e.g. "05 (1,5,7,8,9)".
  *
  * Query string: from=Y-m-d, to=Y-m-d, format=pdf|doc, dept (optional), q (optional).
@@ -66,35 +67,48 @@ try {
     // staff_profiles missing / older schema – columns show "—".
 }
 
-// Approved Casual (CL) / Sick a.k.a. Medical (ML) / Paternity (PL) leave days
-// inside the range.
-$cl_days = [];
-$ml_days = [];
-$pl_days = [];
+// Approved Casual (CL) / Sick a.k.a. Medical (ML) leave DATES inside the range,
+// keyed uid => [Y-m-d => true] so overlapping requests never double-count a day.
+$cl_dates = [];
+$ml_dates = [];
 try {
     $stmt = db()->prepare(
         "SELECT user_id, category, start_date, end_date FROM leave_requests
-          WHERE status = 'approved' AND category IN ('casual','sick','paternity')
+          WHERE status = 'approved' AND category IN ('casual','sick')
             AND start_date <= ? AND end_date >= ?"
     );
     $stmt->execute([$to, $from]);
     foreach ($stmt->fetchAll() as $r) {
-        $uid  = (int)$r['user_id'];
-        $s    = max(strtotime((string)$r['start_date']), strtotime($from));
-        $e    = min(strtotime((string)$r['end_date']),   strtotime($to));
+        $uid = (int)$r['user_id'];
+        $s   = max(strtotime((string)$r['start_date']), strtotime($from));
+        $e   = min(strtotime((string)$r['end_date']),   strtotime($to));
         if ($e < $s) continue;
-        $days = (int)floor(($e - $s) / 86400) + 1;
-        if ($r['category'] === 'casual')         $cl_days[$uid] = ($cl_days[$uid] ?? 0) + $days;
-        elseif ($r['category'] === 'paternity')  $pl_days[$uid] = ($pl_days[$uid] ?? 0) + $days;
-        else                                     $ml_days[$uid] = ($ml_days[$uid] ?? 0) + $days;
+        for ($d = $s; $d <= $e; $d = strtotime('+1 day', $d)) {
+            $day = date('Y-m-d', $d);
+            if ($r['category'] === 'casual') $cl_dates[$uid][$day] = true;
+            else                             $ml_dates[$uid][$day] = true;
+        }
     }
 } catch (Throwable $e) {
-    // Leave Management not installed – CL/ML/PL show "—".
+    // Leave Management not installed – CL/ML show "—".
 }
 
 // When the range spans more than one calendar month, absent dates are shown as
 // "5 Jul" instead of a bare day number so they stay unambiguous.
 $multi_month = date('Y-m', strtotime($from)) !== date('Y-m', strtotime($to));
+
+// Format a keyed [Y-m-d => true] date set like the Absent column: sorted day
+// numbers, or "j M" when the range spans multiple months.
+$fmt_dates = static function (array $keyed) use ($multi_month): array {
+    $days = array_keys($keyed);
+    sort($days);
+    return array_map(
+        static fn(string $day): string => $multi_month
+            ? date('j M', strtotime($day))
+            : (string)(int)date('j', strtotime($day)),
+        $days
+    );
+};
 
 // ── Group staff by department ────────────────────────────────────────────────
 // Administrative staff → "Administrative Employee"; others → their department.
@@ -129,9 +143,8 @@ foreach ($staff as $s) {
         'designation' => (string)($p['designation'] ?? ''),
         'dept'        => (string)($s['dept_name'] ?? ''),
         'appointment' => (string)($p['job_type'] ?? ''),
-        'cl'          => (int)($cl_days[$uid] ?? 0),
-        'ml'          => (int)($ml_days[$uid] ?? 0),
-        'pl'          => (int)($pl_days[$uid] ?? 0),
+        'cl'          => $fmt_dates($cl_dates[$uid] ?? []),
+        'ml'          => $fmt_dates($ml_dates[$uid] ?? []),
         'pa'          => att_late_penalty_days($late_early),
         'absent'      => $absent,
     ];
@@ -189,6 +202,12 @@ foreach ($groups as $dept_heading => $rows) {
         $abs_text = $abs_cnt > 0
             ? sprintf('%02d', $abs_cnt) . ' (' . implode(',', $r['absent']) . ')'
             : '—';
+        $cl_text = count($r['cl']) > 0
+            ? sprintf('%02d', count($r['cl'])) . ' (' . implode(',', $r['cl']) . ')'
+            : '—';
+        $ml_text = count($r['ml']) > 0
+            ? sprintf('%02d', count($r['ml'])) . ' (' . implode(',', $r['ml']) . ')'
+            : '—';
         $body .= '<tr>'
             . '<td class="c">' . $sl . '</td>'
             . '<td class="c">' . h($r['employee_id'] !== '' ? $r['employee_id'] : '—') . '</td>'
@@ -196,9 +215,8 @@ foreach ($groups as $dept_heading => $rows) {
             . '<td class="l">' . h($r['designation'] !== '' ? $r['designation'] : '—') . '</td>'
             . '<td class="l">' . h($r['dept'] !== '' ? $r['dept'] : '—') . '</td>'
             . '<td class="c">' . h($r['appointment'] !== '' ? $r['appointment'] : '—') . '</td>'
-            . '<td class="c">' . ($r['cl'] > 0 ? sprintf('%02d', $r['cl']) : '—') . '</td>'
-            . '<td class="c">' . ($r['ml'] > 0 ? sprintf('%02d', $r['ml']) : '—') . '</td>'
-            . '<td class="c">' . ($r['pl'] > 0 ? sprintf('%02d', $r['pl']) : '—') . '</td>'
+            . '<td class="l">' . h($cl_text) . '</td>'
+            . '<td class="l">' . h($ml_text) . '</td>'
             . '<td class="c">' . ($r['pa'] > 0 ? sprintf('%02d', $r['pa']) : '—') . '</td>'
             . '<td class="l">' . h($abs_text) . '</td>'
             . '<td class="l">&nbsp;</td>'
@@ -210,16 +228,15 @@ foreach ($groups as $dept_heading => $rows) {
         . '<table class="grid">'
         . '<thead><tr>'
         . '<th style="width:4%;">Sl.</th>'
-        . '<th style="width:9%;">Employee ID</th>'
-        . '<th style="width:15%;">Name</th>'
-        . '<th style="width:12%;">Designation</th>'
-        . '<th style="width:12%;">Dept./Section</th>'
-        . '<th style="width:10%;">Type of Appointment</th>'
-        . '<th style="width:5%;">CL</th>'
-        . '<th style="width:5%;">ML</th>'
-        . '<th style="width:5%;">PL</th>'
-        . '<th style="width:5%;">PA</th>'
-        . '<th style="width:12%;">Absent</th>'
+        . '<th style="width:8%;">Employee ID</th>'
+        . '<th style="width:14%;">Name</th>'
+        . '<th style="width:11%;">Designation</th>'
+        . '<th style="width:11%;">Dept./Section</th>'
+        . '<th style="width:9%;">Type of Appointment</th>'
+        . '<th style="width:9%;">CL</th>'
+        . '<th style="width:9%;">ML</th>'
+        . '<th style="width:4%;">PA</th>'
+        . '<th style="width:15%;">Absent</th>'
         . '<th style="width:6%;">Remarks</th>'
         . '</tr></thead>'
         . '<tbody>' . $body . '</tbody>'
