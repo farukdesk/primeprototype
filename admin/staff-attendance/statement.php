@@ -67,30 +67,30 @@ try {
     // staff_profiles missing / older schema – columns show "—".
 }
 
-// Approved Casual (CL) / Sick a.k.a. Medical (ML) / Paternity (PL) leave days
-// inside the range.
-$cl_days = [];
-$ml_days = [];
-$pl_days = [];
+// Approved Casual (CL) / Sick a.k.a. Medical (ML) leave DATES inside the range,
+// keyed uid => [Y-m-d => true] so overlapping requests never double-count a day.
+$cl_dates = [];
+$ml_dates = [];
 try {
     $stmt = db()->prepare(
         "SELECT user_id, category, start_date, end_date FROM leave_requests
-          WHERE status = 'approved' AND category IN ('casual','sick','paternity')
+          WHERE status = 'approved' AND category IN ('casual','sick')
             AND start_date <= ? AND end_date >= ?"
     );
     $stmt->execute([$to, $from]);
     foreach ($stmt->fetchAll() as $r) {
-        $uid  = (int)$r['user_id'];
-        $s    = max(strtotime((string)$r['start_date']), strtotime($from));
-        $e    = min(strtotime((string)$r['end_date']),   strtotime($to));
+        $uid = (int)$r['user_id'];
+        $s   = max(strtotime((string)$r['start_date']), strtotime($from));
+        $e   = min(strtotime((string)$r['end_date']),   strtotime($to));
         if ($e < $s) continue;
-        $days = (int)floor(($e - $s) / 86400) + 1;
-        if ($r['category'] === 'casual')         $cl_days[$uid] = ($cl_days[$uid] ?? 0) + $days;
-        elseif ($r['category'] === 'paternity')  $pl_days[$uid] = ($pl_days[$uid] ?? 0) + $days;
-        else                                     $ml_days[$uid] = ($ml_days[$uid] ?? 0) + $days;
+        for ($d = $s; $d <= $e; $d = strtotime('+1 day', $d)) {
+            $day = date('Y-m-d', $d);
+            if ($r['category'] === 'casual') $cl_dates[$uid][$day] = true;
+            else                             $ml_dates[$uid][$day] = true;
+        }
     }
 } catch (Throwable $e) {
-    // Leave Management not installed – CL/ML/PL show "—".
+    // Leave Management not installed – CL/ML show "—".
 }
 
 // When the range spans more than one calendar month, absent dates are shown as
