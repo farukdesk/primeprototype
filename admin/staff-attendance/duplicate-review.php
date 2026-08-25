@@ -185,7 +185,11 @@ $uname = static fn(?int $uid): string => $uid ? ($names[$uid] ?? ('User #' . $ui
 $shared = []; // norm => ['pins' => [...], 'rows' => mapping rows, 'users' => uid => name]
 try {
     $rows = $db->query(
-        'SELECT m.id, m.device_id, m.pin, m.user_id, u.full_name, d.name AS device_name\n           FROM att_device_users m\n      LEFT JOIN users u ON u.id = m.user_id\n      LEFT JOIN att_devices d ON d.id = m.device_id\n          WHERE m.is_active = 1'
+        'SELECT m.id, m.device_id, m.pin, m.user_id, u.full_name, d.name AS device_name'
+        . ' FROM att_device_users m'
+        . ' LEFT JOIN users u ON u.id = m.user_id'
+        . ' LEFT JOIN att_devices d ON d.id = m.device_id'
+        . ' WHERE m.is_active = 1'
     )->fetchAll();
     $by_norm = [];
     foreach ($rows as $r) $by_norm[$norm_pin((string)$r['pin'])][] = $r;
