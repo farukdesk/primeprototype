@@ -722,6 +722,16 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
         </div>
 
+        <!-- Old ERP uploaded proof (populated by JS from get-student-fees.php) -->
+        <div class="card border-0 shadow-sm mb-3" id="oldErpProofCard" style="display:none;">
+            <div class="card-body py-2 px-4 d-flex align-items-center gap-3 flex-wrap">
+                <span class="fw-semibold small text-secondary">
+                    <i class="fas fa-image me-2 text-success"></i>Old ERP Uploaded Proof
+                </span>
+                <div class="d-flex align-items-center gap-2 flex-wrap" id="oldErpProofLinks"></div>
+            </div>
+        </div>
+
         <!-- Semester drop banner (populated by JS) -->
         <div id="semesterDropBanner" class="alert alert-warning d-flex align-items-center gap-2" style="display:none;">
             <i class="fas fa-pause-circle fa-lg"></i>
@@ -2147,6 +2157,12 @@ require_once __DIR__ . '/../includes/header.php';
             const key = p.fee_type + '|' + (p.semester_number ?? '') + '|' + (p.month_number ?? '');
             (paymentsByKey[key] = paymentsByKey[key] || []).push(p);
         });
+        // Scholarship rows (e.g. OLD-ERP-SCHOLARSHIP memos) clear dues but are
+        // waivers, not cash — keep their total OUT of the money figures.
+        let scholarshipTotal = 0;
+        (data.payments || []).forEach(p => {
+            if (p.is_scholarship) scholarshipTotal += Number(p.amount || 0);
+        });
         function paidNotesHtml(feeType, semNumber, monthNumber) {
             const list = paymentsByKey[feeType + '|' + (semNumber ?? '') + '|' + (monthNumber ?? '')] || [];
             if (!list.length) return '';
@@ -2157,7 +2173,7 @@ require_once __DIR__ . '/../includes/header.php';
                        class="text-decoration-none" title="Open voucher ${escHtml(p.voucher_number)}">
                         <i class="fas fa-file-invoice me-1"></i>${escHtml(p.voucher_number)}
                     </a>
-                    <span class="badge bg-light text-dark border ms-1">${escHtml(p.payment_method_label || p.payment_method || '')}</span>
+                    <span class="badge bg-light text-dark border ms-1">${escHtml(p.payment_method_label || p.payment_method || '')}</span>${p.is_scholarship ? '<span class="badge ms-1" style="background:#6f42c1;color:#fff">Scholarship</span>' : ''}
                 </div>`).join('');
             if (list.length > MAX_NOTES) {
                 html += `<div class="text-muted mt-1" style="font-size:.66rem">+${list.length - MAX_NOTES} more payment${list.length - MAX_NOTES > 1 ? 's' : ''} (see history below)</div>`;
@@ -2381,13 +2397,22 @@ require_once __DIR__ . '/../includes/header.php';
             });
         }
 
-        // Footer totals
+        // Footer totals — scholarship waivers are shown separately and are
+        // NOT counted in the Paid money total.
         document.getElementById('footTotalDue').textContent  = fmt(grandDue);
-        document.getElementById('footTotalPaid').textContent = fmt(grandPaid);
+        const footPaidEl = document.getElementById('footTotalPaid');
+        if (scholarshipTotal > 0) {
+            footPaidEl.innerHTML = fmt(grandPaid - scholarshipTotal)
+                + '<div class="fw-normal" style="font-size:.68rem;color:#6f42c1">+ ' + fmt(scholarshipTotal)
+                + ' scholarship (not counted)</div>';
+        } else {
+            footPaidEl.textContent = fmt(grandPaid);
+        }
         document.getElementById('footTotalOut').textContent  = fmt(grandOut);
 
-        // Additional / examination payments (variable amount, outside schedule)
-        renderAdditionalFees(s.additional || {items: [], total_paid: 0}, scheduleGrandPaid);
+        // Additional / examination payments (variable amount, outside schedule).
+        // Scholarship waivers are excluded from the grand total paid figure.
+        renderAdditionalFees(s.additional || {items: [], total_paid: 0}, scheduleGrandPaid - scholarshipTotal);
 
         // Outstanding badge
         document.getElementById('totalOutstandingBadge').textContent =
@@ -2402,6 +2427,9 @@ require_once __DIR__ . '/../includes/header.php';
 
         // Render transaction history
         renderTransactionHistory(data.payments || []);
+
+        // Old ERP uploaded proof links
+        renderOldErpProofs(data.old_erp_proofs || []);
 
         // Show the Smart Payment card
         showSmartPayCard();
@@ -2500,13 +2528,21 @@ require_once __DIR__ . '/../includes/header.php';
         const countBadge = document.getElementById('transactionCount');
 
         tbody.innerHTML = '';
-        countBadge.textContent = payments.length + ' transaction' + (payments.length !== 1 ? 's' : '');
+        let schCount = 0, schTotal = 0;
+        payments.forEach(p => {
+            if (p.is_scholarship) { schCount++; schTotal += Number(p.amount || 0); }
+        });
+        countBadge.textContent = payments.length + ' transaction' + (payments.length !== 1 ? 's' : '')
+            + (schCount > 0 ? ' · ' + schCount + ' scholarship (' + fmt(schTotal) + ', not counted)' : '');
 
         if (payments.length === 0) {
             tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted py-3 small"><i class="fas fa-info-circle me-1"></i>No transactions recorded yet.</td></tr>';
         } else {
             payments.forEach(p => {
-                const feeLabel  = feeTypeLabel(p.fee_type);
+                const schBadge  = p.is_scholarship
+                    ? ' <span class="badge" style="background:#6f42c1;color:#fff">Scholarship</span>'
+                    : '';
+                const feeLabel  = feeTypeLabel(p.fee_type) + schBadge;
                 const semText   = p.semester_number ? ('Semester ' + p.semester_number) : '—';
                 const monText   = p.month_number
                     ? ('Month ' + p.month_number + (p.month_label ? ' (' + p.month_label + ')' : ''))
@@ -2526,12 +2562,47 @@ require_once __DIR__ . '/../includes/header.php';
                     <td class="small">${monText}</td>
                     <td class="small">${p.payment_method_label || 'Cash'}</td>
                     <td class="small">${p.transaction_number || '—'}</td>
-                    <td class="text-end small fw-semibold text-success">${fmt(p.amount)}</td>
+                    <td class="text-end small fw-semibold" style="color:${p.is_scholarship ? '#6f42c1' : '#198754'}">${fmt(p.amount)}${p.is_scholarship ? '<div class="fw-normal" style="font-size:.66rem">not counted</div>' : ''}</td>
                     <td class="small"><a href="${APP_URL}/accounting/voucher-view.php?id=${p.voucher_id}" target="_blank" rel="noopener noreferrer" class="text-decoration-none">${p.voucher_number ?? '—'}</a></td>
                     <td class="small"><a href="${APP_URL}/accounting/fee-invoice.php?voucher_id=${p.voucher_id}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-primary py-0 px-2"><i class="fas fa-print me-1"></i>Invoice</a></td>
                     <td class="small">${p.collected_by_name}</td>
                     <td>${statusBadge}</td>`;
                 tbody.appendChild(tr);
+            });
+        }
+        card.style.display = '';
+    }
+
+    // ── Old ERP uploaded proof (attached via Bulk OLD ERP Proof Upload) ──────
+    function renderOldErpProofs(proofs) {
+        const card  = document.getElementById('oldErpProofCard');
+        const links = document.getElementById('oldErpProofLinks');
+        if (!card || !links) return;
+        links.innerHTML = '';
+        if (!proofs || proofs.length === 0) {
+            const hint = document.createElement('span');
+            hint.className = 'small text-muted fst-italic';
+            hint.textContent = 'No old ERP proof uploaded for this student.';
+            links.appendChild(hint);
+            const up = document.createElement('a');
+            up.href = APP_URL + '/student-accounts/bulk-proof-upload.php';
+            up.target = '_blank';
+            up.rel = 'noopener noreferrer';
+            up.className = 'small';
+            up.innerHTML = '<i class="fas fa-upload me-1"></i>Upload proof';
+            links.appendChild(up);
+        } else {
+            proofs.forEach((f, i) => {
+                const a = document.createElement('a');
+                a.href = f.url;
+                a.target = '_blank';
+                a.rel = 'noopener noreferrer';
+                a.className = 'btn btn-sm btn-outline-success';
+                const date = String(f.uploaded_at || '').slice(0, 10).replace(/[^0-9-]/g, '');
+                a.innerHTML = '<i class="fas fa-image me-1"></i>View Proof'
+                    + (proofs.length > 1 ? ' ' + (i + 1) : '')
+                    + (date ? ' <span class="opacity-75">(' + date + ')</span>' : '');
+                links.appendChild(a);
             });
         }
         card.style.display = '';
