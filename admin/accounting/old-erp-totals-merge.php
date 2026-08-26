@@ -59,9 +59,9 @@ if (isset($_GET['sample'])) {
     header('Content-Disposition: attachment; filename="old-erp-totals-merge-sample.csv"');
     $out = fopen('php://output', 'w');
     fputcsv($out, ['Student ID', 'Student Name', 'Amount Paid (Incl. Admission & Registration)', 'Scholarship Amount', 'Other Fees Total', 'Other Fees Detail'], ',', '"', '\\');
-    fputcsv($out, ['02826105101071', 'Md Example Student', '85000', '10000', '1500', 'Re-Take Fee'], ',', '"', '\\');
+    fputcsv($out, ['02826105101071', 'Md Example Student', '85000', '10000', '2000', 'Late Fine: 1000; Special Examination (Mid Term): 1000'], ',', '"', '\\');
     fputcsv($out, ['02826105101072', 'Ms Example Student', '42000', '0', '0', ''], ',', '"', '\\');
-    fputcsv($out, ['2826105101073', 'Another Student', '60000', '5000', '800', 'Library Fine'], ',', '"', '\\');
+    fputcsv($out, ['2826105101073', 'Another Student', '60000', '5000', '800', 'Library Late Fine'], ',', '"', '\\');
     fclose($out);
     exit;
 }
@@ -122,8 +122,10 @@ function oesm_month_slots(array $summary): array
 }
 
 /**
- * Map an "Other Fees Detail" head from the CSV to a fee_type. Unknown heads
- * fall back to 'other' (the head name is preserved on the payment note).
+ * Map an "Other Fees Detail" head from the CSV to a fee_type. Covers every
+ * additional / examination fee category in the system; unknown heads fall
+ * back to 'other' (the head name is preserved on the payment note — the
+ * fee_type column is a fixed enum, so brand-new heads are kept as notes).
  */
 function oesm_other_fee_type(string $detail): string
 {
@@ -140,7 +142,151 @@ function oesm_other_fee_type(string $detail): string
     if (str_contains($s, 'special') && str_contains($s, 'final')) {
         return 'special_exam_final';
     }
+    if (str_contains($s, 'library') && str_contains($s, 'fine')) {
+        return 'library_late_fine';
+    }
+    if (str_contains($s, 'fine')) {
+        return 'late_fine';
+    }
+    if (str_contains($s, 'transcript')) {
+        return 'transcript_fee';
+    }
+    if (str_contains($s, 'testimonial')) {
+        return 'testimonial_fee';
+    }
+    if (str_contains($s, 'syllabus')) {
+        return 'syllabus_sale';
+    }
+    if (str_contains($s, 'remedial')) {
+        return 'remedial_course_fee';
+    }
+    if (str_contains($s, 're-registration') || str_contains($s, 're registration') || str_contains($s, 'reregistration')) {
+        return 're_registration_fee';
+    }
+    if (str_contains($s, 're-exam') || str_contains($s, 're exam') || str_contains($s, 'reexam')) {
+        return 're_exam_fee';
+    }
+    if (str_contains($s, 're-admission') || str_contains($s, 're admission') || str_contains($s, 'readmission')) {
+        return 're_admission_fee';
+    }
+    if (str_contains($s, 'provisional')) {
+        return 'provisional_certificate_fee';
+    }
+    if (str_contains($s, 'appeared')) {
+        return 'appeared_certificate_fee';
+    }
+    if (str_contains($s, 'original') && str_contains($s, 'certificate')) {
+        return 'original_certificate_fee';
+    }
+    if (str_contains($s, 'miscellaneous') || str_contains($s, 'misc')) {
+        return 'miscellaneous_fee';
+    }
+    if (str_contains($s, 'id card') || str_contains($s, 'id-card')) {
+        return 'id_card_replacement_fee';
+    }
+    if (str_contains($s, 'english')) {
+        return 'english_language_fee';
+    }
+    if (str_contains($s, 'convocation')) {
+        return 'convocation_registration_fee';
+    }
+    if (str_contains($s, 'advocateship') || str_contains($s, 'advocate')) {
+        return 'advocateship_training_fee';
+    }
     return 'other';
+}
+
+/**
+ * Parse the "Other Fees Detail" cell into individual additional-fee items.
+ *
+ * Supports an itemised detail such as
+ *   "Late Fine: 1000.0; Special Examination (Mid Term): 1000.0"
+ * (heads separated by ';', '|' or newlines; per-head amounts optional).
+ *
+ * Reconciliation with the Other Fees Total column:
+ *   • itemised amounts → each head keeps its own amount; any un-itemised
+ *     remainder of the total is recorded under 'other' so no old-ERP money
+ *     is ever lost (warned for review);
+ *   • no amounts in the detail → a single head gets the whole total;
+ *     multiple heads split the total evenly (last absorbs rounding; warned).
+ *
+ * @return array{items: array<int, array{fee_type:string,label:string,amount:float}>, warning:string}
+ */
+function oesm_parse_other_detail(string $detail, float $other_total): array
+{
+    $items   = [];
+    $warning = '';
+    $total   = round($other_total, 2);
+
+    $parts = preg_split('/[;|\n]+/', $detail) ?: [];
+    $parts = array_values(array_filter(array_map('trim', $parts), static fn($p) => $p !== ''));
+
+    foreach ($parts as $part) {
+        $label  = $part;
+        $amount = 0.0;
+        // "Head: 1000.0" / "Head - 1000" / "Head = 1,000"
+        if (preg_match('/^(.*?)\s*[:=\-]\s*([0-9][0-9,]*(?:\.[0-9]+)?)\s*$/', $part, $m)) {
+            $label  = trim($m[1]);
+            $amount = round((float)str_replace(',', '', $m[2]), 2);
+        }
+        if ($label === '') {
+            $label = 'Other';
+        }
+        $items[] = [
+            'fee_type' => oesm_other_fee_type($label),
+            'label'    => $label,
+            'amount'   => $amount,
+        ];
+    }
+
+    if (!$items) {
+        if ($total > 0.005) {
+            $items[] = [
+                'fee_type' => 'other',
+                'label'    => $detail !== '' ? $detail : 'Other fees (old ERP)',
+                'amount'   => $total,
+            ];
+        }
+        return ['items' => $items, 'warning' => ''];
+    }
+
+    $sum = round(array_sum(array_column($items, 'amount')), 2);
+
+    if ($sum <= 0.005) {
+        // No per-head amounts in the detail — distribute the total.
+        $n = count($items);
+        if ($total > 0.005 && $n > 0) {
+            $per = round($total / $n, 2);
+            foreach ($items as $i => &$it) {
+                $it['amount'] = ($i < $n - 1) ? $per : round($total - $per * ($n - 1), 2);
+            }
+            unset($it);
+            if ($n > 1) {
+                $warning = 'Other Fees Detail carries no per-head amounts — the Other Fees Total was split evenly across ' . $n . ' heads.';
+            }
+        }
+        return ['items' => $items, 'warning' => $warning];
+    }
+
+    $diff = round($total - $sum, 2);
+    if ($diff > OESM_AMOUNT_TOLERANCE) {
+        // Itemised amounts do not reach the total — keep the difference under Other.
+        $items[] = [
+            'fee_type' => 'other',
+            'label'    => 'Other fees (remainder not itemised in CSV)',
+            'amount'   => $diff,
+        ];
+        $warning = 'Other Fees Detail items total ' . acc_fmt($sum) . ' but Other Fees Total is '
+            . acc_fmt($total) . ' — the remaining ' . acc_fmt($diff) . ' was recorded under Other.';
+    } elseif ($diff < -OESM_AMOUNT_TOLERANCE) {
+        $warning = 'Other Fees Detail items total ' . acc_fmt($sum) . ' which is MORE than the Other Fees Total ('
+            . acc_fmt($total) . ') — the itemised amounts were recorded as-is; please verify.';
+    }
+
+    // Drop zero-amount label-only leftovers when other items carry amounts.
+    $items = array_values(array_filter($items, static fn($it) => $it['amount'] > 0.005));
+
+    return ['items' => $items, 'warning' => $warning];
 }
 
 /**
@@ -422,28 +568,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') ==
                 $warnings[] = $sid . ': scholarship ' . acc_fmt($sch) . ' could not be placed (no tuition income account).';
             }
 
-            // ── 5) Other fees: matching head, or 'other' with the CSV head noted ─
+            // ── 5) Other fees: itemised additional payments ─────────────────
+            // The Other Fees Detail cell may itemise several heads, e.g.
+            // "Late Fine: 1000.0; Special Examination (Mid Term): 1000.0".
+            // Each head is recorded as its OWN additional payment (outside the
+            // monthly schedule) under the matching fee type; unknown heads go
+            // to 'other' with the CSV head name preserved on the note.
             if ($other > 0.005) {
-                $ft  = oesm_other_fee_type($detail);
-                $inc = acc_income_account_id_for_fee_type($ft);
-                if ($inc <= 0 && $ft !== 'other') {
-                    $ft  = 'other';
-                    $inc = acc_income_account_id_for_fee_type('other');
+                $parsed_other = oesm_parse_other_detail($detail, $other);
+                if ($parsed_other['warning'] !== '') {
+                    $warnings[] = $sid . ': ' . $parsed_other['warning'];
                 }
-                if ($inc <= 0) {
-                    $warnings[] = $sid . ': other fees ' . acc_fmt($other) . ' skipped — no income account mapped for the "other" head.';
-                } else {
+                foreach ($parsed_other['items'] as $o_item) {
+                    $o_amt = round((float)$o_item['amount'], 2);
+                    if ($o_amt <= 0.005) {
+                        continue;
+                    }
+                    $ft  = (string)$o_item['fee_type'];
+                    $inc = acc_income_account_id_for_fee_type($ft);
+                    if ($inc <= 0 && $ft !== 'other') {
+                        $ft  = 'other';
+                        $inc = acc_income_account_id_for_fee_type('other');
+                    }
+                    if ($inc <= 0) {
+                        $warnings[] = $sid . ': other fee "' . (string)$o_item['label'] . '" (' . acc_fmt($o_amt) . ') skipped — no income account mapped for the "other" head.';
+                        continue;
+                    }
                     acc_collect_student_fee(
                         $stu_pk, $pkg_id, $ft, null, null, null,
-                        'old_erp', null, 'OLD-ERP-OTHER', $other,
+                        'old_erp', null, 'OLD-ERP-OTHER', $o_amt,
                         $cash, $inc, $today,
                         'Old ERP totals merge',
-                        'Old ERP other fees — head: ' . ($detail !== '' ? $detail : 'not specified in CSV')
-                            . ($ft === 'other' && $detail !== '' ? ' (recorded under the catch-all Other head; head noted from CSV)' : '') . '.',
+                        'Old ERP other fees — head: ' . (string)$o_item['label']
+                            . ($ft === 'other' ? ' (recorded under the catch-all Other head; head noted from CSV)' : '') . '.',
                         true
                     );
                     $vcount++;
-                    $inserted = round($inserted + $other, 2);
+                    $inserted = round($inserted + $o_amt, 2);
                 }
             }
 
@@ -522,6 +683,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') ==
                 $detail      = trim((string)($cells[5] ?? ''));
                 $csv_total   = round($amount + $scholarship + $other_total, 2);
 
+                // Itemised Other Fees breakdown (e.g. "Late Fine: 1000;
+                // Special Examination (Mid Term): 1000") for preview + validation.
+                $other_breakdown = [];
+                $other_warn      = '';
+                if ($other_total > 0.005) {
+                    $parsed_other = oesm_parse_other_detail($detail, $other_total);
+                    foreach ($parsed_other['items'] as $oi) {
+                        $other_breakdown[] = acc_fee_type_label((string)$oi['fee_type'])
+                            . ($oi['fee_type'] === 'other' && $oi['label'] !== '' ? ' (' . (string)$oi['label'] . ')' : '')
+                            . ': ' . acc_fmt((float)$oi['amount']);
+                    }
+                    $other_warn = $parsed_other['warning'];
+                }
+
                 $status = 'ready';
                 $note   = '';
                 $stu    = null;
@@ -558,15 +733,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') ==
                 }
 
                 $preview[] = [
-                    'sid'          => $sid,
-                    'name'         => $name,
-                    'db_name'      => $stu['full_name'] ?? '',
-                    'amount'       => $amount,
-                    'scholarship'  => $scholarship,
-                    'other_total'  => $other_total,
-                    'other_detail' => $detail,
-                    'status'       => $status,
-                    'note'         => $note,
+                    'sid'             => $sid,
+                    'name'            => $name,
+                    'db_name'         => $stu['full_name'] ?? '',
+                    'amount'          => $amount,
+                    'scholarship'     => $scholarship,
+                    'other_total'     => $other_total,
+                    'other_detail'    => $detail,
+                    'other_breakdown' => $other_breakdown,
+                    'status'          => $status,
+                    'note'            => trim($note . ($other_warn !== '' ? ($note !== '' ? ' ' : '') . $other_warn : '')),
                 ];
                 if ($status === 'ready') {
                     $ready[] = [
@@ -642,8 +818,14 @@ require_once __DIR__ . '/../includes/header.php';
             Registration (per semester) → monthly tuition (earliest months first). The
             <strong>Scholarship Amount</strong> is merged into monthly tuition as clearly-marked
             <em>OLD-ERP SCHOLARSHIP</em> rows (so those months stop showing dues while staying
-            identifiable as scholarship, not cash). <strong>Other Fees</strong> are recorded under the
-            matching head (Re-Take, Improvement, Special Exam…) or under <em>Other</em> with the head
+            identifiable as scholarship, not cash). <strong>Other Fees</strong> may be itemised in the Detail
+            column as <code>Head: amount; Head: amount</code> — e.g.
+            <code>Late Fine: 1000; Special Examination (Mid Term): 1000</code> — and each head is
+            recorded as its own <em>additional payment</em> (outside the monthly schedule, never counted
+            in monthly tuition) under the matching head (Late Fine, Library Late Fine, Special Exam,
+            Re-Take, Improvement, Transcript, Testimonial, Syllabus, Remedial, Re-Registration,
+            Re-Exam, Re-Admission, Certificates, Convocation, English Language, ID Card Replacement,
+            Advocateship…) or under <em>Other</em> with the head
             name from the CSV written on the payment note. Student IDs match with or without leading
             zeros; a student whose old-ERP records already cover the CSV total is
             <strong>skipped</strong>, so re-uploading is always safe. Everything is recorded as
@@ -725,7 +907,15 @@ require_once __DIR__ . '/../includes/header.php';
                         <td class="text-end"><?= h(acc_fmt((float)$p['amount'])) ?></td>
                         <td class="text-end"><?= $p['scholarship'] > 0 ? h(acc_fmt((float)$p['scholarship'])) : '—' ?></td>
                         <td class="text-end"><?= $p['other_total'] > 0 ? h(acc_fmt((float)$p['other_total'])) : '—' ?></td>
-                        <td><?= h($p['other_detail']) ?: '—' ?></td>
+                        <td>
+                            <?php if (!empty($p['other_breakdown'])): ?>
+                                <?php foreach ($p['other_breakdown'] as $ob): ?>
+                                    <div class="small"><?= h($ob) ?></div>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <?= h($p['other_detail']) ?: '—' ?>
+                            <?php endif; ?>
+                        </td>
                         <td>
                             <?php if ($p['status'] === 'ready'): ?>
                             <span class="badge bg-success">Ready</span>
