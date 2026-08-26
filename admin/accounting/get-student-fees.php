@@ -6,6 +6,7 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_access('accounting', 'can_create');
 require_once __DIR__ . '/helpers.php';
+require_once __DIR__ . '/../student-accounts/helpers.php'; // sfp_get_old_erp_proofs()
 
 header('Content-Type: application/json');
 
@@ -58,6 +59,11 @@ try {
     // Payment transaction history for this student
     $raw_payments = acc_get_student_payments((int)$student['package_id']);
     $payments = array_map(function ($p) {
+        // Scholarship memo rows (e.g. OLD-ERP-SCHOLARSHIP) are waivers, not
+        // cash — flag them so the UI can badge the rows and keep them out of
+        // the money totals.
+        $is_scholarship = (stripos((string)($p['transaction_number'] ?? ''), 'SCHOLARSHIP') !== false)
+            || (stripos((string)($p['note'] ?? ''), 'SCHOLARSHIP') !== false);
         return [
             'id'                => (int)$p['id'],
             'voucher_id'        => (int)$p['voucher_id'],
@@ -80,9 +86,21 @@ try {
             ),
             'amount'            => (float)$p['amount'],
             'note'              => $p['note'] ?? '',
+            'is_scholarship'    => $is_scholarship,
             'collected_by_name' => $p['collected_by_name'] ?? '—',
         ];
     }, $raw_payments);
+
+    // Old ERP uploaded proof images attached to this student (via Student
+    // Accounts → Bulk OLD ERP Proof Upload) so Collect Payment can show them.
+    $old_erp_proofs = array_map(static function ($f) {
+        return [
+            'id'          => (int)$f['id'],
+            'name'        => (string)(($f['original_name'] ?? '') !== '' ? $f['original_name'] : 'OLD ERP Proof'),
+            'url'         => UPLOAD_URL . '/students/files/' . rawurlencode((string)$f['stored_name']),
+            'uploaded_at' => (string)($f['created_at'] ?? ''),
+        ];
+    }, sfp_get_old_erp_proofs((int)$student['id']));
 
     echo json_encode([
         'student'         => [
@@ -116,6 +134,7 @@ try {
         'summary'         => $summary,
         'income_accounts' => $income_accounts,
         'payments'        => $payments,
+        'old_erp_proofs'  => $old_erp_proofs,
     ]);
 } catch (Throwable $e) {
     error_log('get-student-fees.php error: ' . $e->getMessage());
