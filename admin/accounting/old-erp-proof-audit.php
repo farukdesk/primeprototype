@@ -977,7 +977,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') ==
     } else {
         set_time_limit(0);
         $user      = auth_user();
-        $clear_sid = trim((string)($_POST['clear_student_id'] ?? ''));
+        $clear_sid     = trim((string)($_POST['clear_student_id'] ?? ''));
+        $clear_dept    = (int)($_POST['clear_dept'] ?? 0);
+        $clear_program = (int)($_POST['clear_program'] ?? 0);
+        $clear_batch   = (int)($_POST['clear_batch'] ?? 0);
         $clear_stu = $clear_sid !== '' ? oepa_lookup_student($clear_sid) : null;
         if ($clear_sid !== '' && !$clear_stu) {
             flash_set('danger', 'Student "' . h($clear_sid) . '" was not found — nothing was deleted.');
@@ -1006,6 +1009,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') ==
                 db()->prepare('DELETE FROM oepa_fix_batches WHERE student_pk = ?')
                     ->execute([(int)$clear_stu['id']]);
                 $label = 'student ' . (string)$clear_stu['student_id'];
+            } elseif ($clear_dept > 0 || $clear_program > 0 || $clear_batch > 0) {
+                // Group-scoped clear (department / program / batch): only vouchers
+                // whose payments ALL use the old_erp method AND ALL belong to
+                // students inside the chosen group are cleared. Mixed vouchers and
+                // payments collected in this ERP are never touched. The reason
+                // keeps the 'Old ERP import cleared…' marker so Restore still works.
+                $label_parts = [];
+                if ($clear_dept > 0) {
+                    $q = db()->prepare('SELECT name FROM dept_departments WHERE id = ?');
+                    $q->execute([$clear_dept]);
+                    $label_parts[] = 'department ' . ((string)$q->fetchColumn() ?: ('#' . $clear_dept));
+                }
+                if ($clear_program > 0) {
+                    $q = db()->prepare('SELECT program_name FROM dept_academic_programs WHERE id = ?');
+                    $q->execute([$clear_program]);
+                    $label_parts[] = 'program ' . ((string)$q->fetchColumn() ?: ('#' . $clear_program));
+                }
+                if ($clear_batch > 0) {
+                    $q = db()->prepare('SELECT name FROM student_batches WHERE id = ?');
+                    $q->execute([$clear_batch]);
+                    $label_parts[] = 'batch ' . ((string)$q->fetchColumn() ?: ('#' . $clear_batch));
+                }
+                $label  = implode(', ', $label_parts);
+                $reason = 'Old ERP import cleared for ' . $label
+                    . ': old-ERP transactions removed (payments collected in this ERP are kept).';
+
+                $having  = ["SUM(sp.payment_method <> 'old_erp') = 0"];
+                $hparams = [];
+                $swhere  = [];
+                $sparams = [];
+                if ($clear_dept > 0) {
+                    $having[]  = 'SUM(COALESCE(st.dept_id, 0) <> ?) = 0';
+                    $hparams[] = $clear_dept;
+                    $swhere[]  = 'dept_id = ?';
+                    $sparams[] = $clear_dept;
+                }
+                if ($clear_program > 0) {
+                    $having[]  = 'SUM(COALESCE(st.program_id, 0) <> ?) = 0';
+                    $hparams[] = $clear_program;
+                    $swhere[]  = 'program_id = ?';
+                    $sparams[] = $clear_program;
+                }
+                if ($clear_batch > 0) {
+                    $having[]  = 'SUM(COALESCE(st.batch_id, 0) <> ?) = 0';
+                    $hparams[] = $clear_batch;
+                    $swhere[]  = 'batch_id = ?';
+                    $sparams[] = $clear_batch;
+                }
+
+                $upd = db()->prepare(
+                    "UPDATE acc_vouchers v
+                     JOIN (SELECT sp.voucher_id
+                             FROM sfp_payments sp
+                             LEFT JOIN students st ON st.id = sp.student_id
+                            GROUP BY sp.voucher_id
+                           HAVING " . implode(' AND ', $having) . ") t ON t.voucher_id = v.id
+                     SET v.is_deleted = 1, v.deleted_by = ?, v.deleted_at = NOW(), v.delete_reason = ?
+                     WHERE v.is_deleted = 0"
+                );
+                $upd->execute(array_merge($hparams, [(int)($user['id'] ?? 0), $reason]));
+                $cleared = (int)$upd->rowCount();
+                oepa_ensure_batch_table();
+                db()->prepare(
+                    'DELETE FROM oepa_fix_batches
+                      WHERE student_pk IN (SELECT id FROM students WHERE ' . implode(' AND ', $swhere) . ')'
+                )->execute($sparams);
             } else {
                 $reason = 'Old ERP import cleared: every old-ERP transaction removed (payments collected in this ERP are kept).';
                 $upd = db()->prepare(
@@ -1365,26 +1434,83 @@ require_once __DIR__ . '/../includes/header.php';
         <p class="small mb-3">
             Removes old-ERP transactions — bulk-merge rows, single Old-ERP collections and
             proof-audit fixes. <strong>With a Student ID it clears ONLY that student</strong>;
-            <strong>left empty it clears the ENTIRE old-ERP import for ALL students</strong> and
+            <strong>with a Department / Program / Batch selected it clears ONLY the students in
+            that group</strong>; <strong>left empty it clears the ENTIRE old-ERP import for ALL
+            students</strong> and
             resets the proof-audit report. Payments <strong>collected in this ERP</strong> (cash,
             bank, mobile banking, online) are <strong>never touched</strong>. Vouchers are
             soft-deleted with a restorable marker — a mistaken clear can be undone with the
             Restore button below. Type <code>DELETE OLD ERP</code> to confirm.
         </p>
-        <form method="post" class="d-flex gap-2 flex-wrap align-items-center mb-3"
+        <form method="post" class="row g-2 align-items-end mb-3"
               onsubmit="return confirm(this.clear_student_id.value.trim()
                   ? 'Clear the old-ERP import for student ' + this.clear_student_id.value.trim() + ' only?'
-                  : 'No Student ID entered - this clears the ENTIRE old-ERP import for ALL students. Continue?');">
+                  : ((this.clear_dept.value || this.clear_program.value || this.clear_batch.value)
+                      ? 'Clear the old-ERP import for EVERY student in the selected department / program / batch?'
+                      : 'No Student ID or group filter selected - this clears the ENTIRE old-ERP import for ALL students. Continue?'));">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="clear_import">
-            <input type="text" name="clear_student_id" class="form-control form-control-sm"
-                   style="max-width:250px;" placeholder="Student ID (empty = ALL students)" autocomplete="off">
-            <input type="text" name="confirm_text" class="form-control form-control-sm"
-                   style="max-width:220px;" placeholder="Type: DELETE OLD ERP" autocomplete="off" required>
-            <button class="btn btn-danger btn-sm" type="submit">
-                <i class="fas fa-trash-can me-1"></i>Clear Old ERP Import
-            </button>
+            <div class="col-6 col-md-2">
+                <label class="form-label small fw-semibold mb-1">Department</label>
+                <select name="clear_dept" id="clear_dept" class="form-select form-select-sm">
+                    <option value="">All Depts</option>
+                    <?php foreach ($departments as $d): ?>
+                    <option value="<?= $d['id'] ?>"><?= h($d['name']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small fw-semibold mb-1">Program</label>
+                <select name="clear_program" id="clear_program" class="form-select form-select-sm">
+                    <option value="">All Programs</option>
+                    <?php foreach ($all_programs as $p): ?>
+                    <option value="<?= $p['id'] ?>" data-dept="<?= $p['dept_id'] ?>"><?= h($p['program_name']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small fw-semibold mb-1">Batch</label>
+                <select name="clear_batch" class="form-select form-select-sm">
+                    <option value="">All Batches</option>
+                    <?php foreach ($batches as $b): ?>
+                    <option value="<?= $b['id'] ?>"><?= h($b['name']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small fw-semibold mb-1">Student ID <span class="text-muted">(overrides group)</span></label>
+                <input type="text" name="clear_student_id" class="form-control form-control-sm"
+                       placeholder="Student ID (optional)" autocomplete="off">
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small fw-semibold mb-1">Confirmation</label>
+                <input type="text" name="confirm_text" class="form-control form-control-sm"
+                       placeholder="Type: DELETE OLD ERP" autocomplete="off" required>
+            </div>
+            <div class="col-6 col-md-2">
+                <button class="btn btn-danger btn-sm w-100" type="submit">
+                    <i class="fas fa-trash-can me-1"></i>Clear Old ERP Import
+                </button>
+            </div>
         </form>
+        <script>
+        (function () {
+            var d = document.getElementById('clear_dept');
+            var p = document.getElementById('clear_program');
+            if (!d || !p) return;
+            function filterClearPrograms() {
+                var v = d.value;
+                p.querySelectorAll('option[data-dept]').forEach(function (o) {
+                    var show = !v || o.dataset.dept === v;
+                    o.hidden   = !show;
+                    o.disabled = !show;
+                    if (!show && o.selected) p.value = '';
+                });
+            }
+            d.addEventListener('change', filterClearPrograms);
+            filterClearPrograms();
+        }());
+        </script>
         <form method="post" class="d-flex gap-2 flex-wrap align-items-center"
               onsubmit="return confirm('Restore every old-ERP voucher removed by the Clear action? Vouchers deleted through the normal delete workflow are not affected.');">
             <?= csrf_field() ?>
