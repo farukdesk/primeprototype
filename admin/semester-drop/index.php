@@ -116,6 +116,9 @@ require_once __DIR__ . '/../includes/header.php';
         <a href="<?= APP_URL ?>/semester-drop/bulk-upload.php" class="btn btn-outline-warning btn-sm">
             <i class="fas fa-file-csv me-1"></i> Bulk CSV Upload
         </a>
+        <a href="<?= APP_URL ?>/semester-drop/bulk-dropout.php" class="btn btn-outline-dark btn-sm">
+            <i class="fas fa-users-slash me-1"></i> Bulk Dropout (Batch / Program / Dept)
+        </a>
         <a href="<?= APP_URL ?>/semester-drop/create-dropout.php" class="btn btn-dark btn-sm">
             <i class="fas fa-user-slash me-1"></i> Add Dropout Student
         </a>
