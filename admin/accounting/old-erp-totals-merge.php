@@ -232,11 +232,28 @@ function oesm_parse_other_detail(string $detail, float $other_total): array
         if ($label === '') {
             $label = 'Other';
         }
-        $items[] = [
-            'fee_type' => oesm_other_fee_type($label),
-            'label'    => $label,
-            'amount'   => $amount,
-        ];
+        // Combined heads sharing one amount, e.g.
+        // "Re-Take Fee & Improvement Fee: 2000.0" — split the amount evenly
+        // across the heads (last head absorbs the rounding remainder).
+        $sub_labels = preg_split('/\s*&\s*|\s+and\s+/i', $label) ?: [$label];
+        $sub_labels = array_values(array_filter(array_map('trim', $sub_labels), static fn($l) => $l !== ''));
+        if (count($sub_labels) <= 1) {
+            $items[] = [
+                'fee_type' => oesm_other_fee_type($label),
+                'label'    => $label,
+                'amount'   => $amount,
+            ];
+        } else {
+            $n_sub = count($sub_labels);
+            $per   = round($amount / $n_sub, 2);
+            foreach ($sub_labels as $si => $sub_label) {
+                $items[] = [
+                    'fee_type' => oesm_other_fee_type($sub_label),
+                    'label'    => $sub_label,
+                    'amount'   => ($si < $n_sub - 1) ? $per : round($amount - $per * ($n_sub - 1), 2),
+                ];
+            }
+        }
     }
 
     if (!$items) {
@@ -287,6 +304,27 @@ function oesm_parse_other_detail(string $detail, float $other_total): array
     $items = array_values(array_filter($items, static fn($it) => $it['amount'] > 0.005));
 
     return ['items' => $items, 'warning' => $warning];
+}
+
+/**
+ * Old-ERP money already recorded AS SCHOLARSHIP (memo rows whose
+ * transaction number is OLD-ERP-SCHOLARSHIP) for a student. Used to detect
+ * wrong / reversed scholarship marking from an earlier import run.
+ */
+function oesm_existing_scholarship_total(int $student_pk): float
+{
+    $stmt = db()->prepare(
+        "SELECT COALESCE(SUM(sp.amount), 0)
+         FROM sfp_payments sp
+         JOIN acc_vouchers v ON v.id = sp.voucher_id
+         WHERE sp.student_id = ?
+           AND sp.payment_method = 'old_erp'
+           AND sp.transaction_number = 'OLD-ERP-SCHOLARSHIP'
+           AND v.is_deleted = 0
+           AND v.status IN ('posted','memo')"
+    );
+    $stmt->execute([$student_pk]);
+    return round((float)$stmt->fetchColumn(), 2);
 }
 
 /**
@@ -725,6 +763,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') ==
                             $note   = 'Old-ERP records (' . acc_fmt($existing) . ') already cover the CSV total.';
                         } elseif ($existing > OESM_AMOUNT_TOLERANCE) {
                             $note = 'Has ' . acc_fmt($existing) . ' old-ERP records already; only the CSV amounts will be allocated on the remaining dues.';
+                        }
+                        // Detect wrong / reversed scholarship marking from an
+                        // earlier import: the amount already marked as scholarship
+                        // in the DB differs from the CSV's Scholarship Amount.
+                        $existing_sch = oesm_existing_scholarship_total((int)$stu['id']);
+                        if ($existing_sch > OESM_AMOUNT_TOLERANCE
+                            && abs($existing_sch - $scholarship) > OESM_AMOUNT_TOLERANCE) {
+                            $note .= ($note ? ' ' : '') . 'WRONG SCHOLARSHIP MARKING: existing old-ERP records mark '
+                                . acc_fmt($existing_sch) . ' as scholarship but the CSV says '
+                                . acc_fmt($scholarship) . ' — clear this student\'s old ERP import (Proof Audit → Clear Old ERP Import), then re-upload this file to fix the labels.';
                         }
                         if ($name !== '' && $stu && strcasecmp(trim($name), trim((string)$stu['full_name'])) !== 0) {
                             $note .= ($note ? ' ' : '') . 'Name differs in DB: “' . (string)$stu['full_name'] . '”.';
