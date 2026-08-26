@@ -1523,6 +1523,12 @@ function acc_student_form_id_total_fee(): float
 
 function acc_package_form_id_fee(array $pkg): float
 {
+    // Form & ID Card fee marked "MISSING in the old ERP" (set per student by
+    // the Old ERP Totals CSV Merge): the head is intentionally waived — it is
+    // neither counted as due nor marked paid anywhere in the system.
+    if ((int)($pkg['form_id_fee_missing'] ?? 0) === 1) {
+        return 0.0;
+    }
     $snapshot = (float)($pkg['form_id_fee'] ?? 0);
     return $snapshot > 0 ? $snapshot : acc_student_form_id_total_fee();
 }

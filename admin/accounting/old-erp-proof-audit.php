@@ -1194,6 +1194,9 @@ require_once __DIR__ . '/../includes/header.php';
         <a href="<?= APP_URL ?>/accounting/old-erp-bulk-merge.php" class="btn btn-outline-secondary btn-sm">
             <i class="fas fa-file-csv me-1"></i> Bulk CSV Merge
         </a>
+        <a href="<?= APP_URL ?>/accounting/old-erp-totals-merge.php" class="btn btn-outline-success btn-sm">
+            <i class="fas fa-file-invoice-dollar me-1"></i> Totals CSV Merge (v2)
+        </a>
         <a href="<?= APP_URL ?>/accounting/old-erp-remap.php" class="btn btn-outline-secondary btn-sm">
             <i class="fas fa-screwdriver-wrench me-1"></i> Remap Months
         </a>
