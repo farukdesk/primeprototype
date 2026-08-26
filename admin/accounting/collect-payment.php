@@ -2425,11 +2425,12 @@ require_once __DIR__ . '/../includes/header.php';
             btn.addEventListener('click', () => openPayForm(btn));
         });
 
+        // Old ERP uploaded proof (rendered first so a problem in the history
+        // table can never hide the proof strip)
+        renderOldErpProofs(data.old_erp_proofs || []);
+
         // Render transaction history
         renderTransactionHistory(data.payments || []);
-
-        // Old ERP uploaded proof links
-        renderOldErpProofs(data.old_erp_proofs || []);
 
         // Show the Smart Payment card
         showSmartPayCard();
@@ -2582,7 +2583,7 @@ require_once __DIR__ . '/../includes/header.php';
         if (!proofs || proofs.length === 0) {
             const hint = document.createElement('span');
             hint.className = 'small text-muted fst-italic';
-            hint.textContent = 'No old ERP proof uploaded for this student.';
+            hint.textContent = 'No old ERP proof is attached to this student yet (proofs are attached by uploading a ZIP of images named by student ID).';
             links.appendChild(hint);
             const up = document.createElement('a');
             up.href = APP_URL + '/student-accounts/bulk-proof-upload.php';
@@ -2593,15 +2594,32 @@ require_once __DIR__ . '/../includes/header.php';
             links.appendChild(up);
         } else {
             proofs.forEach((f, i) => {
+                const date = String(f.uploaded_at || '').slice(0, 10).replace(/[^0-9-]/g, '');
                 const a = document.createElement('a');
                 a.href = f.url;
                 a.target = '_blank';
                 a.rel = 'noopener noreferrer';
-                a.className = 'btn btn-sm btn-outline-success';
-                const date = String(f.uploaded_at || '').slice(0, 10).replace(/[^0-9-]/g, '');
-                a.innerHTML = '<i class="fas fa-image me-1"></i>View Proof'
-                    + (proofs.length > 1 ? ' ' + (i + 1) : '')
-                    + (date ? ' <span class="opacity-75">(' + date + ')</span>' : '');
+                a.className = 'd-inline-block border rounded p-1 bg-white text-decoration-none text-center';
+                a.title = 'Open proof ' + (i + 1) + ' in a new tab';
+                const img = document.createElement('img');
+                img.src = f.url;
+                img.alt = 'Old ERP proof ' + (i + 1);
+                img.style.height = '72px';
+                img.style.maxWidth = '160px';
+                img.style.objectFit = 'cover';
+                img.loading = 'lazy';
+                img.onerror = function () {
+                    // Inline preview failed — fall back to a button-style link
+                    a.innerHTML = '<i class="fas fa-image me-1"></i>View Proof ' + (i + 1)
+                        + (date ? ' <span class="opacity-75">(' + date + ')</span>' : '');
+                    a.className = 'btn btn-sm btn-outline-success';
+                };
+                a.appendChild(img);
+                const cap = document.createElement('div');
+                cap.className = 'small text-muted';
+                cap.style.fontSize = '.68rem';
+                cap.textContent = 'Proof ' + (i + 1) + (date ? ' · ' + date : '');
+                a.appendChild(cap);
                 links.appendChild(a);
             });
         }

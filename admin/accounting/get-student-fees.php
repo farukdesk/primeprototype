@@ -59,11 +59,18 @@ try {
     // Payment transaction history for this student
     $raw_payments = acc_get_student_payments((int)$student['package_id']);
     $payments = array_map(function ($p) {
-        // Scholarship memo rows (e.g. OLD-ERP-SCHOLARSHIP) are waivers, not
-        // cash — flag them so the UI can badge the rows and keep them out of
-        // the money totals.
-        $is_scholarship = (stripos((string)($p['transaction_number'] ?? ''), 'SCHOLARSHIP') !== false)
-            || (stripos((string)($p['note'] ?? ''), 'SCHOLARSHIP') !== false);
+        // Scholarship memo rows are waivers, not cash — flag them so the UI
+        // can badge the rows and keep them out of the money totals.
+        // STRICT match: only rows explicitly recorded as scholarship by the
+        // Old ERP merge qualify — receipt/transaction number exactly
+        // OLD-ERP-SCHOLARSHIP, or a note starting "SCHOLARSHIP (old ERP)".
+        // A note that merely mentions the word "scholarship" somewhere (e.g.
+        // an old-ERP fee-head name copied onto a normal cash payment) must
+        // NOT count as scholarship.
+        $txn_upper = strtoupper(trim((string)($p['transaction_number'] ?? '')));
+        $note_str  = trim((string)($p['note'] ?? ''));
+        $is_scholarship = ($txn_upper === 'OLD-ERP-SCHOLARSHIP')
+            || (stripos($note_str, 'SCHOLARSHIP (old ERP)') === 0);
         return [
             'id'                => (int)$p['id'],
             'voucher_id'        => (int)$p['voucher_id'],
