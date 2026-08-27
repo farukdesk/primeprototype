@@ -9,10 +9,19 @@
  * registration head shows as DUE again, because the registration paid total
  * decreases and the fee summary recomputes automatically.
  *
+ * It can also move the EXCESS registration fee — the amount paid ABOVE the
+ * total registration due. This covers the correction workflow where the Old
+ * ERP merge recorded a higher registration fee per semester (e.g. 1,000/sem)
+ * than the correct one (e.g. 625/sem for 8 semesters = 5,000): after the
+ * bulk fee correction, the overpaid remainder (e.g. 3,000) is attributed to
+ * no head. The excess mode moves exactly that remainder onto the monthly
+ * schedule WITHOUT marking any registration semester as due.
+ *
  * How the move works, per student
  *   • The amount "paid" on each selected head is read from the live fee
  *     summary (acc_student_fee_summary), which distributes total registration
- *     money sequentially across semesters.
+ *     money sequentially across semesters. The excess head is
+ *     max(0, registration paid − registration due).
  *   • Registration payment rows (sfp_payments, fee_type = 'registration') are
  *     consumed — rows linked to the selected semesters first, then unlinked
  *     rows, then the rest, newest first. Rows are converted or SPLIT exactly
@@ -41,7 +50,8 @@
  * registration money sequentially (Semester 1 first). Moving money therefore
  * marks the LAST paid registration semester(s) as due. In the normal case —
  * moving the most recent semester's registration while later semesters are
- * still unpaid — this is exactly the selected head.
+ * still unpaid — this is exactly the selected head. The excess mode never
+ * marks a semester as due: it only moves the overpaid amount above the total.
  */
 
 require_once __DIR__ . '/../includes/auth.php';
@@ -145,11 +155,13 @@ function mfh_load_registration_rows(int $package_id): array
 
 /**
  * Amount currently counted as paid on each selected registration head, from
- * the live fee summary (sequential distribution).
+ * the live fee summary (sequential distribution). When $move_excess is on,
+ * an extra head is added for the amount paid ABOVE the total registration
+ * due (registration overpayment) — moving it never marks a semester as due.
  *
  * @param int[] $sem_numbers
  */
-function mfh_head_amounts(array $summary, array $sem_numbers): array
+function mfh_head_amounts(array $summary, array $sem_numbers, bool $move_excess = false): array
 {
     $heads = [];
     foreach (($summary['semesters'] ?? []) as $sem) {
@@ -169,6 +181,17 @@ function mfh_head_amounts(array $summary, array $sem_numbers): array
             'label'           => $sem_label . ' – Registration Fee',
             'amount'          => round($paid, 2),
         ];
+    }
+    if ($move_excess) {
+        $tot    = $summary['totals']['registration'] ?? [];
+        $excess = round(max(0.0, (float)($tot['paid'] ?? 0) - (float)($tot['due'] ?? 0)), 2);
+        if ($excess > MFH_EPS) {
+            $heads[] = [
+                'semester_number' => 0,
+                'label'           => 'Registration Fee – excess over total due',
+                'amount'          => $excess,
+            ];
+        }
     }
     return $heads;
 }
@@ -241,9 +264,9 @@ function mfh_order_reg_rows(array $rows, array $sem_numbers): array
  * @return array{heads:array,move_total:float,moved:float,posted_moved:float,
  *               leftover:float,actions:array,slot_labels:string[]}
  */
-function mfh_build_student_plan(array $summary, array $reg_rows, array $sem_numbers): array
+function mfh_build_student_plan(array $summary, array $reg_rows, array $sem_numbers, bool $move_excess = false): array
 {
-    $heads      = mfh_head_amounts($summary, $sem_numbers);
+    $heads      = mfh_head_amounts($summary, $sem_numbers, $move_excess);
     $move_total = round(array_sum(array_column($heads, 'amount')), 2);
     $result = [
         'heads'        => $heads,
@@ -333,7 +356,7 @@ function mfh_build_student_plan(array $summary, array $reg_rows, array $sem_numb
  * @param int[] $sem_numbers
  * @return array{0:int,1:float,2:?string} [rows changed, amount moved, warning]
  */
-function mfh_apply_student(array $stu, array $sem_numbers, string $head_note): array
+function mfh_apply_student(array $stu, array $sem_numbers, bool $move_excess, string $head_note): array
 {
     $student_pk = (int)$stu['student_pk'];
     $package_id = (int)$stu['package_id'];
@@ -343,7 +366,7 @@ function mfh_apply_student(array $stu, array $sem_numbers, string $head_note): a
     if (!$summary) {
         return [0, 0.0, 'Student ' . $sid . ': could not load the fee summary — skipped.'];
     }
-    $plan = mfh_build_student_plan($summary, mfh_load_registration_rows($package_id), $sem_numbers);
+    $plan = mfh_build_student_plan($summary, mfh_load_registration_rows($package_id), $sem_numbers, $move_excess);
     if ($plan['moved'] <= MFH_EPS) {
         return [0, 0.0, null];
     }
@@ -513,6 +536,7 @@ function mfh_apply_student(array $stu, array $sem_numbers, string $head_note): a
 $f_dept    = (int)($_POST['dept_id']    ?? $_GET['dept_id']    ?? 0);
 $f_program = (int)($_POST['program_id'] ?? $_GET['program_id'] ?? 0);
 $f_batch   = (int)($_POST['batch_id']   ?? $_GET['batch_id']   ?? 0);
+$move_excess = (int)($_POST['move_excess'] ?? $_GET['move_excess'] ?? 0) === 1;
 $sem_numbers = array_values(array_unique(array_filter(
     array_map('intval', (array)($_POST['semesters'] ?? [])),
     static fn(int $n): bool => $n >= 1 && $n <= 24
@@ -527,11 +551,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     $action = (string)($_POST['action'] ?? '');
 
-    if ($f_batch <= 0)      $errors[] = 'Please select the Batch (the move always runs per batch).';
-    if (!$sem_numbers)      $errors[] = 'Please select at least one Registration Fee head (semester).';
+    if ($f_batch <= 0) {
+        $errors[] = 'Please select the Batch (the move always runs per batch).';
+    }
+    if (!$sem_numbers && !$move_excess) {
+        $errors[] = 'Please select at least one Registration Fee head (semester) or tick "Excess registration fee".';
+    }
 
     if (!$errors && in_array($action, ['preview', 'apply'], true)) {
-        $head_note = 'Registration Fee (Semester ' . implode(', ', $sem_numbers) . ')';
+        $head_parts = [];
+        if ($sem_numbers) {
+            $head_parts[] = 'Semester ' . implode(', ', $sem_numbers);
+        }
+        if ($move_excess) {
+            $head_parts[] = 'excess over due';
+        }
+        $head_note = 'Registration Fee (' . implode(' + ', $head_parts) . ')';
         $students  = mfh_students($f_dept, $f_program, $f_batch);
 
         if ($action === 'preview') {
@@ -544,7 +579,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $plan = mfh_build_student_plan(
                     $summary,
                     mfh_load_registration_rows((int)$stu['package_id']),
-                    $sem_numbers
+                    $sem_numbers,
+                    $move_excess
                 );
                 if ($plan['move_total'] <= MFH_EPS) {
                     continue;
@@ -569,7 +605,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $tot_amount   = 0.0;
             $warnings     = [];
             foreach ($students as $stu) {
-                [$rows, $moved, $warn] = mfh_apply_student($stu, $sem_numbers, $head_note);
+                [$rows, $moved, $warn] = mfh_apply_student($stu, $sem_numbers, $move_excess, $head_note);
                 if ($rows > 0) {
                     $tot_students++;
                     $tot_rows += $rows;
@@ -581,7 +617,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $msg = 'Fee head move complete: ' . acc_fmt($tot_amount) . ' moved from ' . h($head_note)
                  . ' to monthly payments for ' . $tot_students . ' student(s) (' . $tot_rows
-                 . ' payment rows updated). The selected registration head(s) now show as due.';
+                 . ' payment rows updated).'
+                 . ($sem_numbers ? ' The selected registration head(s) now show as due.' : '');
             if ($warnings) {
                 $shown = array_slice($warnings, 0, 15);
                 $msg .= '<br><strong>Warnings (' . count($warnings) . '):</strong><br>'
@@ -592,7 +629,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 flash_set('success', $msg);
             }
             redirect(APP_URL . '/accounting/move-fee-head.php?batch_id=' . $f_batch
-                . '&dept_id=' . $f_dept . '&program_id=' . $f_program, 303);
+                . '&dept_id=' . $f_dept . '&program_id=' . $f_program
+                . '&move_excess=' . ($move_excess ? 1 : 0), 303);
         }
     }
 }
@@ -628,10 +666,15 @@ require_once __DIR__ . '/../includes/header.php';
     Amounts, vouchers, dates and receipt numbers never change; money only changes head.
     Posted amounts are reclassified in the books with a journal voucher when the two heads map to different
     income accounts. Every change is written to the change log.
+    <br><i class="fas fa-circle-plus text-success me-1"></i>
+    <strong>Excess registration fee:</strong> after correcting the registration fee per semester (e.g. Old ERP
+    merged 1,000/semester but the correct fee is 625/semester × 8 = 5,000), the amount paid <em>above</em> the new
+    total due (e.g. 3,000) belongs to no head. Tick this option to move exactly that overpaid remainder to the
+    monthly payments — registration stays fully paid and <em>no</em> semester is marked due in this mode.
     <br><i class="fas fa-triangle-exclamation text-warning me-1"></i>
-    Registration money is distributed sequentially across semesters (Semester 1 first), so the move marks the
-    <em>latest paid</em> registration semester(s) as due — normally exactly the head you selected, as long as
-    later semesters are still unpaid.
+    Registration money is distributed sequentially across semesters (Semester 1 first), so a per-semester move
+    marks the <em>latest paid</em> registration semester(s) as due — normally exactly the head you selected, as
+    long as later semesters are still unpaid.
 </div>
 
 <div class="card border-0 shadow-sm mb-4">
@@ -677,7 +720,7 @@ require_once __DIR__ . '/../includes/header.php';
                     </select>
                 </div>
                 <div class="col-12">
-                    <label class="form-label fw-semibold">Fee heads to move <span class="text-danger">*</span></label>
+                    <label class="form-label fw-semibold">Fee heads to move</label>
                     <div class="d-flex flex-wrap gap-3">
                         <?php for ($n = 1; $n <= 12; $n++): ?>
                         <div class="form-check">
@@ -689,6 +732,20 @@ require_once __DIR__ . '/../includes/header.php';
                         <?php endfor; ?>
                     </div>
                     <div class="form-text">Only semesters that actually exist on a student's schedule are considered for that student.</div>
+                </div>
+                <div class="col-12">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="move_excess" value="1"
+                               id="mfh-excess" <?= $move_excess ? 'checked' : '' ?>>
+                        <label class="form-check-label fw-semibold" for="mfh-excess">
+                            Excess registration fee — amount paid <em>above</em> the total registration due
+                        </label>
+                    </div>
+                    <div class="form-text">
+                        Use this after correcting the registration fee per semester in Student Accounts (bulk edit):
+                        the overpaid remainder moves to the monthly payments and <strong>no</strong> registration
+                        semester is marked as due. Can be combined with the per-semester heads above.
+                    </div>
                 </div>
             </div>
             <div class="d-flex gap-2 mt-4">
@@ -716,12 +773,15 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
         </div>
         <?php if ($preview_totals['students'] > 0): ?>
-        <form method="post" onsubmit="return confirm('Move <?= h(acc_fmt($preview_totals['amount'])) ?> from the selected registration head(s) to monthly payments for <?= (int)$preview_totals['students'] ?> student(s)? The registration head(s) will show as due again. This will be recorded in the change log.');">
+        <form method="post" onsubmit="return confirm('Move <?= h(acc_fmt($preview_totals['amount'])) ?> from the selected registration head(s) to monthly payments for <?= (int)$preview_totals['students'] ?> student(s)? This will be recorded in the change log.');">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="apply">
             <input type="hidden" name="batch_id" value="<?= (int)$f_batch ?>">
             <input type="hidden" name="dept_id" value="<?= (int)$f_dept ?>">
             <input type="hidden" name="program_id" value="<?= (int)$f_program ?>">
+            <?php if ($move_excess): ?>
+            <input type="hidden" name="move_excess" value="1">
+            <?php endif; ?>
             <?php foreach ($sem_numbers as $n): ?>
             <input type="hidden" name="semesters[]" value="<?= (int)$n ?>">
             <?php endforeach; ?>
