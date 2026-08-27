@@ -178,6 +178,11 @@ require_once __DIR__ . '/../includes/header.php';
                 <a href="<?= APP_URL ?>/accounting/transfer-money.php" class="btn btn-outline-info btn-sm text-start">
                     <i class="fas fa-exchange-alt me-2 text-info"></i> Transfer Money <small class="text-muted ms-1">— Contra Voucher</small>
                 </a>
+                <?php if (is_super_admin() || can_access('accounting', 'can_edit')): ?>
+                <a href="<?= APP_URL ?>/accounting/move-fee-head.php" class="btn btn-outline-warning btn-sm text-start">
+                    <i class="fas fa-people-arrows me-2 text-warning"></i> Move Fee Head <small class="text-muted ms-1">— Batch: Registration → Monthly</small>
+                </a>
+                <?php endif; ?>
                 <a href="<?= APP_URL ?>/accounting/vouchers.php" class="btn btn-outline-secondary btn-sm text-start">
                     <i class="fas fa-list me-2"></i> All Vouchers
                 </a>
