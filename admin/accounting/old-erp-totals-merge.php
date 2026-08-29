@@ -52,6 +52,7 @@ $page_title = 'Old ERP – Totals CSV Merge';
 const OESM_AMOUNT_TOLERANCE = 5.0;      // old-ERP rounding tolerance (BDT)
 const OESM_MAX_ROWS         = 3000;     // hard cap per upload
 const OESM_SESSION_KEY      = 'oesm_rows_v1';
+const OESM_BATCH_SIZE       = 100;      // students merged per request – keeps memory flat on big files
 
 // ── Sample CSV template download ──────────────────────────────────────
 if (isset($_GET['sample'])) {
@@ -376,18 +377,25 @@ function oesm_ensure_missing_flag_column(): void
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') === 'confirm') {
     csrf_check();
     set_time_limit(0);
+    ignore_user_abort(true);
+    // Each student needs a full nested fee summary plus many voucher inserts.
+    // Give PHP head-room and, more importantly, only merge OESM_BATCH_SIZE
+    // students per request (the page auto-continues below) so memory can
+    // never run out even on a 3000-row file.
+    @ini_set('memory_limit', '512M');
 
     $payload = $_SESSION[OESM_SESSION_KEY] ?? null;
     if (!is_array($payload) || !is_array($payload['rows'] ?? null) || !$payload['rows']) {
         flash_set('error', 'Nothing to confirm — please upload the CSV again.');
         redirect(APP_URL . '/accounting/old-erp-totals-merge.php');
     }
-    $rows         = $payload['rows'];
+    $rows_left    = $payload['rows'];
+    $rows         = array_splice($rows_left, 0, OESM_BATCH_SIZE);   // this request's batch
     $mark_missing = !empty($payload['mark_form_id_missing']);
-    unset($_SESSION[OESM_SESSION_KEY]);
 
     $cash = acc_received_into_account_id_for_payment_method('old_erp');
     if ($cash <= 0) {
+        unset($_SESSION[OESM_SESSION_KEY]);
         flash_set('error', 'The Old ERP cash account is not configured in Accounting Settings — nothing was merged.');
         redirect(APP_URL . '/accounting/old-erp-totals-merge.php');
     }
@@ -395,12 +403,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') ==
         oesm_ensure_missing_flag_column();
     }
 
+    // Progress accumulated across batches (kept in the session).
+    $prog = is_array($payload['progress'] ?? null)
+        ? $payload['progress']
+        : ['merged' => 0, 'skipped' => 0, 'failed' => 0, 'grand' => 0.0,
+           'total' => count($payload['rows']), 'warnings' => []];
+
     $today    = date('Y-m-d');
-    $merged   = 0;
-    $skipped  = 0;
-    $failed   = 0;
-    $grand    = 0.0;
-    $warnings = [];
+    $merged   = (int)($prog['merged']  ?? 0);
+    $skipped  = (int)($prog['skipped'] ?? 0);
+    $failed   = (int)($prog['failed']  ?? 0);
+    $grand    = (float)($prog['grand'] ?? 0.0);
+    $warnings = (array)($prog['warnings'] ?? []);
 
     foreach ($rows as $r) {
         $sid = (string)($r['sid'] ?? '');
@@ -658,8 +672,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') ==
             $failed++;
             $warnings[] = $sid . ': ' . $e->getMessage();
         }
+        // Free the per-student fee summary and force cycle collection so a
+        // large file cannot exhaust the PHP memory limit.
+        unset($stu, $summary, $tt, $slots, $room, $parsed_other);
+        gc_collect_cycles();
     }
 
+    // More rows left? Persist the progress and auto-continue with the next
+    // batch in a fresh request – memory stays flat regardless of file size.
+    if ($rows_left) {
+        $payload['rows']     = $rows_left;
+        $payload['progress'] = [
+            'merged'   => $merged,
+            'skipped'  => $skipped,
+            'failed'   => $failed,
+            'grand'    => $grand,
+            'total'    => (int)($prog['total'] ?? 0),
+            'warnings' => array_slice($warnings, 0, 200),
+        ];
+        $_SESSION[OESM_SESSION_KEY] = $payload;
+
+        $done_cnt  = $merged + $skipped + $failed;
+        $total_cnt = max((int)($prog['total'] ?? 0), $done_cnt + count($rows_left));
+        $pct       = $total_cnt > 0 ? (int)floor($done_cnt / $total_cnt * 100) : 0;
+        ?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Old ERP Totals Merge – processing…</title>
+    <style>
+        body{font-family:Inter,Arial,sans-serif;background:#f4f6fb;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;}
+        .box{background:#fff;border:1px solid #e0e7ef;border-radius:12px;padding:32px 40px;max-width:480px;text-align:center;}
+        .bar{background:#e9ecef;border-radius:8px;height:14px;overflow:hidden;margin:18px 0 8px;}
+        .fill{background:#198754;height:100%;width:<?= $pct ?>%;transition:width .3s;}
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h3 style="margin:0 0 6px;">Merging old-ERP totals…</h3>
+        <p style="color:#6c757d;margin:0;">Processed <?= $done_cnt ?> of <?= $total_cnt ?> students (<?= $pct ?>%).<br>
+           Please keep this tab open — the next batch starts automatically.</p>
+        <div class="bar"><div class="fill"></div></div>
+        <form id="oesm_continue" method="post" action="<?= APP_URL ?>/accounting/old-erp-totals-merge.php">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="confirm">
+            <noscript><button type="submit">Continue</button></noscript>
+        </form>
+    </div>
+    <script>setTimeout(function () { document.getElementById('oesm_continue').submit(); }, 400);</script>
+</body>
+</html>
+        <?php
+        exit;
+    }
+
+    unset($_SESSION[OESM_SESSION_KEY]);
     $msg = $merged . ' student(s) merged (' . acc_fmt($grand) . ' recorded as old-ERP memo payments).';
     if ($skipped > 0) {
         $msg .= ' ' . $skipped . ' skipped (old-ERP records already cover the CSV total).';
