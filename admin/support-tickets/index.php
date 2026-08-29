@@ -146,50 +146,34 @@ sort($dept_options, SORT_NATURAL | SORT_FLAG_CASE);
 $program_options = $st_distinct('student_program');
 $batch_options   = $st_distinct('student_batch');
 
-// ── Stats ─────────────────────────────────────────────────────────────────────
-if (is_super_admin()) {
-    $stats_stmt = db()->query('SELECT status, COUNT(*) AS cnt FROM support_tickets GROUP BY status');
-} elseif ($is_staff) {
-    $stats_sql = 'SELECT status, COUNT(*) AS cnt FROM support_tickets t
-                  WHERE (t.created_by = ? OR t.assigned_to = ? OR EXISTS (SELECT 1 FROM support_ticket_user_tags st WHERE st.ticket_id = t.id AND st.user_id = ?))
-                  GROUP BY status';
-    $stats_stmt = db()->prepare($stats_sql);
-    $stats_stmt->execute([$user['id'], $user['id'], $user['id']]);
-} else {
-    $stats_sql = 'SELECT status, COUNT(*) AS cnt FROM support_tickets t
-                  WHERE (t.created_by = ? OR EXISTS (SELECT 1 FROM support_ticket_user_tags st WHERE st.ticket_id = t.id AND st.user_id = ?) OR EXISTS (SELECT 1 FROM support_ticket_comments sc WHERE sc.ticket_id = t.id AND sc.comment LIKE ?))
-                  GROUP BY status';
-    $stats_stmt = db()->prepare($stats_sql);
-    $stats_stmt->execute([$user['id'], $user['id'], $mention_pattern]);
-}
+// ── Stats (respect the active filters – same WHERE as the ticket list) ───────
+$stats_sql = 'SELECT t.status, COUNT(*) AS cnt
+              FROM support_tickets t
+              LEFT JOIN users u ON u.id = t.created_by
+              LEFT JOIN users a ON a.id = t.assigned_to'
+           . ($where ? ' WHERE ' . implode(' AND ', $where) : '')
+           . ' GROUP BY t.status';
+$stats_stmt = db()->prepare($stats_sql);
+$stats_stmt->execute($params);
 $stats    = array_column($stats_stmt->fetchAll(), 'cnt', 'status');
 $total    = array_sum($stats);
 $open_cnt = ($stats['Open'] ?? 0) + ($stats['Reopened'] ?? 0);
 $prog_cnt = $stats['In Progress'] ?? 0;
 $done_cnt = ($stats['Resolved'] ?? 0) + ($stats['Closed'] ?? 0);
 
-// Overdue count
-if (is_super_admin()) {
-    $od_sql = 'SELECT COUNT(*) FROM support_tickets
-               WHERE deadline IS NOT NULL AND deadline < NOW()
-                 AND status NOT IN (\'Resolved\',\'Closed\')';
-    $od_stmt = db()->prepare($od_sql);
-    $od_stmt->execute([]);
-} elseif ($is_staff) {
-    $od_sql = 'SELECT COUNT(*) FROM support_tickets t
-               WHERE deadline IS NOT NULL AND deadline < NOW()
-                 AND status NOT IN (\'Resolved\',\'Closed\')
-                 AND (t.created_by = ? OR t.assigned_to = ? OR EXISTS (SELECT 1 FROM support_ticket_user_tags st WHERE st.ticket_id = t.id AND st.user_id = ?))';
-    $od_stmt = db()->prepare($od_sql);
-    $od_stmt->execute([$user['id'], $user['id'], $user['id']]);
-} else {
-    $od_sql = 'SELECT COUNT(*) FROM support_tickets t
-               WHERE deadline IS NOT NULL AND deadline < NOW()
-                 AND status NOT IN (\'Resolved\',\'Closed\')
-                 AND (t.created_by = ? OR EXISTS (SELECT 1 FROM support_ticket_user_tags st WHERE st.ticket_id = t.id AND st.user_id = ?) OR EXISTS (SELECT 1 FROM support_ticket_comments sc WHERE sc.ticket_id = t.id AND sc.comment LIKE ?))';
-    $od_stmt = db()->prepare($od_sql);
-    $od_stmt->execute([$user['id'], $user['id'], $mention_pattern]);
-}
+// Overdue count (within the active filters)
+$od_where = array_merge($where, [
+    't.deadline IS NOT NULL',
+    't.deadline < NOW()',
+    "t.status NOT IN ('Resolved','Closed')",
+]);
+$od_sql = 'SELECT COUNT(*)
+           FROM support_tickets t
+           LEFT JOIN users u ON u.id = t.created_by
+           LEFT JOIN users a ON a.id = t.assigned_to
+           WHERE ' . implode(' AND ', $od_where);
+$od_stmt = db()->prepare($od_sql);
+$od_stmt->execute($params);
 $overdue_cnt = (int)$od_stmt->fetchColumn();
 
 require_once __DIR__ . '/../includes/header.php';
