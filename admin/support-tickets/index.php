@@ -12,6 +12,11 @@ $search      = trim($_GET['search']   ?? '');
 $f_status    = $_GET['status']        ?? '';
 $f_priority  = $_GET['priority']      ?? '';
 $f_category  = $_GET['category']      ?? '';
+$f_utype     = $_GET['user_type']     ?? '';
+$f_dept      = trim($_GET['department']  ?? '');
+$f_program   = trim($_GET['program']     ?? '');
+$f_batch     = trim($_GET['batch']       ?? '');
+$f_student   = trim($_GET['student_id']  ?? '');
 $f_from      = trim($_GET['from']     ?? '');
 $f_to        = trim($_GET['to']       ?? '');
 $assigned_me = $is_staff && isset($_GET['assigned_me']);
@@ -30,6 +35,7 @@ if ($f_from !== '' && $f_to !== '' && $f_from > $f_to) {
 $valid_statuses   = ['Open','In Progress','Pending','Resolved','Closed','Reopened'];
 $valid_priorities = ['Low','Medium','High','Critical'];
 $valid_categories = ['Hardware','Software','Network','Email','Student Finances','Other Student Issues','Other'];
+$valid_user_types = ['Student','Faculty','Administrative Employee'];
 
 $where  = [];
 $params = [];
@@ -38,19 +44,23 @@ $params = [];
 // Staff (non-super-admin) see only tickets created by, assigned to, or tagged to them.
 // Non-staff see only tickets created by them, tagged, or where they are @mentioned.
 $mention_pattern = '%@' . addcslashes($user['username'], '%_') . '%';
+$scope_where  = [];
+$scope_params = [];
 if (!is_super_admin()) {
     if ($is_staff) {
-        $where[]  = '(t.created_by = ? OR t.assigned_to = ? OR EXISTS (SELECT 1 FROM support_ticket_user_tags st WHERE st.ticket_id = t.id AND st.user_id = ?))';
-        $params[] = $user['id'];
-        $params[] = $user['id'];
-        $params[] = $user['id'];
+        $scope_where[]  = '(t.created_by = ? OR t.assigned_to = ? OR EXISTS (SELECT 1 FROM support_ticket_user_tags st WHERE st.ticket_id = t.id AND st.user_id = ?))';
+        $scope_params[] = $user['id'];
+        $scope_params[] = $user['id'];
+        $scope_params[] = $user['id'];
     } else {
-        $where[]  = '(t.created_by = ? OR EXISTS (SELECT 1 FROM support_ticket_user_tags st WHERE st.ticket_id = t.id AND st.user_id = ?) OR EXISTS (SELECT 1 FROM support_ticket_comments sc WHERE sc.ticket_id = t.id AND sc.comment LIKE ?))';
-        $params[] = $user['id'];
-        $params[] = $user['id'];
-        $params[] = $mention_pattern;
+        $scope_where[]  = '(t.created_by = ? OR EXISTS (SELECT 1 FROM support_ticket_user_tags st WHERE st.ticket_id = t.id AND st.user_id = ?) OR EXISTS (SELECT 1 FROM support_ticket_comments sc WHERE sc.ticket_id = t.id AND sc.comment LIKE ?))';
+        $scope_params[] = $user['id'];
+        $scope_params[] = $user['id'];
+        $scope_params[] = $mention_pattern;
     }
 }
+$where  = $scope_where;
+$params = $scope_params;
 
 if ($search !== '') {
     $like     = '%' . $search . '%';
@@ -70,6 +80,29 @@ if (in_array($f_priority, $valid_priorities, true)) {
 if (in_array($f_category, $valid_categories, true)) {
     $where[]  = 't.category = ?';
     $params[] = $f_category;
+}
+if (in_array($f_utype, $valid_user_types, true)) {
+    $where[]  = 't.user_type = ?';
+    $params[] = $f_utype;
+}
+if ($f_dept !== '') {
+    // A ticket's department may live in student_department (student tickets)
+    // or in the general department column (faculty / staff tickets).
+    $where[]  = '(t.student_department = ? OR t.department = ?)';
+    $params[] = $f_dept;
+    $params[] = $f_dept;
+}
+if ($f_program !== '') {
+    $where[]  = 't.student_program = ?';
+    $params[] = $f_program;
+}
+if ($f_batch !== '') {
+    $where[]  = 't.student_batch = ?';
+    $params[] = $f_batch;
+}
+if ($f_student !== '') {
+    $where[]  = 't.student_id LIKE ?';
+    $params[] = '%' . $f_student . '%';
 }
 if ($assigned_me) {
     $where[]  = 't.assigned_to = ?';
@@ -94,6 +127,24 @@ $sql = 'SELECT t.*, COALESCE(u.full_name, t.submitter_name) AS creator_name, a.f
 $stmt = db()->prepare($sql);
 $stmt->execute($params);
 $tickets = $stmt->fetchAll();
+
+// ── Filter dropdown options (distinct values within the user's visibility scope) ─
+$st_distinct = static function (string $col) use ($scope_where, $scope_params): array {
+    // $col is hardcoded by the callers below – never user input.
+    $q = "SELECT DISTINCT t.`{$col}` AS v FROM support_tickets t WHERE t.`{$col}` IS NOT NULL AND t.`{$col}` <> ''"
+       . ($scope_where ? ' AND ' . implode(' AND ', $scope_where) : '')
+       . ' ORDER BY v';
+    $s = db()->prepare($q);
+    $s->execute($scope_params);
+    return $s->fetchAll(PDO::FETCH_COLUMN);
+};
+$dept_options = array_values(array_unique(array_merge(
+    $st_distinct('department'),
+    $st_distinct('student_department')
+)));
+sort($dept_options, SORT_NATURAL | SORT_FLAG_CASE);
+$program_options = $st_distinct('student_program');
+$batch_options   = $st_distinct('student_batch');
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
 if (is_super_admin()) {
@@ -231,6 +282,38 @@ require_once __DIR__ . '/../includes/header.php';
                 <option value="<?= h($c) ?>" <?= $f_category === $c ? 'selected' : '' ?>><?= h($c) ?></option>
                 <?php endforeach; ?>
             </select>
+            <select name="user_type" class="form-select" style="max-width:160px;border-radius:10px;">
+                <option value="">All User Types</option>
+                <?php foreach ($valid_user_types as $ut): ?>
+                <option value="<?= h($ut) ?>" <?= $f_utype === $ut ? 'selected' : '' ?>><?= h($ut) ?></option>
+                <?php endforeach; ?>
+            </select>
+            <?php if (!empty($dept_options)): ?>
+            <select name="department" class="form-select" style="max-width:180px;border-radius:10px;">
+                <option value="">All Departments</option>
+                <?php foreach ($dept_options as $d): ?>
+                <option value="<?= h($d) ?>" <?= $f_dept === $d ? 'selected' : '' ?>><?= h($d) ?></option>
+                <?php endforeach; ?>
+            </select>
+            <?php endif; ?>
+            <?php if (!empty($program_options)): ?>
+            <select name="program" class="form-select" style="max-width:180px;border-radius:10px;">
+                <option value="">All Programs</option>
+                <?php foreach ($program_options as $p): ?>
+                <option value="<?= h($p) ?>" <?= $f_program === $p ? 'selected' : '' ?>><?= h($p) ?></option>
+                <?php endforeach; ?>
+            </select>
+            <?php endif; ?>
+            <?php if (!empty($batch_options)): ?>
+            <select name="batch" class="form-select" style="max-width:160px;border-radius:10px;">
+                <option value="">All Batches</option>
+                <?php foreach ($batch_options as $b): ?>
+                <option value="<?= h($b) ?>" <?= $f_batch === $b ? 'selected' : '' ?>><?= h($b) ?></option>
+                <?php endforeach; ?>
+            </select>
+            <?php endif; ?>
+            <input type="text" name="student_id" class="form-control" style="max-width:150px;border-radius:10px;"
+                   placeholder="Student ID" value="<?= h($f_student) ?>">
             <div class="d-flex align-items-center gap-1">
                 <label class="text-muted" style="font-size:.8rem;white-space:nowrap;">From</label>
                 <input type="date" name="from" class="form-control" style="max-width:160px;border-radius:10px;"
@@ -249,7 +332,7 @@ require_once __DIR__ . '/../includes/header.php';
             <button class="btn btn-outline-primary" style="border-radius:10px;">
                 <i class="fas fa-search me-1"></i> Filter
             </button>
-            <?php if ($search || $f_status || $f_priority || $f_category || $f_from || $f_to || $assigned_me): ?>
+            <?php if ($search || $f_status || $f_priority || $f_category || $f_utype || $f_dept || $f_program || $f_batch || $f_student || $f_from || $f_to || $assigned_me): ?>
             <a href="<?= APP_URL ?>/support-tickets/index.php" class="btn btn-light" style="border-radius:10px;">Clear</a>
             <?php endif; ?>
         </form>
