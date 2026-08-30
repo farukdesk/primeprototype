@@ -9,9 +9,16 @@
  *   2. Student Name  – informational; a mismatch is warned, never blocks
  *   3. Amount Paid (Incl. Admission & Registration) – the WHOLE amount the
  *      student paid in the old ERP. Allocated server-side in this order:
- *      Admission → Form Fee → ID Card Fee → Registration (per semester) →
- *      Monthly tuition (earliest months first). Anything beyond the schedule
- *      is recorded on the last month and flagged for review.
+ *      Admission → Form Fee → ID Card Fee → Registration (per semester,
+ *      CAPPED at the Registration "Received Amount" read from the OLD ERP
+ *      proof's transaction history — Head of A/C: Registration Fee →
+ *      Payable / Received / Due) → Monthly tuition (earliest months first).
+ *      Registration is only marked paid up to what the proof shows as
+ *      actually RECEIVED; the rest of the registration fees stay as DUES
+ *      and the money is merged into the monthly payments instead. When no
+ *      proof reading is stored the row falls back to schedule order and is
+ *      loudly warned (preview + merge results). Anything beyond the
+ *      schedule is recorded on the last month and flagged for review.
  *   4. Scholarship Amount – merged into monthly tuition as clearly-marked
  *      OLD-ERP SCHOLARSHIP memo rows (transaction no. OLD-ERP-SCHOLARSHIP),
  *      so the months stop showing false dues while the rows stay identifiable
