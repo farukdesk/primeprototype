@@ -466,6 +466,20 @@ require_once __DIR__ . '/../includes/header.php';
 </script>
 <?php endif; ?>
 
+<style>
+    /* ── Mobile responsiveness ──
+       Below 768px the three data sections render as stacked cards (the wide
+       tables are desktop-only) and header badges shrink and wrap instead of
+       overflowing the viewport. */
+    @media (max-width: 767.98px) {
+        #totalOutstandingBadge { font-size: .78rem !important; }
+        #feeScheduleCard .card-header, #scholarshipCard .card-header,
+        #transactionHistoryCard .card-header {
+            padding-left: 1rem !important; padding-right: 1rem !important;
+        }
+    }
+</style>
+
 <!-- Loading indicator -->
 <div id="loadingWrap" class="text-center py-5 text-muted">
     <div class="spinner-border spinner-border-sm me-2" role="status"></div>
@@ -477,12 +491,12 @@ require_once __DIR__ . '/../includes/header.php';
 
 <!-- Fee Schedule & Outstanding Balance -->
 <div class="card border-0 shadow-sm mb-3" id="feeScheduleCard" style="display:none;">
-    <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between">
+    <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
         <span class="fw-semibold">
             <i class="fas fa-file-invoice-dollar me-2 text-success"></i>Fee Schedule &amp; Outstanding Balance
         </span>
-        <div class="d-flex align-items-center gap-2">
-            <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 fs-6"
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 fs-6 text-wrap text-start"
                   id="totalOutstandingBadge" style="display:none;"></span>
             <button type="button" class="btn btn-sm btn-outline-secondary"
                     data-bs-toggle="collapse" data-bs-target="#feeScheduleCollapse">
@@ -491,7 +505,7 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
     </div>
     <div class="collapse show" id="feeScheduleCollapse">
-        <div class="table-responsive">
+        <div class="table-responsive d-none d-md-block">
             <table class="table table-hover table-sm align-middle mb-0" id="feeTable">
                 <thead class="table-light">
                     <tr>
@@ -516,12 +530,14 @@ require_once __DIR__ . '/../includes/header.php';
                 </tfoot>
             </table>
         </div>
+        <!-- Mobile: stacked rows instead of a wide table -->
+        <div class="d-md-none p-3 pt-2" id="feeMobileBody"></div>
     </div>
 </div>
 
 <!-- Scholarships & Waivers -->
 <div class="card border-0 shadow-sm mb-3" id="scholarshipCard" style="display:none;">
-    <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between">
+    <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
         <span class="fw-semibold">
             <i class="fas fa-graduation-cap me-2 text-warning"></i>Applied Scholarships &amp; Waivers
         </span>
@@ -531,7 +547,7 @@ require_once __DIR__ . '/../includes/header.php';
         </button>
     </div>
     <div class="collapse show" id="scholarshipCollapse">
-        <div class="table-responsive">
+        <div class="table-responsive d-none d-md-block">
             <table class="table table-sm table-hover align-middle mb-0" id="scholarshipTable">
                 <thead class="table-light">
                     <tr>
@@ -544,16 +560,18 @@ require_once __DIR__ . '/../includes/header.php';
                 <tbody id="scholarshipTableBody"></tbody>
             </table>
         </div>
+        <!-- Mobile: stacked cards instead of a wide table -->
+        <div class="d-md-none p-3 pt-2" id="scholarshipMobileBody"></div>
     </div>
 </div>
 
 <!-- Payment Transaction History -->
 <div class="card border-0 shadow-sm mb-4" id="transactionHistoryCard" style="display:none;">
-    <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between">
+    <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
         <span class="fw-semibold">
             <i class="fas fa-history me-2 text-info"></i>Payment Transaction History
         </span>
-        <div class="d-flex align-items-center gap-2">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
             <span class="badge bg-info-subtle text-info border border-info-subtle px-3 py-2"
                   id="transactionCount"></span>
             <button type="button" class="btn btn-sm btn-outline-secondary"
@@ -563,7 +581,7 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
     </div>
     <div class="collapse show" id="transactionHistoryCollapse">
-        <div class="table-responsive">
+        <div class="table-responsive d-none d-md-block">
             <table class="table table-sm table-hover align-middle mb-0">
                 <thead class="table-light">
                     <tr>
@@ -582,6 +600,8 @@ require_once __DIR__ . '/../includes/header.php';
                 <tbody id="transactionTableBody"></tbody>
             </table>
         </div>
+        <!-- Mobile: stacked cards instead of a wide table -->
+        <div class="d-md-none p-3 pt-2" id="transactionMobileBody"></div>
     </div>
 </div>
 
@@ -672,6 +692,9 @@ function renderFeeSummary(data) {
 
     const tbody = document.getElementById('feeTableBody');
     tbody.innerHTML = '';
+    // Mobile stacked view container (shown below 768px instead of the table)
+    const mbody = document.getElementById('feeMobileBody');
+    if (mbody) mbody.innerHTML = '';
 
     let grandDue = 0, grandPaid = 0, grandOut = 0;
     let currentlyDueOut = 0; // outstanding for overdue + due_now rows only
@@ -701,6 +724,13 @@ function renderFeeSummary(data) {
             <i class="fas fa-chevron-right me-1"></i>${label}${scHtml}
         </td>`;
         tbody.appendChild(tr);
+
+        if (mbody) {
+            mbody.insertAdjacentHTML('beforeend',
+                `<div class="small fw-semibold text-muted mt-3 mb-2">
+                    <i class="fas fa-chevron-right me-1"></i>${label}${scHtml}
+                </div>`);
+        }
     }
 
     function addRow(label, due, paid, out, calMonth, calYear) {
@@ -722,6 +752,15 @@ function renderFeeSummary(data) {
             ? (status === 'upcoming' ? 'text-secondary' : 'text-danger')
             : 'text-success';
 
+        // Status badge markup (shared by the desktop table and the mobile cards)
+        const badgeHtml = due > 0
+            ? (status !== null
+                ? statusBadge(status)
+                : (out > 0
+                    ? '<span class="badge bg-danger-subtle text-danger border border-danger-subtle"><i class="fas fa-clock me-1"></i>Due</span>'
+                    : '<span class="badge bg-success-subtle text-success border border-success-subtle"><i class="fas fa-check me-1"></i>Paid</span>'))
+            : '—';
+
         const tr  = document.createElement('tr');
         tr.innerHTML = `
             <td class="ps-4">
@@ -740,15 +779,26 @@ function renderFeeSummary(data) {
             </td>
             <td class="text-center small text-muted">${dueDateStr}</td>
             <td class="text-center">
-                ${due > 0
-                    ? (status !== null
-                        ? statusBadge(status)
-                        : (out > 0
-                            ? '<span class="badge bg-danger-subtle text-danger border border-danger-subtle"><i class="fas fa-clock me-1"></i>Due</span>'
-                            : '<span class="badge bg-success-subtle text-success border border-success-subtle"><i class="fas fa-check me-1"></i>Paid</span>'))
-                    : '—'}
+                ${badgeHtml}
             </td>`;
         tbody.appendChild(tr);
+
+        // Mobile stacked card
+        if (mbody) {
+            mbody.insertAdjacentHTML('beforeend', `
+            <div class="border rounded-3 p-2 px-3 mb-2 bg-white shadow-sm">
+                <div class="d-flex justify-content-between align-items-start gap-2">
+                    <div class="small fw-semibold" style="min-width:0;word-break:break-word;">${label}</div>
+                    <div class="text-end flex-shrink-0">${badgeHtml}</div>
+                </div>
+                <div class="d-flex flex-wrap gap-3 small mt-1">
+                    <span class="text-muted">Due: <span class="fw-semibold text-body">${due > 0 ? fmt(due) : '—'}</span></span>
+                    <span class="text-muted">Paid: <span class="fw-semibold text-success">${paid > 0 ? fmt(paid) : '—'}</span></span>
+                    <span class="text-muted">Outstanding: <span class="fw-semibold ${outColour}">${out > 0 ? fmt(out) : (due > 0 ? 'Paid' : '—')}</span></span>
+                </div>
+                ${dueDateStr !== '—' ? `<div class="small text-muted mt-1"><i class="fas fa-calendar me-1"></i>Due date: ${dueDateStr}</div>` : ''}
+            </div>`);
+        }
     }
 
     const t = s.totals;
@@ -813,6 +863,16 @@ function renderFeeSummary(data) {
     document.getElementById('footTotalPaid').textContent = fmt(grandPaid);
     document.getElementById('footTotalOut').textContent  = fmt(grandOut);
 
+    // Mobile: totals card at the end of the stacked list
+    if (mbody) {
+        mbody.insertAdjacentHTML('beforeend', `
+            <div class="border rounded-3 p-3 mt-3 bg-light">
+                <div class="d-flex justify-content-between small mb-1"><span class="fw-semibold">Total Due</span><span class="fw-semibold">${fmt(grandDue)}</span></div>
+                <div class="d-flex justify-content-between small mb-1"><span class="fw-semibold">Total Paid</span><span class="fw-semibold text-success">${fmt(grandPaid)}</span></div>
+                <div class="d-flex justify-content-between small"><span class="fw-semibold">Total Outstanding</span><span class="fw-bold ${grandOut > 0 ? 'text-danger' : 'text-success'}">${fmt(grandOut)}</span></div>
+            </div>`);
+    }
+
     const badge = document.getElementById('totalOutstandingBadge');
     if (grandOut > 0) {
         // Show currently-due amount prominently; note total outstanding separately
@@ -838,7 +898,9 @@ function escHtml(str) {
 function renderScholarships(semesters) {
     const card  = document.getElementById('scholarshipCard');
     const tbody = document.getElementById('scholarshipTableBody');
+    const mbody = document.getElementById('scholarshipMobileBody');
     tbody.innerHTML = '';
+    if (mbody) mbody.innerHTML = '';
 
     let hasAny = false;
     semesters.forEach(sf => {
@@ -870,6 +932,22 @@ function renderScholarships(semesters) {
                 <td class="text-end fw-semibold ${isFixed ? 'text-success' : 'text-warning'}">${discountStr}</td>
                 <td class="text-center small">${scopeBadges}</td>`;
             tbody.appendChild(tr);
+
+            // Mobile stacked card
+            if (mbody) {
+                mbody.insertAdjacentHTML('beforeend', `
+                <div class="border rounded-3 p-3 mb-2 shadow-sm">
+                    <div class="small fw-semibold text-muted mb-1">${escHtml(semLabel)}</div>
+                    <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
+                        <span class="badge rounded-pill bg-success bg-opacity-10 text-success border border-success border-opacity-25"
+                              style="font-size:.8rem;font-weight:500;">
+                            <i class="fas fa-tag me-1"></i>${escHtml(sc.label)}
+                        </span>
+                        <span class="fw-semibold ${isFixed ? 'text-success' : 'text-warning'}">${discountStr}</span>
+                    </div>
+                    <div class="small mt-2">${scopeBadges}</div>
+                </div>`);
+            }
         });
     });
 
@@ -881,14 +959,20 @@ function renderScholarships(semesters) {
 function renderTransactionHistory(payments) {
     const card       = document.getElementById('transactionHistoryCard');
     const tbody      = document.getElementById('transactionTableBody');
+    const mbody      = document.getElementById('transactionMobileBody');
     const countBadge = document.getElementById('transactionCount');
 
     tbody.innerHTML = '';
+    if (mbody) mbody.innerHTML = '';
     countBadge.textContent = payments.length + ' transaction' + (payments.length !== 1 ? 's' : '');
 
     if (payments.length === 0) {
         tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-3 small">' +
             '<i class="fas fa-info-circle me-1"></i>No transactions recorded yet.</td></tr>';
+        if (mbody) {
+            mbody.innerHTML = '<div class="text-center text-muted py-3 small">' +
+                '<i class="fas fa-info-circle me-1"></i>No transactions recorded yet.</div>';
+        }
     } else {
         payments.forEach(p => {
             const feeLabel  = feeTypeLabel(p.fee_type);
@@ -924,6 +1008,28 @@ function renderTransactionHistory(payments) {
                 </td>
                 <td>${voucherStatusBadge}</td>`;
             tbody.appendChild(tr);
+
+            // Mobile stacked card
+            if (mbody) {
+                mbody.insertAdjacentHTML('beforeend', `
+                <div class="border rounded-3 p-3 mb-2 shadow-sm">
+                    <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
+                        <div class="fw-semibold small">${feeLabel}</div>
+                        ${voucherStatusBadge}
+                    </div>
+                    <div class="fs-5 fw-bold text-success mb-1">${fmt(p.amount)}</div>
+                    <div class="small text-muted">${dateStr} · ${semText}${p.month_number ? ' · ' + monText : ''}</div>
+                    <div class="small text-muted" style="word-break:break-word;">Method: ${p.payment_method_label || 'Cash'}${p.transaction_number ? ' · Txn: <span class="font-monospace">' + p.transaction_number + '</span>' : ''}</div>
+                    <div class="small text-muted">Voucher: ${p.voucher_number ?? '—'}</div>
+                    <div class="mt-2">
+                        <a href="${APP_URL}/accounting/student-invoice.php?voucher_id=${p.voucher_id}"
+                           target="_blank" rel="noopener noreferrer"
+                           class="btn btn-sm btn-outline-primary py-0 px-2">
+                            <i class="fas fa-print me-1"></i>Student Copy
+                        </a>
+                    </div>
+                </div>`);
+            }
         });
     }
     card.style.display = '';
