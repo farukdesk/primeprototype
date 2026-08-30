@@ -559,31 +559,69 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') ==
                 $remaining = round($remaining - $take, 2);
             }
 
-            // ── 2) Registration per semester ─────────────────────────────────
+            // ── 2) Registration per semester (proof-driven) ──────────────────
+            // The OLD ERP proof's transaction history carries a "Registration
+            // Fee" row (Head of A/C) with Payable / Received / Due amounts.
+            // Only the RECEIVED amount is marked paid: if the student paid the
+            // registration fees in full, all of them are marked; if not, only
+            // the paid portion is marked, the rest of the registration fees
+            // stay as DUES, and the money flows to monthly tuition instead.
             if ($remaining > 0.005) {
                 $reg_inc = acc_income_account_id_for_fee_type('registration');
                 if ($reg_inc > 0) {
+                    $reg_proof  = oesm_reg_proof($pkg_id);
+                    $reg_budget = null;   // null → no proof reading stored (schedule-order fallback, warned)
+                    if ($reg_proof['received'] !== null) {
+                        // Idempotent against the proof: subtract registration
+                        // already recorded from earlier old-ERP imports.
+                        $reg_already = oesm_existing_reg_old_erp_total($stu_pk);
+                        $reg_budget  = max(0.0, round($reg_proof['received'] - $reg_already, 2));
+                        // Double check the proof's own numbers.
+                        if ($reg_proof['payable'] !== null
+                            && $reg_proof['received'] - $reg_proof['payable'] > OESM_AMOUNT_TOLERANCE) {
+                            $warnings[] = $sid . ': the proof\'s Registration Received ('
+                                . acc_fmt($reg_proof['received']) . ') is larger than its Registration Payable ('
+                                . acc_fmt($reg_proof['payable']) . ') — verify the OCR reading on the student account page.';
+                        }
+                    } else {
+                        $warnings[] = $sid . ': no Registration "Received Amount" stored from the OLD ERP proof — registration was allocated by schedule order. Run the Bulk ERP Check (or enter it manually on the student account) and verify this student.';
+                    }
                     foreach (($summary['semesters'] ?? []) as $sem) {
                         if ($remaining <= 0.005) {
                             break;
+                        }
+                        if ($reg_budget !== null && $reg_budget <= 0.005) {
+                            break;   // the proof says the rest of the registration fees are DUES
                         }
                         $sem_room = round((float)($sem['reg_out'] ?? 0), 2);
                         if ($sem_room <= 0.005) {
                             continue;
                         }
                         $take = round(min($remaining, $sem_room), 2);
+                        if ($reg_budget !== null) {
+                            $take = round(min($take, $reg_budget), 2);
+                        }
+                        if ($take <= 0.005) {
+                            continue;
+                        }
                         acc_collect_student_fee(
                             $stu_pk, $pkg_id, 'registration',
                             (int)$sem['id'], (int)$sem['semester_number'], null,
                             'old_erp', null, 'OLD-ERP-TOTAL', $take,
                             $cash, $reg_inc, $today,
                             'Old ERP totals merge',
-                            'Old ERP totals merge: Registration Fee allocated to semester ' . (int)$sem['semester_number'] . ' from the total Amount Paid column.',
+                            'Old ERP totals merge: Registration Fee allocated to semester ' . (int)$sem['semester_number']
+                                . ($reg_budget !== null
+                                    ? ' — capped at the Registration "Received Amount" from the OLD ERP proof; unpaid registration stays due.'
+                                    : ' from the total Amount Paid column (no proof reading stored — schedule order).'),
                             true
                         );
                         $vcount++;
                         $inserted  = round($inserted + $take, 2);
                         $remaining = round($remaining - $take, 2);
+                        if ($reg_budget !== null) {
+                            $reg_budget = round($reg_budget - $take, 2);
+                        }
                     }
                 }
             }
