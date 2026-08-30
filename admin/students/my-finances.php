@@ -1008,6 +1008,28 @@ function renderTransactionHistory(payments) {
                 </td>
                 <td>${voucherStatusBadge}</td>`;
             tbody.appendChild(tr);
+
+            // Mobile stacked card
+            if (mbody) {
+                mbody.insertAdjacentHTML('beforeend', `
+                <div class="border rounded-3 p-3 mb-2 shadow-sm">
+                    <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
+                        <div class="fw-semibold small">${feeLabel}</div>
+                        ${voucherStatusBadge}
+                    </div>
+                    <div class="fs-5 fw-bold text-success mb-1">${fmt(p.amount)}</div>
+                    <div class="small text-muted">${dateStr} · ${semText}${p.month_number ? ' · ' + monText : ''}</div>
+                    <div class="small text-muted" style="word-break:break-word;">Method: ${p.payment_method_label || 'Cash'}${p.transaction_number ? ' · Txn: <span class="font-monospace">' + p.transaction_number + '</span>' : ''}</div>
+                    <div class="small text-muted">Voucher: ${p.voucher_number ?? '—'}</div>
+                    <div class="mt-2">
+                        <a href="${APP_URL}/accounting/student-invoice.php?voucher_id=${p.voucher_id}"
+                           target="_blank" rel="noopener noreferrer"
+                           class="btn btn-sm btn-outline-primary py-0 px-2">
+                            <i class="fas fa-print me-1"></i>Student Copy
+                        </a>
+                    </div>
+                </div>`);
+            }
         });
     }
     card.style.display = '';
