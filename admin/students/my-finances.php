@@ -863,6 +863,16 @@ function renderFeeSummary(data) {
     document.getElementById('footTotalPaid').textContent = fmt(grandPaid);
     document.getElementById('footTotalOut').textContent  = fmt(grandOut);
 
+    // Mobile: totals card at the end of the stacked list
+    if (mbody) {
+        mbody.insertAdjacentHTML('beforeend', `
+            <div class="border rounded-3 p-3 mt-3 bg-light">
+                <div class="d-flex justify-content-between small mb-1"><span class="fw-semibold">Total Due</span><span class="fw-semibold">${fmt(grandDue)}</span></div>
+                <div class="d-flex justify-content-between small mb-1"><span class="fw-semibold">Total Paid</span><span class="fw-semibold text-success">${fmt(grandPaid)}</span></div>
+                <div class="d-flex justify-content-between small"><span class="fw-semibold">Total Outstanding</span><span class="fw-bold ${grandOut > 0 ? 'text-danger' : 'text-success'}">${fmt(grandOut)}</span></div>
+            </div>`);
+    }
+
     const badge = document.getElementById('totalOutstandingBadge');
     if (grandOut > 0) {
         // Show currently-due amount prominently; note total outstanding separately
