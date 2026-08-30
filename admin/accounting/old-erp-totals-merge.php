@@ -354,6 +354,57 @@ function oesm_existing_old_erp_total(int $student_pk): float
 }
 
 /**
+ * Registration Fee reading from the OLD ERP proof's transaction history
+ * (Head of A/C: Registration Fee → Payable Amount / Received Amount), as
+ * stored on sfp_packages by the ERP check (OCR on the student account page /
+ * the Bulk ERP Check runner) or entered manually on the student account.
+ *
+ * @return array{received: float|null, payable: float|null}
+ */
+function oesm_reg_proof(int $package_id): array
+{
+    try {
+        $stmt = db()->prepare(
+            'SELECT old_erp_reg_received_amount, old_erp_reg_payable_amount
+               FROM sfp_packages WHERE id = ?'
+        );
+        $stmt->execute([$package_id]);
+        $row = $stmt->fetch();
+        if (!$row) {
+            return ['received' => null, 'payable' => null];
+        }
+        return [
+            'received' => $row['old_erp_reg_received_amount'] === null ? null : round((float)$row['old_erp_reg_received_amount'], 2),
+            'payable'  => $row['old_erp_reg_payable_amount'] === null ? null : round((float)$row['old_erp_reg_payable_amount'], 2),
+        ];
+    } catch (Throwable $e) {
+        // Columns not created yet (no ERP check has run) — no proof reading.
+        return ['received' => null, 'payable' => null];
+    }
+}
+
+/**
+ * Old-ERP registration money already recorded for a student, so re-running
+ * the merge never marks more registration paid than the proof's Received
+ * Amount in total (idempotent against the proof).
+ */
+function oesm_existing_reg_old_erp_total(int $student_pk): float
+{
+    $stmt = db()->prepare(
+        "SELECT COALESCE(SUM(sp.amount), 0)
+         FROM sfp_payments sp
+         JOIN acc_vouchers v ON v.id = sp.voucher_id
+         WHERE sp.student_id = ?
+           AND sp.payment_method = 'old_erp'
+           AND sp.fee_type = 'registration'
+           AND v.is_deleted = 0
+           AND v.status IN ('posted','memo')"
+    );
+    $stmt->execute([$student_pk]);
+    return round((float)$stmt->fetchColumn(), 2);
+}
+
+/**
  * Auto-migrate: sfp_packages.form_id_fee_missing flag (waives the Form &
  * ID Card head — neither due nor paid — for batches where the old ERP never
  * charged it). acc_package_form_id_fee() honours this flag.
