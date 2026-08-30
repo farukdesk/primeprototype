@@ -921,7 +921,12 @@ require_once __DIR__ . '/../includes/header.php';
         expectedMonthly:  <?= json_encode(round($erp_expected_monthly, 2)) ?>,
         monthlyTolerance: <?= json_encode((float)SFP_OLD_ERP_MONTHLY_TOLERANCE) ?>,
         stored:        <?= json_encode($old_erp_payable) ?>,
+        regStored:     <?= json_encode(($pkg['old_erp_reg_received_amount'] ?? null) !== null ? (float)$pkg['old_erp_reg_received_amount'] : null) ?>,
         proofUrl:      <?= json_encode($erp_ocr_proof_url) ?>,
+        proofUrls:     <?= json_encode(array_values(array_map(
+                              static fn($p) => UPLOAD_URL . '/students/files/' . rawurlencode((string)$p['stored_name']),
+                              array_filter($old_erp_proofs, static fn($p) => strncmp((string)($p['mime_type'] ?? ''), 'image/', 6) === 0)
+                          ))) ?>,
         saveUrl:       <?= json_encode(APP_URL . '/student-accounts/save-erp-payable.php') ?>,
         csrfField:     <?= json_encode(CSRF_TOKEN_NAME) ?>,
         csrfToken:     <?= json_encode(csrf_token()) ?>
@@ -1086,28 +1091,56 @@ require_once __DIR__ . '/../includes/header.php';
 
     // "Registration Fee" row(s) in the proof's transaction history:
     //   Head of A/C | Payable Amount | Received Amount | Due Amount
-    // Sums every matching row (one per semester on some proofs). Rows whose
-    // three amounts do not reconcile (Payable − Received ≠ Due, ±5 BDT) are
-    // ignored as OCR misreads, and rows with fewer than two amounts are
-    // skipped as ambiguous. Re-Registration / Convocation rows are excluded.
+    // Tolerant of common OCR misreads: fuzzy label match (e.g. "Registralion
+    // Fee"), digit fixes (O→0, l/I→1) and amounts wrapped onto the next line.
+    // Prefers a triple that reconciles (Payable − Received = Due, ±5 BDT);
+    // otherwise falls back to the first pair with Payable ≥ Received.
+    // Re-Registration / Convocation rows are excluded; multiple registration
+    // rows (one per semester) are summed.
+    var REG_LABEL = /\breg\S{0,12}?\s*fees?/i;
+
+    function regAmounts(fragment) {
+        var toks = String(fragment).match(/[0-9OolI|][0-9OolI|,.]*/g) || [];
+        var vals = [];
+        for (var i = 0; i < toks.length; i++) {
+            if (!/[0-9]/.test(toks[i])) continue;           // must contain a real digit
+            var t = toks[i].replace(/[Oo]/g, '0').replace(/[lI|]/g, '1').replace(/,/g, '');
+            var v = parseFloat(t);
+            if (!isNaN(v) && v >= 0) vals.push(v);
+        }
+        return vals;
+    }
+
+    function pickRegPair(vals) {
+        for (var i = 0; i + 2 < vals.length; i++) {          // reconciled triple first
+            if (Math.abs(vals[i] - vals[i + 1] - vals[i + 2]) <= 5) {
+                return { payable: vals[i], received: vals[i + 1] };
+            }
+        }
+        for (var j = 0; j + 1 < vals.length; j++) {          // fallback: Payable ≥ Received
+            if (vals[j] >= vals[j + 1]) {
+                return { payable: vals[j], received: vals[j + 1] };
+            }
+        }
+        return null;
+    }
+
     function parseRegRow(text) {
         var lines = String(text).split(/\n/);
         var payable = 0, received = 0, found = false;
         for (var i = 0; i < lines.length; i++) {
             var line = lines[i];
-            var m = /registration\s*fee/i.exec(line);
+            var m = REG_LABEL.exec(line);
             if (!m) continue;
-            if (/re\s*-?\s*registration|convocation/i.test(line)) continue;
-            var nums = (line.slice(m.index + m[0].length).match(/-?[\d,]+(?:\.\d+)?/g)) || [];
-            var vals = [];
-            for (var j = 0; j < nums.length; j++) {
-                var v = parseFloat(nums[j].replace(/,/g, ''));
-                if (!isNaN(v) && v >= 0) vals.push(v);
+            if (/re\s*-?\s*regis|convocation|replacement/i.test(line)) continue;
+            var vals = regAmounts(line.slice(m.index + m[0].length));
+            if (vals.length < 2 && i + 1 < lines.length && !REG_LABEL.test(lines[i + 1])) {
+                vals = vals.concat(regAmounts(lines[i + 1]));   // amounts wrapped to the next line
             }
-            if (vals.length < 2) continue;
-            if (vals.length >= 3 && Math.abs(vals[0] - vals[1] - vals[2]) > 5) continue;
-            payable  += vals[0];
-            received += vals[1];
+            var pick = pickRegPair(vals);
+            if (!pick) continue;
+            payable  += pick.payable;
+            received += pick.received;
             found = true;
         }
         return found
@@ -1125,26 +1158,66 @@ require_once __DIR__ . '/../includes/header.php';
     }
 
     function runOcr() {
-        if (!CFG.proofUrl) return;
-        setStatus('Reading Payable Amount from the OLD ERP proof…');
+        var urls = (CFG.proofUrls && CFG.proofUrls.length) ? CFG.proofUrls : (CFG.proofUrl ? [CFG.proofUrl] : []);
+        if (!urls.length) return;
+        setStatus('Reading the OLD ERP proof…');
         loadTesseract(function () {
-            window.Tesseract.recognize(CFG.proofUrl, 'eng', {
-                logger: function (m) {
-                    if (m.status === 'recognizing text') {
-                        setStatus('Reading proof… ' + Math.round(m.progress * 100) + '%');
-                    }
+            var val = null, mval = null, reg = null, idx = 0;
+
+            // Read EVERY proof image (the transaction history with the
+            // Registration Fee row is often a separate screenshot) until
+            // all three readings are found.
+            function step() {
+                if (idx >= urls.length || (val !== null && mval !== null && reg !== null)) {
+                    finish();
+                    return;
                 }
-            }).then(function (res) {
-                var text = (res && res.data && res.data.text) || '';
-                var val  = parsePayable(text);
-                var mval = parseMonthly(text);
-                var reg  = parseRegRow(text);
-                if (val === null) {
-                    if (mval !== null) {
-                        saveMonthlyOnly(mval);
-                        return;
+                var url = urls[idx++];
+                window.Tesseract.recognize(url, 'eng', {
+                    logger: function (m) {
+                        if (m.status === 'recognizing text') {
+                            setStatus('Reading proof image ' + idx + ' of ' + urls.length + '… ' + Math.round(m.progress * 100) + '%');
+                        }
                     }
-                    setStatus('Could not find a "Payable Amount" value in the proof image. Enter it manually below.', true);
+                }).then(function (res) {
+                    var text = (res && res.data && res.data.text) || '';
+                    if (val  === null) val  = parsePayable(text);
+                    if (mval === null) mval = parseMonthly(text);
+                    if (reg  === null) reg  = parseRegRow(text);
+                    step();
+                }).catch(function () { step(); });
+            }
+
+            function finish() {
+                if (val === null && mval === null && reg === null) {
+                    setStatus('Could not read the proof image(s). Enter the amounts manually below.', true);
+                    return;
+                }
+                if (val === null) {
+                    // No Payable Amount found — save whatever was read
+                    // (Monthly Payment and/or the Registration Fee row).
+                    var fd = new FormData();
+                    fd.append(CFG.csrfField, CFG.csrfToken);
+                    fd.append('package_id', CFG.packageId);
+                    if (mval !== null) fd.append('monthly', mval);
+                    if (reg) {
+                        fd.append('reg_payable',  reg.payable);
+                        fd.append('reg_received', reg.received);
+                    }
+                    fd.append('source', 'ocr');
+                    fetch(CFG.saveUrl, { method: 'POST', body: fd })
+                        .then(function (r) { return r.json(); })
+                        .then(function (resp) {
+                            if (!resp.success) { setStatus('Values read but saving failed.', true); return; }
+                            if (mval !== null) applyMonthlyResult(mval, 'Read automatically (OCR) · just now');
+                            if (reg && !resp.reg_skipped) applyRegResult(reg.payable, reg.received, 'Read automatically (OCR) · just now');
+                            setStatus('No "Payable Amount" found, but '
+                                + (mval !== null ? 'the Monthly Payment' : '')
+                                + (mval !== null && reg ? ' and ' : '')
+                                + (reg ? 'the Registration Fee row' : '')
+                                + ' was read and saved.');
+                        })
+                        .catch(function () { setStatus('Values read but saving failed.', true); });
                     return;
                 }
                 save(val, 'ocr', mval, reg, function (ok, resp) {
@@ -1159,12 +1232,14 @@ require_once __DIR__ . '/../includes/header.php';
                         setStatus('OCR read ' + fmt(val) + ', but a manually entered value is kept (' + fmt(resp.amount) + ').');
                         return;
                     }
-                    setStatus('Payable Amount read from proof and saved.');
                     applyResult(val, 'Read automatically (OCR) · just now');
+                    setStatus(reg
+                        ? 'Payable Amount and the Registration Fee row were read from the proof and saved.'
+                        : 'Payable Amount read and saved — but NO Registration Fee row could be read from the proof image(s). Enter the registration received amount manually below if the proof shows one.', !reg);
                 });
-            }).catch(function (e) {
-                setStatus('OCR failed: ' + e + '. Enter the amount manually.', true);
-            });
+            }
+
+            step();
         });
     }
 
@@ -1232,8 +1307,11 @@ require_once __DIR__ . '/../includes/header.php';
         });
     }
 
-    // Auto-check: first visit after a proof is uploaded (no stored value yet)
-    if (CFG.proofUrl && CFG.stored === null) {
+    // Auto-check: run when the Payable Amount OR the Registration Fee reading
+    // is still missing (backfills accounts checked before the registration
+    // reading existed).
+    if ((CFG.proofUrl || (CFG.proofUrls && CFG.proofUrls.length))
+        && (CFG.stored === null || CFG.regStored === null)) {
         runOcr();
     }
 })();
