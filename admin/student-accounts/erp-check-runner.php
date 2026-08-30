@@ -683,7 +683,7 @@ require_once __DIR__ . '/../includes/header.php';
             : null;
     }
 
-    function addRow(item, payable, res, status, monthly, monthlyOk, reg) {
+    function addRow(item, payable, res, status, monthly, monthlyOk) {
         var er = $id('empty-row');
         if (er) er.remove();
         var tr = document.createElement('tr');
@@ -702,32 +702,12 @@ require_once __DIR__ . '/../includes/header.php';
                     ? ' <span class="badge bg-danger" title="Monthly Payment differs from the expected monthly total.">✗</span>'
                     : ''));
         }
-        // Registration Fee row read from the proof: Payable / Received and the
-        // derived Due (= Payable − Received). The Payable cell is cross-checked
-        // against the ERP registration total (reg fee/semester × semesters).
-        var regPayCell = '—', regRcvCell = '—', regDueCell = '—';
-        if (reg) {
-            regPayCell = fmt(reg.payable);
-            if (typeof item.reg_total === 'number' && item.reg_total > 0) {
-                regPayCell += Math.abs(reg.payable - item.reg_total) <= 5
-                    ? ' <span class="badge bg-success" title="Matches the ERP registration total (' + fmt(item.reg_total) + ').">✓</span>'
-                    : ' <span class="badge bg-danger" title="ERP registration total is ' + fmt(item.reg_total) + '.">✗</span>';
-            }
-            regRcvCell = fmt(reg.received);
-            var regDue = Math.max(0, reg.payable - reg.received);
-            regDueCell = regDue > 0
-                ? '<span class="text-danger fw-semibold">' + fmt(regDue) + '</span>'
-                : '<span class="text-success">' + fmt(0) + '</span>';
-        }
         tr.innerHTML =
             '<td>' + esc(item.name) + '<br><small class="text-muted">' + esc(item.sid) + '</small></td>' +
             '<td class="text-end">' + (payable === null ? '—' : fmt(payable)) + '</td>' +
             '<td class="text-end">' + fmt(item.grand_total) + '</td>' +
             '<td class="text-end">' + (res ? fmt(res.diff) : '—') + '</td>' +
             '<td class="text-end">' + monthlyCell + '</td>' +
-            '<td class="text-end">' + regPayCell + '</td>' +
-            '<td class="text-end">' + regRcvCell + '</td>' +
-            '<td class="text-end">' + regDueCell + '</td>' +
             '<td>' + badge + '</td>' +
             '<td class="text-end"><a href="' + esc(item.view_url) + '" target="_blank" class="btn btn-outline-primary btn-sm py-0">Open</a></td>';
         var body = $id('results-body');
