@@ -520,55 +520,159 @@ require_once __DIR__ . '/../includes/header.php';
         return null;
     }
 
-    // "Registration Fee" row(s) in the proof's transaction history:
-    //   Head of A/C | Payable Amount | Received Amount | Due Amount
-    // Tolerant of common OCR misreads: fuzzy label match (e.g. "Registralion
-    // Fee"), digit fixes (O→0, l/I→1) and amounts wrapped onto the next line.
-    // Prefers a triple that reconciles (Payable − Received = Due, ±5 BDT);
-    // otherwise falls back to the first pair with Payable ≥ Received.
+    // "Registration Fee" row(s) in the proof's Student Ledger table:
+    //   Head of A/C | Payable Amount | Payment Date | Receipt No | Received Amount [| Due Amount]
+    // The table headers are identified FIRST and every number is mapped to its
+    // field by column position, so Payment Dates and Receipt Nos are never
+    // mistaken for amounts. Comma-separated monetary values are preserved
+    // ("1,000" = 1000, "8,000" = 8000, "53,919" = 53919). Tolerant of common
+    // OCR misreads: fuzzy label match (e.g. "Registralion Fee"), digit fixes
+    // (O→0, l/I→1) and amounts wrapped onto the next line. Every reading is
+    // validated against the visible row (Received ≤ Payable; when a Due column
+    // exists, Due = Payable − Received ±5 BDT) — ambiguous rows are returned
+    // as unread and flagged for manual verification instead of silently
+    // producing an incorrect financial calculation.
     // Re-Registration / Convocation rows are excluded; multiple registration
     // rows (one per semester) are summed.
     var REG_LABEL = /\breg\S{0,12}?\s*fees?/i;
 
-    function regAmounts(fragment) {
-        var toks = String(fragment).match(/[0-9OolI|][0-9OolI|,.]*/g) || [];
-        var vals = [];
-        for (var i = 0; i < toks.length; i++) {
-            if (!/[0-9]/.test(toks[i])) continue;           // must contain a real digit
-            var t = toks[i].replace(/[Oo]/g, '0').replace(/[lI|]/g, '1').replace(/,/g, '');
-            var v = parseFloat(t);
-            if (!isNaN(v) && v >= 0) vals.push(v);
-        }
-        return vals;
-    }
+    // Ledger column headers (fuzzy, OCR-tolerant) used to detect the layout.
+    var REG_HEADER_COLS = [
+        { key: 'payable',  re: /pay\s*[ao]b[l1i]e/i },
+        { key: 'date',     re: /pay\s*ment\s*da[tl]e/i },
+        { key: 'receipt',  re: /rece[il1]pt\s*n/i },
+        { key: 'received', re: /rece[il1]ved/i },
+        { key: 'due',      re: /due\s*am/i }
+    ];
 
-    function pickRegPair(vals) {
-        for (var i = 0; i + 2 < vals.length; i++) {          // reconciled triple first
-            if (Math.abs(vals[i] - vals[i + 1] - vals[i + 2]) <= 5) {
-                return { payable: vals[i], received: vals[i + 1] };
+    // Step 1 – identify the table headers: find the ledger header line and
+    // return the recognised column keys in visual (left-to-right) order.
+    function regHeaderOrder(lines) {
+        for (var i = 0; i < lines.length; i++) {
+            var line = lines[i];
+            if (!/head\s*of/i.test(line)
+                && !(/pay\s*[ao]b[l1i]e/i.test(line) && /rece[il1]/i.test(line))) continue;
+            var found = [];
+            for (var c = 0; c < REG_HEADER_COLS.length; c++) {
+                var m = REG_HEADER_COLS[c].re.exec(line);
+                if (m) found.push({ key: REG_HEADER_COLS[c].key, pos: m.index });
             }
-        }
-        for (var j = 0; j + 1 < vals.length; j++) {          // fallback: Payable ≥ Received
-            if (vals[j] >= vals[j + 1]) {
-                return { payable: vals[j], received: vals[j + 1] };
+            if (found.length >= 2) {
+                found.sort(function (a, b) { return a.pos - b.pos; });
+                var keys = [], seen = {};
+                for (var k = 0; k < found.length; k++) {
+                    if (!seen[found[k].key]) { seen[found[k].key] = true; keys.push(found[k].key); }
+                }
+                return keys;
             }
         }
         return null;
     }
 
+    // Payment Dates (dd-mm-yyyy / dd.mm.yyyy / dd/mm/yyyy, after digit fixes)
+    var REG_DATE = /^\d{1,2}[-.\/]\d{1,2}[-.\/]\d{2,4}$/;
+
+    function regTokens(fragment) {
+        // Hyphens and slashes stay INSIDE a token so a Payment Date remains
+        // one token and is discarded whole – "20-09-2023" can never leak a
+        // stray "20" into the amounts.
+        var toks = String(fragment).match(/[0-9OolI|][0-9OolI|,.\/-]*/g) || [];
+        var out = [];
+        for (var i = 0; i < toks.length; i++) {
+            if (!/[0-9]/.test(toks[i])) continue;            // must contain a real digit
+            var t = toks[i].replace(/[Oo]/g, '0').replace(/[lI|]/g, '1').replace(/[,.\/-]+$/, '');
+            if (REG_DATE.test(t)) { out.push({ kind: 'date', value: null }); continue; }
+            if (/[\/-]/.test(t)) continue;                   // unreadable date-like fragment
+            // Monetary formatting: comma-grouped ("1,000") or decimals (".00").
+            // The comma is a thousands separator and is preserved correctly.
+            var money = /\d,\d{3}(?:\D|$)/.test(t) || /\.\d{1,2}$/.test(t);
+            var v = parseFloat(t.replace(/,/g, ''));
+            if (isNaN(v) || v < 0) continue;
+            out.push({ kind: money ? 'money' : 'int', value: v });
+        }
+        return out;
+    }
+
+    // Step 2 – map the row's numbers to Payable / Received by column position.
+    // Returns null when the values cannot be validated against the row, so the
+    // caller flags the account for manual entry instead of guessing.
+    function pickRegPair(tokens, order) {
+        var vals = [];
+        for (var i = 0; i < tokens.length; i++) {
+            if (tokens[i].kind !== 'date') vals.push(tokens[i]);   // Payment Dates dropped
+        }
+        if (vals.length < 2) return null;
+        var nums = [];
+        for (var n = 0; n < vals.length; n++) nums.push(vals[n].value);
+
+        var payable, received, due = null;
+        var recIdx = order ? order.indexOf('received') : -1;
+
+        if (recIdx !== -1) {
+            // Header-aware: Payable Amount is the FIRST amount and Received
+            // Amount the LAST column amount (or second-to-last when a Due
+            // column follows it). Receipt No tokens in between are ignored.
+            payable = nums[0];
+            var dueIdx = order.indexOf('due');
+            if (dueIdx !== -1 && dueIdx > recIdx && nums.length >= 3) {
+                received = nums[nums.length - 2];
+                due      = nums[nums.length - 1];
+            } else {
+                received = nums[nums.length - 1];
+            }
+        } else {
+            // No readable header: legacy Payable | Received | Due layout.
+            for (var a = 0; a + 2 < nums.length; a++) {      // reconciled triple first
+                if (Math.abs(nums[a] - nums[a + 1] - nums[a + 2]) <= 5) {
+                    return { payable: nums[a], received: nums[a + 1] };
+                }
+            }
+            payable  = nums[0];
+            received = nums[nums.length - 1];
+        }
+
+        // Step 3 – validate against the visible row before using the values.
+        if (payable !== undefined && received !== undefined
+            && payable > 0 && received >= 0 && received <= payable
+            && (due === null || Math.abs(payable - received - due) <= 5)) {
+            return { payable: payable, received: received };
+        }
+
+        // Column mixup (e.g. a Receipt No read as an amount): retry with the
+        // money-formatted tokens only ("1,000" / "8,000.00"), never bare ints.
+        var money = [];
+        for (var b = 0; b < vals.length; b++) {
+            if (vals[b].kind === 'money') money.push(vals[b].value);
+        }
+        for (var c2 = 0; c2 + 2 < money.length; c2++) {
+            if (Math.abs(money[c2] - money[c2 + 1] - money[c2 + 2]) <= 5) {
+                return { payable: money[c2], received: money[c2 + 1] };
+            }
+        }
+        if (money.length >= 2 && money[0] > 0 && money[0] >= money[money.length - 1]) {
+            return { payable: money[0], received: money[money.length - 1] };
+        }
+        return null;   // ambiguous – flagged for manual verification
+    }
+
     function parseRegRow(text) {
         var lines = String(text).split(/\n/);
+        var order = regHeaderOrder(lines);   // identify the table headers first
         var payable = 0, received = 0, found = false;
         for (var i = 0; i < lines.length; i++) {
             var line = lines[i];
             var m = REG_LABEL.exec(line);
             if (!m) continue;
             if (/re\s*-?\s*regis|convocation|replacement/i.test(line)) continue;
-            var vals = regAmounts(line.slice(m.index + m[0].length));
-            if (vals.length < 2 && i + 1 < lines.length && !REG_LABEL.test(lines[i + 1])) {
-                vals = vals.concat(regAmounts(lines[i + 1]));   // amounts wrapped to the next line
+            var toks = regTokens(line.slice(m.index + m[0].length));
+            var amountCount = 0;
+            for (var t = 0; t < toks.length; t++) {
+                if (toks[t].kind !== 'date') amountCount++;
             }
-            var pick = pickRegPair(vals);
+            if (amountCount < 2 && i + 1 < lines.length && !REG_LABEL.test(lines[i + 1])) {
+                toks = toks.concat(regTokens(lines[i + 1]));   // amounts wrapped to the next line
+            }
+            var pick = pickRegPair(toks, order);
             if (!pick) continue;
             payable  += pick.payable;
             received += pick.received;
