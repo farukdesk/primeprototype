@@ -959,14 +959,20 @@ function renderScholarships(semesters) {
 function renderTransactionHistory(payments) {
     const card       = document.getElementById('transactionHistoryCard');
     const tbody      = document.getElementById('transactionTableBody');
+    const mbody      = document.getElementById('transactionMobileBody');
     const countBadge = document.getElementById('transactionCount');
 
     tbody.innerHTML = '';
+    if (mbody) mbody.innerHTML = '';
     countBadge.textContent = payments.length + ' transaction' + (payments.length !== 1 ? 's' : '');
 
     if (payments.length === 0) {
         tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-3 small">' +
             '<i class="fas fa-info-circle me-1"></i>No transactions recorded yet.</td></tr>';
+        if (mbody) {
+            mbody.innerHTML = '<div class="text-center text-muted py-3 small">' +
+                '<i class="fas fa-info-circle me-1"></i>No transactions recorded yet.</div>';
+        }
     } else {
         payments.forEach(p => {
             const feeLabel  = feeTypeLabel(p.fee_type);
