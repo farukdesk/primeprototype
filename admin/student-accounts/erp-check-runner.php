@@ -649,6 +649,7 @@ require_once __DIR__ . '/../includes/header.php';
             var text = (res && res.data && res.data.text) || '';
             var val  = parsePayable(text);
             var mval = parseMonthly(text);
+            var reg  = parseRegRow(text);
             if (val === null && mval === null) {
                 nFailed++; nDone++;
                 failedIds.push(item.package_id);
@@ -657,7 +658,7 @@ require_once __DIR__ . '/../includes/header.php';
                 setTimeout(processNext, 50);
                 return;
             }
-            save(item.package_id, val, mval, function (ok) {
+            save(item.package_id, val, mval, reg, function (ok) {
                 var ev  = (val !== null) ? evaluate(val, item.grand_total, item.project_fee, item.form_id_fee) : null;
                 var mok = (mval !== null && typeof item.expected_monthly === 'number')
                     ? (Math.abs(mval - item.expected_monthly) <= CFG.monthlyTolerance) : null;
