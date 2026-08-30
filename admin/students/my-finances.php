@@ -932,6 +932,22 @@ function renderScholarships(semesters) {
                 <td class="text-end fw-semibold ${isFixed ? 'text-success' : 'text-warning'}">${discountStr}</td>
                 <td class="text-center small">${scopeBadges}</td>`;
             tbody.appendChild(tr);
+
+            // Mobile stacked card
+            if (mbody) {
+                mbody.insertAdjacentHTML('beforeend', `
+                <div class="border rounded-3 p-3 mb-2 shadow-sm">
+                    <div class="small fw-semibold text-muted mb-1">${escHtml(semLabel)}</div>
+                    <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
+                        <span class="badge rounded-pill bg-success bg-opacity-10 text-success border border-success border-opacity-25"
+                              style="font-size:.8rem;font-weight:500;">
+                            <i class="fas fa-tag me-1"></i>${escHtml(sc.label)}
+                        </span>
+                        <span class="fw-semibold ${isFixed ? 'text-success' : 'text-warning'}">${discountStr}</span>
+                    </div>
+                    <div class="small mt-2">${scopeBadges}</div>
+                </div>`);
+            }
         });
     });
 
