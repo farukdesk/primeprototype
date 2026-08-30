@@ -6,6 +6,11 @@ require_once __DIR__ . '/../accounting/helpers.php';
 require_once __DIR__ . '/../vc-approval/helpers.php';
 
 $id  = (int)($_GET['id'] ?? 0);
+
+// Make sure the OLD ERP Registration Fee (proof) columns exist before the
+// package row is loaded, so the cross-check card can display them.
+sfp_ensure_old_erp_reg_columns();
+
 $pkg = sfp_get_package($id);
 
 if (!$pkg) {
@@ -832,6 +837,41 @@ require_once __DIR__ . '/../includes/header.php';
                     <?php else: ?>
                     <span class="badge bg-danger"><i class="fas fa-triangle-exclamation me-1"></i>MISMATCH (Δ <?= number_format(abs($erp_monthly_check['diff']), 2) ?> BDT)</span>
                     <?php endif; ?>
+                </div>
+            </div>
+        </div>
+
+        <hr class="my-3">
+        <div class="row g-3">
+            <div class="col-md-3">
+                <div class="text-muted small mb-1">Registration Fee – Received (proof)</div>
+                <div class="fw-bold fs-5" id="erp-reg-received-display"><?php
+                    $erp_reg_rcv = $pkg['old_erp_reg_received_amount'] ?? null;
+                    $erp_reg_pay = $pkg['old_erp_reg_payable_amount'] ?? null;
+                    echo $erp_reg_rcv !== null ? sfp_money((float)$erp_reg_rcv) : '—';
+                ?></div>
+                <div class="text-muted" style="font-size:.75rem;" id="erp-reg-note"><?php
+                    if ($erp_reg_rcv !== null) {
+                        echo (($pkg['old_erp_reg_source'] ?? '') === 'manual') ? 'Entered manually' : 'Read automatically (OCR)';
+                    } else {
+                        echo 'Not read yet';
+                    }
+                ?></div>
+            </div>
+            <div class="col-md-3">
+                <div class="text-muted small mb-1">Registration Fee – Payable (proof)</div>
+                <div class="fw-bold fs-5" id="erp-reg-payable-display"><?= $erp_reg_pay !== null ? sfp_money((float)$erp_reg_pay) : '—' ?></div>
+            </div>
+            <div class="col-md-3">
+                <div class="text-muted small mb-1">Registration Fee – Due (proof)</div>
+                <div class="fw-bold fs-5" id="erp-reg-due-display"><?= ($erp_reg_rcv !== null && $erp_reg_pay !== null) ? sfp_money(max(0.0, (float)$erp_reg_pay - (float)$erp_reg_rcv)) : '—' ?></div>
+            </div>
+            <div class="col-md-3">
+                <div class="text-muted small mb-1">Used by the Old ERP Totals Merge</div>
+                <div class="text-muted" style="font-size:.8rem;">
+                    Only the <strong>Received</strong> amount is marked paid as registration on merge —
+                    the rest of the registration fees stay as <strong>dues</strong> and the money is
+                    merged into the monthly payments instead.
                 </div>
             </div>
         </div>
