@@ -136,13 +136,11 @@ if (($_GET['action'] ?? '') === 'list') {
                    FROM sfp_semester_fees sf
                   WHERE sf.package_id = p.id AND sf.semester_number = 1
                   LIMIT 1) AS erp_sem1_tuition,
-                (SELECT stf.stored_name
+                (SELECT GROUP_CONCAT(stf.stored_name ORDER BY stf.created_at DESC, stf.id DESC SEPARATOR '||')
                    FROM student_files stf
                   WHERE stf.student_id = p.student_id
                     AND stf.file_name  = '" . SFP_OLD_ERP_PROOF_LABEL . "'
-                    AND stf.mime_type LIKE 'image/%'
-                  ORDER BY stf.created_at DESC, stf.id DESC
-                  LIMIT 1) AS proof_stored_name
+                    AND stf.mime_type LIKE 'image/%') AS proof_stored_names
            FROM sfp_packages p
            JOIN students s ON s.id = p.student_id
           WHERE $queue_where $scope_sql $use_filter_sql $cursor_sql $exclude_sql
@@ -153,7 +151,8 @@ if (($_GET['action'] ?? '') === 'list') {
 
     $items = [];
     foreach ($stmt->fetchAll() as $pkg) {
-        if (empty($pkg['proof_stored_name'])) {
+        $proof_names = array_values(array_filter(explode('||', (string)($pkg['proof_stored_names'] ?? ''))));
+        if (!$proof_names) {
             continue;
         }
         $months = (float)($pkg['total_months'] ?? 0);
@@ -179,7 +178,8 @@ if (($_GET['action'] ?? '') === 'list') {
             'package_id'  => (int)$pkg['id'],
             'name'        => (string)$pkg['student_name'],
             'sid'         => (string)$pkg['student_sid'],
-            'proof_url'   => UPLOAD_URL . '/students/files/' . rawurlencode($pkg['proof_stored_name']),
+            'proof_url'   => UPLOAD_URL . '/students/files/' . rawurlencode($proof_names[0]),
+            'proof_urls'  => array_map(static fn($n) => UPLOAD_URL . '/students/files/' . rawurlencode($n), $proof_names),
             'grand_total' => round($grand, 2),
             'project_fee' => round($proj_fee, 2),
             'form_id_fee' => round($form_fee, 2),
@@ -522,28 +522,56 @@ require_once __DIR__ . '/../includes/header.php';
 
     // "Registration Fee" row(s) in the proof's transaction history:
     //   Head of A/C | Payable Amount | Received Amount | Due Amount
-    // Sums every matching row (one per semester on some proofs). Rows whose
-    // three amounts do not reconcile (Payable − Received ≠ Due, ±5 BDT) are
-    // ignored as OCR misreads, and rows with fewer than two amounts are
-    // skipped as ambiguous. Re-Registration / Convocation rows are excluded.
+    // Tolerant of common OCR misreads: fuzzy label match (e.g. "Registralion
+    // Fee"), digit fixes (O→0, l/I→1) and amounts wrapped onto the next line.
+    // Prefers a triple that reconciles (Payable − Received = Due, ±5 BDT);
+    // otherwise falls back to the first pair with Payable ≥ Received.
+    // Re-Registration / Convocation rows are excluded; multiple registration
+    // rows (one per semester) are summed.
+    var REG_LABEL = /\breg\S{0,12}?\s*fees?/i;
+
+    function regAmounts(fragment) {
+        var toks = String(fragment).match(/[0-9OolI|][0-9OolI|,.]*/g) || [];
+        var vals = [];
+        for (var i = 0; i < toks.length; i++) {
+            if (!/[0-9]/.test(toks[i])) continue;           // must contain a real digit
+            var t = toks[i].replace(/[Oo]/g, '0').replace(/[lI|]/g, '1').replace(/,/g, '');
+            var v = parseFloat(t);
+            if (!isNaN(v) && v >= 0) vals.push(v);
+        }
+        return vals;
+    }
+
+    function pickRegPair(vals) {
+        for (var i = 0; i + 2 < vals.length; i++) {          // reconciled triple first
+            if (Math.abs(vals[i] - vals[i + 1] - vals[i + 2]) <= 5) {
+                return { payable: vals[i], received: vals[i + 1] };
+            }
+        }
+        for (var j = 0; j + 1 < vals.length; j++) {          // fallback: Payable ≥ Received
+            if (vals[j] >= vals[j + 1]) {
+                return { payable: vals[j], received: vals[j + 1] };
+            }
+        }
+        return null;
+    }
+
     function parseRegRow(text) {
         var lines = String(text).split(/\n/);
         var payable = 0, received = 0, found = false;
         for (var i = 0; i < lines.length; i++) {
             var line = lines[i];
-            var m = /registration\s*fee/i.exec(line);
+            var m = REG_LABEL.exec(line);
             if (!m) continue;
-            if (/re\s*-?\s*registration|convocation/i.test(line)) continue;
-            var nums = (line.slice(m.index + m[0].length).match(/-?[\d,]+(?:\.\d+)?/g)) || [];
-            var vals = [];
-            for (var j = 0; j < nums.length; j++) {
-                var v = parseFloat(nums[j].replace(/,/g, ''));
-                if (!isNaN(v) && v >= 0) vals.push(v);
+            if (/re\s*-?\s*regis|convocation|replacement/i.test(line)) continue;
+            var vals = regAmounts(line.slice(m.index + m[0].length));
+            if (vals.length < 2 && i + 1 < lines.length && !REG_LABEL.test(lines[i + 1])) {
+                vals = vals.concat(regAmounts(lines[i + 1]));   // amounts wrapped to the next line
             }
-            if (vals.length < 2) continue;
-            if (vals.length >= 3 && Math.abs(vals[0] - vals[1] - vals[2]) > 5) continue;
-            payable  += vals[0];
-            received += vals[1];
+            var pick = pickRegPair(vals);
+            if (!pick) continue;
+            payable  += pick.payable;
+            received += pick.received;
             found = true;
         }
         return found
@@ -655,12 +683,28 @@ require_once __DIR__ . '/../includes/header.php';
         afterId = Math.max(afterId, item.package_id);
         setStatus('Reading proof for ' + item.name + ' (' + item.sid + ')…');
 
-        worker.recognize(item.proof_url).then(function (res) {
-            var text = (res && res.data && res.data.text) || '';
-            var val  = parsePayable(text);
-            var mval = parseMonthly(text);
-            var reg  = parseRegRow(text);
-            if (val === null && mval === null) {
+        // Read EVERY proof image (the transaction history with the
+        // Registration Fee row is often a separate screenshot) until all
+        // three readings are found.
+        var urls = (item.proof_urls && item.proof_urls.length) ? item.proof_urls : [item.proof_url];
+        var uIdx = 0, val = null, mval = null, reg = null;
+
+        function readNextImage() {
+            if (uIdx >= urls.length || (val !== null && mval !== null && reg !== null)) {
+                finishItem();
+                return;
+            }
+            worker.recognize(urls[uIdx++]).then(function (res) {
+                var text = (res && res.data && res.data.text) || '';
+                if (val  === null) val  = parsePayable(text);
+                if (mval === null) mval = parseMonthly(text);
+                if (reg  === null) reg  = parseRegRow(text);
+                readNextImage();
+            }).catch(function () { readNextImage(); });
+        }
+
+        function finishItem() {
+            if (val === null && mval === null && reg === null) {
                 nFailed++; nDone++;
                 failedIds.push(item.package_id);
                 addRow(item, null, null, 'failed', null, null);
@@ -677,9 +721,9 @@ require_once __DIR__ . '/../includes/header.php';
                     nFailed++; nDone++;
                     failedIds.push(item.package_id);
                     addRow(item, val, ev, 'failed', mval, mok);
-                } else if ((ev && ev.matched) || (ev === null && mok === true)) {
-                    // Payable matched, or a monthly-only screenshot whose
-                    // Monthly Payment matched the expected monthly total.
+                } else if ((ev && ev.matched) || (ev === null && (mok === true || (mok === null && reg !== null)))) {
+                    // Payable matched, or a monthly/registration-only proof
+                    // whose readable values were stored.
                     nMatch++; nDone++;
                     addRow(item, val, ev, 'match', mval, mok);
                 } else {
@@ -689,13 +733,9 @@ require_once __DIR__ . '/../includes/header.php';
                 setProgress();
                 setTimeout(processNext, 50);
             });
-        }).catch(function () {
-            nFailed++; nDone++;
-            failedIds.push(item.package_id);
-            addRow(item, null, null, 'failed');
-            setProgress();
-            setTimeout(processNext, 50);
-        });
+        }
+
+        readNextImage();
     }
 
     function loadTesseract(cb) {
