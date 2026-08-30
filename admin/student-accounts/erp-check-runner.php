@@ -26,6 +26,10 @@ require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/../accounting/helpers.php';
 require_once __DIR__ . '/../students/helpers.php';  // sm_program_data(), sm_batches()
 
+// The Registration Fee (proof) columns must exist before the queue below
+// filters on them.
+sfp_ensure_old_erp_reg_columns();
+
 // ── Filters: Department / Program / Batch (apply to the queue and counters) ───
 $f_dept    = (int)($_GET['dept']    ?? 0);
 $f_program = (int)($_GET['program'] ?? 0);
@@ -51,9 +55,13 @@ if ($dept_scope !== null) {
     }
 }
 
+// "Unchecked" also covers accounts whose Registration Fee reading is still
+// missing (old_erp_reg_received_amount IS NULL): accounts checked BEFORE the
+// registration reading existed are re-queued so the value is backfilled —
+// the Old ERP Totals Merge depends on it for the paid/dues split.
 $unchecked_where =
-    "p.old_erp_payable_amount IS NULL
-     AND p.old_erp_monthly_amount IS NULL
+    "((p.old_erp_payable_amount IS NULL AND p.old_erp_monthly_amount IS NULL)
+      OR p.old_erp_reg_received_amount IS NULL)
      AND EXISTS (SELECT 1 FROM student_files stf
                   WHERE stf.student_id = p.student_id
                     AND stf.file_name  = '" . SFP_OLD_ERP_PROOF_LABEL . "'
@@ -241,8 +249,10 @@ require_once __DIR__ . '/../includes/header.php';
     <div class="d-flex gap-3">
         <div class="fs-4 text-info"><i class="fas fa-info-circle"></i></div>
         <div class="small">
-            <strong>How it works:</strong> this page reads the <em>Payable Amount</em> and the
-            <em>Monthly Payment</em> from every OLD ERP proof screenshot with OCR, saves both,
+            <strong>How it works:</strong> this page reads the <em>Payable Amount</em>, the
+            <em>Monthly Payment</em> and the <em>Registration Fee</em> row (Payable / Received / Due
+            from the transaction history — used by the Old ERP Totals Merge for the exact
+            registration paid/dues split) from every OLD ERP proof screenshot with OCR, saves them,
             and compares the Payable Amount against the Grand Total
             (incl. Admission, Form &amp; ID Card &amp; Project fees) with a ±<?= number_format(SFP_OLD_ERP_TOLERANCE, 0) ?> BDT tolerance
             (also cross-checking Grand Total − Project Fee and − 1,000 BDT).

@@ -53,6 +53,13 @@ require_once __DIR__ . '/../includes/auth.php';
 require_access('accounting', 'can_create');
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/../change-log/helpers.php';
+require_once __DIR__ . '/../student-accounts/helpers.php';
+
+// Make sure the OLD ERP Registration Fee (proof) columns exist before any
+// preview / merge reads them — otherwise every student would wrongly show
+// the "NO REGISTRATION PROOF READING" warning until another page created
+// the columns.
+sfp_ensure_old_erp_reg_columns();
 
 $page_title = 'Old ERP – Totals CSV Merge';
 
