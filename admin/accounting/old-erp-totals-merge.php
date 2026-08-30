@@ -1039,7 +1039,10 @@ require_once __DIR__ . '/../includes/header.php';
             <code>Scholarship Amount</code>, <code>Other Fees Total</code>,
             <code>Other Fees Detail</code>. No receipt numbers are needed — the whole
             <strong>Amount Paid</strong> is allocated automatically: Admission → Form Fee → ID Card Fee →
-            Registration (per semester) → monthly tuition (earliest months first). The
+            Registration (per semester, <strong>capped at the Registration “Received Amount”</strong> read from the
+            OLD ERP proof's transaction history — Head of A/C: <em>Registration Fee</em> → Payable / Received / Due;
+            registration the proof shows as unpaid stays as <strong>dues</strong> and the money is merged into the
+            monthly payments instead) → monthly tuition (earliest months first). The
             <strong>Scholarship Amount</strong> is merged into monthly tuition as clearly-marked
             <em>OLD-ERP SCHOLARSHIP</em> rows (so those months stop showing dues while staying
             identifiable as scholarship, not cash). <strong>Other Fees</strong> may be itemised in the Detail
