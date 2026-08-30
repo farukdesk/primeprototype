@@ -928,6 +928,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') ==
                         } elseif ($existing > OESM_AMOUNT_TOLERANCE) {
                             $note = 'Has ' . acc_fmt($existing) . ' old-ERP records already; only the CSV amounts will be allocated on the remaining dues.';
                         }
+                        // Registration Fee reading from the OLD ERP proof —
+                        // drives how much registration is marked paid.
+                        if ($status !== 'skipped') {
+                            $reg_proof = oesm_reg_proof((int)$stu['package_id']);
+                            if ($reg_proof['received'] === null) {
+                                $note .= ($note ? ' ' : '') . 'NO REGISTRATION PROOF READING: registration will be allocated by schedule order — run the Bulk ERP Check or enter the Registration "Received Amount" manually on the student account for an exact paid/dues split.';
+                            } else {
+                                $note .= ($note ? ' ' : '') . 'Registration per proof: received ' . acc_fmt($reg_proof['received'])
+                                    . ($reg_proof['payable'] !== null ? ' of ' . acc_fmt($reg_proof['payable']) . ' payable' : '')
+                                    . ' — only this much registration is marked paid; the rest stays due and the money goes to monthly tuition.';
+                            }
+                        }
                         // Detect wrong / reversed scholarship marking from an
                         // earlier import: the amount already marked as scholarship
                         // in the DB differs from the CSV's Scholarship Amount.
