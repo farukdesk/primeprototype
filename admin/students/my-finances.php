@@ -898,7 +898,9 @@ function escHtml(str) {
 function renderScholarships(semesters) {
     const card  = document.getElementById('scholarshipCard');
     const tbody = document.getElementById('scholarshipTableBody');
+    const mbody = document.getElementById('scholarshipMobileBody');
     tbody.innerHTML = '';
+    if (mbody) mbody.innerHTML = '';
 
     let hasAny = false;
     semesters.forEach(sf => {
