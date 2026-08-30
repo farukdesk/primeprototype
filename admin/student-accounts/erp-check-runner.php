@@ -835,7 +835,7 @@ require_once __DIR__ . '/../includes/header.php';
             if (val === null && mval === null && reg === null) {
                 nFailed++; nDone++;
                 failedIds.push(item.package_id);
-                addRow(item, null, null, 'failed', null, null);
+                addRow(item, null, null, 'failed', null, null, null);
                 setProgress();
                 setTimeout(processNext, 50);
                 return;
@@ -848,15 +848,15 @@ require_once __DIR__ . '/../includes/header.php';
                     // Could not persist – treat as failed so it is retried later
                     nFailed++; nDone++;
                     failedIds.push(item.package_id);
-                    addRow(item, val, ev, 'failed', mval, mok);
+                    addRow(item, val, ev, 'failed', mval, mok, reg);
                 } else if ((ev && ev.matched) || (ev === null && (mok === true || (mok === null && reg !== null)))) {
                     // Payable matched, or a monthly/registration-only proof
                     // whose readable values were stored.
                     nMatch++; nDone++;
-                    addRow(item, val, ev, 'match', mval, mok);
+                    addRow(item, val, ev, 'match', mval, mok, reg);
                 } else {
                     nMismatch++; nDone++;
-                    addRow(item, val, ev, 'mismatch', mval, mok);
+                    addRow(item, val, ev, 'mismatch', mval, mok, reg);
                 }
                 setProgress();
                 setTimeout(processNext, 50);
