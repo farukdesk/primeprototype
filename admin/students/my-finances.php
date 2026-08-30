@@ -752,6 +752,15 @@ function renderFeeSummary(data) {
             ? (status === 'upcoming' ? 'text-secondary' : 'text-danger')
             : 'text-success';
 
+        // Status badge markup (shared by the desktop table and the mobile cards)
+        const badgeHtml = due > 0
+            ? (status !== null
+                ? statusBadge(status)
+                : (out > 0
+                    ? '<span class="badge bg-danger-subtle text-danger border border-danger-subtle"><i class="fas fa-clock me-1"></i>Due</span>'
+                    : '<span class="badge bg-success-subtle text-success border border-success-subtle"><i class="fas fa-check me-1"></i>Paid</span>'))
+            : '—';
+
         const tr  = document.createElement('tr');
         tr.innerHTML = `
             <td class="ps-4">
@@ -770,15 +779,26 @@ function renderFeeSummary(data) {
             </td>
             <td class="text-center small text-muted">${dueDateStr}</td>
             <td class="text-center">
-                ${due > 0
-                    ? (status !== null
-                        ? statusBadge(status)
-                        : (out > 0
-                            ? '<span class="badge bg-danger-subtle text-danger border border-danger-subtle"><i class="fas fa-clock me-1"></i>Due</span>'
-                            : '<span class="badge bg-success-subtle text-success border border-success-subtle"><i class="fas fa-check me-1"></i>Paid</span>'))
-                    : '—'}
+                ${badgeHtml}
             </td>`;
         tbody.appendChild(tr);
+
+        // Mobile stacked card
+        if (mbody) {
+            mbody.insertAdjacentHTML('beforeend', `
+            <div class="border rounded-3 p-2 px-3 mb-2 bg-white shadow-sm">
+                <div class="d-flex justify-content-between align-items-start gap-2">
+                    <div class="small fw-semibold" style="min-width:0;word-break:break-word;">${label}</div>
+                    <div class="text-end flex-shrink-0">${badgeHtml}</div>
+                </div>
+                <div class="d-flex flex-wrap gap-3 small mt-1">
+                    <span class="text-muted">Due: <span class="fw-semibold text-body">${due > 0 ? fmt(due) : '—'}</span></span>
+                    <span class="text-muted">Paid: <span class="fw-semibold text-success">${paid > 0 ? fmt(paid) : '—'}</span></span>
+                    <span class="text-muted">Outstanding: <span class="fw-semibold ${outColour}">${out > 0 ? fmt(out) : (due > 0 ? 'Paid' : '—')}</span></span>
+                </div>
+                ${dueDateStr !== '—' ? `<div class="small text-muted mt-1"><i class="fas fa-calendar me-1"></i>Due date: ${dueDateStr}</div>` : ''}
+            </div>`);
+        }
     }
 
     const t = s.totals;
