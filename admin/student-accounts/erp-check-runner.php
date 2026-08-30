@@ -183,6 +183,7 @@ if (($_GET['action'] ?? '') === 'list') {
             'grand_total' => round($grand, 2),
             'project_fee' => round($proj_fee, 2),
             'form_id_fee' => round($form_fee, 2),
+            'reg_total'   => round((float)($pkg['reg_fee_per_semester'] ?? 0) * $sem_cnt, 2),
             'expected_monthly' => round(sfp_expected_monthly_total($pkg, (float)($pkg['erp_sem1_tuition'] ?? 0)), 2),
             'view_url'    => APP_URL . '/student-accounts/view.php?id=' . (int)$pkg['id'],
         ];
