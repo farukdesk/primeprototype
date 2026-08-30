@@ -581,12 +581,16 @@ require_once __DIR__ . '/../includes/header.php';
         });
     };
 
-    function save(packageId, amount, monthly, cb) {
+    function save(packageId, amount, monthly, reg, cb) {
         var fd = new FormData();
         fd.append(CFG.csrfField, CFG.csrfToken);
         fd.append('package_id', packageId);
         if (amount !== null) fd.append('amount', amount);
         if (monthly !== null) fd.append('monthly', monthly);
+        if (reg) {
+            fd.append('reg_payable',  reg.payable);
+            fd.append('reg_received', reg.received);
+        }
         fd.append('source', 'ocr');
         fetch(CFG.saveUrl, { method: 'POST', body: fd })
             .then(function (r) { return r.json(); })
