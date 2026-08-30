@@ -692,6 +692,9 @@ function renderFeeSummary(data) {
 
     const tbody = document.getElementById('feeTableBody');
     tbody.innerHTML = '';
+    // Mobile stacked view container (shown below 768px instead of the table)
+    const mbody = document.getElementById('feeMobileBody');
+    if (mbody) mbody.innerHTML = '';
 
     let grandDue = 0, grandPaid = 0, grandOut = 0;
     let currentlyDueOut = 0; // outstanding for overdue + due_now rows only
@@ -721,6 +724,13 @@ function renderFeeSummary(data) {
             <i class="fas fa-chevron-right me-1"></i>${label}${scHtml}
         </td>`;
         tbody.appendChild(tr);
+
+        if (mbody) {
+            mbody.insertAdjacentHTML('beforeend',
+                `<div class="small fw-semibold text-muted mt-3 mb-2">
+                    <i class="fas fa-chevron-right me-1"></i>${label}${scHtml}
+                </div>`);
+        }
     }
 
     function addRow(label, due, paid, out, calMonth, calYear) {
