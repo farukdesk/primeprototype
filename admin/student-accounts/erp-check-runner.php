@@ -183,6 +183,7 @@ if (($_GET['action'] ?? '') === 'list') {
             'grand_total' => round($grand, 2),
             'project_fee' => round($proj_fee, 2),
             'form_id_fee' => round($form_fee, 2),
+            'reg_total'   => round((float)($pkg['reg_fee_per_semester'] ?? 0) * $sem_cnt, 2),
             'expected_monthly' => round(sfp_expected_monthly_total($pkg, (float)($pkg['erp_sem1_tuition'] ?? 0)), 2),
             'view_url'    => APP_URL . '/student-accounts/view.php?id=' . (int)$pkg['id'],
         ];
@@ -398,12 +399,15 @@ require_once __DIR__ . '/../includes/header.php';
                         <th class="text-end">Grand Total</th>
                         <th class="text-end">Δ</th>
                         <th class="text-end">Monthly</th>
+                        <th class="text-end">Reg Payable<br><small class="fw-normal text-muted">(proof)</small></th>
+                        <th class="text-end">Reg Received<br><small class="fw-normal text-muted">(proof)</small></th>
+                        <th class="text-end">Reg Due<br><small class="fw-normal text-muted">(payable − received)</small></th>
                         <th>Status</th>
                         <th></th>
                     </tr>
                 </thead>
                 <tbody id="results-body">
-                    <tr id="empty-row"><td colspan="7" class="text-center text-muted py-4">Not started yet.</td></tr>
+                    <tr id="empty-row"><td colspan="10" class="text-center text-muted py-4">Not started yet.</td></tr>
                 </tbody>
             </table>
         </div>
@@ -683,7 +687,7 @@ require_once __DIR__ . '/../includes/header.php';
             : null;
     }
 
-    function addRow(item, payable, res, status, monthly, monthlyOk) {
+    function addRow(item, payable, res, status, monthly, monthlyOk, reg) {
         var er = $id('empty-row');
         if (er) er.remove();
         var tr = document.createElement('tr');
@@ -702,12 +706,32 @@ require_once __DIR__ . '/../includes/header.php';
                     ? ' <span class="badge bg-danger" title="Monthly Payment differs from the expected monthly total.">✗</span>'
                     : ''));
         }
+        // Registration Fee row read from the proof: Payable / Received and the
+        // derived Due (= Payable − Received). The Payable cell is cross-checked
+        // against the ERP registration total (reg fee/semester × semesters).
+        var regPayCell = '—', regRcvCell = '—', regDueCell = '—';
+        if (reg) {
+            regPayCell = fmt(reg.payable);
+            if (typeof item.reg_total === 'number' && item.reg_total > 0) {
+                regPayCell += Math.abs(reg.payable - item.reg_total) <= 5
+                    ? ' <span class="badge bg-success" title="Matches the ERP registration total (' + fmt(item.reg_total) + ').">✓</span>'
+                    : ' <span class="badge bg-danger" title="ERP registration total is ' + fmt(item.reg_total) + '.">✗</span>';
+            }
+            regRcvCell = fmt(reg.received);
+            var regDue = Math.max(0, reg.payable - reg.received);
+            regDueCell = regDue > 0
+                ? '<span class="text-danger fw-semibold">' + fmt(regDue) + '</span>'
+                : '<span class="text-success">' + fmt(0) + '</span>';
+        }
         tr.innerHTML =
             '<td>' + esc(item.name) + '<br><small class="text-muted">' + esc(item.sid) + '</small></td>' +
             '<td class="text-end">' + (payable === null ? '—' : fmt(payable)) + '</td>' +
             '<td class="text-end">' + fmt(item.grand_total) + '</td>' +
             '<td class="text-end">' + (res ? fmt(res.diff) : '—') + '</td>' +
             '<td class="text-end">' + monthlyCell + '</td>' +
+            '<td class="text-end">' + regPayCell + '</td>' +
+            '<td class="text-end">' + regRcvCell + '</td>' +
+            '<td class="text-end">' + regDueCell + '</td>' +
             '<td>' + badge + '</td>' +
             '<td class="text-end"><a href="' + esc(item.view_url) + '" target="_blank" class="btn btn-outline-primary btn-sm py-0">Open</a></td>';
         var body = $id('results-body');
@@ -811,7 +835,7 @@ require_once __DIR__ . '/../includes/header.php';
             if (val === null && mval === null && reg === null) {
                 nFailed++; nDone++;
                 failedIds.push(item.package_id);
-                addRow(item, null, null, 'failed', null, null);
+                addRow(item, null, null, 'failed', null, null, null);
                 setProgress();
                 setTimeout(processNext, 50);
                 return;
@@ -824,15 +848,15 @@ require_once __DIR__ . '/../includes/header.php';
                     // Could not persist – treat as failed so it is retried later
                     nFailed++; nDone++;
                     failedIds.push(item.package_id);
-                    addRow(item, val, ev, 'failed', mval, mok);
+                    addRow(item, val, ev, 'failed', mval, mok, reg);
                 } else if ((ev && ev.matched) || (ev === null && (mok === true || (mok === null && reg !== null)))) {
                     // Payable matched, or a monthly/registration-only proof
                     // whose readable values were stored.
                     nMatch++; nDone++;
-                    addRow(item, val, ev, 'match', mval, mok);
+                    addRow(item, val, ev, 'match', mval, mok, reg);
                 } else {
                     nMismatch++; nDone++;
-                    addRow(item, val, ev, 'mismatch', mval, mok);
+                    addRow(item, val, ev, 'mismatch', mval, mok, reg);
                 }
                 setProgress();
                 setTimeout(processNext, 50);
