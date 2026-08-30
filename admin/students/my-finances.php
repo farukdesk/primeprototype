@@ -466,6 +466,20 @@ require_once __DIR__ . '/../includes/header.php';
 </script>
 <?php endif; ?>
 
+<style>
+    /* ── Mobile responsiveness ──
+       Below 768px the three data sections render as stacked cards (the wide
+       tables are desktop-only) and header badges shrink and wrap instead of
+       overflowing the viewport. */
+    @media (max-width: 767.98px) {
+        #totalOutstandingBadge { font-size: .78rem !important; }
+        #feeScheduleCard .card-header, #scholarshipCard .card-header,
+        #transactionHistoryCard .card-header {
+            padding-left: 1rem !important; padding-right: 1rem !important;
+        }
+    }
+</style>
+
 <!-- Loading indicator -->
 <div id="loadingWrap" class="text-center py-5 text-muted">
     <div class="spinner-border spinner-border-sm me-2" role="status"></div>
@@ -477,12 +491,12 @@ require_once __DIR__ . '/../includes/header.php';
 
 <!-- Fee Schedule & Outstanding Balance -->
 <div class="card border-0 shadow-sm mb-3" id="feeScheduleCard" style="display:none;">
-    <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between">
+    <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
         <span class="fw-semibold">
             <i class="fas fa-file-invoice-dollar me-2 text-success"></i>Fee Schedule &amp; Outstanding Balance
         </span>
-        <div class="d-flex align-items-center gap-2">
-            <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 fs-6"
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 fs-6 text-wrap text-start"
                   id="totalOutstandingBadge" style="display:none;"></span>
             <button type="button" class="btn btn-sm btn-outline-secondary"
                     data-bs-toggle="collapse" data-bs-target="#feeScheduleCollapse">
@@ -491,7 +505,7 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
     </div>
     <div class="collapse show" id="feeScheduleCollapse">
-        <div class="table-responsive">
+        <div class="table-responsive d-none d-md-block">
             <table class="table table-hover table-sm align-middle mb-0" id="feeTable">
                 <thead class="table-light">
                     <tr>
@@ -516,12 +530,14 @@ require_once __DIR__ . '/../includes/header.php';
                 </tfoot>
             </table>
         </div>
+        <!-- Mobile: stacked rows instead of a wide table -->
+        <div class="d-md-none p-3 pt-2" id="feeMobileBody"></div>
     </div>
 </div>
 
 <!-- Scholarships & Waivers -->
 <div class="card border-0 shadow-sm mb-3" id="scholarshipCard" style="display:none;">
-    <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between">
+    <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
         <span class="fw-semibold">
             <i class="fas fa-graduation-cap me-2 text-warning"></i>Applied Scholarships &amp; Waivers
         </span>
@@ -531,7 +547,7 @@ require_once __DIR__ . '/../includes/header.php';
         </button>
     </div>
     <div class="collapse show" id="scholarshipCollapse">
-        <div class="table-responsive">
+        <div class="table-responsive d-none d-md-block">
             <table class="table table-sm table-hover align-middle mb-0" id="scholarshipTable">
                 <thead class="table-light">
                     <tr>
@@ -544,16 +560,18 @@ require_once __DIR__ . '/../includes/header.php';
                 <tbody id="scholarshipTableBody"></tbody>
             </table>
         </div>
+        <!-- Mobile: stacked cards instead of a wide table -->
+        <div class="d-md-none p-3 pt-2" id="scholarshipMobileBody"></div>
     </div>
 </div>
 
 <!-- Payment Transaction History -->
 <div class="card border-0 shadow-sm mb-4" id="transactionHistoryCard" style="display:none;">
-    <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between">
+    <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
         <span class="fw-semibold">
             <i class="fas fa-history me-2 text-info"></i>Payment Transaction History
         </span>
-        <div class="d-flex align-items-center gap-2">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
             <span class="badge bg-info-subtle text-info border border-info-subtle px-3 py-2"
                   id="transactionCount"></span>
             <button type="button" class="btn btn-sm btn-outline-secondary"
@@ -563,7 +581,7 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
     </div>
     <div class="collapse show" id="transactionHistoryCollapse">
-        <div class="table-responsive">
+        <div class="table-responsive d-none d-md-block">
             <table class="table table-sm table-hover align-middle mb-0">
                 <thead class="table-light">
                     <tr>
@@ -582,6 +600,8 @@ require_once __DIR__ . '/../includes/header.php';
                 <tbody id="transactionTableBody"></tbody>
             </table>
         </div>
+        <!-- Mobile: stacked cards instead of a wide table -->
+        <div class="d-md-none p-3 pt-2" id="transactionMobileBody"></div>
     </div>
 </div>
 
