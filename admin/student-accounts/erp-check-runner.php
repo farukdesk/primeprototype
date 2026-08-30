@@ -398,15 +398,12 @@ require_once __DIR__ . '/../includes/header.php';
                         <th class="text-end">Grand Total</th>
                         <th class="text-end">Δ</th>
                         <th class="text-end">Monthly</th>
-                        <th class="text-end">Reg Payable<br><small class="fw-normal text-muted">(proof)</small></th>
-                        <th class="text-end">Reg Received<br><small class="fw-normal text-muted">(proof)</small></th>
-                        <th class="text-end">Reg Due<br><small class="fw-normal text-muted">(payable − received)</small></th>
                         <th>Status</th>
                         <th></th>
                     </tr>
                 </thead>
                 <tbody id="results-body">
-                    <tr id="empty-row"><td colspan="10" class="text-center text-muted py-4">Not started yet.</td></tr>
+                    <tr id="empty-row"><td colspan="7" class="text-center text-muted py-4">Not started yet.</td></tr>
                 </tbody>
             </table>
         </div>
