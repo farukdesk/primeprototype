@@ -6,6 +6,12 @@
  * either automatically (client-side OCR on view.php) or manually.
  * The stored value drives the cross-check badge on view.php and the
  * mismatch highlighting on index.php.
+ *
+ * Also persists the "Registration Fee" row read from the proof's
+ * transaction history (Head of A/C: Registration Fee → Payable Amount /
+ * Received Amount). The RECEIVED amount drives the Old ERP Totals Merge:
+ * only the actually-paid registration is marked paid there — the rest of
+ * the registration fees stay as dues.
  */
 
 // Buffer all output so PHP warnings cannot corrupt the JSON response.
@@ -48,10 +54,20 @@ $has_monthly = array_key_exists('monthly', $_POST);
 $monthly_raw = trim((string)($_POST['monthly'] ?? ''));
 $monthly     = ($monthly_raw === '') ? null : (float)str_replace(',', '', $monthly_raw);
 
+// Optional: Registration Fee row (transaction history) — Payable / Received.
+// Only saved when the fields are present in the request.
+$has_reg_received = array_key_exists('reg_received', $_POST);
+$reg_received_raw = trim((string)($_POST['reg_received'] ?? ''));
+$reg_received     = ($reg_received_raw === '') ? null : (float)str_replace(',', '', $reg_received_raw);
+
+$has_reg_payable = array_key_exists('reg_payable', $_POST);
+$reg_payable_raw = trim((string)($_POST['reg_payable'] ?? ''));
+$reg_payable     = ($reg_payable_raw === '') ? null : (float)str_replace(',', '', $reg_payable_raw);
+
 if ($package_id <= 0) {
     sep_json(['success' => false, 'error' => 'Invalid package.']);
 }
-if (!$has_amount && !$has_monthly) {
+if (!$has_amount && !$has_monthly && !$has_reg_received && !$has_reg_payable) {
     sep_json(['success' => false, 'error' => 'Nothing to save.']);
 }
 if ($amount !== null && ($amount < 0 || $amount > 99999999)) {
@@ -60,10 +76,19 @@ if ($amount !== null && ($amount < 0 || $amount > 99999999)) {
 if ($has_monthly && $monthly !== null && ($monthly < 0 || $monthly > 9999999)) {
     sep_json(['success' => false, 'error' => 'Invalid monthly amount.']);
 }
+if ($has_reg_received && $reg_received !== null && ($reg_received < 0 || $reg_received > 99999999)) {
+    sep_json(['success' => false, 'error' => 'Invalid registration received amount.']);
+}
+if ($has_reg_payable && $reg_payable !== null && ($reg_payable < 0 || $reg_payable > 99999999)) {
+    sep_json(['success' => false, 'error' => 'Invalid registration payable amount.']);
+}
 // Manual entry / clearing is an explicit edit; OCR auto-save only needs view access.
 if ($source === 'manual' && !sfp_can_edit()) {
     sep_json(['success' => false, 'error' => 'You do not have permission to edit this value.']);
 }
+
+// Make sure the Registration Fee (proof) columns exist before reading/writing.
+sfp_ensure_old_erp_reg_columns();
 
 $pkg = sfp_get_package($package_id);
 if (!$pkg) {
@@ -76,8 +101,16 @@ $payable_skipped = ($has_amount
     && $source === 'ocr'
     && ($pkg['old_erp_payable_source'] ?? null) === 'manual');
 
-$old_value   = $pkg['old_erp_payable_amount'] ?? null;
-$old_monthly = $pkg['old_erp_monthly_amount'] ?? null;
+// Same protection for the Registration Fee reading: OCR never overwrites
+// a manually entered registration value.
+$reg_skipped = (($has_reg_received || $has_reg_payable)
+    && $source === 'ocr'
+    && ($pkg['old_erp_reg_source'] ?? null) === 'manual');
+
+$old_value        = $pkg['old_erp_payable_amount'] ?? null;
+$old_monthly      = $pkg['old_erp_monthly_amount'] ?? null;
+$old_reg_received = $pkg['old_erp_reg_received_amount'] ?? null;
+$old_reg_payable  = $pkg['old_erp_reg_payable_amount'] ?? null;
 
 $sets = [];
 $vals = [];
@@ -90,6 +123,18 @@ if ($has_amount && !$payable_skipped) {
 if ($has_monthly) {
     $sets[] = 'old_erp_monthly_amount = ?';
     $vals[] = $monthly;
+}
+if (!$reg_skipped) {
+    if ($has_reg_received) {
+        $sets[] = 'old_erp_reg_received_amount = ?';
+        $vals[] = $reg_received;
+        $sets[] = 'old_erp_reg_source = ?';
+        $vals[] = $reg_received === null ? null : $source;
+    }
+    if ($has_reg_payable) {
+        $sets[] = 'old_erp_reg_payable_amount = ?';
+        $vals[] = $reg_payable;
+    }
 }
 
 if (!empty($sets)) {
@@ -124,19 +169,49 @@ if ($has_monthly) {
             : 'set to ' . number_format($monthly, 2) . ' BDT (' . $source . ')')
     );
 }
+if ($has_reg_received && !$reg_skipped) {
+    log_change(
+        'student-accounts', 'UPDATE', $package_id,
+        (string)($pkg['student_name'] ?? ('Package #' . $package_id)),
+        'old_erp_reg_received_amount',
+        $old_reg_received === null ? null : (string)$old_reg_received,
+        $reg_received === null ? null : (string)$reg_received,
+        'OLD ERP Registration Fee Received Amount (proof transaction history) ' . ($reg_received === null
+            ? 'cleared'
+            : 'set to ' . number_format($reg_received, 2) . ' BDT (' . $source . ')')
+    );
+}
+if ($has_reg_payable && !$reg_skipped) {
+    log_change(
+        'student-accounts', 'UPDATE', $package_id,
+        (string)($pkg['student_name'] ?? ('Package #' . $package_id)),
+        'old_erp_reg_payable_amount',
+        $old_reg_payable === null ? null : (string)$old_reg_payable,
+        $reg_payable === null ? null : (string)$reg_payable,
+        'OLD ERP Registration Fee Payable Amount (proof transaction history) ' . ($reg_payable === null
+            ? 'cleared'
+            : 'set to ' . number_format($reg_payable, 2) . ' BDT (' . $source . ')')
+    );
+}
 
 if ($payable_skipped) {
     sep_json([
-        'success' => true,
-        'skipped' => true,
-        'amount'  => (float)$pkg['old_erp_payable_amount'],
-        'monthly' => $has_monthly ? $monthly : $old_monthly,
+        'success'      => true,
+        'skipped'      => true,
+        'amount'       => (float)$pkg['old_erp_payable_amount'],
+        'monthly'      => $has_monthly ? $monthly : $old_monthly,
+        'reg_received' => ($has_reg_received && !$reg_skipped) ? $reg_received : $old_reg_received,
+        'reg_payable'  => ($has_reg_payable && !$reg_skipped) ? $reg_payable : $old_reg_payable,
+        'reg_skipped'  => $reg_skipped,
     ]);
 }
 
 sep_json([
-    'success' => true,
-    'amount'  => $has_amount ? $amount : $old_value,
-    'source'  => $source,
-    'monthly' => $has_monthly ? $monthly : $old_monthly,
+    'success'      => true,
+    'amount'       => $has_amount ? $amount : $old_value,
+    'source'       => $source,
+    'monthly'      => $has_monthly ? $monthly : $old_monthly,
+    'reg_received' => ($has_reg_received && !$reg_skipped) ? $reg_received : $old_reg_received,
+    'reg_payable'  => ($has_reg_payable && !$reg_skipped) ? $reg_payable : $old_reg_payable,
+    'reg_skipped'  => $reg_skipped,
 ]);

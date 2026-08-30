@@ -9,9 +9,16 @@
  *   2. Student Name  – informational; a mismatch is warned, never blocks
  *   3. Amount Paid (Incl. Admission & Registration) – the WHOLE amount the
  *      student paid in the old ERP. Allocated server-side in this order:
- *      Admission → Form Fee → ID Card Fee → Registration (per semester) →
- *      Monthly tuition (earliest months first). Anything beyond the schedule
- *      is recorded on the last month and flagged for review.
+ *      Admission → Form Fee → ID Card Fee → Registration (per semester,
+ *      CAPPED at the Registration "Received Amount" read from the OLD ERP
+ *      proof's transaction history — Head of A/C: Registration Fee →
+ *      Payable / Received / Due) → Monthly tuition (earliest months first).
+ *      Registration is only marked paid up to what the proof shows as
+ *      actually RECEIVED; the rest of the registration fees stay as DUES
+ *      and the money is merged into the monthly payments instead. When no
+ *      proof reading is stored the row falls back to schedule order and is
+ *      loudly warned (preview + merge results). Anything beyond the
+ *      schedule is recorded on the last month and flagged for review.
  *   4. Scholarship Amount – merged into monthly tuition as clearly-marked
  *      OLD-ERP SCHOLARSHIP memo rows (transaction no. OLD-ERP-SCHOLARSHIP),
  *      so the months stop showing false dues while the rows stay identifiable
@@ -347,6 +354,57 @@ function oesm_existing_old_erp_total(int $student_pk): float
 }
 
 /**
+ * Registration Fee reading from the OLD ERP proof's transaction history
+ * (Head of A/C: Registration Fee → Payable Amount / Received Amount), as
+ * stored on sfp_packages by the ERP check (OCR on the student account page /
+ * the Bulk ERP Check runner) or entered manually on the student account.
+ *
+ * @return array{received: float|null, payable: float|null}
+ */
+function oesm_reg_proof(int $package_id): array
+{
+    try {
+        $stmt = db()->prepare(
+            'SELECT old_erp_reg_received_amount, old_erp_reg_payable_amount
+               FROM sfp_packages WHERE id = ?'
+        );
+        $stmt->execute([$package_id]);
+        $row = $stmt->fetch();
+        if (!$row) {
+            return ['received' => null, 'payable' => null];
+        }
+        return [
+            'received' => $row['old_erp_reg_received_amount'] === null ? null : round((float)$row['old_erp_reg_received_amount'], 2),
+            'payable'  => $row['old_erp_reg_payable_amount'] === null ? null : round((float)$row['old_erp_reg_payable_amount'], 2),
+        ];
+    } catch (Throwable $e) {
+        // Columns not created yet (no ERP check has run) — no proof reading.
+        return ['received' => null, 'payable' => null];
+    }
+}
+
+/**
+ * Old-ERP registration money already recorded for a student, so re-running
+ * the merge never marks more registration paid than the proof's Received
+ * Amount in total (idempotent against the proof).
+ */
+function oesm_existing_reg_old_erp_total(int $student_pk): float
+{
+    $stmt = db()->prepare(
+        "SELECT COALESCE(SUM(sp.amount), 0)
+         FROM sfp_payments sp
+         JOIN acc_vouchers v ON v.id = sp.voucher_id
+         WHERE sp.student_id = ?
+           AND sp.payment_method = 'old_erp'
+           AND sp.fee_type = 'registration'
+           AND v.is_deleted = 0
+           AND v.status IN ('posted','memo')"
+    );
+    $stmt->execute([$student_pk]);
+    return round((float)$stmt->fetchColumn(), 2);
+}
+
+/**
  * Auto-migrate: sfp_packages.form_id_fee_missing flag (waives the Form &
  * ID Card head — neither due nor paid — for batches where the old ERP never
  * charged it). acc_package_form_id_fee() honours this flag.
@@ -501,31 +559,69 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') ==
                 $remaining = round($remaining - $take, 2);
             }
 
-            // ── 2) Registration per semester ─────────────────────────────────
+            // ── 2) Registration per semester (proof-driven) ──────────────────
+            // The OLD ERP proof's transaction history carries a "Registration
+            // Fee" row (Head of A/C) with Payable / Received / Due amounts.
+            // Only the RECEIVED amount is marked paid: if the student paid the
+            // registration fees in full, all of them are marked; if not, only
+            // the paid portion is marked, the rest of the registration fees
+            // stay as DUES, and the money flows to monthly tuition instead.
             if ($remaining > 0.005) {
                 $reg_inc = acc_income_account_id_for_fee_type('registration');
                 if ($reg_inc > 0) {
+                    $reg_proof  = oesm_reg_proof($pkg_id);
+                    $reg_budget = null;   // null → no proof reading stored (schedule-order fallback, warned)
+                    if ($reg_proof['received'] !== null) {
+                        // Idempotent against the proof: subtract registration
+                        // already recorded from earlier old-ERP imports.
+                        $reg_already = oesm_existing_reg_old_erp_total($stu_pk);
+                        $reg_budget  = max(0.0, round($reg_proof['received'] - $reg_already, 2));
+                        // Double check the proof's own numbers.
+                        if ($reg_proof['payable'] !== null
+                            && $reg_proof['received'] - $reg_proof['payable'] > OESM_AMOUNT_TOLERANCE) {
+                            $warnings[] = $sid . ': the proof\'s Registration Received ('
+                                . acc_fmt($reg_proof['received']) . ') is larger than its Registration Payable ('
+                                . acc_fmt($reg_proof['payable']) . ') — verify the OCR reading on the student account page.';
+                        }
+                    } else {
+                        $warnings[] = $sid . ': no Registration "Received Amount" stored from the OLD ERP proof — registration was allocated by schedule order. Run the Bulk ERP Check (or enter it manually on the student account) and verify this student.';
+                    }
                     foreach (($summary['semesters'] ?? []) as $sem) {
                         if ($remaining <= 0.005) {
                             break;
+                        }
+                        if ($reg_budget !== null && $reg_budget <= 0.005) {
+                            break;   // the proof says the rest of the registration fees are DUES
                         }
                         $sem_room = round((float)($sem['reg_out'] ?? 0), 2);
                         if ($sem_room <= 0.005) {
                             continue;
                         }
                         $take = round(min($remaining, $sem_room), 2);
+                        if ($reg_budget !== null) {
+                            $take = round(min($take, $reg_budget), 2);
+                        }
+                        if ($take <= 0.005) {
+                            continue;
+                        }
                         acc_collect_student_fee(
                             $stu_pk, $pkg_id, 'registration',
                             (int)$sem['id'], (int)$sem['semester_number'], null,
                             'old_erp', null, 'OLD-ERP-TOTAL', $take,
                             $cash, $reg_inc, $today,
                             'Old ERP totals merge',
-                            'Old ERP totals merge: Registration Fee allocated to semester ' . (int)$sem['semester_number'] . ' from the total Amount Paid column.',
+                            'Old ERP totals merge: Registration Fee allocated to semester ' . (int)$sem['semester_number']
+                                . ($reg_budget !== null
+                                    ? ' — capped at the Registration "Received Amount" from the OLD ERP proof; unpaid registration stays due.'
+                                    : ' from the total Amount Paid column (no proof reading stored — schedule order).'),
                             true
                         );
                         $vcount++;
                         $inserted  = round($inserted + $take, 2);
                         $remaining = round($remaining - $take, 2);
+                        if ($reg_budget !== null) {
+                            $reg_budget = round($reg_budget - $take, 2);
+                        }
                     }
                 }
             }
@@ -832,6 +928,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') ==
                         } elseif ($existing > OESM_AMOUNT_TOLERANCE) {
                             $note = 'Has ' . acc_fmt($existing) . ' old-ERP records already; only the CSV amounts will be allocated on the remaining dues.';
                         }
+                        // Registration Fee reading from the OLD ERP proof —
+                        // drives how much registration is marked paid.
+                        if ($status !== 'skipped') {
+                            $reg_proof = oesm_reg_proof((int)$stu['package_id']);
+                            if ($reg_proof['received'] === null) {
+                                $note .= ($note ? ' ' : '') . 'NO REGISTRATION PROOF READING: registration will be allocated by schedule order — run the Bulk ERP Check or enter the Registration "Received Amount" manually on the student account for an exact paid/dues split.';
+                            } else {
+                                $note .= ($note ? ' ' : '') . 'Registration per proof: received ' . acc_fmt($reg_proof['received'])
+                                    . ($reg_proof['payable'] !== null ? ' of ' . acc_fmt($reg_proof['payable']) . ' payable' : '')
+                                    . ' — only this much registration is marked paid; the rest stays due and the money goes to monthly tuition.';
+                            }
+                        }
                         // Detect wrong / reversed scholarship marking from an
                         // earlier import: the amount already marked as scholarship
                         // in the DB differs from the CSV's Scholarship Amount.
@@ -931,7 +1039,10 @@ require_once __DIR__ . '/../includes/header.php';
             <code>Scholarship Amount</code>, <code>Other Fees Total</code>,
             <code>Other Fees Detail</code>. No receipt numbers are needed — the whole
             <strong>Amount Paid</strong> is allocated automatically: Admission → Form Fee → ID Card Fee →
-            Registration (per semester) → monthly tuition (earliest months first). The
+            Registration (per semester, <strong>capped at the Registration “Received Amount”</strong> read from the
+            OLD ERP proof's transaction history — Head of A/C: <em>Registration Fee</em> → Payable / Received / Due;
+            registration the proof shows as unpaid stays as <strong>dues</strong> and the money is merged into the
+            monthly payments instead) → monthly tuition (earliest months first). The
             <strong>Scholarship Amount</strong> is merged into monthly tuition as clearly-marked
             <em>OLD-ERP SCHOLARSHIP</em> rows (so those months stop showing dues while staying
             identifiable as scholarship, not cash). <strong>Other Fees</strong> may be itemised in the Detail

@@ -6,6 +6,11 @@ require_once __DIR__ . '/../accounting/helpers.php';
 require_once __DIR__ . '/../vc-approval/helpers.php';
 
 $id  = (int)($_GET['id'] ?? 0);
+
+// Make sure the OLD ERP Registration Fee (proof) columns exist before the
+// package row is loaded, so the cross-check card can display them.
+sfp_ensure_old_erp_reg_columns();
+
 $pkg = sfp_get_package($id);
 
 if (!$pkg) {
@@ -836,6 +841,41 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
         </div>
 
+        <hr class="my-3">
+        <div class="row g-3">
+            <div class="col-md-3">
+                <div class="text-muted small mb-1">Registration Fee – Received (proof)</div>
+                <div class="fw-bold fs-5" id="erp-reg-received-display"><?php
+                    $erp_reg_rcv = $pkg['old_erp_reg_received_amount'] ?? null;
+                    $erp_reg_pay = $pkg['old_erp_reg_payable_amount'] ?? null;
+                    echo $erp_reg_rcv !== null ? sfp_money((float)$erp_reg_rcv) : '—';
+                ?></div>
+                <div class="text-muted" style="font-size:.75rem;" id="erp-reg-note"><?php
+                    if ($erp_reg_rcv !== null) {
+                        echo (($pkg['old_erp_reg_source'] ?? '') === 'manual') ? 'Entered manually' : 'Read automatically (OCR)';
+                    } else {
+                        echo 'Not read yet';
+                    }
+                ?></div>
+            </div>
+            <div class="col-md-3">
+                <div class="text-muted small mb-1">Registration Fee – Payable (proof)</div>
+                <div class="fw-bold fs-5" id="erp-reg-payable-display"><?= $erp_reg_pay !== null ? sfp_money((float)$erp_reg_pay) : '—' ?></div>
+            </div>
+            <div class="col-md-3">
+                <div class="text-muted small mb-1">Registration Fee – Due (proof)</div>
+                <div class="fw-bold fs-5" id="erp-reg-due-display"><?= ($erp_reg_rcv !== null && $erp_reg_pay !== null) ? sfp_money(max(0.0, (float)$erp_reg_pay - (float)$erp_reg_rcv)) : '—' ?></div>
+            </div>
+            <div class="col-md-3">
+                <div class="text-muted small mb-1">Used by the Old ERP Totals Merge</div>
+                <div class="text-muted" style="font-size:.8rem;">
+                    Only the <strong>Received</strong> amount is marked paid as registration on merge —
+                    the rest of the registration fees stay as <strong>dues</strong> and the money is
+                    merged into the monthly payments instead.
+                </div>
+            </div>
+        </div>
+
         <div id="erp-ocr-status" class="small text-muted mt-3"></div>
 
         <div class="d-flex gap-2 mt-2 flex-wrap align-items-center">
@@ -856,6 +896,11 @@ require_once __DIR__ . '/../includes/header.php';
                 <input type="number" step="0.01" min="0" class="form-control" id="erp-manual-monthly"
                        placeholder="Monthly payment (manual override)">
                 <button type="button" class="btn btn-outline-secondary" id="erp-manual-monthly-save">Save</button>
+            </div>
+            <div class="input-group input-group-sm" style="max-width:320px;">
+                <input type="number" step="0.01" min="0" class="form-control" id="erp-manual-reg"
+                       placeholder="Registration received (manual override)">
+                <button type="button" class="btn btn-outline-secondary" id="erp-manual-reg-save">Save</button>
             </div>
             <?php endif; ?>
         </div>
@@ -943,12 +988,27 @@ require_once __DIR__ . '/../includes/header.php';
         }
     }
 
-    function save(amount, source, monthly, cb) {
+    function applyRegResult(payable, received, sourceNote) {
+        var r = $id('erp-reg-received-display');
+        if (r) r.textContent = fmt(received);
+        var p = $id('erp-reg-payable-display');
+        if (p && payable !== null && payable !== undefined) p.textContent = fmt(payable);
+        var d = $id('erp-reg-due-display');
+        if (d && payable !== null && payable !== undefined) d.textContent = fmt(Math.max(0, payable - received));
+        var n = $id('erp-reg-note');
+        if (n && sourceNote) n.textContent = sourceNote;
+    }
+
+    function save(amount, source, monthly, reg, cb) {
         var fd = new FormData();
         fd.append(CFG.csrfField, CFG.csrfToken);
         fd.append('package_id', CFG.packageId);
         fd.append('amount', amount);
         if (monthly !== null && monthly !== undefined) fd.append('monthly', monthly);
+        if (reg) {
+            fd.append('reg_payable',  reg.payable);
+            fd.append('reg_received', reg.received);
+        }
         fd.append('source', source);
         fetch(CFG.saveUrl, { method: 'POST', body: fd })
             .then(function (r) { return r.json(); })
@@ -1024,6 +1084,37 @@ require_once __DIR__ . '/../includes/header.php';
         return null;
     }
 
+    // "Registration Fee" row(s) in the proof's transaction history:
+    //   Head of A/C | Payable Amount | Received Amount | Due Amount
+    // Sums every matching row (one per semester on some proofs). Rows whose
+    // three amounts do not reconcile (Payable − Received ≠ Due, ±5 BDT) are
+    // ignored as OCR misreads, and rows with fewer than two amounts are
+    // skipped as ambiguous. Re-Registration / Convocation rows are excluded.
+    function parseRegRow(text) {
+        var lines = String(text).split(/\n/);
+        var payable = 0, received = 0, found = false;
+        for (var i = 0; i < lines.length; i++) {
+            var line = lines[i];
+            var m = /registration\s*fee/i.exec(line);
+            if (!m) continue;
+            if (/re\s*-?\s*registration|convocation/i.test(line)) continue;
+            var nums = (line.slice(m.index + m[0].length).match(/-?[\d,]+(?:\.\d+)?/g)) || [];
+            var vals = [];
+            for (var j = 0; j < nums.length; j++) {
+                var v = parseFloat(nums[j].replace(/,/g, ''));
+                if (!isNaN(v) && v >= 0) vals.push(v);
+            }
+            if (vals.length < 2) continue;
+            if (vals.length >= 3 && Math.abs(vals[0] - vals[1] - vals[2]) > 5) continue;
+            payable  += vals[0];
+            received += vals[1];
+            found = true;
+        }
+        return found
+            ? { payable: Math.round(payable * 100) / 100, received: Math.round(received * 100) / 100 }
+            : null;
+    }
+
     function loadTesseract(cb) {
         if (window.Tesseract) { cb(); return; }
         var s = document.createElement('script');
@@ -1047,6 +1138,7 @@ require_once __DIR__ . '/../includes/header.php';
                 var text = (res && res.data && res.data.text) || '';
                 var val  = parsePayable(text);
                 var mval = parseMonthly(text);
+                var reg  = parseRegRow(text);
                 if (val === null) {
                     if (mval !== null) {
                         saveMonthlyOnly(mval);
@@ -1055,13 +1147,14 @@ require_once __DIR__ . '/../includes/header.php';
                     setStatus('Could not find a "Payable Amount" value in the proof image. Enter it manually below.', true);
                     return;
                 }
-                save(val, 'ocr', mval, function (ok, resp) {
+                save(val, 'ocr', mval, reg, function (ok, resp) {
                     if (!ok) {
                         setStatus('OCR read ' + fmt(val) + ' but saving failed: ' + (resp.error || 'unknown error'), true);
                         applyResult(val, 'Read automatically (OCR) · not saved');
                         return;
                     }
                     if (mval !== null) applyMonthlyResult(mval, 'Read automatically (OCR) · just now');
+                    if (reg !== null && !resp.reg_skipped) applyRegResult(reg.payable, reg.received, 'Read automatically (OCR) · just now');
                     if (resp.skipped) {
                         setStatus('OCR read ' + fmt(val) + ', but a manually entered value is kept (' + fmt(resp.amount) + ').');
                         return;
@@ -1084,7 +1177,7 @@ require_once __DIR__ . '/../includes/header.php';
             var input = $id('erp-manual-amount');
             var v = parseFloat(input.value);
             if (isNaN(v) || v < 0) { setStatus('Enter a valid payable amount first.', true); return; }
-            save(v, 'manual', null, function (ok, resp) {
+            save(v, 'manual', null, null, function (ok, resp) {
                 if (!ok) { setStatus('Saving failed: ' + (resp.error || 'unknown error'), true); return; }
                 setStatus('Manual payable amount saved.');
                 applyResult(v, 'Entered manually · just now');
@@ -1110,6 +1203,29 @@ require_once __DIR__ . '/../includes/header.php';
                     if (!resp.success) { setStatus('Saving failed: ' + (resp.error || 'unknown error'), true); return; }
                     setStatus('Manual monthly payment saved.');
                     applyMonthlyResult(v, 'Entered manually · just now');
+                    input.value = '';
+                })
+                .catch(function (e) { setStatus('Saving failed: ' + e, true); });
+        });
+    }
+
+    var manualRegBtn = $id('erp-manual-reg-save');
+    if (manualRegBtn) {
+        manualRegBtn.addEventListener('click', function () {
+            var input = $id('erp-manual-reg');
+            var v = parseFloat(input.value);
+            if (isNaN(v) || v < 0) { setStatus('Enter a valid registration received amount first.', true); return; }
+            var fd = new FormData();
+            fd.append(CFG.csrfField, CFG.csrfToken);
+            fd.append('package_id', CFG.packageId);
+            fd.append('reg_received', v);
+            fd.append('source', 'manual');
+            fetch(CFG.saveUrl, { method: 'POST', body: fd })
+                .then(function (r) { return r.json(); })
+                .then(function (resp) {
+                    if (!resp.success) { setStatus('Saving failed: ' + (resp.error || 'unknown error'), true); return; }
+                    setStatus('Manual registration received amount saved — the Totals Merge will mark only this much registration as paid.');
+                    applyRegResult(null, v, 'Entered manually · just now');
                     input.value = '';
                 })
                 .catch(function (e) { setStatus('Saving failed: ' + e, true); });

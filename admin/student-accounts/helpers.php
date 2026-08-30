@@ -227,6 +227,40 @@ function sfp_old_erp_monthly_check(?float $monthly, float $expected): ?array
     ];
 }
 
+/**
+ * Auto-migrate: sfp_packages.old_erp_reg_* columns — the "Registration Fee"
+ * row read from the OLD ERP proof's transaction history (Head of A/C:
+ * Registration Fee → Payable Amount / Received Amount / Due Amount).
+ * The RECEIVED amount drives the Old ERP Totals Merge: only the
+ * actually-paid registration is marked paid there; the rest of the
+ * registration fees stay as dues.
+ */
+function sfp_ensure_old_erp_reg_columns(): void
+{
+    static $done = false;
+    if ($done) {
+        return;
+    }
+    try {
+        $col = db()->query("SHOW COLUMNS FROM sfp_packages LIKE 'old_erp_reg_received_amount'")->fetch();
+        if (!$col) {
+            db()->exec(
+                "ALTER TABLE sfp_packages
+                 ADD COLUMN old_erp_reg_payable_amount DECIMAL(12,2) NULL DEFAULT NULL
+                 COMMENT 'Registration Fee row: Payable Amount from the OLD ERP proof transaction history',
+                 ADD COLUMN old_erp_reg_received_amount DECIMAL(12,2) NULL DEFAULT NULL
+                 COMMENT 'Registration Fee row: Received Amount from the OLD ERP proof transaction history',
+                 ADD COLUMN old_erp_reg_source VARCHAR(10) NULL DEFAULT NULL
+                 COMMENT 'ocr or manual'"
+            );
+        }
+    } catch (Throwable $e) {
+        // Leave it to the DBA when ALTER is not permitted; the proof-driven
+        // registration cap simply stays unavailable until the columns exist.
+    }
+    $done = true;
+}
+
 // ── Get a package with student / assigner joins ───────────────────────────────
 
 function sfp_get_package(int $id): array|false

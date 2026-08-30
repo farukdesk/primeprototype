@@ -510,6 +510,37 @@ require_once __DIR__ . '/../includes/header.php';
         return null;
     }
 
+    // "Registration Fee" row(s) in the proof's transaction history:
+    //   Head of A/C | Payable Amount | Received Amount | Due Amount
+    // Sums every matching row (one per semester on some proofs). Rows whose
+    // three amounts do not reconcile (Payable − Received ≠ Due, ±5 BDT) are
+    // ignored as OCR misreads, and rows with fewer than two amounts are
+    // skipped as ambiguous. Re-Registration / Convocation rows are excluded.
+    function parseRegRow(text) {
+        var lines = String(text).split(/\n/);
+        var payable = 0, received = 0, found = false;
+        for (var i = 0; i < lines.length; i++) {
+            var line = lines[i];
+            var m = /registration\s*fee/i.exec(line);
+            if (!m) continue;
+            if (/re\s*-?\s*registration|convocation/i.test(line)) continue;
+            var nums = (line.slice(m.index + m[0].length).match(/-?[\d,]+(?:\.\d+)?/g)) || [];
+            var vals = [];
+            for (var j = 0; j < nums.length; j++) {
+                var v = parseFloat(nums[j].replace(/,/g, ''));
+                if (!isNaN(v) && v >= 0) vals.push(v);
+            }
+            if (vals.length < 2) continue;
+            if (vals.length >= 3 && Math.abs(vals[0] - vals[1] - vals[2]) > 5) continue;
+            payable  += vals[0];
+            received += vals[1];
+            found = true;
+        }
+        return found
+            ? { payable: Math.round(payable * 100) / 100, received: Math.round(received * 100) / 100 }
+            : null;
+    }
+
     function addRow(item, payable, res, status, monthly, monthlyOk) {
         var er = $id('empty-row');
         if (er) er.remove();
@@ -550,12 +581,16 @@ require_once __DIR__ . '/../includes/header.php';
         });
     };
 
-    function save(packageId, amount, monthly, cb) {
+    function save(packageId, amount, monthly, reg, cb) {
         var fd = new FormData();
         fd.append(CFG.csrfField, CFG.csrfToken);
         fd.append('package_id', packageId);
         if (amount !== null) fd.append('amount', amount);
         if (monthly !== null) fd.append('monthly', monthly);
+        if (reg) {
+            fd.append('reg_payable',  reg.payable);
+            fd.append('reg_received', reg.received);
+        }
         fd.append('source', 'ocr');
         fetch(CFG.saveUrl, { method: 'POST', body: fd })
             .then(function (r) { return r.json(); })
@@ -614,6 +649,7 @@ require_once __DIR__ . '/../includes/header.php';
             var text = (res && res.data && res.data.text) || '';
             var val  = parsePayable(text);
             var mval = parseMonthly(text);
+            var reg  = parseRegRow(text);
             if (val === null && mval === null) {
                 nFailed++; nDone++;
                 failedIds.push(item.package_id);
@@ -622,7 +658,7 @@ require_once __DIR__ . '/../includes/header.php';
                 setTimeout(processNext, 50);
                 return;
             }
-            save(item.package_id, val, mval, function (ok) {
+            save(item.package_id, val, mval, reg, function (ok) {
                 var ev  = (val !== null) ? evaluate(val, item.grand_total, item.project_fee, item.form_id_fee) : null;
                 var mok = (mval !== null && typeof item.expected_monthly === 'number')
                     ? (Math.abs(mval - item.expected_monthly) <= CFG.monthlyTolerance) : null;
