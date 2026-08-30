@@ -239,9 +239,14 @@ require_once __DIR__ . '/../includes/header.php';
             <li class="breadcrumb-item active">Bulk ERP Check</li>
         </ol></nav>
     </div>
-    <a href="<?= APP_URL ?>/student-accounts/index.php" class="btn btn-outline-secondary btn-sm">
-        <i class="fas fa-arrow-left me-1"></i> Back to Student Accounts
-    </a>
+    <div class="d-flex gap-2">
+        <a href="<?= APP_URL ?>/student-accounts/bulk-reg-import.php" class="btn btn-outline-success btn-sm">
+            <i class="fas fa-file-csv me-1"></i> Bulk Registration Fee CSV Import
+        </a>
+        <a href="<?= APP_URL ?>/student-accounts/index.php" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-arrow-left me-1"></i> Back to Student Accounts
+        </a>
+    </div>
 </div>
 
 <?= flash_show() ?>
