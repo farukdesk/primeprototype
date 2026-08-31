@@ -152,7 +152,9 @@ foreach ($staff as $s) {
     $pen_abs = att_late_penalty_days($pen_days);
     $body .= '<tr>'
         . '<td class="sn">' . $sn . '</td>'
-        . '<td class="nm">' . h($s['full_name']) . '</td>'
+        . '<td class="nm">' . h($s['full_name'])
+            . (($s['designation'] ?? '') !== '' ? '<br><span class="desg">' . h($s['designation']) . '</span>' : '')
+        . '</td>'
         . '<td class="id">' . h($s['employee_id'] ?? '—') . '</td>'
         . $cells
         . '<td class="tot ' . ($total_late ? 'has' : '') . '">' . $total_late . '</td>'
@@ -187,6 +189,7 @@ ob_start();
     th.sn, td.sn { width:<?= $w_serial ?>px; }
     th.nm, td.nm { width:<?= $w_name ?>px; text-align:left; padding-left:4px; }
     td.nm { font-weight:bold; }
+    td.nm .desg { font-weight:normal; font-size:7px; color:#555; }
     th.id, td.id { width:<?= $w_id ?>px; }
     th.dh, td.c { width:<?= $w_date ?>px; }
     th.tt, td.tot { width:<?= $w_total ?>px; font-weight:bold; }

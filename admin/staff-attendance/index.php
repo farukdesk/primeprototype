@@ -93,7 +93,7 @@ if (($_GET['export'] ?? '') === 'csv') {
     fwrite($out, "\xEF\xBB\xBF"); // UTF-8 BOM so Excel opens it correctly
 
     if ($detail) {
-        fputcsv($out, ['Date', 'Employee Name', 'Employee ID', 'Department',
+        fputcsv($out, ['Date', 'Employee Name', 'Employee ID', 'Designation', 'Department',
                        'In Time', 'Out Time', 'Total Working Hours', 'Status']);
         foreach ($dates as $d) {
             $on_leave = $leave_by_date[$d] ?? [];
@@ -107,6 +107,7 @@ if (($_GET['export'] ?? '') === 'csv') {
                     date('d/m/Y', strtotime($d)),
                     (string)$s['full_name'],
                     (string)($s['employee_id'] ?? ''),
+                    (string)($s['designation'] ?? ''),
                     (string)($s['dept_name'] ?? ''),
                     att_display_time($rec['in_time'] ?? null),
                     att_display_time($rec['out_time'] ?? null),
@@ -116,7 +117,7 @@ if (($_GET['export'] ?? '') === 'csv') {
             }
         }
     } else {
-        fputcsv($out, ['Employee Name', 'Employee ID', 'Department', 'Working Days',
+        fputcsv($out, ['Employee Name', 'Employee ID', 'Designation', 'Department', 'Working Days',
                        'Present', 'Late In', 'Early Out', 'On Leave', 'Absent',
                        'Penalty Absent (4 Late/Early = 1)', 'Total Absent (incl. Penalty)', 'Total Working Hours']);
         foreach ($staff as $s) {
@@ -150,6 +151,7 @@ if (($_GET['export'] ?? '') === 'csv') {
             fputcsv($out, [
                 (string)$s['full_name'],
                 (string)($s['employee_id'] ?? ''),
+                (string)($s['designation'] ?? ''),
                 (string)($s['dept_name'] ?? ''),
                 $x['working_days'],
                 $x['present'],
