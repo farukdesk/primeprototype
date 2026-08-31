@@ -354,6 +354,7 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
                             <th class="px-3">Date</th>
                             <th>Employee Name</th>
                             <th>Employee ID</th>
+                            <th>Designation</th>
                             <th>Department</th>
                             <th>In Time</th>
                             <th>Out Time</th>
