@@ -126,7 +126,7 @@ if (($_GET['export'] ?? '') === 'csv') {
                   'leave' => 0, 'minutes' => 0, 'working_days' => 0, 'pen' => 0];
             foreach ($dates as $d) {
                 $on_leave = $leave_by_date[$d] ?? [];
-                $off      = isset($holidays[$d]) || att_is_weekly_off_for($sched, $d);
+                $off      = (isset($holidays[$d]) && att_holiday_applies($uid, $d)) || att_is_weekly_off_for($sched, $d);
                 $rec      = $records[$uid . '|' . $d] ?? null;
                 $status   = att_compute_status($rec, $uid, $d, $sched, $holidays, $on_leave);
                 if (!$off) $x['working_days']++;
@@ -333,10 +333,14 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
             $date       = $from;
             $on_leave   = $leave_by_date[$date] ?? [];
             $is_holiday = isset($holidays[$date]);
+            $hol_groups = $is_holiday ? att_holiday_group_names($date) : [];
         ?>
             <?php if ($is_holiday): ?>
             <div class="alert alert-secondary mb-0 rounded-0 border-0 border-bottom">
                 <i class="fas fa-calendar-day me-1"></i> Holiday: <strong><?= h($holidays[$date]) ?></strong>
+                <?php if (!empty($hol_groups)): ?>
+                <span class="text-muted small">(applies to <?= h(implode(', ', $hol_groups)) ?> only)</span>
+                <?php endif; ?>
             </div>
             <?php elseif (att_is_weekly_off($date)): ?>
             <div class="alert alert-light mb-0 rounded-0 border-0 border-bottom">
@@ -403,8 +407,8 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
                     $rec    = $records[$uid . '|' . $d] ?? null;
                     $sched  = att_effective_schedule($uid);
                     $status = att_compute_status($rec, $uid, $d, $sched, $holidays, $on_leave);
-                    // Off days are per staff member (weekly-off override aware).
-                    $off = $holiday_off || att_is_weekly_off_for($sched, $d);
+                    // Off days are per staff member (weekly-off override and holiday user-group aware).
+                    $off = ($holiday_off && att_holiday_applies($uid, $d)) || att_is_weekly_off_for($sched, $d);
                     if (!$off) $summ[$uid]['working_days']++;
                     switch ($status) {
                         case 'present':                          $summ[$uid]['present']++; break;

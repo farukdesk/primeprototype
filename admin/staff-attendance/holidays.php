@@ -2,6 +2,9 @@
 /**
  * Super Admin / module editor: staff holidays.
  * Dated holidays suppress "Absent" for that day and are highlighted in reports.
+ * A holiday may be limited to specific user groups: keep the selection on
+ * "All Staff" to give everyone the day off (the default), or pick one or more
+ * groups so only their members get the holiday (att_holiday_groups).
  */
 require_once __DIR__ . '/../includes/auth.php';
 auth_check();
@@ -20,6 +23,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $id = (int)($_POST['id'] ?? 0);
         if ($id > 0) {
             $db->prepare('DELETE FROM att_holidays WHERE id = ?')->execute([$id]);
+            try {
+                $db->prepare('DELETE FROM att_holiday_groups WHERE holiday_id = ?')->execute([$id]);
+            } catch (Throwable $e) {
+                // staff-attendance-holiday-groups-v1.sql migration not applied yet.
+            }
             log_change('staff-attendance', 'DELETE', $id, 'Holiday');
             flash_set('success', 'Holiday removed.');
         }
@@ -27,6 +35,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $date  = att_normalize_date($_POST['holiday_date'] ?? '');
         $title = trim($_POST['title'] ?? '');
         if ($title !== '') $title = mb_substr($title, 0, 200);
+
+        // Selected user groups. Choosing "All Staff" (value 0) or selecting
+        // nothing means the holiday applies to everyone.
+        $group_ids = [];
+        foreach ((array)($_POST['group_ids'] ?? []) as $gid) {
+            $gid = (int)$gid;
+            if ($gid < 1) { $group_ids = []; break; } // "All Staff" wins
+            $group_ids[] = $gid;
+        }
+        $group_ids = array_values(array_unique($group_ids));
 
         if ($title === '') {
             flash_set('error', 'Please enter a holiday title.');
@@ -38,8 +56,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                  ON DUPLICATE KEY UPDATE title = VALUES(title)'
             );
             $stmt->execute([$date, $title]);
-            log_change('staff-attendance', 'CREATE', (int)$db->lastInsertId(), $title, null, null, $date);
-            flash_set('success', 'Holiday saved.');
+
+            // Resolve the holiday id (lastInsertId is 0 when an existing date
+            // was updated through ON DUPLICATE KEY UPDATE).
+            $hid = (int)$db->lastInsertId();
+            if ($hid < 1) {
+                $q = $db->prepare('SELECT id FROM att_holidays WHERE holiday_date = ?');
+                $q->execute([$date]);
+                $hid = (int)$q->fetchColumn();
+            }
+
+            // Replace the group restriction (no rows = applies to all staff).
+            $groups_saved = true;
+            if ($hid > 0) {
+                try {
+                    $db->prepare('DELETE FROM att_holiday_groups WHERE holiday_id = ?')->execute([$hid]);
+                    if (!empty($group_ids)) {
+                        $ins = $db->prepare('INSERT INTO att_holiday_groups (holiday_id, group_id) VALUES (?, ?)');
+                        foreach ($group_ids as $gid) $ins->execute([$hid, $gid]);
+                    }
+                } catch (Throwable $e) {
+                    // Table missing – only a problem when a restriction was requested.
+                    $groups_saved = empty($group_ids);
+                }
+            }
+
+            log_change('staff-attendance', 'CREATE', $hid, $title, null, null, $date);
+            if ($groups_saved) {
+                flash_set('success', 'Holiday saved' . (!empty($group_ids) ? ' for the selected user groups' : '') . '.');
+            } else {
+                flash_set('error', 'Holiday saved, but the user-group selection could not be stored. Please run the staff-attendance-holiday-groups-v1.sql migration first.');
+            }
         }
     }
     redirect(APP_URL . '/staff-attendance/holidays.php');
@@ -51,6 +98,26 @@ if ($year < 2000 || $year > 2100) $year = (int)date('Y');
 $stmt = $db->prepare('SELECT * FROM att_holidays WHERE YEAR(holiday_date) = ? ORDER BY holiday_date ASC');
 $stmt->execute([$year]);
 $holidays = $stmt->fetchAll();
+
+// Group restriction per holiday (holiday_id => [group names]).
+$holiday_groups = [];
+try {
+    $rows = $db->query(
+        'SELECT hg.holiday_id, g.name FROM att_holiday_groups hg
+           JOIN user_groups g ON g.id = hg.group_id ORDER BY g.name ASC'
+    )->fetchAll();
+    foreach ($rows as $r) $holiday_groups[(int)$r['holiday_id']][] = (string)$r['name'];
+} catch (Throwable $e) {
+    // staff-attendance-holiday-groups-v1.sql migration not applied yet.
+}
+
+// Active user groups for the "Applies To" multi-select.
+$user_groups = [];
+try {
+    $user_groups = $db->query('SELECT id, name FROM user_groups WHERE is_active = 1 ORDER BY name ASC')->fetchAll();
+} catch (Throwable $e) {
+    // ignore – the form falls back to "All Staff" only.
+}
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -86,6 +153,16 @@ require_once __DIR__ . '/../includes/header.php';
                         <input type="text" name="title" class="form-control" maxlength="200" placeholder="e.g. Victory Day" required>
                     </div>
                     <div class="col-12">
+                        <label class="form-label fw-semibold small mb-1">Applies To</label>
+                        <select name="group_ids[]" class="form-select" multiple size="<?= min(8, count($user_groups) + 1) ?>">
+                            <option value="0" selected>All Staff (default)</option>
+                            <?php foreach ($user_groups as $g): ?>
+                            <option value="<?= (int)$g['id'] ?>"><?= h($g['name']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <div class="form-text">Hold Ctrl (Cmd on Mac) to pick more than one group. Keep <strong>All Staff</strong> selected to give everyone the day off, or pick one or more user groups to limit the holiday to their members only.</div>
+                    </div>
+                    <div class="col-12">
                         <button class="btn btn-primary"><i class="fas fa-save me-1"></i> Save Holiday</button>
                     </div>
                 </form>
@@ -110,7 +187,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="table-responsive">
                     <table class="table table-hover align-middle mb-0">
                         <thead class="table-light">
-                            <tr><th class="px-3">Date</th><th>Day</th><th>Title</th><th></th></tr>
+                            <tr><th class="px-3">Date</th><th>Day</th><th>Title</th><th>Applies To</th><th></th></tr>
                         </thead>
                         <tbody>
                         <?php foreach ($holidays as $hd): ?>
@@ -118,6 +195,14 @@ require_once __DIR__ . '/../includes/header.php';
                                 <td class="px-3"><?= h(date('d M Y', strtotime($hd['holiday_date']))) ?></td>
                                 <td class="small text-muted"><?= h(date('l', strtotime($hd['holiday_date']))) ?></td>
                                 <td><?= h($hd['title']) ?></td>
+                                <td class="small">
+                                    <?php $gnames = $holiday_groups[(int)$hd['id']] ?? []; ?>
+                                    <?php if (empty($gnames)): ?>
+                                        <span class="badge bg-light text-dark border">All Staff</span>
+                                    <?php else: foreach ($gnames as $gn): ?>
+                                        <span class="badge bg-info text-dark"><?= h($gn) ?></span>
+                                    <?php endforeach; endif; ?>
+                                </td>
                                 <td class="text-end pe-3">
                                     <form method="POST" onsubmit="return confirm('Remove this holiday?');" class="d-inline">
                                         <?= csrf_field() ?>
@@ -134,6 +219,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <?php endif; ?>
             </div>
         </div>
+        <p class="text-muted small mt-2 px-1">Re-saving an existing date updates its title and its "Applies To" groups. A group-restricted holiday only suppresses "Absent" for members of the selected user groups; everyone else is expected at the office as usual.</p>
     </div>
 </div>
 

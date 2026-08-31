@@ -82,9 +82,12 @@ $w_date   = 26;
 $w_total  = 32;
 
 // Header row of dates.
-$date_head = '';
+$date_head      = '';
+$holiday_groups = att_holiday_group_map();
 foreach ($dates as $d) {
-    $off = isset($holidays[$d]) || att_is_weekly_off($d);
+    // Only holidays that apply to ALL staff shade the whole column; a
+    // group-restricted holiday still shows per staff member in the cells.
+    $off = (isset($holidays[$d]) && empty($holiday_groups[$d])) || att_is_weekly_off($d);
     $cls = $off ? 'dh off' : 'dh';
     $date_head .= '<th class="' . $cls . '">'
         . '<span class="dnum">' . (int)date('j', strtotime($d)) . '</span><br>'

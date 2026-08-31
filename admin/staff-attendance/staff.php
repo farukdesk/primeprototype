@@ -165,7 +165,13 @@ endif;
 
 // ── Gather the month's data for this staff member ───────────────────────────
 $records  = att_records_map([$user_id], $from, $to);
-$holidays = att_holidays_in_range($from, $to);
+// Only the holidays that apply to THIS staff member: group-restricted
+// holidays are limited to members of the selected user groups.
+$holidays = array_filter(
+    att_holidays_in_range($from, $to),
+    fn(string $d): bool => att_holiday_applies($user_id, $d),
+    ARRAY_FILTER_USE_KEY
+);
 $sched    = att_effective_schedule($user_id);
 
 $dates = [];

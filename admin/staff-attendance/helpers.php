@@ -342,6 +342,99 @@ function att_holidays_in_range(string $from, string $to): array
     return $map;
 }
 
+// ── User-group–specific holidays ────────────────────────────────────────────
+
+/**
+ * Group restrictions for holidays keyed by Y-m-d => [group_id, ...]. A date
+ * missing from this map applies to ALL staff (the default); a date with group
+ * ids applies only to members of those user groups. Cached per request; empty
+ * when the staff-attendance-holiday-groups-v1.sql migration is not applied.
+ */
+function att_holiday_group_map(): array
+{
+    static $cache = null;
+    if ($cache !== null) return $cache;
+    $cache = [];
+    try {
+        $rows = db()->query(
+            'SELECT h.holiday_date, hg.group_id
+               FROM att_holiday_groups hg
+               JOIN att_holidays h ON h.id = hg.holiday_id'
+        )->fetchAll();
+        foreach ($rows as $r) {
+            $cache[(string)$r['holiday_date']][] = (int)$r['group_id'];
+        }
+    } catch (Throwable $e) {
+        // Migration not applied yet – every holiday applies to everyone.
+    }
+    return $cache;
+}
+
+/**
+ * ALL group ids a user belongs to: the primary group (users.group_id) plus
+ * every additional membership in user_group_assignments (multi-group
+ * support). Cached for the request.
+ */
+function att_user_group_ids(int $user_id): array
+{
+    static $map = null;
+    if ($map === null) {
+        $map = [];
+        try {
+            foreach (db()->query('SELECT id, group_id FROM users')->fetchAll() as $r) {
+                if ((int)$r['group_id'] > 0) $map[(int)$r['id']][] = (int)$r['group_id'];
+            }
+        } catch (Throwable $e) {
+            // ignore
+        }
+        try {
+            foreach (db()->query('SELECT user_id, group_id FROM user_group_assignments')->fetchAll() as $r) {
+                $map[(int)$r['user_id']][] = (int)$r['group_id'];
+            }
+        } catch (Throwable $e) {
+            // Junction table may not exist on legacy deployments – primary only.
+        }
+        foreach ($map as $uid => $gids) $map[$uid] = array_values(array_unique($gids));
+    }
+    return $map[$user_id] ?? [];
+}
+
+/**
+ * Whether the holiday on $date applies to $user_id: unrestricted holidays
+ * apply to everyone; group-restricted holidays only to members of one of the
+ * selected user groups.
+ */
+function att_holiday_applies(int $user_id, string $date): bool
+{
+    $groups = att_holiday_group_map()[$date] ?? [];
+    if (empty($groups)) return true;
+    return !empty(array_intersect($groups, att_user_group_ids($user_id)));
+}
+
+/** Names of the user groups a holiday is limited to ([] = applies to all). */
+function att_holiday_group_names(string $date): array
+{
+    $ids = att_holiday_group_map()[$date] ?? [];
+    if (empty($ids)) return [];
+    static $names = null;
+    if ($names === null) {
+        $names = [];
+        try {
+            foreach (db()->query('SELECT id, name FROM user_groups')->fetchAll() as $r) {
+                $names[(int)$r['id']] = (string)$r['name'];
+            }
+        } catch (Throwable $e) {
+            // ignore
+        }
+    }
+    $out = [];
+    foreach ($ids as $id) {
+        if (isset($names[$id])) $out[] = $names[$id];
+    }
+    sort($out);
+    return $out;
+}
+
 /**
  * Prime University attendance "month" range for a given YYYY-MM. The payroll-style
  * cycle runs from the 26th of the previous calendar month to the 25th of the
@@ -677,7 +770,10 @@ function att_compute_status(?array $record, int $user_id, string $date, array $s
     // are never counted Late In / Early Out / Insufficient Hours.
     $exam_exempt = att_exam_exempt($user_id, $date);
 
-    if (isset($holidays[$date]))            return $has_in ? 'present' : 'holiday';
+    // Group-restricted holidays only apply to members of the selected groups.
+    if (isset($holidays[$date]) && att_holiday_applies($user_id, $date)) {
+        return $has_in ? 'present' : 'holiday';
+    }
 
     // Custom Thursday / Friday slots: when the member defined slots for this
     // weekday (e.g. a slot On Campus + a slot for Online Class), the combined
