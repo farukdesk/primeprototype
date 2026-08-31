@@ -93,7 +93,7 @@ if (($_GET['export'] ?? '') === 'csv') {
     fwrite($out, "\xEF\xBB\xBF"); // UTF-8 BOM so Excel opens it correctly
 
     if ($detail) {
-        fputcsv($out, ['Date', 'Employee Name', 'Employee ID', 'Department',
+        fputcsv($out, ['Date', 'Employee Name', 'Employee ID', 'Designation', 'Department',
                        'In Time', 'Out Time', 'Total Working Hours', 'Status']);
         foreach ($dates as $d) {
             $on_leave = $leave_by_date[$d] ?? [];
