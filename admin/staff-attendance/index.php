@@ -407,8 +407,8 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
                     $rec    = $records[$uid . '|' . $d] ?? null;
                     $sched  = att_effective_schedule($uid);
                     $status = att_compute_status($rec, $uid, $d, $sched, $holidays, $on_leave);
-                    // Off days are per staff member (weekly-off override aware).
-                    $off = $holiday_off || att_is_weekly_off_for($sched, $d);
+                    // Off days are per staff member (weekly-off override and holiday user-group aware).
+                    $off = ($holiday_off && att_holiday_applies($uid, $d)) || att_is_weekly_off_for($sched, $d);
                     if (!$off) $summ[$uid]['working_days']++;
                     switch ($status) {
                         case 'present':                          $summ[$uid]['present']++; break;
