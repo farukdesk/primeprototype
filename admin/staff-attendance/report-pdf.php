@@ -189,6 +189,7 @@ ob_start();
     th.sn, td.sn { width:<?= $w_serial ?>px; }
     th.nm, td.nm { width:<?= $w_name ?>px; text-align:left; padding-left:4px; }
     td.nm { font-weight:bold; }
+    td.nm .desg { font-weight:normal; font-size:7px; color:#555; }
     th.id, td.id { width:<?= $w_id ?>px; }
     th.dh, td.c { width:<?= $w_date ?>px; }
     th.tt, td.tot { width:<?= $w_total ?>px; font-weight:bold; }

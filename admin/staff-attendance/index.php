@@ -107,6 +107,7 @@ if (($_GET['export'] ?? '') === 'csv') {
                     date('d/m/Y', strtotime($d)),
                     (string)$s['full_name'],
                     (string)($s['employee_id'] ?? ''),
+                    (string)($s['designation'] ?? ''),
                     (string)($s['dept_name'] ?? ''),
                     att_display_time($rec['in_time'] ?? null),
                     att_display_time($rec['out_time'] ?? null),
