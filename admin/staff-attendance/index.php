@@ -333,10 +333,14 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
             $date       = $from;
             $on_leave   = $leave_by_date[$date] ?? [];
             $is_holiday = isset($holidays[$date]);
+            $hol_groups = $is_holiday ? att_holiday_group_names($date) : [];
         ?>
             <?php if ($is_holiday): ?>
             <div class="alert alert-secondary mb-0 rounded-0 border-0 border-bottom">
                 <i class="fas fa-calendar-day me-1"></i> Holiday: <strong><?= h($holidays[$date]) ?></strong>
+                <?php if (!empty($hol_groups)): ?>
+                <span class="text-muted small">(applies to <?= h(implode(', ', $hol_groups)) ?> only)</span>
+                <?php endif; ?>
             </div>
             <?php elseif (att_is_weekly_off($date)): ?>
             <div class="alert alert-light mb-0 rounded-0 border-0 border-bottom">

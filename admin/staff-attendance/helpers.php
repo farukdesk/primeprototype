@@ -770,7 +770,10 @@ function att_compute_status(?array $record, int $user_id, string $date, array $s
     // are never counted Late In / Early Out / Insufficient Hours.
     $exam_exempt = att_exam_exempt($user_id, $date);
 
-    if (isset($holidays[$date]))            return $has_in ? 'present' : 'holiday';
+    // Group-restricted holidays only apply to members of the selected groups.
+    if (isset($holidays[$date]) && att_holiday_applies($user_id, $date)) {
+        return $has_in ? 'present' : 'holiday';
+    }
 
     // Custom Thursday / Friday slots: when the member defined slots for this
     // weekday (e.g. a slot On Campus + a slot for Online Class), the combined
