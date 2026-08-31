@@ -117,7 +117,7 @@ if (($_GET['export'] ?? '') === 'csv') {
             }
         }
     } else {
-        fputcsv($out, ['Employee Name', 'Employee ID', 'Department', 'Working Days',
+        fputcsv($out, ['Employee Name', 'Employee ID', 'Designation', 'Department', 'Working Days',
                        'Present', 'Late In', 'Early Out', 'On Leave', 'Absent',
                        'Penalty Absent (4 Late/Early = 1)', 'Total Absent (incl. Penalty)', 'Total Working Hours']);
         foreach ($staff as $s) {
