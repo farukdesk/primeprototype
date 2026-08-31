@@ -117,12 +117,23 @@ if ($f_to !== '') {
     $params[] = $f_to . ' 23:59:59';
 }
 
-$sql = 'SELECT t.*, COALESCE(u.full_name, t.submitter_name) AS creator_name, a.full_name AS assignee_name
+// A ticket "awaits a staff reply" when it is Open/Reopened AND the latest
+// public comment on it was posted by the ticket creator. Those tickets are
+// always listed first so new creator replies are never missed.
+$creator_reply_expr =
+    "(t.status IN ('Open','Reopened')
+      AND t.created_by IS NOT NULL
+      AND (SELECT c.created_by FROM support_ticket_comments c
+            WHERE c.ticket_id = t.id AND c.is_internal = 0
+            ORDER BY c.created_at DESC, c.id DESC LIMIT 1) = t.created_by)";
+
+$sql = 'SELECT t.*, COALESCE(u.full_name, t.submitter_name) AS creator_name, a.full_name AS assignee_name,
+               ' . $creator_reply_expr . ' AS creator_reply
         FROM support_tickets t
         LEFT JOIN users u ON u.id = t.created_by
         LEFT JOIN users a ON a.id = t.assigned_to'
      . ($where ? ' WHERE ' . implode(' AND ', $where) : '')
-     . ' ORDER BY FIELD(t.priority,\'Critical\',\'High\',\'Medium\',\'Low\'), t.created_at DESC';
+     . ' ORDER BY creator_reply DESC, FIELD(t.priority,\'Critical\',\'High\',\'Medium\',\'Low\'), t.created_at DESC';
 
 $stmt = db()->prepare($sql);
 $stmt->execute($params);
@@ -371,7 +382,15 @@ require_once __DIR__ . '/../includes/header.php';
                             <span class="badge bg-light text-dark border" style="font-size:.75rem;"><?= h($ticket['category']) ?></span>
                         </td>
                         <td><?= st_priority_badge($ticket['priority']) ?></td>
-                        <td><?= st_status_badge($ticket['status']) ?></td>
+                        <td>
+                            <?= st_status_badge($ticket['status']) ?>
+                            <?php if (!empty($ticket['creator_reply'])): ?>
+                            <br><span class="badge bg-warning text-dark mt-1" style="font-size:.65rem;"
+                                  title="The latest comment was posted by the ticket creator">
+                                <i class="fas fa-comment-dots me-1"></i>New reply
+                            </span>
+                            <?php endif; ?>
+                        </td>
                         <?php if ($is_staff): ?>
                         <td style="font-size:.85rem;">
                             <?= h($ticket['creator_name'] ?: '—') ?>

@@ -59,6 +59,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
 
+            // Creator replying to a Resolved/Closed ticket reopens it automatically.
+            $auto_reopened = false;
+            if ($is_creator && !$is_internal && in_array($ticket['status'], ['Resolved','Closed'], true)) {
+                $old_status = $ticket['status'];
+                $pdo->prepare(
+                    "UPDATE support_tickets SET status = 'Reopened', resolved_at = NULL, closed_at = NULL WHERE id = ?"
+                )->execute([$id]);
+                $auto_reopened = true;
+
+                // Notify staff/admins (and the creator) that the ticket is open again.
+                $cr0 = $pdo->prepare('SELECT * FROM users WHERE id = ?');
+                $cr0->execute([$ticket['created_by']]);
+                st_notify_status_changed(array_merge($ticket, ['status' => 'Reopened']), $cr0->fetch() ?: null, $old_status, 'Reopened');
+                $ticket['status'] = 'Reopened';
+            }
+
             $pdo->prepare('UPDATE support_tickets SET updated_at = NOW() WHERE id = ?')->execute([$id]);
 
             $already_notified = [];
@@ -102,7 +118,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 );
             }
 
-            flash_set('success', 'Comment posted.');
+            flash_set('success', $auto_reopened
+                ? 'Comment posted. The ticket has been reopened automatically.'
+                : 'Comment posted.');
         }
         redirect(APP_URL . '/support-tickets/view.php?id=' . $id . '#comments');
     }
