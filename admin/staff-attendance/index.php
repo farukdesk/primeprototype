@@ -457,6 +457,7 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
                         <tr style="cursor:pointer;" onclick="window.location='<?= $slink ?>'">
                             <td class="px-3"><a href="<?= $slink ?>" class="fw-bold text-decoration-none"><?= h($s['full_name']) ?></a></td>
                             <td><a href="<?= $slink ?>" class="text-decoration-none text-reset"><?= h($s['employee_id'] ?? '—') ?></a></td>
+                            <td class="small"><?= h(($s['designation'] ?? '') !== '' ? $s['designation'] : '—') ?></td>
                             <td class="small"><?= h($s['dept_name'] ?? '—') ?></td>
                             <td><a href="<?= $slink ?>" class="text-decoration-none text-reset"><?= (int)$x['working_days'] ?></a></td>
                             <td><a href="<?= $slink ?>" class="text-decoration-none"><span class="badge bg-success"><?= (int)$x['present'] ?></span></a></td>
