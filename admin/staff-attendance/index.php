@@ -375,6 +375,7 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
                             <td class="px-3 small text-muted"><?= h(date('d M Y', strtotime($date))) ?></td>
                             <td><a href="<?= h($staff_link($uid)) ?>" class="fw-bold text-decoration-none"><?= h($s['full_name']) ?></a></td>
                             <td><?= h($s['employee_id'] ?? '—') ?></td>
+                            <td class="small"><?= h(($s['designation'] ?? '') !== '' ? $s['designation'] : '—') ?></td>
                             <td class="small"><?= h($s['dept_name'] ?? '—') ?></td>
                             <td><?= h(att_display_time($rec['in_time'] ?? null)) ?></td>
                             <td><?= h(att_display_time($rec['out_time'] ?? null)) ?></td>
