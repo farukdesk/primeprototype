@@ -354,6 +354,7 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
                             <th class="px-3">Date</th>
                             <th>Employee Name</th>
                             <th>Employee ID</th>
+                            <th>Designation</th>
                             <th>Department</th>
                             <th>In Time</th>
                             <th>Out Time</th>
@@ -374,6 +375,7 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
                             <td class="px-3 small text-muted"><?= h(date('d M Y', strtotime($date))) ?></td>
                             <td><a href="<?= h($staff_link($uid)) ?>" class="fw-bold text-decoration-none"><?= h($s['full_name']) ?></a></td>
                             <td><?= h($s['employee_id'] ?? '—') ?></td>
+                            <td class="small"><?= h(($s['designation'] ?? '') !== '' ? $s['designation'] : '—') ?></td>
                             <td class="small"><?= h($s['dept_name'] ?? '—') ?></td>
                             <td><?= h(att_display_time($rec['in_time'] ?? null)) ?></td>
                             <td><?= h(att_display_time($rec['out_time'] ?? null)) ?></td>
@@ -434,6 +436,7 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
                         <tr>
                             <th class="px-3">Employee Name</th>
                             <th>Employee ID</th>
+                            <th>Designation</th>
                             <th>Department</th>
                             <th>Working Days</th>
                             <th>Present</th>
@@ -454,6 +457,7 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
                         <tr style="cursor:pointer;" onclick="window.location='<?= $slink ?>'">
                             <td class="px-3"><a href="<?= $slink ?>" class="fw-bold text-decoration-none"><?= h($s['full_name']) ?></a></td>
                             <td><a href="<?= $slink ?>" class="text-decoration-none text-reset"><?= h($s['employee_id'] ?? '—') ?></a></td>
+                            <td class="small"><?= h(($s['designation'] ?? '') !== '' ? $s['designation'] : '—') ?></td>
                             <td class="small"><?= h($s['dept_name'] ?? '—') ?></td>
                             <td><a href="<?= $slink ?>" class="text-decoration-none text-reset"><?= (int)$x['working_days'] ?></a></td>
                             <td><a href="<?= $slink ?>" class="text-decoration-none"><span class="badge bg-success"><?= (int)$x['present'] ?></span></a></td>
