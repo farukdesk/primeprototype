@@ -382,7 +382,15 @@ require_once __DIR__ . '/../includes/header.php';
                             <span class="badge bg-light text-dark border" style="font-size:.75rem;"><?= h($ticket['category']) ?></span>
                         </td>
                         <td><?= st_priority_badge($ticket['priority']) ?></td>
-                        <td><?= st_status_badge($ticket['status']) ?></td>
+                        <td>
+                            <?= st_status_badge($ticket['status']) ?>
+                            <?php if (!empty($ticket['creator_reply'])): ?>
+                            <br><span class="badge bg-warning text-dark mt-1" style="font-size:.65rem;"
+                                  title="The latest comment was posted by the ticket creator">
+                                <i class="fas fa-comment-dots me-1"></i>New reply
+                            </span>
+                            <?php endif; ?>
+                        </td>
                         <?php if ($is_staff): ?>
                         <td style="font-size:.85rem;">
                             <?= h($ticket['creator_name'] ?: '—') ?>
