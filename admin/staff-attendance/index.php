@@ -126,7 +126,7 @@ if (($_GET['export'] ?? '') === 'csv') {
                   'leave' => 0, 'minutes' => 0, 'working_days' => 0, 'pen' => 0];
             foreach ($dates as $d) {
                 $on_leave = $leave_by_date[$d] ?? [];
-                $off      = isset($holidays[$d]) || att_is_weekly_off_for($sched, $d);
+                $off      = (isset($holidays[$d]) && att_holiday_applies($uid, $d)) || att_is_weekly_off_for($sched, $d);
                 $rec      = $records[$uid . '|' . $d] ?? null;
                 $status   = att_compute_status($rec, $uid, $d, $sched, $holidays, $on_leave);
                 if (!$off) $x['working_days']++;
