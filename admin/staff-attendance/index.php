@@ -151,6 +151,7 @@ if (($_GET['export'] ?? '') === 'csv') {
             fputcsv($out, [
                 (string)$s['full_name'],
                 (string)($s['employee_id'] ?? ''),
+                (string)($s['designation'] ?? ''),
                 (string)($s['dept_name'] ?? ''),
                 $x['working_days'],
                 $x['present'],
