@@ -118,7 +118,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 );
             }
 
-            flash_set('success', 'Comment posted.');
+            flash_set('success', $auto_reopened
+                ? 'Comment posted. The ticket has been reopened automatically.'
+                : 'Comment posted.');
         }
         redirect(APP_URL . '/support-tickets/view.php?id=' . $id . '#comments');
     }
