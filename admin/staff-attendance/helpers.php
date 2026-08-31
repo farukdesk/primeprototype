@@ -1037,7 +1037,7 @@ function att_staff_list(int $dept_id = 0, string $search = ''): array
     $acad_expr = $acad_parts ? 'COALESCE(' . implode(', ', $acad_parts) . ')' : 'NULL';
 
     $sql = 'SELECT u.id, u.full_name, u.username,
-                   ' . $emp_expr . ' AS employee_id, sp.staff_dept_id, sd.name AS dept_name,
+                   ' . $emp_expr . ' AS employee_id, sp.designation, sp.staff_dept_id, sd.name AS dept_name,
                    ' . $acad_expr . ' AS academic_dept_name
               FROM users u
               JOIN user_groups ug ON ug.id = u.group_id
