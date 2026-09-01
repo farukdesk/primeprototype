@@ -33,6 +33,7 @@ $pre = [
     'photo'        => (string)($card['photo'] ?? ''),
     'issue_date'   => (string)($card['issue_date'] ?? ''),
     'expiry_date'  => (string)($card['expiry_date'] ?? ''),
+    'print_status' => trim((string)($card['print_status'] ?? '')) ?: 'in_printing_queue',
 ];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -51,7 +52,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $photo        = trim($_POST['photo']        ?? '');
     $issue_date   = trim($_POST['issue_date']   ?? '');
     $expiry_date  = trim($_POST['expiry_date']  ?? '');
+    $print_status = trim($_POST['print_status'] ?? 'in_printing_queue');
     $remove_photo = (int)($_POST['remove_photo'] ?? 0) === 1;
+
+    if (!isset(IDC_PRINT_STATUSES[$print_status])) $errors[] = 'Invalid print status.';
 
     if (!isset(IDC_TYPES[$card_type])) $errors[] = 'Invalid card type.';
     if ($id_number === '')             $errors[] = 'ID number is required.';
@@ -77,7 +81,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'UPDATE idc_cards SET
                     card_type = ?, id_number = ?, full_name = ?, program_name = ?, dept_name = ?,
                     designation = ?, batch_name = ?, blood_group = ?, phone = ?, address = ?,
-                    photo = ?, issue_date = ?, expiry_date = ?
+                    photo = ?, issue_date = ?, expiry_date = ?,
+                    -- Audit fields FIRST: MySQL applies SET left-to-right, so these
+                    -- comparisons must see the OLD print_status value.
+                    print_status_updated_at = IF(print_status <> ?, NOW(), print_status_updated_at),
+                    print_status_updated_by = IF(print_status <> ?, ?, print_status_updated_by),
+                    print_status = ?
                  WHERE id = ?'
             )->execute([
                 $card_type, $id_number, $full_name,
@@ -85,6 +94,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $batch_name ?: null, $blood_group ?: null, $phone ?: null,
                 $address ?: null, $photo ?: null,
                 $issue_date ?: null, $expiry_date ?: null,
+                $print_status, $print_status, auth_user()['id'],
+                $print_status,
                 $id,
             ]);
             flash_set('success', 'ID card updated. Opening print preview…');
@@ -202,13 +213,21 @@ require_once __DIR__ . '/../includes/header.php';
                         <input type="text" name="address" class="form-control" value="<?= h($pre['address']) ?>">
                     </div>
 
-                    <div class="col-md-6">
+                    <div class="col-md-4">
                         <label class="form-label fw-medium">Issue Date</label>
                         <input type="date" name="issue_date" class="form-control" value="<?= h($pre['issue_date']) ?>">
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-md-4">
                         <label class="form-label fw-medium">Valid Until</label>
                         <input type="date" name="expiry_date" class="form-control" value="<?= h($pre['expiry_date']) ?>">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-medium">Print Status</label>
+                        <select name="print_status" class="form-select">
+                            <?php foreach (IDC_PRINT_STATUSES as $k => $v): ?>
+                                <option value="<?= $k ?>" <?= ($pre['print_status'] ?? 'in_printing_queue') === $k ? 'selected' : '' ?>><?= h($v) ?></option>
+                            <?php endforeach; ?>
+                        </select>
                     </div>
 
                     <div class="col-12"><hr class="my-1"></div>
