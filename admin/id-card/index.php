@@ -55,13 +55,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($_POST['action'] ?? '', ['
 
     try {
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
+
+        // Snapshot current statuses so students are only notified on REAL changes.
+        $sel = $db->prepare(
+            "SELECT id, card_type, student_ref_id, id_number, full_name,
+                    COALESCE(NULLIF(TRIM(print_status), ''), 'in_printing_queue') AS print_status
+             FROM idc_cards WHERE id IN ($placeholders)"
+        );
+        $sel->execute($ids);
+        $before = $sel->fetchAll(PDO::FETCH_ASSOC);
+
         $st = $db->prepare(
             "UPDATE idc_cards
              SET print_status = ?, print_status_updated_at = NOW(), print_status_updated_by = ?
              WHERE id IN ($placeholders)"
         );
         $st->execute(array_merge([$new_status, auth_user()['id']], $ids));
-        flash_set('success', $st->rowCount() . ' ID card(s) marked as “' . h(idc_print_status_label($new_status)) . '”.');
+
+        // Automatic push notification to each affected student (best-effort).
+        $notified = 0;
+        foreach ($before as $c) {
+            if ($c['print_status'] !== $new_status && idc_notify_status_change($c, $new_status)) {
+                $notified++;
+            }
+        }
+
+        $msg = $st->rowCount() . ' ID card(s) marked as “' . h(idc_print_status_label($new_status)) . '”.';
+        if ($notified > 0) {
+            $msg .= ' ' . $notified . ' student(s) received a push notification.';
+        }
+        flash_set('success', $msg);
     } catch (Throwable $e) {
         flash_set('danger', 'Could not update status – run <code>admin/id-card-status-v1.sql</code> first. (' . h($e->getMessage()) . ')');
     }
