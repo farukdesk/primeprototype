@@ -546,3 +546,100 @@ function idc_expiry_date_for_program(string $program, ?string $from = null): str
     }
     return date('Y-m-d', strtotime('+' . idc_program_validity_months($program) . ' months', $ts));
 }
+
+// ── Module settings (idc_settings) ────────────────────────────────────────────
+
+/**
+ * Read an ID-card module setting. Requires admin/id-card-signature-v1.sql;
+ * when the table is missing the default is returned so pages keep working.
+ */
+function idc_setting(string $key, string $default = ''): string
+{
+    static $cache = [];
+    if (!array_key_exists($key, $cache)) {
+        try {
+            $st = db()->prepare('SELECT setting_value FROM idc_settings WHERE setting_key = ?');
+            $st->execute([$key]);
+            $v = $st->fetchColumn();
+            $cache[$key] = ($v !== false && $v !== null) ? (string)$v : $default;
+        } catch (Throwable $e) {
+            $cache[$key] = $default;
+        }
+    }
+    return $cache[$key];
+}
+
+function idc_save_setting(string $key, string $value): void
+{
+    db()->prepare(
+        'INSERT INTO idc_settings (setting_key, setting_value) VALUES (?,?)
+         ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)'
+    )->execute([$key, $value]);
+}
+
+// ── Registrar signature ────────────────────────────────────────────────────────
+
+/**
+ * Path of the CURRENT Registrar signature ('' when none uploaded yet).
+ * New cards snapshot this value at creation time (idc_cards.signature_path),
+ * so a later upload never changes cards that already exist.
+ */
+function idc_current_signature_path(): string
+{
+    return trim(idc_setting('registrar_signature_path', ''));
+}
+
+/**
+ * Signature area on the card front, in SVG user units
+ * (the card design is 331.2 wide × 212.16 high). Configurable in Settings.
+ *
+ * @return array{x:float,y:float,w:float,h:float,cover:bool}
+ */
+function idc_signature_box(): array
+{
+    return [
+        'x'     => (float)idc_setting('signature_x', '20'),
+        'y'     => (float)idc_setting('signature_y', '155'),
+        'w'     => (float)idc_setting('signature_w', '80'),
+        'h'     => (float)idc_setting('signature_h', '28'),
+        'cover' => idc_setting('signature_cover', '1') === '1',
+    ];
+}
+
+/**
+ * Validate and store an uploaded Registrar signature image, VERSIONED
+ * (random filename, never overwritten) so cards that snapshotted an older
+ * signature keep rendering it forever.
+ * Returns the stored relative path (e.g. 'uploads/id-cards/signatures/ab12.png').
+ */
+function idc_store_signature(array $file): string
+{
+    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+        throw new RuntimeException('Please choose a signature image to upload.');
+    }
+    if ($file['error'] !== UPLOAD_ERR_OK) {
+        throw new RuntimeException('Signature upload failed (error ' . (int)$file['error'] . ').');
+    }
+    if (($file['size'] ?? 0) > 1024 * 1024) {
+        throw new RuntimeException('Signature must be 1 MB or smaller.');
+    }
+    $ext = strtolower(pathinfo((string)$file['name'], PATHINFO_EXTENSION));
+    if (!in_array($ext, ['png', 'jpg', 'jpeg', 'webp'], true)) {
+        throw new RuntimeException('Signature must be a PNG (recommended, transparent), JPG or WEBP image.');
+    }
+    if (class_exists('finfo')) {
+        $mime = (new finfo(FILEINFO_MIME_TYPE))->file($file['tmp_name']);
+        if (!is_string($mime) || strpos($mime, 'image/') !== 0) {
+            throw new RuntimeException('Uploaded file is not a valid image.');
+        }
+    }
+    $dir = UPLOAD_DIR . '/id-cards/signatures';
+    if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
+        throw new RuntimeException('Could not create the signature directory.');
+    }
+    $name = bin2hex(random_bytes(10)) . '.' . $ext;
+    if (!move_uploaded_file($file['tmp_name'], $dir . '/' . $name)) {
+        throw new RuntimeException('Could not save the uploaded signature.');
+    }
+    return 'uploads/id-cards/signatures/' . $name;
+}
