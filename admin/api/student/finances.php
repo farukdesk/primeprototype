@@ -217,6 +217,9 @@ sp_api_ok([
         // installments excluded).
         'due_as_of_today' => $due_as_of_today !== null ? round($due_as_of_today, 2) : round($grand_out, 2),
         'as_of_date'      => date('d M Y'),
+        // Dues count from the 1st of the month; the 10th is the payment deadline.
+        'payment_deadline_day' => defined('ACC_MONTHLY_LAST_PAYMENT_DAY') ? ACC_MONTHLY_LAST_PAYMENT_DAY : 10,
+        'payment_deadline'     => 'Last date of payment: 10th of every month',
     ],
     'schedule' => $schedule,
     'payments' => $payments,
