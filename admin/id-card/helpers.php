@@ -9,6 +9,38 @@ const IDC_TYPES = ['student' => 'Student', 'faculty' => 'Faculty', 'staff' => 'S
 
 const IDC_BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
+/**
+ * Print / distribution status workflow for a card.
+ * Requires admin/id-card-status-v1.sql (adds idc_cards.print_status).
+ */
+const IDC_PRINT_STATUSES = [
+    'in_printing_queue' => 'In Printing Queue',
+    'printed'           => 'Printed',
+    'distributed'       => 'Distributed',
+    'collected'         => 'Collected by Student',
+];
+
+/** Human-readable label for a print status. */
+function idc_print_status_label(?string $status): string
+{
+    $status = trim((string)$status) ?: 'in_printing_queue';
+    return IDC_PRINT_STATUSES[$status] ?? ucfirst(str_replace('_', ' ', $status));
+}
+
+/** Bootstrap badge for a print status. */
+function idc_print_status_badge(?string $status): string
+{
+    $status = trim((string)$status) ?: 'in_printing_queue';
+    $cls = match ($status) {
+        'in_printing_queue' => 'bg-warning text-dark',
+        'printed'           => 'bg-info text-dark',
+        'distributed'       => 'bg-primary',
+        'collected'         => 'bg-success',
+        default             => 'bg-secondary',
+    };
+    return '<span class="badge ' . $cls . '">' . h(idc_print_status_label($status)) . '</span>';
+}
+
 // ── Permission helpers ────────────────────────────────────────────────────────
 
 function idc_can_view(): bool   { return is_super_admin() || can_access('id-card'); }
