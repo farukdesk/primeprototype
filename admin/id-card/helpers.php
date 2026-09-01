@@ -61,8 +61,21 @@ function idc_photo_url(?string $photo): string
     $photo = trim((string)$photo);
     if ($photo === '') return '';
     if (preg_match('#^https?://#i', $photo)) return $photo;
+
+    $rel  = ltrim($photo, '/');
     $base = defined('SITE_URL') ? rtrim(SITE_URL, '/') : '';
-    return $base . '/' . ltrim($photo, '/');
+
+    // students.photo stores a BARE FILENAME: resolve it against the student
+    // photo locations (new uploads dir first, then the legacy old-site dir).
+    if (strpos($rel, '/') === false) {
+        if (defined('UPLOAD_DIR') && is_file(rtrim(UPLOAD_DIR, '/') . '/students/photos/' . $rel)) {
+            $upload_url = defined('UPLOAD_URL') ? rtrim(UPLOAD_URL, '/') : rtrim(APP_URL, '/') . '/uploads';
+            return $upload_url . '/students/photos/' . rawurlencode($rel);
+        }
+        return $base . '/upload_spic/' . rawurlencode($rel);
+    }
+
+    return $base . '/' . $rel;
 }
 
 /**
@@ -136,6 +149,18 @@ function idc_photo_data_uri(?string $photo): string
         dirname(__DIR__, 2) . '/' . $rel,   // site root
         dirname(__DIR__) . '/' . $rel,      // admin/
     ];
+    if (strpos($rel, '/') === false) {
+        // students.photo usually stores a BARE FILENAME: resolve it against
+        // the student photo locations — the new uploads directory first, then
+        // the legacy old-site directory (upload_spic).
+        if (defined('UPLOAD_DIR')) {
+            array_unshift($candidates, rtrim(UPLOAD_DIR, '/') . '/students/photos/' . $rel);
+        }
+        $candidates[] = dirname(__DIR__, 2) . '/upload_spic/' . $rel;
+    } elseif (defined('UPLOAD_DIR')) {
+        // Relative paths copied from other modules may live under the uploads dir
+        $candidates[] = rtrim(UPLOAD_DIR, '/') . '/' . $rel;
+    }
     $doc_root = rtrim((string)($_SERVER['DOCUMENT_ROOT'] ?? ''), '/');
     if ($doc_root !== '') $candidates[] = $doc_root . '/' . $rel;
 
