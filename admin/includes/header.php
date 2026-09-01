@@ -368,6 +368,12 @@ if (is_portal_student()) {
                 <i class="fas fa-id-card"></i> My Admit Card
             </a>
         </li>
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/students/my-course-registration.php"
+               class="<?= strpos($current_path, '/students/my-course-registration') !== false ? 'active' : '' ?>">
+                <i class="fas fa-book-open"></i> Course Registration
+            </a>
+        </li>
         <?php if (can_access('support-tickets')): ?>
         <li class="nav-item">
             <a href="<?= APP_URL ?>/support-tickets/index.php"
