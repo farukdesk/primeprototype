@@ -88,12 +88,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $created = 0;
             $updated = 0;
             $failed  = 0;
+            // signature_path snapshots the Registrar signature current at
+            // CREATION time and is intentionally NOT refreshed on duplicate
+            // (re-running the bulk keeps each card's issued signature).
             $st = $db->prepare(
                 'INSERT INTO idc_cards
                     (card_type, student_ref_id, id_number, full_name, program_name, dept_name,
-                     designation, batch_name, blood_group, phone, address, photo,
+                     designation, batch_name, blood_group, phone, address, photo, signature_path,
                      issue_date, expiry_date, created_by)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                  ON DUPLICATE KEY UPDATE
                     full_name=VALUES(full_name), program_name=VALUES(program_name),
                     dept_name=VALUES(dept_name), designation=VALUES(designation),
@@ -102,6 +105,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     issue_date=VALUES(issue_date), expiry_date=VALUES(expiry_date)'
             );
             $uid = auth_user()['id'];
+            $sig = idc_current_signature_path() ?: null;
             foreach ($list as $s) {
                 try {
                     // Expiry is program-wise, counted from the issue/created date.
@@ -116,6 +120,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ($s['phone'] ?? '') !== '' ? $s['phone'] : null,
                         (($s['present_address'] ?? '') !== '' ? $s['present_address'] : ($s['permanent_address'] ?? null)) ?: null,
                         ($s['photo'] ?? '') !== '' ? $s['photo'] : null,
+                        $sig,
                         $issue_date, $expiry, $uid,
                     ]);
                     if (!empty($s['existing_card_id'])) { $updated++; } else { $created++; }
