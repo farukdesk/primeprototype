@@ -615,19 +615,81 @@ function idc_current_signature_path(): string
 
 /**
  * Signature area on the card front, in SVG user units
- * (the card design is 331.2 wide × 212.16 high). Configurable in Settings.
+ * (the card design is 331.2 wide × 212.16 high).
+ *
+ * Position mode (Settings):
+ *   • auto (default) – the Registrar signature line is detected in the SVG
+ *     design and the signature is placed exactly on it.
+ *   • manual         – the X/Y/W/H values configured in Settings are used.
  *
  * @return array{x:float,y:float,w:float,h:float,cover:bool}
  */
 function idc_signature_box(): array
 {
-    return [
+    $manual = [
         'x'     => (float)idc_setting('signature_x', '20'),
         'y'     => (float)idc_setting('signature_y', '155'),
         'w'     => (float)idc_setting('signature_w', '80'),
         'h'     => (float)idc_setting('signature_h', '28'),
         'cover' => idc_setting('signature_cover', '1') === '1',
     ];
+    if (idc_setting('signature_pos_mode', 'auto') !== 'manual') {
+        $auto = idc_detect_signature_box();
+        if ($auto !== null) {
+            $auto['cover'] = $manual['cover'];
+            return $auto;
+        }
+    }
+    return $manual;
+}
+
+/**
+ * Auto-detect the signature area from the front SVG design.
+ *
+ * The design draws the Registrar signature line as a short horizontal path
+ * ("M 0,0 H -nn") in the bottom part of the card. This finds that line and
+ * returns a box sitting right on top of it, so an uploaded signature is
+ * placed exactly where the current design expects it – no manual
+ * coordinates needed.
+ *
+ * @return array{x:float,y:float,w:float,h:float,cover:bool}|null
+ */
+function idc_detect_signature_box(string $type = 'student'): ?array
+{
+    static $cache = [];
+    if (array_key_exists($type, $cache)) return $cache[$type];
+
+    $dir  = dirname(__DIR__, 2) . '/ID Card SVG/';
+    $file = (IDC_TYPES[$type] ?? 'Student') . '_ID_Front.svg';
+    if (!is_file($dir . $file)) $file = 'Student_ID_Front.svg';
+    $svg = @file_get_contents($dir . $file);
+    if ($svg === false) return $cache[$type] = null;
+
+    $best = null;
+    if (preg_match_all(
+        '/<path\b[^>]*?d="M 0,0 H (-?[0-9.]+)"[^>]*?transform="matrix\(([-0-9.]+),[-0-9.]+,[-0-9.]+,[-0-9.]+,([-0-9.]+),([-0-9.]+)\)"[^>]*?\/>/s',
+        $svg, $ms, PREG_SET_ORDER
+    )) {
+        foreach ($ms as $m) {
+            $len = (float)$m[1];   // line length in path units (signed)
+            $a   = (float)$m[2];   // horizontal scale of the transform
+            $e   = (float)$m[3];   // translate X (line end point)
+            $f   = (float)$m[4];   // translate Y (height of the line on the card)
+            $x1  = $e + $len * $a;
+            $x2  = $e;
+            if ($x1 > $x2) { [$x1, $x2] = [$x2, $x1]; }
+            $w = $x2 - $x1;
+            // The Registrar line: a short horizontal rule in the bottom area
+            if ($f > 140 && $f < 212.16 && $w > 20 && $w < 120) {
+                // pick the right-most candidate (the line sits bottom-right)
+                if ($best === null || $x1 > $best['x']) {
+                    $h = 26.0; // signature height above the line
+                    $best = ['x' => $x1, 'y' => $f - $h - 1.5, 'w' => $w, 'h' => $h, 'cover' => true];
+                }
+            }
+        }
+    }
+    return $cache[$type] = $best;
 }
 
 /**
@@ -666,4 +728,47 @@ function idc_store_signature(array $file): string
         throw new RuntimeException('Could not save the uploaded signature.');
     }
     return 'uploads/id-cards/signatures/' . $name;
+}
+
+// ── Back side (university information) ───────────────────────────────────────
+
+/**
+ * Back-side texts baked into the SVG design and editable in Settings.
+ * setting_key => [design default, label]
+ */
+const IDC_BACK_FIELDS = [
+    'back_address1' => ['114/116, Mazar Road',              'Address line 1'],
+    'back_address2' => ['Mirpur-1, Dhaka-1216',             'Address line 2'],
+    'back_phone1'   => ['+88 02 8031810, 41002432',         'Phone line 1'],
+    'back_phone2'   => ['01939-425030, 01710-996196',       'Phone line 2'],
+    'back_website'  => ['www.primeuniversity.ac.bd',        'Website'],
+    'back_email'    => ['admission@primeuniversity.edu.bd', 'Email'],
+    'back_facebook' => ['www.facebook.com/primevarsity',    'Facebook link'],
+];
+
+/** Current value of a back-side field (falls back to the design default). */
+function idc_back_field(string $key): string
+{
+    $default = IDC_BACK_FIELDS[$key][0] ?? '';
+    $v = trim(idc_setting($key, $default));
+    return $v !== '' ? $v : $default;
+}
+
+/**
+ * Load the back SVG template and replace the university information
+ * (address, phone numbers, website, email, facebook) with the values
+ * configured in Settings. Returns '' when the template cannot be loaded.
+ */
+function idc_render_back_svg(string $type): string
+{
+    $dir  = dirname(__DIR__, 2) . '/ID Card SVG/';
+    $file = (IDC_TYPES[$type] ?? 'Student') . '_ID_Back.svg';
+    if (!is_file($dir . $file)) $file = 'Student_ID_Back.svg';
+    $svg = @file_get_contents($dir . $file);
+    if ($svg === false) return '';
+
+    foreach (IDC_BACK_FIELDS as $key => $meta) {
+        $svg = str_replace('>' . $meta[0] . '<', '>' . idc_xml(idc_back_field($key)) . '<', $svg);
+    }
+    return $svg;
 }
