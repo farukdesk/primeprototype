@@ -69,12 +69,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!$errors) {
         try {
+            // signature_path snapshots the Registrar signature current at
+            // CREATION time and is intentionally NOT refreshed on duplicate
+            // (re-saving an existing card keeps its issued signature).
             $st = $db->prepare(
                 'INSERT INTO idc_cards
                     (card_type, student_ref_id, id_number, full_name, program_name, dept_name,
-                     designation, batch_name, blood_group, phone, address, photo,
+                     designation, batch_name, blood_group, phone, address, photo, signature_path,
                      issue_date, expiry_date, created_by)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                  ON DUPLICATE KEY UPDATE
                     full_name=VALUES(full_name), program_name=VALUES(program_name),
                     dept_name=VALUES(dept_name), designation=VALUES(designation),
@@ -87,6 +90,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $program_name ?: null, $dept_name ?: null, $designation ?: null,
                 $batch_name ?: null, $blood_group ?: null, $phone ?: null,
                 $address ?: null, $photo ?: null,
+                idc_current_signature_path() ?: null,
                 $issue_date ?: null, $expiry_date ?: null,
                 auth_user()['id'],
             ]);

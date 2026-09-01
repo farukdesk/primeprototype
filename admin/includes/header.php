@@ -1062,6 +1062,14 @@ if (is_portal_student()) {
                 </a>
             </li>
             <?php endif; ?>
+            <?php if (is_super_admin() || can_access('id-card', 'can_edit')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/id-card/settings.php"
+                   class="<?= strpos($current_path, '/id-card/settings') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-cog"></i> Settings
+                </a>
+            </li>
+            <?php endif; ?>
         </ul>
     </div>
     <?php endif; ?>
