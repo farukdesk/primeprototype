@@ -30,7 +30,7 @@
     <string name="badge_id">ID: %1$s</string>
     <string name="badge_dept">Dept: %1$s</string>
     <string name="stat_notices">Notices</string>
-    <string name="stat_outstanding">Outstanding</string>
+    <string name="stat_outstanding">Due as of Today</string>
     <string name="recent_notices">Recent Notices</string>
     <string name="no_recent_notices">No recent notices.</string>
 

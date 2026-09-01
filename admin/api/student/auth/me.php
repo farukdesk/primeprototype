@@ -39,6 +39,10 @@ try {
 } catch (Throwable $e) {}
 
 // ── Outstanding balance (lightweight query) ────────────────────────────────────
+// Same figure as the Finances tab's "Due as of today": obligations up to the
+// current calendar month; future installments are excluded. (The previous
+// implementation summed $sem['total_due'] / $sem['total_paid'] – keys that do
+// not exist in acc_student_fee_summary() – so the dashboard always showed 0.)
 $outstanding_balance = null;
 try {
     require_once dirname(__DIR__, 3) . '/accounting/helpers.php';
@@ -46,15 +50,35 @@ try {
     $pkg_stmt->execute([(int)$student['student_db_id']]);
     $pkg = $pkg_stmt->fetch();
     if ($pkg) {
-        $summary = acc_student_fee_summary((int)$student['student_db_id']);
-        if ($summary) {
-            $total_due  = 0;
-            $total_paid = 0;
-            foreach ($summary['semesters'] ?? [] as $sem) {
-                $total_due  += (float)($sem['total_due']   ?? 0);
-                $total_paid += (float)($sem['total_paid']  ?? 0);
+        if (function_exists('acc_outstanding_through_current_month')) {
+            $due = acc_outstanding_through_current_month((int)$pkg['id']);
+            if ($due !== null) {
+                $outstanding_balance = round((float)$due, 2);
             }
-            $outstanding_balance = round($total_due - $total_paid, 2);
+        }
+        if ($outstanding_balance === null) {
+            // Fallback: total outstanding across the whole fee summary, using
+            // the REAL summary keys (admission heads, registration, months).
+            $summary = acc_student_fee_summary((int)$student['student_db_id']);
+            if ($summary) {
+                $out = 0.0;
+                foreach (['admission', 'form_fee', 'id_card_fee'] as $key) {
+                    $head = $summary['totals'][$key] ?? null;
+                    if (!$head) {
+                        continue;
+                    }
+                    $due  = (float)($head['due']  ?? 0);
+                    $paid = (float)($head['paid'] ?? 0);
+                    $out += (float)($head['out'] ?? max(0.0, $due - $paid));
+                }
+                foreach ($summary['semesters'] ?? [] as $sem) {
+                    $out += (float)($sem['reg_out'] ?? 0);
+                    foreach (($sem['monthly_rows'] ?? []) as $mr) {
+                        $out += (float)($mr['out'] ?? 0);
+                    }
+                }
+                $outstanding_balance = round($out, 2);
+            }
         }
     }
 } catch (Throwable $e) {
