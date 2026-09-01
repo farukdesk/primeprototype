@@ -116,6 +116,7 @@
     <string name="course_reg_status_pending">Submitted – awaiting departmental approval</string>
     <string name="course_reg_status_approved">Registration approved</string>
     <string name="course_reg_closed">Self-registration is currently closed for this offer.</string>
+    <string name="course_reg_dues_blocked">You cannot register while you have dues. Please clear your dues to register your courses.</string>
 
     <!-- Examination -->
     <string name="feat_results">Results</string>

@@ -47,9 +47,36 @@ try {
     $has_status = true;
 } catch (Throwable $e) {}
 
+// ── Dues check: registration is blocked when dues exceed 1,000 BDT ──────────
+// Uses the same "due as of today" figure as the Finances page (obligations up
+// to the current month; future installments excluded). Fails open when the
+// accounting module is unavailable so registration never breaks.
+$due_limit = 1000.0;
+$due_today = null;
+try {
+    require_once __DIR__ . '/../accounting/helpers.php';
+    $pkg_stmt = db()->prepare('SELECT id FROM sfp_packages WHERE student_id = ? LIMIT 1');
+    $pkg_stmt->execute([$sid]);
+    $pkg = $pkg_stmt->fetch();
+    if ($pkg && function_exists('acc_outstanding_through_current_month')) {
+        $d = acc_outstanding_through_current_month((int)$pkg['id']);
+        if ($d !== null) {
+            $due_today = round((float)$d, 2);
+        }
+    }
+} catch (Throwable $e) {}
+$dues_blocked = $due_today !== null && $due_today > $due_limit;
+
 // ── Submit registration (ALL offered courses required) ─────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'register_all') {
     csrf_check();
+
+    if ($dues_blocked) {
+        flash_set('error', 'You cannot register while you have dues. Please clear your dues ('
+            . number_format((float)$due_today, 2) . ' BDT as of today) to register your courses.');
+        redirect($self_url);
+    }
+
     $offer_id = (int)($_POST['offer_id'] ?? 0);
 
     $ost = db()->prepare(
@@ -169,6 +196,16 @@ require_once __DIR__ . '/../includes/header.php';
 
 <?php flash_show(); ?>
 
+<?php if ($dues_blocked): ?>
+<div class="alert alert-warning" style="border-radius:12px;">
+    <i class="fas fa-exclamation-triangle me-2"></i>
+    <strong>You cannot register while you have dues.</strong>
+    Please clear your dues (<strong><?= number_format((float)$due_today, 2) ?> BDT</strong> as of today)
+    to register your courses. See <a href="<?= APP_URL ?>/students/my-finances.php" class="alert-link">My Finances</a>
+    for the details.
+</div>
+<?php endif; ?>
+
 <?php
 $visible = array_filter($offers, function ($o) use ($subjects_by_offer, $my_regs) {
     $subs = $subjects_by_offer[(int)$o['id']] ?? [];
@@ -259,6 +296,12 @@ $visible = array_filter($offers, function ($o) use ($subjects_by_offer, $my_regs
             Your registration is awaiting departmental approval. The status will update here once it is approved.
         </div>
         <?php endif; ?>
+        <?php elseif ((int)$o['registration_open'] === 1 && $dues_blocked): ?>
+        <div class="alert alert-warning mb-0" style="border-radius:10px;">
+            <i class="fas fa-exclamation-triangle me-1"></i>
+            You cannot register while you have dues. Please clear your dues
+            (<strong><?= number_format((float)$due_today, 2) ?> BDT</strong> as of today) to register your courses.
+        </div>
         <?php elseif ((int)$o['registration_open'] === 1): ?>
         <!-- Registration form: ALL courses must be selected -->
         <form method="POST" class="course-reg-form">
