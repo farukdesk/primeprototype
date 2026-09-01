@@ -6,6 +6,10 @@ import com.google.gson.annotations.SerializedName
 data class CourseOffersResponse(
     @SerializedName("offers") val offers: List<CourseOffer> = emptyList(),
     @SerializedName("message") val message: String? = null,
+    /** True when registration is blocked because dues exceed 1,000 BDT. */
+    @SerializedName("dues_blocked") val duesBlocked: Boolean = false,
+    @SerializedName("dues_amount") val duesAmount: Double? = null,
+    @SerializedName("dues_message") val duesMessage: String? = null,
 ) : BaseResponse()
 
 /** A course offer targeted at the student's batch (one per semester/intake). */

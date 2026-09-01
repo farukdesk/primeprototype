@@ -52,6 +52,34 @@ try {
 } catch (Throwable $e) {
 }
 
+// ── Dues check: registration is blocked when dues exceed 1,000 BDT ──────────
+// Same "due as of today" figure as the Finances tab. Dropping a course stays
+// allowed; the check fails open when the accounting module is unavailable.
+if ($action !== 'drop') {
+    $due_today = null;
+    try {
+        require_once dirname(__DIR__, 2) . '/accounting/helpers.php';
+        $pkg_stmt = db()->prepare('SELECT id FROM sfp_packages WHERE student_id = ? LIMIT 1');
+        $pkg_stmt->execute([$sid]);
+        $pkg = $pkg_stmt->fetch();
+        if ($pkg && function_exists('acc_outstanding_through_current_month')) {
+            $d = acc_outstanding_through_current_month((int)$pkg['id']);
+            if ($d !== null) {
+                $due_today = round((float)$d, 2);
+            }
+        }
+    } catch (Throwable $e) {
+    }
+    if ($due_today !== null && $due_today > 1000.0) {
+        sp_api_error(
+            403,
+            'You cannot register while you have dues. Please clear your dues ('
+                . number_format($due_today, 2) . ' BDT as of today) to register your courses.',
+            ['dues_blocked' => true, 'dues_amount' => $due_today]
+        );
+    }
+}
+
 // ── Register ALL subjects of an offer at once (mobile app / web portal) ──────
 if ($action === 'register_all') {
     if ($offer_id <= 0) {

@@ -35,6 +35,9 @@ class CourseRegistrationActivity : AppCompatActivity() {
     private val app: PrimeApp by lazy { application as PrimeApp }
     private var submitting = false
 
+    /** True when the server blocked registration because of outstanding dues. */
+    private var duesBlocked = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityCourseRegistrationBinding.inflate(layoutInflater)
@@ -52,7 +55,16 @@ class CourseRegistrationActivity : AppCompatActivity() {
         lifecycleScope.launch {
             when (val result = app.repository.getCourseOffers()) {
                 is AppResult.Success -> {
-                    val visible = result.data.offers.filter {
+                    val data = result.data
+                    duesBlocked = data.duesBlocked
+                    if (data.duesBlocked) {
+                        binding.duesWarning.visibility = View.VISIBLE
+                        binding.duesWarning.text =
+                            data.duesMessage ?: getString(R.string.course_reg_dues_blocked)
+                    } else {
+                        binding.duesWarning.visibility = View.GONE
+                    }
+                    val visible = data.offers.filter {
                         it.registrationOpen || it.registeredCount > 0
                     }
                     if (visible.isEmpty()) {
@@ -109,6 +121,13 @@ class CourseRegistrationActivity : AppCompatActivity() {
 
         when {
             offer.registeredCount > 0 -> addStatusView(body, offer)
+            offer.registrationOpen && duesBlocked -> body.addView(TextView(this).apply {
+                text = getString(R.string.course_reg_dues_blocked)
+                setTextColor(color(R.color.accent))
+                textSize = 13f
+                setTypeface(typeface, Typeface.BOLD)
+                setPadding(0, dp(12), 0, 0)
+            })
             offer.registrationOpen -> addRegistrationForm(body, offer)
             else -> body.addView(TextView(this).apply {
                 text = getString(R.string.course_reg_closed)
