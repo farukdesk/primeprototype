@@ -6,6 +6,10 @@
  * list is recomputed server-side at confirm time — nothing from the browser
  * is trusted. Existing cards (same card_type + id_number) are refreshed via
  * the same upsert used by single creation, so re-running is always safe.
+ *
+ * Dates: the issue date defaults to the creation date (today) and the expiry
+ * date is calculated PER STUDENT from their program — 4 years for bachelor
+ * programs, 1 / 1.5 / 2 years for masters programs (idc_program_validity_months).
  */
 require_once __DIR__ . '/../includes/auth.php';
 require_access('id-card', 'can_create');
@@ -26,7 +30,6 @@ $f_program     = (int)($_POST['program_id'] ?? $_GET['program_id'] ?? 0);
 $f_batch       = (int)($_POST['batch_id'] ?? $_GET['batch_id'] ?? 0);
 $f_active_only = (int)($_POST['active_only'] ?? $_GET['active_only'] ?? 1) === 1;
 $issue_date    = trim((string)($_POST['issue_date'] ?? date('Y-m-d')));
-$expiry_date   = trim((string)($_POST['expiry_date'] ?? date('Y-m-d', strtotime('+4 years'))));
 
 /**
  * Students matching the selected Batch / Department / Program. The batch
@@ -73,8 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($f_dept <= 0 && $f_program <= 0 && $f_batch <= 0) {
         $errors[] = 'Select at least one filter (Batch, Department or Program).';
     }
-    if ($issue_date === '' || !strtotime($issue_date))   { $errors[] = 'Invalid issue date.'; }
-    if ($expiry_date === '' || !strtotime($expiry_date)) { $errors[] = 'Invalid expiry date.'; }
+    if ($issue_date === '' || !strtotime($issue_date)) { $errors[] = 'Invalid issue date.'; }
 
     if (!$errors && $action === 'preview') {
         $students = idc_bulk_students($f_dept, $f_program, $f_batch, $f_active_only);
@@ -102,6 +104,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $uid = auth_user()['id'];
             foreach ($list as $s) {
                 try {
+                    // Expiry is program-wise, counted from the issue/created date.
+                    $expiry = idc_expiry_date_for_program((string)($s['program_name'] ?? ''), $issue_date);
                     $st->execute([
                         'student', (int)$s['id'], (string)$s['student_id'], (string)$s['full_name'],
                         ($s['program_name'] ?? '') !== '' ? $s['program_name'] : null,
@@ -112,7 +116,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ($s['phone'] ?? '') !== '' ? $s['phone'] : null,
                         (($s['present_address'] ?? '') !== '' ? $s['present_address'] : ($s['permanent_address'] ?? null)) ?: null,
                         ($s['photo'] ?? '') !== '' ? $s['photo'] : null,
-                        $issue_date, $expiry_date, $uid,
+                        $issue_date, $expiry, $uid,
                     ]);
                     if (!empty($s['existing_card_id'])) { $updated++; } else { $created++; }
                 } catch (Throwable $e) {
@@ -184,15 +188,16 @@ require_once __DIR__ . '/../includes/header.php';
                     </select>
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label fw-medium">Issue Date</label>
+                    <label class="form-label fw-medium">Issue Date <span class="text-muted small">(creation date)</span></label>
                     <input type="date" name="issue_date" class="form-control" value="<?= h($issue_date) ?>">
                 </div>
                 <div class="col-md-4">
                     <label class="form-label fw-medium">Valid Until</label>
-                    <input type="date" name="expiry_date" class="form-control" value="<?= h($expiry_date) ?>">
+                    <input type="text" class="form-control" value="Auto — program wise" disabled>
+                    <div class="form-text">4 years for bachelor programs; 1 / 1.5 / 2 years for masters programs, from the issue date.</div>
                 </div>
                 <div class="col-md-4 d-flex align-items-end">
-                    <div class="form-check">
+                    <div class="form-check mb-4">
                         <input class="form-check-input" type="checkbox" name="active_only" value="1"
                                id="idcActiveOnly" <?= $f_active_only ? 'checked' : '' ?>>
                         <label class="form-check-label" for="idcActiveOnly">Active students only</label>
@@ -225,7 +230,6 @@ require_once __DIR__ . '/../includes/header.php';
             <input type="hidden" name="program_id" value="<?= (int)$f_program ?>">
             <input type="hidden" name="active_only" value="<?= $f_active_only ? 1 : 0 ?>">
             <input type="hidden" name="issue_date" value="<?= h($issue_date) ?>">
-            <input type="hidden" name="expiry_date" value="<?= h($expiry_date) ?>">
             <button type="submit" class="btn btn-success"><i class="fas fa-id-card me-1"></i> Create <?= count($students) ?> ID Card(s)</button>
         </form>
         <?php endif; ?>
@@ -239,13 +243,14 @@ require_once __DIR__ . '/../includes/header.php';
                     <th>Program (short on card)</th>
                     <th>Batch</th>
                     <th>Blood</th>
+                    <th>Valid Until</th>
                     <th>Photo</th>
                     <th>Card</th>
                 </tr>
             </thead>
             <tbody>
             <?php if (!$students): ?>
-                <tr><td colspan="7" class="text-center text-muted py-4">No students match the selected filters.</td></tr>
+                <tr><td colspan="8" class="text-center text-muted py-4">No students match the selected filters.</td></tr>
             <?php endif; ?>
             <?php foreach ($students as $s): ?>
                 <tr>
@@ -257,6 +262,9 @@ require_once __DIR__ . '/../includes/header.php';
                     </td>
                     <td class="small"><?= h((string)($s['batch_name'] ?? '')) ?></td>
                     <td class="small"><?= h((string)($s['blood_group'] ?? '')) ?></td>
+                    <td class="small text-muted">
+                        <?= h(idc_fmt_date(idc_expiry_date_for_program((string)($s['program_name'] ?? ''), $issue_date))) ?>
+                    </td>
                     <td><?= trim((string)($s['photo'] ?? '')) !== '' ? '<span class="badge bg-success">Yes</span>' : '<span class="badge bg-secondary">No</span>' ?></td>
                     <td><?= !empty($s['existing_card_id']) ? '<span class="badge bg-info text-dark">Will refresh</span>' : '<span class="badge bg-primary">New</span>' ?></td>
                 </tr>
