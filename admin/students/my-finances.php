@@ -621,7 +621,8 @@ const CURRENCY = <?= json_encode(acc_currency()) ?>;
 const TODAY = new Date();
 TODAY.setHours(0, 0, 0, 0);
 
-// Monthly payment due day
+// LAST date of payment each month. Dues start counting from the 1st of the
+// month; the 10th is only the payment deadline.
 const DUE_DAY = 10;
 
 function fmt(n) {
@@ -646,15 +647,22 @@ function feeTypeLabel(type) {
 
 /**
  * Determine due-date status for a monthly row.
+ * Dues start counting from the 1st of the month; the 10th (DUE_DAY) is only
+ * the LAST date of payment:
+ *   - 'due_now'  from the 1st through the 10th of the month
+ *   - 'overdue'  after the 10th has passed
+ *   - 'upcoming' before the month starts
  * Returns one of: 'overdue' | 'due_now' | 'upcoming' | 'paid' | null (no date)
  */
 function monthStatus(calMonth, calYear, out) {
     if (!calMonth || !calYear) return null;
+    const monthStart = new Date(calYear, calMonth - 1, 1);
+    monthStart.setHours(0, 0, 0, 0);
     const dueDate = new Date(calYear, calMonth - 1, DUE_DAY);
     dueDate.setHours(0, 0, 0, 0);
     if (out <= 0) return 'paid';
     if (dueDate < TODAY) return 'overdue';
-    if (dueDate.getTime() === TODAY.getTime()) return 'due_now';
+    if (monthStart <= TODAY) return 'due_now'; // due since the 1st; pay by the 10th
     return 'upcoming';
 }
 
@@ -672,7 +680,8 @@ function statusBadge(status) {
                    '<div class="small text-danger mt-1" style="font-size:.7rem;">Late fees may apply</div>';
         case 'due_now':
             return '<span class="badge bg-warning text-dark border border-warning">' +
-                   '<i class="fas fa-clock me-1"></i>Due Today</span>';
+                   '<i class="fas fa-clock me-1"></i>Due Now</span>' +
+                   '<div class="small text-muted mt-1" style="font-size:.7rem;">Pay by the 10th</div>';
         case 'upcoming':
             return '<span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">' +
                    '<i class="fas fa-calendar me-1"></i>Upcoming</span>';
@@ -748,8 +757,11 @@ function renderFeeSummary(data) {
         const dueDateStr = formatDueDate(calMonth, calYear);
         const pct = (due > 0 && out > 0) ? Math.round((out / due) * 100) : 0;
 
-        // Only count as "currently due" for overdue and due-today rows
-        if (status === 'overdue' || status === 'due_now') {
+        // Currently due = overdue rows, rows of a month that has started
+        // (due from the 1st; the 10th is only the last payment date), and
+        // undated rows (Admission / Form / ID Card fees and legacy rows
+        // without a calendar month) that still carry an outstanding balance.
+        if (status === 'overdue' || status === 'due_now' || (status === null && out > 0)) {
             currentlyDueOut += out;
         }
 
