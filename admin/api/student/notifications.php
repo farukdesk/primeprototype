@@ -7,6 +7,12 @@
  * every push notification inside the app even after dismissing the system
  * notification.
  *
+ * Includes:
+ *   • student-wide broadcasts (audience "All students" / "Everyone" / legacy), and
+ *   • notifications addressed DIRECTLY to the signed-in student through the
+ *     app_notification_recipients log – e.g. the automatic ID card status
+ *     updates sent by the ID Card module (admin/id-card/).
+ *
  * Query params:
  *   page   = 1, 2, 3 … (default 1)
  *   limit  = 50 (default, max 100)
@@ -21,7 +27,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     sp_api_error(405, 'Method Not Allowed. Use GET.');
 }
 
-sp_api_auth();
+$ctx = sp_api_auth();
+$uid = (int)$ctx['user']['user_id'];
 
 $page   = max(1, (int)($_GET['page']  ?? 1));
 $limit  = min(100, max(1, (int)($_GET['limit'] ?? 50)));
@@ -42,19 +49,42 @@ try {
     // audience column missing (run admin/app-notifications-audience.sql).
 }
 
-$where = "status IN ('sent', 'partial')";
+// Personal notifications (e.g. ID card status updates) are matched through
+// the recipients log; feature-detected the same way.
+$has_recipients = false;
+try {
+    db()->query('SELECT notification_id FROM app_notification_recipients LIMIT 1');
+    $has_recipients = true;
+} catch (Throwable $e) {
+    // recipients table missing (run admin/app-notifications-recipients.sql).
+}
+
+$where  = "status IN ('sent', 'partial')";
+$params = [];
 if ($has_audience) {
-    $where .= " AND (audience IS NULL
+    $broadcast = "(audience IS NULL
                OR audience IN ('students', 'everyone')
                OR audience LIKE 'All students%'
                OR audience LIKE 'Everyone%')";
+    if ($has_recipients) {
+        // Broadcasts to students PLUS notifications addressed directly to
+        // THIS student (ID card status updates, etc.).
+        $where .= " AND ({$broadcast}
+               OR EXISTS (SELECT 1 FROM app_notification_recipients r
+                           WHERE r.notification_id = app_notifications.id
+                             AND r.source = 'student'
+                             AND r.recipient_user_id = ?))";
+        $params[] = $uid;
+    } else {
+        $where .= " AND {$broadcast}";
+    }
 }
 
 try {
     // Only announcements that actually reached devices (skip failed sends).
-    $total = (int)db()->query(
-        "SELECT COUNT(*) FROM app_notifications WHERE {$where}"
-    )->fetchColumn();
+    $count = db()->prepare("SELECT COUNT(*) FROM app_notifications WHERE {$where}");
+    $count->execute($params);
+    $total = (int)$count->fetchColumn();
 
     $stmt = db()->prepare(
         "SELECT id, title, body, url, created_at
@@ -63,7 +93,7 @@ try {
          ORDER BY created_at DESC, id DESC
          LIMIT ? OFFSET ?"
     );
-    $stmt->execute([$limit, $offset]);
+    $stmt->execute(array_merge($params, [$limit, $offset]));
     $rows = $stmt->fetchAll();
 
     sp_api_ok([
