@@ -383,6 +383,30 @@ function idc_render_front_svg(array $card): string
         $svg, 1
     );
 
+    // ── 8. Registrar signature overlay ──────────────────────────────────────
+    //     Only cards that SNAPSHOTTED a signature at creation time show it —
+    //     cards with an empty signature_path keep the original design artwork,
+    //     so an updated signature is distributed to newly created IDs only.
+    //     The image is scaled to FIT the configured area (aspect ratio kept,
+    //     bottom-aligned so it sits on the Registrar line).
+    $sig_path = trim((string)($card['signature_path'] ?? ''));
+    if ($sig_path !== '') {
+        $sig_uri = idc_photo_data_uri($sig_path);
+        if ($sig_uri !== '') {
+            $box = idc_signature_box();
+            $overlay = '';
+            if ($box['cover']) {
+                // Hide the signature baked into the design artwork first
+                $overlay .= '<rect x="' . $box['x'] . '" y="' . $box['y'] . '" width="' . $box['w']
+                          . '" height="' . $box['h'] . '" fill="#ffffff"/>';
+            }
+            $overlay .= '<image x="' . $box['x'] . '" y="' . $box['y'] . '" width="' . $box['w']
+                      . '" height="' . $box['h'] . '" preserveAspectRatio="xMidYMax meet"'
+                      . ' xlink:href="' . $sig_uri . '"/>';
+            $svg = str_replace('</svg>', $overlay . '</svg>', $svg);
+        }
+    }
+
     return $svg;
 }
 
