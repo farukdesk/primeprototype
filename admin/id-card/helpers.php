@@ -280,6 +280,25 @@ function idc_render_front_svg(array $card): string
     $svg = str_replace('>02825205101167<', '>' . idc_xml($idno) . '<', $svg);
 
     // ── 4. Sample program line ("BSc in CSE, 67" + superscript "th " + "Batch") ─
+    // Auto-shrink: when even the shortened program line is too long for the
+    // design, scale down the font of the program text block so it still fits
+    // (never below 55% so it stays readable).
+    if (mb_strlen($line) > 22) {
+        $scale = max(0.55, 22 / mb_strlen($line));
+        $svg = preg_replace_callback(
+            '/<text\b[^>]*>(?:(?!<\/text>).)*?BSc in CSE, 67(?:(?!<\/text>).)*?<\/text>/s',
+            static function ($m) use ($scale) {
+                return preg_replace_callback(
+                    '/font-size:([0-9.]+)px/',
+                    static function ($f) use ($scale) {
+                        return 'font-size:' . round((float)$f[1] * $scale, 2) . 'px';
+                    },
+                    $m[0]
+                );
+            },
+            $svg, 1
+        );
+    }
     $svg = str_replace('>BSc in CSE, 67<', '>' . idc_xml($line) . '<', $svg);
     $svg = str_replace('>th <', '><', $svg);
     $svg = str_replace('>Batch<', '><', $svg);
