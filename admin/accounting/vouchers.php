@@ -276,6 +276,12 @@ require_once __DIR__ . '/../includes/header.php';
                         <td class="text-end">
                             <a href="<?= APP_URL ?>/accounting/voucher-view.php?id=<?= $v['id'] ?>"
                                class="btn btn-sm btn-outline-primary" title="View"><i class="fas fa-eye"></i></a>
+                            <?php if (($vp['kind'] ?? '') === 'student_fee' && $v['voucher_type'] === 'receipt'
+                                      && $v['status'] !== 'reversed' && empty($v['is_deleted'])
+                                      && (is_super_admin() || can_access('accounting', 'can_edit'))): ?>
+                            <a href="<?= APP_URL ?>/accounting/voucher-move.php?id=<?= $v['id'] ?>"
+                               class="btn btn-sm btn-outline-warning" title="Move to another category"><i class="fas fa-people-arrows"></i></a>
+                            <?php endif; ?>
                             <?php if (acc_can_request_voucher_delete() && empty($v['is_deleted'])): ?>
                             <button type="button" class="btn btn-sm btn-outline-danger js-voucher-delete"
                                     title="Delete"
