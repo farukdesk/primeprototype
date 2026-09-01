@@ -39,7 +39,9 @@ $pre = [
     'address'      => $student['present_address'] ?? ($student['permanent_address'] ?? ''),
     'photo'        => $student['photo'] ?? '',
     'issue_date'   => date('Y-m-d'),
-    'expiry_date'  => date('Y-m-d', strtotime('+4 years')),
+    // Program-wise validity from the creation date: 4 years for bachelor
+    // programs, 1 / 1.5 / 2 years for masters programs (idc_program_validity_months).
+    'expiry_date'  => idc_expiry_date_for_program((string)($student['program_name'] ?? '')),
 ];
 
 // ── Save ─────────────────────────────────────────────────────────────────────
