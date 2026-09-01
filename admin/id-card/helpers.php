@@ -884,15 +884,6 @@ function idc_notify_status_change(array $card, string $new_status): bool
     try {
         require_once __DIR__ . '/../app-notifications/helpers.php';
 
-        $sa = apn_fcm_service_account();
-        if ($sa === null) {
-            return false; // FCM not configured – nothing to send.
-        }
-        $access = apn_fcm_access_token($sa);
-        if ($access === null) {
-            return false;
-        }
-
         // Resolve the student's portal account: linked record first, then
         // the printed Student ID (cards created before linking existed).
         $uid = 0;
@@ -910,47 +901,125 @@ function idc_notify_status_change(array $card, string $new_status): bool
             return false; // No portal account – the student has no app to notify.
         }
 
-        $st = db()->prepare(
-            "SELECT id, fcm_token FROM student_push_tokens
-              WHERE user_id = ? AND fcm_token IS NOT NULL AND fcm_token != ''"
-        );
-        $st->execute([$uid]);
-        $tokens = $st->fetchAll(PDO::FETCH_ASSOC);
-        if (!$tokens) {
-            return false;
-        }
+        // ── FCM push (best-effort; the inbox record below is ALWAYS written) ──
+        $ok     = 0;
+        $failed = 0;
+        $total  = 0;
+        $sa     = apn_fcm_service_account();
+        $access = ($sa !== null) ? apn_fcm_access_token($sa) : null;
+        if ($access !== null) {
+            $st = db()->prepare(
+                "SELECT id, fcm_token FROM student_push_tokens
+                  WHERE user_id = ? AND fcm_token IS NOT NULL AND fcm_token != ''"
+            );
+            $st->execute([$uid]);
+            $tokens = $st->fetchAll(PDO::FETCH_ASSOC);
 
-        $data = [
-            'type'   => 'id_card_status',
-            'status' => $new_status,
-            'title'  => $msg['title'],
-            'body'   => $msg['body'],
-        ];
+            $data = [
+                'type'   => 'id_card_status',
+                'status' => $new_status,
+                'title'  => $msg['title'],
+                'body'   => $msg['body'],
+            ];
 
-        $sent  = false;
-        $stale = [];
-        $seen  = [];
-        foreach ($tokens as $row) {
-            if (isset($seen[$row['fcm_token']])) {
-                continue; // one push per physical device
+            $stale = [];
+            $seen  = [];
+            foreach ($tokens as $row) {
+                if (isset($seen[$row['fcm_token']])) {
+                    continue; // one push per physical device
+                }
+                $seen[$row['fcm_token']] = true;
+                $total++;
+                $r = apn_fcm_send_single($access, $sa['project_id'], $row['fcm_token'], $msg['title'], $msg['body'], $data);
+                if ($r['ok']) {
+                    $ok++;
+                } else {
+                    $failed++;
+                    if ($r['unregister']) {
+                        $stale[] = (int)$row['id'];
+                    }
+                }
             }
-            $seen[$row['fcm_token']] = true;
-            $r = apn_fcm_send_single($access, $sa['project_id'], $row['fcm_token'], $msg['title'], $msg['body'], $data);
-            if ($r['ok']) {
-                $sent = true;
-            } elseif ($r['unregister']) {
-                $stale[] = (int)$row['id'];
+
+            // Prune tokens FCM reported as permanently invalid.
+            if ($stale) {
+                $ph = implode(',', array_fill(0, count($stale), '?'));
+                db()->prepare("DELETE FROM student_push_tokens WHERE id IN ($ph)")->execute($stale);
             }
         }
 
-        // Prune tokens FCM reported as permanently invalid.
-        if ($stale) {
-            $ph = implode(',', array_fill(0, count($stale), '?'));
-            db()->prepare("DELETE FROM student_push_tokens WHERE id IN ($ph)")->execute($stale);
-        }
-        return $sent;
+        // ── Announcements inbox ─────────────────────────────────────────────
+        // Always recorded – even when the push could not be delivered (device
+        // offline, no registered device, FCM not configured) – so the status
+        // update shows up in the student's in-app Announcements screen.
+        idc_record_status_announcement($card, $uid, $msg, $total, $ok, $failed);
+
+        return $ok > 0;
     } catch (Throwable $e) {
         error_log('ID card status push: ' . $e->getMessage());
         return false;
+    }
+}
+
+/**
+ * Write an ID card status message into the App Notification history
+ * (app_notifications) with a per-student recipient row
+ * (app_notification_recipients), so it appears in the student's in-app
+ * Announcements inbox – scoped to ONLY that student by
+ * admin/api/student/notifications.php.
+ *
+ * Best-effort: when the recipients table is missing (migration not applied)
+ * the history row is removed again so the personal message is never
+ * broadcast to every student.
+ */
+function idc_record_status_announcement(array $card, int $uid, array $msg, int $total, int $ok, int $failed): void
+{
+    try {
+        $st = db()->prepare(
+            "INSERT INTO app_notifications
+                (title, body, url, sent_by, status, total_tokens, sent_count, failed_count)
+             VALUES (?, ?, NULL, ?, 'sent', ?, ?, ?)"
+        );
+        $sent_by = function_exists('auth_user') ? (int)(auth_user()['id'] ?? 0) : 0;
+        $st->execute([
+            $msg['title'], $msg['body'],
+            $sent_by > 0 ? $sent_by : null,
+            $total, $ok, $failed,
+        ]);
+        $nid = (int)db()->lastInsertId();
+        if ($nid <= 0) {
+            return;
+        }
+
+        // Human audience label for the admin history page (best-effort column).
+        try {
+            $who = trim((string)($card['full_name'] ?? ''));
+            $idn = trim((string)($card['id_number'] ?? ''));
+            $label = 'ID card status: ' . trim($who . ($idn !== '' ? ' (' . $idn . ')' : ''));
+            db()->prepare('UPDATE app_notifications SET audience = ? WHERE id = ?')
+               ->execute([$label, $nid]);
+        } catch (Throwable $e) {
+            // audience column missing (migration not applied) – ignore.
+        }
+
+        // Per-student recipient row: this scopes the announcement to only
+        // this student in the app's Announcements inbox.
+        try {
+            db()->prepare(
+                "INSERT INTO app_notification_recipients
+                    (notification_id, source, recipient_user_id, fcm_status)
+                 VALUES (?, 'student', ?, ?)"
+            )->execute([$nid, $uid, $ok > 0 ? 'sent' : 'failed']);
+        } catch (Throwable $e) {
+            // Recipients table missing – remove the history row so a personal
+            // message is never listed to every student on legacy deployments.
+            try {
+                db()->prepare('DELETE FROM app_notifications WHERE id = ?')->execute([$nid]);
+            } catch (Throwable $e2) {
+            }
+            error_log('ID card status announcement: recipients table missing – ' . $e->getMessage());
+        }
+    } catch (Throwable $e) {
+        error_log('ID card status announcement: ' . $e->getMessage());
     }
 }
