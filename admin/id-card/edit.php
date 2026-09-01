@@ -202,13 +202,21 @@ require_once __DIR__ . '/../includes/header.php';
                         <input type="text" name="address" class="form-control" value="<?= h($pre['address']) ?>">
                     </div>
 
-                    <div class="col-md-6">
+                    <div class="col-md-4">
                         <label class="form-label fw-medium">Issue Date</label>
                         <input type="date" name="issue_date" class="form-control" value="<?= h($pre['issue_date']) ?>">
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-md-4">
                         <label class="form-label fw-medium">Valid Until</label>
                         <input type="date" name="expiry_date" class="form-control" value="<?= h($pre['expiry_date']) ?>">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-medium">Print Status</label>
+                        <select name="print_status" class="form-select">
+                            <?php foreach (IDC_PRINT_STATUSES as $k => $v): ?>
+                                <option value="<?= $k ?>" <?= ($pre['print_status'] ?? 'in_printing_queue') === $k ? 'selected' : '' ?>><?= h($v) ?></option>
+                            <?php endforeach; ?>
+                        </select>
                     </div>
 
                     <div class="col-12"><hr class="my-1"></div>
