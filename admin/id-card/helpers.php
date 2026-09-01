@@ -222,9 +222,12 @@ function idc_render_front_svg(array $card): string
     $idno = trim((string)$card['id_number']);
     $bg   = trim((string)$card['blood_group']);
 
-    // Program / designation line (e.g. "BSc in CSE, 67th Batch")
+    // Program / designation line (e.g. "BSc in CSE, 67th Batch").
+    // Program names are shortened for the card (e.g. "BSc in Computer
+    // Science & Engineering (CSE)" -> "BSc in CSE") so they fit the design;
+    // when even the short name is too long the font auto-shrinks (step 4).
     if ($card['card_type'] === 'student') {
-        $line = trim((string)$card['program_name']);
+        $line = idc_short_program_name(trim((string)$card['program_name']));
         $batch = trim((string)$card['batch_name']);
         if ($batch !== '') {
             if (stripos($batch, 'batch') === false) $batch .= ' Batch';
