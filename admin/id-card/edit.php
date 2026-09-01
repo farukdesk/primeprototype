@@ -82,9 +82,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     card_type = ?, id_number = ?, full_name = ?, program_name = ?, dept_name = ?,
                     designation = ?, batch_name = ?, blood_group = ?, phone = ?, address = ?,
                     photo = ?, issue_date = ?, expiry_date = ?,
-                    print_status = ?,
+                    -- Audit fields FIRST: MySQL applies SET left-to-right, so these
+                    -- comparisons must see the OLD print_status value.
                     print_status_updated_at = IF(print_status <> ?, NOW(), print_status_updated_at),
-                    print_status_updated_by = IF(print_status <> ?, ?, print_status_updated_by)
+                    print_status_updated_by = IF(print_status <> ?, ?, print_status_updated_by),
+                    print_status = ?
                  WHERE id = ?'
             )->execute([
                 $card_type, $id_number, $full_name,
@@ -92,7 +94,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $batch_name ?: null, $blood_group ?: null, $phone ?: null,
                 $address ?: null, $photo ?: null,
                 $issue_date ?: null, $expiry_date ?: null,
-                $print_status, $print_status, $print_status, auth_user()['id'],
+                $print_status, $print_status, auth_user()['id'],
+                $print_status,
                 $id,
             ]);
             flash_set('success', 'ID card updated. Opening print preview…');
