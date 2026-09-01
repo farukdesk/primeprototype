@@ -162,6 +162,10 @@ require_once __DIR__ . '/../includes/header.php';
                     <td class="text-end">
                         <a href="<?= APP_URL ?>/id-card/print.php?id=<?= (int)$r['id'] ?>" target="_blank"
                            class="btn btn-sm btn-outline-primary" title="Preview & Print"><i class="fas fa-print"></i></a>
+                        <?php if (idc_can_edit()): ?>
+                        <a href="<?= APP_URL ?>/id-card/edit.php?id=<?= (int)$r['id'] ?>"
+                           class="btn btn-sm btn-outline-secondary" title="Edit"><i class="fas fa-pen"></i></a>
+                        <?php endif; ?>
                         <?php if (idc_can_delete()): ?>
                         <form method="POST" action="<?= APP_URL ?>/id-card/delete.php" class="d-inline"
                               onsubmit="return confirm('Delete this ID card record?');">

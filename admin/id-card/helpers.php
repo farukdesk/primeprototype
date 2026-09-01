@@ -342,7 +342,7 @@ function idc_short_program_name(string $program): string
 {
     $norm = static function (string $s): string {
         $s = mb_strtolower(trim($s));
-        $s = str_replace(['\u2013', '\u2014'], '-', $s);
+        $s = str_replace(["\u{2013}", "\u{2014}"], '-', $s);
         $s = preg_replace('/\s*-\s*/', '-', $s);
         $s = preg_replace('/\s+/', ' ', $s);
         return $s;
