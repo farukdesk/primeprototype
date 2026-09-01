@@ -97,17 +97,26 @@ if (!empty($subject_ids)) {
     }
 }
 
-// ── This student's registrations ───────────────────────────────────────────
-$registered = [];
+// ── This student's registrations (with approval status when available) ──────
+$has_status = false;
+try {
+    db()->query('SELECT status FROM co_registrations LIMIT 1');
+    $has_status = true;
+} catch (Throwable $e) {
+    // approval column missing (run admin/course-offer-approval-v1.sql)
+}
+
+$registered = []; // offer_subject_id => 'pending' | 'approved'
 if (!empty($subject_ids)) {
     $rin = implode(',', array_fill(0, count($subject_ids), '?'));
     $rst = db()->prepare(
-        "SELECT offer_subject_id FROM co_registrations
+        'SELECT offer_subject_id' . ($has_status ? ', status' : '') . " FROM co_registrations
           WHERE student_id = ? AND offer_subject_id IN ($rin)"
     );
     $rst->execute(array_merge([$sid], $subject_ids));
     foreach ($rst->fetchAll() as $rr) {
-        $registered[(int)$rr['offer_subject_id']] = true;
+        $registered[(int)$rr['offer_subject_id']] =
+            $has_status ? (string)(($rr['status'] ?? '') ?: 'approved') : 'approved';
     }
 }
 
@@ -121,6 +130,7 @@ foreach ($subject_rows as $row) {
         'course_name'      => $row['course_name'],
         'credit'           => $row['credit'],
         'registered'       => isset($registered[$osid]),
+        'approval_status'  => $registered[$osid] ?? null,
         'teachers'         => $teacher_map[$osid] ?? [],
     ];
 }
@@ -128,9 +138,13 @@ foreach ($subject_rows as $row) {
 $out = [];
 foreach ($offers as $o) {
     $oid  = (int)$o['id'];
-    $subs = $subjects_by_offer[$oid] ?? [];
-    $reg  = 0;
-    foreach ($subs as $s) if ($s['registered']) $reg++;
+    $subs    = $subjects_by_offer[$oid] ?? [];
+    $reg     = 0;
+    $pending = 0;
+    foreach ($subs as $s) {
+        if ($s['registered']) $reg++;
+        if (($s['approval_status'] ?? null) === 'pending') $pending++;
+    }
 
     $out[] = [
         'id'                => $oid,
@@ -142,6 +156,7 @@ foreach ($offers as $o) {
         'batch_name'        => $o['batch_name'],
         'subjects'          => $subs,
         'registered_count'  => $reg,
+        'pending_count'     => $pending,
         'total_subjects'    => count($subs),
     ];
 }

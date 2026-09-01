@@ -56,6 +56,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect(APP_URL . '/course-offer/registrations.php?offer_id=' . $offer_id);
     }
 
+    // ── Departmental approval of pending self-registrations ──────────────────
+    // Anyone with course-offer access scoped to this offer's department can
+    // approve (both checks are enforced at the top of this page).
+    if ($action === 'approve') {
+        $osid = (int)($_POST['offer_subject_id'] ?? 0);
+        $sid  = (int)($_POST['student_id'] ?? 0);
+        try {
+            if (in_array($osid, $valid_sub, true) && $sid > 0) {
+                $st = db()->prepare(
+                    "UPDATE co_registrations
+                        SET status = 'approved', approved_by = ?, approved_at = NOW()
+                      WHERE offer_subject_id = ? AND student_id = ? AND status = 'pending'"
+                );
+                $st->execute([(int)$user['id'], $osid, $sid]);
+                if ($st->rowCount() > 0) {
+                    log_change('course-offer', 'UPDATE', $offer_id, 'Offer #' . $offer_id,
+                        'registration_status', 'pending', 'approved',
+                        'Self-registration approved for student #' . $sid . ' (subject #' . $osid . ') by '
+                            . ($user['full_name'] ?? ('user #' . (int)$user['id'])));
+                    flash_set('success', 'Registration approved.');
+                } else {
+                    flash_set('error', 'No pending registration found.');
+                }
+            }
+        } catch (Throwable $e) {
+            flash_set('error', 'Could not approve – run <code>admin/course-offer-approval-v1.sql</code> first.');
+        }
+        redirect(APP_URL . '/course-offer/registrations.php?offer_id=' . $offer_id);
+    }
+
+    if ($action === 'approve_all') {
+        try {
+            $st = db()->prepare(
+                "UPDATE co_registrations r
+                   JOIN co_offer_subjects cos ON cos.id = r.offer_subject_id
+                    SET r.status = 'approved', r.approved_by = ?, r.approved_at = NOW()
+                  WHERE cos.offer_id = ? AND r.status = 'pending'"
+            );
+            $st->execute([(int)$user['id'], $offer_id]);
+            $n = (int)$st->rowCount();
+            if ($n > 0) {
+                log_change('course-offer', 'UPDATE', $offer_id, 'Offer #' . $offer_id,
+                    'registration_status', 'pending', 'approved',
+                    'Approved ' . $n . ' pending self-registration(s) by '
+                        . ($user['full_name'] ?? ('user #' . (int)$user['id'])));
+            }
+            flash_set('success', $n . ' pending registration(s) approved.');
+        } catch (Throwable $e) {
+            flash_set('error', 'Could not approve – run <code>admin/course-offer-approval-v1.sql</code> first.');
+        }
+        redirect(APP_URL . '/course-offer/registrations.php?offer_id=' . $offer_id);
+    }
+
     if ($action === 'add') {
         $student_ids = array_values(array_filter(array_map('intval', (array)($_POST['student_ids'] ?? []))));
         $subject_ids = array_values(array_filter(array_map('intval', (array)($_POST['subject_ids'] ?? []))));
@@ -246,6 +299,25 @@ $reg_map     = co_registrations_by_subject($offer_id);
 $total_regs  = 0;
 foreach ($reg_map as $list) $total_regs += count($list);
 
+// Pending self-registrations awaiting departmental approval
+// (admin/course-offer-approval-v1.sql; empty map on older deployments).
+$pending_map = [];
+try {
+    $pst = db()->prepare(
+        "SELECT r.offer_subject_id, r.student_id
+           FROM co_registrations r
+           JOIN co_offer_subjects cos ON cos.id = r.offer_subject_id
+          WHERE cos.offer_id = ? AND r.status = 'pending'"
+    );
+    $pst->execute([$offer_id]);
+    foreach ($pst->fetchAll() as $pr) {
+        $pending_map[(int)$pr['offer_subject_id'] . ':' . (int)$pr['student_id']] = true;
+    }
+} catch (Throwable $e) {
+    // status column missing – approval workflow not installed yet.
+}
+$pending_total = count($pending_map);
+
 $page_title = 'Course Registrations';
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -276,6 +348,22 @@ require_once __DIR__ . '/../includes/header.php';
         <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle ms-auto">
             <?= (int)$total_regs ?> registration<?= $total_regs != 1 ? 's' : '' ?>
         </span>
+        <?php if ($pending_total > 0): ?>
+        <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">
+            <?= (int)$pending_total ?> pending approval
+        </span>
+        <?php if (co_is_staff()): ?>
+        <form method="POST" class="d-inline"
+              onsubmit="return confirm('Approve all <?= (int)$pending_total ?> pending self-registration(s) of this offer?');">
+            <?= csrf_field() ?>
+            <input type="hidden" name="offer_id" value="<?= $offer_id ?>">
+            <input type="hidden" name="action" value="approve_all">
+            <button type="submit" class="btn btn-sm btn-success" style="border-radius:8px;">
+                <i class="fas fa-check-double me-1"></i>Approve All Pending
+            </button>
+        </form>
+        <?php endif; ?>
+        <?php endif; ?>
         <?php if (co_is_staff()): ?>
         <form method="POST" class="d-inline">
             <?= csrf_field() ?>
@@ -555,9 +643,24 @@ require_once __DIR__ . '/../includes/header.php';
                         <?php else: ?>
                         <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle">Self</span>
                         <?php endif; ?>
+                        <?php if (isset($pending_map[$osid . ':' . (int)$r['student_pk']])): ?>
+                        <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle d-block mt-1">Pending</span>
+                        <?php endif; ?>
                     </td>
                     <?php if (co_is_staff()): ?>
-                    <td>
+                    <td class="text-nowrap">
+                        <?php if (isset($pending_map[$osid . ':' . (int)$r['student_pk']])): ?>
+                        <form method="POST" class="d-inline" onsubmit="return confirm('Approve this registration?');">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="offer_id" value="<?= $offer_id ?>">
+                            <input type="hidden" name="action" value="approve">
+                            <input type="hidden" name="offer_subject_id" value="<?= $osid ?>">
+                            <input type="hidden" name="student_id" value="<?= (int)$r['student_pk'] ?>">
+                            <button type="submit" class="btn btn-sm btn-outline-success" title="Approve">
+                                <i class="fas fa-check"></i>
+                            </button>
+                        </form>
+                        <?php endif; ?>
                         <form method="POST" class="d-inline" onsubmit="return confirm('Remove this registration?');">
                             <?= csrf_field() ?>
                             <input type="hidden" name="offer_id" value="<?= $offer_id ?>">

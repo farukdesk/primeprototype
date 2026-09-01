@@ -95,6 +95,12 @@ class DashboardFragment : Fragment() {
         when (feature) {
             Feature.REGISTERED_COURSES ->
                 startActivity(Intent(requireContext(), RegisteredCoursesActivity::class.java))
+            Feature.COURSE_REGISTRATION -> startActivity(
+                Intent(
+                    requireContext(),
+                    bd.ac.primeuniversity.studentportal.ui.courses.CourseRegistrationActivity::class.java,
+                )
+            )
             Feature.NOTICES -> activity?.selectTab(R.id.nav_notices)
             Feature.ANNOUNCEMENTS ->
                 startActivity(Intent(requireContext(), NotificationsActivity::class.java))

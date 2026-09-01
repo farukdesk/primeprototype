@@ -103,6 +103,20 @@
     <string name="offer_registered_count">%1$d of %2$d courses registered</string>
     <string name="course_credit">%1$s Credit</string>
 
+    <!-- Course registration screen -->
+    <string name="course_reg_title">Course Registration</string>
+    <string name="course_reg_empty">No course registration is open for your batch right now. When your department opens self-registration, the offered courses will appear here.</string>
+    <string name="course_reg_select_all">Select all courses</string>
+    <string name="course_reg_must_select_all">You must select all offered courses to submit your registration. It will then be sent to your department for approval.</string>
+    <string name="course_reg_register">Register (%1$d courses)</string>
+    <string name="course_reg_register_action">Register</string>
+    <string name="course_reg_confirm_title">Submit registration?</string>
+    <string name="course_reg_confirm_body">You are registering for all %1$d offered courses. Your registration will be sent to your department for approval.</string>
+    <string name="course_reg_submitted">Your registration has been submitted for departmental approval.</string>
+    <string name="course_reg_status_pending">Submitted – awaiting departmental approval</string>
+    <string name="course_reg_status_approved">Registration approved</string>
+    <string name="course_reg_closed">Self-registration is currently closed for this offer.</string>
+
     <!-- Examination -->
     <string name="feat_results">Results</string>
     <string name="feat_results_desc">Semester-wise &amp; course-wise</string>
