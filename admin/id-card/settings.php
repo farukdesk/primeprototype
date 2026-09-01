@@ -1,15 +1,18 @@
 <?php
 /**
- * ID Card – Settings (Registrar Signature)
+ * ID Card – Settings
  *
- * Upload / change the Registrar's signature shown on the front of the card
- * and tune the signature area so it fits the SVG design.
+ * • Registrar Signature: upload / change the signature shown on the front of
+ *   the card. Position is AUTO-DETECTED from the card design (the Registrar
+ *   line) by default; a manual X/Y/W/H mode is still available.
+ * • Back Side: edit the university information printed on the back of the
+ *   card (address, phone numbers, website, email, Facebook link).
  *
- * The uploaded file is stored VERSIONED (never overwritten) and each card
- * snapshots the signature that was current at CREATION time — an updated
- * signature is therefore distributed to NEWLY created IDs only; cards that
- * already exist keep the signature (or the original design artwork) they
- * were issued with.
+ * The uploaded signature file is stored VERSIONED (never overwritten) and
+ * each card snapshots the signature that was current at CREATION time — an
+ * updated signature is therefore distributed to NEWLY created IDs only;
+ * cards that already exist keep the signature (or the original design
+ * artwork) they were issued with.
  */
 require_once __DIR__ . '/../includes/auth.php';
 require_access('id-card', 'can_edit');
@@ -25,9 +28,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $y = (float)($_POST['sig_y'] ?? 155);
     $w = (float)($_POST['sig_w'] ?? 80);
     $h = (float)($_POST['sig_h'] ?? 28);
-    $cover = isset($_POST['sig_cover']) ? '1' : '0';
+    $cover    = isset($_POST['sig_cover']) ? '1' : '0';
+    $pos_mode = (($_POST['sig_pos_mode'] ?? 'auto') === 'manual') ? 'manual' : 'auto';
 
-    if ($w <= 0 || $h <= 0) {
+    if ($pos_mode === 'manual' && ($w <= 0 || $h <= 0)) {
         $errors[] = 'Signature area width and height must be greater than zero.';
     }
 
@@ -43,13 +47,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             idc_save_setting('signature_w', (string)$w);
             idc_save_setting('signature_h', (string)$h);
             idc_save_setting('signature_cover', $cover);
+            idc_save_setting('signature_pos_mode', $pos_mode);
+
+            // Back-side university information (address, phones, website, email, facebook)
+            foreach (array_keys(IDC_BACK_FIELDS) as $bkey) {
+                if (isset($_POST[$bkey])) {
+                    idc_save_setting($bkey, trim((string)$_POST[$bkey]));
+                }
+            }
 
             if ($new_path !== null) {
                 idc_save_setting('registrar_signature_path', $new_path);
                 idc_save_setting('registrar_signature_updated_at', date('Y-m-d H:i:s'));
                 flash_set('success', 'New Registrar signature saved. It will appear on ID cards created from now on — existing cards are NOT changed.');
             } else {
-                flash_set('success', 'Signature area settings saved.');
+                flash_set('success', 'Settings saved.');
             }
             redirect(APP_URL . '/id-card/settings.php');
         } catch (Throwable $e) {
@@ -59,7 +71,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $sig_path   = idc_current_signature_path();
-$box        = idc_signature_box();
+$box        = [
+    'x'     => (float)idc_setting('signature_x', '20'),
+    'y'     => (float)idc_setting('signature_y', '155'),
+    'w'     => (float)idc_setting('signature_w', '80'),
+    'h'     => (float)idc_setting('signature_h', '28'),
+    'cover' => idc_setting('signature_cover', '1') === '1',
+];
+$pos_mode   = idc_setting('signature_pos_mode', 'auto');
+$auto_box   = idc_detect_signature_box();
 $updated_at = idc_setting('registrar_signature_updated_at', '');
 $sig_url    = $sig_path !== '' ? APP_URL . '/' . $sig_path : '';
 
@@ -89,14 +109,14 @@ require_once __DIR__ . '/../includes/header.php';
     <strong>newly created</strong> cards — cards that already exist keep the signature (or the original design
     artwork) they were issued with. Signature files are stored versioned and never overwritten.
     <br><i class="fas fa-lightbulb text-warning me-1"></i>
-    Use a <strong>transparent PNG</strong> for the best result. The signature is scaled to fit the area below
+    Use a <strong>transparent PNG</strong> for the best result. The signature is scaled to fit the area
     while keeping its aspect ratio.
 </div>
 
 <div class="row justify-content-center"><div class="col-lg-8">
     <div class="card">
         <div class="card-header py-3 px-4">
-            <h6 class="mb-0 fw-semibold"><i class="fas fa-signature me-2 text-muted"></i>Registrar Signature</h6>
+            <h6 class="mb-0 fw-semibold"><i class="fas fa-signature me-2 text-muted"></i>Registrar Signature &amp; Back Side</h6>
         </div>
         <div class="card-body p-4">
             <form method="POST" enctype="multipart/form-data" novalidate>
@@ -130,7 +150,26 @@ require_once __DIR__ . '/../includes/header.php';
                     <div class="col-12"><hr class="my-1"></div>
 
                     <div class="col-12">
-                        <label class="form-label fw-medium">Signature Area on the Card <span class="text-muted small">(SVG units — the card is 331.2 wide × 212.16 high)</span></label>
+                        <label class="form-label fw-medium">Signature Position</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="sig_pos_mode" id="sigPosAuto" value="auto" <?= $pos_mode !== 'manual' ? 'checked' : '' ?>>
+                            <label class="form-check-label" for="sigPosAuto">
+                                <strong>Automatic (recommended)</strong> — detect the Registrar signature line in the current card design and place the new signature exactly there
+                                <?php if ($auto_box): ?>
+                                <span class="text-muted small d-block">Detected position: x=<?= h((string)round($auto_box['x'], 1)) ?>, y=<?= h((string)round($auto_box['y'], 1)) ?>, width=<?= h((string)round($auto_box['w'], 1)) ?>, height=<?= h((string)round($auto_box['h'], 1)) ?></span>
+                                <?php else: ?>
+                                <span class="text-danger small d-block">Could not detect the signature line in the design — the manual values below will be used.</span>
+                                <?php endif; ?>
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="sig_pos_mode" id="sigPosManual" value="manual" <?= $pos_mode === 'manual' ? 'checked' : '' ?>>
+                            <label class="form-check-label" for="sigPosManual">Manual — use the X / Y / Width / Height values below</label>
+                        </div>
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label fw-medium">Signature Area on the Card <span class="text-muted small">(SVG units — the card is 331.2 wide × 212.16 high; used in Manual mode)</span></label>
                         <div class="form-text mb-2">The signature is placed inside this box, scaled to fit and bottom-aligned so it sits on the Registrar line. Adjust and re-print a test card until it matches the design.</div>
                     </div>
                     <div class="col-6 col-md-3">
@@ -157,6 +196,40 @@ require_once __DIR__ . '/../includes/header.php';
                                 Cover the area with white first <span class="text-muted small">(hides the signature baked into the design artwork)</span>
                             </label>
                         </div>
+                    </div>
+                </div>
+
+                <hr class="my-4">
+                <h6 class="fw-semibold mb-1"><i class="fas fa-address-card me-2 text-muted"></i>ID Card Back – University Information</h6>
+                <div class="form-text mb-3">These values replace the static texts on the back of the ID card (address, phone numbers, website, email and Facebook link). They apply whenever a card is previewed or printed.</div>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-medium">Address line 1</label>
+                        <input type="text" name="back_address1" class="form-control" value="<?= h(idc_back_field('back_address1')) ?>">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-medium">Address line 2</label>
+                        <input type="text" name="back_address2" class="form-control" value="<?= h(idc_back_field('back_address2')) ?>">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-medium">Phone line 1</label>
+                        <input type="text" name="back_phone1" class="form-control" value="<?= h(idc_back_field('back_phone1')) ?>">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-medium">Phone line 2</label>
+                        <input type="text" name="back_phone2" class="form-control" value="<?= h(idc_back_field('back_phone2')) ?>">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-medium">Website</label>
+                        <input type="text" name="back_website" class="form-control" value="<?= h(idc_back_field('back_website')) ?>">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-medium">Email</label>
+                        <input type="text" name="back_email" class="form-control" value="<?= h(idc_back_field('back_email')) ?>">
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label small fw-medium">Facebook link</label>
+                        <input type="text" name="back_facebook" class="form-control" value="<?= h(idc_back_field('back_facebook')) ?>">
                     </div>
                 </div>
 

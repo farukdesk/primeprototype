@@ -2,7 +2,8 @@
 /**
  * ID Card – Admin Index
  * Lists generated ID cards with a quick "Generate by Student ID" search,
- * per-card print-status quick change and bulk status update.
+ * filters (type, print status, department, program, batch), per-card
+ * print-status quick change, bulk status update and bulk delete.
  */
 require_once __DIR__ . '/../includes/auth.php';
 require_access('id-card');
@@ -13,7 +14,7 @@ $db = db();
 
 $self_qs = ($_SERVER['QUERY_STRING'] ?? '') !== '' ? '?' . $_SERVER['QUERY_STRING'] : '';
 
-// ── Toggle active status ─────────────────────────────────────────────────────
+// ── Toggle active status ─────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'toggle_active') {
     csrf_check();
     if (!idc_can_edit()) {
@@ -67,10 +68,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($_POST['action'] ?? '', ['
     redirect(APP_URL . '/id-card/index.php' . $self_qs);
 }
 
+// ── Bulk delete ───────────────────────────────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'bulk_delete') {
+    csrf_check();
+    if (!idc_can_delete()) {
+        flash_set('danger', 'You do not have permission to delete ID cards.');
+        redirect(APP_URL . '/id-card/index.php');
+    }
+    $ids = array_values(array_filter(array_map('intval', (array)($_POST['ids'] ?? [])), static fn(int $i): bool => $i > 0));
+    if (!$ids) {
+        flash_set('warning', 'No ID cards selected.');
+        redirect(APP_URL . '/id-card/index.php' . $self_qs);
+    }
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    $st = $db->prepare("DELETE FROM idc_cards WHERE id IN ($placeholders)");
+    $st->execute($ids);
+    flash_set('success', $st->rowCount() . ' ID card(s) deleted.');
+    redirect(APP_URL . '/id-card/index.php' . $self_qs);
+}
+
 // ── Filters ──────────────────────────────────────────────────────────────
 $f_search  = trim($_GET['search'] ?? '');
 $f_type    = trim($_GET['type'] ?? '');
 $f_pstatus = trim($_GET['pstatus'] ?? '');
+$f_dept    = trim($_GET['dept'] ?? '');
+$f_prog    = trim($_GET['program'] ?? '');
+$f_batch   = trim($_GET['batch'] ?? '');
 $per_page = 25;
 $cur_page = max(1, (int)($_GET['page'] ?? 1));
 $offset   = ($cur_page - 1) * $per_page;
@@ -89,6 +112,28 @@ if ($f_type !== '' && isset(IDC_TYPES[$f_type])) {
 if ($f_pstatus !== '' && isset(IDC_PRINT_STATUSES[$f_pstatus])) {
     $where .= ' AND c.print_status = ?';
     $params[] = $f_pstatus;
+}
+if ($f_dept !== '') {
+    $where .= ' AND c.dept_name = ?';
+    $params[] = $f_dept;
+}
+if ($f_prog !== '') {
+    $where .= ' AND c.program_name = ?';
+    $params[] = $f_prog;
+}
+if ($f_batch !== '') {
+    $where .= ' AND c.batch_name = ?';
+    $params[] = $f_batch;
+}
+
+// Filter dropdown options (distinct values from generated cards)
+$opt_depts = $opt_programs = $opt_batches = [];
+try {
+    $opt_depts    = $db->query("SELECT DISTINCT dept_name FROM idc_cards WHERE dept_name IS NOT NULL AND dept_name <> '' ORDER BY dept_name")->fetchAll(PDO::FETCH_COLUMN);
+    $opt_programs = $db->query("SELECT DISTINCT program_name FROM idc_cards WHERE program_name IS NOT NULL AND program_name <> '' ORDER BY program_name")->fetchAll(PDO::FETCH_COLUMN);
+    $opt_batches  = $db->query("SELECT DISTINCT batch_name FROM idc_cards WHERE batch_name IS NOT NULL AND batch_name <> '' ORDER BY batch_name")->fetchAll(PDO::FETCH_COLUMN);
+} catch (Throwable $e) {
+    // Columns/table missing – filter dropdowns simply stay empty
 }
 
 $total = 0;
@@ -121,16 +166,21 @@ require_once __DIR__ . '/../includes/header.php';
             <li class="breadcrumb-item active">ID Cards</li>
         </ol>
     </nav>
-    <?php if (idc_can_create()): ?>
     <div class="d-flex gap-2">
+        <?php if (idc_can_create()): ?>
         <a href="<?= APP_URL ?>/id-card/bulk-create.php" class="btn btn-outline-success btn-sm">
             <i class="fas fa-layer-group me-1"></i> Bulk Create
         </a>
         <a href="<?= APP_URL ?>/id-card/create.php" class="btn btn-outline-primary btn-sm">
             <i class="fas fa-pen me-1"></i> Manual Entry
         </a>
+        <?php endif; ?>
+        <?php if (idc_can_edit()): ?>
+        <a href="<?= APP_URL ?>/id-card/settings.php" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-cog me-1"></i> Settings
+        </a>
+        <?php endif; ?>
     </div>
-    <?php endif; ?>
 </div>
 
 <?php if (idc_can_create()): ?>
@@ -170,8 +220,36 @@ require_once __DIR__ . '/../includes/header.php';
                     <i class="fas fa-tags me-1"></i>Apply (<span class="js-idc-count">0</span>)
                 </button>
             </form>
+            <?php if (idc_can_delete()): ?>
+            <!-- Bulk delete: removes all selected cards -->
+            <form method="POST" id="bulkDeleteForm" class="d-inline" onsubmit="return idcBulkDelete(this);">
+                <?= csrf_field() ?>
+                <input type="hidden" name="action" value="bulk_delete">
+                <button class="btn btn-sm btn-outline-danger js-bulk-delete-btn" disabled>
+                    <i class="fas fa-trash me-1"></i>Delete (<span class="js-idc-count">0</span>)
+                </button>
+            </form>
             <?php endif; ?>
-            <form method="GET" class="d-flex gap-2">
+            <?php endif; ?>
+            <form method="GET" class="d-flex gap-2 flex-wrap">
+                <select name="dept" class="form-select form-select-sm" style="width:auto;max-width:170px">
+                    <option value="">All Departments</option>
+                    <?php foreach ($opt_depts as $d): ?>
+                        <option value="<?= h($d) ?>" <?= $f_dept === $d ? 'selected' : '' ?>><?= h($d) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <select name="program" class="form-select form-select-sm" style="width:auto;max-width:190px">
+                    <option value="">All Programs</option>
+                    <?php foreach ($opt_programs as $p): ?>
+                        <option value="<?= h($p) ?>" <?= $f_prog === $p ? 'selected' : '' ?>><?= h(idc_short_program_name($p)) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <select name="batch" class="form-select form-select-sm" style="width:auto;max-width:140px">
+                    <option value="">All Batches</option>
+                    <?php foreach ($opt_batches as $b): ?>
+                        <option value="<?= h($b) ?>" <?= $f_batch === $b ? 'selected' : '' ?>><?= h($b) ?></option>
+                    <?php endforeach; ?>
+                </select>
                 <select name="pstatus" class="form-select form-select-sm" style="width:auto">
                     <option value="">All Print Statuses</option>
                     <?php foreach (IDC_PRINT_STATUSES as $k => $v): ?>
@@ -298,12 +376,14 @@ require_once __DIR__ . '/../includes/header.php';
     var selectAll = document.getElementById('idcSelectAll');
     var checks    = Array.prototype.slice.call(document.querySelectorAll('.js-idc-check'));
     var bulkBtn   = document.querySelector('.js-bulk-status-btn');
+    var delBtn    = document.querySelector('.js-bulk-delete-btn');
     var countEls  = Array.prototype.slice.call(document.querySelectorAll('.js-idc-count'));
 
     function refresh() {
         var n = checks.filter(function (c) { return c.checked; }).length;
         countEls.forEach(function (el) { el.textContent = n; });
         if (bulkBtn) { bulkBtn.disabled = n === 0; }
+        if (delBtn)  { delBtn.disabled  = n === 0; }
         if (selectAll) { selectAll.checked = checks.length > 0 && n === checks.length; }
     }
     if (selectAll) {
@@ -314,6 +394,20 @@ require_once __DIR__ . '/../includes/header.php';
     }
     checks.forEach(function (c) { c.addEventListener('change', refresh); });
     refresh();
+
+    // Copy the selected ids into the bulk-delete form before submitting
+    window.idcBulkDelete = function (form) {
+        var checked = checks.filter(function (c) { return c.checked; });
+        if (!checked.length) { return false; }
+        if (!confirm('Delete ' + checked.length + ' ID card(s)? This cannot be undone.')) { return false; }
+        Array.prototype.slice.call(form.querySelectorAll('input[name="ids[]"]')).forEach(function (el) { el.remove(); });
+        checked.forEach(function (c) {
+            var i = document.createElement('input');
+            i.type = 'hidden'; i.name = 'ids[]'; i.value = c.value;
+            form.appendChild(i);
+        });
+        return true;
+    };
 })();
 </script>
 <?php endif; ?>
