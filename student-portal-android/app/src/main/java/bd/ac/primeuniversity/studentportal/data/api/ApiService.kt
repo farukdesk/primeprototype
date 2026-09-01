@@ -4,6 +4,7 @@ import bd.ac.primeuniversity.studentportal.data.model.AdmitCardsResponse
 import bd.ac.primeuniversity.studentportal.data.model.AppNotificationsResponse
 import bd.ac.primeuniversity.studentportal.data.model.CourseOffersResponse
 import bd.ac.primeuniversity.studentportal.data.model.FinancesResponse
+import bd.ac.primeuniversity.studentportal.data.model.IdCardResponse
 import bd.ac.primeuniversity.studentportal.data.model.LoginResponse
 import bd.ac.primeuniversity.studentportal.data.model.MeResponse
 import bd.ac.primeuniversity.studentportal.data.model.NoticeDetailResponse
@@ -80,6 +81,10 @@ interface ApiService {
     @Streaming
     @GET("admit-card-download.php")
     suspend fun downloadAdmitCard(@Query("card") cardId: Int): Response<ResponseBody>
+
+    /** The student's generated ID card (front/back SVG), when one exists. */
+    @GET("id-card.php")
+    suspend fun getIdCard(): Response<IdCardResponse>
 
     @GET("notifications.php")
     suspend fun getAppNotifications(

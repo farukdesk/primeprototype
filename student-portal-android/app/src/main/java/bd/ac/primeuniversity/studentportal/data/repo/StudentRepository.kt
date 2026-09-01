@@ -224,6 +224,15 @@ class StudentRepository private constructor(context: Context) {
             }
         }
 
+    // ── Digital ID card (students only) ─────────────────────────────────────────────
+
+    /**
+     * The student's official ID card rendered server-side (front/back SVG)
+     * from the same design the admin ID Card module prints.
+     */
+    suspend fun getIdCard(): AppResult<bd.ac.primeuniversity.studentportal.data.model.IdCardResponse> =
+        call { api.getIdCard() }
+
     // ── Announcements (push notification history) ─────────────────────────────────────
 
     // ── IT Support tickets (students only) ──────────────────────────────────────────

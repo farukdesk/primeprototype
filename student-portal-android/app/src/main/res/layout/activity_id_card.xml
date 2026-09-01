@@ -22,129 +22,206 @@
         android:layout_height="match_parent"
         android:fillViewport="true">
 
-        <com.google.android.material.card.MaterialCardView
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_margin="20dp"
-            app:cardBackgroundColor="@color/surface"
-            app:cardCornerRadius="20dp"
-            app:cardElevation="4dp">
+            android:orientation="vertical">
 
+            <ProgressBar
+                android:id="@+id/progress"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="48dp"
+                android:visibility="gone" />
+
+            <!-- Official ID card (front + back), rendered from the printed design -->
             <LinearLayout
+                android:id="@+id/officialContainer"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical">
+                android:orientation="vertical"
+                android:padding="20dp"
+                android:visibility="gone">
 
-                <!-- Branded header band -->
-                <LinearLayout
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/frontCard"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:background="@drawable/bg_header_gradient"
-                    android:gravity="center"
-                    android:orientation="vertical"
-                    android:paddingTop="20dp"
-                    android:paddingBottom="20dp">
+                    app:cardBackgroundColor="@color/white"
+                    app:cardCornerRadius="12dp"
+                    app:cardElevation="4dp">
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/university_name"
-                        android:textColor="@color/white"
-                        android:textSize="18sp"
-                        android:textStyle="bold" />
+                    <WebView
+                        android:id="@+id/frontWebView"
+                        android:layout_width="match_parent"
+                        android:layout_height="220dp" />
+                </com.google.android.material.card.MaterialCardView>
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:alpha="0.85"
-                        android:letterSpacing="0.15"
-                        android:text="@string/student_portal"
-                        android:textColor="@color/white"
-                        android:textSize="11sp" />
-                </LinearLayout>
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/backCard"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    app:cardBackgroundColor="@color/white"
+                    app:cardCornerRadius="12dp"
+                    app:cardElevation="4dp">
 
-                <TextView
-                    android:id="@+id/avatar"
-                    android:layout_width="88dp"
-                    android:layout_height="88dp"
-                    android:layout_gravity="center_horizontal"
-                    android:layout_marginTop="-44dp"
-                    android:background="@drawable/bg_avatar_circle"
-                    android:gravity="center"
-                    android:textColor="@color/white"
-                    android:textSize="30sp"
-                    android:textStyle="bold"
-                    tools:text="JD" />
+                    <WebView
+                        android:id="@+id/backWebView"
+                        android:layout_width="match_parent"
+                        android:layout_height="220dp" />
+                </com.google.android.material.card.MaterialCardView>
 
                 <TextView
-                    android:id="@+id/idName"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
                     android:gravity="center"
-                    android:textColor="@color/text_primary"
-                    android:textSize="18sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/idNumber"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:gravity="center"
-                    android:textColor="@color/primary"
-                    android:textSize="14sp"
-                    android:textStyle="bold" />
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
-                    android:orientation="vertical"
-                    android:paddingStart="20dp"
-                    android:paddingEnd="20dp">
-
-                    <include android:id="@+id/rowDept" layout="@layout/item_info_row" />
-                    <include android:id="@+id/rowProgram" layout="@layout/item_info_row" />
-                    <include android:id="@+id/rowBatch" layout="@layout/item_info_row" />
-                    <include android:id="@+id/rowStatus" layout="@layout/item_info_row" />
-                </LinearLayout>
-
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:layout_marginTop="16dp"
-                    android:background="@color/divider" />
-
-                <ImageView
-                    android:id="@+id/qrImage"
-                    android:layout_width="180dp"
-                    android:layout_height="180dp"
-                    android:layout_gravity="center_horizontal"
-                    android:layout_marginTop="20dp"
-                    android:contentDescription="@string/id_card_scan_hint" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:gravity="center"
-                    android:text="@string/id_card_scan_hint"
+                    android:text="@string/id_card_official_hint"
                     android:textColor="@color/text_secondary"
                     android:textSize="12sp" />
 
                 <TextView
+                    android:id="@+id/cardValidity"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
-                    android:layout_marginBottom="24dp"
+                    android:layout_marginBottom="12dp"
                     android:gravity="center"
-                    android:text="@string/id_card_valid"
                     android:textColor="@color/success"
                     android:textSize="12sp"
-                    android:textStyle="bold" />
+                    android:textStyle="bold"
+                    tools:text="Valid student ID · Prime University" />
             </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
+
+            <!-- Fallback: app-generated verification card with QR code -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/fallbackCard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_margin="20dp"
+                android:visibility="gone"
+                app:cardBackgroundColor="@color/surface"
+                app:cardCornerRadius="20dp"
+                app:cardElevation="4dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <!-- Branded header band -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_header_gradient"
+                        android:gravity="center"
+                        android:orientation="vertical"
+                        android:paddingTop="20dp"
+                        android:paddingBottom="20dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/university_name"
+                            android:textColor="@color/white"
+                            android:textSize="18sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:alpha="0.85"
+                            android:letterSpacing="0.15"
+                            android:text="@string/student_portal"
+                            android:textColor="@color/white"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/avatar"
+                        android:layout_width="88dp"
+                        android:layout_height="88dp"
+                        android:layout_gravity="center_horizontal"
+                        android:layout_marginTop="-44dp"
+                        android:background="@drawable/bg_avatar_circle"
+                        android:gravity="center"
+                        android:textColor="@color/white"
+                        android:textSize="30sp"
+                        android:textStyle="bold"
+                        tools:text="JD" />
+
+                    <TextView
+                        android:id="@+id/idName"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:gravity="center"
+                        android:textColor="@color/text_primary"
+                        android:textSize="18sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/idNumber"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:gravity="center"
+                        android:textColor="@color/primary"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:orientation="vertical"
+                        android:paddingStart="20dp"
+                        android:paddingEnd="20dp">
+
+                        <include android:id="@+id/rowDept" layout="@layout/item_info_row" />
+                        <include android:id="@+id/rowProgram" layout="@layout/item_info_row" />
+                        <include android:id="@+id/rowBatch" layout="@layout/item_info_row" />
+                        <include android:id="@+id/rowStatus" layout="@layout/item_info_row" />
+                    </LinearLayout>
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="16dp"
+                        android:background="@color/divider" />
+
+                    <ImageView
+                        android:id="@+id/qrImage"
+                        android:layout_width="180dp"
+                        android:layout_height="180dp"
+                        android:layout_gravity="center_horizontal"
+                        android:layout_marginTop="20dp"
+                        android:contentDescription="@string/id_card_scan_hint" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:gravity="center"
+                        android:text="@string/id_card_scan_hint"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:layout_marginBottom="24dp"
+                        android:gravity="center"
+                        android:text="@string/id_card_valid"
+                        android:textColor="@color/success"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+        </LinearLayout>
     </ScrollView>
 </LinearLayout>
