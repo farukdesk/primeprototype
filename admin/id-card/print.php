@@ -7,8 +7,8 @@
  * (photo, name, ID, program/batch, blood group, issue/expiry dates and
  * the barcode) is replaced with the generated card's data.
  * The barcode is a real Code 39 barcode that encodes the ID number.
- * The back side contains only static university information and is
- * rendered unchanged.
+ * The back side is also rendered server-side: the university information
+ * (address, phone numbers, website, email, facebook) comes from Settings.
  */
 require_once __DIR__ . '/../includes/auth.php';
 require_access('id-card');
@@ -35,6 +35,7 @@ if (!empty($card['student_ref_id'])) {
 }
 
 $front_svg = idc_render_front_svg($card);
+$back_svg  = idc_render_back_svg($card['card_type']);
 $back_url  = idc_template_url($card['card_type'], 'back');
 
 if ($front_svg === '') {
@@ -42,8 +43,11 @@ if ($front_svg === '') {
     redirect(APP_URL . '/id-card/index.php');
 }
 
-// Strip the XML prolog so the SVG can be inlined into the HTML page
+// Strip the XML prolog so the SVGs can be inlined into the HTML page
 $front_svg = preg_replace('/^<\?xml[^>]*\?>\s*/', '', $front_svg);
+if ($back_svg !== '') {
+    $back_svg = preg_replace('/^<\?xml[^>]*\?>\s*/', '', $back_svg);
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -93,9 +97,13 @@ $front_svg = preg_replace('/^<\?xml[^>]*\?>\s*/', '', $front_svg);
         <?= $front_svg ?>
     </div>
 
-    <!-- BACK: static university information from the design -->
+    <!-- BACK: university information from the design; texts editable in Settings -->
     <div class="id-card">
-        <img src="<?= h($back_url) ?>" alt="ID Card Back">
+        <?php if ($back_svg !== ''): ?>
+            <?= $back_svg ?>
+        <?php else: ?>
+            <img src="<?= h($back_url) ?>" alt="ID Card Back">
+        <?php endif; ?>
     </div>
 
 </div>
