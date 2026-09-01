@@ -60,3 +60,22 @@ data class FinancesResponse(
 data class SimpleResponse(
     @SerializedName("message") val message: String? = null,
 ) : BaseResponse()
+
+data class IdCardResponse(
+    @SerializedName("has_card") val hasCard: Boolean = false,
+    @SerializedName("card") val card: DigitalIdCard? = null,
+) : BaseResponse()
+
+/** The student's official ID card, rendered server-side from the printed design. */
+data class DigitalIdCard(
+    @SerializedName("id") val id: Int = 0,
+    @SerializedName("id_number") val idNumber: String? = null,
+    @SerializedName("full_name") val fullName: String? = null,
+    @SerializedName("blood_group") val bloodGroup: String? = null,
+    @SerializedName("issue_date") val issueDate: String? = null,
+    @SerializedName("expiry_date") val expiryDate: String? = null,
+    @SerializedName("print_status") val printStatus: String? = null,
+    @SerializedName("print_status_label") val printStatusLabel: String? = null,
+    @SerializedName("front_svg") val frontSvg: String? = null,
+    @SerializedName("back_svg") val backSvg: String? = null,
+)

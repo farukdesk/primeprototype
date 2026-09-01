@@ -132,7 +132,7 @@
 
     <!-- Profile -->
     <string name="feat_student_profile">Student Profile</string>
-    <string name="feat_id_card">ID Card (Digital QR)</string>
+    <string name="feat_id_card">Digital ID Card</string>
     <string name="feat_emergency_contact">Emergency Contact</string>
 
     <!-- Settings menu -->
@@ -158,6 +158,8 @@
     <string name="id_card_title">Student ID Card</string>
     <string name="id_card_scan_hint">Scan to verify identity</string>
     <string name="id_card_valid">Valid student ID · Prime University</string>
+    <string name="id_card_official_hint">Official university ID card</string>
+    <string name="id_card_valid_until">Valid until %1$s · Prime University</string>
 
     <!-- Push notifications -->
     <string name="notification_channel_name">Announcements</string>
