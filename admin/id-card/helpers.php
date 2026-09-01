@@ -116,25 +116,40 @@ function idc_xml(string $s): string
  */
 function idc_photo_data_uri(?string $photo): string
 {
-    $placeholder = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mPcvHnzfwAGrgLLYIJtFgAAAABJRU5ErkJggg==';
     $photo = trim((string)$photo);
-    if ($photo === '' || preg_match('#^https?://#i', $photo)) {
-        // Remote URLs are not fetched server-side; use placeholder.
-        return $placeholder;
-    }
-    $file = dirname(__DIR__, 2) . '/' . ltrim($photo, '/');
-    if (!is_file($file)) {
-        // Also try relative to the admin folder
-        $file = dirname(__DIR__) . '/' . ltrim($photo, '/');
-    }
-    if (!is_file($file)) return $placeholder;
+    if ($photo === '') return '';
 
-    $ext  = strtolower(pathinfo($file, PATHINFO_EXTENSION));
-    $mime = ['jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png',
-             'gif' => 'image/gif', 'webp' => 'image/webp'][$ext] ?? 'image/jpeg';
-    $data = @file_get_contents($file);
-    if ($data === false || $data === '') return $placeholder;
-    return 'data:' . $mime . ';base64,' . base64_encode($data);
+    // Remote URL: fetch it (photos may be served from the public site)
+    if (preg_match('#^https?://#i', $photo)) {
+        $data = @file_get_contents($photo);
+        if ($data === false || $data === '') return '';
+        $mime = 'image/jpeg';
+        if (class_exists('finfo')) {
+            $m = (new finfo(FILEINFO_MIME_TYPE))->buffer($data);
+            if (is_string($m) && strpos($m, 'image/') === 0) $mime = $m;
+        }
+        return 'data:' . $mime . ';base64,' . base64_encode($data);
+    }
+
+    $rel = ltrim($photo, '/');
+    $candidates = [
+        dirname(__DIR__, 2) . '/' . $rel,   // site root
+        dirname(__DIR__) . '/' . $rel,      // admin/
+    ];
+    $doc_root = rtrim((string)($_SERVER['DOCUMENT_ROOT'] ?? ''), '/');
+    if ($doc_root !== '') $candidates[] = $doc_root . '/' . $rel;
+
+    foreach ($candidates as $file) {
+        if (!is_file($file)) continue;
+        $ext  = strtolower(pathinfo($file, PATHINFO_EXTENSION));
+        $mime = ['jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png',
+                 'gif' => 'image/gif', 'webp' => 'image/webp'][$ext] ?? 'image/jpeg';
+        $data = @file_get_contents($file);
+        if ($data !== false && $data !== '') {
+            return 'data:' . $mime . ';base64,' . base64_encode($data);
+        }
+    }
+    return '';
 }
 
 /**
@@ -225,10 +240,29 @@ function idc_render_front_svg(array $card): string
     $expiry = idc_fmt_date_dash($card['expiry_date']);
 
     // ── 1. Sample photo (the <image> masked by #mask487) ────────────────────
+    // The sample portrait is the large embedded 495x600 PNG. It is identified
+    // by its unique base64 header, so the university logo (a different,
+    // masked image) and all other design artwork are left untouched.
     $photo_uri = idc_photo_data_uri($card['photo']);
     $svg = preg_replace_callback(
-        '/xlink:href="data:image\/[a-zA-Z+]+;base64,[^"]*"(\s+mask="url\(#mask487\)")/s',
-        static fn($m) => 'xlink:href="' . $photo_uri . '"' . $m[1],
+        '/<image\b[^>]*?xlink:href="data:image\/png;base64,iVBORw0KGgoAAAANSUhEUgAAAe8AAAJY[^"]*"[^>]*?\/>/s',
+        static function ($m) use ($photo_uri) {
+            if ($photo_uri !== '') {
+                // Swap only the image data; keep the design's position, mask and clip.
+                return preg_replace('/xlink:href="[^"]*"/s', 'xlink:href="' . $photo_uri . '"', $m[0], 1);
+            }
+            // No photo on record -> neutral "No Image Found" box in the same place
+            if (preg_match('/transform="matrix\(([-0-9.]+),[-0-9.]+,[-0-9.]+,([-0-9.]+),([-0-9.]+),([-0-9.]+)\)"/', $m[0], $t)) {
+                $w = (float)$t[1]; $h = (float)$t[2]; $x = (float)$t[3]; $y = (float)$t[4];
+                $cx = $x + $w / 2; $cy = $y + $h / 2;
+                return '<g>'
+                     . '<rect x="' . $x . '" y="' . $y . '" width="' . $w . '" height="' . $h . '" fill="#e4e4e4" stroke="#bbbbbb" stroke-width="0.5"/>'
+                     . '<text x="' . $cx . '" y="' . ($cy - 2) . '" text-anchor="middle" font-family="Arial" font-size="8" fill="#888888">No Image</text>'
+                     . '<text x="' . $cx . '" y="' . ($cy + 8) . '" text-anchor="middle" font-family="Arial" font-size="8" fill="#888888">Found</text>'
+                     . '</g>';
+            }
+            return $m[0];
+        },
         $svg, 1
     );
 

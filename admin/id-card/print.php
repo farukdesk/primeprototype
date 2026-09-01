@@ -21,6 +21,19 @@ if (!$card) {
     redirect(APP_URL . '/id-card/index.php');
 }
 
+// Always use the CURRENT photo from the student profile when the card is
+// linked to a student record (falls back to the photo stored on the card).
+if (!empty($card['student_ref_id'])) {
+    try {
+        $st = db()->prepare('SELECT photo FROM students WHERE id = ?');
+        $st->execute([(int)$card['student_ref_id']]);
+        $live_photo = trim((string)$st->fetchColumn());
+        if ($live_photo !== '') $card['photo'] = $live_photo;
+    } catch (Throwable $e) {
+        // keep the stored photo
+    }
+}
+
 $front_svg = idc_render_front_svg($card);
 $back_url  = idc_template_url($card['card_type'], 'back');
 
