@@ -43,7 +43,11 @@ if ($voucher['status'] === 'reversed') {
 
 // ── Linked student fee lines ─────────────────────────────────────────────────
 $pay_stmt = db()->prepare(
-    'SELECT sp.*, s.id AS student_pk, s.student_id AS student_sid, s.full_name AS student_name\n     FROM sfp_payments sp\n     JOIN students s ON s.id = sp.student_id\n     WHERE sp.voucher_id = ?\n     ORDER BY sp.id ASC'
+    'SELECT sp.*, s.id AS student_pk, s.student_id AS student_sid, s.full_name AS student_name
+     FROM sfp_payments sp
+     JOIN students s ON s.id = sp.student_id
+     WHERE sp.voucher_id = ?
+     ORDER BY sp.id ASC'
 );
 $pay_stmt->execute([$voucher_id]);
 $payments = $pay_stmt->fetchAll();
@@ -183,7 +187,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             // WHERE re-asserts the safety scope: only rows of THIS voucher can change.
             $upd = $db->prepare(
-                'UPDATE sfp_payments\n                 SET fee_type = ?, semester_fee_id = ?, semester_number = ?, month_number = ?, note = ?\n                 WHERE id = ? AND voucher_id = ?'
+                'UPDATE sfp_payments
+                 SET fee_type = ?, semester_fee_id = ?, semester_number = ?, month_number = ?, note = ?
+                 WHERE id = ? AND voucher_id = ?'
             );
 
             foreach ($changes as $c) {
