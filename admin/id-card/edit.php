@@ -52,7 +52,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $photo        = trim($_POST['photo']        ?? '');
     $issue_date   = trim($_POST['issue_date']   ?? '');
     $expiry_date  = trim($_POST['expiry_date']  ?? '');
+    $print_status = trim($_POST['print_status'] ?? 'in_printing_queue');
     $remove_photo = (int)($_POST['remove_photo'] ?? 0) === 1;
+
+    if (!isset(IDC_PRINT_STATUSES[$print_status])) $errors[] = 'Invalid print status.';
 
     if (!isset(IDC_TYPES[$card_type])) $errors[] = 'Invalid card type.';
     if ($id_number === '')             $errors[] = 'ID number is required.';
