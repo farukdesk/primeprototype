@@ -434,3 +434,58 @@ function idc_store_photo(array $file): ?string
     }
     return 'uploads/id-cards/' . $name;
 }
+
+// ── Program-wise card validity ────────────────────────────────────────────────
+
+/**
+ * Card validity in months for a program, counted from the creation/issue date.
+ *
+ *   • All bachelor programs (CSE, EEE, CE, FDAE, LL.B. Hons., BBA,
+ *     B.A. Bangla/English) → 48 months (4 years)
+ *   • 1-year masters (LLM Regular, MBA 1 Year, M.A. 1 Year, B.Ed, M.Ed) → 12
+ *   • 2-year masters (LLM Preli & Final, MBA 2 Years, M.A. 2 Years) → 24
+ *   • EMBA (1.5 Years) → 18
+ *
+ * Unknown programs fall back to an explicit "N Year(s)" hint in the name,
+ * then to 48 months.
+ */
+function idc_program_validity_months(string $program): int
+{
+    $short = idc_short_program_name($program);
+    $map = [
+        'LLM Regular'              => 12,
+        'LLM Preli & Final'        => 24,
+        'MBA (1 Year)'             => 12,
+        'MBA (2 Years)'            => 24,
+        'EMBA (1.5 Years)'         => 18,
+        'M.A. in Bangla (1 Year)'  => 12,
+        'M.A. in Bangla (2 Years)' => 24,
+        'M.A. in English (1 Year)' => 12,
+        'M.A. in English (2 Years)'=> 24,
+        'B.Ed'                     => 12,
+        'M.Ed'                     => 12,
+    ];
+    if (isset($map[$short])) {
+        return $map[$short];
+    }
+    if (preg_match('/1\.5\s*year/i', $program)) {
+        return 18;
+    }
+    if (preg_match('/(\d+)\s*year/i', $program, $m)) {
+        return ((int)$m[1]) * 12;
+    }
+    return 48;
+}
+
+/**
+ * Program-wise expiry date: validity months added to the issue/created date.
+ * $from defaults to today (the creation date).
+ */
+function idc_expiry_date_for_program(string $program, ?string $from = null): string
+{
+    $ts = ($from !== null && $from !== '') ? strtotime($from) : time();
+    if (!$ts) {
+        $ts = time();
+    }
+    return date('Y-m-d', strtotime('+' . idc_program_validity_months($program) . ' months', $ts));
+}
