@@ -772,3 +772,57 @@ function idc_render_back_svg(string $type): string
     }
     return $svg;
 }
+
+// ── Card completeness check ───────────────────────────────────────────────
+
+/**
+ * A printable ID card must contain:
+ *   • Name
+ *   • Photo (the card's own photo, or the linked student profile photo –
+ *     pass it as 'effective_photo' when available)
+ *   • Student ID number (also encoded in the barcode – no ID means no barcode)
+ *   • Program name + Batch name (students) / Designation (faculty & staff)
+ *   • Blood group
+ *
+ * Returns the list of missing items ([] when the card is complete).
+ */
+function idc_card_missing_fields(array $card): array
+{
+    $missing = [];
+
+    if (trim((string)($card['full_name'] ?? '')) === '') {
+        $missing[] = 'Name';
+    }
+
+    $photo = trim((string)($card['effective_photo'] ?? ''));
+    if ($photo === '') {
+        $photo = trim((string)($card['photo'] ?? ''));
+    }
+    if ($photo === '') {
+        $missing[] = 'Photo';
+    }
+
+    if (trim((string)($card['id_number'] ?? '')) === '') {
+        $missing[] = 'Student ID number';
+        $missing[] = 'Barcode (needs the ID number)';
+    }
+
+    if (($card['card_type'] ?? '') === 'student') {
+        if (trim((string)($card['program_name'] ?? '')) === '') {
+            $missing[] = 'Program name';
+        }
+        if (trim((string)($card['batch_name'] ?? '')) === '') {
+            $missing[] = 'Batch name';
+        }
+    } else {
+        if (trim((string)($card['designation'] ?? '')) === '') {
+            $missing[] = 'Designation';
+        }
+    }
+
+    if (trim((string)($card['blood_group'] ?? '')) === '') {
+        $missing[] = 'Blood Group';
+    }
+
+    return $missing;
+}

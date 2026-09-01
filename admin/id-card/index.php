@@ -144,7 +144,11 @@ try {
     $total = (int)$st->fetchColumn();
 
     $st = $db->prepare(
-        "SELECT c.* FROM idc_cards c WHERE $where
+        "SELECT c.*,
+                COALESCE(NULLIF(TRIM(c.photo), ''), NULLIF(TRIM(s.photo), '')) AS effective_photo
+         FROM idc_cards c
+         LEFT JOIN students s ON s.id = c.student_ref_id
+         WHERE $where
          ORDER BY c.created_at DESC, c.id DESC
          LIMIT $per_page OFFSET $offset"
     );
@@ -291,16 +295,52 @@ require_once __DIR__ . '/../includes/header.php';
                 <tr><td colspan="<?= $can_edit ? 10 : 9 ?>" class="text-center text-muted py-4">No ID cards yet. Use Quick Generate above or Manual Entry.</td></tr>
             <?php endif; ?>
             <?php foreach ($rows as $r): ?>
-                <?php $pstatus = trim((string)($r['print_status'] ?? '')) ?: 'in_printing_queue'; ?>
-                <tr>
+                <?php
+                    $pstatus = trim((string)($r['print_status'] ?? '')) ?: 'in_printing_queue';
+                    $missing = idc_card_missing_fields($r);
+                ?>
+                <tr class="<?= $missing ? 'table-danger' : '' ?>"<?= $missing ? ' title="Incomplete card – missing: ' . h(implode(', ', $missing)) . '"' : '' ?>>
                     <?php if ($can_edit): ?>
                     <td><input type="checkbox" class="form-check-input js-idc-check" form="bulkStatusForm" name="ids[]" value="<?= (int)$r['id'] ?>"></td>
                     <?php endif; ?>
                     <td><span class="badge bg-<?= $r['card_type'] === 'student' ? 'primary' : ($r['card_type'] === 'faculty' ? 'success' : 'secondary') ?>"><?= h(IDC_TYPES[$r['card_type']] ?? $r['card_type']) ?></span></td>
-                    <td class="fw-semibold"><?= h($r['id_number']) ?></td>
-                    <td><?= h($r['full_name']) ?></td>
-                    <td><?= h($r['card_type'] === 'student' ? (string)$r['program_name'] : (string)$r['designation']) ?></td>
-                    <td><?= h((string)$r['blood_group']) ?></td>
+                    <td class="fw-semibold">
+                        <?php if (trim((string)$r['id_number']) !== ''): ?>
+                            <?= h($r['id_number']) ?>
+                        <?php else: ?>
+                            <span class="badge bg-danger">ID / barcode missing</span>
+                        <?php endif; ?>
+                    </td>
+                    <td>
+                        <?php if (trim((string)$r['full_name']) !== ''): ?>
+                            <?= h($r['full_name']) ?>
+                        <?php else: ?>
+                            <span class="badge bg-danger">Name missing</span>
+                        <?php endif; ?>
+                        <?php if ($missing): ?>
+                        <div class="text-danger fw-semibold" style="font-size:.7rem">
+                            <i class="fas fa-exclamation-triangle me-1"></i>Missing: <?= h(implode(', ', $missing)) ?>
+                        </div>
+                        <?php endif; ?>
+                    </td>
+                    <td>
+                        <?php $prog_line = $r['card_type'] === 'student' ? trim((string)$r['program_name']) : trim((string)$r['designation']); ?>
+                        <?php if ($prog_line !== ''): ?>
+                            <?= h($prog_line) ?>
+                        <?php else: ?>
+                            <span class="badge bg-danger"><?= $r['card_type'] === 'student' ? 'Program missing' : 'Designation missing' ?></span>
+                        <?php endif; ?>
+                        <?php if ($r['card_type'] === 'student' && trim((string)($r['batch_name'] ?? '')) === ''): ?>
+                            <span class="badge bg-danger">Batch missing</span>
+                        <?php endif; ?>
+                    </td>
+                    <td>
+                        <?php if (trim((string)$r['blood_group']) !== ''): ?>
+                            <?= h((string)$r['blood_group']) ?>
+                        <?php else: ?>
+                            <span class="badge bg-danger">Missing</span>
+                        <?php endif; ?>
+                    </td>
                     <td class="small text-muted"><?= h(idc_fmt_date($r['issue_date'])) ?> – <?= h(idc_fmt_date($r['expiry_date'])) ?></td>
                     <td>
                         <?php if ($can_edit): ?>
