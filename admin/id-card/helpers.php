@@ -93,3 +93,182 @@ function idc_fmt_date(?string $d): string
     $ts = strtotime($d);
     return $ts ? date('d/m/Y', $ts) : '';
 }
+
+/** dd-mm-YYYY (matches the SVG design's date format) or '' */
+function idc_fmt_date_dash(?string $d): string
+{
+    $d = trim((string)$d);
+    if ($d === '' || $d === '0000-00-00') return '';
+    $ts = strtotime($d);
+    return $ts ? date('d-m-Y', $ts) : '';
+}
+
+/** Escape a string for embedding inside SVG/XML text nodes. */
+function idc_xml(string $s): string
+{
+    return htmlspecialchars($s, ENT_QUOTES | ENT_XML1, 'UTF-8');
+}
+
+/**
+ * Photo as a data URI for embedding into the SVG <image> element.
+ * Resolves the stored path against the site root; falls back to a neutral
+ * grey placeholder so the sample person's photo is never shown.
+ */
+function idc_photo_data_uri(?string $photo): string
+{
+    $placeholder = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mPcvHnzfwAGrgLLYIJtFgAAAABJRU5ErkJggg==';
+    $photo = trim((string)$photo);
+    if ($photo === '' || preg_match('#^https?://#i', $photo)) {
+        // Remote URLs are not fetched server-side; use placeholder.
+        return $placeholder;
+    }
+    $file = dirname(__DIR__, 2) . '/' . ltrim($photo, '/');
+    if (!is_file($file)) {
+        // Also try relative to the admin folder
+        $file = dirname(__DIR__) . '/' . ltrim($photo, '/');
+    }
+    if (!is_file($file)) return $placeholder;
+
+    $ext  = strtolower(pathinfo($file, PATHINFO_EXTENSION));
+    $mime = ['jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png',
+             'gif' => 'image/gif', 'webp' => 'image/webp'][$ext] ?? 'image/jpeg';
+    $data = @file_get_contents($file);
+    if ($data === false || $data === '') return $placeholder;
+    return 'data:' . $mime . ';base64,' . base64_encode($data);
+}
+
+/**
+ * Code 39 barcode as SVG <rect> elements inside a 1×1 unit box.
+ * Meant to be wrapped in a <g transform="matrix(w,0,0,h,x,y)"> so it fills
+ * the exact area of the design's placeholder barcode.
+ */
+function idc_code39_rects(string $code): string
+{
+    $map = [
+        '0' => '000110100', '1' => '100100001', '2' => '001100001', '3' => '101100000',
+        '4' => '000110001', '5' => '100110000', '6' => '001110000', '7' => '000100101',
+        '8' => '100100100', '9' => '001100100', 'A' => '100001001', 'B' => '001001001',
+        'C' => '101001000', 'D' => '000011001', 'E' => '100011000', 'F' => '001011000',
+        'G' => '000001101', 'H' => '100001100', 'I' => '001001100', 'J' => '000011100',
+        'K' => '100000011', 'L' => '001000011', 'M' => '101000010', 'N' => '000010011',
+        'O' => '100010010', 'P' => '001010010', 'Q' => '000000111', 'R' => '100000110',
+        'S' => '001000110', 'T' => '000010110', 'U' => '110000001', 'V' => '011000001',
+        'W' => '111000000', 'X' => '010010001', 'Y' => '110010000', 'Z' => '011010000',
+        '-' => '010000101', '.' => '110000100', ' ' => '011000100', '$' => '010101000',
+        '/' => '010100010', '+' => '010001010', '%' => '000101010', '*' => '010010100',
+    ];
+
+    $code = strtoupper(preg_replace('/[^0-9A-Za-z \-.$\/+%]/', '', $code));
+    if ($code === '') $code = '0';
+    $chars = str_split('*' . $code . '*');
+
+    $narrow = 1.0;
+    $wide   = 2.5;
+
+    // Build alternating bar/space width sequence
+    $seq = []; // [width, is_bar]
+    $last = count($chars) - 1;
+    foreach ($chars as $i => $ch) {
+        $pat = $map[$ch] ?? $map['-'];
+        for ($j = 0; $j < 9; $j++) {
+            $seq[] = [$pat[$j] === '1' ? $wide : $narrow, $j % 2 === 0];
+        }
+        if ($i < $last) $seq[] = [$narrow, false]; // inter-character gap
+    }
+
+    $total = 0.0;
+    foreach ($seq as $s) $total += $s[0];
+
+    $x = 0.0;
+    $rects = '';
+    foreach ($seq as [$w, $bar]) {
+        if ($bar) {
+            $rects .= sprintf('<rect x="%.6F" y="0" width="%.6F" height="1" fill="#000000"/>', $x / $total, $w / $total);
+        }
+        $x += $w;
+    }
+    return $rects;
+}
+
+/**
+ * Load the front SVG template and replace ALL sample/default content
+ * (photo, name, ID, program line, blood group, dates, barcode) with the
+ * generated card data.
+ */
+function idc_render_front_svg(array $card): string
+{
+    $dir  = dirname(__DIR__, 2) . '/ID Card SVG/';
+    $file = (IDC_TYPES[$card['card_type']] ?? 'Student') . '_ID_Front.svg';
+    if (!is_file($dir . $file)) $file = 'Student_ID_Front.svg';
+    $svg = @file_get_contents($dir . $file);
+    if ($svg === false) return '';
+
+    $name = trim((string)$card['full_name']);
+    $idno = trim((string)$card['id_number']);
+    $bg   = trim((string)$card['blood_group']);
+
+    // Program / designation line (e.g. "BSc in CSE, 67th Batch")
+    if ($card['card_type'] === 'student') {
+        $line = trim((string)$card['program_name']);
+        $batch = trim((string)$card['batch_name']);
+        if ($batch !== '') {
+            if (stripos($batch, 'batch') === false) $batch .= ' Batch';
+            $line .= ($line !== '' ? ', ' : '') . $batch;
+        }
+    } else {
+        $line = trim((string)$card['designation']);
+        $dept = trim((string)$card['dept_name']);
+        if ($dept !== '') $line .= ($line !== '' ? ', ' : '') . $dept;
+    }
+
+    $issue  = idc_fmt_date_dash($card['issue_date']);
+    $expiry = idc_fmt_date_dash($card['expiry_date']);
+
+    // ── 1. Sample photo (the <image> masked by #mask487) ────────────────────
+    $photo_uri = idc_photo_data_uri($card['photo']);
+    $svg = preg_replace_callback(
+        '/xlink:href="data:image\/[a-zA-Z+]+;base64,[^"]*"(\s+mask="url\(#mask487\)")/s',
+        static fn($m) => 'xlink:href="' . $photo_uri . '"' . $m[1],
+        $svg, 1
+    );
+
+    // ── 2. Sample name (auto-shrink for long names) ─────────────────────────
+    if (mb_strlen($name) > 20) {
+        $newSize = max(7.5, 12.8994 * 20 / mb_strlen($name));
+        $svg = str_replace('font-size:12.8994px', 'font-size:' . round($newSize, 2) . 'px', $svg);
+    }
+    $svg = str_replace('>Md Mohiuddin Gazi<', '>' . idc_xml($name) . '<', $svg);
+
+    // ── 3. Sample ID number ─────────────────────────────────────────────────
+    $svg = str_replace('>02825205101167<', '>' . idc_xml($idno) . '<', $svg);
+
+    // ── 4. Sample program line ("BSc in CSE, 67" + superscript "th " + "Batch") ─
+    $svg = str_replace('>BSc in CSE, 67<', '>' . idc_xml($line) . '<', $svg);
+    $svg = str_replace('>th <', '><', $svg);
+    $svg = str_replace('>Batch<', '><', $svg);
+
+    // ── 5. Sample blood group ───────────────────────────────────────────────
+    $bg_text = $bg !== '' ? 'Blood Group : ' . $bg : '';
+    $svg = str_replace('>Blood Group : B+ve<', '>' . idc_xml($bg_text) . '<', $svg);
+
+    // ── 6. Sample dates ─────────────────────────────────────────────────────
+    $svg = preg_replace('/>Date of Issue\s*: 01-07-2025</',
+        '>' . idc_xml($issue !== '' ? 'Date of Issue   : ' . $issue : '') . '<', $svg, 1);
+    $svg = preg_replace('/>Date of Expiry\s*: 31-07-2029</',
+        '>' . idc_xml($expiry !== '' ? 'Date of Expiry: ' . $expiry : '') . '<', $svg, 1);
+
+    // ── 7. Barcode: replace the placeholder image with a real Code 39 barcode
+    //      that encodes the ID number, in the exact same position/size. ───────
+    $svg = preg_replace_callback(
+        '/<image\b[^>]*?id="image495"[^>]*?\/>/s',
+        static function ($m) use ($idno) {
+            // Reuse the placeholder's transform so position/size match the design
+            $transform = 'matrix(143.05477,0,0,15.124583,118.25223,185.38558)';
+            if (preg_match('/transform="([^"]+)"/', $m[0], $t)) $transform = $t[1];
+            return '<g transform="' . $transform . '">' . idc_code39_rects($idno) . '</g>';
+        },
+        $svg, 1
+    );
+
+    return $svg;
+}

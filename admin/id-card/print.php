@@ -2,14 +2,13 @@
 /**
  * ID Card – Print Preview (front + back)
  *
- * Renders the SVG design (from /ID Card SVG/) as the card background and
- * overlays the dynamic data (photo, name, ID, program, validity, QR …)
- * with absolutely-positioned elements.
- *
- * >>> FINE-TUNING <<<
- * All overlay positions live in the $layout array below (values are px
- * inside the native 331.2 × 212.16 px card canvas of the SVG).
- * Adjust them until the text sits exactly in your design's blank areas.
+ * The front side is generated server-side from the SVG design in
+ * "/ID Card SVG/": every piece of sample data baked into the template
+ * (photo, name, ID, program/batch, blood group, issue/expiry dates and
+ * the barcode) is replaced with the generated card's data.
+ * The barcode is a real Code 39 barcode that encodes the ID number.
+ * The back side contains only static university information and is
+ * rendered unchanged.
  */
 require_once __DIR__ . '/../includes/auth.php';
 require_access('id-card');
@@ -22,32 +21,16 @@ if (!$card) {
     redirect(APP_URL . '/id-card/index.php');
 }
 
-$front_bg = idc_template_url($card['card_type'], 'front');
-$back_bg  = idc_template_url($card['card_type'], 'back');
-$photo    = idc_photo_url($card['photo']);
-$qr_src   = APP_URL . '/id-card/qr.php?card_id=' . $id;
+$front_svg = idc_render_front_svg($card);
+$back_url  = idc_template_url($card['card_type'], 'back');
 
-// ── Overlay layout (px, native card canvas 331.2 × 212.16) ──────────────────
-$layout = [
-    'front' => [
-        'photo'    => ['left' => 22,  'top' => 60,  'width' => 84, 'height' => 104],
-        'name'     => ['left' => 118, 'top' => 76,  'size' => 13],
-        'id'       => ['left' => 118, 'top' => 97,  'size' => 11],
-        'line1'    => ['left' => 118, 'top' => 115, 'size' => 9],   // program / designation
-        'line2'    => ['left' => 118, 'top' => 131, 'size' => 9],   // department
-        'validity' => ['left' => 118, 'top' => 149, 'size' => 8],
-    ],
-    'back' => [
-        'blood'   => ['left' => 20, 'top' => 42,  'size' => 10],
-        'phone'   => ['left' => 20, 'top' => 62,  'size' => 9],
-        'address' => ['left' => 20, 'top' => 82,  'size' => 8, 'width' => 200],
-        'qr'      => ['right' => 16, 'bottom' => 16, 'size' => 66],
-    ],
-];
+if ($front_svg === '') {
+    flash_set('danger', 'Could not load the ID card SVG template (ID Card SVG/Student_ID_Front.svg).');
+    redirect(APP_URL . '/id-card/index.php');
+}
 
-$line1 = $card['card_type'] === 'student' ? (string)$card['program_name'] : (string)$card['designation'];
-$line2 = (string)$card['dept_name'];
-$validity = trim(idc_fmt_date($card['issue_date']) . ' – ' . idc_fmt_date($card['expiry_date']), ' –');
+// Strip the XML prolog so the SVG can be inlined into the HTML page
+$front_svg = preg_replace('/^<\?xml[^>]*\?>\s*/', '', $front_svg);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -70,20 +53,15 @@ $validity = trim(idc_fmt_date($card['issue_date']) . ' – ' . idc_fmt_date($car
     .id-card {
         position: relative; width: var(--card-w); height: var(--card-h);
         border-radius: 10px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,.25);
-        background: #fff url('') center/cover no-repeat;
+        background: #fff;
     }
-    .id-card .bg { position: absolute; inset: 0; width: 100%; height: 100%; }
-    .ov { position: absolute; color: #fff; line-height: 1.25; white-space: nowrap; }
-    .ov.dark { color: #1a1a2e; }
-    .ov.wrap { white-space: normal; }
-    .photo { position: absolute; object-fit: cover; border: 2px solid #fff; border-radius: 4px; background: #ddd; }
-    .qr { position: absolute; background: #fff; padding: 3px; border-radius: 4px; }
+    .id-card svg, .id-card img { display: block; width: 100%; height: 100%; }
 
     @media print {
         body { background: #fff; padding: 0; }
         .toolbar { display: none; }
         .cards { gap: 8mm; }
-        .id-card { box-shadow: none; border: 1px dashed #bbb; break-inside: avoid; }
+        .id-card { box-shadow: none; break-inside: avoid; border-radius: 0; }
         @page { margin: 8mm; }
     }
 </style>
@@ -97,46 +75,14 @@ $validity = trim(idc_fmt_date($card['issue_date']) . ' – ' . idc_fmt_date($car
 
 <div class="cards">
 
-    <!-- FRONT -->
+    <!-- FRONT: SVG template with all sample data replaced by generated info -->
     <div class="id-card">
-        <img class="bg" src="<?= h($front_bg) ?>" alt="">
-        <?php $L = $layout['front']; ?>
-        <?php if ($photo !== ''): ?>
-        <img class="photo" src="<?= h($photo) ?>" alt=""
-             style="left:<?= $L['photo']['left'] ?>px; top:<?= $L['photo']['top'] ?>px;
-                    width:<?= $L['photo']['width'] ?>px; height:<?= $L['photo']['height'] ?>px;">
-        <?php else: ?>
-        <div class="photo" style="left:<?= $L['photo']['left'] ?>px; top:<?= $L['photo']['top'] ?>px;
-                    width:<?= $L['photo']['width'] ?>px; height:<?= $L['photo']['height'] ?>px;"></div>
-        <?php endif; ?>
-        <div class="ov" style="left:<?= $L['name']['left'] ?>px; top:<?= $L['name']['top'] ?>px; font-size:<?= $L['name']['size'] ?>px; font-weight:700;"><?= h($card['full_name']) ?></div>
-        <div class="ov" style="left:<?= $L['id']['left'] ?>px; top:<?= $L['id']['top'] ?>px; font-size:<?= $L['id']['size'] ?>px; font-weight:600;">ID: <?= h($card['id_number']) ?></div>
-        <?php if ($line1 !== ''): ?>
-        <div class="ov" style="left:<?= $L['line1']['left'] ?>px; top:<?= $L['line1']['top'] ?>px; font-size:<?= $L['line1']['size'] ?>px;"><?= h($line1) ?></div>
-        <?php endif; ?>
-        <?php if ($line2 !== ''): ?>
-        <div class="ov" style="left:<?= $L['line2']['left'] ?>px; top:<?= $L['line2']['top'] ?>px; font-size:<?= $L['line2']['size'] ?>px;"><?= h($line2) ?></div>
-        <?php endif; ?>
-        <?php if ($validity !== ''): ?>
-        <div class="ov" style="left:<?= $L['validity']['left'] ?>px; top:<?= $L['validity']['top'] ?>px; font-size:<?= $L['validity']['size'] ?>px;">Valid: <?= h($validity) ?></div>
-        <?php endif; ?>
+        <?= $front_svg ?>
     </div>
 
-    <!-- BACK -->
+    <!-- BACK: static university information from the design -->
     <div class="id-card">
-        <img class="bg" src="<?= h($back_bg) ?>" alt="">
-        <?php $L = $layout['back']; ?>
-        <?php if ((string)$card['blood_group'] !== ''): ?>
-        <div class="ov dark" style="left:<?= $L['blood']['left'] ?>px; top:<?= $L['blood']['top'] ?>px; font-size:<?= $L['blood']['size'] ?>px; font-weight:700;">Blood Group: <?= h($card['blood_group']) ?></div>
-        <?php endif; ?>
-        <?php if ((string)$card['phone'] !== ''): ?>
-        <div class="ov dark" style="left:<?= $L['phone']['left'] ?>px; top:<?= $L['phone']['top'] ?>px; font-size:<?= $L['phone']['size'] ?>px;">Phone: <?= h($card['phone']) ?></div>
-        <?php endif; ?>
-        <?php if ((string)$card['address'] !== ''): ?>
-        <div class="ov dark wrap" style="left:<?= $L['address']['left'] ?>px; top:<?= $L['address']['top'] ?>px; font-size:<?= $L['address']['size'] ?>px; width:<?= $L['address']['width'] ?>px;"><?= h($card['address']) ?></div>
-        <?php endif; ?>
-        <img class="qr" src="<?= h($qr_src) ?>" alt="QR"
-             style="right:<?= $L['qr']['right'] ?>px; bottom:<?= $L['qr']['bottom'] ?>px; width:<?= $L['qr']['size'] ?>px; height:<?= $L['qr']['size'] ?>px;">
+        <img src="<?= h($back_url) ?>" alt="ID Card Back">
     </div>
 
 </div>
