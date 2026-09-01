@@ -160,6 +160,9 @@
     <string name="id_card_valid">Valid student ID · Prime University</string>
     <string name="id_card_official_hint">Official university ID card</string>
     <string name="id_card_valid_until">Valid until %1$s · Prime University</string>
+    <string name="id_card_status">Card status: %1$s</string>
+    <string name="id_card_empty_title">No ID card found</string>
+    <string name="id_card_empty_body">Your ID card has not been issued yet. Once the university generates your ID card, it will appear here – and we\'ll notify you when it is printed and ready for collection.</string>
 
     <!-- Push notifications -->
     <string name="notification_channel_name">Announcements</string>

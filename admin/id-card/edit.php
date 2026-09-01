@@ -98,6 +98,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $print_status,
                 $id,
             ]);
+
+            // Automatic push notification to the student on a real status change.
+            if ($print_status !== $pre['print_status']) {
+                idc_notify_status_change(
+                    array_merge($card, ['card_type' => $card_type, 'id_number' => $id_number]),
+                    $print_status
+                );
+            }
+
             flash_set('success', 'ID card updated. Opening print preview…');
             redirect(APP_URL . '/id-card/print.php?id=' . $id);
         } catch (Throwable $e) {
