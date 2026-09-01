@@ -77,6 +77,9 @@ require_once __DIR__ . '/../includes/header.php';
     </nav>
     <?php if (idc_can_create()): ?>
     <div class="d-flex gap-2">
+        <a href="<?= APP_URL ?>/id-card/bulk-create.php" class="btn btn-outline-success btn-sm">
+            <i class="fas fa-layer-group me-1"></i> Bulk Create
+        </a>
         <a href="<?= APP_URL ?>/id-card/create.php" class="btn btn-outline-primary btn-sm">
             <i class="fas fa-pen me-1"></i> Manual Entry
         </a>

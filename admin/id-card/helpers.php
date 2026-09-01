@@ -328,3 +328,109 @@ function idc_render_front_svg(array $card): string
 
     return $svg;
 }
+
+// ── Program short names ──────────────────────────────────────────────────────
+
+/**
+ * Short display name for a program on the ID card.
+ *
+ * Uses the official mapping first (normalised: case, spacing and dashes are
+ * ignored). Unknown programs fall back to light generic shortening
+ * (BSc/MSc prefixes, then the parenthesised acronym when still too long).
+ */
+function idc_short_program_name(string $program): string
+{
+    $norm = static function (string $s): string {
+        $s = mb_strtolower(trim($s));
+        $s = str_replace(['\u2013', '\u2014'], '-', $s);
+        $s = preg_replace('/\s*-\s*/', '-', $s);
+        $s = preg_replace('/\s+/', ' ', $s);
+        return $s;
+    };
+
+    static $map = null;
+    if ($map === null) {
+        $pairs = [
+            'BSc in Computer Science & Engineering (CSE)'                 => 'BSc in CSE',
+            'BSc in Computer Science and Engineering (CSE)'               => 'BSc in CSE',
+            'BSc in Electrical and Electronic Engineering'                => 'BSc in EEE',
+            'BSc in Electrical & Electronic Engineering'                  => 'BSc in EEE',
+            'Bachelor of Science in Civil Engineering (CE)'               => 'BSc in CE',
+            'B.Sc in Fashion Design and Apparel Engineering'              => 'BSc in FDAE',
+            'Bachelor of Laws (LL.B. Hons.)'                              => 'LL.B. Hons.',
+            'Master of Laws (LLM)- 1 Year'                                => 'LLM Regular',
+            'Master of Laws (LLM) Preli & Final- 2 Years'                 => 'LLM Preli & Final',
+            'Bachelor of Business Administration (BBA)- 4 Years'          => 'BBA',
+            'Masters of Business Administration (MBA)'                    => 'MBA (1 Year)',
+            'Masters of Business Administration (MBA)- 1 Year'            => 'MBA (1 Year)',
+            'Executive Master of Business Administration (EMBA)-1.5 Years'=> 'EMBA (1.5 Years)',
+            'Masters of Business Administration (MBA)- 2 Years'           => 'MBA (2 Years)',
+            'Bachelor of Arts in Bangla'                                  => 'B.A. (Hons.) in Bangla',
+            'Master of Arts in Bangla (MA)- 1 Year'                       => 'M.A. in Bangla (1 Year)',
+            'Master of Arts in Bangla (MA)- 2 Years'                      => 'M.A. in Bangla (2 Years)',
+            'Bachelor of Arts in English'                                 => 'B.A. (Hons.) in English',
+            'Master of Arts in English (1 Year)'                          => 'M.A. in English (1 Year)',
+            'Master of Arts in English (2 Years)'                         => 'M.A. in English (2 Years)',
+            'Bachelor of Education (B.Ed)- 1 Year'                        => 'B.Ed',
+            'Master of Education (M.Ed)-1 Year'                           => 'M.Ed',
+        ];
+        $map = [];
+        foreach ($pairs as $k => $v) {
+            $map[$norm($k)] = $v;
+        }
+    }
+
+    $p = trim($program);
+    if ($p === '') return '';
+
+    $key = $norm($p);
+    if (isset($map[$key])) {
+        return $map[$key];
+    }
+
+    // Generic fallbacks for programs not in the official map
+    $short = preg_replace('/^bachelor of science in\s+/i', 'BSc in ', $p);
+    $short = preg_replace('/^b\.?\s?sc\.?\s+in\s+/i', 'BSc in ', $short);
+    $short = preg_replace('/^master of science in\s+/i', 'MSc in ', $short);
+    if (mb_strlen($short) > 26 && preg_match('/\(([A-Za-z.&\s]{2,14})\)/', $short, $m)) {
+        $short = trim($m[1]);
+    }
+    return $short;
+}
+
+// ── Photo upload ────────────────────────────────────────────────────────────
+
+/**
+ * Validate and store an uploaded ID-card photo.
+ * Returns the stored relative path (e.g. 'uploads/id-cards/abc.jpg'),
+ * or null when no file was supplied. Throws RuntimeException on invalid uploads.
+ */
+function idc_store_photo(array $file): ?string
+{
+    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) return null;
+    if ($file['error'] !== UPLOAD_ERR_OK) {
+        throw new RuntimeException('Photo upload failed (error ' . (int)$file['error'] . ').');
+    }
+    if (($file['size'] ?? 0) > 3 * 1024 * 1024) {
+        throw new RuntimeException('Photo must be 3 MB or smaller.');
+    }
+    $ext = strtolower(pathinfo((string)$file['name'], PATHINFO_EXTENSION));
+    if (!in_array($ext, ['jpg', 'jpeg', 'png', 'webp'], true)) {
+        throw new RuntimeException('Photo must be a JPG, PNG or WEBP image.');
+    }
+    if (class_exists('finfo')) {
+        $mime = (new finfo(FILEINFO_MIME_TYPE))->file($file['tmp_name']);
+        if (!is_string($mime) || strpos($mime, 'image/') !== 0) {
+            throw new RuntimeException('Uploaded file is not a valid image.');
+        }
+    }
+    $dir = UPLOAD_DIR . '/id-cards';
+    if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
+        throw new RuntimeException('Could not create the ID card photo directory.');
+    }
+    $name = bin2hex(random_bytes(10)) . '.' . $ext;
+    if (!move_uploaded_file($file['tmp_name'], $dir . '/' . $name)) {
+        throw new RuntimeException('Could not save the uploaded photo.');
+    }
+    return 'uploads/id-cards/' . $name;
+}

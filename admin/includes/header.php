@@ -1030,6 +1030,42 @@ if (is_portal_student()) {
     </div>
     <?php endif; ?>
 
+    <!-- ── ID Card ── -->
+    <?php if (is_super_admin() || can_access('id-card')): ?>
+    <?php $is_idcard_active = strpos($current_path, '/id-card/') !== false; ?>
+    <button class="nav-group-toggle <?= $is_idcard_active ? '' : 'collapsed' ?>"
+            data-bs-toggle="collapse" data-bs-target="#grp-idcard"
+            aria-expanded="<?= $is_idcard_active ? 'true' : 'false' ?>">
+        <i class="fas fa-id-card grp-icon" style="color:#06b6d4"></i>
+        ID Card
+        <i class="fas fa-chevron-down toggle-icon"></i>
+    </button>
+    <div class="collapse <?= $is_idcard_active ? 'show' : '' ?>" id="grp-idcard">
+        <ul class="nav flex-column grp-items">
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/id-card/index.php"
+                   class="<?= ($is_idcard_active && strpos($current_path, '/id-card/create') === false && strpos($current_path, '/id-card/bulk-create') === false && strpos($current_path, '/id-card/edit') === false) ? 'active' : '' ?>">
+                    <i class="fas fa-list"></i> All ID Cards
+                </a>
+            </li>
+            <?php if (is_super_admin() || can_access('id-card', 'can_create')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/id-card/create.php"
+                   class="<?= strpos($current_path, '/id-card/create') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-plus"></i> Generate ID Card
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/id-card/bulk-create.php"
+                   class="<?= strpos($current_path, '/id-card/bulk-create') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-layer-group"></i> Bulk Create
+                </a>
+            </li>
+            <?php endif; ?>
+        </ul>
+    </div>
+    <?php endif; ?>
+
     <!-- ── Semester Drop / Dropout ── -->
     <?php if (is_super_admin() || can_access('semester-drop')): ?>
     <button class="nav-group-toggle <?= $is_semester_drop_active ? '' : 'collapsed' ?>"
