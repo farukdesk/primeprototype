@@ -15,6 +15,9 @@ const ACC_INVOICE_CUSTOM_LOGO_FILE = 'Prime_University_Invoice logo.png';
 const ACC_STUDENT_FORM_FEE = 500.0;
 const ACC_STUDENT_ID_CARD_FEE = 500.0;
 
+/** Day of the month on which monthly fee installments fall due. */
+const ACC_MONTHLY_DUE_DAY = 10;
+
 // ── Permission helpers ────────────────────────────────────────────────────────
 
 function acc_can_view(): bool
@@ -3284,8 +3287,12 @@ function acc_month_year_for_slot(int $start_month, int $start_year, int $offset)
  * Unlike acc_total_outstanding (which counts every future semester), this function
  * only charges:
  *   - Admission + form/ID fees (always due in full – one-time on admission)
- *   - Registration fee for each semester whose first month ≤ today
- *   - Monthly tuition / fixed / English fees for months that are ≤ today
+ *   - Registration fee for each semester whose first month has fallen due
+ *   - Monthly tuition / fixed / English fees for months that have fallen due
+ *
+ * A month's installment falls due on the 10th of that month
+ * (ACC_MONTHLY_DUE_DAY), so the CURRENT month is only counted from the
+ * 10th onward; past months are always counted.
  *
  * Used by the admit-card access check so students are not blocked by dues that
  * have not yet fallen due.
@@ -3320,6 +3327,10 @@ function acc_outstanding_through_current_month(int $package_id): float
     $now_month = (int)date('n');
     $now_year  = (int)date('Y');
 
+    // Monthly obligations fall due on the 10th of their month (not the 1st):
+    // the CURRENT month's installment only counts as due from the 10th onward.
+    $due_day_passed = (int)date('j') >= ACC_MONTHLY_DUE_DAY;
+
     $sd_student_id = (int)($pkg['student_id'] ?? 0);
 
     // Official dropout: from the dropout effective date the account is frozen and
@@ -3348,9 +3359,13 @@ function acc_outstanding_through_current_month(int $package_id): float
             ? sd_shifted_slot_calendar($sd_student_id, $start_month, $start_year, $first_offset)
             : acc_month_year_for_slot($start_month, $start_year, $first_offset);
 
-        // Has this semester started yet?
+        // Has this semester started yet? Its first month has fallen due –
+        // months fall due on the 10th, so the current month only counts
+        // from the 10th onward.
         $sem_started = ($first_month_info['year'] < $now_year)
-            || ($first_month_info['year'] === $now_year && $first_month_info['month'] <= $now_month);
+            || ($first_month_info['year'] === $now_year && $first_month_info['month'] < $now_month)
+            || ($first_month_info['year'] === $now_year && $first_month_info['month'] === $now_month
+                && $due_day_passed);
 
         if (!$sem_started) {
             continue;
@@ -3388,7 +3403,9 @@ function acc_outstanding_through_current_month(int $package_id): float
                 : acc_month_year_for_slot($start_month, $start_year, $global_offset);
 
             $month_due = ($month_info['year'] < $now_year)
-                || ($month_info['year'] === $now_year && $month_info['month'] <= $now_month);
+                || ($month_info['year'] === $now_year && $month_info['month'] < $now_month)
+                || ($month_info['year'] === $now_year && $month_info['month'] === $now_month
+                    && $due_day_passed);
 
             if (!$month_due) {
                 // Months map to strictly increasing (deferred) calendar months, so once
