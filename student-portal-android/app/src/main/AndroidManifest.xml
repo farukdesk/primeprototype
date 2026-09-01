@@ -71,6 +71,11 @@
             android:parentActivityName=".ui.main.MainActivity" />
 
         <activity
+            android:name=".ui.courses.CourseRegistrationActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.main.MainActivity" />
+
+        <activity
             android:name=".ui.idcard.IdCardActivity"
             android:exported="false"
             android:parentActivityName=".ui.main.MainActivity" />

@@ -189,6 +189,13 @@ class StudentRepository private constructor(context: Context) {
     suspend fun getCourseOffers(): AppResult<CourseOffersResponse> =
         call { api.getCourseOffers() }
 
+    /**
+     * Submits registration for ALL subjects of an offer at once.
+     * The registration awaits departmental approval.
+     */
+    suspend fun registerAllCourses(offerId: Int): AppResult<SimpleResponse> =
+        call { api.registerAllCourses(offerId = offerId) }
+
     // ── Admit cards (students only) ────────────────────────────────────────────────
 
     /** Active admit cards published for the student's dept + program. */

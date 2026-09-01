@@ -86,6 +86,17 @@ interface ApiService {
     @GET("id-card.php")
     suspend fun getIdCard(): Response<IdCardResponse>
 
+    /**
+     * Registers the student for ALL subjects of a course offer at once.
+     * The registration is created as pending and approved by the department.
+     */
+    @FormUrlEncoded
+    @POST("course-register.php")
+    suspend fun registerAllCourses(
+        @Field("offer_id") offerId: Int,
+        @Field("action") action: String = "register_all",
+    ): Response<SimpleResponse>
+
     @GET("notifications.php")
     suspend fun getAppNotifications(
         @Query("page") page: Int = 1,

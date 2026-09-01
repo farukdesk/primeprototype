@@ -19,6 +19,7 @@ data class CourseOffer(
     @SerializedName("batch_name") val batchName: String? = null,
     @SerializedName("subjects") val subjects: List<OfferSubject> = emptyList(),
     @SerializedName("registered_count") val registeredCount: Int = 0,
+    @SerializedName("pending_count") val pendingCount: Int = 0,
     @SerializedName("total_subjects") val totalSubjects: Int = 0,
 )
 
@@ -29,6 +30,8 @@ data class OfferSubject(
     @SerializedName("course_name") val courseName: String? = null,
     @SerializedName("credit") val credit: String? = null,
     @SerializedName("registered") val registered: Boolean = false,
+    /** "pending" while awaiting departmental approval, "approved" after; null when not registered. */
+    @SerializedName("approval_status") val approvalStatus: String? = null,
     @SerializedName("teachers") val teachers: List<SubjectTeacher> = emptyList(),
 )
 
