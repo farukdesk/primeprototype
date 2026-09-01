@@ -16,7 +16,7 @@ const IDC_BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 const IDC_PRINT_STATUSES = [
     'in_printing_queue' => 'In Printing Queue',
     'printed'           => 'Printed',
-    'distributed'       => 'Distributed',
+    'distributed'       => 'Ready for Collection',
     'collected'         => 'Collected by Student',
 ];
 
@@ -825,4 +825,132 @@ function idc_card_missing_fields(array $card): array
     }
 
     return $missing;
+}
+
+// ── Student push notifications on print-status changes ──────────────────────
+
+/**
+ * Push notification title/body for a print status ('' = no notification).
+ */
+function idc_status_notification(string $status): ?array
+{
+    return match ($status) {
+        'in_printing_queue' => [
+            'title' => 'ID Card Update',
+            'body'  => 'Your student ID card is now in the printing queue. '
+                     . 'We will notify you once it has been printed.',
+        ],
+        'printed' => [
+            'title' => 'Your ID Card Has Been Printed',
+            'body'  => 'Your student ID card has been printed. '
+                     . 'We will let you know as soon as it is ready for collection.',
+        ],
+        'distributed' => [
+            'title' => 'ID Card Ready for Collection',
+            'body'  => 'Your student ID card is ready for collection. '
+                     . 'You can now collect it from the Admission Office.',
+        ],
+        'collected' => [
+            'title' => 'Thank You for Collecting Your ID Card',
+            'body'  => 'Thank you for collecting your student ID card. '
+                     . 'Please wear it at all times while you are inside the university.',
+        ],
+        default => null,
+    };
+}
+
+/**
+ * Send a push notification to the card's student when the print status
+ * changes. Delivers to every device registered by the student's portal
+ * account (student_push_tokens) via the App Notification module's FCM
+ * HTTP v1 sender. Best-effort: failures are logged and never block the
+ * admin action.
+ *
+ * @param array  $card       Card row – needs card_type, student_ref_id, id_number.
+ * @param string $new_status The status the card was just changed to.
+ * @return bool  True when at least one device received the notification.
+ */
+function idc_notify_status_change(array $card, string $new_status): bool
+{
+    if (($card['card_type'] ?? '') !== 'student') {
+        return false;
+    }
+
+    $msg = idc_status_notification($new_status);
+    if ($msg === null) {
+        return false;
+    }
+
+    try {
+        require_once __DIR__ . '/../app-notifications/helpers.php';
+
+        $sa = apn_fcm_service_account();
+        if ($sa === null) {
+            return false; // FCM not configured – nothing to send.
+        }
+        $access = apn_fcm_access_token($sa);
+        if ($access === null) {
+            return false;
+        }
+
+        // Resolve the student's portal account: linked record first, then
+        // the printed Student ID (cards created before linking existed).
+        $uid = 0;
+        if (!empty($card['student_ref_id'])) {
+            $st = db()->prepare('SELECT portal_user_id FROM students WHERE id = ?');
+            $st->execute([(int)$card['student_ref_id']]);
+            $uid = (int)$st->fetchColumn();
+        }
+        if ($uid <= 0 && trim((string)($card['id_number'] ?? '')) !== '') {
+            $st = db()->prepare('SELECT portal_user_id FROM students WHERE student_id = ? LIMIT 1');
+            $st->execute([trim((string)$card['id_number'])]);
+            $uid = (int)$st->fetchColumn();
+        }
+        if ($uid <= 0) {
+            return false; // No portal account – the student has no app to notify.
+        }
+
+        $st = db()->prepare(
+            "SELECT id, fcm_token FROM student_push_tokens
+              WHERE user_id = ? AND fcm_token IS NOT NULL AND fcm_token != ''"
+        );
+        $st->execute([$uid]);
+        $tokens = $st->fetchAll(PDO::FETCH_ASSOC);
+        if (!$tokens) {
+            return false;
+        }
+
+        $data = [
+            'type'   => 'id_card_status',
+            'status' => $new_status,
+            'title'  => $msg['title'],
+            'body'   => $msg['body'],
+        ];
+
+        $sent  = false;
+        $stale = [];
+        $seen  = [];
+        foreach ($tokens as $row) {
+            if (isset($seen[$row['fcm_token']])) {
+                continue; // one push per physical device
+            }
+            $seen[$row['fcm_token']] = true;
+            $r = apn_fcm_send_single($access, $sa['project_id'], $row['fcm_token'], $msg['title'], $msg['body'], $data);
+            if ($r['ok']) {
+                $sent = true;
+            } elseif ($r['unregister']) {
+                $stale[] = (int)$row['id'];
+            }
+        }
+
+        // Prune tokens FCM reported as permanently invalid.
+        if ($stale) {
+            $ph = implode(',', array_fill(0, count($stale), '?'));
+            db()->prepare("DELETE FROM student_push_tokens WHERE id IN ($ph)")->execute($stale);
+        }
+        return $sent;
+    } catch (Throwable $e) {
+        error_log('ID card status push: ' . $e->getMessage());
+        return false;
+    }
 }
