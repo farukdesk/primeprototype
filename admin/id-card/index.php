@@ -144,7 +144,11 @@ try {
     $total = (int)$st->fetchColumn();
 
     $st = $db->prepare(
-        "SELECT c.* FROM idc_cards c WHERE $where
+        "SELECT c.*,
+                COALESCE(NULLIF(TRIM(c.photo), ''), NULLIF(TRIM(s.photo), '')) AS effective_photo
+         FROM idc_cards c
+         LEFT JOIN students s ON s.id = c.student_ref_id
+         WHERE $where
          ORDER BY c.created_at DESC, c.id DESC
          LIMIT $per_page OFFSET $offset"
     );
