@@ -33,6 +33,7 @@ $pre = [
     'photo'        => (string)($card['photo'] ?? ''),
     'issue_date'   => (string)($card['issue_date'] ?? ''),
     'expiry_date'  => (string)($card['expiry_date'] ?? ''),
+    'print_status' => trim((string)($card['print_status'] ?? '')) ?: 'in_printing_queue',
 ];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
