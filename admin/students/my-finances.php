@@ -69,6 +69,12 @@ require_once __DIR__ . '/../includes/header.php';
 
 <?= flash_show() ?>
 
+<div class="alert alert-info py-2 px-3 small" style="border-radius:10px;">
+    <i class="fas fa-calendar-day me-1"></i>
+    Monthly fees are counted as due from the <strong>1st</strong> of every month.
+    <strong>Last date of payment: the 10th of every month.</strong>
+</div>
+
 <!-- Student info strip (populated by JS) -->
 <div class="card border-0 shadow-sm mb-3" id="studentInfoCard" style="display:none;">
     <div class="card-body py-3 px-4 d-flex align-items-center gap-3 flex-wrap">
