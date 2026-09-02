@@ -165,7 +165,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['rows_json']) && is_string($_POST['rows_json']) && $_POST['rows_json'] !== '') {
         $rows_decoded = json_decode($_POST['rows_json'], true);
         if (is_array($rows_decoded)) {
-            $sid_arr = []; $name_arr = []; $pk_arr = []; $abs_arr = [];
+            $sid_arr = []; $name_arr = []; $pk_arr = []; $abs_arr = []; $rem_arr = [];
             $marks_arr = []; $dist_abs_arr = [];
             $ri = 0;
             foreach ($rows_decoded as $row) {
@@ -174,6 +174,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $name_arr[$ri] = (string)($row['name'] ?? '');
                 $pk_arr[$ri]   = (string)($row['pk']   ?? '0');
                 $abs_arr[$ri]  = !empty($row['absent']) ? '1' : '0';
+                $rem_arr[$ri]  = trim((string)($row['remark'] ?? ''));
                 foreach ((array)($row['marks'] ?? []) as $di => $v) {
                     $marks_arr[(int)$di][$ri] = ($v === null || $v === '') ? '' : (string)$v;
                 }
@@ -185,9 +186,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_POST['student_sid']   = $sid_arr;
             $_POST['student_name']  = $name_arr;
             $_POST['student_id_pk'] = $pk_arr;
-            $_POST['is_absent']     = $abs_arr;
-            $_POST['marks']         = $marks_arr;
-            $_POST['dist_absent']   = $dist_abs_arr;
+            $_POST['is_absent']       = $abs_arr;
+            $_POST['student_remarks'] = $rem_arr;
+            $_POST['marks']           = $marks_arr;
+            $_POST['dist_absent']     = $dist_abs_arr;
         }
     }
 
@@ -431,6 +433,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $dist_absent_by_dist[(int)$dist_idx] = (array)$vals;
         }
 
+        // Typed per-student remarks (delivered via rows_json)
+        $remarks_in = (array)($_POST['student_remarks'] ?? []);
+
         // Collect a per-student snapshot of the marks entered for the change log.
         $log_rows = [];
 
@@ -485,7 +490,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $derived_absent,
                 $row_marks,
                 $row_absent_flags,
-                $dist_max_values
+                $dist_max_values,
+                trim((string)($remarks_in[$row_idx] ?? ''))
             );
 
             $log_rows[] = [
@@ -493,6 +499,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'name'   => trim($names[$row_idx] ?? ''),
                 'marks'  => $row_marks,
                 'absent' => (bool)$derived_absent,
+                'remark' => trim((string)($remarks_in[$row_idx] ?? '')),
             ];
         }
 
@@ -1029,7 +1036,12 @@ if (!empty($grades)):
                             <!-- mark cells injected by JS -->
                             <td class="text-center total-cell fw-semibold" style="font-size:.8rem;">—</td>
                             <td class="text-center grade-cell fw-bold" style="font-size:.8rem;">—</td>
-                            <td class="text-center remarks-cell" style="font-size:.75rem;">—</td>
+                            <td class="text-center" style="font-size:.75rem;">
+                                <input type="text" class="form-control form-control-sm remark-input"
+                                       value="<?= h($g['remarks'] ?? '') ?>" placeholder="Remarks" maxlength="500"
+                                       style="font-size:.72rem;padding:.15rem .3rem;margin-bottom:2px;">
+                                <div class="remarks-cell">—</div>
+                            </td>
                             <td class="text-center">
 <?php if ($can_remove_rows): ?>
                                 <button type="button" class="btn btn-sm btn-outline-danger btn-remove-row p-0"
@@ -1072,7 +1084,12 @@ else:
         <!-- mark cells injected by JS -->
         <td class="text-center total-cell fw-semibold" style="font-size:.8rem;">—</td>
         <td class="text-center grade-cell fw-bold" style="font-size:.8rem;">—</td>
-        <td class="text-center remarks-cell" style="font-size:.75rem;">—</td>
+        <td class="text-center" style="font-size:.75rem;">
+            <input type="text" class="form-control form-control-sm remark-input"
+                   value="" placeholder="Remarks" maxlength="500"
+                   style="font-size:.72rem;padding:.15rem .3rem;margin-bottom:2px;">
+            <div class="remarks-cell">—</div>
+        </td>
         <td class="text-center">
             <button type="button" class="btn btn-sm btn-outline-danger btn-remove-row p-0"
                     style="width:24px;height:24px;line-height:1;border-radius:5px;">
@@ -1935,6 +1952,7 @@ foreach ($creatable as $cr) {
         if (!rows.length) { alert('Load the students first (select the exam and subject).'); return; }
         var header = ['Student ID', 'Name'];
         currentDist.forEach(function(d) { header.push(d.name + ' (max ' + d.max + ')'); });
+        header.push('Remarks');
         var lines = [header.map(csvEscape).join(',')];
         rows.forEach(function(tr) {
             var line = [
@@ -1946,6 +1964,7 @@ foreach ($creatable as $cr) {
                 var inp  = tr.querySelector('.marks-input[data-dist-idx="' + i + '"]');
                 line.push((flag && flag.value === '1') ? 'ABS' : (inp ? inp.value : ''));
             });
+            line.push(((tr.querySelector('.remark-input') || {}).value || '').trim());
             lines.push(line.map(csvEscape).join(','));
         });
         var fname = ((subCode.value || 'marks') + '-'
@@ -2017,6 +2036,7 @@ foreach ($creatable as $cr) {
                     });
                     colFor[i] = (found !== -1) ? found : (2 + i);
                 });
+                var remCol = header.indexOf('remarks');
 
                 // Index editable table rows by Student ID
                 var byId = {};
@@ -2058,6 +2078,15 @@ foreach ($creatable as $cr) {
                             touched = true;
                         }
                     });
+                    // Optional Remarks column: fill the typed remark box
+                    if (remCol !== -1) {
+                        var remRaw = String(rec[remCol] == null ? '' : rec[remCol]).trim();
+                        var remInp = tr.querySelector('.remark-input');
+                        if (remInp && !remInp.disabled && remRaw !== '') {
+                            remInp.value = remRaw;
+                            touched = true;
+                        }
+                    }
                     if (touched) updated++;
                 });
 
@@ -2097,6 +2126,7 @@ foreach ($creatable as $cr) {
                         sid:  ((tr.querySelector('input[name^="student_sid"]') || {}).value || '').trim(),
                         name: (tr.querySelector('input[name^="student_name"]') || {}).value || '',
                         absent: ((tr.querySelector('input[name^="is_absent"]') || {}).value || '0') === '1',
+                        remark: ((tr.querySelector('.remark-input') || {}).value || '').trim(),
                         marks: {},
                         dist_absent: {}
                     };

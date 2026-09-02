@@ -451,7 +451,8 @@ function wf_upsert_grade(
     int $is_absent,
     array $marks,
     array $absent_flags = [],
-    array $dist_maxes = []  // per-distribution max marks for server-side clamping
+    array $dist_maxes = [],  // per-distribution max marks for server-side clamping
+    ?string $remarks = null  // typed per-student remark (requires remarks-migration.sql)
 ): void {
     // Clamp each mark to its per-distribution max.
     // Prefer $dist_maxes when provided; fall back to WF legacy constants for first 4.
@@ -509,12 +510,22 @@ function wf_upsert_grade(
     $mid = $clamped[2] ?? null;
     $fin = $clamped[3] ?? null;
 
-    db()->prepare(
-        'INSERT INTO result_sheet_grades
+    // remarks column exists only after remarks-migration.sql has run;
+    // keep saving working either way.
+    static $has_remarks_col = null;
+    if ($has_remarks_col === null) {
+        try {
+            db()->query('SELECT remarks FROM result_sheet_grades LIMIT 1');
+            $has_remarks_col = true;
+        } catch (Throwable $_e) { $has_remarks_col = false; }
+    }
+
+    $sql = 'INSERT INTO result_sheet_grades
            (sheet_id, student_id, student_sid, student_name,
             is_absent, attendance, class_test, mid_term, final_exam,
-            marks_json, absent_json, total_marks, letter_grade, grade_point)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            marks_json, absent_json, total_marks, letter_grade, grade_point'
+         . ($has_remarks_col ? ', remarks' : '') . ')
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?' . ($has_remarks_col ? ',?' : '') . ")
          ON DUPLICATE KEY UPDATE
            student_name  = VALUES(student_name),
            is_absent     = VALUES(is_absent),
@@ -526,8 +537,10 @@ function wf_upsert_grade(
            absent_json   = VALUES(absent_json),
            total_marks   = VALUES(total_marks),
            letter_grade  = VALUES(letter_grade),
-           grade_point   = VALUES(grade_point)'
-    )->execute([
+           grade_point   = VALUES(grade_point)"
+         . ($has_remarks_col ? ', remarks = VALUES(remarks)' : '');
+
+    $params = [
         $sheet_id,
         $student_id_pk ?: null,
         $student_sid,
@@ -539,7 +552,12 @@ function wf_upsert_grade(
         $total,
         $letter,
         $point,
-    ]);
+    ];
+    if ($has_remarks_col) {
+        $rm = trim((string)$remarks);
+        $params[] = ($rm !== '') ? substr($rm, 0, 500) : null;
+    }
+    db()->prepare($sql)->execute($params);
 }
 
 // ── Workflow actions ──────────────────────────────────────────────────────────

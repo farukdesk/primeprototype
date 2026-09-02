@@ -389,7 +389,11 @@ $page_title      = h($sheet['subject_title']);
             <td><strong><?= h($g['letter_grade'] ?? '—') ?></strong></td>
             <td><?= $g['grade_point'] !== null ? number_format((float)$g['grade_point'], 2) : '—' ?></td>
             <?php endif; ?>
-            <td style="text-align:left;font-size:11px;color:#c0392b;"><?= $_remarks ?></td>
+            <td style="text-align:left;font-size:11px;">
+                <?php if ($_remarks !== ''): ?><span style="color:#c0392b;"><?= $_remarks ?></span><?php endif; ?>
+                <?php $_custom = trim((string)($g['remarks'] ?? '')); ?>
+                <?php if ($_custom !== ''): ?><?= $_remarks !== '' ? '<br>' : '' ?><span><?= h($_custom) ?></span><?php endif; ?>
+            </td>
         </tr>
         <?php endforeach; ?>
         </tbody>
