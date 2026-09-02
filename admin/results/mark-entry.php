@@ -155,6 +155,42 @@ $page_title = $sheet ? 'Edit Mark Sheet' : 'New Mark Sheet';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
+    // ── Compact row payload (large classes) ─────────────────────────────
+    // With one form input per mark, classes of ~80+ students exceed PHP's
+    // max_input_vars (default 1000) and PHP SILENTLY drops every POST variable
+    // past the limit — losing students and their marks. The client therefore
+    // serialises all rows into a single rows_json field on submit; unpack it
+    // here into the legacy arrays the save code below consumes. The per-input
+    // path still works as a fallback when JavaScript is unavailable.
+    if (isset($_POST['rows_json']) && is_string($_POST['rows_json']) && $_POST['rows_json'] !== '') {
+        $rows_decoded = json_decode($_POST['rows_json'], true);
+        if (is_array($rows_decoded)) {
+            $sid_arr = []; $name_arr = []; $pk_arr = []; $abs_arr = [];
+            $marks_arr = []; $dist_abs_arr = [];
+            $ri = 0;
+            foreach ($rows_decoded as $row) {
+                if (!is_array($row)) continue;
+                $sid_arr[$ri]  = (string)($row['sid']  ?? '');
+                $name_arr[$ri] = (string)($row['name'] ?? '');
+                $pk_arr[$ri]   = (string)($row['pk']   ?? '0');
+                $abs_arr[$ri]  = !empty($row['absent']) ? '1' : '0';
+                foreach ((array)($row['marks'] ?? []) as $di => $v) {
+                    $marks_arr[(int)$di][$ri] = ($v === null || $v === '') ? '' : (string)$v;
+                }
+                foreach ((array)($row['dist_absent'] ?? []) as $di => $v) {
+                    $dist_abs_arr[(int)$di][$ri] = !empty($v) ? '1' : '0';
+                }
+                $ri++;
+            }
+            $_POST['student_sid']   = $sid_arr;
+            $_POST['student_name']  = $name_arr;
+            $_POST['student_id_pk'] = $pk_arr;
+            $_POST['is_absent']     = $abs_arr;
+            $_POST['marks']         = $marks_arr;
+            $_POST['dist_absent']   = $dist_abs_arr;
+        }
+    }
+
     $action           = $_POST['action']           ?? 'save';
     $dept_id          = (int)($_POST['dept_id']          ?? 0);
     $program_id       = (int)($_POST['program_id']       ?? 0);
@@ -611,6 +647,9 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
 
 <form method="POST" id="markEntryForm" novalidate>
     <?= csrf_field() ?>
+    <!-- All student rows are serialised into this single field on submit so
+         large classes never exceed PHP's max_input_vars limit. -->
+    <input type="hidden" name="rows_json" id="rows_json_field" value="">
 
     <div class="row g-4 mb-4">
 
@@ -1826,33 +1865,46 @@ foreach ($creatable as $cr) {
         });
     }
 
-    // ── Row-integrity guard: marks must NEVER shift to another student ──────
-    // Disabled inputs are not submitted by the browser (absent segments,
-    // exam-mode locked columns, rows locked by another teacher). With plain
-    // name[] arrays that shifts the positional marks arrays and can attach a
-    // mark to the WRONG student. Before every submit, each row's inputs are
-    // renamed with an explicit row index so PHP receives perfectly aligned
-    // rows: a missing (disabled) input just leaves that one student's value
-    // empty instead of shifting everyone below them.
+    // ── Row serialisation guard ────────────────────────────────────────────
+    // Two problems are solved at once by serialising every row into ONE
+    // rows_json field and disabling the per-row inputs before submit:
+    //  1. max_input_vars — with one input per mark, classes of ~80+ students
+    //     exceed PHP's limit (default 1000) and PHP silently drops the rest
+    //     of the POST data, losing students and their marks.
+    //  2. Row integrity — disabled inputs are not submitted, which with plain
+    //     name[] arrays shifted the positional marks arrays and could attach
+    //     a mark to the WRONG student. Explicit per-row objects keep every
+    //     value glued to its student.
+    // Rows locked by another teacher (data-marked-by) are excluded entirely.
     var markForm = document.getElementById('markEntryForm');
     if (markForm) {
         markForm.addEventListener('submit', function() {
-            Array.from(tbody.querySelectorAll('tr.grade-row')).forEach(function(tr, idx) {
-                function rename(sel, name) {
-                    var el = tr.querySelector(sel);
-                    if (el) el.name = name;
+            var rows = [];
+            Array.from(tbody.querySelectorAll('tr.grade-row')).forEach(function(tr) {
+                var isLockedRow = tr.hasAttribute('data-marked-by');
+                if (!isLockedRow) {
+                    var row = {
+                        pk:   (tr.querySelector('input[name^="student_id_pk"]') || {}).value || '0',
+                        sid:  ((tr.querySelector('input[name^="student_sid"]') || {}).value || '').trim(),
+                        name: (tr.querySelector('input[name^="student_name"]') || {}).value || '',
+                        absent: ((tr.querySelector('input[name^="is_absent"]') || {}).value || '0') === '1',
+                        marks: {},
+                        dist_absent: {}
+                    };
+                    tr.querySelectorAll('.marks-input').forEach(function(inp) {
+                        var di = inp.getAttribute('data-dist-idx');
+                        row.marks[di] = (!inp.disabled && inp.value !== '') ? inp.value : null;
+                    });
+                    tr.querySelectorAll('.dist-absent-flag').forEach(function(f) {
+                        row.dist_absent[f.getAttribute('data-dist-idx')] = (f.value === '1');
+                    });
+                    if (row.sid !== '') rows.push(row);
                 }
-                rename('input[name^="student_id_pk"]', 'student_id_pk[' + idx + ']');
-                rename('input[name^="student_sid"]',   'student_sid['   + idx + ']');
-                rename('input[name^="student_name"]',  'student_name['  + idx + ']');
-                rename('input[name^="is_absent"]',     'is_absent['     + idx + ']');
-                tr.querySelectorAll('.marks-input').forEach(function(inp) {
-                    inp.name = 'marks[' + inp.getAttribute('data-dist-idx') + '][' + idx + ']';
-                });
-                tr.querySelectorAll('.dist-absent-flag').forEach(function(f) {
-                    f.name = 'dist_absent[' + f.getAttribute('data-dist-idx') + '][' + idx + ']';
-                });
+                // Per-row inputs must not count against max_input_vars.
+                tr.querySelectorAll('input').forEach(function(el) { el.disabled = true; });
             });
+            var payload = document.getElementById('rows_json_field');
+            if (payload) payload.value = JSON.stringify(rows);
         });
     }
 
