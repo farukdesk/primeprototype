@@ -9,8 +9,27 @@ $page_title = 'Result Management';
 // ── Active tab (workflow dashboard) ───────────────────────────────────────────
 $active_tab = $_GET['tab'] ?? 'my_sheets';
 
-// Apply department scope
+// Apply department scope.
+// Published results are strictly department-scoped: when no explicit dept
+// scope is configured (get_dept_scope() = null → unrestricted), non-admin
+// users are still limited to their own department(s) from their faculty
+// profile, so they never see other departments' published results.
 $dept_scope = get_dept_scope();
+if (!is_super_admin() && $dept_scope === null) {
+    $own_uid   = (int)(auth_user()['id'] ?? 0);
+    $own_depts = [];
+    try {
+        $st = db()->prepare('SELECT dept_id FROM faculty_profiles WHERE user_id = ? AND dept_id IS NOT NULL');
+        $st->execute([$own_uid]);
+        foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $d) $own_depts[] = (int)$d;
+    } catch (Throwable $_e) {}
+    try {
+        $st = db()->prepare('SELECT dept_id FROM dept_faculty WHERE user_id = ? AND is_active = 1 AND dept_id IS NOT NULL');
+        $st->execute([$own_uid]);
+        foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $d) $own_depts[] = (int)$d;
+    } catch (Throwable $_e) {}
+    $dept_scope = array_values(array_unique($own_depts));
+}
 
 // ── Workflow counts (chain-aware) ─────────────────────────────────────────────
 $wf_counts  = ['my_sheets' => 0, 'queue' => 0, 'published' => 0];

@@ -78,4 +78,79 @@ if ($exam_id > 0 && $students) {
     } catch (Throwable $_e) { /* lookup unavailable — return plain roster */ }
 }
 
+// ── Mid-term marks pull ───────────────────────────────────────────────────────
+// When the selected exam is a FINAL exam, return each student's mid-term marks
+// previously entered for the SAME offer subject in a mid-term exam sheet
+// (pending/published) as `prev_marks`, so the final-entry sheet pre-fills them
+// and lets the teacher modify them. Only mid-component indices are included.
+if ($exam_id > 0 && $students) {
+    try {
+        $ex = db()->prepare('SELECT exam_name FROM ei_exams WHERE id = ? LIMIT 1');
+        $ex->execute([$exam_id]);
+        $sel_exam_name = strtolower((string)$ex->fetchColumn());
+        if (strpos($sel_exam_name, 'final') !== false && !preg_match('/mid\\s*-?\\s*term|midterm/', $sel_exam_name)) {
+            $mq2 = db()->prepare(
+                "SELECT g.student_sid, g.student_id, g.marks_json, g.mid_term,
+                        ms.curriculum_id
+                   FROM result_mark_sheets ms
+                   JOIN result_sheet_grades g ON g.sheet_id = ms.id
+                   JOIN ei_exams e            ON e.id = ms.exam_id
+                  WHERE ms.offer_subject_id = ?
+                    AND ms.workflow_status IN ('pending', 'published')
+                    AND LOWER(e.exam_name) REGEXP 'mid[[:space:]]*-?[[:space:]]*term|midterm'
+                    AND LOWER(e.exam_name) NOT LIKE '%final%'
+                  ORDER BY ms.updated_at ASC"
+            );
+            $mq2->execute([$offer_subject_id]);
+
+            // Mid-component indices per curriculum (default: index 2 = legacy Mid Term)
+            $mid_idx_cache = [];
+            $mid_indices = static function (int $cid) use (&$mid_idx_cache): array {
+                if (isset($mid_idx_cache[$cid])) return $mid_idx_cache[$cid];
+                $idx = [];
+                if ($cid > 0) {
+                    try {
+                        $ds = db()->prepare(
+                            'SELECT distribution_name FROM cc_mark_distributions
+                              WHERE curriculum_id = ? ORDER BY sort_order ASC, id ASC'
+                        );
+                        $ds->execute([$cid]);
+                        foreach ($ds->fetchAll(PDO::FETCH_COLUMN) as $i => $nm) {
+                            if (stripos((string)$nm, 'mid') !== false) $idx[] = $i;
+                        }
+                    } catch (Throwable $_e) {}
+                }
+                if (empty($idx)) $idx = [2]; // legacy layout: Att, CT, Mid, Final
+                return $mid_idx_cache[$cid] = $idx;
+            };
+
+            $prev_by_pk = []; $prev_by_sid = [];
+            foreach ($mq2->fetchAll(PDO::FETCH_ASSOC) as $m) {
+                $marks = json_decode((string)$m['marks_json'], true);
+                $mids  = $mid_indices((int)($m['curriculum_id'] ?? 0));
+                $prev  = [];
+                foreach ($mids as $i) {
+                    $v = is_array($marks) ? ($marks[$i] ?? null) : null;
+                    if ($v === null && $i === 2 && $m['mid_term'] !== null) $v = (float)$m['mid_term'];
+                    if ($v !== null) $prev[$i] = (float)$v;
+                }
+                if (empty($prev)) continue;
+                // Null-padded array aligned by distribution index (latest sheet wins)
+                $out = array_fill(0, max(array_keys($prev)) + 1, null);
+                foreach ($prev as $i => $v) $out[$i] = $v;
+                if (!empty($m['student_id']))               $prev_by_pk[(int)$m['student_id']] = $out;
+                if (trim((string)$m['student_sid']) !== '') $prev_by_sid[trim((string)$m['student_sid'])] = $out;
+            }
+
+            if ($prev_by_pk || $prev_by_sid) {
+                foreach ($students as &$s) {
+                    $s['prev_marks'] = $prev_by_pk[(int)$s['id']]
+                                    ?? ($prev_by_sid[trim((string)$s['student_id'])] ?? null);
+                }
+                unset($s);
+            }
+        }
+    } catch (Throwable $_e) { /* prefill unavailable — return plain roster */ }
+}
+
 echo json_encode($students);
