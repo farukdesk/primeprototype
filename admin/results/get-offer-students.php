@@ -80,28 +80,64 @@ if ($exam_id > 0 && $students) {
 
 // ── Mid-term marks pull ───────────────────────────────────────────────────────
 // When the selected exam is a FINAL exam, return each student's mid-term marks
-// previously entered for the SAME offer subject in a mid-term exam sheet
-// (pending/published) as `prev_marks`, so the final-entry sheet pre-fills them
-// and lets the teacher modify them. Only mid-component indices are included.
+// previously entered for the same subject in a mid-term exam sheet (any
+// status; matched by offer, curriculum, or dept + subject code so marks
+// recorded under an earlier / re-created offer are found too) as `prev_marks`,
+// so the final-entry sheet pre-fills them and lets the teacher modify them.
 if ($exam_id > 0 && $students) {
     try {
         $ex = db()->prepare('SELECT exam_name FROM ei_exams WHERE id = ? LIMIT 1');
         $ex->execute([$exam_id]);
         $sel_exam_name = strtolower((string)$ex->fetchColumn());
-        if (strpos($sel_exam_name, 'final') !== false && !preg_match('/mid\\s*-?\\s*term|midterm/', $sel_exam_name)) {
+        if (strpos($sel_exam_name, 'final') !== false && strpos($sel_exam_name, 'mid') === false) {
+            // Resolve the offer's curriculum / dept / course code so mid sheets
+            // recorded under a DIFFERENT offer of the same subject (earlier
+            // semester's offer, re-created offer, bulk import) are matched too.
+            $off_cid = 0; $off_dept = 0; $off_code = '';
+            try {
+                $oq = db()->prepare(
+                    'SELECT cos.curriculum_id, o.dept_id, cc.course_code
+                       FROM co_offer_subjects cos
+                       JOIN co_offers o               ON o.id  = cos.offer_id
+                       LEFT JOIN course_curriculum cc ON cc.id = cos.curriculum_id
+                      WHERE cos.id = ? LIMIT 1'
+                );
+                $oq->execute([$offer_subject_id]);
+                if ($orow = $oq->fetch(PDO::FETCH_ASSOC)) {
+                    $off_cid  = (int)($orow['curriculum_id'] ?? 0);
+                    $off_dept = (int)($orow['dept_id'] ?? 0);
+                    $off_code = trim((string)($orow['course_code'] ?? ''));
+                }
+            } catch (Throwable $_e) {}
+
+            $subj_where  = '(ms.offer_subject_id = ?';
+            $subj_params = [$offer_subject_id];
+            if ($off_cid > 0) {
+                $subj_where   .= ' OR ms.curriculum_id = ?';
+                $subj_params[] = $off_cid;
+            }
+            if ($off_code !== '' && $off_dept > 0) {
+                $subj_where   .= ' OR (ms.dept_id = ? AND ms.subject_code = ?)';
+                $subj_params[] = $off_dept;
+                $subj_params[] = $off_code;
+            }
+            $subj_where .= ')';
+
+            // All sheet statuses are considered; the ORDER BY makes published
+            // sheets overwrite pending/draft values (later rows win below).
             $mq2 = db()->prepare(
                 "SELECT g.student_sid, g.student_id, g.marks_json, g.mid_term,
                         ms.curriculum_id
                    FROM result_mark_sheets ms
                    JOIN result_sheet_grades g ON g.sheet_id = ms.id
                    JOIN ei_exams e            ON e.id = ms.exam_id
-                  WHERE ms.offer_subject_id = ?
-                    AND ms.workflow_status IN ('pending', 'published')
-                    AND LOWER(e.exam_name) REGEXP 'mid[[:space:]]*-?[[:space:]]*term|midterm'
+                  WHERE $subj_where
+                    AND LOWER(e.exam_name) LIKE '%mid%'
                     AND LOWER(e.exam_name) NOT LIKE '%final%'
-                  ORDER BY ms.updated_at ASC"
+                  ORDER BY FIELD(ms.workflow_status, 'draft', 'returned', 'pending', 'published') ASC,
+                           ms.updated_at ASC"
             );
-            $mq2->execute([$offer_subject_id]);
+            $mq2->execute($subj_params);
 
             // Mid-component indices per curriculum (default: index 2 = legacy Mid Term)
             $mid_idx_cache = [];
@@ -131,8 +167,12 @@ if ($exam_id > 0 && $students) {
                 $prev  = [];
                 foreach ($mids as $i) {
                     $v = is_array($marks) ? ($marks[$i] ?? null) : null;
-                    if ($v === null && $i === 2 && $m['mid_term'] !== null) $v = (float)$m['mid_term'];
-                    if ($v !== null) $prev[$i] = (float)$v;
+                    if ($v !== null && $v !== '') $prev[$i] = (float)$v;
+                }
+                // Legacy fallback: no mid value in marks_json → use the
+                // mid_term column at the first mid-component index.
+                if (empty($prev) && $m['mid_term'] !== null && $m['mid_term'] !== '') {
+                    $prev[$mids[0]] = (float)$m['mid_term'];
                 }
                 if (empty($prev)) continue;
                 // Null-padded array aligned by distribution index (latest sheet wins)
