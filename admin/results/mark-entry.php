@@ -863,6 +863,18 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
     </div>
     <!-- Student Marks Table -->
     <style>
+        /* Prevent accidental mark changes: hide the number spinner buttons —
+           values may only be changed by typing (wheel/arrow stepping is
+           blocked in JS as well). */
+        #markEntryForm input[type=number]::-webkit-outer-spin-button,
+        #markEntryForm input[type=number]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        #markEntryForm input[type=number] {
+            -moz-appearance: textfield;
+            appearance: textfield;
+        }
         /* Resizable columns: drag handle on the right edge of every header cell */
         #marks_table th { position: relative; }
         #marks_table th .col-resizer {
@@ -2417,6 +2429,35 @@ foreach ($creatable as $cr) {
         .observe(sel, { childList: true, attributes: true, attributeFilter: ['disabled'] });
 
     syncFromSelect();
+})();
+</script>
+
+<script>
+// ── Guard against accidental mark changes ──────────────────────────────────
+// Scrolling the page while the cursor is over a (focused) number input used to
+// silently increment/decrement the entered mark. Block wheel and arrow-key
+// stepping on every number input in the mark-entry form — values can only be
+// changed by typing. The page itself keeps scrolling normally.
+(function () {
+    function isFormNumberInput(el) {
+        return el && el.tagName === 'INPUT' && el.type === 'number'
+            && el.closest && el.closest('#markEntryForm');
+    }
+
+    document.addEventListener('wheel', function (e) {
+        if (isFormNumberInput(e.target)) {
+            // Don't let the browser step the value…
+            e.preventDefault();
+            // …but keep the page scrolling as the user expects.
+            window.scrollBy(0, e.deltaY);
+        }
+    }, { passive: false });
+
+    document.addEventListener('keydown', function (e) {
+        if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && isFormNumberInput(e.target)) {
+            e.preventDefault();
+        }
+    });
 })();
 </script>
 
