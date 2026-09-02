@@ -675,10 +675,18 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
                                 : '' ?>
                             <span class="text-danger">*</span>
                         </label>
-                        <select name="offer_subject_id" id="curriculum_select" class="form-select"
-                                <?= ($v_dept_id && $v_program_id) ? '' : 'disabled' ?>>
-                            <option value="">— Select Subject —</option>
-                        </select>
+                        <div class="position-relative" id="subject_search_wrap">
+                            <!-- The real select stays in the form (hidden) so existing JS/submit logic keeps working -->
+                            <select name="offer_subject_id" id="curriculum_select" class="form-select d-none"
+                                    <?= ($v_dept_id && $v_program_id) ? '' : 'disabled' ?>>
+                                <option value="">— Select Subject —</option>
+                            </select>
+                            <input type="text" id="subject_search" class="form-control" autocomplete="off"
+                                   placeholder="Search subject by name or code…"
+                                   <?= ($v_dept_id && $v_program_id) ? '' : 'disabled' ?>>
+                            <div id="subject_search_list" class="dropdown-menu w-100 shadow-sm"
+                                 style="max-height:280px;overflow:auto;"></div>
+                        </div>
                         <div class="form-text" id="subject_hint">
                             <?= (!is_super_admin() && ($is_faculty_member || (!rm_can_create() && !rm_is_staff())))
                                 ? 'Only offered courses you teach are shown. Selecting one loads its registered students.'
@@ -2239,6 +2247,124 @@ foreach ($creatable as $cr) {
     form.addEventListener('submit', function () {
         try { localStorage.removeItem(storeKey()); } catch (e) {}
     });
+})();
+</script>
+
+<script>
+// ── Searchable subject dropdown ────────────────────────────────────────────────
+// Real-time filter over the offered-course options by subject name or code.
+// The hidden native select remains the source of truth: picking an item sets
+// its value and fires 'change' so the existing roster/duplicate logic runs.
+(function () {
+    var sel   = document.getElementById('curriculum_select');
+    var input = document.getElementById('subject_search');
+    var list  = document.getElementById('subject_search_list');
+    if (!sel || !input || !list) return;
+
+    var activeIdx = -1;
+
+    function options() {
+        return Array.prototype.filter.call(sel.options, function (o) {
+            return o.value !== '' && !o.disabled;
+        });
+    }
+
+    function selectedLabel() {
+        var o = sel.options[sel.selectedIndex];
+        return (o && o.value) ? o.textContent : '';
+    }
+
+    function syncFromSelect() {
+        input.value       = selectedLabel();
+        input.disabled    = sel.disabled;
+        input.placeholder = sel.disabled
+            ? '— Select department & program first —'
+            : 'Search subject by name or code…';
+    }
+
+    function close() { list.classList.remove('show'); activeIdx = -1; }
+
+    function render(filter) {
+        var q    = (filter || '').trim().toLowerCase();
+        var opts = options().filter(function (o) {
+            return !q || o.textContent.toLowerCase().indexOf(q) !== -1;
+        });
+        list.innerHTML = '';
+        if (!opts.length) {
+            var d = document.createElement('div');
+            d.className     = 'dropdown-item disabled text-muted';
+            d.style.fontSize = '.82rem';
+            d.textContent   = options().length
+                ? 'No subject matches “' + (filter || '') + '”'
+                : 'No offered courses found';
+            list.appendChild(d);
+        } else {
+            opts.forEach(function (o) {
+                var a = document.createElement('button');
+                a.type      = 'button';
+                a.className = 'dropdown-item' + (o.value === sel.value ? ' active' : '');
+                a.style.cssText = 'font-size:.82rem;white-space:normal;';
+                a.textContent   = o.textContent;
+                // Keep focus in the search box so blur doesn't fire before the pick
+                a.addEventListener('mousedown', function (e) { e.preventDefault(); });
+                a.addEventListener('click', function () {
+                    sel.value = o.value;
+                    sel.dispatchEvent(new Event('change', { bubbles: true }));
+                    syncFromSelect();
+                    close();
+                });
+                list.appendChild(a);
+            });
+        }
+        list.classList.add('show');
+        activeIdx = -1;
+    }
+
+    input.addEventListener('focus', function () { this.select(); render(''); });
+    input.addEventListener('input', function () { render(this.value); });
+
+    input.addEventListener('keydown', function (e) {
+        var items = Array.prototype.filter.call(
+            list.querySelectorAll('.dropdown-item'),
+            function (i) { return !i.classList.contains('disabled'); }
+        );
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (!list.classList.contains('show')) { render(input.value); return; }
+            activeIdx += (e.key === 'ArrowDown') ? 1 : -1;
+            if (activeIdx < 0) activeIdx = items.length - 1;
+            if (activeIdx >= items.length) activeIdx = 0;
+            items.forEach(function (i, n) { i.classList.toggle('active', n === activeIdx); });
+            if (items[activeIdx]) items[activeIdx].scrollIntoView({ block: 'nearest' });
+        } else if (e.key === 'Enter') {
+            if (list.classList.contains('show')) {
+                e.preventDefault();
+                var pick = (activeIdx >= 0 && items[activeIdx])
+                    ? items[activeIdx]
+                    : (items.length === 1 ? items[0] : null);
+                if (pick) pick.click();
+            }
+        } else if (e.key === 'Escape') {
+            close();
+            syncFromSelect();
+        }
+    });
+
+    // Restore the selected label when leaving the box without picking
+    input.addEventListener('blur', function () {
+        setTimeout(function () { close(); syncFromSelect(); }, 150);
+    });
+    document.addEventListener('click', function (e) {
+        if (!e.target.closest('#subject_search_wrap')) { close(); syncFromSelect(); }
+    });
+
+    // Keep the search box in sync when the select changes, is re-populated
+    // (dept/program change, edit mode restore) or enabled/disabled.
+    sel.addEventListener('change', syncFromSelect);
+    new MutationObserver(syncFromSelect)
+        .observe(sel, { childList: true, attributes: true, attributeFilter: ['disabled'] });
+
+    syncFromSelect();
 })();
 </script>
 
