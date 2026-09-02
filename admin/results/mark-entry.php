@@ -912,6 +912,15 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
                         style="border-radius:8px;" disabled title="Reload registered students for the selected subject">
                     <i class="fas fa-sync me-1"></i> Reload Registered
                 </button>
+                <button type="button" id="btn_csv_download" class="btn btn-sm btn-outline-success"
+                        style="border-radius:8px;" title="Download the loaded students as a CSV marks template">
+                    <i class="fas fa-file-csv me-1"></i> Download CSV
+                </button>
+                <button type="button" id="btn_csv_upload" class="btn btn-sm btn-outline-success"
+                        style="border-radius:8px;" title="Upload the filled CSV to fill in all marks">
+                    <i class="fas fa-upload me-1"></i> Upload CSV
+                </button>
+                <input type="file" id="csv_file_input" accept=".csv,text/csv" class="d-none">
                 <button type="button" id="btn_add_row" class="btn btn-sm btn-outline-secondary"
                         style="border-radius:8px;">
                     <i class="fas fa-plus me-1"></i> Add Row
@@ -1874,6 +1883,171 @@ foreach ($creatable as $cr) {
             } else {
                 loadRegisteredStudents(currSel.value, true);
             }
+        });
+    }
+
+    // ── CSV bulk marks ──────────────────────────────────────────────────────────
+    // 1. Download CSV: exports the loaded students (ID, Name, one column per
+    //    mark component with its max) so marks can be filled in Excel/Sheets.
+    // 2. Upload CSV:   reads the filled file, matches rows by Student ID and
+    //    fills every mark input in the table — nothing is saved until the
+    //    teacher reviews and clicks Save Draft / Submit.
+    var btnCsvDown = document.getElementById('btn_csv_download');
+    var btnCsvUp   = document.getElementById('btn_csv_upload');
+    var csvInput   = document.getElementById('csv_file_input');
+
+    function csvEscape(v) {
+        v = String(v == null ? '' : v);
+        return /[",;\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+    }
+
+    function editableRows() {
+        return Array.from(tbody.querySelectorAll('tr.grade-row')).filter(function(tr) {
+            return !tr.hasAttribute('data-marked-by');
+        });
+    }
+
+    if (btnCsvDown) btnCsvDown.addEventListener('click', function() {
+        var rows = editableRows();
+        if (!rows.length) { alert('Load the students first (select the exam and subject).'); return; }
+        var header = ['Student ID', 'Name'];
+        currentDist.forEach(function(d) { header.push(d.name + ' (max ' + d.max + ')'); });
+        var lines = [header.map(csvEscape).join(',')];
+        rows.forEach(function(tr) {
+            var line = [
+                ((tr.querySelector('input[name^="student_sid"]') || {}).value || '').trim(),
+                (tr.querySelector('input[name^="student_name"]') || {}).value || ''
+            ];
+            currentDist.forEach(function(d, i) {
+                var flag = tr.querySelector('.dist-absent-flag[data-dist-idx="' + i + '"]');
+                var inp  = tr.querySelector('.marks-input[data-dist-idx="' + i + '"]');
+                line.push((flag && flag.value === '1') ? 'ABS' : (inp ? inp.value : ''));
+            });
+            lines.push(line.map(csvEscape).join(','));
+        });
+        var fname = ((subCode.value || 'marks') + '-'
+                  + (examSel && examSel.selectedIndex > 0
+                        ? examSel.options[examSel.selectedIndex].textContent.trim() : 'exam'))
+                  .replace(/[^\w.-]+/g, '-') + '.csv';
+        // BOM so Excel opens it as UTF-8
+        var blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = fname;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(function() { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+    });
+
+    // Minimal RFC-4180 CSV parser: quoted fields, comma or semicolon
+    // delimiters (Excel locale variants), CR/LF line endings, UTF-8 BOM.
+    function parseCsv(text) {
+        text = text.replace(/^\ufeff/, '');
+        var firstLine = text.split(/\r\n|\n|\r/, 1)[0] || '';
+        var delim = ((firstLine.match(/;/g) || []).length > (firstLine.match(/,/g) || []).length) ? ';' : ',';
+        var rows = [], row = [], cur = '', inQ = false;
+        for (var i = 0; i < text.length; i++) {
+            var c = text[i];
+            if (inQ) {
+                if (c === '"') {
+                    if (text[i + 1] === '"') { cur += '"'; i++; }
+                    else inQ = false;
+                } else cur += c;
+            } else if (c === '"') inQ = true;
+            else if (c === delim) { row.push(cur); cur = ''; }
+            else if (c === '\n' || c === '\r') {
+                if (c === '\r' && text[i + 1] === '\n') i++;
+                row.push(cur); cur = '';
+                rows.push(row); row = [];
+            } else cur += c;
+        }
+        if (cur !== '' || row.length) { row.push(cur); rows.push(row); }
+        return rows.filter(function(r) {
+            return r.some(function(v) { return String(v).trim() !== ''; });
+        });
+    }
+
+    if (btnCsvUp && csvInput) {
+        btnCsvUp.addEventListener('click', function() {
+            if (!editableRows().length) { alert('Load the students first (select the exam and subject).'); return; }
+            csvInput.value = '';
+            csvInput.click();
+        });
+        csvInput.addEventListener('change', function() {
+            var file = this.files && this.files[0];
+            if (!file) return;
+            var reader = new FileReader();
+            reader.onload = function() {
+                var recs = parseCsv(String(reader.result || ''));
+                if (recs.length < 2) { alert('The CSV file is empty or has no data rows.'); return; }
+
+                // Map mark columns: match header names to distributions,
+                // falling back to position (3rd column onwards).
+                var header = recs[0].map(function(h) { return String(h).trim().toLowerCase(); });
+                var colFor = [];
+                currentDist.forEach(function(d, i) {
+                    var dn = String(d.name).trim().toLowerCase();
+                    var found = -1;
+                    header.forEach(function(h, ci) {
+                        if (ci < 2 || found !== -1) return;
+                        if (h.replace(/\s*\(max[^)]*\)\s*$/, '') === dn) found = ci;
+                    });
+                    colFor[i] = (found !== -1) ? found : (2 + i);
+                });
+
+                // Index editable table rows by Student ID
+                var byId = {};
+                editableRows().forEach(function(tr) {
+                    var sid = ((tr.querySelector('input[name^="student_sid"]') || {}).value || '').trim().toLowerCase();
+                    if (sid) byId[sid] = tr;
+                });
+
+                var updated = 0, notFound = [];
+                recs.slice(1).forEach(function(rec) {
+                    var sid = String(rec[0] || '').trim();
+                    if (!sid) return;
+                    var tr = byId[sid.toLowerCase()];
+                    if (!tr) { notFound.push(sid); return; }
+                    var touched = false;
+                    currentDist.forEach(function(d, i) {
+                        var raw = String(rec[colFor[i]] == null ? '' : rec[colFor[i]]).trim();
+                        if (raw === '') return; // empty cell: leave the current value untouched
+                        var chk = tr.querySelector('.dist-absent-chk[data-dist-idx="' + i + '"]');
+                        var inp = tr.querySelector('.marks-input[data-dist-idx="' + i + '"]');
+                        if (/^(a|abs|absent)$/i.test(raw)) {
+                            if (chk && !chk.disabled && !chk.checked) {
+                                chk.checked = true;
+                                chk.dispatchEvent(new Event('change', { bubbles: true }));
+                            }
+                            touched = true;
+                            return;
+                        }
+                        var v = parseFloat(raw.replace(',', '.'));
+                        if (isNaN(v)) return;
+                        // A number clears an absent tick for that segment
+                        if (chk && chk.checked && !chk.disabled) {
+                            chk.checked = false;
+                            chk.dispatchEvent(new Event('change', { bubbles: true }));
+                        }
+                        if (inp && !inp.disabled) {
+                            inp.value = Math.min(Math.max(v, 0), d.max);
+                            inp.dispatchEvent(new Event('input', { bubbles: true }));
+                            touched = true;
+                        }
+                    });
+                    if (touched) updated++;
+                });
+
+                var msg = 'CSV import complete: marks filled for ' + updated
+                        + ' student' + (updated === 1 ? '' : 's') + '.';
+                if (notFound.length) {
+                    msg += '\n\n' + notFound.length + ' Student ID(s) in the file are not in the loaded list and were skipped:\n'
+                         + notFound.slice(0, 15).join(', ') + (notFound.length > 15 ? ', …' : '');
+                }
+                msg += '\n\nPlease review the table, then Save Draft or Submit for Review.';
+                alert(msg);
+            };
+            reader.readAsText(file);
         });
     }
 
