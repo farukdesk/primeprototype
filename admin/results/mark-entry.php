@@ -199,6 +199,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $subject_code     = trim($_POST['subject_code']      ?? '');
     $subject_title    = trim($_POST['subject_title']     ?? '');
     $credits          = trim($_POST['credits']           ?? '');
+    $exam_date        = trim($_POST['exam_date']         ?? '');
+    // Accept only a valid YYYY-MM-DD exam date (empty allowed)
+    if ($exam_date !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $exam_date)) $exam_date = '';
 
     // Curriculum + term label are derived authoritatively from the selected course
     // offer subject, so the client cannot spoof an unrelated subject/term.
@@ -346,36 +349,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $is_new_sheet = ($sheet_id <= 0);
 
+        // exam_date column exists only after exam-date-migration.sql has run;
+        // keep saving working either way.
+        $has_exam_date_col = false;
+        try {
+            $db->query('SELECT exam_date FROM result_mark_sheets LIMIT 1');
+            $has_exam_date_col = true;
+        } catch (Throwable $_e) {}
+
         if ($sheet_id > 0) {
             // Update existing sheet header
-            $db->prepare(
-                'UPDATE result_mark_sheets SET
+            $sql = 'UPDATE result_mark_sheets SET
                    dept_id=?, program_id=?, exam_id=?, semester=?,
                    curriculum_id=?, offer_subject_id=?,
-                   subject_code=?, subject_title=?, credits=?,
-                   updated_at=NOW()
-                 WHERE id=?'
-            )->execute([
+                   subject_code=?, subject_title=?, credits=?,'
+                 . ($has_exam_date_col ? ' exam_date=?,' : '')
+                 . ' updated_at=NOW()
+                 WHERE id=?';
+            $params = [
                 $dept_id, $program_id ?: null, $exam_id ?: null, $semester_label,
                 $curriculum_id ?: null, $offer_subject_id ?: null,
                 $subject_code ?: null, $subject_title,
                 $credits !== '' ? (float)$credits : null,
-                $sheet_id,
-            ]);
+            ];
+            if ($has_exam_date_col) $params[] = $exam_date ?: null;
+            $params[] = $sheet_id;
+            $db->prepare($sql)->execute($params);
         } else {
             // Insert new sheet (always starts as draft)
-            $db->prepare(
-                'INSERT INTO result_mark_sheets
+            $sql = 'INSERT INTO result_mark_sheets
                    (dept_id, program_id, exam_id, semester, curriculum_id, offer_subject_id,
-                    subject_code, subject_title, credits, workflow_status, created_by)
-                 VALUES (?,?,?,?,?,?,?,?,?,\'draft\',?)'
-            )->execute([
+                    subject_code, subject_title, credits, '
+                 . ($has_exam_date_col ? 'exam_date, ' : '')
+                 . "workflow_status, created_by)
+                 VALUES (?,?,?,?,?,?,?,?,?," . ($has_exam_date_col ? '?,' : '') . "'draft',?)";
+            $params = [
                 $dept_id, $program_id ?: null, $exam_id ?: null, $semester_label,
                 $curriculum_id ?: null, $offer_subject_id ?: null,
                 $subject_code ?: null, $subject_title,
                 $credits !== '' ? (float)$credits : null,
-                $user['id'],
-            ]);
+            ];
+            if ($has_exam_date_col) $params[] = $exam_date ?: null;
+            $params[] = $user['id'];
+            $db->prepare($sql)->execute($params);
             $sheet_id = (int)$db->lastInsertId();
             // Note: chain is not yet resolved for draft saves; history entry added at submit time
         }
@@ -544,7 +560,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     save_old(compact('dept_id','program_id','exam_id','offer_subject_id',
-                     'subject_code','subject_title','credits'));
+                     'subject_code','subject_title','credits','exam_date'));
 }
 
 require_once __DIR__ . '/../includes/header.php';
@@ -591,6 +607,7 @@ $v_curriculum_id    = $sheet ? $sheet['curriculum_id']     : old('curriculum_id'
 $v_subject_code     = $sheet ? $sheet['subject_code']      : old('subject_code');
 $v_subject_title    = $sheet ? $sheet['subject_title']     : old('subject_title');
 $v_credits          = $sheet ? $sheet['credits']           : old('credits');
+$v_exam_date        = $sheet ? ($sheet['exam_date'] ?? '') : old('exam_date');
 $is_edit            = $sheet !== null;
 ?>
 
@@ -739,15 +756,21 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
                             <input type="text" name="subject_code" id="subject_code" class="form-control"
                                    value="<?= h($v_subject_code) ?>" placeholder="e.g. CSE-301" maxlength="50">
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <label class="form-label fw-medium">Subject Title <span class="text-danger">*</span></label>
                             <input type="text" name="subject_title" id="subject_title" class="form-control"
                                    value="<?= h($v_subject_title) ?>" placeholder="e.g. Data Structures" maxlength="300" required>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <label class="form-label fw-medium">Credits</label>
                             <input type="number" name="credits" id="credits_input" class="form-control"
                                    value="<?= h($v_credits) ?>" min="0" max="10" step="0.5">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-medium">Exam Date</label>
+                            <input type="date" name="exam_date" id="exam_date_input" class="form-control"
+                                   value="<?= h($v_exam_date) ?>">
+                            <div class="form-text">Printed as “Exam Date” on the mark sheet.</div>
                         </div>
                     </div>
 

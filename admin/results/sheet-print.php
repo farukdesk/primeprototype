@@ -281,7 +281,7 @@ $page_title      = h($sheet['subject_title']);
         </div>
         <div class="info-col">
             <div class="info-row"><span class="lbl">Semester:</span><span><?= h($sheet['semester']) ?></span></div>
-            <div class="info-row"><span class="lbl">Exam Date:</span><span class="blank-line">&nbsp;</span></div>
+            <div class="info-row"><span class="lbl">Exam Date:</span><?php if (!empty($sheet['exam_date'])): ?><span><?= h(date('d M Y', strtotime($sheet['exam_date']))) ?></span><?php else: ?><span class="blank-line">&nbsp;</span><?php endif; ?></div>
             <?php if ($section_label !== ''): ?>
             <div class="info-row"><span class="lbl">Section:</span><span><?= h($section_label) ?></span></div>
             <?php endif; ?>
