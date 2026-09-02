@@ -1040,7 +1040,8 @@ foreach ($creatable as $cr) {
 
     // ── Exam-type mode (mid / final / all) ────────────────────────────────────
     // 'mid'   → only Mid Term columns editable; no letter grade (result not final)
-    // 'final' → Mid Term columns locked (marks already given & published)
+    // 'final' → all columns editable; Mid Term marks already entered for the
+    //           mid-term exam are pre-filled and can be modified
     // 'all'   → no restriction
     var examMode = 'all';
 
@@ -1062,8 +1063,9 @@ foreach ($creatable as $cr) {
 
     /** Whether a distribution column is editable under the current exam mode. */
     function distAllowed(name) {
-        if (examMode === 'mid')   return isMidDist(name);
-        if (examMode === 'final') return !isMidDist(name);
+        if (examMode === 'mid') return isMidDist(name);
+        // 'final' and 'all': every column is editable — mid-term marks pulled
+        // from the mid-term exam sheet are pre-filled and may be modified.
         return true;
     }
 
@@ -1081,7 +1083,7 @@ foreach ($creatable as $cr) {
                 hint.textContent = 'Mid Term entry — only Mid Term columns are editable; letter grades appear after the final exam';
                 hint.className   = 'badge bg-warning text-dark ms-2';
             } else if (examMode === 'final') {
-                hint.textContent = 'Final entry — Mid Term columns are locked (marks already published)';
+                hint.textContent = 'Final entry — Mid Term marks from the mid-term exam are pre-filled and can be modified';
                 hint.className   = 'badge bg-info text-dark ms-2';
             } else {
                 hint.textContent = '';
@@ -1611,8 +1613,8 @@ foreach ($creatable as $cr) {
                 Array.from(tbody.querySelectorAll('tr.grade-row')).forEach(function(tr) {
                     var pk  = (tr.querySelector('[name="student_id_pk[]"]') || {}).value || '';
                     var sid = ((tr.querySelector('[name="student_sid[]"]') || {}).value || '').trim();
-                    if (pk && pk !== '0') existingPk[pk] = true;
-                    if (sid) existingSid[sid] = true;
+                    if (pk && pk !== '0') existingPk[pk] = tr;
+                    if (sid) existingSid[sid] = tr;
                 });
                 var batchCounts = {};
                 data.forEach(function(s) { if (s.batch) batchCounts[s.batch] = (batchCounts[s.batch] || 0) + 1; });
@@ -1622,11 +1624,17 @@ foreach ($creatable as $cr) {
                 });
                 var added = 0;
                 data.forEach(function(s) {
-                    if (existingPk[String(s.id)] || existingSid[String(s.student_id).trim()]) return;
+                    var existingTr = existingPk[String(s.id)] || existingSid[String(s.student_id).trim()];
+                    if (existingTr) {
+                        // Already in the sheet: pull previously entered mid-term
+                        // marks into any still-empty mid columns.
+                        prefillMidMarks(existingTr, s.prev_marks || null);
+                        return;
+                    }
                     var diffBatch = (s.batch && mainBatch && s.batch !== mainBatch) ? s.batch : null;
                     var diffDept  = (s.dept_id && String(s.dept_id) !== String(getDeptId() || 0))
                         ? (s.dept_name || ('#' + s.dept_id)) : null;
-                    appendRow(s.student_id, s.full_name, s.id, null, null, true, s.marked_by || null, diffBatch, diffDept);
+                    appendRow(s.student_id, s.full_name, s.id, s.prev_marks || null, null, true, s.marked_by || null, diffBatch, diffDept);
                     added++;
                 });
                 if (added > 0) {
@@ -1635,6 +1643,33 @@ foreach ($creatable as $cr) {
                     applyExamMode();
                 }
             });
+    }
+
+    /**
+     * Pre-fill previously entered mid-term marks (pulled from the mid-term exam
+     * sheet of the same subject) into a row's still-empty mark inputs, and merge
+     * them into the row's data-saved-marks attribute so distribution rebuilds
+     * keep the values. The server only sends mid-component indices in prev_marks.
+     */
+    function prefillMidMarks(tr, prevMarks) {
+        if (!prevMarks || !prevMarks.length || tr.hasAttribute('data-marked-by')) return;
+        var saved = null;
+        try { saved = JSON.parse(tr.getAttribute('data-saved-marks') || 'null'); } catch (e) {}
+        if (!Array.isArray(saved)) saved = [];
+        var changed = false;
+        prevMarks.forEach(function(v, i) {
+            if (v === null || v === undefined) return;
+            if (saved[i] === null || saved[i] === undefined) { saved[i] = v; changed = true; }
+        });
+        if (changed) tr.setAttribute('data-saved-marks', JSON.stringify(saved));
+        prevMarks.forEach(function(v, i) {
+            if (v === null || v === undefined) return;
+            var inp = tr.querySelector('.marks-input[data-dist-idx="' + i + '"]');
+            if (inp && !inp.disabled && inp.value === '') {
+                inp.value = v;
+                inp.dispatchEvent(new Event('input', { bubbles: false }));
+            }
+        });
     }
 
     // Re-order the table rows serial-wise by student ID (natural compare).
@@ -1679,7 +1714,7 @@ foreach ($creatable as $cr) {
                     var diffBatch = (s.batch && mainBatch && s.batch !== mainBatch) ? s.batch : null;
                     var diffDept  = (s.dept_id && String(s.dept_id) !== String(getDeptId() || 0))
                         ? (s.dept_name || ('#' + s.dept_id)) : null;
-                    appendRow(s.student_id, s.full_name, s.id, null, null, true, s.marked_by || null, diffBatch, diffDept);
+                    appendRow(s.student_id, s.full_name, s.id, s.prev_marks || null, null, true, s.marked_by || null, diffBatch, diffDept);
                 });
                 renumber();
                 applyExamMode();
@@ -1864,6 +1899,10 @@ foreach ($creatable as $cr) {
         tr.querySelector('[name="student_id_pk[]"]').value = idPk || 0;
         tr.querySelector('[name="student_sid[]"]').value   = sid  || '';
         tr.querySelector('[name="student_name[]"]').value  = name || '';
+
+        // Keep pre-filled marks (e.g. pulled mid-term marks) across
+        // distribution rebuilds.
+        if (savedMarks) tr.setAttribute('data-saved-marks', JSON.stringify(savedMarks));
 
         // Student registered from a different batch/department → tag under the ID
         if (diffBatch || diffDept) {
