@@ -14,7 +14,7 @@ try {
             "SELECT a.*, i.issue_number, i.published_date AS issue_date, i.id AS issue_id,
                     v.volume_number, v.year,
                     j.name AS journal_title, j.slug AS journal_slug, j.publisher,
-                    j.issn, j.e_issn, j.language AS journal_language
+                    j.issn, j.e_issn, j.short_name
              FROM journal_articles a
              JOIN journal_issues   i ON i.id = a.issue_id
              JOIN journal_volumes  v ON v.id = i.volume_id
@@ -48,9 +48,34 @@ $page_title    = $article ? $article['title'] : 'Article Not Found';
 $canonical_url = SITE_URL . '/journal-article.php?slug=' . rawurlencode($slug);
 $pdf_url       = ($article && $article['pdf_file']) ? SITE_URL . '/journal-pdf.php?slug=' . rawurlencode($slug) : null;
 $citation_date = '';
+$cite_year     = '';
 if ($article) {
     $d = $article['published_date'] ?: $article['issue_date'];
     $citation_date = $d ? date('Y/m/d', strtotime($d)) : (string)$article['year'];
+    $cite_year     = $d ? date('Y', strtotime($d)) : (string)$article['year'];
+}
+
+/** Author initials for avatar chips. */
+function jm_author_initials(string $name): string
+{
+    $parts = preg_split('/\s+/', trim($name)) ?: [];
+    $parts = array_values(array_filter($parts, fn($p) => $p !== '' && ctype_alpha($p[0]) && !in_array(strtolower(rtrim($p, '.')), ['dr', 'prof', 'md', 'mr', 'mrs', 'ms'], true)));
+    $first = $parts[0][0] ?? 'A';
+    $last  = count($parts) > 1 ? $parts[count($parts) - 1][0] : '';
+    return strtoupper($first . $last);
+}
+
+// Build a simple APA-like citation string.
+$cite_text = '';
+if ($article) {
+    $names = implode(', ', array_column($authors, 'full_name'));
+    $pages = $article['page_from']
+        ? 'pp. ' . (int)$article['page_from'] . ($article['page_to'] ? '–' . (int)$article['page_to'] : '') . '.'
+        : '';
+    $cite_text = trim(
+        ($names !== '' ? $names . ' ' : '') . '(' . $cite_year . '). ' . $article['title'] . '. ' .
+        $article['journal_title'] . ', ' . (int)$article['volume_number'] . '(' . (int)$article['issue_number'] . '), ' . $pages
+    );
 }
 ?>
 <!doctype html>
@@ -109,6 +134,7 @@ render_seo_meta('/journal-article.php?slug=' . urlencode($slug), $page_title, $_
    <link rel="stylesheet" href="/assets/css/custom-animation.css">
    <link rel="stylesheet" href="/assets/css/spacing.css">
    <link rel="stylesheet" href="/assets/css/main.css">
+<?php include __DIR__ . '/includes/journal-styles.php'; ?>
 <?php include __DIR__ . '/includes/meta-pixel.php'; ?>
 </head>
 <body id="body" class="it-magic-cursor">
@@ -121,94 +147,126 @@ render_seo_meta('/journal-article.php?slug=' . urlencode($slug), $page_title, $_
       <?php include __DIR__ . '/includes/nav-menu.php'; ?>
    </header>
    <main>
-   <div class="it-breadcrumb-area fix it-breadcrumb-style-2 z-index-1" data-background="assets/img/shape/breadcrumb-1-bg.png">
-      <div class="container"><div class="row align-items-center"><div class="col-12">
-         <div class="it-breadcrumb-content text-center z-index-1">
-            <div class="it-breadcrumb-title-box">
-               <h3 class="it-breadcrumb-title style-2"><?= $article ? fh($article['journal_title']) : 'Article Not Found' ?></h3>
-            </div>
-            <div class="it-breadcrumb-list"><ul>
-               <li><a href="<?= fh(SITE_URL) ?>/index.php">Home</a></li>
-               <?php if ($article): ?>
-               <li><a href="<?= fh(SITE_URL) ?>/journal.php?slug=<?= fh(rawurlencode($article['journal_slug'])) ?>">Journal</a></li>
-               <?php endif; ?>
-               <li><span>Article</span></li>
-            </ul></div>
-         </div>
-      </div></div></div>
-   </div>
 
-   <div class="postbox-area pt-100 pb-100">
+   <div class="jm-wrap pt-60 pb-100">
       <div class="container">
-         <?php if (!$article): ?>
-         <div class="text-center py-5">
-            <h3 class="mb-3">Article Not Found</h3>
-            <p>The article you are looking for does not exist or is not published.</p>
-            <a href="<?= fh(SITE_URL) ?>/journal.php">Browse all journals</a>
-         </div>
-         <?php else: ?>
-         <div class="row">
-            <div class="col-lg-8">
-               <h3 class="mb-3"><?= fh($article['title']) ?></h3>
-               <?php if ($authors): ?>
-               <div class="mb-3">
-                  <?php foreach ($authors as $k => $au): ?>
-                  <span class="fw-semibold"><?= fh($au['full_name']) ?></span><?php
-                     if ($au['affiliation']): ?><span class="text-muted small"> (<?= fh($au['affiliation']) ?>)</span><?php endif;
-                     echo $k < count($authors) - 1 ? ', ' : ''; ?>
-                  <?php endforeach; ?>
-               </div>
-               <?php endif; ?>
 
+         <?php if (!$article): ?>
+         <div class="jm-card"><div class="jm-card-body text-center py-5">
+            <i class="far fa-file-lines mb-3" style="font-size:2.4rem;color:var(--jm-blue);"></i>
+            <h3 class="mb-2">Article Not Found</h3>
+            <p class="jm-meta-line mb-4">The article you are looking for does not exist or is not published.</p>
+            <a class="jm-btn jm-btn-outline" href="<?= fh(SITE_URL) ?>/journal.php"><i class="far fa-arrow-left"></i> Browse all journals</a>
+         </div></div>
+         <?php else: ?>
+
+         <!-- ── Article hero ── -->
+         <div class="jm-hero mb-4">
+            <div class="d-flex flex-wrap gap-2 mb-3">
+               <a class="jm-pill" style="text-decoration:none;"
+                  href="<?= fh(SITE_URL) ?>/journal.php?slug=<?= fh(rawurlencode($article['journal_slug'])) ?>">
+                  <i class="far fa-book"></i> <?= fh($article['short_name'] ?: $article['journal_title']) ?></a>
+               <a class="jm-pill" style="text-decoration:none;"
+                  href="<?= fh(SITE_URL) ?>/journal-issue.php?id=<?= (int)$article['issue_id'] ?>">
+                  <i class="far fa-book-open"></i> Vol. <?= (int)$article['volume_number'] ?>, No. <?= (int)$article['issue_number'] ?> (<?= (int)$article['year'] ?>)</a>
+               <?php if ($article['published_date']): ?>
+               <span class="jm-pill"><i class="far fa-calendar-check"></i> <?= fh(date('d F Y', strtotime($article['published_date']))) ?></span>
+               <?php endif; ?>
+            </div>
+            <h1 class="mb-3" style="font-weight:800;font-size:1.7rem;line-height:1.4;"><?= fh($article['title']) ?></h1>
+            <?php if ($authors): ?>
+            <div>
+               <?php foreach ($authors as $au): ?>
+               <span class="jm-author-chip" style="background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.3);color:#fff;">
+                  <span class="jm-avatar"><?= fh(jm_author_initials($au['full_name'])) ?></span>
+                  <span><?= fh($au['full_name']) ?>
+                     <?php if ($au['affiliation']): ?><small style="color:rgba(255,255,255,.7);"> · <?= fh($au['affiliation']) ?></small><?php endif; ?>
+                  </span>
+               </span>
+               <?php endforeach; ?>
+            </div>
+            <?php endif; ?>
+         </div>
+
+         <div class="row g-4">
+            <div class="col-lg-8">
                <?php if ($article['abstract']): ?>
-               <h5>Abstract</h5>
-               <p><?= nl2br(fh($article['abstract'])) ?></p>
+               <div class="jm-card mb-4"><div class="jm-card-body">
+                  <div class="jm-section-title">Abstract</div>
+                  <div class="jm-abstract"><?= nl2br(fh($article['abstract'])) ?></div>
+               </div></div>
                <?php endif; ?>
 
                <?php if ($article['keywords']): ?>
-               <p><strong>Keywords:</strong> <?= fh($article['keywords']) ?></p>
+               <div class="jm-card mb-4"><div class="jm-card-body">
+                  <div class="jm-section-title">Keywords</div>
+                  <div>
+                     <?php foreach (array_filter(array_map('trim', explode(',', $article['keywords']))) as $kw): ?>
+                     <span class="jm-tag"><i class="far fa-tag me-1" style="color:var(--jm-blue);"></i><?= fh($kw) ?></span>
+                     <?php endforeach; ?>
+                  </div>
+               </div></div>
                <?php endif; ?>
 
-               <?php if ($pdf_url): ?>
-               <a class="btn btn-danger mt-3" href="<?= fh($pdf_url) ?>">
-                  <i class="far fa-file-pdf me-1"></i> Download Full Text PDF
-               </a>
+               <?php if ($cite_text): ?>
+               <div class="jm-card mb-4"><div class="jm-card-body">
+                  <div class="jm-section-title">How to Cite</div>
+                  <div class="jm-cite-box" id="jm-citation"><?= fh($cite_text) ?></div>
+                  <button class="jm-btn jm-btn-outline mt-3" style="padding:9px 18px;font-size:.82rem;"
+                          onclick="navigator.clipboard.writeText(document.getElementById('jm-citation').innerText).then(()=>{this.innerHTML='<i class\u003d\u0022far fa-check\u0022></i> Copied!';setTimeout(()=>{this.innerHTML='<i class\u003d\u0022far fa-copy\u0022></i> Copy Citation';},2000);});">
+                     <i class="far fa-copy"></i> Copy Citation</button>
+               </div></div>
                <?php endif; ?>
             </div>
+
             <div class="col-lg-4">
-               <div class="card" style="border-radius:12px;">
-                  <div class="card-body small">
-                     <h5 class="mb-3">Article Details</h5>
-                     <ul class="list-unstyled mb-0">
-                        <li class="mb-1"><strong>Journal:</strong>
-                           <a href="<?= fh(SITE_URL) ?>/journal.php?slug=<?= fh(rawurlencode($article['journal_slug'])) ?>"><?= fh($article['journal_title']) ?></a></li>
-                        <li class="mb-1"><strong>Issue:</strong>
-                           <a href="<?= fh(SITE_URL) ?>/journal-issue.php?id=<?= (int)$article['issue_id'] ?>">
-                              Vol. <?= (int)$article['volume_number'] ?>, No. <?= (int)$article['issue_number'] ?> (<?= (int)$article['year'] ?>)</a></li>
+               <div class="jm-sticky">
+                  <?php if ($pdf_url): ?>
+                  <a class="jm-btn jm-btn-pdf w-100 mb-3" style="padding:15px 24px;" href="<?= fh($pdf_url) ?>">
+                     <i class="far fa-file-pdf"></i> Download Full Text PDF</a>
+                  <?php endif; ?>
+
+                  <div class="row g-3 mb-3">
+                     <div class="col-6"><div class="jm-stat"><i class="far fa-eye"></i>
+                        <div><div class="n"><?= number_format((int)$article['views'] + 1) ?></div><div class="l">Views</div></div></div></div>
+                     <div class="col-6"><div class="jm-stat"><i class="far fa-download"></i>
+                        <div><div class="n"><?= number_format((int)$article['downloads']) ?></div><div class="l">Downloads</div></div></div></div>
+                  </div>
+
+                  <div class="jm-card"><div class="jm-card-body">
+                     <div class="jm-section-title">Article Details</div>
+                     <ul class="jm-info-list">
+                        <li><span class="k">Journal</span>
+                            <span class="v"><a href="<?= fh(SITE_URL) ?>/journal.php?slug=<?= fh(rawurlencode($article['journal_slug'])) ?>"><?= fh($article['short_name'] ?: $article['journal_title']) ?></a></span></li>
+                        <li><span class="k">Issue</span>
+                            <span class="v"><a href="<?= fh(SITE_URL) ?>/journal-issue.php?id=<?= (int)$article['issue_id'] ?>">Vol. <?= (int)$article['volume_number'] ?>, No. <?= (int)$article['issue_number'] ?></a></span></li>
+                        <li><span class="k">Year</span><span class="v"><?= (int)$article['year'] ?></span></li>
                         <?php if ($article['page_from']): ?>
-                        <li class="mb-1"><strong>Pages:</strong> <?= (int)$article['page_from'] ?><?= $article['page_to'] ? '–' . (int)$article['page_to'] : '' ?></li>
+                        <li><span class="k">Pages</span><span class="v"><?= (int)$article['page_from'] ?><?= $article['page_to'] ? '–' . (int)$article['page_to'] : '' ?></span></li>
                         <?php endif; ?>
                         <?php if ($article['published_date']): ?>
-                        <li class="mb-1"><strong>Published:</strong> <?= fh(date('d F Y', strtotime($article['published_date']))) ?></li>
+                        <li><span class="k">Published</span><span class="v"><?= fh(date('d M Y', strtotime($article['published_date']))) ?></span></li>
                         <?php endif; ?>
                         <?php if ($article['doi']): ?>
-                        <li class="mb-1"><strong>DOI:</strong>
-                           <a href="https://doi.org/<?= fh($article['doi']) ?>" target="_blank" rel="noopener"><?= fh($article['doi']) ?></a></li>
+                        <li><span class="k">DOI</span>
+                            <span class="v"><a href="https://doi.org/<?= fh($article['doi']) ?>" target="_blank" rel="noopener"><?= fh($article['doi']) ?></a></span></li>
                         <?php endif; ?>
                         <?php if ($article['issn']): ?>
-                        <li class="mb-1"><strong>ISSN:</strong> <?= fh($article['issn']) ?></li>
+                        <li><span class="k">ISSN</span><span class="v"><?= fh($article['issn']) ?></span></li>
                         <?php endif; ?>
                         <?php if ($article['e_issn']): ?>
-                        <li class="mb-1"><strong>e-ISSN:</strong> <?= fh($article['e_issn']) ?></li>
+                        <li><span class="k">e-ISSN</span><span class="v"><?= fh($article['e_issn']) ?></span></li>
                         <?php endif; ?>
-                        <li class="mb-1"><strong>Views:</strong> <?= (int)$article['views'] + 1 ?>
-                            &nbsp; <strong>Downloads:</strong> <?= (int)$article['downloads'] ?></li>
                      </ul>
-                  </div>
+                  </div></div>
+
+                  <a class="jm-btn jm-btn-outline w-100 mt-3" href="<?= fh(SITE_URL) ?>/journal-issue.php?id=<?= (int)$article['issue_id'] ?>">
+                     <i class="far fa-arrow-left"></i> Back to Issue</a>
                </div>
             </div>
          </div>
          <?php endif; ?>
+
       </div>
    </div>
    </main>
