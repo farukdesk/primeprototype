@@ -86,7 +86,7 @@ if ($id > 0) {
 }
 
 $issues = $db->query(
-    'SELECT i.id, i.issue_number, i.is_published, v.volume_number, v.year, j.title AS journal_title
+    'SELECT i.id, i.issue_number, i.is_published, v.volume_number, v.year, j.name AS journal_title
      FROM journal_issues i
      JOIN journal_volumes  v ON v.id = i.volume_id
      JOIN journal_journals j ON j.id = v.journal_id

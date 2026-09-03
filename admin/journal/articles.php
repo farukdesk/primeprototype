@@ -45,7 +45,7 @@ if ($journal_id > 0) { $where[] = 'j.id = ?';       $params[] = $journal_id; }
 if ($status !== '')  { $where[] = 'a.status = ?';   $params[] = $status; }
 if ($q !== '')       { $where[] = '(a.title LIKE ? OR a.keywords LIKE ?)'; $params[] = "%$q%"; $params[] = "%$q%"; }
 
-$sql = "SELECT a.*, i.issue_number, v.volume_number, v.year, j.title AS journal_title,
+$sql = "SELECT a.*, i.issue_number, v.volume_number, v.year, j.name AS journal_title,
                (SELECT GROUP_CONCAT(au.full_name ORDER BY aa.author_order SEPARATOR ', ')
                 FROM journal_article_authors aa JOIN journal_authors au ON au.id = aa.author_id
                 WHERE aa.article_id = a.id) AS author_names
@@ -80,7 +80,7 @@ require_once __DIR__ . '/../includes/header.php';
         <select class="form-select" name="journal_id" onchange="this.form.submit()">
             <option value="0">All journals</option>
             <?php foreach ($journals as $j): ?>
-            <option value="<?= (int)$j['id'] ?>" <?= $journal_id === (int)$j['id'] ? 'selected' : '' ?>><?= h($j['title']) ?></option>
+            <option value="<?= (int)$j['id'] ?>" <?= $journal_id === (int)$j['id'] ? 'selected' : '' ?>><?= h($j['name']) ?></option>
             <?php endforeach; ?>
         </select>
     </div>

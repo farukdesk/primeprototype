@@ -19,7 +19,7 @@ $totals = $db->query('SELECT COALESCE(SUM(views),0) AS v, COALESCE(SUM(downloads
 
 $recent = $db->query(
     "SELECT a.id, a.title, a.slug, a.status, a.published_date, a.created_at,
-            j.title AS journal_title, v.volume_number, i.issue_number
+            j.name AS journal_title, v.volume_number, i.issue_number
      FROM journal_articles a
      JOIN journal_issues   i ON i.id = a.issue_id
      JOIN journal_volumes  v ON v.id = i.volume_id

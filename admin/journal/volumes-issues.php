@@ -126,7 +126,7 @@ function jm_issue_form(int $journal_id, int $volume_id, array $i = []): void { ?
     <label class="form-label small text-muted">Journal</label>
     <select class="form-select" name="journal_id" onchange="this.form.submit()">
         <?php foreach ($journals as $j): ?>
-        <option value="<?= (int)$j['id'] ?>" <?= $journal_id === (int)$j['id'] ? 'selected' : '' ?>><?= h($j['title']) ?></option>
+        <option value="<?= (int)$j['id'] ?>" <?= $journal_id === (int)$j['id'] ? 'selected' : '' ?>><?= h($j['name']) ?></option>
         <?php endforeach; ?>
     </select>
 </form>
