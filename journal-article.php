@@ -13,13 +13,13 @@ try {
         $stmt = $db->prepare(
             "SELECT a.*, i.issue_number, i.published_date AS issue_date, i.id AS issue_id,
                     v.volume_number, v.year,
-                    j.title AS journal_title, j.slug AS journal_slug, j.publisher,
-                    j.issn_print, j.issn_online
+                    j.name AS journal_title, j.slug AS journal_slug, j.publisher,
+                    j.issn, j.e_issn, j.language AS journal_language
              FROM journal_articles a
              JOIN journal_issues   i ON i.id = a.issue_id
              JOIN journal_volumes  v ON v.id = i.volume_id
              JOIN journal_journals j ON j.id = v.journal_id
-             WHERE a.slug = ? AND a.status = 'published' AND j.is_active = 1
+             WHERE a.slug = ? AND a.status = 'published' AND j.status = 'active'
              LIMIT 1"
         );
         $stmt->execute([$slug]);
@@ -69,8 +69,8 @@ render_seo_meta('/journal-article.php?slug=' . urlencode($slug), $page_title, $_
    <link rel="canonical" href="<?= fh($canonical_url) ?>">
    <meta name="citation_journal_title" content="<?= fh($article['journal_title']) ?>">
    <meta name="citation_publisher" content="<?= fh($article['publisher'] ?: ($settings['publisher_name'] ?? 'Prime University')) ?>">
-   <?php if ($article['issn_online'] || $article['issn_print']): ?>
-   <meta name="citation_issn" content="<?= fh($article['issn_online'] ?: $article['issn_print']) ?>">
+   <?php if ($article['e_issn'] || $article['issn']): ?>
+   <meta name="citation_issn" content="<?= fh($article['e_issn'] ?: $article['issn']) ?>">
    <?php endif; ?>
    <meta name="citation_title" content="<?= fh($article['title']) ?>">
    <?php foreach ($authors as $au): ?>
@@ -195,8 +195,11 @@ render_seo_meta('/journal-article.php?slug=' . urlencode($slug), $page_title, $_
                         <li class="mb-1"><strong>DOI:</strong>
                            <a href="https://doi.org/<?= fh($article['doi']) ?>" target="_blank" rel="noopener"><?= fh($article['doi']) ?></a></li>
                         <?php endif; ?>
-                        <?php if ($article['issn_online'] || $article['issn_print']): ?>
-                        <li class="mb-1"><strong>ISSN:</strong> <?= fh($article['issn_online'] ?: $article['issn_print']) ?></li>
+                        <?php if ($article['issn']): ?>
+                        <li class="mb-1"><strong>ISSN:</strong> <?= fh($article['issn']) ?></li>
+                        <?php endif; ?>
+                        <?php if ($article['e_issn']): ?>
+                        <li class="mb-1"><strong>e-ISSN:</strong> <?= fh($article['e_issn']) ?></li>
                         <?php endif; ?>
                         <li class="mb-1"><strong>Views:</strong> <?= (int)$article['views'] + 1 ?>
                             &nbsp; <strong>Downloads:</strong> <?= (int)$article['downloads'] ?></li>

@@ -10,12 +10,12 @@ try {
     $db = front_db();
     if ($db && $id > 0) {
         $stmt = $db->prepare(
-            'SELECT i.*, v.volume_number, v.year, j.title AS journal_title, j.slug AS journal_slug
+            "SELECT i.*, v.volume_number, v.year, j.name AS journal_title, j.slug AS journal_slug
              FROM journal_issues i
              JOIN journal_volumes  v ON v.id = i.volume_id
              JOIN journal_journals j ON j.id = v.journal_id
-             WHERE i.id = ? AND i.is_published = 1 AND j.is_active = 1
-             LIMIT 1'
+             WHERE i.id = ? AND i.is_published = 1 AND j.status = 'active'
+             LIMIT 1"
         );
         $stmt->execute([$id]);
         $issue = $stmt->fetch();
