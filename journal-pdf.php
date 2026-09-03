@@ -22,7 +22,7 @@ try {
              JOIN journal_issues   i ON i.id = a.issue_id
              JOIN journal_volumes  v ON v.id = i.volume_id
              JOIN journal_journals j ON j.id = v.journal_id
-             WHERE a.slug = ? AND a.status = 'published' AND j.is_active = 1
+             WHERE a.slug = ? AND a.status = 'published' AND j.status = 'active'
              LIMIT 1"
         );
         $stmt->execute([$slug]);

@@ -130,8 +130,8 @@ function jm_upload_image(array $file, string $subdir): string
 function jm_journals(bool $active_only = false): array
 {
     $sql = 'SELECT * FROM journal_journals'
-         . ($active_only ? ' WHERE is_active = 1' : '')
-         . ' ORDER BY sort_order ASC, title ASC';
+         . ($active_only ? " WHERE status = 'active'" : '')
+         . ' ORDER BY sort_order ASC, name ASC';
     return db()->query($sql)->fetchAll();
 }
 

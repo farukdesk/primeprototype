@@ -77,7 +77,7 @@ function jm_board_form(array $journals, int $journal_id, array $m = []): void { 
         <select class="form-select" name="journal_id" required>
             <?php foreach ($journals as $j): ?>
             <option value="<?= (int)$j['id'] ?>" <?= (int)($m['journal_id'] ?? $journal_id) === (int)$j['id'] ? 'selected' : '' ?>>
-                <?= h($j['title']) ?></option>
+                <?= h($j['name']) ?></option>
             <?php endforeach; ?>
         </select></div>
     <div class="row g-2">
@@ -123,7 +123,7 @@ function jm_board_form(array $journals, int $journal_id, array $m = []): void { 
     <label class="form-label small text-muted">Journal</label>
     <select class="form-select" name="journal_id" onchange="this.form.submit()">
         <?php foreach ($journals as $j): ?>
-        <option value="<?= (int)$j['id'] ?>" <?= $journal_id === (int)$j['id'] ? 'selected' : '' ?>><?= h($j['title']) ?></option>
+        <option value="<?= (int)$j['id'] ?>" <?= $journal_id === (int)$j['id'] ? 'selected' : '' ?>><?= h($j['name']) ?></option>
         <?php endforeach; ?>
     </select>
 </form>

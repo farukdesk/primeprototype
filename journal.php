@@ -13,7 +13,7 @@ try {
     $db = front_db();
     if ($db) {
         if ($slug !== '') {
-            $stmt = $db->prepare('SELECT * FROM journal_journals WHERE slug = ? AND is_active = 1 LIMIT 1');
+            $stmt = $db->prepare("SELECT * FROM journal_journals WHERE slug = ? AND status = 'active' LIMIT 1");
             $stmt->execute([$slug]);
             $journal = $stmt->fetch();
             if ($journal) {
@@ -51,7 +51,7 @@ try {
             }
         } else {
             $journals = $db->query(
-                'SELECT * FROM journal_journals WHERE is_active = 1 ORDER BY sort_order ASC, title ASC'
+                "SELECT * FROM journal_journals WHERE status = 'active' ORDER BY sort_order ASC, name ASC"
             )->fetchAll();
         }
     }
@@ -59,7 +59,7 @@ try {
     // tables may not exist yet - fall through with empty data
 }
 
-$page_title = $journal ? $journal['title'] : 'University Journals';
+$page_title = $journal ? $journal['name'] : 'University Journals';
 ?>
 <!doctype html>
 <html class="no-js" lang="en">
@@ -161,10 +161,16 @@ render_seo_meta('/journal.php' . ($slug !== '' ? '?slug=' . urlencode($slug) : '
                   <div class="card-body">
                      <h5 class="mb-3">Journal Information</h5>
                      <ul class="list-unstyled small mb-0">
-                        <?php if ($journal['issn_print']): ?><li><strong>ISSN (Print):</strong> <?= fh($journal['issn_print']) ?></li><?php endif; ?>
-                        <?php if ($journal['issn_online']): ?><li><strong>ISSN (Online):</strong> <?= fh($journal['issn_online']) ?></li><?php endif; ?>
+                        <?php if ($journal['short_name']): ?><li><strong>Short Name:</strong> <?= fh($journal['short_name']) ?></li><?php endif; ?>
+                        <?php if ($journal['issn']): ?><li><strong>ISSN:</strong> <?= fh($journal['issn']) ?></li><?php endif; ?>
+                        <?php if ($journal['e_issn']): ?><li><strong>e-ISSN:</strong> <?= fh($journal['e_issn']) ?></li><?php endif; ?>
                         <?php if ($journal['publisher']): ?><li><strong>Publisher:</strong> <?= fh($journal['publisher']) ?></li><?php endif; ?>
+                        <?php if ($journal['department']): ?><li><strong>Department:</strong> <?= fh($journal['department']) ?></li><?php endif; ?>
+                        <?php if ($journal['frequency']): ?><li><strong>Frequency:</strong> <?= fh($journal['frequency']) ?></li><?php endif; ?>
+                        <?php if ($journal['language']): ?><li><strong>Language:</strong> <?= fh($journal['language']) ?></li><?php endif; ?>
                         <?php if ($journal['contact_email']): ?><li><strong>Contact:</strong> <?= fh($journal['contact_email']) ?></li><?php endif; ?>
+                        <?php if ($journal['website_url']): ?><li><strong>Website:</strong>
+                           <a href="<?= fh($journal['website_url']) ?>" target="_blank" rel="noopener"><?= fh($journal['website_url']) ?></a></li><?php endif; ?>
                      </ul>
                   </div>
                </div>
@@ -202,11 +208,11 @@ render_seo_meta('/journal.php' . ($slug !== '' ? '?slug=' . urlencode($slug) : '
             <div class="col-md-6 col-lg-4 mb-4">
                <div class="card h-100" style="border-radius:12px;">
                   <div class="card-body">
-                     <h5><a href="<?= fh(SITE_URL) ?>/journal.php?slug=<?= fh(rawurlencode($j['slug'])) ?>"><?= fh($j['title']) ?></a></h5>
-                     <?php if ($j['issn_online'] || $j['issn_print']): ?>
+                     <h5><a href="<?= fh(SITE_URL) ?>/journal.php?slug=<?= fh(rawurlencode($j['slug'])) ?>"><?= fh($j['name']) ?><?= $j['short_name'] ? ' (' . fh($j['short_name']) . ')' : '' ?></a></h5>
+                     <?php if ($j['issn'] || $j['e_issn']): ?>
                      <div class="small text-muted mb-2">
-                        <?= $j['issn_print'] ? 'ISSN (Print): ' . fh($j['issn_print']) : '' ?>
-                        <?= $j['issn_online'] ? ' ISSN (Online): ' . fh($j['issn_online']) : '' ?>
+                        <?= $j['issn'] ? 'ISSN: ' . fh($j['issn']) : '' ?>
+                        <?= $j['e_issn'] ? ' e-ISSN: ' . fh($j['e_issn']) : '' ?>
                      </div>
                      <?php endif; ?>
                      <p class="small mb-0"><?= fh(mb_substr(strip_tags((string)$j['description']), 0, 180)) ?></p>
