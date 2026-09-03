@@ -583,6 +583,64 @@ if (is_portal_student()) {
     </div>
     <?php endif; ?>
 
+    <!-- ── Journal Management ── -->
+    <?php if (is_super_admin() || can_access('journal')): ?>
+    <?php $is_journal_mgmt_active = strpos($current_path, '/journal/') !== false; ?>
+    <button class="nav-group-toggle <?= $is_journal_mgmt_active ? '' : 'collapsed' ?>"
+            data-bs-toggle="collapse" data-bs-target="#grp-journal"
+            aria-expanded="<?= $is_journal_mgmt_active ? 'true' : 'false' ?>">
+        <i class="fas fa-book-open grp-icon" style="color:#9b59b6"></i>
+        Journal Management
+        <i class="fas fa-chevron-down toggle-icon"></i>
+    </button>
+    <div class="collapse <?= $is_journal_mgmt_active ? 'show' : '' ?>" id="grp-journal">
+        <ul class="nav flex-column grp-items">
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/journal/index.php"
+                   class="<?= strpos($current_path, '/journal/index') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-gauge"></i> Dashboard
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/journal/journals.php"
+                   class="<?= strpos($current_path, '/journal/journals') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-book"></i> Journals
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/journal/editorial-board.php"
+                   class="<?= strpos($current_path, '/journal/editorial-board') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-user-tie"></i> Editorial Board
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/journal/volumes-issues.php"
+                   class="<?= strpos($current_path, '/journal/volumes-issues') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-layer-group"></i> Volumes &amp; Issues
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/journal/articles.php"
+                   class="<?= (strpos($current_path, '/journal/articles') !== false || strpos($current_path, '/journal/article-form') !== false) ? 'active' : '' ?>">
+                    <i class="fas fa-file-lines"></i> Articles
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/journal/authors.php"
+                   class="<?= strpos($current_path, '/journal/authors') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-users"></i> Authors
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/journal/settings.php"
+                   class="<?= strpos($current_path, '/journal/settings') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-cog"></i> Settings
+                </a>
+            </li>
+        </ul>
+    </div>
+    <?php endif; ?>
+
     <!-- ── SEO Manager ── -->
     <?php if (is_super_admin() || can_access('seo')): ?>
     <button class="nav-group-toggle <?= $is_seo_active ? '' : 'collapsed' ?>"
