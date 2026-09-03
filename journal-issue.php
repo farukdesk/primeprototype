@@ -10,7 +10,7 @@ try {
     $db = front_db();
     if ($db && $id > 0) {
         $stmt = $db->prepare(
-            "SELECT i.*, v.volume_number, v.year, j.name AS journal_title, j.slug AS journal_slug
+            "SELECT i.*, v.volume_number, v.year, j.name AS journal_title, j.slug AS journal_slug, j.short_name
              FROM journal_issues i
              JOIN journal_volumes  v ON v.id = i.volume_id
              JOIN journal_journals j ON j.id = v.journal_id
@@ -57,6 +57,7 @@ $page_title = $issue
    <link rel="stylesheet" href="/assets/css/custom-animation.css">
    <link rel="stylesheet" href="/assets/css/spacing.css">
    <link rel="stylesheet" href="/assets/css/main.css">
+<?php include __DIR__ . '/includes/journal-styles.php'; ?>
 <?php include __DIR__ . '/includes/meta-pixel.php'; ?>
 </head>
 <body id="body" class="it-magic-cursor">
@@ -69,63 +70,80 @@ $page_title = $issue
       <?php include __DIR__ . '/includes/nav-menu.php'; ?>
    </header>
    <main>
-   <div class="it-breadcrumb-area fix it-breadcrumb-style-2 z-index-1" data-background="assets/img/shape/breadcrumb-1-bg.png">
-      <div class="container"><div class="row align-items-center"><div class="col-12">
-         <div class="it-breadcrumb-content text-center z-index-1">
-            <div class="it-breadcrumb-title-box">
-               <h3 class="it-breadcrumb-title style-2"><?= fh($page_title) ?></h3>
-            </div>
-            <div class="it-breadcrumb-list"><ul>
-               <li><a href="<?= fh(SITE_URL) ?>/index.php">Home</a></li>
-               <?php if ($issue): ?>
-               <li><a href="<?= fh(SITE_URL) ?>/journal.php?slug=<?= fh(rawurlencode($issue['journal_slug'])) ?>"><?= fh($issue['journal_title']) ?></a></li>
-               <?php endif; ?>
-               <li><span>Issue</span></li>
-            </ul></div>
-         </div>
-      </div></div></div>
-   </div>
 
-   <div class="postbox-area pt-100 pb-100">
+   <div class="jm-wrap pt-60 pb-100">
       <div class="container">
+
          <?php if (!$issue): ?>
-         <div class="text-center py-5">
-            <h3 class="mb-3">Issue Not Found</h3>
-            <a href="<?= fh(SITE_URL) ?>/journal.php">Browse all journals</a>
-         </div>
+         <div class="jm-card"><div class="jm-card-body text-center py-5">
+            <i class="far fa-book-open mb-3" style="font-size:2.4rem;color:var(--jm-blue);"></i>
+            <h3 class="mb-2">Issue Not Found</h3>
+            <p class="jm-meta-line mb-4">The issue you are looking for does not exist or is not published.</p>
+            <a class="jm-btn jm-btn-outline" href="<?= fh(SITE_URL) ?>/journal.php"><i class="far fa-arrow-left"></i> Browse all journals</a>
+         </div></div>
          <?php else: ?>
-         <h4 class="mb-1">Table of Contents</h4>
-         <?php if ($issue['published_date']): ?>
-         <p class="text-muted">Published: <?= fh(date('d F Y', strtotime($issue['published_date']))) ?></p>
-         <?php endif; ?>
+
+         <!-- ── Issue hero ── -->
+         <div class="jm-hero mb-4">
+            <a class="jm-pill mb-3" style="text-decoration:none;"
+               href="<?= fh(SITE_URL) ?>/journal.php?slug=<?= fh(rawurlencode($issue['journal_slug'])) ?>">
+               <i class="far fa-book"></i> <?= fh($issue['journal_title']) ?><?= $issue['short_name'] ? ' (' . fh($issue['short_name']) . ')' : '' ?>
+            </a>
+            <h2 class="mt-3 mb-2" style="font-weight:800;">
+               Vol. <?= (int)$issue['volume_number'] ?>, No. <?= (int)$issue['issue_number'] ?> (<?= (int)$issue['year'] ?>)
+            </h2>
+            <?php if ($issue['title']): ?>
+            <div class="mb-2" style="font-size:1.05rem;opacity:.9;"><?= fh($issue['title']) ?></div>
+            <?php endif; ?>
+            <div class="d-flex flex-wrap gap-2">
+               <?php if ($issue['published_date']): ?>
+               <span class="jm-pill"><i class="far fa-calendar-check"></i>
+                  Published <?= fh(date('d F Y', strtotime($issue['published_date']))) ?></span>
+               <?php endif; ?>
+               <span class="jm-pill"><i class="far fa-file-lines"></i> <?= count($articles) ?> Article<?= count($articles) === 1 ? '' : 's' ?></span>
+            </div>
+         </div>
+
+         <div class="jm-section-title mt-4" style="font-size:1.15rem;">Table of Contents</div>
 
          <?php if (!$articles): ?>
-         <p class="text-muted">No articles in this issue yet.</p>
+         <div class="jm-card"><div class="jm-card-body jm-meta-line">No articles in this issue yet.</div></div>
          <?php endif; ?>
 
-         <?php foreach ($articles as $a): ?>
-         <div class="card mb-3" style="border-radius:12px;">
-            <div class="card-body d-flex justify-content-between align-items-start flex-wrap gap-2">
-               <div>
-                  <h5 class="mb-1">
-                     <a href="<?= fh(SITE_URL) ?>/journal-article.php?slug=<?= fh(rawurlencode($a['slug'])) ?>"><?= fh($a['title']) ?></a>
-                  </h5>
-                  <div class="small text-muted">
-                     <?= fh($a['author_names'] ?: '') ?>
-                     <?php if ($a['page_from']): ?>
-                        &nbsp;|&nbsp; pp. <?= (int)$a['page_from'] ?><?= $a['page_to'] ? '–' . (int)$a['page_to'] : '' ?>
-                     <?php endif; ?>
-                  </div>
+         <?php foreach ($articles as $k => $a): ?>
+         <div class="jm-card jm-card-hover mb-3">
+            <div class="jm-art">
+               <div class="jm-art-num"><?= $k + 1 ?></div>
+               <div class="flex-grow-1">
+                  <h5><a href="<?= fh(SITE_URL) ?>/journal-article.php?slug=<?= fh(rawurlencode($a['slug'])) ?>"><?= fh($a['title']) ?></a></h5>
+                  <?php if ($a['author_names']): ?>
+                  <div class="jm-authors mb-1"><i class="far fa-users me-1" style="color:var(--jm-blue);"></i><?= fh($a['author_names']) ?></div>
+                  <?php endif; ?>
+                  <?php if ($a['page_from']): ?>
+                  <div class="jm-meta-line"><i class="far fa-file-alt"></i>
+                     pp. <?= (int)$a['page_from'] ?><?= $a['page_to'] ? '–' . (int)$a['page_to'] : '' ?></div>
+                  <?php endif; ?>
                </div>
-               <?php if ($a['pdf_file']): ?>
-               <a class="btn btn-sm btn-outline-danger" href="<?= fh(SITE_URL) ?>/journal-pdf.php?slug=<?= fh(rawurlencode($a['slug'])) ?>">
-                  <i class="far fa-file-pdf me-1"></i> PDF
-               </a>
-               <?php endif; ?>
+               <div class="d-flex flex-column gap-2 align-items-end justify-content-center">
+                  <a class="jm-btn jm-btn-outline" style="padding:9px 18px;font-size:.82rem;"
+                     href="<?= fh(SITE_URL) ?>/journal-article.php?slug=<?= fh(rawurlencode($a['slug'])) ?>">
+                     Abstract <i class="far fa-arrow-right"></i></a>
+                  <?php if ($a['pdf_file']): ?>
+                  <a class="jm-btn jm-btn-pdf" style="padding:9px 18px;font-size:.82rem;"
+                     href="<?= fh(SITE_URL) ?>/journal-pdf.php?slug=<?= fh(rawurlencode($a['slug'])) ?>">
+                     <i class="far fa-file-pdf"></i> PDF</a>
+                  <?php endif; ?>
+               </div>
             </div>
          </div>
          <?php endforeach; ?>
+
+         <div class="mt-4">
+            <a class="jm-btn jm-btn-outline" href="<?= fh(SITE_URL) ?>/journal.php?slug=<?= fh(rawurlencode($issue['journal_slug'])) ?>">
+               <i class="far fa-arrow-left"></i> Back to <?= fh($issue['short_name'] ?: 'Journal') ?></a>
+         </div>
          <?php endif; ?>
+
       </div>
    </div>
    </main>
