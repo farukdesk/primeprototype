@@ -90,7 +90,7 @@ $issues = $db->query(
      FROM journal_issues i
      JOIN journal_volumes  v ON v.id = i.volume_id
      JOIN journal_journals j ON j.id = v.journal_id
-     ORDER BY j.title ASC, v.volume_number DESC, i.issue_number DESC'
+     ORDER BY j.name ASC, v.volume_number DESC, i.issue_number DESC'
 )->fetchAll();
 
 $all_authors = $db->query('SELECT id, full_name, affiliation FROM journal_authors ORDER BY full_name ASC')->fetchAll();
