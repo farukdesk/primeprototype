@@ -398,10 +398,12 @@ function wf_get_grades(int $sheet_id): array
 {
     $stmt = db()->prepare(
         'SELECT g.*, s.full_name AS s_full_name, s.student_id AS s_student_id,
-                s.batch AS s_batch, s.dept_id AS s_dept_id, sd.name AS s_dept_name
+                s.batch AS s_batch, s.dept_id AS s_dept_id, sd.name AS s_dept_name,
+                s.program_id AS s_program_id, sp.program_name AS s_program_name
          FROM result_sheet_grades g
          LEFT JOIN students s ON s.id = g.student_id
          LEFT JOIN dept_departments sd ON sd.id = s.dept_id
+         LEFT JOIN dept_academic_programs sp ON sp.id = s.program_id
          WHERE g.sheet_id = ?'
     );
     $stmt->execute([$sheet_id]);

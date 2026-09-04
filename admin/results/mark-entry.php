@@ -694,6 +694,37 @@ $is_edit            = $sheet !== null;
     <div id="dup_warning_text" class="mt-1"></div>
 </div>
 
+<?php
+// ── Mixed-program alert ───────────────────────────────────────────────────────
+// A sheet must contain students of ONE program. If saved rows span more than
+// one program (e.g. Bachelor rows merged with a Masters entry), offer the
+// split tool which separates them into two drafts WITHOUT losing any marks.
+if ($sheet && !empty($grades)):
+    $mix_programs = [];
+    foreach ($grades as $mg) {
+        if (!empty($mg['s_program_id'])) {
+            $mix_programs[(int)$mg['s_program_id']] =
+                (isset($mg['s_program_name']) && $mg['s_program_name'] !== null && $mg['s_program_name'] !== '')
+                    ? (string)$mg['s_program_name']
+                    : ('Program #' . (int)$mg['s_program_id']);
+        }
+    }
+    if (count($mix_programs) > 1): ?>
+<div class="alert alert-danger">
+    <strong><i class="fas fa-exclamation-triangle me-1"></i> Mixed programs in one sheet</strong>
+    <div class="mt-1" style="font-size:.9rem;">
+        This sheet contains students from <?= count($mix_programs) ?> different academic programs
+        (<?= h(implode(', ', $mix_programs)) ?>). A mark sheet should contain only one program's
+        students. Use the split tool to separate them into two drafts — all entered marks,
+        absence flags and remarks are preserved.
+    </div>
+    <a href="<?= APP_URL ?>/results/sheet-split.php?id=<?= (int)$sheet_id ?>"
+       class="btn btn-sm btn-danger mt-2" style="border-radius:8px;">
+        <i class="fas fa-code-branch me-1"></i> Split this sheet
+    </a>
+</div>
+<?php endif; endif; ?>
+
 <?php if ($sheet && $sheet['workflow_status'] === 'returned'): ?>
 <?php $history = wf_get_sheet_history($sheet_id); $last_return = null;
 foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $last_return = $h; break; } }
