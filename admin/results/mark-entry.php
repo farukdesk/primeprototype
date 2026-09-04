@@ -712,6 +712,33 @@ $is_edit            = $sheet !== null;
     <div id="dup_warning_text" class="mt-1"></div>
 </div>
 
+<!-- Existing-draft prompt: shown in new-sheet mode when the picked exam +
+     subject already has one of the current user's draft/returned sheets. -->
+<div class="modal fade" id="existing_draft_modal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content" style="border-radius:14px;">
+      <div class="modal-header">
+        <h6 class="modal-title fw-semibold">
+            <i class="fas fa-file-signature me-2 text-warning"></i>You already have a draft for this subject
+        </h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" style="font-size:.9rem;">
+        <div id="existing_draft_info" class="p-3 bg-light rounded mb-2"></div>
+        Do you want to continue editing that draft, or create a completely new sheet?
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal" style="border-radius:8px;">
+            <i class="fas fa-plus me-1"></i> Create New
+        </button>
+        <a href="#" id="existing_draft_edit_btn" class="btn btn-primary" style="border-radius:8px;">
+            <i class="fas fa-edit me-1"></i> Edit Existing Draft
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
 <?php
 // ── Mixed-program alert ───────────────────────────────────────────────────────
 // A sheet must contain students of ONE program. If saved rows span more than
@@ -1991,13 +2018,66 @@ foreach ($creatable as $cr) {
             });
     }
 
+    // ── Existing-draft prompt ────────────────────────────────────────────────
+    // New-sheet mode: when the teacher picks an exam + subject that already has
+    // one of their own draft/returned sheets, ask whether to continue editing
+    // that draft or start a new one — preventing accidental duplicate drafts.
+    var existingDraftShownFor = '';
+    function checkExistingDraft() {
+        if (isEditMode) return;
+        var examId  = examSel ? examSel.value : '';
+        var offerId = currSel ? currSel.value : '';
+        if (!examId || !offerId) return;
+        var key = examId + ':' + offerId;
+        if (existingDraftShownFor === key) return; // ask only once per exam+subject pick
+        fetch(APP_URL + '/results/get-my-draft.php?exam_id=' + encodeURIComponent(examId)
+                      + '&offer_subject_id=' + encodeURIComponent(offerId))
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (!d || !d.exists) return;
+                existingDraftShownFor = key;
+                var editUrl = APP_URL + '/results/mark-entry.php?id=' + d.id;
+                var info    = document.getElementById('existing_draft_info');
+                if (info) {
+                    info.innerHTML =
+                        '<div class="fw-semibold">'
+                      + escHtml((d.subject_code ? d.subject_code + ' — ' : '') + (d.subject_title || ''))
+                      + '</div>'
+                      + '<div class="text-muted" style="font-size:.8rem;">'
+                      + escHtml(d.semester || '')
+                      + ' · ' + (parseInt(d.student_count, 10) || 0) + ' student(s)'
+                      + (d.status === 'returned'
+                            ? ' · <span class="text-danger">returned for revision</span>'
+                            : ' · draft')
+                      + (d.updated_at ? ' · last saved ' + escHtml(d.updated_at) : '')
+                      + '</div>';
+                }
+                var editBtn = document.getElementById('existing_draft_edit_btn');
+                if (editBtn) editBtn.href = editUrl;
+                var modalEl = document.getElementById('existing_draft_modal');
+                if (modalEl && window.bootstrap && bootstrap.Modal) {
+                    bootstrap.Modal.getOrCreateInstance(modalEl).show();
+                } else if (confirm(
+                    'You already have a ' + (d.status === 'returned' ? 'returned' : 'draft')
+                  + ' mark sheet for this subject and exam ('
+                  + (parseInt(d.student_count, 10) || 0) + ' students'
+                  + (d.updated_at ? ', last saved ' + d.updated_at : '') + ').\n\n'
+                  + 'Press OK to edit that draft, or Cancel to create a new one.')) {
+                    window.location.href = editUrl;
+                }
+            })
+            .catch(function() { /* fail open — creating a new sheet still works */ });
+    }
+
     if (examSel) examSel.addEventListener('change', function() {
         checkDuplicate();
+        checkExistingDraft();
         applyExamMode();
         // Refresh the roster so students already marked for the newly selected exam get locked
         if (currSel.value && !isEditMode) loadRegisteredStudents(currSel.value, false);
     });
     currSel.addEventListener('change', checkDuplicate);
+    currSel.addEventListener('change', checkExistingDraft);
 
 
     // Manual "Reload Registered" button
