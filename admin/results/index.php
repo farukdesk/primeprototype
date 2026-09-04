@@ -202,12 +202,13 @@ function _wf_render_my_sheets(int $user_id, ?array $dept_scope): void
                             <th class="text-center">Students</th>
                             <th>Status</th>
                             <th>Current Step</th>
+                            <th>Last Saved</th>
                             <th class="text-end pe-4">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                     <?php if (empty($sheets)): ?>
-                        <tr><td colspan="8" class="text-center text-muted py-5">
+                        <tr><td colspan="9" class="text-center text-muted py-5">
                             <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
                             No mark sheets yet.
                             <a href="<?= APP_URL ?>/results/mark-entry.php">Create one now</a>.
@@ -240,6 +241,22 @@ function _wf_render_my_sheets(int $user_id, ?array $dept_scope): void
                                 <small class="text-success"><i class="fas fa-globe me-1"></i>Published</small>
                                 <?php elseif ($s['workflow_status'] === 'returned'): ?>
                                 <small class="text-danger"><i class="fas fa-undo me-1"></i>Returned – check remarks</small>
+                                <?php else: ?>
+                                <small class="text-muted">—</small>
+                                <?php endif; ?>
+                            </td>
+                            <td style="white-space:nowrap;">
+                                <?php
+                                $_saved_ts   = strtotime((string)($s['updated_at'] ?? '')) ?: null;
+                                $_created_ts = strtotime((string)($s['created_at'] ?? '')) ?: null;
+                                ?>
+                                <?php if ($_saved_ts): ?>
+                                <div style="font-size:.8rem;">
+                                    <i class="far fa-clock me-1 text-muted"></i><?= date('d M Y, h:i A', $_saved_ts) ?>
+                                </div>
+                                <?php if ($_created_ts && date('YmdHi', $_created_ts) !== date('YmdHi', $_saved_ts)): ?>
+                                <small class="text-muted" style="font-size:.7rem;">Created: <?= date('d M Y, h:i A', $_created_ts) ?></small>
+                                <?php endif; ?>
                                 <?php else: ?>
                                 <small class="text-muted">—</small>
                                 <?php endif; ?>
