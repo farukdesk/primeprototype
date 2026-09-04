@@ -562,6 +562,192 @@ function wf_upsert_grade(
     db()->prepare($sql)->execute($params);
 }
 
+// ── Auto-split mixed programs ─────────────────────────────────────────────
+
+/**
+ * Move students that belong to a DIFFERENT academic program than the sheet's
+ * own program into their own draft sheet(s), preserving all entered marks.
+ *
+ * Rows are KEPT in the sheet when:
+ *  - the student's program matches the sheet's program, or
+ *  - the student is genuinely registered to the sheet's course offer
+ *    (legitimate cross-program registration, e.g. retakes), or
+ *  - the student/program cannot be resolved (manually added rows).
+ *
+ * The target draft reuses the creator's existing draft for the same
+ * exam + course offer when one exists; otherwise a new draft is created with
+ * the best-matching course offer of the moved students' own program
+ * (preferring the same course code, then most registrations).
+ *
+ * Returns a list of ['sheet_id', 'program_name', 'moved', 'reused'] for each
+ * program group that was moved out. Safe no-op when there is nothing to split
+ * or when the sheet is not editable.
+ */
+function wf_auto_split_sheet(int $sheet_id): array
+{
+    try {
+        $st = db()->prepare('SELECT * FROM result_mark_sheets WHERE id = ?');
+        $st->execute([$sheet_id]);
+        $sheet = $st->fetch();
+        if (!$sheet) return [];
+        if (!in_array($sheet['workflow_status'], ['draft', 'returned'], true)) return [];
+
+        $sheet_pid = (int)($sheet['program_id'] ?? 0);
+        $offer_id  = (int)($sheet['offer_subject_id'] ?? 0);
+        if ($sheet_pid <= 0) return [];   // cannot determine the sheet's own program
+
+        $rq = db()->prepare(
+            'SELECT g.id, g.student_id, g.student_sid,
+                    s.program_id AS s_pid, s.dept_id AS s_dept,
+                    p.program_name AS s_program_name
+               FROM result_sheet_grades g
+               LEFT JOIN students s ON s.id = g.student_id
+               LEFT JOIN dept_academic_programs p ON p.id = s.program_id
+              WHERE g.sheet_id = ?'
+        );
+        $rq->execute([$sheet_id]);
+        $rows = $rq->fetchAll();
+        if (count($rows) < 2) return [];
+
+        // Students registered to the sheet's own offer stay regardless of program.
+        $registered = [];
+        if ($offer_id > 0) {
+            $rr = db()->prepare('SELECT student_id FROM co_registrations WHERE offer_subject_id = ?');
+            $rr->execute([$offer_id]);
+            foreach ($rr->fetchAll(PDO::FETCH_COLUMN) as $pk) $registered[(int)$pk] = true;
+        }
+
+        $foreign = [];  // program_id => ['name' => ..., 'rows' => [...]]
+        foreach ($rows as $r) {
+            $spid = (int)($r['s_pid'] ?? 0);
+            if ($spid <= 0 || $spid === $sheet_pid) continue;
+            if (!empty($r['student_id']) && isset($registered[(int)$r['student_id']])) continue;
+            if (!isset($foreign[$spid])) {
+                $foreign[$spid] = [
+                    'name' => ($r['s_program_name'] !== null && $r['s_program_name'] !== '')
+                        ? (string)$r['s_program_name'] : ('Program #' . $spid),
+                    'rows' => [],
+                ];
+            }
+            $foreign[$spid]['rows'][] = $r;
+        }
+        if (empty($foreign)) return [];
+
+        // Never empty the sheet completely — leave that case to the manual tool.
+        $foreign_total = 0;
+        foreach ($foreign as $f) $foreign_total += count($f['rows']);
+        if ($foreign_total >= count($rows)) return [];
+
+        $out = [];
+        foreach ($foreign as $pid => $f) {
+            $pks = array_values(array_filter(array_map(
+                static fn($r) => (int)$r['student_id'], $f['rows']
+            )));
+
+            // Best-matching course offer of the moved students' own program.
+            $offer = null;
+            if (!empty($pks)) {
+                $phs = implode(',', array_fill(0, count($pks), '?'));
+                $oq  = db()->prepare(
+                    "SELECT cos.id, cos.curriculum_id, o.dept_id, o.program_id,
+                            o.semester, o.academic_intake,
+                            cc.course_code, cc.course_name, cc.credit,
+                            COUNT(DISTINCT r.student_id) AS cnt
+                       FROM co_registrations r
+                       JOIN co_offer_subjects cos ON cos.id = r.offer_subject_id
+                       JOIN co_offers o           ON o.id  = cos.offer_id
+                       LEFT JOIN course_curriculum cc ON cc.id = cos.curriculum_id
+                      WHERE r.student_id IN ($phs) AND o.program_id = ?
+                      GROUP BY cos.id, cos.curriculum_id, o.dept_id, o.program_id,
+                               o.semester, o.academic_intake,
+                               cc.course_code, cc.course_name, cc.credit
+                      ORDER BY CASE WHEN cc.course_code = ? THEN 0 ELSE 1 END ASC, cnt DESC
+                      LIMIT 1"
+                );
+                $oq->execute(array_merge($pks, [$pid, (string)($sheet['subject_code'] ?? '')]));
+                $offer = $oq->fetch() ?: null;
+            }
+
+            // Reuse the creator's existing draft for the same exam + offer.
+            $target_id = 0;
+            $reused    = false;
+            if ($offer) {
+                $tq = db()->prepare(
+                    "SELECT id FROM result_mark_sheets
+                      WHERE workflow_status = 'draft' AND created_by <=> ?
+                        AND exam_id <=> ? AND offer_subject_id = ? AND id <> ?
+                      LIMIT 1"
+                );
+                $tq->execute([$sheet['created_by'], $sheet['exam_id'], (int)$offer['id'], $sheet_id]);
+                if ($tid = $tq->fetchColumn()) { $target_id = (int)$tid; $reused = true; }
+            }
+
+            if (!$target_id) {
+                $dept_id  = $offer ? (int)$offer['dept_id'] : (int)$sheet['dept_id'];
+                $semester = $offer ? trim((string)($offer['semester'] ?: $offer['academic_intake'])) : '';
+                if ($semester === '') $semester = (string)$sheet['semester'];
+                db()->prepare(
+                    "INSERT INTO result_mark_sheets
+                       (dept_id, program_id, exam_id, semester, curriculum_id, offer_subject_id,
+                        subject_code, subject_title, credits, workflow_status, created_by)
+                     VALUES (?,?,?,?,?,?,?,?,?,'draft',?)"
+                )->execute([
+                    $dept_id,
+                    $pid,
+                    $sheet['exam_id'] ?: null,
+                    $semester,
+                    $offer ? ((int)$offer['curriculum_id'] ?: null) : null,
+                    $offer ? (int)$offer['id'] : null,
+                    ($offer && !empty($offer['course_code'])) ? $offer['course_code'] : ($sheet['subject_code'] ?: null),
+                    ($offer && !empty($offer['course_name'])) ? $offer['course_name'] : (string)$sheet['subject_title'],
+                    ($offer && $offer['credit'] !== null && $offer['credit'] !== '') ? $offer['credit'] : $sheet['credits'],
+                    $sheet['created_by'],
+                ]);
+                $target_id = (int)db()->lastInsertId();
+            }
+            if (!$target_id) continue;
+
+            // Move rows one by one; when the target already has the student,
+            // drop the duplicate source row instead (marks already there).
+            $chk = db()->prepare('SELECT id FROM result_sheet_grades WHERE sheet_id = ? AND student_sid = ? LIMIT 1');
+            $mv  = db()->prepare('UPDATE result_sheet_grades SET sheet_id = ? WHERE id = ?');
+            $del = db()->prepare('DELETE FROM result_sheet_grades WHERE id = ?');
+            $moved = 0;
+            foreach ($f['rows'] as $r) {
+                $chk->execute([$target_id, $r['student_sid']]);
+                if ($chk->fetch()) { $del->execute([(int)$r['id']]); }
+                else               { $mv->execute([$target_id, (int)$r['id']]); }
+                $moved++;
+            }
+
+            try {
+                log_change(
+                    'results', 'UPDATE', $sheet_id,
+                    trim(($sheet['subject_code'] ? $sheet['subject_code'] . ' — ' : '') . (string)$sheet['subject_title']),
+                    'auto-split', null,
+                    json_encode([
+                        'moved_to_sheet' => $target_id,
+                        'moved_sids'     => array_map(static fn($r) => $r['student_sid'], $f['rows']),
+                    ]),
+                    sprintf('Auto-split: moved %d student(s) of "%s" into %s draft sheet #%d (marks preserved).',
+                            $moved, $f['name'], $reused ? 'existing' : 'new', $target_id)
+                );
+            } catch (Throwable $_e) {}
+
+            $out[] = [
+                'sheet_id'     => $target_id,
+                'program_name' => $f['name'],
+                'moved'        => $moved,
+                'reused'       => $reused,
+            ];
+        }
+        return $out;
+    } catch (Throwable $e) {
+        error_log('wf_auto_split_sheet: ' . $e->getMessage());
+        return [];
+    }
+}
+
 // ── Workflow actions ──────────────────────────────────────────────────────────
 
 /**
