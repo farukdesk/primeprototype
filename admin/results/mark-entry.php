@@ -147,6 +147,14 @@ if ($sheet_id > 0) {
     }
 
     $grades = wf_get_grades($sheet_id);
+
+    // The owner of an editable (draft/returned) sheet may remove rows, so a
+    // sheet saved with the wrong roster (e.g. two programs merged into one
+    // draft) can be cleaned up before submission. Removals now persist on
+    // save thanks to the sync-delete in the POST handler.
+    if ((int)$sheet['created_by'] === (int)$user['id']) {
+        $can_remove_rows = true;
+    }
 }
 
 $page_title = $sheet ? 'Edit Mark Sheet' : 'New Mark Sheet';
@@ -162,9 +170,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // serialises all rows into a single rows_json field on submit; unpack it
     // here into the legacy arrays the save code below consumes. The per-input
     // path still works as a fallback when JavaScript is unavailable.
+    $rows_json_snapshot = false; // true when the client sent the full-roster JSON snapshot
     if (isset($_POST['rows_json']) && is_string($_POST['rows_json']) && $_POST['rows_json'] !== '') {
         $rows_decoded = json_decode($_POST['rows_json'], true);
         if (is_array($rows_decoded)) {
+            $rows_json_snapshot = true;
             $sid_arr = []; $name_arr = []; $pk_arr = []; $abs_arr = []; $rem_arr = [];
             $marks_arr = []; $dist_abs_arr = [];
             $ri = 0;
@@ -501,6 +511,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'absent' => (bool)$derived_absent,
                 'remark' => trim((string)($remarks_in[$row_idx] ?? '')),
             ];
+        }
+
+        // ── Sync-delete stale rows ────────────────────────────────────────────
+        // The saved sheet must contain EXACTLY the students submitted with the
+        // form. Previously rows were only upserted and never removed, so
+        // changing the program/subject (or removing a student) on an existing
+        // draft KEPT the old roster rows and silently merged two different
+        // programs/batches into one sheet. Only runs when the client sent the
+        // full rows_json snapshot, so a partial (non-JS fallback) POST that may
+        // have been truncated by max_input_vars can never wipe rows it did not
+        // include.
+        if ($rows_json_snapshot) {
+            $kept_sids = [];
+            foreach ($sids as $k_sid) {
+                $k_sid = trim((string)$k_sid);
+                if ($k_sid !== '') $kept_sids[$k_sid] = true;
+            }
+            $kept_sids = array_keys($kept_sids);
+            if (empty($kept_sids)) {
+                $db->prepare('DELETE FROM result_sheet_grades WHERE sheet_id = ?')
+                   ->execute([$sheet_id]);
+            } else {
+                $kphs = implode(',', array_fill(0, count($kept_sids), '?'));
+                $db->prepare(
+                    "DELETE FROM result_sheet_grades
+                      WHERE sheet_id = ? AND student_sid NOT IN ($kphs)"
+                )->execute(array_merge([$sheet_id], $kept_sids));
+            }
         }
 
         // ── Submit: advance to first approver step ────────────────────────────
