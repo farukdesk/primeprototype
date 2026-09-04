@@ -541,6 +541,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
+        // ── Auto-split mixed programs ────────────────────────────────────────
+        // If the sheet ended up containing students of ANOTHER academic program
+        // (e.g. Bachelor rows merged into a Masters sheet), they are moved
+        // automatically into their own draft sheet — no manual action needed.
+        // All marks are preserved (rows are moved, never re-entered).
+        $split_note = '';
+        foreach (wf_auto_split_sheet($sheet_id) as $sp) {
+            $split_note .= sprintf(
+                '<br><i class="fas fa-code-branch me-1"></i>%d student%s of <strong>%s</strong> '
+              . 'did not belong to this sheet\'s program and %s automatically moved to '
+              . '<a href="%s">%s separate draft</a> — all marks preserved.',
+                (int)$sp['moved'], $sp['moved'] === 1 ? '' : 's', h($sp['program_name']),
+                $sp['moved'] === 1 ? 'was' : 'were',
+                APP_URL . '/results/mark-entry.php?id=' . (int)$sp['sheet_id'],
+                $sp['reused'] ? 'their existing' : 'a new'
+            );
+        }
+
         // ── Submit: advance to first approver step ────────────────────────────
         if ($action === 'submit' && $chain) {
             $entry_step = wf_get_entry_step((int)$chain['id']);
@@ -572,9 +590,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'published', (int)$user['id']);
             }
 
-            flash_set('success', 'Mark sheet submitted for review.');
+            flash_set('success', 'Mark sheet submitted for review.' . $split_note);
         } else {
-            flash_set('success', 'Mark sheet saved as draft.');
+            flash_set('success', 'Mark sheet saved as draft.' . $split_note);
         }
 
         // ── Change log: record every mark-entry action (create/update + marks) ──
@@ -715,8 +733,9 @@ if ($sheet && !empty($grades)):
     <div class="mt-1" style="font-size:.9rem;">
         This sheet contains students from <?= count($mix_programs) ?> different academic programs
         (<?= h(implode(', ', $mix_programs)) ?>). A mark sheet should contain only one program's
-        students. Use the split tool to separate them into two drafts — all entered marks,
-        absence flags and remarks are preserved.
+        students. Simply click <strong>Save Draft</strong> — the other program's students are
+        separated into their own draft <strong>automatically</strong> (all marks, absence flags
+        and remarks preserved). You can also use the split tool below to choose manually.
     </div>
     <a href="<?= APP_URL ?>/results/sheet-split.php?id=<?= (int)$sheet_id ?>"
        class="btn btn-sm btn-danger mt-2" style="border-radius:8px;">
