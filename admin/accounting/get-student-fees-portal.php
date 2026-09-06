@@ -88,6 +88,15 @@ try {
     // Payment transaction history for this student only
     $raw_payments = acc_get_student_payments((int)$student['package_id']);
     $payments = array_map(function ($p) use ($month_labels_map) {
+        // Scholarship memo rows are waivers that clear dues. Flag them so the
+        // portal UI can badge the rows; their amounts ARE counted in the
+        // student's paid totals. STRICT match, same as get-student-fees.php:
+        // receipt/transaction number exactly OLD-ERP-SCHOLARSHIP, or a note
+        // starting "SCHOLARSHIP (old ERP)".
+        $txn_upper = strtoupper(trim((string)($p['transaction_number'] ?? '')));
+        $note_str  = trim((string)($p['note'] ?? ''));
+        $is_scholarship = ($txn_upper === 'OLD-ERP-SCHOLARSHIP')
+            || (stripos($note_str, 'SCHOLARSHIP (old ERP)') === 0);
         return [
             'id'                      => (int)$p['id'],
             'voucher_id'              => (int)$p['voucher_id'],
@@ -109,6 +118,7 @@ try {
                 $p['mobile_banking_provider'] ?? null
             ),
             'amount'                  => (float)$p['amount'],
+            'is_scholarship'          => $is_scholarship,
         ];
     }, $raw_payments);
 
