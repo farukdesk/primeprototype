@@ -265,12 +265,8 @@ $tags_stmt->execute([$id]);
 $tagged_users = $tags_stmt->fetchAll();
 
 // ── All users for assign dropdown ─────────────────────────────────────────────
-$all_users_for_assign = [];
-if ($is_staff) {
-    $all_users_for_assign = db()->query(
-        'SELECT id, full_name FROM users WHERE is_active = 1 ORDER BY full_name'
-    )->fetchAll();
-}
+// Assignee selection now uses the real-time AJAX search (assign-user-search.php),
+// so the full user list is no longer loaded into the page.
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -629,22 +625,36 @@ require_once __DIR__ . '/../includes/header.php';
                 </h6>
             </div>
             <div class="card-body p-4">
-                <form method="POST">
+                <form method="POST" id="assignForm">
                     <?= csrf_field() ?>
                     <input type="hidden" name="action" value="assign">
-                    <select name="assign_to" class="form-select mb-2" style="border-radius:8px;">
-                        <option value="0">— Unassigned —</option>
-                        <?php foreach ($all_users_for_assign as $au): ?>
-                        <option value="<?= $au['id'] ?>"
-                            <?= (int)$ticket['assigned_to'] === (int)$au['id'] ? 'selected' : '' ?>>
-                            <?= h($au['full_name']) ?>
-                        </option>
-                        <?php endforeach; ?>
-                    </select>
+                    <input type="hidden" name="assign_to" id="assignToId"
+                           value="<?= (int)$ticket['assigned_to'] ?>">
+                    <div class="position-relative mb-1">
+                        <input type="text" id="assignSearch" class="form-control" autocomplete="off"
+                               placeholder="Type a name, username or email…"
+                               value="<?= h($ticket['assignee_name'] ?? '') ?>"
+                               style="border-radius:8px;">
+                        <div id="assignResults"
+                             class="list-group position-absolute start-0 end-0 mt-1 shadow border rounded bg-white overflow-auto"
+                             style="display:none;z-index:1056;max-height:280px;"></div>
+                    </div>
+                    <div class="form-text mb-2">Search in real time — results are grouped by user group.</div>
                     <button class="btn btn-outline-primary w-100" style="border-radius:8px;">
                         <i class="fas fa-user-check me-1"></i> Assign
                     </button>
                 </form>
+                <?php if ($ticket['assigned_to']): ?>
+                <form method="POST" class="mt-2"
+                      onsubmit="return confirm('Clear the current assignment?');">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="action" value="assign">
+                    <input type="hidden" name="assign_to" value="0">
+                    <button class="btn btn-sm btn-outline-secondary w-100" style="border-radius:8px;">
+                        <i class="fas fa-user-slash me-1"></i> Clear assignment
+                    </button>
+                </form>
+                <?php endif; ?>
             </div>
         </div>
         <?php endif; ?>
@@ -840,6 +850,93 @@ require_once __DIR__ . '/../includes/header.php';
     window.addEventListener('scroll', function () {
         if (dropdown.style.display !== 'none') positionDropdown();
     }, true);
+})();
+</script>
+
+<script>
+// ── Assign ticket: real-time user search, grouped by user group ────────────
+(function () {
+    var input  = document.getElementById('assignSearch');
+    var hidden = document.getElementById('assignToId');
+    var listEl = document.getElementById('assignResults');
+    var form   = document.getElementById('assignForm');
+    if (!input || !hidden || !listEl || !form) return;
+
+    var timer = null;
+
+    function esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+    function close() { listEl.style.display = 'none'; listEl.innerHTML = ''; }
+
+    function render(users) {
+        listEl.innerHTML = '';
+        if (!users.length) {
+            listEl.innerHTML = '<div class="list-group-item small text-muted">No matching user found.</div>';
+            listEl.style.display = '';
+            return;
+        }
+        var lastGroup = null;
+        users.forEach(function (u) {
+            var g = u.group_name || 'No Group';
+            if (g !== lastGroup) {
+                var head = document.createElement('div');
+                head.className = 'list-group-item py-1 fw-bold text-uppercase text-muted bg-light';
+                head.style.fontSize = '.68rem';
+                head.innerHTML = '<i class="fas fa-users me-1"></i>' + esc(g);
+                listEl.appendChild(head);
+                lastGroup = g;
+            }
+            var item = document.createElement('button');
+            item.type = 'button';
+            item.className = 'list-group-item list-group-item-action py-2 small';
+            item.innerHTML = '<span class="fw-semibold">' + esc(u.full_name) + '</span>'
+                + ' <span class="text-muted">@' + esc(u.username) + '</span>';
+            item.addEventListener('mousedown', function (e) {
+                e.preventDefault();
+                hidden.value = String(u.id);
+                input.value  = u.full_name + ' (' + g + ')';
+                input.classList.add('is-valid');
+                close();
+            });
+            listEl.appendChild(item);
+        });
+        listEl.style.display = '';
+    }
+
+    input.addEventListener('input', function () {
+        // Typing invalidates the previous selection so a stale id can never be submitted
+        hidden.value = '';
+        input.classList.remove('is-valid');
+        clearTimeout(timer);
+        var q = input.value.trim();
+        if (q.length < 2) { close(); return; }
+        timer = setTimeout(function () {
+            fetch('assign-user-search.php?q=' + encodeURIComponent(q))
+                .then(function (r) { return r.json(); })
+                .then(function (d) { render(Array.isArray(d) ? d : []); })
+                .catch(close);
+        }, 200);
+    });
+
+    input.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') close();
+        if (e.key === 'Enter') e.preventDefault(); // never submit straight from the search box
+    });
+
+    document.addEventListener('mousedown', function (e) {
+        if (!listEl.contains(e.target) && e.target !== input) close();
+    });
+
+    form.addEventListener('submit', function (e) {
+        if (!hidden.value || hidden.value === '0') {
+            e.preventDefault();
+            alert('Please pick a user from the suggestions before assigning.');
+            input.focus();
+        }
+    });
 })();
 </script>
 
