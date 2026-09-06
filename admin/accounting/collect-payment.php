@@ -1079,7 +1079,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <tfoot class="table-light fw-bold" id="feeTableFoot">
                             <tr>
                                 <td></td>
-                                <td class="ps-4">Total</td>
+                                <td class="ps-4" id="footTotalLabel">Total</td>
                                 <td class="text-end" id="footTotalDue"></td>
                                 <td class="text-end" id="footTotalPaid"></td>
                                 <td class="text-end text-danger" id="footTotalOut"></td>
@@ -2378,10 +2378,12 @@ require_once __DIR__ . '/../includes/header.php';
             );
         }
 
-        // Schedule-only paid total, captured before the Additional / Examination
-        // rows below add to grandPaid — used for the Additional Payment card's
-        // "Grand Total Paid (Schedule + Additional)" figure.
+        // Schedule-only totals, captured before the Additional / Examination
+        // rows below add to grandPaid — used for the schedule subtotal row and
+        // the Additional Payment card's "Grand Total Paid" figure.
         const scheduleGrandPaid = grandPaid;
+        const scheduleGrandDue  = grandDue;
+        const scheduleGrandOut  = grandOut;
 
         // ── Additional / Examination fees ────────────────────────────────────
         // Variable examination / other fees collected outside the scheduled
@@ -2390,6 +2392,27 @@ require_once __DIR__ . '/../includes/header.php';
         const addlItems = ((s.additional && s.additional.items) || [])
             .filter(it => Number(it.paid) > 0);
         if (addlItems.length) {
+            // Schedule subtotal row — totals of all scheduled fees only, shown
+            // BEFORE the Additional / Examination Fees section so the schedule
+            // and the additional fees are totalled separately. The table footer
+            // below then shows the GRAND total including additional fees.
+            const schedulePaidShown = scholarshipTotal > 0
+                ? fmt(scheduleGrandPaid - scholarshipTotal)
+                  + '<div class="fw-normal" style="font-size:.68rem;color:#6f42c1">+ ' + fmt(scholarshipTotal)
+                  + ' scholarship (not counted)</div>'
+                : fmt(scheduleGrandPaid);
+            const subTr = document.createElement('tr');
+            subTr.className = 'table-light fw-bold';
+            subTr.style.borderTop = '2px solid #dee2e6';
+            subTr.innerHTML = `
+                <td></td>
+                <td class="ps-4 small">Total (without Additional / Examination Fees)</td>
+                <td class="text-end small">${fmt(scheduleGrandDue)}</td>
+                <td class="text-end small text-success">${schedulePaidShown}</td>
+                <td class="text-end small text-danger">${fmt(scheduleGrandOut)}</td>
+                <td></td>`;
+            tbody.appendChild(subTr);
+
             addSectionRow('Additional / Examination Fees');
             addlItems.forEach(it => {
                 addRow(feeTypeLabel(it.fee_type), 0, Number(it.paid), 0,
@@ -2398,7 +2421,15 @@ require_once __DIR__ . '/../includes/header.php';
         }
 
         // Footer totals — scholarship waivers are shown separately and are
-        // NOT counted in the Paid money total.
+        // NOT counted in the Paid money total. When additional / examination
+        // fees exist, the footer row is labelled as the GRAND total
+        // (schedule + additional); otherwise it stays a plain schedule total.
+        const footLabelEl = document.getElementById('footTotalLabel');
+        if (footLabelEl) {
+            footLabelEl.textContent = addlItems.length
+                ? 'Grand Total (Schedule + Additional / Examination Fees)'
+                : 'Total';
+        }
         document.getElementById('footTotalDue').textContent  = fmt(grandDue);
         const footPaidEl = document.getElementById('footTotalPaid');
         if (scholarshipTotal > 0) {
