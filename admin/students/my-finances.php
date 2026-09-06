@@ -92,6 +92,16 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
+<!-- Old ERP uploaded payment proof (populated by JS; hidden when none attached) -->
+<div class="card border-0 shadow-sm mb-3" id="oldErpProofCard" style="display:none;">
+    <div class="card-body py-2 px-4 d-flex align-items-center gap-3 flex-wrap">
+        <span class="fw-semibold small text-secondary">
+            <i class="fas fa-image me-2 text-success"></i>Old ERP Payment Proof
+        </span>
+        <div class="d-flex align-items-center gap-2 flex-wrap" id="oldErpProofLinks"></div>
+    </div>
+</div>
+
 <?php if ($opm_student && $opm_methods): ?>
 <!-- ── Pay Online ──────────────────────────────────────────────────────── -->
 <style>
@@ -1100,6 +1110,49 @@ function renderTransactionHistory(payments) {
     card.style.display = '';
 }
 
+// ── Old ERP uploaded proof (attached by the Accounts Office) ──────────────
+function renderOldErpProofs(proofs) {
+    const card  = document.getElementById('oldErpProofCard');
+    const links = document.getElementById('oldErpProofLinks');
+    if (!card || !links) return;
+    if (!proofs || proofs.length === 0) {
+        // Students only see the strip when a proof is actually attached.
+        card.style.display = 'none';
+        return;
+    }
+    links.innerHTML = '';
+    proofs.forEach((f, i) => {
+        const date = String(f.uploaded_at || '').slice(0, 10).replace(/[^0-9-]/g, '');
+        const a = document.createElement('a');
+        a.href = f.url;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.className = 'd-inline-block border rounded p-1 bg-white text-decoration-none text-center';
+        a.title = 'Open proof ' + (i + 1) + ' in a new tab';
+        const img = document.createElement('img');
+        img.src = f.url;
+        img.alt = 'Old ERP proof ' + (i + 1);
+        img.style.height = '72px';
+        img.style.maxWidth = '160px';
+        img.style.objectFit = 'cover';
+        img.loading = 'lazy';
+        img.onerror = function () {
+            // Inline preview failed — fall back to a button-style link
+            a.innerHTML = '<i class="fas fa-image me-1"></i>View Proof ' + (i + 1)
+                + (date ? ' <span class="opacity-75">(' + date + ')</span>' : '');
+            a.className = 'btn btn-sm btn-outline-success';
+        };
+        a.appendChild(img);
+        const cap = document.createElement('div');
+        cap.className = 'small text-muted';
+        cap.style.fontSize = '.68rem';
+        cap.textContent = 'Proof ' + (i + 1) + (date ? ' · ' + date : '');
+        a.appendChild(cap);
+        links.appendChild(a);
+    });
+    card.style.display = '';
+}
+
 // Load data on page ready
 document.addEventListener('DOMContentLoaded', function () {
     fetch(APP_URL + '/accounting/get-student-fees-portal.php', {
@@ -1118,6 +1171,7 @@ document.addEventListener('DOMContentLoaded', function () {
         renderFeeSummary(data);
         renderScholarships(data.summary.semesters || []);
         renderTransactionHistory(data.payments || []);
+        renderOldErpProofs(data.old_erp_proofs || []);
     })
     .catch(() => {
         document.getElementById('loadingWrap').style.display = 'none';
