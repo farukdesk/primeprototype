@@ -714,6 +714,16 @@ function renderFeeSummary(data) {
     let grandDue = 0, grandPaid = 0, grandOut = 0;
     let currentlyDueOut = 0; // outstanding for overdue + due_now rows only
 
+    // Scholarship memo payments per fee row — used to highlight rows that were
+    // cleared (fully or partly) by a scholarship, same purple treatment as the
+    // admin Collect Payment page.
+    const scholarshipByKey = {};
+    (data.payments || []).forEach(p => {
+        if (!p.is_scholarship) return;
+        const key = p.fee_type + '|' + (p.semester_number ?? '') + '|' + (p.month_number ?? '');
+        scholarshipByKey[key] = (scholarshipByKey[key] || 0) + Number(p.amount || 0);
+    });
+
     function addSectionRow(label, scholarships) {
         const tr = document.createElement('tr');
         tr.className = 'table-secondary';
@@ -748,10 +758,18 @@ function renderFeeSummary(data) {
         }
     }
 
-    function addRow(label, due, paid, out, calMonth, calYear) {
+    function addRow(label, due, paid, out, calMonth, calYear, feeType, semNumber, monthNumber) {
         grandDue  += due;
         grandPaid += paid;
         grandOut  += out;
+
+        // Purple scholarship highlight for this row (waiver amount applied here)
+        const schAmt = feeType
+            ? Number(scholarshipByKey[feeType + '|' + (semNumber ?? '') + '|' + (monthNumber ?? '')] || 0)
+            : 0;
+        const schNote = schAmt > 0
+            ? '<div class="mt-1" style="font-size:.68rem;line-height:1.2;white-space:nowrap;"><span class="badge" style="background:#6f42c1;color:#fff">Scholarship</span> <span class="fw-semibold" style="color:#6f42c1">' + fmt(schAmt) + '</span></div>'
+            : '';
 
         const status  = monthStatus(calMonth, calYear, out);
         const dueDateStr = formatDueDate(calMonth, calYear);
@@ -791,7 +809,7 @@ function renderFeeSummary(data) {
                     : ''}
             </td>
             <td class="text-end small">${due > 0 ? fmt(due) : '—'}</td>
-            <td class="text-end small text-success">${paid > 0 ? fmt(paid) : '—'}</td>
+            <td class="text-end small text-success">${paid > 0 ? fmt(paid) : '—'}${schNote}</td>
             <td class="text-end small fw-semibold ${outColour}">
                 ${out > 0 ? fmt(out) : (due > 0 ? '<i class="fas fa-check-circle"></i> Paid' : '—')}
             </td>
@@ -814,6 +832,7 @@ function renderFeeSummary(data) {
                     <span class="text-muted">Paid: <span class="fw-semibold text-success">${paid > 0 ? fmt(paid) : '—'}</span></span>
                     <span class="text-muted">Outstanding: <span class="fw-semibold ${outColour}">${out > 0 ? fmt(out) : (due > 0 ? 'Paid' : '—')}</span></span>
                 </div>
+                ${schNote}
                 ${dueDateStr !== '—' ? `<div class="small text-muted mt-1"><i class="fas fa-calendar me-1"></i>Due date: ${dueDateStr}</div>` : ''}
             </div>`);
         }
@@ -822,12 +841,12 @@ function renderFeeSummary(data) {
     const t = s.totals;
 
     addSectionRow('Admission', []);
-    addRow('Admission Fee', t.admission.due, t.admission.paid, t.admission.out, null, null);
+    addRow('Admission Fee', t.admission.due, t.admission.paid, t.admission.out, null, null, 'admission', null, null);
     if (t.form_fee && (t.form_fee.due > 0 || t.form_fee.paid > 0)) {
-        addRow('Form Fee', t.form_fee.due, t.form_fee.paid, t.form_fee.out, null, null);
+        addRow('Form Fee', t.form_fee.due, t.form_fee.paid, t.form_fee.out, null, null, 'form_fee', null, null);
     }
     if (t.id_card_fee && (t.id_card_fee.due > 0 || t.id_card_fee.paid > 0)) {
-        addRow('ID Card Fee', t.id_card_fee.due, t.id_card_fee.paid, t.id_card_fee.out, null, null);
+        addRow('ID Card Fee', t.id_card_fee.due, t.id_card_fee.paid, t.id_card_fee.out, null, null, 'id_card_fee', null, null);
     }
 
     s.semesters.forEach(sf => {
@@ -838,13 +857,15 @@ function renderFeeSummary(data) {
         const firstMonth = sf.monthly_rows && sf.monthly_rows.length ? sf.monthly_rows[0] : null;
         addRow(semLabel + ' – Registration Fee', sf.reg_fee, sf.reg_paid, sf.reg_out,
                firstMonth ? (firstMonth.cal_month || null) : null,
-               firstMonth ? (firstMonth.cal_year  || null) : null);
+               firstMonth ? (firstMonth.cal_year  || null) : null,
+               'registration', sf.semester_number, null);
         sf.monthly_rows.forEach(mr => {
             addRow(
                 semLabel + ' – Month ' + mr.month_number + (mr.month_label ? ' (' + mr.month_label + ')' : ''),
                 mr.due, mr.paid, mr.out,
                 mr.cal_month || null,
-                mr.cal_year  || null
+                mr.cal_year  || null,
+                'semester_tuition', sf.semester_number, mr.month_number
             );
         });
     });
@@ -858,7 +879,8 @@ function renderFeeSummary(data) {
                 'Extra Month ' + mr.month_number + (mr.month_label ? ' (' + mr.month_label + ')' : ''),
                 mr.due, mr.paid, mr.out,
                 mr.cal_month || null,
-                mr.cal_year  || null
+                mr.cal_year  || null,
+                'bi_tri_shift_fee', null, mr.month_number
             );
         });
     }
@@ -874,7 +896,7 @@ function renderFeeSummary(data) {
             projCalYear  = lastRows[lastRows.length - 1].cal_year  || null;
         }
         addSectionRow('Project Fee', []);
-        addRow('Project Fee (one-time)', t.project_fee.due, t.project_fee.paid, t.project_fee.out, projCalMonth, projCalYear);
+        addRow('Project Fee (one-time)', t.project_fee.due, t.project_fee.paid, t.project_fee.out, projCalMonth, projCalYear, 'project_fee', null, null);
     }
 
     // Scholarship waivers arrive as memo vouchers: they clear dues but are
