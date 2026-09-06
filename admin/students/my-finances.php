@@ -877,20 +877,21 @@ function renderFeeSummary(data) {
         addRow('Project Fee (one-time)', t.project_fee.due, t.project_fee.paid, t.project_fee.out, projCalMonth, projCalYear);
     }
 
-    // Scholarship waivers arrive as memo vouchers and are already included in
-    // the paid figures above — they COUNT toward the totals. Compute the
-    // included amount so it can be shown explicitly in the totals.
+    // Scholarship waivers arrive as memo vouchers: they clear dues but are
+    // NOT money the student paid. Exclude them from the Total Paid figure and
+    // show the waived amount separately.
     let scholarshipTotal = 0;
     (data.payments || []).forEach(p => {
         if (p.is_scholarship) scholarshipTotal += Number(p.amount || 0);
     });
+    const paidWithoutScholarship = Math.max(0, grandPaid - scholarshipTotal);
 
     document.getElementById('footTotalDue').textContent  = fmt(grandDue);
     const footPaidEl = document.getElementById('footTotalPaid');
     if (scholarshipTotal > 0) {
-        footPaidEl.innerHTML = fmt(grandPaid)
-            + '<div class="fw-normal" style="font-size:.68rem;color:#6f42c1">includes '
-            + fmt(scholarshipTotal) + ' scholarship</div>';
+        footPaidEl.innerHTML = fmt(paidWithoutScholarship)
+            + '<div class="fw-normal" style="font-size:.68rem;color:#6f42c1">+ '
+            + fmt(scholarshipTotal) + ' scholarship (not counted)</div>';
     } else {
         footPaidEl.textContent = fmt(grandPaid);
     }
@@ -901,8 +902,8 @@ function renderFeeSummary(data) {
         mbody.insertAdjacentHTML('beforeend', `
             <div class="border rounded-3 p-3 mt-3 bg-light">
                 <div class="d-flex justify-content-between small mb-1"><span class="fw-semibold">Total Due</span><span class="fw-semibold">${fmt(grandDue)}</span></div>
-                <div class="d-flex justify-content-between small mb-1"><span class="fw-semibold">Total Paid</span><span class="fw-semibold text-success">${fmt(grandPaid)}</span></div>
-                ${scholarshipTotal > 0 ? `<div class="text-end mb-1" style="font-size:.7rem;color:#6f42c1">includes ${fmt(scholarshipTotal)} scholarship</div>` : ''}
+                <div class="d-flex justify-content-between small mb-1"><span class="fw-semibold">Total Paid</span><span class="fw-semibold text-success">${fmt(paidWithoutScholarship)}</span></div>
+                ${scholarshipTotal > 0 ? `<div class="text-end mb-1" style="font-size:.7rem;color:#6f42c1">+ ${fmt(scholarshipTotal)} scholarship (not counted)</div>` : ''}
                 <div class="d-flex justify-content-between small"><span class="fw-semibold">Total Outstanding</span><span class="fw-bold ${grandOut > 0 ? 'text-danger' : 'text-success'}">${fmt(grandOut)}</span></div>
             </div>`);
     }
@@ -1003,7 +1004,7 @@ function renderTransactionHistory(payments) {
         if (p.is_scholarship) { schCount++; schTotal += Number(p.amount || 0); }
     });
     countBadge.textContent = payments.length + ' transaction' + (payments.length !== 1 ? 's' : '')
-        + (schCount > 0 ? ' · ' + schCount + ' scholarship (' + fmt(schTotal) + ', counted in total)' : '');
+        + (schCount > 0 ? ' · ' + schCount + ' scholarship (' + fmt(schTotal) + ', not counted)' : '');
 
     if (payments.length === 0) {
         tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-3 small">' +
@@ -1039,7 +1040,7 @@ function renderTransactionHistory(payments) {
                 <td class="small">${monText}</td>
                 <td class="small">${p.payment_method_label || 'Cash'}</td>
                 <td class="small">${p.transaction_number || '—'}</td>
-                <td class="text-end small fw-semibold text-success">${fmt(p.amount)}</td>
+                <td class="text-end small fw-semibold" style="color:${p.is_scholarship ? '#6f42c1' : '#198754'}">${fmt(p.amount)}${p.is_scholarship ? '<div class="fw-normal" style="font-size:.66rem">not counted</div>' : ''}</td>
                 <td class="small">${p.voucher_number ?? '—'}</td>
                 <td class="small">
                     <a href="${APP_URL}/accounting/student-invoice.php?voucher_id=${p.voucher_id}"
@@ -1059,7 +1060,7 @@ function renderTransactionHistory(payments) {
                         <div class="fw-semibold small">${feeLabel}</div>
                         ${voucherStatusBadge}
                     </div>
-                    <div class="fs-5 fw-bold text-success mb-1">${fmt(p.amount)}</div>
+                    <div class="fs-5 fw-bold mb-1" style="color:${p.is_scholarship ? '#6f42c1' : '#198754'}">${fmt(p.amount)}${p.is_scholarship ? ' <span class="fw-normal small">(not counted)</span>' : ''}</div>
                     <div class="small text-muted">${dateStr} · ${semText}${p.month_number ? ' · ' + monText : ''}</div>
                     <div class="small text-muted" style="word-break:break-word;">Method: ${p.payment_method_label || 'Cash'}${p.transaction_number ? ' · Txn: <span class="font-monospace">' + p.transaction_number + '</span>' : ''}</div>
                     <div class="small text-muted">Voucher: ${p.voucher_number ?? '—'}</div>
