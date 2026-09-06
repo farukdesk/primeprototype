@@ -7,6 +7,7 @@
 require_once __DIR__ . '/../includes/auth.php';
 auth_check();
 require_once __DIR__ . '/helpers.php';
+require_once __DIR__ . '/../student-accounts/helpers.php'; // sfp_get_old_erp_proofs()
 
 header('Content-Type: application/json');
 
@@ -131,6 +132,16 @@ try {
         ],
         'summary'  => $summary,
         'payments' => $payments,
+        // Old ERP proof images attached to this student (via Student Accounts
+        // → Bulk OLD ERP Proof Upload) so the portal can show them read-only.
+        'old_erp_proofs' => array_map(static function ($f) {
+            return [
+                'id'          => (int)$f['id'],
+                'name'        => (string)(($f['original_name'] ?? '') !== '' ? $f['original_name'] : 'OLD ERP Proof'),
+                'url'         => UPLOAD_URL . '/students/files/' . rawurlencode((string)$f['stored_name']),
+                'uploaded_at' => (string)($f['created_at'] ?? ''),
+            ];
+        }, sfp_get_old_erp_proofs((int)$student['id'])),
     ]);
 } catch (Throwable $e) {
     error_log('get-student-fees-portal.php error: ' . $e->getMessage());
