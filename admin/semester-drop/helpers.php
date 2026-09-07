@@ -53,9 +53,14 @@ function sd_block_months(string $type): int
 
 /**
  * Human label for a semester type.
+ * NULL / empty means a custom-length drop (e.g. created by Bulk Drop by
+ * Amount), whose month count lives in block_months instead of a fixed block.
  */
-function sd_type_label(string $type): string
+function sd_type_label(?string $type): string
 {
+    if ($type === null || $type === '') {
+        return 'Custom';
+    }
     return $type === 'tri' ? 'Tri-semester' : 'Bi-semester';
 }
 
@@ -68,7 +73,21 @@ function sd_type_label(string $type): string
  */
 function sd_compute_end(string $start, string $type): string
 {
-    $months = sd_block_months($type);
+    return sd_compute_end_months($start, sd_block_months($type));
+}
+
+/**
+ * Compute the inclusive last day of a blocked window covering an arbitrary
+ * number of whole months (used by custom-length drops such as Bulk Drop by
+ * Amount).
+ *
+ * @param string $start   Y-m-d start date
+ * @param int    $months  Number of whole months blocked (>= 1)
+ * @return string         Y-m-d inclusive end date
+ */
+function sd_compute_end_months(string $start, int $months): string
+{
+    $months = max(1, $months);
     $dt = \DateTimeImmutable::createFromFormat('!Y-m-d', $start);
     if ($dt === false) {
         $dt = new \DateTimeImmutable($start);
@@ -77,6 +96,45 @@ function sd_compute_end(string $start, string $type): string
     // blocked day is one day before the same day-of-month $months later.
     $end = $dt->modify('+' . $months . ' months')->modify('-1 day');
     return $end->format('Y-m-d');
+}
+
+/**
+ * Create a semester drop with a CUSTOM month length (semester_type = NULL).
+ *
+ * Used by Bulk Drop by Amount, where the number of blocked months is derived
+ * from an amount (amount / monthly fee, rounded to a whole number) instead of
+ * the fixed Bi (6) / Tri (4) blocks. Behaves exactly like a normal drop for
+ * the deferral / accounting logic, which only reads drop_start / drop_end /
+ * block_months and the drop window dates.
+ *
+ * @return int  The new record id.
+ */
+function sd_create_drop_custom(
+    int $student_id,
+    int $months,
+    string $drop_start,
+    ?string $reason,
+    ?int $evidence_file_id,
+    int $created_by
+): int {
+    $months   = max(1, $months);
+    $drop_end = sd_compute_end_months($drop_start, $months);
+
+    $stmt = db()->prepare(
+        'INSERT INTO semester_drops
+            (student_id, kind, semester_type, block_months, drop_start, drop_end, reason, evidence_file_id, status, created_by)
+         VALUES (?, \'drop\', NULL, ?, ?, ?, ?, ?, \'active\', ?)'
+    );
+    $stmt->execute([
+        $student_id,
+        $months,
+        $drop_start,
+        $drop_end,
+        ($reason !== null && $reason !== '') ? $reason : null,
+        $evidence_file_id,
+        $created_by,
+    ]);
+    return (int)db()->lastInsertId();
 }
 
 // ── CRUD ────────────────────────────────────────────────────────────────────
