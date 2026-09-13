@@ -1,9 +1,9 @@
 # Prime University Student API v1 – Third-Party Integration Guide
 
-This API lets an approved external application create student records directly in the
-Prime University student database. Records created through the API are identical to
-ones entered by staff in the admin panel (same fields, same auto-generated Student ID,
-same audit trail).
+This API lets an approved external application **create student records** and **publish
+final results (CGPA)** directly in the Prime University database. Records created through
+the API are identical to ones entered by staff in the admin panel (same fields, same
+auto-generated Student ID, same audit trail).
 
 | | |
 |---|---|
@@ -23,8 +23,9 @@ same audit trail).
 2. You receive an API key that looks like `pu_3f9a…` (51 characters). It is shown to
    you **once**; the university stores only a hash and cannot recover it.
 3. Keys are bound to *scopes*. The standard partner key has:
-   * `students:create` – create students
-   * `reference:read` – read lookup data (departments, programs, boards, …)
+   * `students:create` – create students (§6)
+   * `results:create` – publish final results / CGPA (§7)
+   * `reference:read` – read lookup data (departments, programs, boards, …) (§5)
 
 **Protect the key.** Store it in a secrets manager or environment variable, never in
 source control, mobile apps or browser JavaScript. Call the API from your **server**
@@ -53,7 +54,7 @@ X-API-Key: pu_your_key_here
 | `X-Idempotent-Replayed: true` | response | The response is a replay of an earlier identical request |
 
 Authentication failures return `401` (missing / invalid / expired key) or `403`
-(disabled client, IP not allowed, missing scope). See §8 for the full code list.
+(disabled client, IP not allowed, missing scope). See §9 for the full code list.
 
 ---
 
@@ -62,7 +63,8 @@ Authentication failures return `401` (missing / invalid / expired key) or `403`
 Each client has a per-minute quota (default **60 requests/minute**, sliding window).
 When exceeded you receive `429 rate_limited` with a `Retry-After` header. Back off and
 retry after the indicated time; do not hammer the endpoint. Bulk loads should be
-throttled to stay under your quota (contact IT if you need a higher limit).
+throttled to stay under your quota (contact IT if you need a higher limit). For results,
+prefer the bulk form of §7 (up to 200 per request) over many single calls.
 
 ---
 
@@ -84,7 +86,8 @@ X-Idempotency-Key: crm-applicant-84213
 * Same key after a failed attempt (4xx/5xx): the request is processed again.
 
 Keys are scoped to your client and remembered indefinitely, so use a new key for each
-distinct student.
+distinct student. (The results endpoint is additionally an *upsert*, so re-sending the
+same result is always safe even without an idempotency key.)
 
 ---
 
@@ -331,11 +334,7 @@ if not body["ok"]:
     raise RuntimeError(f"{r.status_code} {body['code']}: {body['message']} {body.get('errors')}")
 ```
 
----
-
-## 7. Responses
-
-### 7.1 Success `201 Created`
+### 6.7 Success response `201 Created`
 
 ```json
 {
@@ -366,7 +365,153 @@ if not body["ok"]:
 Store `data.student_id` (the university's official ID) and `data.id` (internal row id)
 on your side. `warnings` never block creation; review them to catch duplicates.
 
-### 7.2 Error format
+---
+
+## 7. Endpoint: publish final result (CGPA)
+
+```
+POST /results/create.php
+Scope: results:create
+Content-Type: application/json
+```
+
+Writes a student's **final result** into the university's result store: the same record
+the public *Certificate Verification* page shows as *Final CGPA / Ending Semester /
+Result Publish Date*. The student **must already exist** (create them with §6 first).
+
+The operation is an **upsert**: the key is *(student, subject, semester)*. Sending the
+same student + semester again updates the CGPA, batch and publish date instead of
+creating a duplicate. Re-sending is therefore always safe.
+
+When a valid CGPA is published for a student whose status is `Active` or `Dropped`, the
+student is automatically marked **`Graduated`** (this mirrors the university's manual
+process). Pass `"mark_graduated": true` to force the change for other statuses.
+
+### 7.1 Field reference
+
+| Field | Required | Type / format | Notes |
+|---|---|---|---|
+| `student_id` (*sid*) | **yes** | 1-25 letters/digits/hyphens | University Student ID. Leading-zero variants are tolerated (`0123` matches `123`) and reported in `warnings` |
+| `semester` (*completion_semester*, *ending_semester*) | **yes** | `"<Spring|Summer|Fall> <YYYY>"` | The **completion / ending** semester, e.g. `"Fall 2024"` |
+| `cgpa` (*final_cgpa*, *gpa*) | **yes** | number `0.01` – `4.00` | Stored with 2 decimals. Values such as `"incom."`, `"incomplete"`, `"withheld"` are **rejected** (422): only final results can be published |
+| `subject` | no | string ≤ 100 | Result label; default `"Final Result"`. Leave the default unless IT tells you otherwise |
+| `batch` | no | string ≤ 50 | Defaults to the batch on the student record |
+| `recorded_date` (*publish_date*) | no | `YYYY-MM-DD`, not in the future | Result publish date shown on the verification page; default **today** |
+| `mark_graduated` | no | boolean | Force status `Graduated`; default `false` (auto-applied anyway for `Active`/`Dropped`) |
+| `student_name` (*name*) | no | string | Optional cross-check; a mismatch with the record is returned as a warning, the record is kept |
+
+### 7.2 Single result
+
+```bash
+curl -X POST https://primeuniversity.ac.bd/admin/api/v1/results/create.php \
+  -H "X-API-Key: $PU_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "student_id": "210302070045",
+    "student_name": "Md. Rakib Hasan",
+    "semester": "Fall 2024",
+    "cgpa": 3.42,
+    "batch": "52nd Batch",
+    "recorded_date": "2025-01-10"
+  }'
+```
+
+`201 Created` (first publication) or `200 OK` (existing result updated):
+
+```json
+{
+  "ok": true,
+  "message": "Result published.",
+  "data": {
+    "student_id": "210302070045",
+    "action": "created",
+    "result_id": 9310,
+    "student": { "id": 15231, "student_id": "210302070045", "full_name": "Md. Rakib Hasan", "status": "Graduated" },
+    "subject": "Final Result",
+    "semester": "Fall 2024",
+    "cgpa": "3.42",
+    "batch": "52nd Batch",
+    "recorded_date": "2025-01-10"
+  },
+  "warnings": []
+}
+```
+
+Unknown student:
+
+```json
+{ "ok": false, "code": "student_not_found",
+  "message": "No student with ID \"210302070099\". Create the student first via POST /v1/students/create.php.",
+  "errors": { "student_id": "No student with ID \"210302070099\"..." } }
+```
+
+### 7.3 Bulk results (up to 200 per request)
+
+Wrap the items in `results`. Top-level `semester`, `subject`, `batch`, `recorded_date`
+and `mark_graduated` act as defaults for every item; an item can override them.
+
+```bash
+curl -X POST https://primeuniversity.ac.bd/admin/api/v1/results/create.php \
+  -H "X-API-Key: $PU_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "semester": "Fall 2024",
+    "recorded_date": "2025-01-10",
+    "results": [
+      { "student_id": "210302070045", "cgpa": 3.42 },
+      { "student_id": "210302070046", "cgpa": 3.87, "batch": "52nd Batch" },
+      { "student_id": "210302070099", "cgpa": 2.95 },
+      { "student_id": "210302070050", "cgpa": "incom." }
+    ]
+  }'
+```
+
+Each item is processed independently. The response is `200 OK` as long as at least one
+item succeeded (`422` only when **every** item failed); inspect `results[]`:
+
+```json
+{
+  "ok": true,
+  "message": "2 of 4 items failed. See results[].errors.",
+  "summary": { "total": 4, "created": 1, "updated": 1, "failed": 2 },
+  "results": [
+    { "index": 0, "student_id": "210302070045", "status": "ok", "action": "updated", "result_id": 9310,
+      "student": { "id": 15231, "student_id": "210302070045", "full_name": "Md. Rakib Hasan", "status": "Graduated" },
+      "subject": "Final Result", "semester": "Fall 2024", "cgpa": "3.42", "batch": "52nd Batch", "recorded_date": "2025-01-10" },
+    { "index": 1, "student_id": "210302070046", "status": "ok", "action": "created", "result_id": 9311, "...": "..." },
+    { "index": 2, "student_id": "210302070099", "status": "failed",
+      "errors": { "student_id": "No student with ID \"210302070099\". Create the student first via POST /v1/students/create.php." } },
+    { "index": 3, "student_id": "210302070050", "status": "failed",
+      "errors": { "cgpa": "Incomplete / withheld results cannot be published. Send the result once a final CGPA exists." } }
+  ]
+}
+```
+
+Re-submitting only the failed items (after fixing them) is safe because of the upsert.
+
+### 7.4 Example: Python bulk
+
+```python
+import os, requests
+
+batch = [{"student_id": r.sid, "cgpa": r.cgpa} for r in graduates]   # ≤ 200 per call
+r = requests.post(
+    "https://primeuniversity.ac.bd/admin/api/v1/results/create.php",
+    headers={"X-API-Key": os.environ["PU_API_KEY"]},
+    json={"semester": "Fall 2024", "recorded_date": "2025-01-10", "results": batch},
+    timeout=60,
+)
+body = r.json()
+for item in body.get("results", []):
+    if item["status"] != "ok":
+        log.warning("Result for %s failed: %s", item["student_id"], item["errors"])
+```
+
+---
+
+## 8. Responses and error format
+
+Every response is JSON with a top-level `ok` boolean.
 
 ```json
 {
@@ -382,11 +527,12 @@ on your side. `warnings` never block creation; review them to catch duplicates.
 ```
 
 `code` is stable and safe to branch on; `message` is human-readable and may change.
-`errors` (only on `422`/`409`) maps field paths to messages; nested paths use dots.
+`errors` (on `422`/`409`/`404`) maps field paths to messages; nested paths use dots.
+Bulk result responses carry `summary` and `results[]` instead of a single `errors` map.
 
 ---
 
-## 8. Error codes
+## 9. Error codes
 
 | HTTP | `code` | Meaning / what to do |
 |---|---|---|
@@ -398,34 +544,38 @@ on your side. `warnings` never block creation; review them to catch duplicates.
 | 403 | `client_disabled` | Your access was revoked; contact IT |
 | 403 | `ip_not_allowed` | Calling IP is not on your allow-list |
 | 403 | `insufficient_scope` | Key lacks the scope for this endpoint |
+| 404 | `student_not_found` | (results) No student with that ID; create the student first |
 | 405 | `method_not_allowed` | Wrong HTTP verb |
 | 409 | `duplicate_student_id` | The `student_id` you supplied already exists |
 | 409 | `request_in_progress` | Same idempotency key is still processing; retry after `Retry-After` |
-| 422 | `validation_failed` | Fix the fields listed in `errors` |
+| 422 | `validation_failed` | Fix the fields listed in `errors` (or `results[].errors` for bulk) |
 | 429 | `rate_limited` | Wait `Retry-After` seconds |
 | 500 | `server_error` | Temporary failure; retry with the **same** idempotency key |
 
 ---
 
-## 9. Integration checklist and best practices
+## 10. Integration checklist and best practices
 
 - [ ] Call `GET /reference-data.php` on start-up (cache a few hours) and map your
       department/program/board values to the university's ids or exact names.
-- [ ] Always send `X-Idempotency-Key` on `POST` and retry `5xx` / network errors with the
-      same key (exponential back-off, max 5 attempts).
+- [ ] Always send `X-Idempotency-Key` on student `POST`s and retry `5xx` / network errors
+      with the same key (exponential back-off, max 5 attempts).
+- [ ] Create the student **before** publishing their result; results for unknown IDs are
+      rejected with `404 student_not_found`.
+- [ ] Publish results in bulk (≤ 200 per call) and re-send only the failed items.
 - [ ] Handle `422` by surfacing `errors` to the operator; do not retry unchanged data.
 - [ ] Respect `429` and `Retry-After`; throttle bulk imports.
 - [ ] Let the university generate `student_id` unless you have been explicitly given an
       ID range.
 - [ ] Send dates as `YYYY-MM-DD`, phones with country code (`+880…`), UTF-8 text.
 - [ ] Compress photos before sending (a 300×400 JPEG is plenty); keep under 5 MB.
-- [ ] Persist `data.id`, `data.student_id` and any `warnings` in your system.
+- [ ] Persist `data.id`, `data.student_id`, `result_id` and any `warnings` in your system.
 - [ ] Keep the API key server-side; rotate it if staff with access leave.
 - [ ] Log the `X-API-Version` header so you notice when a new version is announced.
 
 ---
 
-## 10. Support
+## 11. Support
 
 * Technical issues: Prime University IT Office (see the contact you were given with your key). Include the timestamp, endpoint, HTTP status, `code` and your `X-Idempotency-Key`.
 * Breaking changes will be released under a new base path (`/v2`). `/v1` fields may gain
@@ -435,15 +585,21 @@ on your side. `warnings` never block creation; review them to catch duplicates.
 
 ## Appendix A – Operator notes (university IT)
 
-1. Apply `admin/student-api-clients-v1.sql` once.
+1. Apply `admin/student-api-clients-v1.sql` once, then `admin/student-results-api-v1.sql`.
 2. Issue a key (run on the server, never over HTTP):
    ```bash
    php admin/api/v1/bin/create-client.php --name="Partner CRM" \
        --ips=203.0.113.10 --rate=60 --expires=2027-12-31 --created-by=1
    ```
+   Default scopes are `students:create,results:create,reference:read`; restrict with
+   `--scopes=` (e.g. a results-only partner gets `--scopes=results:create`).
    `--created-by` is the `users.id` recorded as `students.created_by` and in `change_log`.
 3. Manage: `--list`, `--revoke=<id>`, `--enable=<id>`.
 4. Audit: `api_client_requests` holds every call (status, IP, created `students.id`);
-   `students.api_client_id` identifies API-created records.
-5. Adjust `default_status`, `scopes`, `rate_limit_per_min`, `ip_allowlist` directly in
+   `students.api_client_id` and `student_results.api_client_id` identify API-written rows;
+   every published result also appears in the Change Log as `final_result` on the student.
+5. Results published through the API behave exactly like the **Final Result Publish**
+   admin import (same `student_results` upsert key, same Graduated rule) and are visible
+   on the public certificate-verification page immediately.
+6. Adjust `default_status`, `scopes`, `rate_limit_per_min`, `ip_allowlist` directly in
    `api_clients` if needed.
