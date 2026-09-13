@@ -1,0 +1,6 @@
+# Local configuration holds the database password and the PU API key
+/config.php
+
+# Uploaded student photos (sent to the university as base64, kept locally for reference)
+/storage/photos/*
+!/storage/photos/.gitkeep
