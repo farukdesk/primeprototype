@@ -243,6 +243,13 @@ function capi_ip_allowed(string $ip, ?string $allowlist): bool
 
 // ── Authentication ───────────────────────────────────────────────────────────
 
+/** True when the client's scope list contains $scope (or the wildcard "*"). */
+function capi_has_scope(array $client, string $scope): bool
+{
+    $scopes = array_filter(array_map('trim', explode(',', (string)($client['scopes'] ?? ''))));
+    return in_array($scope, $scopes, true) || in_array('*', $scopes, true);
+}
+
 /**
  * Authenticate the calling application and enforce scope, IP allow-list and
  * rate limit.  Returns the api_clients row or terminates with a JSON error.
@@ -281,8 +288,7 @@ function capi_auth(string $required_scope): array
         capi_error(403, 'ip_not_allowed', 'Requests from ' . ($ip ?: 'this address') . ' are not permitted for this API client.');
     }
 
-    $scopes = array_filter(array_map('trim', explode(',', (string)$client['scopes'])));
-    if (!in_array($required_scope, $scopes, true) && !in_array('*', $scopes, true)) {
+    if (!capi_has_scope($client, $required_scope)) {
         capi_error(403, 'insufficient_scope', 'This API key does not have the "' . $required_scope . '" scope.');
     }
 
