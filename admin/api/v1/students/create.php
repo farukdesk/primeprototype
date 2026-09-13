@@ -8,18 +8,24 @@
  * follow admin/students/create.php so records are indistinguishable from
  * ones entered through the admin panel.
  *
+ * Optionally the payload may carry a `result` object (alias `final_result`,
+ * fields as in results/create.php).  The final result is then written to
+ * `student_results` in the SAME transaction as the student, so a partner
+ * portal can push "new student + their result" in one call.  Requires the
+ * `results:create` scope in addition to `students:create`.
+ *
  * Auth : X-API-Key with scope `students:create`  (includes/auth_client_api.php)
  * Body : application/json, or multipart/form-data when uploading the photo as
  *        a file (put the JSON document in the `payload` field, or send every
  *        field as a plain form field).
  * Docs : ../API-GUIDE.md
  *
- * 201  { ok:true, message, data:{…}, warnings:[…] }
+ * 201  { ok:true, message, data:{…, result:{…}|null}, warnings:[…] }
  * 4xx  { ok:false, code, message, errors?:{field:message} }
  */
 
 require_once dirname(__DIR__, 2) . '/includes/auth_client_api.php';
-require_once dirname(__DIR__) . '/includes/student_helpers.php';
+require_once dirname(__DIR__) . '/includes/result_helpers.php';   // also loads student_helpers.php
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Allow: POST, OPTIONS');
@@ -301,6 +307,35 @@ if (!empty($_FILES['photo']) && (int)($_FILES['photo']['error'] ?? UPLOAD_ERR_NO
     }
 }
 
+// ── 6. Final result (optional, saved together with the student) ────────────────
+
+$result_in = $in['result'] ?? $in['final_result'] ?? null;
+$result_d  = null;
+if ($result_in !== null) {
+    if (!is_array($result_in)) {
+        $errors['result'] = 'Must be an object: { semester, cgpa, batch?, recorded_date?, mark_graduated?, subject? } (see API-GUIDE §7.1).';
+    } elseif (!capi_has_scope($client, 'results:create')) {
+        capi_error(403, 'insufficient_scope', 'Including a "result" requires the "results:create" scope on your API key.');
+    } else {
+        // The student does not exist yet – validate against the values being created.
+        $stub = [
+            'id'         => 0,
+            'student_id' => $auto_id ? '(generated)' : $student_id,
+            'full_name'  => $full_name,
+            'status'     => $status,
+            'batch'      => $batch ?: null,
+        ];
+        $rv = capi_result_validate($result_in, [], $stub);
+        foreach ($rv['errors'] as $k => $m) {
+            $errors['result.' . $k] = $m;
+        }
+        foreach ($rv['warnings'] as $w) {
+            $warnings[] = 'result: ' . $w;
+        }
+        $result_d = $rv['data'];
+    }
+}
+
 // ── Validation result ─────────────────────────────────────────────────────────
 
 if ($errors) {
@@ -332,6 +367,7 @@ try {
 $db         = db();
 $photo_name = null;
 $new_id     = 0;
+$result_out = null;
 
 try {
     if ($photo !== null) {
@@ -411,6 +447,29 @@ try {
                     $q['obtained_marks_gpa'], $qi,
                 ]);
             }
+
+            // Inline final result: same transaction, so student + result are all-or-nothing.
+            if ($result_d !== null) {
+                $result_d['student'] = [
+                    'id'         => $new_id,
+                    'student_id' => $student_id,
+                    'full_name'  => $full_name,
+                    'status'     => $status,
+                    'batch'      => $batch ?: null,
+                ];
+                $r          = capi_result_persist($result_d, $client, false);
+                $status     = $r['student_status'];
+                $result_out = [
+                    'action'        => $r['action'],
+                    'result_id'     => $r['result_id'],
+                    'subject'       => $result_d['subject'],
+                    'semester'      => $result_d['season'] . ' ' . $result_d['year'],
+                    'cgpa'          => $result_d['cgpa'],
+                    'batch'         => $result_d['batch'],
+                    'recorded_date' => $result_d['recorded_date'],
+                ];
+            }
+
             $db->commit();
             break;
         } catch (PDOException $e) {
@@ -456,7 +515,7 @@ if ($client['created_by'] !== null) {
 // ── Response ──────────────────────────────────────────────────────────────────
 
 capi_ok([
-    'message'  => 'Student created.',
+    'message'  => $result_out !== null ? 'Student created and result published.' : 'Student created.',
     'data'     => [
         'id'                => $new_id,
         'student_id'        => $student_id,
@@ -471,6 +530,7 @@ capi_ok([
         'contact_no'        => $phone ?: null,
         'photo_url'         => capi_photo_url($photo_name),
         'academic_qualifications_saved' => count($qual_rows),
+        'result'            => $result_out,
         'created_at'        => date('c'),
     ],
     'warnings' => $warnings,
