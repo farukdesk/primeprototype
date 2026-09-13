@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS `api_clients` (
     `name`               VARCHAR(150) NOT NULL COMMENT 'Partner / application name',
     `key_prefix`         CHAR(12)     NOT NULL COMMENT 'First 12 chars of the key, for identification only',
     `key_hash`           CHAR(64)     NOT NULL COMMENT 'sha256(full API key)',
-    `scopes`             VARCHAR(500) NOT NULL DEFAULT 'students:create,reference:read'
+    `scopes`             VARCHAR(500) NOT NULL DEFAULT 'students:create,results:create,reference:read'
                                       COMMENT 'Comma-separated scopes; * = all',
     `ip_allowlist`       TEXT         DEFAULT NULL COMMENT 'Comma-separated IPs / CIDRs; NULL = any IP',
     `rate_limit_per_min` SMALLINT UNSIGNED NOT NULL DEFAULT 60,
