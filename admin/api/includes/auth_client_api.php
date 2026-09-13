@@ -288,8 +288,7 @@ function capi_auth(string $required_scope): array
         capi_error(403, 'ip_not_allowed', 'Requests from ' . ($ip ?: 'this address') . ' are not permitted for this API client.');
     }
 
-    $scopes = array_filter(array_map('trim', explode(',', (string)$client['scopes'])));
-    if (!in_array($required_scope, $scopes, true) && !in_array('*', $scopes, true)) {
+    if (!capi_has_scope($client, $required_scope)) {
         capi_error(403, 'insufficient_scope', 'This API key does not have the "' . $required_scope . '" scope.');
     }
 

@@ -365,6 +365,81 @@ if not body["ok"]:
 Store `data.student_id` (the university's official ID) and `data.id` (internal row id)
 on your side. `warnings` never block creation; review them to catch duplicates.
 
+### 6.8 Create a student **together with their result** (one call)
+
+If your portal already holds the student's final result, add a `result` object (alias
+`final_result`) to the same request. The student and the result are written in **one
+transaction**: if anything in the result is invalid, the student is not created either,
+and you get a normal `422` whose `errors` keys are prefixed with `result.`.
+
+* Requires **both** scopes `students:create` and `results:create` on your key
+  (otherwise `403 insufficient_scope`).
+* `result` takes the fields of §7.1 **except** `student_id` (the new student is used).
+* `batch` inside `result` defaults to the student's `batch`; `recorded_date` defaults to today.
+* The graduation rule of §7 applies to the new record: with `"status": "Active"` (or
+  `"result": { "mark_graduated": true, … }`) the student is stored as `Graduated`.
+  With the default status `Not Admitted Yet` the status is left unchanged.
+
+```bash
+curl -X POST https://primeuniversity.ac.bd/admin/api/v1/students/create.php \
+  -H "X-API-Key: $PU_API_KEY" \
+  -H "Content-Type: application/json" \
+  -H "X-Idempotency-Key: portal-student-5521" \
+  -d '{
+    "department": "CSE",
+    "program": 7,
+    "semester": "Spring 2021",
+    "batch": "52nd Batch",
+    "status": "Active",
+    "name": "Md. Rakib Hasan",
+    "father_name": "Md. Abul Hasan",
+    "mother_name": "Salma Begum",
+    "contact_no": "+8801711000000",
+    "email": "rakib@example.com",
+    "date_of_birth": "2002-03-11",
+    "sex": "Male",
+    "guardian": { "name": "Md. Abul Hasan", "relationship": "Father", "phone": "+8801711000000" },
+    "result": {
+      "semester": "Fall 2024",
+      "cgpa": 3.42,
+      "recorded_date": "2025-01-10"
+    }
+  }'
+```
+
+`201 Created`:
+
+```json
+{
+  "ok": true,
+  "message": "Student created and result published.",
+  "data": {
+    "id": 18430,
+    "student_id": "210303070018",
+    "student_id_source": "generated",
+    "full_name": "Md. Rakib Hasan",
+    "status": "Graduated",
+    "department": { "id": 3, "code": "CSE", "name": "Computer Science & Engineering" },
+    "program": { "id": 7, "name": "B.Sc. in CSE" },
+    "admitted_semester": "Spring 2021",
+    "result": {
+      "action": "created",
+      "result_id": 9312,
+      "subject": "Final Result",
+      "semester": "Fall 2024",
+      "cgpa": "3.42",
+      "batch": "52nd Batch",
+      "recorded_date": "2025-01-10"
+    },
+    "created_at": "2026-09-13T10:15:42+06:00"
+  },
+  "warnings": []
+}
+```
+
+`data.result` is `null` when no `result` object was sent. To publish or correct a result
+for a student that already exists, use §7 instead.
+
 ---
 
 ## 7. Endpoint: publish final result (CGPA)
