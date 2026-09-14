@@ -4,3 +4,7 @@
 # Uploaded student photos (sent to the university as base64, kept locally for reference)
 /storage/photos/*
 !/storage/photos/.gitkeep
+
+# Internal documents (portal only, never sent to the university)
+/storage/files/*
+!/storage/files/.gitkeep

@@ -98,12 +98,25 @@ refuses to resend a record that is already `Registered at PU`.
 | Table | Purpose |
 |---|---|
 | `ssp_users` | portal logins (bcrypt hashes, roles `admin` / `operator`) |
-| `ssp_students` | local record, exact JSON payload sent, sync status, university `id` / `student_id` / status, last response, published result |
+| `ssp_students` | local record, exact JSON payload sent, sync status, university `id` / `student_id` / status, last response, published result, and `internal_json` (portal-only flags / reference / notes) |
+| `ssp_student_files` | internal documents per student: admission form, SSC, HSC, certificate, transcript, tabulation, other files |
 | `ssp_api_log` | every API call: endpoint, idempotency key, HTTP status, code, duration, request and response bodies (photo bytes are not logged) |
 | `ssp_cache` | cached reference data (default 6 h) |
 
 Photos are stored in `storage/photos/` (not web-accessible) and sent to the university
 as base64 inside the JSON request.
+
+### Internal section (portal only)
+
+Every student form has an **Internal** section for the partner's own bookkeeping:
+**Apostille** (yes/no), **Online only** (yes/no), **Work done** (yes/no), **Reference**
+(e.g. Bindu, Sir), **Internal notes**, and document uploads (**Admission form, SSC, HSC,
+Certificate, Transcript, Tabulation, Other files**; several files per slot; PDF, JPG, PNG,
+GIF, WEBP, DOC, DOCX; `file_max_bytes` in `config.php`, default 10 MB). Documents are kept
+in `storage/files/` (not web-accessible) and served to signed-in users by `students/file.php`.
+This data lives in `internal_json` / `ssp_student_files`, separate from `payload_json`, so it
+is **never** sent to the university. Existing installs: run `upgrade-1.2.sql` once and make
+`storage/files` writable like `storage/photos`.
 
 ## Security notes
 
@@ -124,17 +137,20 @@ ss-portal-api/
 │  ├─ view.php     status, university data, payload, API log
 │  ├─ sync.php     (POST) send / retry
 │  ├─ result.php   publish / update final result
-│  └─ photo.php    serve local photo to signed-in users
+│  ├─ photo.php    serve local photo to signed-in users
+│  └─ file.php     serve an internal document to signed-in users
 ├─ includes/
 │  ├─ bootstrap.php        config, session, PDO, helpers
 │  ├─ auth.php             users, login, CSRF
 │  ├─ pu_api_client.php    cURL client for the Student API v1
 │  ├─ reference_data.php   cached GET /reference-data.php
 │  ├─ student_payload.php  form → API JSON, local validation, photo storage
+│  ├─ internal_data.php    portal-only flags / reference / notes and document uploads
 │  ├─ sync.php             send student, publish result, audit log
 │  └─ layout.php           page chrome and form-field helpers
 ├─ bin/create-user.php     CLI user management
 ├─ assets/portal.css, portal.js
 ├─ storage/photos/         uploaded photos (private)
-├─ schema.sql, config.sample.php, .htaccess, .gitignore
+├─ storage/files/          internal documents (private, never sent to the university)
+├─ schema.sql, upgrade-1.1.sql, upgrade-1.2.sql, config.sample.php, .htaccess, .gitignore
 ```

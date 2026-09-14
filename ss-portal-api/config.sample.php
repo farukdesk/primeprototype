@@ -44,4 +44,9 @@ return [
 
     // Max photo upload size accepted by the portal (the university limit is 5 MB).
     'photo_max_bytes' => 5 * 1024 * 1024,
+
+    // Max size per internal document (admission form, SSC, HSC, certificate, transcript,
+    // tabulation, other). Stored in storage/files/ and never sent to the university.
+    // Keep PHP's upload_max_filesize / post_max_size at or above this value.
+    'file_max_bytes' => 10 * 1024 * 1024,
 ];

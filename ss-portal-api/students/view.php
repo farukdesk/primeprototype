@@ -5,6 +5,7 @@
  * published result and the audit trail of API calls for one student.
  */
 require_once __DIR__ . '/../includes/layout.php';
+require_once __DIR__ . '/../includes/internal_data.php';
 require_once __DIR__ . '/../includes/sync.php';
 
 $user = ssp_require_login();
@@ -18,6 +19,8 @@ if ($s === null) {
 $payload  = json_decode((string)$s['payload_json'], true) ?: [];
 $response = $s['last_response_json'] ? json_decode((string)$s['last_response_json'], true) : null;
 $result   = $s['result_json'] ? json_decode((string)$s['result_json'], true) : null;
+$internal = ssp_internal_decode($s['internal_json'] ?? null);   // portal-only data, never sent to the university
+$files    = ssp_student_files($id);
 
 $st = ssp_db()->prepare('SELECT l.*, u.full_name AS user_name FROM ssp_api_log l LEFT JOIN ssp_users u ON u.id = l.user_id
                          WHERE l.student_id = ? ORDER BY l.id DESC LIMIT 20');
@@ -135,6 +138,34 @@ ssp_header($s['full_name'], $user);
     </div>
     <details><summary>Payload sent to the API (JSON)</summary><pre class="code"><?= e(ssp_json_pretty($payload)) ?></pre></details>
     <?php if ($response): ?><details><summary>Last API response</summary><pre class="code"><?= e(ssp_json_pretty($response)) ?></pre></details><?php endif; ?>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Internal <small class="muted">(portal only – never sent to the university)</small></h2>
+  <div class="grid-2">
+    <dl class="dl">
+      <?php foreach (SSP_INTERNAL_FLAGS as $k => $label): ?>
+      <dt><?= e($label) ?></dt><dd><?= ssp_yes_no_html($internal[$k] ?? null) ?></dd>
+      <?php endforeach; ?>
+      <dt>Reference</dt><dd><?= e($internal['reference'] ?? '—') ?></dd>
+      <dt>Notes</dt><dd class="prewrap"><?= !empty($internal['notes']) ? e($internal['notes']) : '<span class="muted">—</span>' ?></dd>
+    </dl>
+    <div>
+      <h3 style="margin-top:0">Documents (<?= count($files) ?>)</h3>
+      <?php if (!$files): ?>
+      <p class="muted">No documents uploaded.<?= $canEdit ? ' <a href="' . e(ssp_url('students/create.php?id=' . $id)) . '">Edit</a> the student to upload.' : '' ?></p>
+      <?php else: ?>
+      <ul class="file-list">
+        <?php foreach ($files as $f): ?>
+        <li><span class="badge badge-draft"><?= e(SSP_FILE_KINDS[$f['kind']] ?? $f['kind']) ?></span>
+          <a href="<?= e(ssp_url('students/file.php?id=' . (int)$f['id'])) ?>" target="_blank" rel="noopener"><?= e($f['original_name']) ?></a>
+          <small class="muted"><?= e(ssp_file_size_human((int)$f['size_bytes'])) ?> · <?= e(ssp_date_human($f['created_at'])) ?><?= $f['uploaded_by_name'] ? ' · ' . e($f['uploaded_by_name']) : '' ?></small>
+          <a class="muted" href="<?= e(ssp_url('students/file.php?id=' . (int)$f['id'] . '&download=1')) ?>" title="Download">⬇</a></li>
+        <?php endforeach; ?>
+      </ul>
+      <?php endif; ?>
+    </div>
   </div>
 </div>
 
