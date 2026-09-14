@@ -239,7 +239,7 @@ $fileMaxMb = round(ssp_file_max_bytes() / 1048576, 1);
 
 // ── Section navigation: labels, descriptions and error counts per section ───────────────────────────────
 $sections = [
-    'enrollment'     => ['Enrollment', 'Department, program and admitted semester'],
+    'enrollment'     => ['Enrollment', 'Department, program and admitted semester – the batch is assigned by the university from the Student ID'],
     'student'        => ['Student & parents', 'Personal details, contacts and parents'],
     'guardian'       => ['Guardian', 'Optional'],
     'qualifications' => ['Academic qualifications', 'SSC, HSC and other examinations'],
@@ -326,11 +326,6 @@ ssp_header($title, $user);
             <?php ssp_input('student_id', 'University Student ID', $form, $errors, ['placeholder' => 'Leave empty – assigned by the university', 'maxlength' => 20,
                 'hint' => 'Normally leave empty: the university continues the numbering of this semester / department / program. Fill in ONLY the ID issued by the university admin when the portal reports that no numbering exists yet.']); ?>
           <?php endif; ?>
-          <?php ssp_input('year', 'Academic year', $form, $errors, ['placeholder' => '1st', 'maxlength' => 20]); ?>
-          <?php ssp_input('batch', 'Batch', $form, $errors, ['placeholder' => '52nd Batch', 'maxlength' => 50]); ?>
-          <?php ssp_select('semester_type', 'Semester type', $form, $errors, $enumOptions('semester_type', ['bi_semester', 'trimester']), ['placeholder' => '— default —']); ?>
-          <?php ssp_select('shift', 'Shift', $form, $errors, $enumOptions('shift', ['Morning', 'Day', 'Evening']), ['placeholder' => '— optional —']); ?>
-          <?php ssp_select('section', 'Section', $form, $errors, $enumOptions('section', ['A', 'B', 'C', 'D', 'E', 'F', 'G']), ['placeholder' => '— optional —']); ?>
           <?php ssp_select('status', 'Status at university', $form, $errors, $enumOptions('status', ['Active', 'Inactive', 'Graduated', 'Dropped', 'Not Admitted Yet']), ['placeholder' => 'University default', 'hint' => 'Choose "Active" when sending a final result so the student is marked Graduated.']); ?>
         </div>
       </section>
@@ -432,7 +427,7 @@ ssp_header($title, $user);
               <?php ssp_input('result.semester', 'Completion semester', $form, $errors, ['required' => true, 'list' => 'dl_semesters', 'placeholder' => 'Fall 2024']); ?>
               <?php ssp_input('result.cgpa', 'Final CGPA', $form, $errors, ['required' => true, 'type' => 'number', 'step' => '0.01', 'min' => '0.01', 'max' => '4', 'placeholder' => '3.42']); ?>
               <?php ssp_input('result.recorded_date', 'Result publish date', $form, $errors, ['type' => 'date', 'max' => date('Y-m-d'), 'hint' => 'Defaults to today.']); ?>
-              <?php ssp_input('result.batch', 'Batch', $form, $errors, ['maxlength' => 50, 'hint' => 'Defaults to the student batch above.']); ?>
+              <?php ssp_input('result.batch', 'Batch', $form, $errors, ['maxlength' => 50, 'hint' => 'Optional – the university derives the batch from the Student ID when left empty.']); ?>
               <div class="field">
                 <label>&nbsp;</label>
                 <label class="check"><input type="checkbox" name="result[mark_graduated]" value="1"<?= !empty($form['result']['mark_graduated']) ? ' checked' : '' ?>> Force status “Graduated”</label>
