@@ -30,8 +30,9 @@ CREATE TABLE IF NOT EXISTS ssp_students (
   admitted_semester  VARCHAR(30)  DEFAULT NULL,
   payload_json       LONGTEXT     NOT NULL,                 -- exact JSON document sent to the university (photo excluded)
   photo_path         VARCHAR(255) DEFAULT NULL,             -- file name inside storage/photos/
-  sync_status        ENUM('draft','pending','synced','failed') NOT NULL DEFAULT 'draft',
+  sync_status        ENUM('draft','pending','synced','failed','deleted') NOT NULL DEFAULT 'draft',
   sync_attempts      INT UNSIGNED NOT NULL DEFAULT 0,
+  pending_update     TINYINT(1)   NOT NULL DEFAULT 0,             -- local edits not yet sent to the university
   pu_id              INT UNSIGNED DEFAULT NULL,             -- data.id returned by the university
   pu_student_id      VARCHAR(25)  DEFAULT NULL,             -- data.student_id (official Student ID)
   pu_status          VARCHAR(40)  DEFAULT NULL,
@@ -41,6 +42,9 @@ CREATE TABLE IF NOT EXISTS ssp_students (
   last_error         TEXT         DEFAULT NULL,
   last_response_json LONGTEXT     DEFAULT NULL,
   synced_at          DATETIME     DEFAULT NULL,
+  deleted_at         DATETIME     DEFAULT NULL,                   -- record deleted at the university, kept here
+  deleted_by         INT UNSIGNED DEFAULT NULL,
+  delete_reason      VARCHAR(500) DEFAULT NULL,
   created_by         INT UNSIGNED NOT NULL,
   created_at         TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at         TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

@@ -24,8 +24,14 @@ auto-generated Student ID, same audit trail).
    you **once**; the university stores only a hash and cannot recover it.
 3. Keys are bound to *scopes*. The standard partner key has:
    * `students:create` – create students (§6)
+   * `students:update` – edit students **your key created** (§6.9)
+   * `students:delete` – permanently delete students **your key created** (§6.10)
    * `results:create` – publish final results / CGPA (§7)
    * `reference:read` – read lookup data (departments, programs, boards, …) (§5)
+
+   `students:update:any` / `students:delete:any` additionally allow changing students that
+   were created elsewhere (admin panel, other partners); they are granted only to trusted
+   integrations.
 
 **Protect the key.** Store it in a secrets manager or environment variable, never in
 source control, mobile apps or browser JavaScript. Call the API from your **server**
@@ -440,6 +446,108 @@ curl -X POST https://primeuniversity.ac.bd/admin/api/v1/students/create.php \
 `data.result` is `null` when no `result` object was sent. To publish or correct a result
 for a student that already exists, use §7 instead.
 
+### 6.9 Update a student
+
+```
+POST /students/update.php          (PUT / PATCH accepted)
+Scope: students:update             (+ students:update:any for students you did not create)
+Content-Type: application/json     (or multipart/form-data for a photo file)
+```
+
+A **partial update**: identify the student and send only the fields that change.
+
+| Field | Notes |
+|---|---|
+| `student_id` (*sid*) **or** `id` | Required. Official Student ID, or the internal `id` returned at creation |
+| any field of §6.1 | Same names, aliases and rules as create. Send `""` or `null` to clear an optional field. Fields you omit are left untouched |
+| `academic_qualifications` | When present, **replaces** the whole list (send `[]` to remove all) |
+| `photo_base64` / multipart `photo` | Replaces the photo. `"remove_photo": true` (or an empty `photo_base64`) removes it |
+| `new_student_id` | Changes the official Student ID (1-20 letters/digits/hyphens, must be unique) |
+| `result` | **Not accepted** here; use §7 (it is an upsert) |
+
+```bash
+curl -X POST https://primeuniversity.ac.bd/admin/api/v1/students/update.php \
+  -H "X-API-Key: $PU_API_KEY" -H "Content-Type: application/json" \
+  -d '{
+    "student_id": "260303070012",
+    "contact_no": "+8801811000000",
+    "present_address": "House 7, Road 2, Uttara, Dhaka",
+    "guardian": { "phone": "+8801811000000" },
+    "status": "Active"
+  }'
+```
+
+`200 OK`:
+
+```json
+{
+  "ok": true,
+  "message": "Student updated.",
+  "data": {
+    "id": 18422, "student_id": "260303070012", "full_name": "Nusrat Jahan", "status": "Active",
+    "department": { "id": 3, "code": "CSE", "name": "Computer Science & Engineering" },
+    "program": { "id": 7, "name": "B.Sc. in CSE" },
+    "admitted_semester": "Spring 2026", "year": "1st", "batch": null,
+    "email": "nusrat.jahan@example.com", "contact_no": "+8801811000000", "photo_url": "https://…/9f2c….jpg",
+    "changed_fields": ["phone", "present_address", "guardian_phone", "status"],
+    "academic_qualifications_saved": null,
+    "updated_at": "2026-09-14T10:15:42+06:00"
+  },
+  "warnings": []
+}
+```
+
+`changed_fields` lists the database columns that actually changed (`[]` and message
+`"Nothing to update."` when every value was already identical). Every change is written to
+the university Change Log, one entry per field.
+
+Errors: `404 student_not_found`, `403 not_owned` (student created by someone else and your
+key lacks `students:update:any`), `409 duplicate_student_id` (`new_student_id` in use),
+`422 validation_failed`.
+
+### 6.10 Delete a student
+
+```
+POST /students/delete.php          (DELETE accepted, with a JSON body or query string)
+Scope: students:delete             (+ students:delete:any for students you did not create)
+```
+
+**Permanently** removes the student from the university system, exactly like the *Delete*
+button in the admin panel: the `students` row, academic qualifications, uploaded files and
+comments, every **final result** published for the student, and the photo. This cannot be
+undone; keep your own copy of the record.
+
+| Field | Required | Notes |
+|---|---|---|
+| `student_id` (*sid*) **or** `id` | **yes** | Which student to delete |
+| `confirm` | **yes** | Must be `true` |
+| `reason` | no | ≤ 500 chars, written to the Change Log |
+
+```bash
+curl -X POST https://primeuniversity.ac.bd/admin/api/v1/students/delete.php \
+  -H "X-API-Key: $PU_API_KEY" -H "Content-Type: application/json" \
+  -d '{ "student_id": "260303070012", "confirm": true, "reason": "Duplicate registration" }'
+```
+
+`200 OK`:
+
+```json
+{
+  "ok": true,
+  "message": "Student and all related data deleted.",
+  "data": {
+    "id": 18422, "student_id": "260303070012", "full_name": "Nusrat Jahan", "deleted": true,
+    "results_deleted": 1, "qualifications_deleted": 2, "files_deleted": 0,
+    "deleted_at": "2026-09-14T10:20:03+06:00"
+  }
+}
+```
+
+A student who has **recorded payments or vouchers** cannot be deleted (`409 has_payments`),
+and neither can one still referenced by other university records (`409 has_dependencies`);
+in both cases contact the university office. Deleting an already deleted student returns
+`404 student_not_found`, which your system may treat as success.
+
 ---
 
 ## 7. Endpoint: publish final result (CGPA)
@@ -619,9 +727,13 @@ Bulk result responses carry `summary` and `results[]` instead of a single `error
 | 403 | `client_disabled` | Your access was revoked; contact IT |
 | 403 | `ip_not_allowed` | Calling IP is not on your allow-list |
 | 403 | `insufficient_scope` | Key lacks the scope for this endpoint |
-| 404 | `student_not_found` | (results) No student with that ID; create the student first |
+| 403 | `not_owned` | (update / delete) Student was not created by your key and it lacks the `:any` scope |
+| 404 | `student_not_found` | No student with that ID (results: create the student first; delete: already gone) |
 | 405 | `method_not_allowed` | Wrong HTTP verb |
-| 409 | `duplicate_student_id` | The `student_id` you supplied already exists |
+| 409 | `duplicate_student_id` | The `student_id` / `new_student_id` you supplied already exists |
+| 409 | `has_payments` | (delete) Student has recorded payments / vouchers; cannot be deleted |
+| 409 | `has_dependencies` | (delete) Other university records still reference the student |
+| 422 | `confirmation_required` | (delete) Send `"confirm": true` |
 | 409 | `request_in_progress` | Same idempotency key is still processing; retry after `Retry-After` |
 | 422 | `validation_failed` | Fix the fields listed in `errors` (or `results[].errors` for bulk) |
 | 429 | `rate_limited` | Wait `Retry-After` seconds |
@@ -668,8 +780,14 @@ Bulk result responses carry `summary` and `results[]` instead of a single `error
    php admin/api/v1/bin/create-client.php --name="Partner CRM" \
        --ips=203.0.113.10 --rate=60 --expires=2027-12-31 --created-by=1
    ```
-   Default scopes are `students:create,results:create,reference:read`; restrict with
-   `--scopes=` (e.g. a results-only partner gets `--scopes=results:create`).
+   Default scopes are `students:create,students:update,students:delete,results:create,reference:read`
+   (after `admin/student-api-update-delete-v1.sql`); restrict with `--scopes=` (e.g. a
+   results-only partner gets `--scopes=results:create`). Existing keys must be granted the
+   new scopes explicitly:
+   ```sql
+   UPDATE api_clients SET scopes = CONCAT(scopes, ',students:update,students:delete') WHERE id = <client_id>;
+   ```
+   `students:update:any` / `students:delete:any` let a key change students it did not create.
    `--created-by` is the `users.id` recorded as `students.created_by` and in `change_log`.
 3. Manage: `--list`, `--revoke=<id>`, `--enable=<id>`.
 4. Audit: `api_client_requests` holds every call (status, IP, created `students.id`);

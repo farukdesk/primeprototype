@@ -50,8 +50,11 @@ h3{font-size:.95rem;margin:18px 0 8px;color:var(--muted);text-transform:uppercas
 .badge-draft{background:#e5e7eb;color:#374151}
 .badge-pending{background:var(--info-bg);color:var(--info)}
 .badge-failed{background:var(--err-bg);color:var(--err)}
+.badge-deleted{background:#1f2937;color:#f9fafb}
+.strike{text-decoration:line-through;color:var(--muted)}
 
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
+.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:18px}
+@media (max-width:1000px){.stats{grid-template-columns:repeat(3,1fr)}}
 @media (max-width:700px){.stats{grid-template-columns:repeat(2,1fr)}}
 .stat{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;text-decoration:none;color:var(--text)}
 .stat.active{border-color:var(--primary);box-shadow:0 0 0 2px rgba(29,78,216,.15)}
@@ -59,6 +62,13 @@ h3{font-size:.95rem;margin:18px 0 8px;color:var(--muted);text-transform:uppercas
 .stat-label{color:var(--muted);font-size:.85rem}
 .stat-synced .stat-num{color:var(--ok)}
 .stat-failed .stat-num{color:var(--err)}
+.stat-update_pending .stat-num{color:var(--warn)}
+.stat-deleted .stat-num{color:#374151}
+.card.danger{border-color:#fecaca;background:#fff7f7}
+.btn-danger{background:var(--err);border-color:var(--err);color:#fff}
+.btn-danger:hover{background:#991b1b}
+.btn-danger-outline{color:var(--err);border-color:#fecaca}
+.btn-danger-outline:hover{background:var(--err-bg)}
 
 .filters{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
 .filters input[type=search]{flex:1;min-width:240px}

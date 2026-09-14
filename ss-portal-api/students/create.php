@@ -26,11 +26,12 @@ if ($editId > 0) {
         ssp_flash('error', 'Student not found.');
         ssp_redirect('dashboard.php');
     }
-    if ($existing['sync_status'] === 'synced') {
-        ssp_flash('warning', 'This student is already registered at Prime University and can no longer be edited here.');
+    if ($existing['sync_status'] === 'deleted') {
+        ssp_flash('warning', 'This student has been deleted and cannot be edited.');
         ssp_redirect('students/view.php?id=' . $editId);
     }
 }
+$isSynced = $existing !== null && $existing['sync_status'] === 'synced';
 
 $ref     = ssp_reference_data();
 $refData = $ref['data'] ?? [];
@@ -64,9 +65,13 @@ if (ssp_is_post()) {
         $json = json_encode($payload, JSON_UNESCAPED_UNICODE);
         try {
             if ($existing !== null) {
+                // Registered students stay "synced" and are flagged as having a pending update;
+                // unsent ones go back to draft.
                 $db->prepare('UPDATE ssp_students
                         SET full_name = ?, email = ?, contact_no = ?, department_label = ?, program_label = ?, admitted_semester = ?,
-                            payload_json = ?, photo_path = ?, sync_status = "draft", last_error = NULL
+                            payload_json = ?, photo_path = ?, last_error = NULL,
+                            pending_update = IF(sync_status = "synced", 1, 0),
+                            sync_status    = IF(sync_status = "synced", "synced", "draft")
                       WHERE id = ?')
                    ->execute([$payload['name'], $payload['email'] ?? null, $payload['contact_no'] ?? null, $labels['department'],
                               $labels['program'], $payload['semester'], $json, $photoPath, $editId]);
@@ -95,7 +100,7 @@ if (ssp_is_post()) {
         if ($action === 'send') {
             $result = ssp_sync_student($id, (int)$user['id']);
             if ($result['ok']) {
-                ssp_flash('success', $result['message'] . ' University Student ID: ' . ($result['student_id'] ?? 'n/a') . '.');
+                ssp_flash('success', $result['message'] . ($isSynced ? '' : ' University Student ID: ' . ($result['student_id'] ?? 'n/a') . '.'));
                 foreach ($result['warnings'] ?? [] as $w) {
                     ssp_flash('warning', 'University warning: ' . $w);
                 }
@@ -110,12 +115,14 @@ if (ssp_is_post()) {
                 $editId   = $id;
                 $existing = ssp_student_find($id);
             } else {
-                ssp_flash('error', 'Saved locally, but sending to the university failed: ' . $result['message']
+                ssp_flash('error', 'Saved locally, but ' . ($isSynced ? 'updating the university record' : 'sending to the university') . ' failed: ' . $result['message']
                     . (!empty($result['retryable']) ? ' You can retry from this page.' : ''));
                 ssp_redirect('students/view.php?id=' . $id);
             }
         } else {
-            ssp_flash('success', 'Student saved as a draft. Open it and click "Send to university" when ready.');
+            ssp_flash('success', $isSynced
+                ? 'Changes saved locally. The university record is NOT updated until you click "Send update to university".'
+                : 'Student saved as a draft. Open it and click "Send to university" when ready.');
             ssp_redirect('students/view.php?id=' . $id);
         }
     }
@@ -167,7 +174,10 @@ $title = $existing ? 'Edit student ' . $existing['reference_no'] : 'New student'
 ssp_header($title, $user);
 ?>
 <div class="page-head">
-  <h1><?= e($title) ?></h1>
+  <div>
+    <h1><?= e($title) ?></h1>
+    <?php if ($isSynced): ?><p class="muted">Registered at Prime University as <strong><?= e($existing['pu_student_id']) ?></strong>. Changes are sent with <code>students/update.php</code>; the Student ID stays the same.</p><?php endif; ?>
+  </div>
   <?php if ($existing): ?><a class="btn btn-ghost" href="<?= e(ssp_url('students/view.php?id=' . $editId)) ?>">← Back to student</a><?php endif; ?>
 </div>
 
@@ -274,6 +284,12 @@ ssp_header($title, $user);
     </div>
   </section>
 
+  <?php if ($isSynced): ?>
+  <section class="card">
+    <h2>Final result</h2>
+    <p class="muted">Results of a registered student are managed separately: use <a href="<?= e(ssp_url('students/result.php?id=' . $editId)) ?>">Publish / update final result</a> on the student page.</p>
+  </section>
+  <?php else: ?>
   <section class="card">
     <div class="section-head">
       <h2>Final result <small class="muted">(optional – sent in the same call)</small></h2>
@@ -294,6 +310,7 @@ ssp_header($title, $user);
       <p class="muted">Requires the <code>results:create</code> scope on the partner key. If the result is invalid the university creates nothing and returns the errors here.</p>
     </fieldset>
   </section>
+  <?php endif; ?>
 
   <?php ssp_datalist('dl_semesters', $semesters); ?>
   <?php ssp_datalist('dl_exams', $examNames); ?>
@@ -301,8 +318,8 @@ ssp_header($title, $user);
   <?php ssp_datalist('dl_groups', $groupNames); ?>
 
   <div class="form-actions">
-    <button type="submit" name="action" value="save" class="btn">Save draft</button>
-    <button type="submit" name="action" value="send" class="btn btn-primary" data-confirm="Send this student to Prime University now?"<?= ssp_api()->isConfigured() ? '' : ' disabled title="API key not configured"' ?>>Save and send to university</button>
+    <button type="submit" name="action" value="save" class="btn"><?= $isSynced ? 'Save locally only' : 'Save draft' ?></button>
+    <button type="submit" name="action" value="send" class="btn btn-primary" data-confirm="<?= $isSynced ? 'Update this student\'s record at Prime University now?' : 'Send this student to Prime University now?' ?>"<?= ssp_api()->isConfigured() ? '' : ' disabled title="API key not configured"' ?>><?= $isSynced ? 'Save and update at university' : 'Save and send to university' ?></button>
     <a class="btn btn-ghost" href="<?= e(ssp_url($existing ? 'students/view.php?id=' . $editId : 'dashboard.php')) ?>">Cancel</a>
   </div>
 </form>

@@ -11,7 +11,7 @@
  */
 
 define('SSP_ROOT', dirname(__DIR__));
-define('SSP_VERSION', '1.0.0');
+define('SSP_VERSION', '1.1.0');
 
 if (!is_file(SSP_ROOT . '/config.php')) {
     if (PHP_SAPI !== 'cli') {

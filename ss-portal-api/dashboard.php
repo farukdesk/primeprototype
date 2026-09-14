@@ -21,9 +21,11 @@ if ($q !== '') {
     $like    = '%' . $q . '%';
     array_push($args, $like, $like, $like, $like, $like);
 }
-if (in_array($status, ['draft', 'pending', 'synced', 'failed'], true)) {
+if (in_array($status, ['draft', 'pending', 'synced', 'failed', 'deleted'], true)) {
     $where[] = 'sync_status = ?';
     $args[]  = $status;
+} elseif ($status === 'update_pending') {
+    $where[] = 'sync_status = "synced" AND pending_update = 1';
 }
 $whereSql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
 
@@ -33,17 +35,18 @@ $total = (int)$st->fetchColumn();
 $pages = max(1, (int)ceil($total / $per));
 $page  = min($page, $pages);
 
-$st = $db->prepare('SELECT id, reference_no, full_name, department_label, program_label, admitted_semester, sync_status,
-                           pu_student_id, pu_status, pu_result_id, created_at, synced_at
+$st = $db->prepare('SELECT id, reference_no, full_name, department_label, program_label, admitted_semester, sync_status, pending_update,
+                           pu_student_id, pu_status, pu_result_id, created_at, synced_at, deleted_at
                       FROM ssp_students' . $whereSql . '
                      ORDER BY id DESC LIMIT ' . $per . ' OFFSET ' . (($page - 1) * $per));
 $st->execute($args);
 $rows = $st->fetchAll();
 
-$stats = ['draft' => 0, 'pending' => 0, 'synced' => 0, 'failed' => 0];
+$stats = ['draft' => 0, 'pending' => 0, 'synced' => 0, 'failed' => 0, 'deleted' => 0, 'update_pending' => 0];
 foreach ($db->query('SELECT sync_status, COUNT(*) AS c FROM ssp_students GROUP BY sync_status') as $r) {
     $stats[$r['sync_status']] = (int)$r['c'];
 }
+$stats['update_pending'] = (int)$db->query('SELECT COUNT(*) FROM ssp_students WHERE sync_status = "synced" AND pending_update = 1')->fetchColumn();
 
 $ref = ssp_reference_data();
 
@@ -61,7 +64,7 @@ ssp_header('Dashboard', $user);
 <?php endif; ?>
 
 <div class="stats">
-  <?php foreach (['synced' => 'Registered at PU', 'draft' => 'Drafts', 'failed' => 'Failed', 'pending' => 'Sending'] as $k => $label): ?>
+  <?php foreach (['synced' => 'Registered at PU', 'update_pending' => 'Update pending', 'draft' => 'Drafts', 'failed' => 'Failed', 'deleted' => 'Deleted'] as $k => $label): ?>
   <a class="stat stat-<?= e($k) ?><?= $status === $k ? ' active' : '' ?>" href="<?= e(ssp_url('dashboard.php?status=' . $k)) ?>">
     <span class="stat-num"><?= (int)$stats[$k] ?></span><span class="stat-label"><?= e($label) ?></span>
   </a>
@@ -72,7 +75,7 @@ ssp_header('Dashboard', $user);
   <input type="search" name="q" value="<?= e($q) ?>" placeholder="Search name, reference, PU student ID, e-mail, phone">
   <select name="status">
     <option value="">All statuses</option>
-    <?php foreach (['draft' => 'Draft', 'pending' => 'Sending', 'synced' => 'Registered at PU', 'failed' => 'Failed'] as $k => $label): ?>
+    <?php foreach (['draft' => 'Draft', 'pending' => 'Sending', 'synced' => 'Registered at PU', 'update_pending' => 'Update pending', 'failed' => 'Failed', 'deleted' => 'Deleted'] as $k => $label): ?>
     <option value="<?= e($k) ?>"<?= $status === $k ? ' selected' : '' ?>><?= e($label) ?></option>
     <?php endforeach; ?>
   </select>
@@ -97,8 +100,8 @@ ssp_header('Dashboard', $user);
       <td><?= e($r['full_name']) ?></td>
       <td><?= e($r['department_label'] ?? '—') ?><?= $r['program_label'] ? '<br><small class="muted">' . e($r['program_label']) . '</small>' : '' ?></td>
       <td><?= e($r['admitted_semester'] ?? '—') ?></td>
-      <td><?= ssp_badge($r['sync_status']) ?></td>
-      <td><?= $r['pu_student_id'] ? '<strong>' . e($r['pu_student_id']) . '</strong><br><small class="muted">' . e($r['pu_status']) . '</small>' : '—' ?></td>
+      <td><?= ssp_badge($r['sync_status']) ?><?= $r['sync_status'] === 'synced' && (int)$r['pending_update'] === 1 ? '<br><span class="badge badge-pending">Update pending</span>' : '' ?></td>
+      <td><?= $r['pu_student_id'] ? '<strong' . ($r['sync_status'] === 'deleted' ? ' class="strike"' : '') . '>' . e($r['pu_student_id']) . '</strong><br><small class="muted">' . e($r['sync_status'] === 'deleted' ? 'deleted ' . ssp_date_human($r['deleted_at']) : $r['pu_status']) . '</small>' : '—' ?></td>
       <td><?= $r['pu_result_id'] ? '<span class="badge badge-synced">Published</span>' : '—' ?></td>
       <td><small><?= e(ssp_date_human($r['created_at'])) ?></small></td>
       <td class="actions">

@@ -2,9 +2,11 @@
 /**
  * SS Portal – HTTP client for the Prime University Student API v1.
  *
- * Wraps the three endpoints the portal uses (see admin/api/v1/API-GUIDE.md):
+ * Wraps the endpoints the portal uses (see admin/api/v1/API-GUIDE.md):
  *   GET  /reference-data.php      (scope reference:read)
  *   POST /students/create.php     (scope students:create [+ results:create])
+ *   POST /students/update.php     (scope students:update)
+ *   POST /students/delete.php     (scope students:delete)
  *   POST /results/create.php      (scope results:create)
  *
  * The API key never leaves the server: every call is made from PHP with cURL.
@@ -70,6 +72,18 @@ final class PuApiClient
     public function publishResult(array $payload): array
     {
         return $this->request('POST', '/results/create.php', $payload);
+    }
+
+    /** Partial update of a registered student (API guide §6.9). */
+    public function updateStudent(array $payload): array
+    {
+        return $this->request('POST', '/students/update.php', $payload);
+    }
+
+    /** Permanent delete at the university (API guide §6.10). */
+    public function deleteStudent(array $payload): array
+    {
+        return $this->request('POST', '/students/delete.php', $payload);
     }
 
     /** True when the API guide says the same request may simply be retried later. */

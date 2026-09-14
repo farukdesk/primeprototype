@@ -24,31 +24,55 @@ $st = ssp_db()->prepare('SELECT l.*, u.full_name AS user_name FROM ssp_api_log l
 $st->execute([$id]);
 $logs = $st->fetchAll();
 
-$canEdit = $s['sync_status'] !== 'synced';
-$canSend = $s['sync_status'] !== 'synced' && ssp_api()->isConfigured();
+$isDeleted     = $s['sync_status'] === 'deleted';
+$isSynced      = $s['sync_status'] === 'synced';
+$pendingUpdate = $isSynced && (int)$s['pending_update'] === 1;
+$canEdit       = !$isDeleted;
+$canSend       = !$isDeleted && (!$isSynced || $pendingUpdate) && ssp_api()->isConfigured();
+$canDelete     = !$isDeleted && $user['role'] === 'admin';
+
+$deletedBy = null;
+if ($isDeleted && !empty($s['deleted_by'])) {
+    $q = ssp_db()->prepare('SELECT full_name FROM ssp_users WHERE id = ?');
+    $q->execute([(int)$s['deleted_by']]);
+    $deletedBy = $q->fetchColumn() ?: null;
+}
+
+if ($canSend) {
+    $sendLabel = $s['sync_status'] === 'failed' ? 'Retry sending' : ($pendingUpdate ? 'Send update to university' : 'Send to university');
+    $sendConfirm = $pendingUpdate ? 'Update this student\'s record at Prime University now?' : 'Send this student to Prime University now?';
+}
 
 ssp_header($s['full_name'], $user);
 ?>
 <div class="page-head">
   <div>
-    <h1><?= e($s['full_name']) ?> <?= ssp_badge($s['sync_status']) ?></h1>
+    <h1><?= e($s['full_name']) ?> <?= ssp_badge($s['sync_status']) ?><?= $pendingUpdate ? ' <span class="badge badge-pending">Update pending</span>' : '' ?></h1>
     <p class="muted">Reference <code><?= e($s['reference_no']) ?></code> · created <?= e(ssp_date_human($s['created_at'])) ?></p>
   </div>
   <div class="btn-group">
     <?php if ($canSend): ?>
     <form method="post" action="<?= e(ssp_url('students/sync.php')) ?>">
       <?= ssp_csrf_field() ?><input type="hidden" name="id" value="<?= $id ?>">
-      <button type="submit" class="btn btn-primary" data-confirm="Send this student to Prime University now?"><?= $s['sync_status'] === 'failed' ? 'Retry sending' : 'Send to university' ?></button>
+      <button type="submit" class="btn btn-primary" data-confirm="<?= e($sendConfirm) ?>"><?= e($sendLabel) ?></button>
     </form>
     <?php endif; ?>
     <?php if ($canEdit): ?><a class="btn" href="<?= e(ssp_url('students/create.php?id=' . $id)) ?>">Edit</a><?php endif; ?>
-    <?php if ($s['sync_status'] === 'synced'): ?><a class="btn" href="<?= e(ssp_url('students/result.php?id=' . $id)) ?>"><?= $s['pu_result_id'] ? 'Update final result' : 'Publish final result' ?></a><?php endif; ?>
+    <?php if ($isSynced): ?><a class="btn" href="<?= e(ssp_url('students/result.php?id=' . $id)) ?>"><?= $s['pu_result_id'] ? 'Update final result' : 'Publish final result' ?></a><?php endif; ?>
+    <?php if ($canDelete): ?><a class="btn btn-danger-outline" href="<?= e(ssp_url('students/delete.php?id=' . $id)) ?>">Delete…</a><?php endif; ?>
     <a class="btn btn-ghost" href="<?= e(ssp_url('dashboard.php')) ?>">← Students</a>
   </div>
 </div>
 
-<?php if ($s['sync_status'] === 'failed' && $s['last_error']): ?>
+<?php if ($isDeleted): ?>
+  <div class="flash flash-error"><strong>Deleted</strong> on <?= e(ssp_date_human($s['deleted_at'])) ?><?= $deletedBy ? ' by ' . e($deletedBy) : '' ?>.
+    <?= $s['pu_student_id'] ? 'The student and all their data were permanently removed from Prime University (former Student ID ' . e($s['pu_student_id']) . ').' : 'The student was never registered at the university.' ?>
+    <?= $s['delete_reason'] ? '<br>Reason: ' . e($s['delete_reason']) : '' ?>
+    <br><small>This record is kept in the portal for history only and cannot be edited or sent.</small></div>
+<?php elseif ($s['sync_status'] === 'failed' && $s['last_error']): ?>
   <div class="flash flash-error"><strong>Last attempt failed:</strong> <?= e($s['last_error']) ?></div>
+<?php elseif ($pendingUpdate): ?>
+  <div class="flash flash-warning"><strong>Local changes not yet at the university.</strong> Click <strong>Send update to university</strong> to push them.<?= $s['last_error'] ? '<br>Last attempt failed: ' . e($s['last_error']) : '' ?></div>
 <?php elseif ($s['sync_status'] === 'draft'): ?>
   <div class="flash flash-info">This student exists only in this portal. Click <strong>Send to university</strong> to register them at Prime University.</div>
 <?php endif; ?>
@@ -56,7 +80,7 @@ ssp_header($s['full_name'], $user);
 <div class="grid-2">
   <div class="card">
     <h2>Prime University</h2>
-    <?php if ($s['sync_status'] === 'synced'): ?>
+    <?php if ($isSynced): ?>
     <dl class="dl">
       <dt>Student ID</dt><dd><strong class="big"><?= e($s['pu_student_id']) ?></strong></dd>
       <dt>Internal id</dt><dd><?= (int)$s['pu_id'] ?></dd>
@@ -79,6 +103,8 @@ ssp_header($s['full_name'], $user);
     <?php else: ?>
     <p class="muted">No result published yet. <a href="<?= e(ssp_url('students/result.php?id=' . $id)) ?>">Publish final result</a>.</p>
     <?php endif; ?>
+    <?php elseif ($isDeleted): ?>
+    <p class="muted"><?= $s['pu_student_id'] ? 'Former Student ID <strong>' . e($s['pu_student_id']) . '</strong> – deleted at the university on ' . e(ssp_date_human($s['deleted_at'])) . '.' : 'Never registered at the university.' ?></p>
     <?php else: ?>
     <p class="muted">Not registered yet. Attempts: <?= (int)$s['sync_attempts'] ?>.</p>
     <p class="muted">Idempotency key: <code><?= e(ssp_student_idempotency_key($s)) ?></code><br><small>Retrying with the same key can never create a duplicate student.</small></p>
