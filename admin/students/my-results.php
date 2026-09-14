@@ -143,14 +143,56 @@ try {
     }
 }
 
+// ── Completed exams only ────────────────────────────────────────────────────────────────
+// A result is shown to the student only when the exam it belongs to is OVER
+// (ei_exams.end_date has passed). Sheets without an exam tag, or for exams
+// still upcoming / ongoing, are hidden.
+$today = date('Y-m-d');
+
+/** True when the exam row has an end date that is already in the past. */
+function mr_exam_done(?string $exam_id, ?string $end_date, string $today): bool
+{
+    return !empty($exam_id) && !empty($end_date) && $end_date < $today;
+}
+
+// Terms that have at least one completed exam. Used to decide whether a
+// registered course may be shown as "Not published yet" (its exam must be over).
+$done_terms = []; // 'Spring 2026' => true
+try {
+    // (a) exam name / year itself carries the term, e.g. "Final Examination Spring 2026"
+    $st = db()->query("SELECT exam_name, exam_year FROM ei_exams WHERE end_date IS NOT NULL AND end_date < CURDATE()");
+    foreach ($st->fetchAll() as $e) {
+        $t = mr_parse_term(trim((string)$e['exam_name'] . ' ' . (string)($e['exam_year'] ?? '')));
+        if ($t) $done_terms[$t['label']] = true;
+    }
+    // (b) any mark sheet already linked to a completed exam reveals that exam's term
+    $st = db()->query(
+        "SELECT DISTINCT o.semester
+           FROM result_mark_sheets ms
+           JOIN ei_exams e            ON e.id  = ms.exam_id
+           JOIN co_offer_subjects cos ON cos.id = ms.offer_subject_id
+           JOIN co_offers o           ON o.id  = cos.offer_id
+          WHERE e.end_date IS NOT NULL AND e.end_date < CURDATE()
+            AND o.semester IS NOT NULL AND o.semester <> ''"
+    );
+    foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $s) {
+        $t = mr_parse_term((string)$s);
+        if ($t) $done_terms[$t['label']] = true;
+    }
+} catch (Throwable $e) {}
+
 // Group by semester (term label from the course offer; fall back to the exam).
 $semesters = [];   // key => ['label','sort','courses'=>[], ...]
 $published_offer_subjects = []; // offer_subject_id => true  (already has a published grade)
 $published_course_terms   = []; // "CODE|Term label" => true (same course already published in that term)
+$hidden_upcoming = 0;           // published grades hidden because their exam is not over / not tagged
 foreach ($courses as $c) {
     $letter = trim((string)($c['letter_grade'] ?? ''));
     $graded = ($c['marks_json'] !== null) || (int)$c['is_absent'] === 1 || $letter !== '';
     if (!$graded) continue; // roster row with no marks entered – nothing to show
+
+    // Exam must be over (and the sheet must be tagged with an exam) to be visible.
+    if (!mr_exam_done((string)($c['exam_id'] ?? ''), $c['exam_end_date'] ?? null, $today)) { $hidden_upcoming++; continue; }
 
     $is_incom = ((int)$c['is_absent'] === 1) || strcasecmp($letter, 'Incom') === 0;
 
@@ -219,9 +261,11 @@ try {
         if (isset($published_offer_subjects[$osid])) continue;
 
         $term  = mr_parse_term($reg['semester']);
-        $label = $term ? $term['label'] : trim((string)($reg['semester'] ?: $reg['academic_intake']));
-        if ($label === '') $label = 'Current semester';
-        $sort  = $term ? $term['sort'] : PHP_INT_MAX; // unknown term → treat as most recent
+        // Only terms whose exam is already over are listed; a course of a term
+        // with no completed exam (or an unparseable term) is not "due" yet.
+        if (!$term || !isset($done_terms[$term['label']])) continue;
+        $label = $term['label'];
+        $sort  = $term['sort'];
 
         $code_key = strtoupper(preg_replace('/\s+/', '', (string)$reg['course_code']));
         if ($code_key !== '' && isset($published_course_terms[$code_key . '|' . $label])) continue;
@@ -509,7 +553,7 @@ require_once __DIR__ . '/../includes/header.php';
 <?php endif; ?>
 
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2 no-print">
-    <small class="text-muted"><i class="fas fa-lock me-1"></i>Only results published by the Controller of Examinations appear here.</small>
+    <small class="text-muted"><i class="fas fa-lock me-1"></i>Only results of completed exams, published by the Controller of Examinations, appear here.</small>
     <?php if ($has_anything): ?>
     <button type="button" class="btn btn-sm btn-outline-secondary" style="border-radius:9px;" onclick="window.print()">
         <i class="fas fa-print me-1"></i> Print
@@ -553,7 +597,7 @@ require_once __DIR__ . '/../includes/header.php';
     <div class="mr-empty">
         <i class="fas fa-hourglass-half"></i>
         <div class="fw-semibold" style="color:#334155;">No results have been published yet</div>
-        <div style="font-size:.85rem;">Your results will appear here as soon as they are approved and published.</div>
+        <div style="font-size:.85rem;">Your results will appear here once the exam is over and the result is approved and published.</div>
     </div>
 </div>
 <?php endif; ?>
@@ -683,7 +727,8 @@ require_once __DIR__ . '/../includes/header.php';
     <strong>How GPA / CGPA is calculated:</strong> Semester GPA = Σ(credit × grade point) ÷ Σ credits of graded courses in that semester.
     CGPA is cumulative across all published semesters, so it is shown only in the “All semesters” view<?= MR_CGPA_LATEST_ATTEMPT_ONLY ? '; when a course is retaken, the latest attempt replaces the earlier grade' : '' ?>.
     Courses marked <span class="mr-grade mr-g-incom" style="padding:1px 6px;">Incom</span> are excluded until completed.
-    Courses marked <span class="mr-grade mr-g-pending" style="padding:1px 6px;">Not published yet</span> are registered courses whose results have not been released;
+    Results are listed only for exams that are already over.
+    Courses marked <span class="mr-grade mr-g-pending" style="padding:1px 6px;">Not published yet</span> are registered courses of a completed exam whose results have not been released;
     they are not counted in GPA / CGPA (values marked * are provisional). If you have any urgency, please contact your course teacher.
     The official transcript issued by the Controller of Examinations prevails in case of any discrepancy.
 </div>
