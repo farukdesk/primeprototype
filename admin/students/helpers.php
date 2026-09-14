@@ -249,32 +249,129 @@ function sm_semester_year(string $semester): string
 }
 
 /**
- * Generate a unique 12-digit student ID.
- *
- * Format: [YY][SS][DD][PP][NNNN]
- *   YY   = last 2 digits of admission year
- *   SS   = semester code (01=Summer, 02=Fall, 03=Spring)
- *   DD   = dept_id zero-padded to 2 digits
- *   PP   = program_id zero-padded to 2 digits (00 if none)
- *   NNNN = 4-digit sequential counter for this prefix
+ * Split an ID into its fixed stem and trailing running number:
+ *   "260303070012" → ['', '260303070012'],   "CSE-26-007" → ['CSE-26-', '007'].
+ * Returns null when the ID does not end in a digit (nothing to continue from).
  */
-function sm_generate_student_id(string $admitted_semester, int $dept_id, int $program_id = 0): string
+function sm_student_id_split(string $sid): ?array
 {
-    $yy   = sm_semester_year($admitted_semester);
-    $ss   = sm_semester_code($admitted_semester);
-    $dd   = str_pad((string)$dept_id,    2, '0', STR_PAD_LEFT);
-    $pp   = str_pad((string)$program_id, 2, '0', STR_PAD_LEFT);
-    $prefix = $yy . $ss . $dd . $pp;
+    return preg_match('/^(.*?)(\d+)$/', $sid, $m) ? [$m[1], $m[2]] : null;
+}
 
-    $stmt = db()->prepare(
-        "SELECT student_id FROM students
-         WHERE student_id LIKE ? ORDER BY student_id DESC LIMIT 1"
-    );
-    $stmt->execute([$prefix . '%']);
-    $last = $stmt->fetchColumn();
-    $seq  = $last ? (int)substr($last, -4) + 1 : 1;
+/** Add 1 to a digit string, keeping its zero-padding width ("0007" → "0008", "0999" → "1000"). */
+function sm_digits_increment(string $digits): string
+{
+    for ($i = strlen($digits) - 1; $i >= 0; $i--) {
+        if ($digits[$i] !== '9') {
+            $digits[$i] = (string)((int)$digits[$i] + 1);
+            return $digits;
+        }
+        $digits[$i] = '0';
+    }
+    return '1' . $digits;   // all nines: the number grows by one digit
+}
 
-    return $prefix . str_pad((string)$seq, 4, '0', STR_PAD_LEFT);
+/**
+ * Detect the numbering pattern a set of existing IDs follows.  Every ID is
+ * split into stem + trailing number; IDs with the same stem and the same
+ * number width belong to one pattern.  The pattern used by most IDs wins;
+ * on a tie the one used by the newest student wins (pass IDs newest first).
+ *
+ * @param  string[] $ids
+ * @return ?array{stem:string,last:string,count:int}  null when no ID ends in a digit
+ */
+function sm_student_id_pattern(array $ids): ?array
+{
+    $groups = [];
+    foreach ($ids as $sid) {
+        $parts = sm_student_id_split(trim((string)$sid));
+        if ($parts === null) {
+            continue;
+        }
+        [$stem, $num] = $parts;
+        $key = $stem . '|' . strlen($num);
+        if (!isset($groups[$key])) {
+            $groups[$key] = ['stem' => $stem, 'last' => $num, 'count' => 0];
+        }
+        $groups[$key]['count']++;
+        if (strcmp($num, $groups[$key]['last']) > 0) {   // same width → string order == numeric order
+            $groups[$key]['last'] = $num;
+        }
+    }
+
+    $best = null;
+    foreach ($groups as $g) {   // insertion order is newest-first, so a strict ">" keeps the newest on ties
+        if ($best === null || $g['count'] > $best['count']) {
+            $best = $g;
+        }
+    }
+    return $best;
+}
+
+/**
+ * Generate the next student ID for an admission cohort, or NULL when the
+ * cohort has no numbering to follow.
+ *
+ *   1. Cohort = every student whose admitted_semester, dept_id and program_id
+ *      match the new student (the real columns).
+ *   2. The cohort's own ID pattern is detected (stem + running number, see
+ *      sm_student_id_pattern) and CONTINUED: same stem, same zero-padding,
+ *      highest number + 1.  Whatever convention was used for that intake is
+ *      followed as-is.  No format is EVER invented here.
+ *   3. No students in the cohort / no ID ending in a digit → null.  The
+ *      operator must then enter the Student ID issued by the admin office.
+ *   4. The candidate is bumped past any ID that already exists anywhere in
+ *      `students`, so a number is never handed out twice.
+ *
+ * Mirrored by capi_generate_student_id() in admin/api/v1/includes/student_helpers.php;
+ * keep both in sync.
+ *
+ * @throws RuntimeException when a pattern exists but no free ID can be produced.
+ */
+function sm_generate_student_id(string $admitted_semester, int $dept_id, int $program_id = 0): ?string
+{
+    $sql = 'SELECT student_id
+              FROM students
+             WHERE admitted_semester = ?
+               AND dept_id = ?
+               AND ' . ($program_id > 0 ? 'program_id = ?' : '(program_id IS NULL OR program_id = 0)') . '
+             ORDER BY id DESC';
+    $params = [$admitted_semester, $dept_id];
+    if ($program_id > 0) {
+        $params[] = $program_id;
+    }
+    $stmt = db()->prepare($sql);
+    $stmt->execute($params);
+    $cohort = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+    $pattern = sm_student_id_pattern($cohort);
+    if ($pattern === null) {
+        return null;   // nothing to follow – the admin office must issue the ID
+    }
+    $stem = $pattern['stem'];
+    $next = sm_digits_increment($pattern['last']);
+
+    $exists = db()->prepare('SELECT 1 FROM students WHERE student_id = ? LIMIT 1');
+    $tries  = 0;
+    while (true) {
+        $exists->execute([$stem . $next]);
+        if (!$exists->fetchColumn()) {
+            break;
+        }
+        $next = sm_digits_increment($next);
+        if (++$tries > 10000) {
+            throw new RuntimeException(
+                'Could not find a free student ID for pattern "' . $stem . '<number>" ('
+                . $admitted_semester . ', dept ' . $dept_id . ', program ' . $program_id . ').'
+            );
+        }
+    }
+
+    $sid = $stem . $next;
+    if (strlen($sid) > 20) {
+        throw new RuntimeException('Generated student ID "' . $sid . '" exceeds 20 characters.');
+    }
+    return $sid;
 }
 
 // ── Upload helpers ────────────────────────────────────────────────────────────

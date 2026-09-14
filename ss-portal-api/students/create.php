@@ -106,6 +106,12 @@ if (ssp_is_post()) {
                 }
                 ssp_redirect('students/view.php?id=' . $id);
             }
+            if (!empty($result['needs_student_id'])) {
+                // The university has no ID numbering for this cohort and created nothing:
+                // the record stays a draft until the admin-issued Student ID is entered.
+                ssp_flash('warning', $result['message']);
+                ssp_redirect('students/view.php?id=' . $id);
+            }
             if (!empty($result['errors'])) {
                 // 422 from the university – show its field errors here so they can be fixed immediately
                 $errors          = $result['errors'];
@@ -203,6 +209,10 @@ ssp_header($title, $user);
         <?php ssp_input('program', 'Program', $form, $errors, ['placeholder' => 'B.Sc. in CSE', 'hint' => 'ID or exact name']); ?>
       <?php endif; ?>
       <?php ssp_input('semester', 'Admitted semester', $form, $errors, ['required' => true, 'list' => 'dl_semesters', 'placeholder' => 'Spring 2026', 'maxlength' => 30]); ?>
+      <?php if (!$isSynced): ?>
+        <?php ssp_input('student_id', 'University Student ID', $form, $errors, ['placeholder' => 'Leave empty – assigned by the university', 'maxlength' => 20,
+            'hint' => 'Normally leave empty: the university continues the numbering of this semester / department / program. Fill in ONLY the ID issued by the university admin when the portal reports that no numbering exists yet.']); ?>
+      <?php endif; ?>
       <?php ssp_input('year', 'Academic year', $form, $errors, ['placeholder' => '1st', 'maxlength' => 20]); ?>
       <?php ssp_input('batch', 'Batch', $form, $errors, ['placeholder' => '52nd Batch', 'maxlength' => 50]); ?>
       <?php ssp_select('semester_type', 'Semester type', $form, $errors, $enumOptions('semester_type', ['bi_semester', 'trimester']), ['placeholder' => '— default —']); ?>

@@ -73,6 +73,11 @@ ssp_header($s['full_name'], $user);
   <div class="flash flash-error"><strong>Last attempt failed:</strong> <?= e($s['last_error']) ?></div>
 <?php elseif ($pendingUpdate): ?>
   <div class="flash flash-warning"><strong>Local changes not yet at the university.</strong> Click <strong>Send update to university</strong> to push them.<?= $s['last_error'] ? '<br>Last attempt failed: ' . e($s['last_error']) : '' ?></div>
+<?php elseif ($s['sync_status'] === 'draft' && (($response['code'] ?? '') === 'student_id_pattern_not_found')): ?>
+  <div class="flash flash-warning"><strong>Student ID required – please contact the university admin.</strong>
+    Prime University has no Student ID numbering yet for this semester / department / program and does not create one on its own, so the student was <strong>not</strong> created there (kept here as a draft).
+    Ask the Prime University admin office for the Student ID, then <a href="<?= e(ssp_url('students/create.php?id=' . $id)) ?>">edit this student</a>, enter it in <strong>University Student ID</strong> and click <strong>Save and send to university</strong>.
+    <?= !empty($payload['student_id']) ? '<br>Student ID currently entered: <code>' . e($payload['student_id']) . '</code> – click <strong>Send to university</strong> to create the student with it.' : '' ?></div>
 <?php elseif ($s['sync_status'] === 'draft'): ?>
   <div class="flash flash-info">This student exists only in this portal. Click <strong>Send to university</strong> to register them at Prime University.</div>
 <?php endif; ?>
@@ -119,6 +124,7 @@ ssp_header($s['full_name'], $user);
         <dt>Department</dt><dd><?= e($s['department_label'] ?? $payload['department'] ?? '—') ?></dd>
         <dt>Program</dt><dd><?= e($s['program_label'] ?? $payload['program'] ?? '—') ?></dd>
         <dt>Admitted</dt><dd><?= e($payload['semester'] ?? '—') ?><?= !empty($payload['batch']) ? ' · ' . e($payload['batch']) : '' ?></dd>
+        <?php if (!$isSynced && !empty($payload['student_id'])): ?><dt>Student ID to use</dt><dd><code><?= e($payload['student_id']) ?></code> <small class="muted">(issued by the university admin)</small></dd><?php endif; ?>
         <dt>Mobile / e-mail</dt><dd><?= e($payload['contact_no'] ?? '—') ?> / <?= e($payload['email'] ?? '—') ?></dd>
         <dt>Date of birth</dt><dd><?= e($payload['date_of_birth'] ?? '—') ?><?= !empty($payload['sex']) ? ' · ' . e($payload['sex']) : '' ?></dd>
         <dt>Father / Mother</dt><dd><?= e($payload['father_name'] ?? '—') ?> / <?= e($payload['mother_name'] ?? '—') ?></dd>

@@ -65,6 +65,12 @@ variable) and used **only from PHP on the server**; it is never sent to the brow
 * If the university answers `422 validation_failed`, its field errors are shown on the form
   (same field names) so the operator can correct and resend. Network / `5xx` / `429` failures
   are recorded and can be **retried** from the student page.
+* **Student ID.** Leave *University Student ID* empty: the university continues the numbering
+  already used by the students of the same admitted semester, department and program. It never
+  invents a numbering. If none exists yet (first student of a new intake) it answers
+  `422 student_id_pattern_not_found`, creates nothing, and the record stays a **Draft** with the
+  notice *please contact the university admin for the Student ID*. Enter the ID the admin office
+  issues in **University Student ID** (Edit) and send again.
 * **Publish final result** – available once the student is registered; uses
   `POST /results/create.php` (an upsert, so re-sending the same semester is safe).
 * **Edit a registered student** – the same form; *Save and update at university* pushes the

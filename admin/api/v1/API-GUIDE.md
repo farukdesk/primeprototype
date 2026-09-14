@@ -161,7 +161,7 @@ are ignored. Alternative names shown in *italics* are accepted aliases.
 | `shift` | no | `Morning` \| `Day` \| `Evening` | |
 | `section` | no | `A`…`G` | |
 | `status` | no | see enums | defaults to the status configured for your client (normally `Not Admitted Yet`) |
-| `student_id` | no | 1-20 letters/digits/hyphens | **omit to let the university generate it** (recommended) |
+| `student_id` | no | 1-20 letters/digits/hyphens | **omit to let the university assign it** (recommended). The university continues the numbering already used by the students admitted to the same semester, department and program (same prefix and zero-padding, highest number + 1). It **never invents** a numbering: if that intake has no students yet the request is refused with `422 student_id_pattern_not_found` and nothing is created. Ask the university admin office for the Student ID and resend with `student_id` set |
 
 **Student**
 
@@ -736,6 +736,7 @@ Bulk result responses carry `summary` and `results[]` instead of a single `error
 | 422 | `confirmation_required` | (delete) Send `"confirm": true` |
 | 409 | `request_in_progress` | Same idempotency key is still processing; retry after `Retry-After` |
 | 422 | `validation_failed` | Fix the fields listed in `errors` (or `results[].errors` for bulk) |
+| 422 | `student_id_pattern_not_found` | (create, no `student_id` sent) No Student ID numbering exists yet for that semester / department / program; nothing was created. Contact the university admin office for the Student ID and resend with `student_id` |
 | 429 | `rate_limited` | Wait `Retry-After` seconds |
 | 500 | `server_error` | Temporary failure; retry with the **same** idempotency key |
 

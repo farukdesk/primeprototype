@@ -156,6 +156,18 @@ function ssp_sync_student(int $id, int $userId): array
     }
 
     $errors = is_array($resp['body']['errors'] ?? null) ? $resp['body']['errors'] : [];
+
+    if ($resp['code'] === 'student_id_pattern_not_found') {
+        // The university has no Student ID numbering yet for this semester / department /
+        // program and never invents one. Nothing was created there: keep the record as a
+        // DRAFT until the university admin supplies the Student ID.
+        $db->prepare('UPDATE ssp_students SET sync_status = "draft", sync_attempts = sync_attempts + 1, last_error = ?, last_response_json = ? WHERE id = ?')
+           ->execute([ssp_error_summary($resp), json_encode($resp['body'], JSON_UNESCAPED_UNICODE), $id]);
+        return ['ok' => false, 'needs_student_id' => true, 'errors' => $errors, 'retryable' => false, 'response' => $resp,
+            'message' => 'Saved as draft – the student was NOT created at Prime University. No Student ID numbering exists yet for this semester / department / program. '
+                . 'Please contact the university admin for the Student ID, then edit the student, enter it in "University Student ID" and send again.'];
+    }
+
     $db->prepare('UPDATE ssp_students SET sync_status = "failed", sync_attempts = sync_attempts + 1, last_error = ?, last_response_json = ? WHERE id = ?')
        ->execute([ssp_error_summary($resp), json_encode($resp['body'], JSON_UNESCAPED_UNICODE), $id]);
 
