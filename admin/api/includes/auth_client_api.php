@@ -144,6 +144,63 @@ function capi_client_ip(): string
     return filter_var($ip, FILTER_VALIDATE_IP) ? $ip : '';
 }
 
+/**
+ * Write an entry to change_log on behalf of an API client so it shows up in
+ * admin/change-log like changes made by staff.
+ *
+ * user_id is the admin who issued the key (api_clients.created_by) or NULL;
+ * api_client_id identifies the client.  Requires admin/change-log-api-clients-v1.sql.
+ * When that migration is not applied yet, falls back to the legacy row shape
+ * (which needs a user) so nothing breaks.  Never throws.
+ */
+function capi_log_change(
+    array $client,
+    string $action,
+    ?int $record_id,
+    ?string $record_label,
+    ?string $field_name,
+    ?string $old_value,
+    ?string $new_value,
+    string $description,
+    string $module = 'students'
+): void {
+    $user_id = $client['created_by'] !== null ? (int)$client['created_by'] : null;
+    $ip      = capi_client_ip();
+    $action  = strtoupper($action);
+    if (!in_array($action, ['CREATE', 'UPDATE', 'DELETE'], true)) {
+        $action = 'UPDATE';
+    }
+
+    try {
+        db()->prepare(
+            'INSERT INTO change_log
+                (user_id, api_client_id, module, record_id, record_label, action, field_name, old_value, new_value, description, ip_address)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        )->execute([
+            $user_id, (int)$client['id'], $module, $record_id, $record_label, $action,
+            $field_name, $old_value, $new_value, $description, $ip ?: null,
+        ]);
+        return;
+    } catch (Throwable $e) {
+        $first = $e->getMessage();
+    }
+
+    // Migration not applied yet → legacy shape (user_id required).
+    if ($user_id !== null) {
+        try {
+            db()->prepare(
+                'INSERT INTO change_log
+                    (user_id, module, record_id, record_label, action, field_name, old_value, new_value, description, ip_address)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            )->execute([$user_id, $module, $record_id, $record_label, $action, $field_name, $old_value, $new_value, $description, $ip ?: null]);
+            return;
+        } catch (Throwable $e2) {
+            $first = $e2->getMessage();
+        }
+    }
+    error_log('capi_log_change: ' . $first . ' (apply admin/change-log-api-clients-v1.sql so API changes are recorded in the Change Log)');
+}
+
 /** Extract the API key from X-API-Key or Authorization: Bearer. */
 function capi_extract_key(): string
 {

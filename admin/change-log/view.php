@@ -10,10 +10,13 @@ if (!$id) {
     redirect(APP_URL . '/change-log/index.php');
 }
 
+// LEFT JOINs: entries made through the third-party API may have no user.
 $stmt = db()->prepare(
-    'SELECT cl.*, u.full_name, u.email
+    'SELECT cl.*, u.full_name, u.email,
+            ac.name AS api_client_name, ac.key_prefix AS api_key_prefix, ac.contact_email AS api_contact_email, ac.is_active AS api_is_active
      FROM change_log cl
-     JOIN users u ON u.id = cl.user_id
+     LEFT JOIN users u ON u.id = cl.user_id
+     LEFT JOIN api_clients ac ON ac.id = cl.api_client_id
      WHERE cl.id = ?'
 );
 $stmt->execute([$id]);
@@ -143,14 +146,33 @@ require_once __DIR__ . '/../includes/header.php';
                 </h6>
             </div>
             <div class="card-body px-4 py-3">
-                <div class="fw-semibold" style="font-size:.95rem;"><?= h($log['full_name']) ?></div>
-                <div class="text-muted" style="font-size:.83rem;"><?= h($log['email']) ?></div>
-                <div class="mt-2">
-                    <a href="<?= APP_URL ?>/users/edit.php?id=<?= (int)$log['user_id'] ?>"
-                       class="btn btn-sm btn-outline-secondary" style="border-radius:8px;font-size:.78rem;">
-                        <i class="fas fa-user-edit me-1"></i> View User
-                    </a>
-                </div>
+                <?php if ($log['api_client_id']): ?>
+                    <div class="fw-semibold" style="font-size:.95rem;">
+                        <span class="badge bg-info text-dark me-1" style="font-size:.7rem;">API client</span>
+                        <?= h($log['api_client_name'] ?? ('Client #' . (int)$log['api_client_id'])) ?>
+                    </div>
+                    <div class="text-muted" style="font-size:.83rem;">
+                        Third-party application via <code>admin/api/v1</code>
+                        <?php if ($log['api_key_prefix']): ?><br>Key <code><?= h($log['api_key_prefix']) ?>…</code><?php endif; ?>
+                        <?php if ($log['api_contact_email']): ?><br><?= h($log['api_contact_email']) ?><?php endif; ?>
+                        <?php if ($log['api_client_name'] !== null && !(int)$log['api_is_active']): ?><br><span class="text-danger">client revoked</span><?php endif; ?>
+                    </div>
+                    <?php if ($log['full_name']): ?>
+                    <div class="mt-2 text-muted" style="font-size:.8rem;">Key issued by <strong><?= h($log['full_name']) ?></strong> (<?= h($log['email']) ?>)</div>
+                    <?php endif; ?>
+                <?php elseif ($log['full_name']): ?>
+                    <div class="fw-semibold" style="font-size:.95rem;"><?= h($log['full_name']) ?></div>
+                    <div class="text-muted" style="font-size:.83rem;"><?= h($log['email']) ?></div>
+                    <div class="mt-2">
+                        <a href="<?= APP_URL ?>/users/edit.php?id=<?= (int)$log['user_id'] ?>"
+                           class="btn btn-sm btn-outline-secondary" style="border-radius:8px;font-size:.78rem;">
+                            <i class="fas fa-user-edit me-1"></i> View User
+                        </a>
+                    </div>
+                <?php else: ?>
+                    <div class="fw-semibold text-muted" style="font-size:.95rem;">Unknown user</div>
+                    <div class="text-muted" style="font-size:.83rem;">User #<?= (int)$log['user_id'] ?> no longer exists.</div>
+                <?php endif; ?>
             </div>
         </div>
 
