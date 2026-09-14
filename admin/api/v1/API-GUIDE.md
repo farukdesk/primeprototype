@@ -660,7 +660,9 @@ Bulk result responses carry `summary` and `results[]` instead of a single `error
 
 ## Appendix A – Operator notes (university IT)
 
-1. Apply `admin/student-api-clients-v1.sql` once, then `admin/student-results-api-v1.sql`.
+1. Apply `admin/student-api-clients-v1.sql` once, then `admin/student-results-api-v1.sql`,
+   then `admin/change-log-api-clients-v1.sql` (lets the Change Log attribute entries to
+   API clients even when the key has no `--created-by` user).
 2. Issue a key (run on the server, never over HTTP):
    ```bash
    php admin/api/v1/bin/create-client.php --name="Partner CRM" \
@@ -671,8 +673,11 @@ Bulk result responses carry `summary` and `results[]` instead of a single `error
    `--created-by` is the `users.id` recorded as `students.created_by` and in `change_log`.
 3. Manage: `--list`, `--revoke=<id>`, `--enable=<id>`.
 4. Audit: `api_client_requests` holds every call (status, IP, created `students.id`);
-   `students.api_client_id` and `student_results.api_client_id` identify API-written rows;
-   every published result also appears in the Change Log as `final_result` on the student.
+   `students.api_client_id` and `student_results.api_client_id` identify API-written rows.
+   Every student created and every result published through the API also appears in
+   **Change Log** (`change_log.api_client_id` = the client; shown with an **API** badge and
+   filterable with *Source → API clients*). `--created-by` is optional; when set, the
+   entry additionally shows which admin issued the key.
 5. Results published through the API behave exactly like the **Final Result Publish**
    admin import (same `student_results` upsert key, same Graduated rule) and are visible
    on the public certificate-verification page immediately.

@@ -261,24 +261,19 @@ function capi_result_persist(array $d, array $client, bool $own_transaction = tr
             $status = 'Graduated';
         }
 
-        // Best-effort audit trail, same shape the admin import writes.
-        if ($client['created_by'] !== null) {
-            try {
-                $db->prepare(
-                    'INSERT INTO change_log
-                        (user_id, module, record_id, record_label, action, field_name, old_value, new_value, description, ip_address)
-                     VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)'
-                )->execute([
-                    (int)$client['created_by'], 'students', $pk, $s['full_name'] . ' (' . $s['student_id'] . ')',
-                    'UPDATE', 'final_result', $d['cgpa'],
-                    'Final result ' . $action . ' via API client "' . $client['name'] . '" ('
-                        . $d['season'] . ' ' . $d['year'] . ', CGPA ' . $d['cgpa'] . ')',
-                    capi_client_ip(),
-                ]);
-            } catch (Throwable $e) {
-                error_log('result_helpers change_log: ' . $e->getMessage());
-            }
-        }
+        // Audit trail, same shape the admin import writes (always recorded, even
+        // when the API client has no created_by user – see capi_log_change()).
+        capi_log_change(
+            $client,
+            'UPDATE',
+            $pk,
+            $s['full_name'] . ' (' . $s['student_id'] . ')',
+            'final_result',
+            null,
+            $d['cgpa'],
+            'Final result ' . $action . ' via API client "' . $client['name'] . '" ('
+                . $d['season'] . ' ' . $d['year'] . ', CGPA ' . $d['cgpa'] . ')'
+        );
 
         if ($own_transaction) {
             $db->commit();

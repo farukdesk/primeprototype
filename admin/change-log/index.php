@@ -12,6 +12,7 @@ $f_module   = trim($_GET['module']     ?? '');
 $f_action   = trim($_GET['action']     ?? '');
 $f_date_from = trim($_GET['date_from'] ?? '');
 $f_date_to   = trim($_GET['date_to']   ?? '');
+$f_source    = trim($_GET['source']    ?? '');   // '' | 'users' | 'api'
 $page        = max(1, (int)($_GET['page'] ?? 1));
 $per_page    = 10;
 
@@ -22,13 +23,19 @@ $params = [];
 
 if ($search !== '') {
     $like     = '%' . $search . '%';
-    $where[]  = '(u.full_name LIKE ? OR u.email LIKE ? OR cl.module LIKE ? OR cl.field_name LIKE ? OR cl.description LIKE ? OR cl.record_label LIKE ?)';
+    $where[]  = '(u.full_name LIKE ? OR u.email LIKE ? OR ac.name LIKE ? OR cl.module LIKE ? OR cl.field_name LIKE ? OR cl.description LIKE ? OR cl.record_label LIKE ?)';
     $params[] = $like;
     $params[] = $like;
     $params[] = $like;
     $params[] = $like;
     $params[] = $like;
     $params[] = $like;
+    $params[] = $like;
+}
+if ($f_source === 'api') {
+    $where[] = 'cl.api_client_id IS NOT NULL';
+} elseif ($f_source === 'users') {
+    $where[] = 'cl.api_client_id IS NULL';
 }
 if ($f_module !== '') {
     $where[]  = 'cl.module = ?';
@@ -47,8 +54,11 @@ if ($f_date_to !== '') {
     $params[] = $f_date_to;
 }
 
+// LEFT JOINs: entries written by third-party API clients (admin/api/v1) may have
+// no user at all, and old entries may point to a deleted user – both must stay visible.
 $base_sql = 'FROM change_log cl
-             JOIN users u ON u.id = cl.user_id'
+             LEFT JOIN users u ON u.id = cl.user_id
+             LEFT JOIN api_clients ac ON ac.id = cl.api_client_id'
           . ($where ? ' WHERE ' . implode(' AND ', $where) : '');
 
 // Total count for pagination
@@ -64,7 +74,7 @@ $data_params[] = $per_page;
 $data_params[] = $offset;
 
 $stmt = db()->prepare(
-    'SELECT cl.*, u.full_name, u.email ' . $base_sql
+    'SELECT cl.*, u.full_name, u.email, ac.name AS api_client_name, ac.key_prefix AS api_key_prefix ' . $base_sql
     . ' ORDER BY cl.created_at DESC LIMIT ? OFFSET ?'
 );
 $stmt->execute($data_params);
@@ -117,6 +127,14 @@ require_once __DIR__ . '/../includes/header.php';
                 </select>
             </div>
             <div class="col-6 col-md-2">
+                <label class="form-label" style="font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:#6b7280;">Source</label>
+                <select name="source" class="form-select" style="border-radius:10px;">
+                    <option value="">All Sources</option>
+                    <option value="users" <?= $f_source === 'users' ? 'selected' : '' ?>>Admin users</option>
+                    <option value="api" <?= $f_source === 'api' ? 'selected' : '' ?>>API clients</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
                 <label class="form-label" style="font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:#6b7280;">From Date</label>
                 <input type="date" name="date_from" class="form-control" style="border-radius:10px;"
                        value="<?= h($f_date_from) ?>">
@@ -130,7 +148,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <button class="btn btn-outline-primary w-100" style="border-radius:10px;" title="Apply filters">
                     <i class="fas fa-search"></i>
                 </button>
-                <?php if ($search || $f_module || $f_action || $f_date_from || $f_date_to): ?>
+                <?php if ($search || $f_module || $f_action || $f_date_from || $f_date_to || $f_source): ?>
                 <a href="<?= APP_URL ?>/change-log/index.php" class="btn btn-light" style="border-radius:10px;" title="Clear filters">
                     <i class="fas fa-times"></i>
                 </a>
@@ -173,8 +191,20 @@ require_once __DIR__ . '/../includes/header.php';
                     <tr>
                         <td class="px-3 text-muted" style="font-size:.78rem;"><?= $log['id'] ?></td>
                         <td>
-                            <div class="fw-semibold" style="font-size:.875rem;"><?= h($log['full_name']) ?></div>
-                            <div class="text-muted" style="font-size:.75rem;"><?= h($log['email']) ?></div>
+                            <?php if ($log['api_client_id']): ?>
+                                <div class="fw-semibold" style="font-size:.875rem;">
+                                    <span class="badge bg-info text-dark me-1" style="font-size:.68rem;">API</span><?= h($log['api_client_name'] ?? ('Client #' . (int)$log['api_client_id'])) ?>
+                                </div>
+                                <div class="text-muted" style="font-size:.75rem;">
+                                    <?php if ($log['full_name']): ?>key issued by <?= h($log['full_name']) ?><?php elseif ($log['api_key_prefix']): ?>key <?= h($log['api_key_prefix']) ?>…<?php else: ?>third-party application<?php endif; ?>
+                                </div>
+                            <?php elseif ($log['full_name']): ?>
+                                <div class="fw-semibold" style="font-size:.875rem;"><?= h($log['full_name']) ?></div>
+                                <div class="text-muted" style="font-size:.75rem;"><?= h($log['email']) ?></div>
+                            <?php else: ?>
+                                <div class="fw-semibold text-muted" style="font-size:.875rem;">Unknown user</div>
+                                <div class="text-muted" style="font-size:.75rem;">user #<?= (int)$log['user_id'] ?> (deleted)</div>
+                            <?php endif; ?>
                         </td>
                         <td>
                             <span class="badge bg-light text-dark border" style="font-size:.75rem;"><?= h($log['module']) ?></span>
@@ -237,6 +267,7 @@ $qs_base = http_build_query(array_filter([
     'action'    => $f_action,
     'date_from' => $f_date_from,
     'date_to'   => $f_date_to,
+    'source'    => $f_source,
 ]));
 $qs_base = $qs_base ? '&' . $qs_base : '';
 ?>

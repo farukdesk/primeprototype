@@ -497,20 +497,18 @@ try {
 // ── Audit trail (best effort, same table the admin panel uses) ─────────────────
 
 $GLOBALS['CAPI']['student_db_id'] = $new_id;
-if ($client['created_by'] !== null) {
-    try {
-        $db->prepare(
-            'INSERT INTO change_log
-                (user_id, module, record_id, record_label, action, field_name, old_value, new_value, description, ip_address)
-             VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?)'
-        )->execute([
-            (int)$client['created_by'], 'students', $new_id, $full_name . ' (' . $student_id . ')', 'CREATE',
-            'New student added via API client "' . $client['name'] . '"', capi_client_ip(),
-        ]);
-    } catch (Throwable $e) {
-        error_log('api/v1/students/create change_log: ' . $e->getMessage());
-    }
-}
+capi_log_change(
+    $client,
+    'CREATE',
+    $new_id,
+    $full_name . ' (' . $student_id . ')',
+    null,
+    null,
+    null,
+    'New student added via API client "' . $client['name'] . '"'
+        . ($result_out !== null ? ' together with final result (' . $result_out['semester'] . ', CGPA ' . $result_out['cgpa'] . ')' : '')
+        . ($GLOBALS['CAPI']['idempotency_key'] !== null ? ' [idempotency key ' . $GLOBALS['CAPI']['idempotency_key'] . ']' : '')
+);
 
 // ── Response ──────────────────────────────────────────────────────────────────
 
