@@ -14,7 +14,8 @@ function ssp_header(string $title, ?array $user = null): void
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex, nofollow">
+<meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
+<meta name="googlebot" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
 <title><?= e($title) ?> · <?= e($app) ?></title>
 <link rel="stylesheet" href="<?= e(ssp_url('assets/portal.css')) ?>?v=<?= e(SSP_VERSION) ?>">
 </head>
