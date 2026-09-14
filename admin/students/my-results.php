@@ -308,6 +308,16 @@ $overall_cgpa        = $cum_credits > 0 ? round($cum_points / $cum_credits, 2) :
 $published_sem_count = count(array_filter($semesters, static fn($s) => ($s['published'] ?? 0) > 0));
 $semesters_desc      = array_reverse($semesters, true); // newest first for display
 
+// ── View filter: all semesters (with CGPA) or one exam / semester ──────────────────
+// CGPA is cumulative, so it is shown ONLY when the student looks at all
+// semesters. A single semester shows just that semester's grades and GPA.
+$view = trim((string)($_GET['view'] ?? 'all'));
+if ($view !== 'all' && !isset($semesters[$view])) $view = 'all';
+$show_cgpa       = ($view === 'all');
+$visible         = $show_cgpa ? $semesters_desc : [$view => $semesters[$view]];
+$sel             = $show_cgpa ? null : $semesters[$view];
+$visible_pending = $show_cgpa ? $pending_total : (int)$sel['pending'];
+
 // ── Legacy / imported results (student_results) ────────────────────────────────────
 $legacy_groups = [];
 $final_result  = null;
@@ -389,6 +399,15 @@ require_once __DIR__ . '/../includes/header.php';
 .mr-teacher { font-size:.72rem; color:#64748b; margin-top:2px; }
 .mr-teacher strong { color:#334155; }
 
+.mr-filter { display:inline-flex; align-items:center; gap:6px; font-size:.78rem; font-weight:600; padding:6px 14px; border-radius:20px; text-decoration:none; border:1.5px solid #e2e8f0; color:#475569; background:#fff; transition:all .15s; line-height:1.2; }
+.mr-filter:hover { background:#eff6ff; border-color:#93c5fd; color:#1d4ed8; }
+.mr-filter.active { background:#2563eb; border-color:#2563eb; color:#fff; }
+.mr-filter .ex { font-size:.64rem; font-weight:500; opacity:.7; }
+.mr-filter .cnt { font-size:.64rem; background:rgba(0,0,0,.07); padding:1px 7px; border-radius:10px; }
+.mr-filter.active .cnt { background:rgba(255,255,255,.25); }
+.mr-filter .cnt.pend { background:#fff7ed; color:#c2410c; border:1px solid #fdba74; }
+.mr-filter.active .cnt.pend { background:#fff; }
+
 .mr-empty { text-align:center; padding:56px 24px; color:#64748b; }
 .mr-empty i { font-size:2.4rem; color:#cbd5e1; margin-bottom:12px; display:block; }
 
@@ -418,6 +437,7 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
         </div>
         <div class="d-flex flex-wrap gap-2">
+            <?php if ($show_cgpa): ?>
             <div class="mr-stat">
                 <div class="v"><?= $final_cgpa !== null ? number_format($final_cgpa, 2) : mr_fmt_gpa($overall_cgpa) ?></div>
                 <div class="l"><?= $final_cgpa !== null ? 'Final CGPA' : 'Current CGPA' ?></div>
@@ -436,9 +456,57 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="v"><?= rtrim(rtrim(number_format($cum_credits, 1), '0'), '.') ?></div>
                 <div class="l">Credits counted</div>
             </div>
+            <?php else: ?>
+            <div class="mr-stat">
+                <div class="v"><?= $sel['published'] > 0 ? mr_fmt_gpa($sel['gpa']) : '<span style="font-size:1rem;">Pending</span>' ?></div>
+                <div class="l">Semester GPA · <?= h($sel['label']) ?></div>
+            </div>
+            <div class="mr-stat">
+                <div class="v"><?= (int)$sel['published'] ?></div>
+                <div class="l">Course<?= (int)$sel['published'] === 1 ? '' : 's' ?> published</div>
+            </div>
+            <?php if ($sel['pending'] > 0): ?>
+            <div class="mr-stat" style="background:rgba(251,146,60,.22);border-color:rgba(251,146,60,.45);">
+                <div class="v"><?= (int)$sel['pending'] ?></div>
+                <div class="l">Not published yet</div>
+            </div>
+            <?php endif; ?>
+            <div class="mr-stat">
+                <div class="v"><?= rtrim(rtrim(number_format((float)$sel['credits'], 1), '0'), '.') ?></div>
+                <div class="l">Credits</div>
+            </div>
+            <?php endif; ?>
         </div>
     </div>
 </div>
+
+<?php if (!empty($semesters)): ?>
+<!-- ═══════════════ FILTER: ALL / ONE EXAM-SEMESTER ═══════════════ -->
+<div class="sv-card no-print" style="margin-bottom:16px;">
+    <div class="sv-card-body py-3 d-flex flex-wrap align-items-center gap-2">
+        <span class="text-muted me-1" style="font-size:.78rem;font-weight:600;"><i class="fas fa-filter me-1"></i>Show results for:</span>
+        <a href="?view=all" class="mr-filter <?= $show_cgpa ? 'active' : '' ?>">
+            <i class="fas fa-layer-group"></i> All semesters
+            <span class="cnt"><?= count($semesters) ?></span>
+        </a>
+        <?php foreach ($semesters_desc as $key => $s): ?>
+        <a href="?view=<?= urlencode((string)$key) ?>" class="mr-filter <?= (!$show_cgpa && $view === (string)$key) ? 'active' : '' ?>"
+           title="<?= h($s['exam'] !== '' ? $s['exam'] : $s['label']) ?>">
+            <span>
+                <?= h($s['label']) ?>
+                <?php if ($s['exam'] !== '' && $s['exam'] !== $s['label']): ?><br><span class="ex"><?= h($s['exam']) ?></span><?php endif; ?>
+            </span>
+            <?php if ($s['pending'] > 0): ?><span class="cnt pend" title="<?= (int)$s['pending'] ?> not published yet"><?= (int)$s['pending'] ?></span><?php endif; ?>
+        </a>
+        <?php endforeach; ?>
+        <?php if (!$show_cgpa): ?>
+        <small class="text-muted ms-auto" style="font-size:.74rem;">
+            <i class="fas fa-info-circle me-1"></i>CGPA is shown only in <a href="?view=all">All semesters</a>.
+        </small>
+        <?php endif; ?>
+    </div>
+</div>
+<?php endif; ?>
 
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2 no-print">
     <small class="text-muted"><i class="fas fa-lock me-1"></i>Only results published by the Controller of Examinations appear here.</small>
@@ -453,15 +521,15 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="alert alert-warning"><i class="fas fa-exclamation-triangle me-1"></i>Results are temporarily unavailable. Please try again later.</div>
 <?php endif; ?>
 
-<?php if ($pending_total > 0): ?>
+<?php if ($visible_pending > 0): ?>
 <div class="alert py-2 px-3 mb-3 d-flex align-items-center gap-2" style="background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;font-size:.85rem;">
     <i class="fas fa-hourglass-half"></i>
-    <span><strong><?= $pending_total ?></strong> registered course<?= $pending_total === 1 ? ' has' : 's have' ?> no published result yet.
+    <span><strong><?= $visible_pending ?></strong> registered course<?= $visible_pending === 1 ? ' has' : 's have' ?> no published result yet<?= $show_cgpa ? '' : ' in ' . h($sel['label']) ?>.
           If you have any urgency, please contact your course teacher.</span>
 </div>
 <?php endif; ?>
 
-<?php if ($final_cgpa !== null): ?>
+<?php if ($final_cgpa !== null && $show_cgpa): ?>
 <div class="sv-card" style="border-color:#bbf7d0;">
     <div class="sv-card-body d-flex flex-wrap align-items-center gap-3" style="background:linear-gradient(90deg,#ecfdf5,#fff);">
         <div class="sv-card-header-icon" style="background:#d1fae5;color:#047857;width:40px;height:40px;font-size:1rem;"><i class="fas fa-award"></i></div>
@@ -491,7 +559,7 @@ require_once __DIR__ . '/../includes/header.php';
 <?php endif; ?>
 
 <!-- ═══════════════ SEMESTER RESULTS ═══════════════ -->
-<?php foreach ($semesters_desc as $sem): ?>
+<?php foreach ($visible as $sem): ?>
 <div class="sv-card">
     <div class="sv-card-header">
         <div class="sv-card-header-icon" style="background:#eff6ff;color:#2563eb;"><i class="fas fa-calendar-alt"></i></div>
@@ -510,10 +578,12 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="v"><?= $sem['published'] > 0 ? mr_fmt_gpa($sem['gpa']) : '<span style="font-size:.8rem;color:#c2410c;">Pending</span>' ?></div>
                 <div class="l">Semester GPA<?= $sem['pending'] > 0 && $sem['published'] > 0 ? '*' : '' ?></div>
             </div>
+            <?php if ($show_cgpa): ?>
             <div class="box cg">
                 <div class="v"><?= $sem['published'] > 0 ? mr_fmt_gpa($sem['cgpa']) : '—' ?></div>
                 <div class="l">CGPA<?= $sem['pending'] > 0 && $sem['published'] > 0 ? '*' : '' ?></div>
             </div>
+            <?php endif; ?>
         </div>
     </div>
     <div class="table-responsive">
@@ -562,7 +632,7 @@ require_once __DIR__ . '/../includes/header.php';
 <?php endforeach; ?>
 
 <!-- ═══════════════ ARCHIVED / IMPORTED RESULTS ═══════════════ -->
-<?php if (!empty($legacy_groups)): ?>
+<?php if (!empty($legacy_groups) && $show_cgpa): ?>
 <div class="sv-card">
     <div class="sv-card-header">
         <div class="sv-card-header-icon" style="background:#faf5ff;color:#7c3aed;"><i class="fas fa-archive"></i></div>
@@ -611,7 +681,7 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="text-muted" style="font-size:.74rem;">
     <i class="fas fa-info-circle me-1"></i>
     <strong>How GPA / CGPA is calculated:</strong> Semester GPA = Σ(credit × grade point) ÷ Σ credits of graded courses in that semester.
-    CGPA is cumulative across all published semesters<?= MR_CGPA_LATEST_ATTEMPT_ONLY ? '; when a course is retaken, the latest attempt replaces the earlier grade' : '' ?>.
+    CGPA is cumulative across all published semesters, so it is shown only in the “All semesters” view<?= MR_CGPA_LATEST_ATTEMPT_ONLY ? '; when a course is retaken, the latest attempt replaces the earlier grade' : '' ?>.
     Courses marked <span class="mr-grade mr-g-incom" style="padding:1px 6px;">Incom</span> are excluded until completed.
     Courses marked <span class="mr-grade mr-g-pending" style="padding:1px 6px;">Not published yet</span> are registered courses whose results have not been released;
     they are not counted in GPA / CGPA (values marked * are provisional). If you have any urgency, please contact your course teacher.
