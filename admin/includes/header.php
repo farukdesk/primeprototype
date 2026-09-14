@@ -369,6 +369,12 @@ if (is_portal_student()) {
             </a>
         </li>
         <li class="nav-item">
+            <a href="<?= APP_URL ?>/students/my-results.php"
+               class="<?= strpos($current_path, '/students/my-results') !== false ? 'active' : '' ?>">
+                <i class="fas fa-chart-line"></i> My Results
+            </a>
+        </li>
+        <li class="nav-item">
             <a href="<?= APP_URL ?>/students/my-course-registration.php"
                class="<?= strpos($current_path, '/students/my-course-registration') !== false ? 'active' : '' ?>">
                 <i class="fas fa-book-open"></i> Course Registration
