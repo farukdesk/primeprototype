@@ -79,6 +79,12 @@ require_once __DIR__ . '/../includes/header.php';
         </ol>
     </nav>
     <div class="d-flex gap-2 flex-wrap">
+        <?php if (is_super_admin() || rm_is_staff() || wf_has_approver_role()): ?>
+        <a href="<?= APP_URL ?>/results/report.php" class="btn btn-outline-primary" style="border-radius:10px;font-size:.875rem;"
+           title="Which department / program / subject has not submitted or published results for an exam">
+            <i class="fas fa-chart-pie me-1"></i> Submission Report
+        </a>
+        <?php endif; ?>
         <?php if (wf_can_create_sheet()): ?>
         <a href="<?= APP_URL ?>/results/mark-entry.php" class="btn btn-success" style="border-radius:10px;font-size:.875rem;">
             <i class="fas fa-pen-nib me-1"></i> New Mark Sheet
