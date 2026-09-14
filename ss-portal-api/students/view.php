@@ -5,6 +5,7 @@
  * published result and the audit trail of API calls for one student.
  */
 require_once __DIR__ . '/../includes/layout.php';
+require_once __DIR__ . '/../includes/internal_data.php';
 require_once __DIR__ . '/../includes/sync.php';
 
 $user = ssp_require_login();
@@ -18,6 +19,8 @@ if ($s === null) {
 $payload  = json_decode((string)$s['payload_json'], true) ?: [];
 $response = $s['last_response_json'] ? json_decode((string)$s['last_response_json'], true) : null;
 $result   = $s['result_json'] ? json_decode((string)$s['result_json'], true) : null;
+$internal = ssp_internal_decode($s['internal_json'] ?? null);   // portal-only data, never sent to the university
+$files    = ssp_student_files($id);
 
 $st = ssp_db()->prepare('SELECT l.*, u.full_name AS user_name FROM ssp_api_log l LEFT JOIN ssp_users u ON u.id = l.user_id
                          WHERE l.student_id = ? ORDER BY l.id DESC LIMIT 20');
