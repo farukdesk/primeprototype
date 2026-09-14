@@ -52,7 +52,7 @@ function ssp_footer(): void
 
 function ssp_badge(string $status): string
 {
-    $labels = ['draft' => 'Draft', 'pending' => 'Sending…', 'synced' => 'Registered at PU', 'failed' => 'Failed'];
+    $labels = ['draft' => 'Draft', 'pending' => 'Sending…', 'synced' => 'Registered at PU', 'failed' => 'Failed', 'deleted' => 'Deleted'];
     return '<span class="badge badge-' . e($status) . '">' . e($labels[$status] ?? ucfirst($status)) . '</span>';
 }
 

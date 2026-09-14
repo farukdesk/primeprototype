@@ -16,7 +16,7 @@ $id     = (int)($_POST['id'] ?? 0);
 $result = ssp_sync_student($id, (int)$user['id']);
 
 if ($result['ok']) {
-    ssp_flash('success', $result['message'] . (empty($result['already']) ? ' University Student ID: ' . ($result['student_id'] ?? 'n/a') . '.' : ''));
+    ssp_flash('success', $result['message'] . (empty($result['already']) && !isset($result['changed_fields']) ? ' University Student ID: ' . ($result['student_id'] ?? 'n/a') . '.' : ''));
     foreach ($result['warnings'] ?? [] as $w) {
         ssp_flash('warning', 'University warning: ' . $w);
     }

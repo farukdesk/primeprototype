@@ -2,10 +2,16 @@
 /**
  * SS Portal – push local student records to Prime University.
  *
- * ssp_sync_student()   POST /students/create.php with an X-Idempotency-Key
- *                      derived from the local reference number, so retrying
- *                      after a network failure never creates a second student.
- * ssp_publish_result() POST /results/create.php for an already registered student.
+ * ssp_sync_student()    POST /students/create.php with an X-Idempotency-Key
+ *                       derived from the local reference number, so retrying
+ *                       after a network failure never creates a second student.
+ *                       Registered students with pending edits are routed to
+ *                       ssp_update_student().
+ * ssp_update_student()  POST /students/update.php – pushes the local record.
+ * ssp_delete_student()  POST /students/delete.php – permanently deletes the
+ *                       student at the university; the local record is KEPT
+ *                       and marked "deleted".
+ * ssp_publish_result()  POST /results/create.php for an already registered student.
  *
  * Every call is written to ssp_api_log for auditing.
  */
@@ -83,7 +89,13 @@ function ssp_sync_student(int $id, int $userId): array
     if ($s === null) {
         return ['ok' => false, 'message' => 'Student not found.'];
     }
+    if ($s['sync_status'] === 'deleted') {
+        return ['ok' => false, 'message' => 'This student has been deleted and cannot be sent.'];
+    }
     if ($s['sync_status'] === 'synced') {
+        if ((int)$s['pending_update'] === 1) {
+            return ssp_update_student($id, $userId);
+        }
         return ['ok' => true, 'already' => true, 'student_id' => $s['pu_student_id'],
             'message' => 'Already registered at the university as ' . $s['pu_student_id'] . '.'];
     }
@@ -149,6 +161,162 @@ function ssp_sync_student(int $id, int $userId): array
 
     return ['ok' => false, 'message' => ssp_error_summary($resp), 'errors' => $errors,
         'retryable' => PuApiClient::isRetryable($resp), 'response' => $resp];
+}
+
+/**
+ * Push the local record of a registered student to the university
+ * (POST /students/update.php).  The whole local payload is sent, so the
+ * university copy always mirrors the portal; the result block is never sent
+ * (results have their own endpoint).  The local photo is re-sent when present,
+ * otherwise the university photo is removed.
+ *
+ * @return array{ok: bool, message: string, student_id?: ?string, warnings?: array, errors?: array, retryable?: bool, response?: array, changed_fields?: array}
+ */
+function ssp_update_student(int $id, int $userId): array
+{
+    $db = ssp_db();
+    $s  = ssp_student_find($id);
+    if ($s === null) {
+        return ['ok' => false, 'message' => 'Student not found.'];
+    }
+    if ($s['sync_status'] !== 'synced' || empty($s['pu_student_id'])) {
+        return ['ok' => false, 'message' => 'The student is not registered at the university yet; use "Send to university" instead.'];
+    }
+    if (!ssp_api()->isConfigured()) {
+        return ['ok' => false, 'retryable' => true, 'message' => 'The Prime University API key is not configured (config.php → pu_api.api_key).'];
+    }
+
+    $payload = json_decode((string)$s['payload_json'], true);
+    if (!is_array($payload)) {
+        return ['ok' => false, 'message' => 'Stored payload is corrupt; edit and save the student again.'];
+    }
+    unset($payload['result'], $payload['final_result'], $payload['student_id'], $payload['new_student_id'], $payload['id']);
+
+    $photoBytes = 0;
+    $hasPhoto   = false;
+    if (!empty($s['photo_path'])) {
+        $file = ssp_photo_file((string)$s['photo_path']);
+        $mime = ssp_photo_mime($file);
+        if ($mime !== null) {
+            $bin        = (string)file_get_contents($file);
+            $photoBytes = strlen($bin);
+            $hasPhoto   = true;
+            $payload['photo_base64'] = 'data:' . $mime . ';base64,' . base64_encode($bin);
+            unset($bin);
+        }
+    }
+    if (!$hasPhoto) {
+        $payload['remove_photo'] = true;
+    }
+
+    $ident = ['student_id' => (string)$s['pu_student_id']];
+    if (!empty($s['pu_id'])) {
+        $ident = ['id' => (int)$s['pu_id']] + $ident;
+    }
+    $payload = $ident + $payload;
+
+    $resp = ssp_api()->updateStudent($payload);
+
+    $logged = $payload;
+    if (isset($logged['photo_base64'])) {
+        $logged['photo_base64'] = '[photo, ' . $photoBytes . ' bytes]';
+    }
+    ssp_api_log($id, $userId, 'v1/students/update', null, $logged, $resp);
+
+    if ($resp['ok']) {
+        $d = is_array($resp['body']['data'] ?? null) ? $resp['body']['data'] : [];
+        $db->prepare('UPDATE ssp_students
+                SET pending_update = 0, sync_attempts = sync_attempts + 1,
+                    pu_student_id = COALESCE(?, pu_student_id), pu_status = COALESCE(?, pu_status),
+                    pu_photo_url = ?, last_error = NULL, last_response_json = ?
+              WHERE id = ?')
+           ->execute([
+               isset($d['student_id']) ? (string)$d['student_id'] : null,
+               isset($d['status']) ? (string)$d['status'] : null,
+               isset($d['photo_url']) ? (string)$d['photo_url'] : null,
+               json_encode($resp['body'], JSON_UNESCAPED_UNICODE),
+               $id,
+           ]);
+        $changed = is_array($d['changed_fields'] ?? null) ? $d['changed_fields'] : [];
+        $message = $resp['message'] !== '' ? $resp['message'] : 'Student updated.';
+        if ($changed) {
+            $message .= ' Changed at the university: ' . implode(', ', $changed) . '.';
+        }
+        return ['ok' => true, 'message' => $message, 'student_id' => $d['student_id'] ?? $s['pu_student_id'],
+            'changed_fields' => $changed,
+            'warnings' => is_array($resp['body']['warnings'] ?? null) ? $resp['body']['warnings'] : [], 'response' => $resp];
+    }
+
+    $errors = is_array($resp['body']['errors'] ?? null) ? $resp['body']['errors'] : [];
+    $db->prepare('UPDATE ssp_students SET pending_update = 1, sync_attempts = sync_attempts + 1, last_error = ?, last_response_json = ? WHERE id = ?')
+       ->execute([ssp_error_summary($resp), json_encode($resp['body'], JSON_UNESCAPED_UNICODE), $id]);
+
+    return ['ok' => false, 'message' => ssp_error_summary($resp), 'errors' => $errors,
+        'retryable' => PuApiClient::isRetryable($resp), 'response' => $resp];
+}
+
+/**
+ * Delete a student.  If the student is registered at the university the record
+ * (and all its data there) is permanently removed through the API first; the
+ * local row is then KEPT and marked sync_status = 'deleted'.
+ *
+ * @return array{ok: bool, message: string, at_university?: bool, response?: array}
+ */
+function ssp_delete_student(int $id, int $userId, string $reason = ''): array
+{
+    $db = ssp_db();
+    $s  = ssp_student_find($id);
+    if ($s === null) {
+        return ['ok' => false, 'message' => 'Student not found.'];
+    }
+    if ($s['sync_status'] === 'deleted') {
+        return ['ok' => true, 'message' => 'This student was already deleted.'];
+    }
+
+    $atUniversity = $s['sync_status'] === 'synced' && !empty($s['pu_student_id']);
+    $resp         = null;
+    $puData       = null;
+
+    if ($atUniversity) {
+        if (!ssp_api()->isConfigured()) {
+            return ['ok' => false, 'message' => 'The Prime University API key is not configured (config.php → pu_api.api_key).'];
+        }
+        $payload = [
+            'student_id' => (string)$s['pu_student_id'],
+            'confirm'    => true,
+            'reason'     => mb_substr($reason !== '' ? $reason : 'Deleted from partner portal (' . $s['reference_no'] . ')', 0, 500),
+        ];
+        if (!empty($s['pu_id'])) {
+            $payload = ['id' => (int)$s['pu_id']] + $payload;
+        }
+        $resp = ssp_api()->deleteStudent($payload);
+        ssp_api_log($id, $userId, 'v1/students/delete', null, $payload, $resp);
+
+        if (!$resp['ok'] && $resp['code'] !== 'student_not_found') {
+            $db->prepare('UPDATE ssp_students SET last_error = ?, last_response_json = ? WHERE id = ?')
+               ->execute([ssp_error_summary($resp), json_encode($resp['body'], JSON_UNESCAPED_UNICODE), $id]);
+            return ['ok' => false, 'message' => 'The university refused the deletion: ' . ssp_error_summary($resp), 'response' => $resp];
+        }
+        $puData = is_array($resp['body']['data'] ?? null) ? $resp['body']['data'] : null;
+    }
+
+    $db->prepare('UPDATE ssp_students
+            SET sync_status = "deleted", pending_update = 0, deleted_at = NOW(), deleted_by = ?, delete_reason = ?,
+                last_error = NULL, last_response_json = COALESCE(?, last_response_json)
+          WHERE id = ?')
+       ->execute([$userId, $reason !== '' ? mb_substr($reason, 0, 500) : null,
+                  $resp ? json_encode($resp['body'], JSON_UNESCAPED_UNICODE) : null, $id]);
+
+    if ($atUniversity) {
+        $message = $resp['code'] === 'student_not_found'
+            ? 'The student no longer existed at the university; the local record is now marked as deleted.'
+            : 'Student permanently deleted at Prime University'
+              . ($puData ? ' (' . (int)($puData['results_deleted'] ?? 0) . ' result(s), ' . (int)($puData['qualifications_deleted'] ?? 0) . ' qualification(s) removed)' : '')
+              . '. The local record is kept and marked as deleted.';
+    } else {
+        $message = 'Student was never registered at the university; the local record is marked as deleted.';
+    }
+    return ['ok' => true, 'message' => $message, 'at_university' => $atUniversity, 'response' => $resp];
 }
 
 /**

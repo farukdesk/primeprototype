@@ -67,6 +67,17 @@ variable) and used **only from PHP on the server**; it is never sent to the brow
   are recorded and can be **retried** from the student page.
 * **Publish final result** – available once the student is registered; uses
   `POST /results/create.php` (an upsert, so re-sending the same semester is safe).
+* **Edit a registered student** – the same form; *Save and update at university* pushes the
+  whole local record with `POST /students/update.php` (the Student ID never changes). *Save
+  locally only* keeps the change in the portal and flags the record **Update pending** until it
+  is sent from the student page.
+* **Delete** (administrators only) – `POST /students/delete.php` permanently removes the student,
+  qualifications, final results, photo and files **at Prime University**; the portal record is
+  **kept** and marked **Deleted** (who, when, why). Students who were never sent are simply
+  marked deleted. The university refuses when the student has recorded payments.
+
+The partner key needs the scopes `students:create`, `students:update`, `students:delete`,
+`results:create` and `reference:read`. Existing installs: run `upgrade-1.1.sql` once.
 
 ## How duplicates are prevented
 
