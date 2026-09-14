@@ -157,7 +157,7 @@ are ignored. Alternative names shown in *italics* are accepted aliases.
 | `semester` (*admitted_semester*) | **yes** | `"<Spring|Summer|Fall> <YYYY>"` | `"Spring 2026"`, `"fall-2026"`, `"2026 Summer"` all accepted |
 | `year` | no | string ≤ 20 | academic year label, e.g. `"1st"` |
 | `semester_type` | no | `bi_semester` \| `trimester` | |
-| `batch` | no | string ≤ 50 | |
+| `batch` | no | batch name or id | **omit to let the university assign it** (recommended). The student gets the batch of the students already admitted to the same semester, department and program (falling back to the same semester in the department, then to the whole intake). A name such as `"59th"` or `"59th Batch"` is linked to the matching batch defined by the university; an unknown name is stored as text only. The response returns `batch` / `batch_id` and a warning tells you what was assigned |
 | `shift` | no | `Morning` \| `Day` \| `Evening` | |
 | `section` | no | `A`…`G` | |
 | `status` | no | see enums | defaults to the status configured for your client (normally `Not Admitted Yet`) |

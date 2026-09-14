@@ -22,7 +22,9 @@ $stmt = db()->prepare(
 $stmt->execute([$id]);
 $log = $stmt->fetch();
 
-if (!$log) {
+// Entries written by third-party API clients (admin/api/v1) are not part of the
+// staff Change Log and are never shown, even when addressed directly by id.
+if (!$log || !empty($log['api_client_id'])) {
     flash_set('error', 'Log entry not found.');
     redirect(APP_URL . '/change-log/index.php');
 }

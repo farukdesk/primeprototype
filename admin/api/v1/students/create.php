@@ -226,6 +226,8 @@ capi_ok([
         'program'           => $program ? ['id' => $program_id, 'name' => $program['program_name']] : null,
         'admitted_semester' => $admitted_sem,
         'year'              => $row['year'] ?? null,
+        'batch'             => $batch,
+        'batch_id'          => $row['batch_id'] ?? null,
         'email'             => $email !== '' ? $email : null,
         'contact_no'        => $phone !== '' ? $phone : null,
         'photo_url'         => capi_photo_url($photo_name),
