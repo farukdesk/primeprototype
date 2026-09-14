@@ -361,6 +361,129 @@ function capi_student_id_exists(string $student_id): bool
     return (bool)$stmt->fetchColumn();
 }
 
+// ── Batch ────────────────────────────────────────────────────────────────────
+// students.batch_id links to student_batches – that is what the admin panel
+// (student list filters, batch analytics, batch transfers, course offers)
+// works with.  students.batch keeps the batch name as text, exactly like the
+// admin "Add New Student" form fills both when a batch is picked.
+
+/** Active batches: id, name (same list as the admin form). */
+function capi_batches(): array
+{
+    static $rows = null;
+    if ($rows === null) {
+        try {
+            $rows = db()->query(
+                'SELECT id, name FROM student_batches WHERE is_active = 1 ORDER BY sort_order, name ASC'
+            )->fetchAll();
+        } catch (Throwable $e) {
+            error_log('capi_batches: ' . $e->getMessage());
+            $rows = [];
+        }
+    }
+    return $rows;
+}
+
+/**
+ * Resolve a batch sent by the caller to an active student_batches row.
+ * Accepts the exact name, a loose spelling ("59", "59th", "59th Batch",
+ * "Batch-59" all match "59th Batch") or, as a last resort, the numeric id.
+ */
+function capi_resolve_batch(mixed $input): ?array
+{
+    if ($input === null || is_array($input)) {
+        return null;
+    }
+    $needle = trim((string)$input);
+    if ($needle === '') {
+        return null;
+    }
+
+    // "59th Batch" → "59th" → "59"; "Batch-59" → "59"
+    $norm = static function (string $s): string {
+        $s = preg_replace('/[^a-z0-9]/', '', strtolower($s));
+        $s = str_replace('batch', '', $s);
+        return preg_replace('/^(\d+)(st|nd|rd|th)$/', '$1', $s);
+    };
+
+    $batches = capi_batches();
+    foreach ($batches as $b) {                       // 1. exact name
+        if (strcasecmp((string)$b['name'], $needle) === 0) {
+            return $b;
+        }
+    }
+    $key = $norm($needle);
+    if ($key !== '') {
+        foreach ($batches as $b) {                   // 2. loose spelling
+            if ($norm((string)$b['name']) === $key) {
+                return $b;
+            }
+        }
+    }
+    if (ctype_digit($needle)) {
+        foreach ($batches as $b) {                   // 3. numeric id
+            if ((int)$b['id'] === (int)$needle) {
+                return $b;
+            }
+        }
+    }
+    return null;
+}
+
+/**
+ * Work out the batch for a new student from the students already admitted
+ * with them – the way staff would.  Scopes are tried in order:
+ *
+ *   1. same admission cohort (admitted_semester + dept_id + program_id)
+ *   2. same admitted semester in the same department
+ *   3. the whole intake (same admitted semester, any department)
+ *
+ * Within a scope the most used active batch wins; ties go to the batch of the
+ * most recently added student.  Returns null when nobody admitted in that
+ * semester has a batch yet (the admin then sets it in the panel).
+ *
+ * @return ?array{batch_id:int,batch:string,scope:string}
+ */
+function capi_infer_batch(string $admitted_semester, int $dept_id, int $program_id = 0): ?array
+{
+    $admitted_semester = trim($admitted_semester);
+    if ($admitted_semester === '' || $dept_id <= 0) {
+        return null;
+    }
+
+    $scopes = [
+        [
+            'same semester, department and program',
+            's.admitted_semester = ? AND s.dept_id = ? AND ' . ($program_id > 0 ? 's.program_id = ?' : '(s.program_id IS NULL OR s.program_id = 0)'),
+            $program_id > 0 ? [$admitted_semester, $dept_id, $program_id] : [$admitted_semester, $dept_id],
+        ],
+        ['same semester and department', 's.admitted_semester = ? AND s.dept_id = ?', [$admitted_semester, $dept_id]],
+        ['same admitted semester',        's.admitted_semester = ?',                    [$admitted_semester]],
+    ];
+
+    try {
+        foreach ($scopes as [$label, $cond, $params]) {
+            $stmt = db()->prepare(
+                'SELECT s.batch_id, b.name, COUNT(*) AS n, MAX(s.id) AS newest
+                   FROM students s
+                   JOIN student_batches b ON b.id = s.batch_id AND b.is_active = 1
+                  WHERE ' . $cond . '
+                  GROUP BY s.batch_id, b.name
+                  ORDER BY n DESC, newest DESC
+                  LIMIT 1'
+            );
+            $stmt->execute($params);
+            $row = $stmt->fetch();
+            if ($row) {
+                return ['batch_id' => (int)$row['batch_id'], 'batch' => (string)$row['name'], 'scope' => $label];
+            }
+        }
+    } catch (Throwable $e) {
+        error_log('capi_infer_batch: ' . $e->getMessage());
+    }
+    return null;
+}
+
 // ── Photo handling ───────────────────────────────────────────────────────────
 // Validation and storage are split so nothing is written to disk until the
 // whole request has passed validation.

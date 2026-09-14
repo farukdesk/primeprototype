@@ -261,8 +261,8 @@ function capi_result_persist(array $d, array $client, bool $own_transaction = tr
             $status = 'Graduated';
         }
 
-        // Audit trail, same shape the admin import writes (always recorded, even
-        // when the API client has no created_by user – see capi_log_change()).
+        // capi_log_change() is a no-op: partner changes are audited in
+        // api_client_requests and never reach the admin Change Log.
         capi_log_change(
             $client,
             'UPDATE',

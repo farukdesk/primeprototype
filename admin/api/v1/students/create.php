@@ -196,7 +196,9 @@ try {
     capi_error(500, 'server_error', 'The student could not be saved. Please retry; if the problem persists contact the university IT office.');
 }
 
-// ── Audit trail (same table the admin panel uses) ────────────────────────────────────────
+// ── Audit ──────────────────────────────────────────────────────────────────────────────────
+// Partner activity is recorded in api_client_requests (student_db_id below).
+// capi_log_change() is a no-op: nothing from the API reaches the admin Change Log.
 
 $GLOBALS['CAPI']['student_db_id'] = $new_id;
 capi_log_change(
@@ -226,6 +228,8 @@ capi_ok([
         'program'           => $program ? ['id' => $program_id, 'name' => $program['program_name']] : null,
         'admitted_semester' => $admitted_sem,
         'year'              => $row['year'] ?? null,
+        'batch'             => $batch,
+        'batch_id'          => $row['batch_id'] ?? null,
         'email'             => $email !== '' ? $email : null,
         'contact_no'        => $phone !== '' ? $phone : null,
         'photo_url'         => capi_photo_url($photo_name),

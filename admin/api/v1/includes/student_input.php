@@ -307,6 +307,36 @@ function capi_student_validate(array $in, array $client, ?array $existing = null
         $row[$col] = $v !== '' ? $v : null;
     }
 
+    // ── Batch: link to student_batches like the admin form; auto-assign on create ──
+    // A batch sent by the caller is matched against the batches defined at the
+    // university so students.batch_id is set (free text is kept as text only).
+    // When nothing is sent, a NEW student inherits the batch of the students
+    // already admitted with them – see capi_infer_batch().
+    if (!$partial || $has($in, ['batch'])) {
+        $batch_row = capi_resolve_batch($row['batch'] ?? null);
+        if ($batch_row !== null) {
+            $row['batch_id'] = (int)$batch_row['id'];
+            $row['batch']    = (string)$batch_row['name'];
+        } else {
+            $row['batch_id'] = null;
+            if (($row['batch'] ?? null) !== null) {
+                $warnings[] = 'batch "' . $row['batch'] . '" does not match any batch defined at the university; it was stored as text only.';
+            }
+        }
+    }
+    if (!$partial && ($row['batch_id'] ?? null) === null && ($row['batch'] ?? null) === null
+        && $dept_id > 0 && isset($row['admitted_semester'])) {
+        $inferred = capi_infer_batch($row['admitted_semester'], $dept_id, $program_id);
+        if ($inferred !== null) {
+            $row['batch_id'] = $inferred['batch_id'];
+            $row['batch']    = $inferred['batch'];
+            $warnings[]      = 'Batch "' . $inferred['batch'] . '" was assigned automatically (' . $inferred['scope'] . ').';
+        } else {
+            $warnings[]      = 'No batch could be assigned automatically: no student admitted in ' . $row['admitted_semester']
+                . ' has a batch yet. The university admin can set it in the admin panel.';
+        }
+    }
+
     if (!$partial || $has($in, ['country'])) {
         $row['country'] = $pick($in, ['country'], 100, 'country') ?: 'Bangladesh';
     }
