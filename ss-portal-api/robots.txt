@@ -1,0 +1,3 @@
+# SS Portal is a private partner application. Do not index anything.
+User-agent: *
+Disallow: /
