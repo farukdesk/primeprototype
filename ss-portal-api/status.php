@@ -27,14 +27,39 @@ $logs = ssp_db()->query('SELECT l.*, s.reference_no, s.full_name
                            FROM ssp_api_log l LEFT JOIN ssp_students s ON s.id = l.student_id
                           ORDER BY l.id DESC LIMIT 25')->fetchAll();
 
+if (!$api->isConfigured()) {
+    $connState = 'is-bad';
+    $connIcon  = 'x-circle';
+    $connTitle = 'Not configured';
+    $connText  = 'Set the partner API key in config.php (or the PU_API_KEY environment variable). Students can be saved as drafts but not sent.';
+} elseif ($ref['error'] !== null) {
+    $connState = $data ? 'is-warn' : 'is-bad';
+    $connIcon  = $data ? 'alert-triangle' : 'x-circle';
+    $connTitle = $data ? 'Using cached reference data' : 'Connection failed';
+    $connText  = 'Last error: ' . $ref['error'] . ($data && $ref['fetched_at'] ? ' · cache from ' . ssp_date_human($ref['fetched_at']) : '');
+} else {
+    $connState = 'is-ok';
+    $connIcon  = 'check-circle';
+    $connTitle = 'Connected to Prime University';
+    $connText  = 'Reference data fetched ' . ($ref['fetched_at'] ? ssp_date_human($ref['fetched_at']) : 'just now') . ' · ' . count($data['departments'] ?? []) . ' departments available.';
+}
+
 ssp_header('Connection', $user);
 ?>
 <div class="page-head">
-  <h1>University connection</h1>
+  <div>
+    <h1>University connection</h1>
+    <p class="page-sub">The API key is used only from this server and never sent to the browser.</p>
+  </div>
   <form method="post" action="<?= e(ssp_url('status.php')) ?>">
     <?= ssp_csrf_field() ?>
-    <button type="submit" class="btn btn-primary"<?= $api->isConfigured() ? '' : ' disabled' ?>>Test connection &amp; refresh reference data</button>
+    <button type="submit" class="btn btn-primary"<?= $api->isConfigured() ? '' : ' disabled title="API key not configured"' ?>><?= ssp_icon('refresh') ?> Test connection &amp; refresh reference data</button>
   </form>
+</div>
+
+<div class="card conn-hero <?= e($connState) ?>">
+  <div class="conn-icon"><?= ssp_icon($connIcon) ?></div>
+  <div class="grow"><h2><?= e($connTitle) ?></h2><p class="muted" style="margin:2px 0 0"><?= e($connText) ?></p></div>
 </div>
 
 <div class="grid-2">
