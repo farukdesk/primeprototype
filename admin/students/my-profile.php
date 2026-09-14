@@ -351,6 +351,7 @@ $statusChipClass = match($student['status'] ?? '') {
     <?php if (!empty($results)): ?>
     <a href="#sv-results"><i class="fas fa-chart-bar me-1"></i>Results</a>
     <?php endif; ?>
+    <a href="<?= APP_URL ?>/students/my-results.php" style="border-color:#93c5fd;color:#1d4ed8;background:#eff6ff;"><i class="fas fa-chart-line me-1"></i>My Results &amp; CGPA</a>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════
