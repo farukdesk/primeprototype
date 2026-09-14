@@ -8,7 +8,7 @@
  *   Issue a key:
  *     php admin/api/v1/bin/create-client.php \
  *         --name="Partner Admission CRM" \
- *         [--scopes=students:create,reference:read] \
+ *         [--scopes=students:create,students:update,students:delete,results:create,reference:read] \
  *         [--ips=203.0.113.10,198.51.100.0/24] \
  *         [--rate=60] \
  *         [--expires=2027-12-31] \
@@ -95,7 +95,7 @@ try {
         $fail('--name is required.');
     }
 
-    $scopes = trim((string)($opts['scopes'] ?? 'students:create,results:create,reference:read'));
+    $scopes = trim((string)($opts['scopes'] ?? 'students:create,students:update,students:delete,results:create,reference:read'));
     $scopes = implode(',', array_filter(array_map('trim', explode(',', $scopes))));
     if ($scopes === '') {
         $fail('--scopes cannot be empty.');
