@@ -1,8 +1,8 @@
 <?php
 /**
  * SS Portal – students/view.php
- * Local record, registration status at Prime University, last response,
- * published result and the audit trail of API calls for one student.
+ * One student: progress at Prime University, local record, internal
+ * (portal-only) data and the audit trail of API calls.
  */
 require_once __DIR__ . '/../includes/layout.php';
 require_once __DIR__ . '/../includes/internal_data.php';
@@ -27,12 +27,13 @@ $st = ssp_db()->prepare('SELECT l.*, u.full_name AS user_name FROM ssp_api_log l
 $st->execute([$id]);
 $logs = $st->fetchAll();
 
-$isDeleted     = $s['sync_status'] === 'deleted';
-$isSynced      = $s['sync_status'] === 'synced';
-$pendingUpdate = $isSynced && (int)$s['pending_update'] === 1;
-$canEdit       = !$isDeleted;
-$canSend       = !$isDeleted && (!$isSynced || $pendingUpdate) && ssp_api()->isConfigured();
-$canDelete     = !$isDeleted && $user['role'] === 'admin';
+$isDeleted      = $s['sync_status'] === 'deleted';
+$isSynced       = $s['sync_status'] === 'synced';
+$pendingUpdate  = $isSynced && (int)$s['pending_update'] === 1;
+$needsStudentId = $s['sync_status'] === 'draft' && (($response['code'] ?? '') === 'student_id_pattern_not_found');
+$canEdit        = !$isDeleted;
+$canSend        = !$isDeleted && (!$isSynced || $pendingUpdate) && ssp_api()->isConfigured();
+$canDelete      = !$isDeleted && $user['role'] === 'admin';
 
 $deletedBy = null;
 if ($isDeleted && !empty($s['deleted_by'])) {
@@ -41,50 +42,110 @@ if ($isDeleted && !empty($s['deleted_by'])) {
     $deletedBy = $q->fetchColumn() ?: null;
 }
 
+$sendLabel = $sendConfirm = '';
 if ($canSend) {
-    $sendLabel = $s['sync_status'] === 'failed' ? 'Retry sending' : ($pendingUpdate ? 'Send update to university' : 'Send to university');
+    $sendLabel   = $s['sync_status'] === 'failed' ? 'Retry sending' : ($pendingUpdate ? 'Send update to university' : 'Send to university');
     $sendConfirm = $pendingUpdate ? 'Update this student\'s record at Prime University now?' : 'Send this student to Prime University now?';
 }
 
+// ── Progress steps (saved → sent → registered → result) ──
+$attempts = (int)$s['sync_attempts'];
+if ($isSynced) {
+    $sent = 'done';
+    $sentMeta = 'Accepted ' . ssp_date_human($s['synced_at']);
+} elseif ($s['sync_status'] === 'pending') {
+    $sent = 'current';
+    $sentMeta = 'Sending…';
+} elseif ($s['sync_status'] === 'failed') {
+    $sent = 'failed';
+    $sentMeta = 'Failed · ' . $attempts . ' attempt' . ($attempts === 1 ? '' : 's');
+} elseif ($needsStudentId) {
+    $sent = 'failed';
+    $sentMeta = 'Student ID needed from the admin office';
+} else {
+    $sent = 'current';
+    $sentMeta = 'Next step';
+}
+$steps = [
+    ['Saved in portal', 'done', ssp_date_human($s['created_at'])],
+    ['Sent to university', $sent, $sentMeta],
+    ['Registered at PU', $isSynced ? ($pendingUpdate ? 'current' : 'done') : 'todo', $isSynced ? ($pendingUpdate ? 'Local changes not sent yet' : 'Student ID ' . $s['pu_student_id']) : 'After sending'],
+    ['Result published', $s['pu_result_id'] ? 'done' : 'todo', $s['pu_result_id'] ? 'CGPA ' . ($result['cgpa'] ?? '') : ($isSynced ? 'Optional' : 'After registration')],
+];
+
+$meta = array_filter([
+    $s['department_label'] ?? $payload['department'] ?? null,
+    $s['program_label'] ?? $payload['program'] ?? null,
+    $payload['semester'] ?? null,
+]);
+
 ssp_header($s['full_name'], $user);
 ?>
-<div class="page-head">
-  <div>
-    <h1><?= e($s['full_name']) ?> <?= ssp_badge($s['sync_status']) ?><?= $pendingUpdate ? ' <span class="badge badge-pending">Update pending</span>' : '' ?></h1>
-    <p class="muted">Reference <code><?= e($s['reference_no']) ?></code> · created <?= e(ssp_date_human($s['created_at'])) ?></p>
-  </div>
-  <div class="btn-group">
-    <?php if ($canSend): ?>
-    <form method="post" action="<?= e(ssp_url('students/sync.php')) ?>">
-      <?= ssp_csrf_field() ?><input type="hidden" name="id" value="<?= $id ?>">
-      <button type="submit" class="btn btn-primary" data-confirm="<?= e($sendConfirm) ?>"><?= e($sendLabel) ?></button>
-    </form>
+<p class="crumbs"><a href="<?= e(ssp_url('dashboard.php')) ?>"><?= ssp_icon('arrow-left') ?> Students</a></p>
+
+<div class="card hero">
+  <div class="hero-main">
+    <?php if ($s['photo_path']): ?>
+      <img class="avatar avatar-lg" src="<?= e(ssp_url('students/photo.php?id=' . $id)) ?>" alt="">
+    <?php else: ?>
+      <span class="avatar avatar-lg" aria-hidden="true"><?= e(ssp_initials((string)$s['full_name'])) ?></span>
     <?php endif; ?>
-    <?php if ($canEdit): ?><a class="btn" href="<?= e(ssp_url('students/create.php?id=' . $id)) ?>">Edit</a><?php endif; ?>
-    <?php if ($isSynced): ?><a class="btn" href="<?= e(ssp_url('students/result.php?id=' . $id)) ?>"><?= $s['pu_result_id'] ? 'Update final result' : 'Publish final result' ?></a><?php endif; ?>
-    <?php if ($canDelete): ?><a class="btn btn-danger-outline" href="<?= e(ssp_url('students/delete.php?id=' . $id)) ?>">Delete…</a><?php endif; ?>
-    <a class="btn btn-ghost" href="<?= e(ssp_url('dashboard.php')) ?>">← Students</a>
+    <div>
+      <div class="hero-title"><h1><?= e($s['full_name']) ?></h1><?= ssp_badge($s['sync_status']) ?><?= $pendingUpdate ? ssp_badge('update_pending') : '' ?></div>
+      <p class="hero-meta"><code><?= e($s['reference_no']) ?></code><?= $meta ? ' · ' . e(implode(' · ', $meta)) : '' ?> · created <?= e(ssp_date_human($s['created_at'])) ?></p>
+    </div>
+  </div>
+  <div class="hero-side">
+    <?php if ($s['pu_student_id']): ?>
+      <div class="kpi"><small>University Student ID</small><strong class="<?= $isDeleted ? 'strike' : '' ?>"><?= e($s['pu_student_id']) ?></strong></div>
+    <?php endif; ?>
+    <div class="btn-group">
+      <?php if ($canSend): ?>
+      <form method="post" action="<?= e(ssp_url('students/sync.php')) ?>">
+        <?= ssp_csrf_field() ?><input type="hidden" name="id" value="<?= $id ?>">
+        <button type="submit" class="btn btn-primary" data-confirm="<?= e($sendConfirm) ?>"><?= ssp_icon('send') ?> <?= e($sendLabel) ?></button>
+      </form>
+      <?php endif; ?>
+      <?php if ($canEdit): ?><a class="btn" href="<?= e(ssp_url('students/create.php?id=' . $id)) ?>"><?= ssp_icon('pencil') ?> Edit</a><?php endif; ?>
+      <?php if ($isSynced): ?><a class="btn" href="<?= e(ssp_url('students/result.php?id=' . $id)) ?>"><?= ssp_icon('award') ?> <?= $s['pu_result_id'] ? 'Update result' : 'Publish result' ?></a><?php endif; ?>
+      <?php if ($canDelete): ?><a class="btn btn-danger-outline" href="<?= e(ssp_url('students/delete.php?id=' . $id)) ?>"><?= ssp_icon('trash') ?> Delete</a><?php endif; ?>
+    </div>
   </div>
 </div>
 
-<?php if ($isDeleted): ?>
-  <div class="flash flash-error"><strong>Deleted</strong> on <?= e(ssp_date_human($s['deleted_at'])) ?><?= $deletedBy ? ' by ' . e($deletedBy) : '' ?>.
-    <?= $s['pu_student_id'] ? 'The student and all their data were permanently removed from Prime University (former Student ID ' . e($s['pu_student_id']) . ').' : 'The student was never registered at the university.' ?>
-    <?= $s['delete_reason'] ? '<br>Reason: ' . e($s['delete_reason']) : '' ?>
-    <br><small>This record is kept in the portal for history only and cannot be edited or sent.</small></div>
-<?php elseif ($s['sync_status'] === 'failed' && $s['last_error']): ?>
-  <div class="flash flash-error"><strong>Last attempt failed:</strong> <?= e($s['last_error']) ?></div>
-<?php elseif ($pendingUpdate): ?>
-  <div class="flash flash-warning"><strong>Local changes not yet at the university.</strong> Click <strong>Send update to university</strong> to push them.<?= $s['last_error'] ? '<br>Last attempt failed: ' . e($s['last_error']) : '' ?></div>
-<?php elseif ($s['sync_status'] === 'draft' && (($response['code'] ?? '') === 'student_id_pattern_not_found')): ?>
-  <div class="flash flash-warning"><strong>Student ID required – please contact the university admin.</strong>
-    Prime University has no Student ID numbering yet for this semester / department / program and does not create one on its own, so the student was <strong>not</strong> created there (kept here as a draft).
-    Ask the Prime University admin office for the Student ID, then <a href="<?= e(ssp_url('students/create.php?id=' . $id)) ?>">edit this student</a>, enter it in <strong>University Student ID</strong> and click <strong>Save and send to university</strong>.
-    <?= !empty($payload['student_id']) ? '<br>Student ID currently entered: <code>' . e($payload['student_id']) . '</code> – click <strong>Send to university</strong> to create the student with it.' : '' ?></div>
-<?php elseif ($s['sync_status'] === 'draft'): ?>
-  <div class="flash flash-info">This student exists only in this portal. Click <strong>Send to university</strong> to register them at Prime University.</div>
+<?php if (!$isDeleted): ?>
+<ol class="steps" aria-label="Progress">
+  <?php foreach ($steps as [$label, $state, $stepMeta]): ?>
+  <li class="step <?= e($state) ?>"><strong><?= e($label) ?></strong><small><?= e($stepMeta) ?></small></li>
+  <?php endforeach; ?>
+</ol>
 <?php endif; ?>
 
+<?php if ($isDeleted): ?>
+  <?= ssp_alert('error', '<strong>Deleted</strong> on ' . e(ssp_date_human($s['deleted_at'])) . ($deletedBy ? ' by ' . e($deletedBy) : '') . '. '
+      . ($s['pu_student_id'] ? 'The student and all their data were permanently removed from Prime University (former Student ID ' . e($s['pu_student_id']) . ').' : 'The student was never registered at the university.')
+      . ($s['delete_reason'] ? '<br>Reason: ' . e($s['delete_reason']) : '')
+      . '<br><small>This record is kept in the portal for history only and cannot be edited or sent.</small>', false) ?>
+<?php elseif ($s['sync_status'] === 'failed' && $s['last_error']): ?>
+  <?= ssp_alert('error', '<strong>Last attempt failed:</strong> ' . e($s['last_error']) . ($canSend ? ' Use <strong>Retry sending</strong> above, or <a href="' . e(ssp_url('students/create.php?id=' . $id)) . '">edit the student</a> first.' : ''), false) ?>
+<?php elseif ($pendingUpdate): ?>
+  <?= ssp_alert('warning', '<strong>Local changes are not at the university yet.</strong> Click <strong>Send update to university</strong> to push them.' . ($s['last_error'] ? '<br>Last attempt failed: ' . e($s['last_error']) : ''), false) ?>
+<?php elseif ($needsStudentId): ?>
+  <?= ssp_alert('warning', '<strong>Student ID required – please contact the university admin.</strong> '
+      . 'Prime University has no Student ID numbering yet for this semester / department / program and does not create one on its own, so the student was <strong>not</strong> created there (kept here as a draft). '
+      . 'Ask the Prime University admin office for the Student ID, then <a href="' . e(ssp_url('students/create.php?id=' . $id)) . '">edit this student</a>, enter it in <strong>University Student ID</strong> and click <strong>Save and send to university</strong>.'
+      . (!empty($payload['student_id']) ? '<br>Student ID currently entered: <code>' . e($payload['student_id']) . '</code> – click <strong>Send to university</strong> to create the student with it.' : ''), false) ?>
+<?php elseif ($s['sync_status'] === 'draft'): ?>
+  <?= ssp_alert('info', 'This student exists only in this portal. Click <strong>Send to university</strong> to register them at Prime University.', false) ?>
+<?php endif; ?>
+
+<div class="tabs" role="tablist" aria-label="Student details">
+  <button type="button" class="tab" role="tab" id="tabbtn-overview" aria-controls="tab-overview" aria-selected="true">Overview</button>
+  <button type="button" class="tab" role="tab" id="tabbtn-internal" aria-controls="tab-internal" aria-selected="false">Internal <span class="count"><?= count($files) ?></span></button>
+  <button type="button" class="tab" role="tab" id="tabbtn-log" aria-controls="tab-log" aria-selected="false">API calls <span class="count"><?= count($logs) ?></span></button>
+</div>
+
+<div class="tab-panel" id="tab-overview" role="tabpanel" aria-labelledby="tabbtn-overview">
 <div class="grid-2">
   <div class="card">
     <h2>Prime University</h2>
@@ -94,7 +155,7 @@ ssp_header($s['full_name'], $user);
       <dt>Internal id</dt><dd><?= (int)$s['pu_id'] ?></dd>
       <dt>Status</dt><dd><?= e($s['pu_status'] ?? '—') ?></dd>
       <dt>Registered</dt><dd><?= e(ssp_date_human($s['synced_at'])) ?></dd>
-      <?php if ($s['pu_photo_url']): ?><dt>Photo</dt><dd><a href="<?= e($s['pu_photo_url']) ?>" target="_blank" rel="noopener">View on university server</a></dd><?php endif; ?>
+      <?php if ($s['pu_photo_url']): ?><dt>Photo</dt><dd><a href="<?= e($s['pu_photo_url']) ?>" target="_blank" rel="noopener">View on university server <?= ssp_icon('external') ?></a></dd><?php endif; ?>
       <?php if (!empty($response['warnings'])): ?>
       <dt>Warnings</dt><dd><ul class="plain"><?php foreach ($response['warnings'] as $w): ?><li class="warn"><?= e($w) ?></li><?php endforeach; ?></ul></dd>
       <?php endif; ?>
@@ -117,6 +178,7 @@ ssp_header($s['full_name'], $user);
     <p class="muted">Not registered yet. Attempts: <?= (int)$s['sync_attempts'] ?>.</p>
     <p class="muted">Idempotency key: <code><?= e(ssp_student_idempotency_key($s)) ?></code><br><small>Retrying with the same key can never create a duplicate student.</small></p>
     <?php endif; ?>
+    <?php if ($response): ?><details><summary>Last API response</summary><pre class="code"><?= e(ssp_json_pretty($response)) ?></pre></details><?php endif; ?>
   </div>
 
   <div class="card">
@@ -137,12 +199,16 @@ ssp_header($s['full_name'], $user);
       </dl>
     </div>
     <details><summary>Payload sent to the API (JSON)</summary><pre class="code"><?= e(ssp_json_pretty($payload)) ?></pre></details>
-    <?php if ($response): ?><details><summary>Last API response</summary><pre class="code"><?= e(ssp_json_pretty($response)) ?></pre></details><?php endif; ?>
   </div>
 </div>
+</div>
 
+<div class="tab-panel" id="tab-internal" role="tabpanel" aria-labelledby="tabbtn-internal">
 <div class="card">
-  <h2>Internal <small class="muted">(portal only – never sent to the university)</small></h2>
+  <div class="section-head">
+    <div><h2>Internal</h2><p class="muted" style="margin:0">Portal only – never sent to the university.</p></div>
+    <?php if ($canEdit): ?><a class="btn btn-sm" href="<?= e(ssp_url('students/create.php?id=' . $id . '#sec-internal')) ?>"><?= ssp_icon('pencil') ?> Edit</a><?php endif; ?>
+  </div>
   <div class="grid-2">
     <dl class="dl">
       <?php foreach (SSP_INTERNAL_FLAGS as $k => $label): ?>
@@ -154,21 +220,23 @@ ssp_header($s['full_name'], $user);
     <div>
       <h3 style="margin-top:0">Documents (<?= count($files) ?>)</h3>
       <?php if (!$files): ?>
-      <p class="muted">No documents uploaded.<?= $canEdit ? ' <a href="' . e(ssp_url('students/create.php?id=' . $id)) . '">Edit</a> the student to upload.' : '' ?></p>
+      <p class="muted">No documents uploaded.<?= $canEdit ? ' <a href="' . e(ssp_url('students/create.php?id=' . $id . '#sec-internal')) . '">Edit</a> the student to upload.' : '' ?></p>
       <?php else: ?>
       <ul class="file-list">
         <?php foreach ($files as $f): ?>
-        <li><span class="badge badge-draft"><?= e(SSP_FILE_KINDS[$f['kind']] ?? $f['kind']) ?></span>
+        <li><span class="badge badge-plain"><?= e(SSP_FILE_KINDS[$f['kind']] ?? $f['kind']) ?></span>
           <a href="<?= e(ssp_url('students/file.php?id=' . (int)$f['id'])) ?>" target="_blank" rel="noopener"><?= e($f['original_name']) ?></a>
           <small class="muted"><?= e(ssp_file_size_human((int)$f['size_bytes'])) ?> · <?= e(ssp_date_human($f['created_at'])) ?><?= $f['uploaded_by_name'] ? ' · ' . e($f['uploaded_by_name']) : '' ?></small>
-          <a class="muted" href="<?= e(ssp_url('students/file.php?id=' . (int)$f['id'] . '&download=1')) ?>" title="Download">⬇</a></li>
+          <a class="btn btn-ghost btn-sm btn-icon" href="<?= e(ssp_url('students/file.php?id=' . (int)$f['id'] . '&download=1')) ?>" title="Download" aria-label="Download <?= e($f['original_name']) ?>"><?= ssp_icon('download') ?></a></li>
         <?php endforeach; ?>
       </ul>
       <?php endif; ?>
     </div>
   </div>
 </div>
+</div>
 
+<div class="tab-panel" id="tab-log" role="tabpanel" aria-labelledby="tabbtn-log">
 <div class="card table-card">
   <h2>API calls for this student</h2>
   <table class="table">
@@ -189,5 +257,6 @@ ssp_header($s['full_name'], $user);
     <?php endforeach; ?>
     </tbody>
   </table>
+</div>
 </div>
 <?php ssp_footer();

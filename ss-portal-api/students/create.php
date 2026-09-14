@@ -205,7 +205,7 @@ $renderQualRow = static function ($i) use ($form, $errors): void {
     ssp_input($p . 'year_of_passing', 'Passing year', $form, $errors, ['placeholder' => '2024', 'maxlength' => 4]);
     ssp_input($p . 'division_grade', 'Division / Grade', $form, $errors, ['placeholder' => 'A+', 'maxlength' => 50]);
     ssp_input($p . 'obtained_marks_cgpa', 'Marks / GPA', $form, $errors, ['placeholder' => '5.00', 'maxlength' => 50]);
-    echo '<button type="button" class="btn btn-ghost btn-remove-row" title="Remove this row">✕</button>';
+    echo '<button type="button" class="btn btn-ghost btn-remove-row" title="Remove this row" aria-label="Remove this row">', ssp_icon('x'), '</button>';
     echo '</div>';
 };
 
@@ -222,13 +222,14 @@ $renderFileSlot = static function (string $kind, string $label) use ($filesByKin
     if (!empty($filesByKind[$kind])) {
         echo '<ul class="file-list">';
         foreach ($filesByKind[$kind] as $f) {
-            echo '<li><a href="', e(ssp_url('students/file.php?id=' . (int)$f['id'])), '" target="_blank" rel="noopener">', e($f['original_name']), '</a>',
+            echo '<li>', ssp_icon('file'), '<a href="', e(ssp_url('students/file.php?id=' . (int)$f['id'])), '" target="_blank" rel="noopener">', e($f['original_name']), '</a>',
                  ' <small class="muted">', e(ssp_file_size_human((int)$f['size_bytes'])), '</small>',
                  ' <label class="check inline"><input type="checkbox" name="remove_files[]" value="', (int)$f['id'], '"> remove</label></li>';
         }
         echo '</ul>';
     }
     echo '<input type="file" id="', e($id), '" name="files[', e($kind), '][]" multiple accept="', e(SSP_FILE_ACCEPT), '">';
+    echo '<small class="file-chosen"></small>';
     if ($err !== '') {
         echo '<small class="error">', e($err), '</small>';
     }
@@ -236,179 +237,227 @@ $renderFileSlot = static function (string $kind, string $label) use ($filesByKin
 };
 $fileMaxMb = round(ssp_file_max_bytes() / 1048576, 1);
 
-$title = $existing ? 'Edit student ' . $existing['reference_no'] : 'New student';
+// ── Section navigation: labels, descriptions and error counts per section ───────────────────────────────
+$sections = [
+    'enrollment'     => ['Enrollment', 'Department, program and admitted semester'],
+    'student'        => ['Student & parents', 'Personal details, contacts and parents'],
+    'guardian'       => ['Guardian', 'Optional'],
+    'qualifications' => ['Academic qualifications', 'SSC, HSC and other examinations'],
+    'photo'          => ['Photo', 'Sent to the university with the record'],
+    'internal'       => ['Internal', 'Portal only – never sent to the university'],
+    'result'         => ['Final result', $isSynced ? 'Managed from the student page' : 'Optional – sent in the same call'],
+];
+$enrollmentKeys = ['department', 'program', 'semester', 'student_id', 'year', 'batch', 'semester_type', 'shift', 'section', 'status'];
+$sectionOf = static function (string $key) use ($enrollmentKeys): string {
+    if (strpos($key, 'guardian.') === 0) {
+        return 'guardian';
+    }
+    if (strpos($key, 'academic_qualifications') === 0) {
+        return 'qualifications';
+    }
+    if ($key === 'photo') {
+        return 'photo';
+    }
+    if (strpos($key, 'internal.') === 0 || strpos($key, 'files') === 0) {
+        return 'internal';
+    }
+    if (strpos($key, 'result') === 0) {
+        return 'result';
+    }
+    return in_array($key, $enrollmentKeys, true) ? 'enrollment' : 'student';
+};
+$sectionErrors = [];
+foreach (array_keys($errors) as $k) {
+    if ($k !== '_form') {
+        $sec = $sectionOf((string)$k);
+        $sectionErrors[$sec] = ($sectionErrors[$sec] ?? 0) + 1;
+    }
+}
+$sectionNo   = 0;
+$sectionHead = static function (string $key, string $extraHtml = '') use ($sections, &$sectionNo): void {
+    $sectionNo++;
+    echo '<div class="section-head"><div class="section-title"><span class="num" aria-hidden="true">', $sectionNo, '</span><div><h2>', e($sections[$key][0]), '</h2><p>', e($sections[$key][1]), '</p></div></div>', $extraHtml, '</div>';
+};
+
+$title = $existing ? 'Edit student' : 'New student';
 ssp_header($title, $user);
 ?>
+<p class="crumbs"><a href="<?= e(ssp_url($existing ? 'students/view.php?id=' . $editId : 'dashboard.php')) ?>"><?= ssp_icon('arrow-left') ?> <?= $existing ? 'Back to student' : 'Students' ?></a></p>
 <div class="page-head">
   <div>
-    <h1><?= e($title) ?></h1>
-    <?php if ($isSynced): ?><p class="muted">Registered at Prime University as <strong><?= e($existing['pu_student_id']) ?></strong>. Changes are sent with <code>students/update.php</code>; the Student ID stays the same.</p><?php endif; ?>
+    <h1><?= e($title) ?><?php if ($existing): ?> <code><?= e($existing['reference_no']) ?></code><?php endif; ?></h1>
+    <p class="page-sub"><?php if ($isSynced): ?>Registered at Prime University as <strong><?= e($existing['pu_student_id']) ?></strong>. Changes are sent with <code>students/update.php</code>; the Student ID stays the same.<?php else: ?>Fields marked <span class="req">*</span> are required. Everything is saved in this portal first; sending to the university is a separate step.<?php endif; ?></p>
   </div>
-  <?php if ($existing): ?><a class="btn btn-ghost" href="<?= e(ssp_url('students/view.php?id=' . $editId)) ?>">← Back to student</a><?php endif; ?>
 </div>
 
 <?php if (!$refData): ?>
-  <div class="flash flash-warning">Reference data from the university is unavailable<?= $ref['error'] ? ' (' . e($ref['error']) . ')' : '' ?>. You can still type department / program as an ID, code or exact name; the university validates them when the student is sent.</div>
+  <?= ssp_alert('warning', 'Reference data from the university is unavailable' . ($ref['error'] ? ' (' . e($ref['error']) . ')' : '') . '. You can still type department / program as an ID, code or exact name; the university validates them when the student is sent.', false) ?>
 <?php elseif ($ref['error'] !== null): ?>
-  <div class="flash flash-info">Using cached reference data from <?= e(ssp_date_human($ref['fetched_at'])) ?>.</div>
+  <?= ssp_alert('info', 'Using cached reference data from ' . ssp_date_human($ref['fetched_at']) . '.') ?>
 <?php endif; ?>
 
 <?php ssp_form_errors_summary($errors); ?>
 
 <form method="post" action="<?= e(ssp_url('students/create.php' . ($editId ? '?id=' . $editId : ''))) ?>" enctype="multipart/form-data" class="student-form" id="student-form" novalidate>
   <?= ssp_csrf_field() ?>
+  <div class="form-layout">
+    <aside class="form-nav" aria-label="Form sections">
+      <ol>
+        <?php foreach ($sections as $key => [$label]): ?>
+        <li><a href="#sec-<?= e($key) ?>" data-target="sec-<?= e($key) ?>"><span class="dot" aria-hidden="true"></span><?= e($label) ?><?php if (!empty($sectionErrors[$key])): ?><span class="count" title="Problems in this section"><?= (int)$sectionErrors[$key] ?></span><?php endif; ?></a></li>
+        <?php endforeach; ?>
+      </ol>
+      <p class="form-nav-hint">Use the buttons at the bottom to save. Nothing is sent to the university until you choose to.</p>
+    </aside>
 
-  <section class="card">
-    <h2>Enrollment</h2>
-    <div class="grid">
-      <?php if ($deptOptions): ?>
-        <?php ssp_select('department', 'Department', $form, $errors, $deptOptions, ['required' => true, 'attrs' => ['data-role' => 'department']]); ?>
-        <?php ssp_select('program', 'Program', $form, $errors, $progOptions, ['attrs' => ['data-role' => 'program'], 'placeholder' => '— optional —', 'hint' => 'Only programs of the selected department are shown.']); ?>
-      <?php else: ?>
-        <?php ssp_input('department', 'Department', $form, $errors, ['required' => true, 'placeholder' => 'CSE', 'hint' => 'ID, code or exact name']); ?>
-        <?php ssp_input('program', 'Program', $form, $errors, ['placeholder' => 'B.Sc. in CSE', 'hint' => 'ID or exact name']); ?>
-      <?php endif; ?>
-      <?php ssp_input('semester', 'Admitted semester', $form, $errors, ['required' => true, 'list' => 'dl_semesters', 'placeholder' => 'Spring 2026', 'maxlength' => 30]); ?>
-      <?php if (!$isSynced): ?>
-        <?php ssp_input('student_id', 'University Student ID', $form, $errors, ['placeholder' => 'Leave empty – assigned by the university', 'maxlength' => 20,
-            'hint' => 'Normally leave empty: the university continues the numbering of this semester / department / program. Fill in ONLY the ID issued by the university admin when the portal reports that no numbering exists yet.']); ?>
-      <?php endif; ?>
-      <?php ssp_input('year', 'Academic year', $form, $errors, ['placeholder' => '1st', 'maxlength' => 20]); ?>
-      <?php ssp_input('batch', 'Batch', $form, $errors, ['placeholder' => '52nd Batch', 'maxlength' => 50]); ?>
-      <?php ssp_select('semester_type', 'Semester type', $form, $errors, $enumOptions('semester_type', ['bi_semester', 'trimester']), ['placeholder' => '— default —']); ?>
-      <?php ssp_select('shift', 'Shift', $form, $errors, $enumOptions('shift', ['Morning', 'Day', 'Evening']), ['placeholder' => '— optional —']); ?>
-      <?php ssp_select('section', 'Section', $form, $errors, $enumOptions('section', ['A', 'B', 'C', 'D', 'E', 'F', 'G']), ['placeholder' => '— optional —']); ?>
-      <?php ssp_select('status', 'Status at university', $form, $errors, $enumOptions('status', ['Active', 'Inactive', 'Graduated', 'Dropped', 'Not Admitted Yet']), ['placeholder' => 'University default', 'hint' => 'Choose "Active" when sending a final result so the student is marked Graduated.']); ?>
-    </div>
-  </section>
-
-  <section class="card">
-    <h2>Student</h2>
-    <div class="grid">
-      <?php ssp_input('name', 'Full name', $form, $errors, ['required' => true, 'maxlength' => 255, 'wide' => true]); ?>
-      <?php ssp_input('date_of_birth', 'Date of birth', $form, $errors, ['type' => 'date', 'max' => date('Y-m-d')]); ?>
-      <?php ssp_select('sex', 'Sex', $form, $errors, $enumOptions('sex', ['Male', 'Female', 'Other'])); ?>
-      <?php ssp_select('blood_group', 'Blood group', $form, $errors, $enumOptions('blood_group', ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'])); ?>
-      <?php ssp_input('religion', 'Religion', $form, $errors, ['maxlength' => 50]); ?>
-      <?php ssp_input('nationality', 'Nationality', $form, $errors, ['maxlength' => 100]); ?>
-      <?php ssp_input('country', 'Country', $form, $errors, ['maxlength' => 100]); ?>
-      <?php ssp_input('place_of_birth', 'Place of birth', $form, $errors, ['maxlength' => 150]); ?>
-      <?php ssp_input('nid', 'National ID / Birth reg. no.', $form, $errors, ['maxlength' => 50]); ?>
-      <?php ssp_input('contact_no', 'Mobile', $form, $errors, ['type' => 'tel', 'placeholder' => '+8801711000000']); ?>
-      <?php ssp_input('email', 'E-mail', $form, $errors, ['type' => 'email']); ?>
-      <?php ssp_input('present_address', 'Present address', $form, $errors, ['type' => 'textarea', 'maxlength' => 1000, 'wide' => true]); ?>
-      <?php ssp_input('permanent_address', 'Permanent address', $form, $errors, ['type' => 'textarea', 'maxlength' => 1000, 'wide' => true]); ?>
-      <?php ssp_input('permanent_contact_no', 'Permanent phone', $form, $errors, ['type' => 'tel']); ?>
-      <?php ssp_input('permanent_email', 'Permanent e-mail', $form, $errors, ['type' => 'email']); ?>
-    </div>
-    <h3>Parents</h3>
-    <div class="grid">
-      <?php ssp_input('father_name', "Father's name", $form, $errors, ['maxlength' => 255]); ?>
-      <?php ssp_input('father_phone', "Father's phone", $form, $errors, ['type' => 'tel']); ?>
-      <?php ssp_input('father_occupation', "Father's occupation", $form, $errors, ['maxlength' => 150]); ?>
-      <?php ssp_input('mother_name', "Mother's name", $form, $errors, ['maxlength' => 255]); ?>
-      <?php ssp_input('mother_phone', "Mother's phone", $form, $errors, ['type' => 'tel']); ?>
-      <?php ssp_input('mother_occupation', "Mother's occupation", $form, $errors, ['maxlength' => 150]); ?>
-    </div>
-  </section>
-
-  <section class="card">
-    <h2>Guardian</h2>
-    <div class="grid">
-      <?php ssp_input('guardian.name', 'Name', $form, $errors, ['maxlength' => 255]); ?>
-      <?php ssp_input('guardian.relationship', 'Relationship', $form, $errors, ['placeholder' => 'Father', 'maxlength' => 100]); ?>
-      <?php ssp_input('guardian.phone', 'Phone', $form, $errors, ['type' => 'tel']); ?>
-      <?php ssp_input('guardian.email', 'E-mail', $form, $errors, ['type' => 'email']); ?>
-      <?php ssp_input('guardian.profession', 'Profession', $form, $errors, ['maxlength' => 150]); ?>
-      <?php ssp_input('guardian.yearly_income', 'Yearly income (BDT)', $form, $errors, ['placeholder' => '650000']); ?>
-      <?php ssp_input('guardian.address', 'Address', $form, $errors, ['type' => 'textarea', 'maxlength' => 1000, 'wide' => true]); ?>
-    </div>
-  </section>
-
-  <section class="card">
-    <div class="section-head">
-      <h2>Academic qualifications</h2>
-      <button type="button" class="btn btn-sm" id="add-qual" data-max="<?= SSP_MAX_QUALIFICATIONS ?>">+ Add row</button>
-    </div>
-    <?php if (!empty($errors['academic_qualifications'])): ?><small class="error"><?= e($errors['academic_qualifications']) ?></small><?php endif; ?>
-    <div id="qual-rows">
-      <?php foreach ($qualRows as $i => $row) { $renderQualRow($i); } ?>
-    </div>
-    <template id="qual-template"><?php $renderQualRow('__i__'); ?></template>
-    <p class="muted">Blank rows are ignored. Up to <?= SSP_MAX_QUALIFICATIONS ?> rows.</p>
-  </section>
-
-  <section class="card">
-    <h2>Photo</h2>
-    <div class="photo-row">
-      <?php if ($existing && !empty($existing['photo_path'])): ?>
-        <figure class="photo-current">
-          <img src="<?= e(ssp_url('students/photo.php?id=' . $editId)) ?>" alt="Current photo">
-          <label class="check"><input type="checkbox" name="remove_photo" value="1"> Remove current photo</label>
-        </figure>
-      <?php endif; ?>
-      <div>
-        <?php ssp_input('photo', $existing && !empty($existing['photo_path']) ? 'Replace photo' : 'Photo', $form, $errors, ['type' => 'file', 'accept' => 'image/jpeg,image/png,image/gif,image/webp', 'hint' => 'JPG, PNG, GIF or WEBP, max 5 MB. A 300×400 JPEG is plenty.']); ?>
-        <img id="photo-preview" class="photo-preview" alt="" hidden>
-      </div>
-    </div>
-  </section>
-
-  <section class="card">
-    <h2>Internal <small class="muted">(portal only – never sent to the university)</small></h2>
-    <div class="grid">
-      <?php ssp_select('internal.apostille', 'Apostille', $form, $errors, $yesNo, ['placeholder' => '— not set —']); ?>
-      <?php ssp_select('internal.online_only', 'Online only', $form, $errors, $yesNo, ['placeholder' => '— not set —']); ?>
-      <?php ssp_select('internal.work_done', 'Work done', $form, $errors, $yesNo, ['placeholder' => '— not set —']); ?>
-      <?php ssp_input('internal.reference', 'Reference', $form, $errors, ['list' => 'dl_reference', 'placeholder' => 'Bindu / Sir', 'maxlength' => SSP_INTERNAL_TEXTS['reference'], 'hint' => 'Who referred the student.']); ?>
-      <?php ssp_input('internal.notes', 'Internal notes', $form, $errors, ['type' => 'textarea', 'rows' => 3, 'maxlength' => SSP_INTERNAL_TEXTS['notes'], 'wide' => true]); ?>
-    </div>
-    <h3>Documents</h3>
-    <?php if (!empty($errors['files'])): ?><small class="error"><?= e($errors['files']) ?></small><?php endif; ?>
-    <div class="file-slots">
-      <?php foreach (SSP_FILE_KINDS as $kind => $label) { $renderFileSlot($kind, $label); } ?>
-    </div>
-    <p class="muted">PDF, JPG, PNG, GIF, WEBP, DOC or DOCX; max <?= e($fileMaxMb) ?> MB per file, up to <?= SSP_FILES_PER_KIND ?> files per slot. Several files can be selected at once. Stored on this server only.</p>
-  </section>
-
-  <?php if ($isSynced): ?>
-  <section class="card">
-    <h2>Final result</h2>
-    <p class="muted">Results of a registered student are managed separately: use <a href="<?= e(ssp_url('students/result.php?id=' . $editId)) ?>">Publish / update final result</a> on the student page.</p>
-  </section>
-  <?php else: ?>
-  <section class="card">
-    <div class="section-head">
-      <h2>Final result <small class="muted">(optional – sent in the same call)</small></h2>
-      <label class="check"><input type="checkbox" name="result_enabled" value="1" id="result-enabled"<?= !empty($form['result_enabled']) ? ' checked' : '' ?>> Include final result</label>
-    </div>
-    <fieldset id="result-fields"<?= empty($form['result_enabled']) ? ' disabled' : '' ?>>
-      <div class="grid">
-        <?php ssp_input('result.semester', 'Completion semester', $form, $errors, ['required' => true, 'list' => 'dl_semesters', 'placeholder' => 'Fall 2024']); ?>
-        <?php ssp_input('result.cgpa', 'Final CGPA', $form, $errors, ['required' => true, 'type' => 'number', 'step' => '0.01', 'min' => '0.01', 'max' => '4', 'placeholder' => '3.42']); ?>
-        <?php ssp_input('result.recorded_date', 'Result publish date', $form, $errors, ['type' => 'date', 'max' => date('Y-m-d'), 'hint' => 'Defaults to today.']); ?>
-        <?php ssp_input('result.batch', 'Batch', $form, $errors, ['maxlength' => 50, 'hint' => 'Defaults to the student batch above.']); ?>
-        <div class="field">
-          <label>&nbsp;</label>
-          <label class="check"><input type="checkbox" name="result[mark_graduated]" value="1"<?= !empty($form['result']['mark_graduated']) ? ' checked' : '' ?>> Force status “Graduated”</label>
-          <small class="hint">Applied automatically when status is Active or Dropped.</small>
+    <div class="form-main">
+      <section class="card section" id="sec-enrollment">
+        <?php $sectionHead('enrollment'); ?>
+        <div class="grid">
+          <?php if ($deptOptions): ?>
+            <?php ssp_select('department', 'Department', $form, $errors, $deptOptions, ['required' => true, 'attrs' => ['data-role' => 'department']]); ?>
+            <?php ssp_select('program', 'Program', $form, $errors, $progOptions, ['attrs' => ['data-role' => 'program'], 'placeholder' => '— optional —', 'hint' => 'Only programs of the selected department are shown.']); ?>
+          <?php else: ?>
+            <?php ssp_input('department', 'Department', $form, $errors, ['required' => true, 'placeholder' => 'CSE', 'hint' => 'ID, code or exact name']); ?>
+            <?php ssp_input('program', 'Program', $form, $errors, ['placeholder' => 'B.Sc. in CSE', 'hint' => 'ID or exact name']); ?>
+          <?php endif; ?>
+          <?php ssp_input('semester', 'Admitted semester', $form, $errors, ['required' => true, 'list' => 'dl_semesters', 'placeholder' => 'Spring 2026', 'maxlength' => 30]); ?>
+          <?php if (!$isSynced): ?>
+            <?php ssp_input('student_id', 'University Student ID', $form, $errors, ['placeholder' => 'Leave empty – assigned by the university', 'maxlength' => 20,
+                'hint' => 'Normally leave empty: the university continues the numbering of this semester / department / program. Fill in ONLY the ID issued by the university admin when the portal reports that no numbering exists yet.']); ?>
+          <?php endif; ?>
+          <?php ssp_input('year', 'Academic year', $form, $errors, ['placeholder' => '1st', 'maxlength' => 20]); ?>
+          <?php ssp_input('batch', 'Batch', $form, $errors, ['placeholder' => '52nd Batch', 'maxlength' => 50]); ?>
+          <?php ssp_select('semester_type', 'Semester type', $form, $errors, $enumOptions('semester_type', ['bi_semester', 'trimester']), ['placeholder' => '— default —']); ?>
+          <?php ssp_select('shift', 'Shift', $form, $errors, $enumOptions('shift', ['Morning', 'Day', 'Evening']), ['placeholder' => '— optional —']); ?>
+          <?php ssp_select('section', 'Section', $form, $errors, $enumOptions('section', ['A', 'B', 'C', 'D', 'E', 'F', 'G']), ['placeholder' => '— optional —']); ?>
+          <?php ssp_select('status', 'Status at university', $form, $errors, $enumOptions('status', ['Active', 'Inactive', 'Graduated', 'Dropped', 'Not Admitted Yet']), ['placeholder' => 'University default', 'hint' => 'Choose "Active" when sending a final result so the student is marked Graduated.']); ?>
         </div>
+      </section>
+
+      <section class="card section" id="sec-student">
+        <?php $sectionHead('student'); ?>
+        <div class="grid">
+          <?php ssp_input('name', 'Full name', $form, $errors, ['required' => true, 'maxlength' => 255, 'wide' => true, 'autocomplete' => 'off']); ?>
+          <?php ssp_input('date_of_birth', 'Date of birth', $form, $errors, ['type' => 'date', 'max' => date('Y-m-d')]); ?>
+          <?php ssp_select('sex', 'Sex', $form, $errors, $enumOptions('sex', ['Male', 'Female', 'Other'])); ?>
+          <?php ssp_select('blood_group', 'Blood group', $form, $errors, $enumOptions('blood_group', ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'])); ?>
+          <?php ssp_input('religion', 'Religion', $form, $errors, ['maxlength' => 50]); ?>
+          <?php ssp_input('nationality', 'Nationality', $form, $errors, ['maxlength' => 100]); ?>
+          <?php ssp_input('country', 'Country', $form, $errors, ['maxlength' => 100]); ?>
+          <?php ssp_input('place_of_birth', 'Place of birth', $form, $errors, ['maxlength' => 150]); ?>
+          <?php ssp_input('nid', 'National ID / Birth reg. no.', $form, $errors, ['maxlength' => 50]); ?>
+          <?php ssp_input('contact_no', 'Mobile', $form, $errors, ['type' => 'tel', 'placeholder' => '+8801711000000']); ?>
+          <?php ssp_input('email', 'E-mail', $form, $errors, ['type' => 'email']); ?>
+          <?php ssp_input('present_address', 'Present address', $form, $errors, ['type' => 'textarea', 'maxlength' => 1000, 'wide' => true]); ?>
+          <?php ssp_input('permanent_address', 'Permanent address', $form, $errors, ['type' => 'textarea', 'maxlength' => 1000, 'wide' => true]); ?>
+          <?php ssp_input('permanent_contact_no', 'Permanent phone', $form, $errors, ['type' => 'tel']); ?>
+          <?php ssp_input('permanent_email', 'Permanent e-mail', $form, $errors, ['type' => 'email']); ?>
+        </div>
+        <h3>Parents</h3>
+        <div class="grid">
+          <?php ssp_input('father_name', "Father's name", $form, $errors, ['maxlength' => 255]); ?>
+          <?php ssp_input('father_phone', "Father's phone", $form, $errors, ['type' => 'tel']); ?>
+          <?php ssp_input('father_occupation', "Father's occupation", $form, $errors, ['maxlength' => 150]); ?>
+          <?php ssp_input('mother_name', "Mother's name", $form, $errors, ['maxlength' => 255]); ?>
+          <?php ssp_input('mother_phone', "Mother's phone", $form, $errors, ['type' => 'tel']); ?>
+          <?php ssp_input('mother_occupation', "Mother's occupation", $form, $errors, ['maxlength' => 150]); ?>
+        </div>
+      </section>
+
+      <section class="card section" id="sec-guardian">
+        <?php $sectionHead('guardian'); ?>
+        <div class="grid">
+          <?php ssp_input('guardian.name', 'Name', $form, $errors, ['maxlength' => 255]); ?>
+          <?php ssp_input('guardian.relationship', 'Relationship', $form, $errors, ['placeholder' => 'Father', 'maxlength' => 100]); ?>
+          <?php ssp_input('guardian.phone', 'Phone', $form, $errors, ['type' => 'tel']); ?>
+          <?php ssp_input('guardian.email', 'E-mail', $form, $errors, ['type' => 'email']); ?>
+          <?php ssp_input('guardian.profession', 'Profession', $form, $errors, ['maxlength' => 150]); ?>
+          <?php ssp_input('guardian.yearly_income', 'Yearly income (BDT)', $form, $errors, ['placeholder' => '650000']); ?>
+          <?php ssp_input('guardian.address', 'Address', $form, $errors, ['type' => 'textarea', 'maxlength' => 1000, 'wide' => true]); ?>
+        </div>
+      </section>
+
+      <section class="card section" id="sec-qualifications">
+        <?php $sectionHead('qualifications', '<button type="button" class="btn btn-sm" id="add-qual" data-max="' . SSP_MAX_QUALIFICATIONS . '">' . ssp_icon('plus') . ' Add row</button>'); ?>
+        <?php if (!empty($errors['academic_qualifications'])): ?><small class="error"><?= e($errors['academic_qualifications']) ?></small><?php endif; ?>
+        <div id="qual-rows">
+          <?php foreach ($qualRows as $i => $row) { $renderQualRow($i); } ?>
+        </div>
+        <template id="qual-template"><?php $renderQualRow('__i__'); ?></template>
+        <p class="muted small">Blank rows are ignored. Up to <?= SSP_MAX_QUALIFICATIONS ?> rows.</p>
+      </section>
+
+      <section class="card section" id="sec-photo">
+        <?php $sectionHead('photo'); ?>
+        <div class="photo-row">
+          <?php if ($existing && !empty($existing['photo_path'])): ?>
+            <figure class="photo-current">
+              <img src="<?= e(ssp_url('students/photo.php?id=' . $editId)) ?>" alt="Current photo">
+              <label class="check"><input type="checkbox" name="remove_photo" value="1"> Remove current photo</label>
+            </figure>
+          <?php endif; ?>
+          <div style="flex:1;min-width:240px">
+            <?php ssp_input('photo', $existing && !empty($existing['photo_path']) ? 'Replace photo' : 'Photo', $form, $errors, ['type' => 'file', 'accept' => 'image/jpeg,image/png,image/gif,image/webp', 'hint' => 'JPG, PNG, GIF or WEBP, max 5 MB. A 300×400 JPEG is plenty.']); ?>
+            <img id="photo-preview" class="photo-preview" alt="" hidden>
+          </div>
+        </div>
+      </section>
+
+      <section class="card section" id="sec-internal">
+        <?php $sectionHead('internal', '<span class="badge badge-plain">' . ssp_icon('shield') . ' Portal only</span>'); ?>
+        <div class="grid">
+          <?php ssp_select('internal.apostille', 'Apostille', $form, $errors, $yesNo, ['placeholder' => '— not set —']); ?>
+          <?php ssp_select('internal.online_only', 'Online only', $form, $errors, $yesNo, ['placeholder' => '— not set —']); ?>
+          <?php ssp_select('internal.work_done', 'Work done', $form, $errors, $yesNo, ['placeholder' => '— not set —']); ?>
+          <?php ssp_input('internal.reference', 'Reference', $form, $errors, ['list' => 'dl_reference', 'placeholder' => 'Bindu / Sir', 'maxlength' => SSP_INTERNAL_TEXTS['reference'], 'hint' => 'Who referred the student.']); ?>
+          <?php ssp_input('internal.notes', 'Internal notes', $form, $errors, ['type' => 'textarea', 'rows' => 3, 'maxlength' => SSP_INTERNAL_TEXTS['notes'], 'wide' => true]); ?>
+        </div>
+        <h3>Documents</h3>
+        <?php if (!empty($errors['files'])): ?><small class="error"><?= e($errors['files']) ?></small><?php endif; ?>
+        <div class="file-slots">
+          <?php foreach (SSP_FILE_KINDS as $kind => $label) { $renderFileSlot($kind, $label); } ?>
+        </div>
+        <p class="muted small">PDF, JPG, PNG, GIF, WEBP, DOC or DOCX; max <?= e($fileMaxMb) ?> MB per file, up to <?= SSP_FILES_PER_KIND ?> files per slot. Several files can be selected at once. Stored on this server only.</p>
+      </section>
+
+      <section class="card section" id="sec-result">
+        <?php if ($isSynced): ?>
+          <?php $sectionHead('result'); ?>
+          <p class="muted">Results of a registered student are managed separately: use <a href="<?= e(ssp_url('students/result.php?id=' . $editId)) ?>">Publish / update final result</a> on the student page.</p>
+        <?php else: ?>
+          <?php $sectionHead('result', '<label class="check"><input type="checkbox" name="result_enabled" value="1" id="result-enabled"' . (!empty($form['result_enabled']) ? ' checked' : '') . '> Include final result</label>'); ?>
+          <fieldset id="result-fields"<?= empty($form['result_enabled']) ? ' disabled' : '' ?>>
+            <div class="grid">
+              <?php ssp_input('result.semester', 'Completion semester', $form, $errors, ['required' => true, 'list' => 'dl_semesters', 'placeholder' => 'Fall 2024']); ?>
+              <?php ssp_input('result.cgpa', 'Final CGPA', $form, $errors, ['required' => true, 'type' => 'number', 'step' => '0.01', 'min' => '0.01', 'max' => '4', 'placeholder' => '3.42']); ?>
+              <?php ssp_input('result.recorded_date', 'Result publish date', $form, $errors, ['type' => 'date', 'max' => date('Y-m-d'), 'hint' => 'Defaults to today.']); ?>
+              <?php ssp_input('result.batch', 'Batch', $form, $errors, ['maxlength' => 50, 'hint' => 'Defaults to the student batch above.']); ?>
+              <div class="field">
+                <label>&nbsp;</label>
+                <label class="check"><input type="checkbox" name="result[mark_graduated]" value="1"<?= !empty($form['result']['mark_graduated']) ? ' checked' : '' ?>> Force status “Graduated”</label>
+                <small class="hint">Applied automatically when status is Active or Dropped.</small>
+              </div>
+            </div>
+            <p class="muted small">Requires the <code>results:create</code> scope on the partner key. If the result is invalid the university creates nothing and returns the errors here.</p>
+          </fieldset>
+        <?php endif; ?>
+      </section>
+
+      <?php ssp_datalist('dl_semesters', $semesters); ?>
+      <?php ssp_datalist('dl_exams', $examNames); ?>
+      <?php ssp_datalist('dl_boards', $boardNames); ?>
+      <?php ssp_datalist('dl_groups', $groupNames); ?>
+      <?php ssp_datalist('dl_reference', SSP_INTERNAL_REFERENCES); ?>
+
+      <div class="form-bar">
+        <button type="submit" name="action" value="save" class="btn"><?= $isSynced ? 'Save locally only' : 'Save draft' ?></button>
+        <button type="submit" name="action" value="send" class="btn btn-primary" data-confirm="<?= $isSynced ? 'Update this student\'s record at Prime University now?' : 'Send this student to Prime University now?' ?>"<?= ssp_api()->isConfigured() ? '' : ' disabled title="API key not configured"' ?>><?= ssp_icon('send') ?> <?= $isSynced ? 'Save and update at university' : 'Save and send to university' ?></button>
+        <a class="btn btn-ghost" href="<?= e(ssp_url($existing ? 'students/view.php?id=' . $editId : 'dashboard.php')) ?>">Cancel</a>
+        <span class="spacer"></span>
+        <span class="form-dirty" id="form-dirty" hidden><?= ssp_icon('alert-triangle') ?> Unsaved changes</span>
       </div>
-      <p class="muted">Requires the <code>results:create</code> scope on the partner key. If the result is invalid the university creates nothing and returns the errors here.</p>
-    </fieldset>
-  </section>
-  <?php endif; ?>
-
-  <?php ssp_datalist('dl_semesters', $semesters); ?>
-  <?php ssp_datalist('dl_exams', $examNames); ?>
-  <?php ssp_datalist('dl_boards', $boardNames); ?>
-  <?php ssp_datalist('dl_groups', $groupNames); ?>
-  <?php ssp_datalist('dl_reference', SSP_INTERNAL_REFERENCES); ?>
-
-  <div class="form-actions">
-    <button type="submit" name="action" value="save" class="btn"><?= $isSynced ? 'Save locally only' : 'Save draft' ?></button>
-    <button type="submit" name="action" value="send" class="btn btn-primary" data-confirm="<?= $isSynced ? 'Update this student\'s record at Prime University now?' : 'Send this student to Prime University now?' ?>"<?= ssp_api()->isConfigured() ? '' : ' disabled title="API key not configured"' ?>><?= $isSynced ? 'Save and update at university' : 'Save and send to university' ?></button>
-    <a class="btn btn-ghost" href="<?= e(ssp_url($existing ? 'students/view.php?id=' . $editId : 'dashboard.php')) ?>">Cancel</a>
+    </div>
   </div>
 </form>
 <?php ssp_footer();
