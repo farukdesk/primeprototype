@@ -161,7 +161,7 @@ are ignored. Alternative names shown in *italics* are accepted aliases.
 | `shift` | no | `Morning` \| `Day` \| `Evening` | |
 | `section` | no | `A`…`G` | |
 | `status` | no | see enums | defaults to the status configured for your client (normally `Not Admitted Yet`) |
-| `student_id` | no | 1-20 letters/digits/hyphens | **omit to let the university generate it** (recommended) |
+| `student_id` | no | 1-20 letters/digits/hyphens | **omit to let the university generate it** (recommended). Generated IDs are `YYSSDDPPNNNN`: admission year, semester (`01` Summer, `02` Fall, `03` Spring), department id, program id, then the next free number among the students already admitted to that same semester, department and program |
 
 **Student**
 

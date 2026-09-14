@@ -249,6 +249,18 @@ function sm_semester_year(string $semester): string
 }
 
 /**
+ * [YY][SS][DD][PP] – the part of the ID shared by everyone admitted to one
+ * semester / department / program.
+ */
+function sm_student_id_prefix(string $admitted_semester, int $dept_id, int $program_id = 0): string
+{
+    return sm_semester_year($admitted_semester)
+         . sm_semester_code($admitted_semester)
+         . str_pad((string)$dept_id,    2, '0', STR_PAD_LEFT)
+         . str_pad((string)$program_id, 2, '0', STR_PAD_LEFT);
+}
+
+/**
  * Generate a unique 12-digit student ID.
  *
  * Format: [YY][SS][DD][PP][NNNN]
@@ -256,23 +268,59 @@ function sm_semester_year(string $semester): string
  *   SS   = semester code (01=Summer, 02=Fall, 03=Spring)
  *   DD   = dept_id zero-padded to 2 digits
  *   PP   = program_id zero-padded to 2 digits (00 if none)
- *   NNNN = 4-digit sequential counter for this prefix
+ *   NNNN = 4-digit sequential counter within the admission cohort
+ *
+ * How the number is chosen:
+ *   1. Look up the cohort: every student whose admitted_semester, dept_id and
+ *      program_id match the new student (the real columns, not a string guess).
+ *   2. Among those, take the IDs that follow the standard format for this
+ *      prefix and read the highest 4-digit sequence.  Manually entered or
+ *      legacy IDs of any other shape are ignored, so they can never corrupt
+ *      the counter.
+ *   3. The next number is last + 1, then bumped past any ID that already
+ *      exists anywhere in `students` (e.g. a student who later moved to another
+ *      department keeps the ID of the cohort they were admitted with).
+ *
+ * Mirrored by capi_generate_student_id() in admin/api/v1/includes/student_helpers.php;
+ * keep both in sync.
+ *
+ * @throws RuntimeException when all 9999 numbers of the cohort are taken.
  */
 function sm_generate_student_id(string $admitted_semester, int $dept_id, int $program_id = 0): string
 {
-    $yy   = sm_semester_year($admitted_semester);
-    $ss   = sm_semester_code($admitted_semester);
-    $dd   = str_pad((string)$dept_id,    2, '0', STR_PAD_LEFT);
-    $pp   = str_pad((string)$program_id, 2, '0', STR_PAD_LEFT);
-    $prefix = $yy . $ss . $dd . $pp;
+    $prefix  = sm_student_id_prefix($admitted_semester, $dept_id, $program_id);
+    $pattern = '^' . $prefix . '[0-9]{4}$';
 
-    $stmt = db()->prepare(
-        "SELECT student_id FROM students
-         WHERE student_id LIKE ? ORDER BY student_id DESC LIMIT 1"
-    );
-    $stmt->execute([$prefix . '%']);
-    $last = $stmt->fetchColumn();
-    $seq  = $last ? (int)substr($last, -4) + 1 : 1;
+    $sql = 'SELECT MAX(CAST(RIGHT(student_id, 4) AS UNSIGNED))
+              FROM students
+             WHERE admitted_semester = ?
+               AND dept_id = ?
+               AND ' . ($program_id > 0 ? 'program_id = ?' : '(program_id IS NULL OR program_id = 0)') . '
+               AND student_id REGEXP ?';
+    $params = [$admitted_semester, $dept_id];
+    if ($program_id > 0) {
+        $params[] = $program_id;
+    }
+    $params[] = $pattern;
+
+    $stmt = db()->prepare($sql);
+    $stmt->execute($params);
+    $seq = (int)$stmt->fetchColumn() + 1;
+
+    $exists = db()->prepare('SELECT 1 FROM students WHERE student_id = ? LIMIT 1');
+    while ($seq <= 9999) {
+        $exists->execute([$prefix . str_pad((string)$seq, 4, '0', STR_PAD_LEFT)]);
+        if (!$exists->fetchColumn()) {
+            break;
+        }
+        $seq++;
+    }
+    if ($seq > 9999) {
+        throw new RuntimeException(
+            'Student ID sequence exhausted for prefix ' . $prefix
+            . ' (' . $admitted_semester . ', dept ' . $dept_id . ', program ' . $program_id . ').'
+        );
+    }
 
     return $prefix . str_pad((string)$seq, 4, '0', STR_PAD_LEFT);
 }

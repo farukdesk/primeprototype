@@ -167,7 +167,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $student_id = '';
     if ($student_id_mode === 'auto') {
         if ($dept_id > 0 && $admitted_sem !== '') {
-            $student_id = sm_generate_student_id($admitted_sem, $dept_id, $program_id ?: 0);
+            try {
+                $student_id = sm_generate_student_id($admitted_sem, $dept_id, $program_id ?: 0);
+            } catch (Throwable $e) {
+                error_log('students/create auto student id: ' . $e->getMessage());
+                $errors[] = 'A student ID could not be generated for this semester / department / program. Please enter one manually.';
+            }
         } else {
             $errors[] = 'Department and admitted semester are required to auto-generate the student ID.';
         }
