@@ -3,7 +3,9 @@
 This API lets an approved external application **create student records** and **publish
 final results (CGPA)** directly in the Prime University database. Records created through
 the API are identical to ones entered by staff in the admin panel (same fields, same
-auto-generated Student ID, same audit trail).
+auto-generated Student ID, same batch assignment). API activity is recorded in the
+university's API request log; it does **not** appear in the admin Change Log, which is
+reserved for actions taken by university staff.
 
 | | |
 |---|---|
