@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS ssp_students (
   admitted_semester  VARCHAR(30)  DEFAULT NULL,
   payload_json       LONGTEXT     NOT NULL,                 -- exact JSON document sent to the university (photo excluded)
   photo_path         VARCHAR(255) DEFAULT NULL,             -- file name inside storage/photos/
+  internal_json      TEXT         DEFAULT NULL,             -- portal-only: apostille, online_only, work_done, reference, notes (NEVER sent to the university)
   sync_status        ENUM('draft','pending','synced','failed','deleted') NOT NULL DEFAULT 'draft',
   sync_attempts      INT UNSIGNED NOT NULL DEFAULT 0,
   pending_update     TINYINT(1)   NOT NULL DEFAULT 0,             -- local edits not yet sent to the university
@@ -71,6 +72,24 @@ CREATE TABLE IF NOT EXISTS ssp_api_log (
   PRIMARY KEY (id),
   KEY idx_ssp_api_log_student (student_id),
   KEY idx_ssp_api_log_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Internal documents (admission form, SSC, HSC, certificate, transcript, tabulation, other).
+-- Portal-only: files live in storage/files/ and are NEVER sent to the university.
+CREATE TABLE IF NOT EXISTS ssp_student_files (
+  id            INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  student_id    INT UNSIGNED NOT NULL,
+  kind          ENUM('admission_form','ssc','hsc','certificate','transcript','tabulation','other') NOT NULL,
+  original_name VARCHAR(255) NOT NULL,
+  stored_name   VARCHAR(255) NOT NULL,                 -- file name inside storage/files/
+  mime          VARCHAR(100) NOT NULL,
+  size_bytes    INT UNSIGNED NOT NULL DEFAULT 0,
+  uploaded_by   INT UNSIGNED DEFAULT NULL,
+  created_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_ssp_student_files_student (student_id, kind),
+  CONSTRAINT fk_ssp_student_files_student FOREIGN KEY (student_id) REFERENCES ssp_students (id) ON DELETE CASCADE,
+  CONSTRAINT fk_ssp_student_files_user    FOREIGN KEY (uploaded_by) REFERENCES ssp_users (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Small key/value cache (reference data from GET /reference-data.php)

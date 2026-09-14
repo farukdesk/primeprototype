@@ -9,10 +9,15 @@
  * returned by the university (422) are shown on this form so the operator can
  * correct them and send again; other failures are kept on the record and can
  * be retried from the student page.
+ *
+ * The "Internal (portal only)" section – yes/no flags, reference, notes and
+ * document uploads – is stored beside the payload (internal_json /
+ * ssp_student_files) and is never part of what is sent to the university.
  */
 require_once __DIR__ . '/../includes/layout.php';
 require_once __DIR__ . '/../includes/reference_data.php';
 require_once __DIR__ . '/../includes/student_payload.php';
+require_once __DIR__ . '/../includes/internal_data.php';
 require_once __DIR__ . '/../includes/sync.php';
 
 $user = ssp_require_login();
@@ -36,11 +41,14 @@ $isSynced = $existing !== null && $existing['sync_status'] === 'synced';
 $ref     = ssp_reference_data();
 $refData = $ref['data'] ?? [];
 
-$errors = [];
-$form   = ['country' => 'Bangladesh', 'nationality' => 'Bangladeshi'];
+$errors        = [];
+$form          = ['country' => 'Bangladesh', 'nationality' => 'Bangladeshi'];
+$existingFiles = [];
 if ($existing !== null) {
     $form = json_decode((string)$existing['payload_json'], true) ?: [];
     $form['result_enabled'] = isset($form['result']);
+    $form['internal']       = ssp_internal_decode($existing['internal_json'] ?? null);
+    $existingFiles          = ssp_student_files($editId);
 }
 
 if (ssp_is_post()) {
@@ -50,9 +58,17 @@ if (ssp_is_post()) {
     $form    = $payload;
     $form['result_enabled'] = isset($payload['result']);
 
-    $newPhoto    = ssp_store_photo_upload($_FILES['photo'] ?? null, $errors);
-    $removePhoto = !empty($_POST['remove_photo']);
-    $id          = $editId;
+    // Portal-only data: validated here, stored next to (never inside) the payload.
+    $internal         = ssp_build_internal_data($_POST, $errors);
+    $form['internal'] = $internal;
+    $removeFileIds    = array_map('intval', (array)($_POST['remove_files'] ?? []));
+    $uploads          = ssp_normalize_file_uploads($_FILES['files'] ?? null);
+    ssp_validate_file_uploads($uploads, $existingFiles, $removeFileIds, $errors);
+
+    $newPhoto     = ssp_store_photo_upload($_FILES['photo'] ?? null, $errors);
+    $removePhoto  = !empty($_POST['remove_photo']);
+    $id           = $editId;
+    $fileWarnings = [];
 
     if (!$errors) {
         $labels    = ssp_ref_labels($refData, $payload);
@@ -62,31 +78,43 @@ if (ssp_is_post()) {
         } elseif ($removePhoto) {
             $photoPath = null;
         }
-        $json = json_encode($payload, JSON_UNESCAPED_UNICODE);
+        $json         = json_encode($payload, JSON_UNESCAPED_UNICODE);
+        $internalJson = $internal ? json_encode($internal, JSON_UNESCAPED_UNICODE) : null;
         try {
             if ($existing !== null) {
                 // Registered students stay "synced" and are flagged as having a pending update;
                 // unsent ones go back to draft.
                 $db->prepare('UPDATE ssp_students
                         SET full_name = ?, email = ?, contact_no = ?, department_label = ?, program_label = ?, admitted_semester = ?,
-                            payload_json = ?, photo_path = ?, last_error = NULL,
+                            payload_json = ?, internal_json = ?, photo_path = ?, last_error = NULL,
                             pending_update = IF(sync_status = "synced", 1, 0),
                             sync_status    = IF(sync_status = "synced", "synced", "draft")
                       WHERE id = ?')
                    ->execute([$payload['name'], $payload['email'] ?? null, $payload['contact_no'] ?? null, $labels['department'],
-                              $labels['program'], $payload['semester'], $json, $photoPath, $editId]);
+                              $labels['program'], $payload['semester'], $json, $internalJson, $photoPath, $editId]);
                 if (!empty($existing['photo_path']) && $existing['photo_path'] !== $photoPath) {
                     ssp_delete_photo($existing['photo_path']);
                 }
             } else {
                 $db->prepare('INSERT INTO ssp_students
                         (reference_no, full_name, email, contact_no, department_label, program_label, admitted_semester,
-                         payload_json, photo_path, sync_status, created_by)
-                      VALUES (?,?,?,?,?,?,?,?,?,"draft",?)')
+                         payload_json, internal_json, photo_path, sync_status, created_by)
+                      VALUES (?,?,?,?,?,?,?,?,?,?,"draft",?)')
                    ->execute([ssp_generate_reference_no($db), $payload['name'], $payload['email'] ?? null, $payload['contact_no'] ?? null,
-                              $labels['department'], $labels['program'], $payload['semester'], $json, $photoPath, (int)$user['id']]);
+                              $labels['department'], $labels['program'], $payload['semester'], $json, $internalJson, $photoPath, (int)$user['id']]);
                 $id = (int)$db->lastInsertId();
             }
+
+            // Internal documents: drop the ticked ones, then store the new uploads.
+            // Problems here never block the (already saved) student; they are shown as warnings.
+            foreach ($existingFiles as $f) {
+                if (in_array((int)$f['id'], $removeFileIds, true)) {
+                    ssp_delete_student_file($f);
+                }
+            }
+            $fileErrors = [];
+            ssp_store_student_files($id, (int)$user['id'], $uploads, $fileErrors);
+            $fileWarnings = array_values($fileErrors);
         } catch (Throwable $ex) {
             error_log('ss-portal students/create: ' . $ex->getMessage());
             $errors['_form'] = 'The student could not be saved locally. Please try again.';
@@ -97,6 +125,9 @@ if (ssp_is_post()) {
     }
 
     if (!$errors) {
+        foreach ($fileWarnings as $w) {
+            ssp_flash('warning', 'Document upload: ' . $w);
+        }
         if ($action === 'send') {
             $result = ssp_sync_student($id, (int)$user['id']);
             if ($result['ok']) {
@@ -118,8 +149,9 @@ if (ssp_is_post()) {
                 $errors['_form'] = 'Prime University rejected the request: '
                     . (($result['response']['message'] ?? '') !== '' ? $result['response']['message'] : 'validation failed')
                     . ' Correct the highlighted fields and send again.';
-                $editId   = $id;
-                $existing = ssp_student_find($id);
+                $editId        = $id;
+                $existing      = ssp_student_find($id);
+                $existingFiles = ssp_student_files($id);
             } else {
                 ssp_flash('error', 'Saved locally, but ' . ($isSynced ? 'updating the university record' : 'sending to the university') . ' failed: ' . $result['message']
                     . (!empty($result['retryable']) ? ' You can retry from this page.' : ''));
@@ -156,6 +188,7 @@ foreach ((array)($refData['exam_titles'] ?? []) as $x) {
 $boardNames = array_column((array)($refData['boards'] ?? []), 'name');
 $groupNames = array_column((array)($refData['groups'] ?? []), 'name');
 $semesters  = (array)($refData['semesters'] ?? []);
+$yesNo      = [['value' => 'yes', 'label' => 'Yes'], ['value' => 'no', 'label' => 'No']];
 
 $qualRows = array_values((array)($form['academic_qualifications'] ?? []));
 if (!$qualRows) {
@@ -175,6 +208,33 @@ $renderQualRow = static function ($i) use ($form, $errors): void {
     echo '<button type="button" class="btn btn-ghost btn-remove-row" title="Remove this row">✕</button>';
     echo '</div>';
 };
+
+// Internal document slots: existing files (with a remove tick box) + a multi-file input per slot.
+$filesByKind = [];
+foreach ($existingFiles as $f) {
+    $filesByKind[$f['kind']][] = $f;
+}
+$renderFileSlot = static function (string $kind, string $label) use ($filesByKind, $errors): void {
+    $err = (string)($errors['files.' . $kind] ?? '');
+    $id  = 'f_files_' . $kind;
+    echo '<div class="field file-slot', $err !== '' ? ' has-error' : '', '">';
+    echo '<label for="', e($id), '">', e($label), '</label>';
+    if (!empty($filesByKind[$kind])) {
+        echo '<ul class="file-list">';
+        foreach ($filesByKind[$kind] as $f) {
+            echo '<li><a href="', e(ssp_url('students/file.php?id=' . (int)$f['id'])), '" target="_blank" rel="noopener">', e($f['original_name']), '</a>',
+                 ' <small class="muted">', e(ssp_file_size_human((int)$f['size_bytes'])), '</small>',
+                 ' <label class="check inline"><input type="checkbox" name="remove_files[]" value="', (int)$f['id'], '"> remove</label></li>';
+        }
+        echo '</ul>';
+    }
+    echo '<input type="file" id="', e($id), '" name="files[', e($kind), '][]" multiple accept="', e(SSP_FILE_ACCEPT), '">';
+    if ($err !== '') {
+        echo '<small class="error">', e($err), '</small>';
+    }
+    echo '</div>';
+};
+$fileMaxMb = round(ssp_file_max_bytes() / 1048576, 1);
 
 $title = $existing ? 'Edit student ' . $existing['reference_no'] : 'New student';
 ssp_header($title, $user);
@@ -294,6 +354,23 @@ ssp_header($title, $user);
     </div>
   </section>
 
+  <section class="card">
+    <h2>Internal <small class="muted">(portal only – never sent to the university)</small></h2>
+    <div class="grid">
+      <?php ssp_select('internal.apostille', 'Apostille', $form, $errors, $yesNo, ['placeholder' => '— not set —']); ?>
+      <?php ssp_select('internal.online_only', 'Online only', $form, $errors, $yesNo, ['placeholder' => '— not set —']); ?>
+      <?php ssp_select('internal.work_done', 'Work done', $form, $errors, $yesNo, ['placeholder' => '— not set —']); ?>
+      <?php ssp_input('internal.reference', 'Reference', $form, $errors, ['list' => 'dl_reference', 'placeholder' => 'Bindu / Sir', 'maxlength' => SSP_INTERNAL_TEXTS['reference'], 'hint' => 'Who referred the student.']); ?>
+      <?php ssp_input('internal.notes', 'Internal notes', $form, $errors, ['type' => 'textarea', 'rows' => 3, 'maxlength' => SSP_INTERNAL_TEXTS['notes'], 'wide' => true]); ?>
+    </div>
+    <h3>Documents</h3>
+    <?php if (!empty($errors['files'])): ?><small class="error"><?= e($errors['files']) ?></small><?php endif; ?>
+    <div class="file-slots">
+      <?php foreach (SSP_FILE_KINDS as $kind => $label) { $renderFileSlot($kind, $label); } ?>
+    </div>
+    <p class="muted">PDF, JPG, PNG, GIF, WEBP, DOC or DOCX; max <?= e($fileMaxMb) ?> MB per file, up to <?= SSP_FILES_PER_KIND ?> files per slot. Several files can be selected at once. Stored on this server only.</p>
+  </section>
+
   <?php if ($isSynced): ?>
   <section class="card">
     <h2>Final result</h2>
@@ -326,6 +403,7 @@ ssp_header($title, $user);
   <?php ssp_datalist('dl_exams', $examNames); ?>
   <?php ssp_datalist('dl_boards', $boardNames); ?>
   <?php ssp_datalist('dl_groups', $groupNames); ?>
+  <?php ssp_datalist('dl_reference', SSP_INTERNAL_REFERENCES); ?>
 
   <div class="form-actions">
     <button type="submit" name="action" value="save" class="btn"><?= $isSynced ? 'Save locally only' : 'Save draft' ?></button>
