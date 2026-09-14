@@ -326,11 +326,6 @@ ssp_header($title, $user);
             <?php ssp_input('student_id', 'University Student ID', $form, $errors, ['placeholder' => 'Leave empty – assigned by the university', 'maxlength' => 20,
                 'hint' => 'Normally leave empty: the university continues the numbering of this semester / department / program. Fill in ONLY the ID issued by the university admin when the portal reports that no numbering exists yet.']); ?>
           <?php endif; ?>
-          <?php ssp_input('year', 'Academic year', $form, $errors, ['placeholder' => '1st', 'maxlength' => 20]); ?>
-          <?php ssp_input('batch', 'Batch', $form, $errors, ['placeholder' => '52nd Batch', 'maxlength' => 50]); ?>
-          <?php ssp_select('semester_type', 'Semester type', $form, $errors, $enumOptions('semester_type', ['bi_semester', 'trimester']), ['placeholder' => '— default —']); ?>
-          <?php ssp_select('shift', 'Shift', $form, $errors, $enumOptions('shift', ['Morning', 'Day', 'Evening']), ['placeholder' => '— optional —']); ?>
-          <?php ssp_select('section', 'Section', $form, $errors, $enumOptions('section', ['A', 'B', 'C', 'D', 'E', 'F', 'G']), ['placeholder' => '— optional —']); ?>
           <?php ssp_select('status', 'Status at university', $form, $errors, $enumOptions('status', ['Active', 'Inactive', 'Graduated', 'Dropped', 'Not Admitted Yet']), ['placeholder' => 'University default', 'hint' => 'Choose "Active" when sending a final result so the student is marked Graduated.']); ?>
         </div>
       </section>
