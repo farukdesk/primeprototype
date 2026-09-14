@@ -261,68 +261,132 @@ function sm_student_id_prefix(string $admitted_semester, int $dept_id, int $prog
 }
 
 /**
- * Generate a unique 12-digit student ID.
+ * Split an ID into its fixed stem and trailing running number:
+ *   "260303070012" → ['', '260303070012'],   "CSE-26-007" → ['CSE-26-', '007'].
+ * Returns null when the ID does not end in a digit (nothing to continue from).
+ */
+function sm_student_id_split(string $sid): ?array
+{
+    return preg_match('/^(.*?)(\d+)$/', $sid, $m) ? [$m[1], $m[2]] : null;
+}
+
+/** Add 1 to a digit string, keeping its zero-padding width ("0007" → "0008", "0999" → "1000"). */
+function sm_digits_increment(string $digits): string
+{
+    for ($i = strlen($digits) - 1; $i >= 0; $i--) {
+        if ($digits[$i] !== '9') {
+            $digits[$i] = (string)((int)$digits[$i] + 1);
+            return $digits;
+        }
+        $digits[$i] = '0';
+    }
+    return '1' . $digits;   // all nines: the number grows by one digit
+}
+
+/**
+ * Detect the numbering pattern a set of existing IDs follows.  Every ID is
+ * split into stem + trailing number; IDs with the same stem and the same
+ * number width belong to one pattern.  The pattern used by most IDs wins;
+ * on a tie the one used by the newest student wins (pass IDs newest first).
  *
- * Format: [YY][SS][DD][PP][NNNN]
- *   YY   = last 2 digits of admission year
- *   SS   = semester code (01=Summer, 02=Fall, 03=Spring)
- *   DD   = dept_id zero-padded to 2 digits
- *   PP   = program_id zero-padded to 2 digits (00 if none)
- *   NNNN = 4-digit sequential counter within the admission cohort
+ * @param  string[] $ids
+ * @return ?array{stem:string,last:string,count:int}  null when no ID ends in a digit
+ */
+function sm_student_id_pattern(array $ids): ?array
+{
+    $groups = [];
+    foreach ($ids as $sid) {
+        $parts = sm_student_id_split(trim((string)$sid));
+        if ($parts === null) {
+            continue;
+        }
+        [$stem, $num] = $parts;
+        $key = $stem . '|' . strlen($num);
+        if (!isset($groups[$key])) {
+            $groups[$key] = ['stem' => $stem, 'last' => $num, 'count' => 0];
+        }
+        $groups[$key]['count']++;
+        if (strcmp($num, $groups[$key]['last']) > 0) {   // same width → string order == numeric order
+            $groups[$key]['last'] = $num;
+        }
+    }
+
+    $best = null;
+    foreach ($groups as $g) {   // insertion order is newest-first, so a strict ">" keeps the newest on ties
+        if ($best === null || $g['count'] > $best['count']) {
+            $best = $g;
+        }
+    }
+    return $best;
+}
+
+/**
+ * Generate the next student ID for an admission cohort.
  *
- * How the number is chosen:
- *   1. Look up the cohort: every student whose admitted_semester, dept_id and
- *      program_id match the new student (the real columns, not a string guess).
- *   2. Among those, take the IDs that follow the standard format for this
- *      prefix and read the highest 4-digit sequence.  Manually entered or
- *      legacy IDs of any other shape are ignored, so they can never corrupt
- *      the counter.
- *   3. The next number is last + 1, then bumped past any ID that already
- *      exists anywhere in `students` (e.g. a student who later moved to another
- *      department keeps the ID of the cohort they were admitted with).
+ *   1. Cohort = every student whose admitted_semester, dept_id and program_id
+ *      match the new student (the real columns).
+ *   2. The cohort's own ID pattern is detected (stem + running number, see
+ *      sm_student_id_pattern) and CONTINUED: same stem, same zero-padding,
+ *      highest number + 1.  Whatever convention was used for that intake is
+ *      followed as-is; no format is invented.
+ *   3. Only when the cohort has no students yet (nothing to follow) the
+ *      standard [YY][SS][DD][PP][NNNN] format is used, starting at 0001:
+ *        YY = admission year, SS = semester code (01 Summer, 02 Fall, 03 Spring),
+ *        DD = dept_id, PP = program_id (00 if none).
+ *   4. The candidate is bumped past any ID that already exists anywhere in
+ *      `students`, so a number is never handed out twice.
  *
  * Mirrored by capi_generate_student_id() in admin/api/v1/includes/student_helpers.php;
  * keep both in sync.
  *
- * @throws RuntimeException when all 9999 numbers of the cohort are taken.
+ * @throws RuntimeException when no free ID can be produced.
  */
 function sm_generate_student_id(string $admitted_semester, int $dept_id, int $program_id = 0): string
 {
-    $prefix  = sm_student_id_prefix($admitted_semester, $dept_id, $program_id);
-    $pattern = '^' . $prefix . '[0-9]{4}$';
-
-    $sql = 'SELECT MAX(CAST(RIGHT(student_id, 4) AS UNSIGNED))
+    $sql = 'SELECT student_id
               FROM students
              WHERE admitted_semester = ?
                AND dept_id = ?
                AND ' . ($program_id > 0 ? 'program_id = ?' : '(program_id IS NULL OR program_id = 0)') . '
-               AND student_id REGEXP ?';
+             ORDER BY id DESC';
     $params = [$admitted_semester, $dept_id];
     if ($program_id > 0) {
         $params[] = $program_id;
     }
-    $params[] = $pattern;
-
     $stmt = db()->prepare($sql);
     $stmt->execute($params);
-    $seq = (int)$stmt->fetchColumn() + 1;
+    $cohort = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+    $pattern = sm_student_id_pattern($cohort);
+    if ($pattern !== null) {
+        $stem = $pattern['stem'];
+        $next = sm_digits_increment($pattern['last']);
+    } else {
+        $stem = sm_student_id_prefix($admitted_semester, $dept_id, $program_id);
+        $next = '0001';
+    }
 
     $exists = db()->prepare('SELECT 1 FROM students WHERE student_id = ? LIMIT 1');
-    while ($seq <= 9999) {
-        $exists->execute([$prefix . str_pad((string)$seq, 4, '0', STR_PAD_LEFT)]);
+    $tries  = 0;
+    while (true) {
+        $exists->execute([$stem . $next]);
         if (!$exists->fetchColumn()) {
             break;
         }
-        $seq++;
-    }
-    if ($seq > 9999) {
-        throw new RuntimeException(
-            'Student ID sequence exhausted for prefix ' . $prefix
-            . ' (' . $admitted_semester . ', dept ' . $dept_id . ', program ' . $program_id . ').'
-        );
+        $next = sm_digits_increment($next);
+        if (++$tries > 10000) {
+            throw new RuntimeException(
+                'Could not find a free student ID for pattern "' . $stem . '<number>" ('
+                . $admitted_semester . ', dept ' . $dept_id . ', program ' . $program_id . ').'
+            );
+        }
     }
 
-    return $prefix . str_pad((string)$seq, 4, '0', STR_PAD_LEFT);
+    $sid = $stem . $next;
+    if (strlen($sid) > 20) {
+        throw new RuntimeException('Generated student ID "' . $sid . '" exceeds 20 characters.');
+    }
+    return $sid;
 }
 
 // ── Upload helpers ────────────────────────────────────────────────────────────

@@ -245,55 +245,122 @@ function capi_student_id_prefix(string $admitted_semester, int $dept_id, int $pr
 }
 
 /**
- * Generate the next 12-digit student ID: [YY][SS][DD][PP][NNNN]
- *   YY = admission year, SS = semester code, DD = dept id, PP = program id,
- *   NNNN = sequence within the admission cohort.
+ * Split an ID into its fixed stem and trailing running number:
+ *   "260303070012" → ['', '260303070012'],   "CSE-26-007" → ['CSE-26-', '007'].
+ * Returns null when the ID does not end in a digit (nothing to continue from).
+ */
+function capi_student_id_split(string $sid): ?array
+{
+    return preg_match('/^(.*?)(\d+)$/', $sid, $m) ? [$m[1], $m[2]] : null;
+}
+
+/** Add 1 to a digit string, keeping its zero-padding width ("0007" → "0008", "0999" → "1000"). */
+function capi_digits_increment(string $digits): string
+{
+    for ($i = strlen($digits) - 1; $i >= 0; $i--) {
+        if ($digits[$i] !== '9') {
+            $digits[$i] = (string)((int)$digits[$i] + 1);
+            return $digits;
+        }
+        $digits[$i] = '0';
+    }
+    return '1' . $digits;   // all nines: the number grows by one digit
+}
+
+/**
+ * Detect the numbering pattern a set of existing IDs follows.  Every ID is
+ * split into stem + trailing number; IDs with the same stem and the same
+ * number width belong to one pattern.  The pattern used by most IDs wins;
+ * on a tie the one used by the newest student wins (pass IDs newest first).
  *
- * How the number is chosen:
- *   1. Look up the cohort: every student whose admitted_semester, dept_id and
- *      program_id match the new student (the real columns, not a string guess).
- *   2. Among those, take the IDs that follow the standard format for this
- *      prefix and read the highest 4-digit sequence.  Manually entered or
- *      legacy IDs of any other shape are ignored, so they can never corrupt
- *      the counter.
- *   3. The next number is last + 1, then bumped past any ID that already
- *      exists anywhere in `students` (e.g. a student who later moved to another
- *      department keeps the ID of the cohort they were admitted with).
+ * @param  string[] $ids
+ * @return ?array{stem:string,last:string,count:int}  null when no ID ends in a digit
+ */
+function capi_student_id_pattern(array $ids): ?array
+{
+    $groups = [];
+    foreach ($ids as $sid) {
+        $parts = capi_student_id_split(trim((string)$sid));
+        if ($parts === null) {
+            continue;
+        }
+        [$stem, $num] = $parts;
+        $key = $stem . '|' . strlen($num);
+        if (!isset($groups[$key])) {
+            $groups[$key] = ['stem' => $stem, 'last' => $num, 'count' => 0];
+        }
+        $groups[$key]['count']++;
+        if (strcmp($num, $groups[$key]['last']) > 0) {   // same width → string order == numeric order
+            $groups[$key]['last'] = $num;
+        }
+    }
+
+    $best = null;
+    foreach ($groups as $g) {   // insertion order is newest-first, so a strict ">" keeps the newest on ties
+        if ($best === null || $g['count'] > $best['count']) {
+            $best = $g;
+        }
+    }
+    return $best;
+}
+
+/**
+ * Generate the next student ID for an admission cohort.
  *
- * @throws RuntimeException when all 9999 numbers of the cohort are taken.
+ *   1. Cohort = every student whose admitted_semester, dept_id and program_id
+ *      match the new student (the real columns).
+ *   2. The cohort's own ID pattern is detected (stem + running number, see
+ *      capi_student_id_pattern) and CONTINUED: same stem, same zero-padding,
+ *      highest number + 1.  Whatever convention was used for that intake is
+ *      followed as-is; no format is invented.
+ *   3. Only when the cohort has no students yet (nothing to follow) the
+ *      standard [YY][SS][DD][PP][NNNN] format is used, starting at 0001.
+ *   4. The candidate is bumped past any ID that already exists anywhere in
+ *      `students`, so a number is never handed out twice.
+ *
+ * @throws RuntimeException when no free ID can be produced.
  */
 function capi_generate_student_id(string $admitted_semester, int $dept_id, int $program_id = 0): string
 {
-    $prefix  = capi_student_id_prefix($admitted_semester, $dept_id, $program_id);
-    $pattern = '^' . $prefix . '[0-9]{4}$';
-
-    $sql = 'SELECT MAX(CAST(RIGHT(student_id, 4) AS UNSIGNED))
+    $sql = 'SELECT student_id
               FROM students
              WHERE admitted_semester = ?
                AND dept_id = ?
                AND ' . ($program_id > 0 ? 'program_id = ?' : '(program_id IS NULL OR program_id = 0)') . '
-               AND student_id REGEXP ?';
+             ORDER BY id DESC';
     $params = [$admitted_semester, $dept_id];
     if ($program_id > 0) {
         $params[] = $program_id;
     }
-    $params[] = $pattern;
-
     $stmt = db()->prepare($sql);
     $stmt->execute($params);
-    $seq = (int)$stmt->fetchColumn() + 1;
+    $cohort = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
-    while ($seq <= 9999 && capi_student_id_exists($prefix . str_pad((string)$seq, 4, '0', STR_PAD_LEFT))) {
-        $seq++;
-    }
-    if ($seq > 9999) {
-        throw new RuntimeException(
-            'Student ID sequence exhausted for prefix ' . $prefix
-            . ' (' . $admitted_semester . ', dept ' . $dept_id . ', program ' . $program_id . ').'
-        );
+    $pattern = capi_student_id_pattern($cohort);
+    if ($pattern !== null) {
+        $stem = $pattern['stem'];
+        $next = capi_digits_increment($pattern['last']);
+    } else {
+        $stem = capi_student_id_prefix($admitted_semester, $dept_id, $program_id);
+        $next = '0001';
     }
 
-    return $prefix . str_pad((string)$seq, 4, '0', STR_PAD_LEFT);
+    $tries = 0;
+    while (capi_student_id_exists($stem . $next)) {
+        $next = capi_digits_increment($next);
+        if (++$tries > 10000) {
+            throw new RuntimeException(
+                'Could not find a free student ID for pattern "' . $stem . '<number>" ('
+                . $admitted_semester . ', dept ' . $dept_id . ', program ' . $program_id . ').'
+            );
+        }
+    }
+
+    $sid = $stem . $next;
+    if (strlen($sid) > 20) {
+        throw new RuntimeException('Generated student ID "' . $sid . '" exceeds 20 characters.');
+    }
+    return $sid;
 }
 
 function capi_student_id_exists(string $student_id): bool
