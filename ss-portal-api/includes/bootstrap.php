@@ -51,6 +51,12 @@ function ssp_config(?string $key = null, $default = null)
 date_default_timezone_set((string)ssp_config('timezone', 'Asia/Dhaka'));
 mb_internal_encoding('UTF-8');
 
+// Private partner application: never let search engines index or cache any page.
+// (Also set in .htaccess and as <meta name="robots">; this covers servers without mod_headers.)
+if (PHP_SAPI !== 'cli' && !headers_sent()) {
+    header('X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex');
+}
+
 // ── Session (web requests only) ───────────────────────────────────────────────
 if (PHP_SAPI !== 'cli' && session_status() !== PHP_SESSION_ACTIVE) {
     $ssp_https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')

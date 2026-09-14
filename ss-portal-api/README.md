@@ -90,6 +90,8 @@ as base64 inside the JSON request.
 
 ## Security notes
 
+* The portal is hidden from search engines three ways: `robots.txt` (`Disallow: /`), an `X-Robots-Tag: noindex, nofollow, noarchive` header (sent by `.htaccess` and by PHP), and `<meta name="robots">` on every page. If the portal lives in a sub-folder of a public site, also add `Disallow: /ss-portal-api/` to that site's root `robots.txt`.
+
 * Keep `config.php` outside version control (already git-ignored) and readable only by the web server user.
 * `.htaccess` files deny HTTP access to `includes/`, `bin/`, `storage/`, `config*.php`, `schema.sql` and this README. Replicate these rules if you use nginx.
 * Sessions use `HttpOnly`, `SameSite=Lax` and `Secure` (when served over HTTPS); all forms are CSRF-protected; login is throttled after 5 failures.
