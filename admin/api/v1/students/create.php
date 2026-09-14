@@ -70,6 +70,21 @@ $batch        = $row['batch'] ?? null;
 $email        = (string)($row['email'] ?? '');
 $phone        = (string)($row['phone'] ?? '');
 
+// Auto ID: continue the numbering already used by this admission cohort
+// (same semester + department + program).  When the cohort has no numbering
+// yet NOTHING is created – the Student ID must be issued by the university
+// admin office and sent in `student_id`.
+if ($auto_id) {
+    $student_id = capi_generate_student_id($admitted_sem, $dept_id, $program_id);
+    if ($student_id === null) {
+        $cohort_label = $admitted_sem . ' / ' . $dept['code'] . ($program ? ' / ' . $program['program_name'] : '');
+        capi_error(422, 'student_id_pattern_not_found',
+            'No Student ID numbering exists yet for ' . $cohort_label
+            . '. The student was not created. Please contact the Prime University admin office for a Student ID and send it in "student_id".',
+            ['student_id' => 'Please contact the university admin for a Student ID (' . $cohort_label . ') and send it in "student_id".']);
+    }
+}
+
 // Soft duplicate detection – never blocks, mirrors admin behaviour, but tells
 // the caller so they can reconcile on their side.
 try {
@@ -111,8 +126,9 @@ try {
     // Auto-generated IDs can collide under concurrency; regenerate and retry.
     $attempts = $auto_id ? 3 : 1;
     for ($try = 1; $try <= $attempts; $try++) {
-        if ($auto_id) {
-            $student_id = capi_generate_student_id($admitted_sem, $dept_id, $program_id);
+        if ($auto_id && $try > 1) {
+            // ID raced with another insert – read the cohort again and take the next free number.
+            $student_id = capi_generate_student_id($admitted_sem, $dept_id, $program_id) ?? $student_id;
         }
         $row['student_id'] = $student_id;
         try {

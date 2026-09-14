@@ -20,6 +20,8 @@ if ($result['ok']) {
     foreach ($result['warnings'] ?? [] as $w) {
         ssp_flash('warning', 'University warning: ' . $w);
     }
+} elseif (!empty($result['needs_student_id'])) {
+    ssp_flash('warning', $result['message']);
 } elseif (!empty($result['errors'])) {
     ssp_flash('error', 'Prime University rejected the data: ' . $result['message'] . ' Edit the student to correct the fields.');
 } else {

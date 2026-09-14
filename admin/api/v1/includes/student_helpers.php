@@ -235,15 +235,6 @@ function capi_semester_year(string $semester): string
     return str_pad(substr($year, -2), 2, '0', STR_PAD_LEFT);
 }
 
-/** [YY][SS][DD][PP] – the part of the ID shared by everyone admitted to one semester / department / program. */
-function capi_student_id_prefix(string $admitted_semester, int $dept_id, int $program_id = 0): string
-{
-    return capi_semester_year($admitted_semester)
-         . capi_semester_code($admitted_semester)
-         . str_pad((string)$dept_id,    2, '0', STR_PAD_LEFT)
-         . str_pad((string)$program_id, 2, '0', STR_PAD_LEFT);
-}
-
 /**
  * Split an ID into its fixed stem and trailing running number:
  *   "260303070012" → ['', '260303070012'],   "CSE-26-007" → ['CSE-26-', '007'].
@@ -305,22 +296,24 @@ function capi_student_id_pattern(array $ids): ?array
 }
 
 /**
- * Generate the next student ID for an admission cohort.
+ * Generate the next student ID for an admission cohort, or NULL when the
+ * cohort has no numbering to follow.
  *
  *   1. Cohort = every student whose admitted_semester, dept_id and program_id
  *      match the new student (the real columns).
  *   2. The cohort's own ID pattern is detected (stem + running number, see
  *      capi_student_id_pattern) and CONTINUED: same stem, same zero-padding,
  *      highest number + 1.  Whatever convention was used for that intake is
- *      followed as-is; no format is invented.
- *   3. Only when the cohort has no students yet (nothing to follow) the
- *      standard [YY][SS][DD][PP][NNNN] format is used, starting at 0001.
+ *      followed as-is.  No format is EVER invented here.
+ *   3. No students in the cohort / no ID ending in a digit → null.  The caller
+ *      must not create the student; the ID has to come from the university
+ *      admin office (create.php answers 422 student_id_pattern_not_found).
  *   4. The candidate is bumped past any ID that already exists anywhere in
  *      `students`, so a number is never handed out twice.
  *
- * @throws RuntimeException when no free ID can be produced.
+ * @throws RuntimeException when a pattern exists but no free ID can be produced.
  */
-function capi_generate_student_id(string $admitted_semester, int $dept_id, int $program_id = 0): string
+function capi_generate_student_id(string $admitted_semester, int $dept_id, int $program_id = 0): ?string
 {
     $sql = 'SELECT student_id
               FROM students
@@ -337,13 +330,11 @@ function capi_generate_student_id(string $admitted_semester, int $dept_id, int $
     $cohort = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
     $pattern = capi_student_id_pattern($cohort);
-    if ($pattern !== null) {
-        $stem = $pattern['stem'];
-        $next = capi_digits_increment($pattern['last']);
-    } else {
-        $stem = capi_student_id_prefix($admitted_semester, $dept_id, $program_id);
-        $next = '0001';
+    if ($pattern === null) {
+        return null;   // nothing to follow – the university admin must issue the ID
     }
+    $stem = $pattern['stem'];
+    $next = capi_digits_increment($pattern['last']);
 
     $tries = 0;
     while (capi_student_id_exists($stem . $next)) {

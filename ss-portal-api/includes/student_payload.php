@@ -11,8 +11,8 @@
 require_once __DIR__ . '/bootstrap.php';
 
 const SSP_STUDENT_SCALARS = [
-    // enrollment
-    'department', 'program', 'semester', 'year', 'batch', 'semester_type', 'shift', 'section', 'status',
+    // enrollment ('student_id' only when issued by the university admin, see README)
+    'department', 'program', 'semester', 'year', 'batch', 'semester_type', 'shift', 'section', 'status', 'student_id',
     // student
     'name', 'father_name', 'father_phone', 'father_occupation', 'mother_name', 'mother_phone', 'mother_occupation',
     'present_address', 'contact_no', 'email', 'permanent_address', 'permanent_contact_no', 'permanent_email',
@@ -61,6 +61,12 @@ function ssp_build_student_payload(array $src, array &$errors): array
         $errors['semester'] = 'Admitted semester is required, e.g. "Spring 2026".';
     } elseif (!preg_match('/^(spring|summer|fall)[\s-]+\d{4}$/i', $payload['semester']) && !preg_match('/^\d{4}[\s-]+(spring|summer|fall)$/i', $payload['semester'])) {
         $errors['semester'] = 'Use "<Spring|Summer|Fall> <YYYY>", e.g. "Fall 2026".';
+    }
+    if (isset($payload['student_id'])) {
+        $payload['student_id'] = preg_replace('/\s+/', '', $payload['student_id']);
+        if (!preg_match('/^[a-zA-Z0-9-]{1,20}$/', $payload['student_id'])) {
+            $errors['student_id'] = 'Student ID must be 1-20 letters, digits or hyphens, exactly as issued by the university admin.';
+        }
     }
     $nameLen = mb_strlen($payload['name'] ?? '');
     if ($nameLen < 2 || $nameLen > 255) {
