@@ -102,7 +102,7 @@ $courses = [];
 $live_error = false;
 try {
     $stmt = db()->prepare(
-        "SELECT ms.id AS sheet_id, ms.semester, ms.subject_code, ms.subject_title,
+        "SELECT ms.id AS sheet_id, ms.offer_subject_id, ms.semester, ms.subject_code, ms.subject_title,
                 COALESCE(ms.credits, cc.credit) AS credits,
                 ms.exam_id, e.exam_name, e.exam_year, e.end_date AS exam_end_date,
                 g.letter_grade, g.grade_point, g.is_absent, g.marks_json, g.remarks,
@@ -122,7 +122,7 @@ try {
     // remarks column may not exist on older deployments – retry without it
     try {
         $stmt = db()->prepare(
-            "SELECT ms.id AS sheet_id, ms.semester, ms.subject_code, ms.subject_title,
+            "SELECT ms.id AS sheet_id, ms.offer_subject_id, ms.semester, ms.subject_code, ms.subject_title,
                     COALESCE(ms.credits, cc.credit) AS credits,
                     ms.exam_id, e.exam_name, e.exam_year, e.end_date AS exam_end_date,
                     g.letter_grade, g.grade_point, g.is_absent, g.marks_json, NULL AS remarks,
@@ -145,6 +145,8 @@ try {
 
 // Group by semester (term label from the course offer; fall back to the exam).
 $semesters = [];   // key => ['label','sort','courses'=>[], ...]
+$published_offer_subjects = []; // offer_subject_id => true  (already has a published grade)
+$published_course_terms   = []; // "CODE|Term label" => true (same course already published in that term)
 foreach ($courses as $c) {
     $letter = trim((string)($c['letter_grade'] ?? ''));
     $graded = ($c['marks_json'] !== null) || (int)$c['is_absent'] === 1 || $letter !== '';
@@ -181,7 +183,73 @@ foreach ($courses as $c) {
         'point'       => $is_incom ? null : ($c['grade_point'] !== null ? (float)$c['grade_point'] : null),
         'is_incom'    => $is_incom,
         'remarks'     => trim((string)($c['remarks'] ?? '')),
+        'pending'     => false,
+        'teachers'    => '',
     ];
+
+    if (!empty($c['offer_subject_id'])) $published_offer_subjects[(int)$c['offer_subject_id']] = true;
+    $ck = strtoupper(preg_replace('/\s+/', '', (string)($c['subject_code'] ?? '')));
+    if ($ck !== '') $published_course_terms[$ck . '|' . $key] = true;
+}
+
+// ── Registered courses whose result is NOT published yet ─────────────────────────────
+// Every course the student registered for (Course Offers) that has no
+// published grade is listed in its semester with a "Not published yet" status
+// and the course teacher's name. Workflow state (draft / pending) is never
+// revealed to the student.
+$pending_error = false;
+try {
+    $stmt = db()->prepare(
+        "SELECT cos.id AS offer_subject_id, o.semester, o.academic_intake,
+                c.course_code, c.course_name, c.credit,
+                (SELECT GROUP_CONCAT(f.name ORDER BY t.sort_order SEPARATOR ', ')
+                   FROM co_offer_subject_teachers t
+                   JOIN dept_faculty f ON f.id = t.faculty_id
+                  WHERE t.offer_subject_id = cos.id) AS teachers
+           FROM co_registrations r
+           JOIN co_offer_subjects cos ON cos.id = r.offer_subject_id
+           JOIN co_offers o           ON o.id  = cos.offer_id
+           JOIN course_curriculum c   ON c.id  = cos.curriculum_id
+          WHERE r.student_id = ?
+          ORDER BY o.id DESC, cos.sort_order ASC, cos.id ASC"
+    );
+    $stmt->execute([$student_pk]);
+    foreach ($stmt->fetchAll() as $reg) {
+        $osid = (int)$reg['offer_subject_id'];
+        if (isset($published_offer_subjects[$osid])) continue;
+
+        $term  = mr_parse_term($reg['semester']);
+        $label = $term ? $term['label'] : trim((string)($reg['semester'] ?: $reg['academic_intake']));
+        if ($label === '') $label = 'Current semester';
+        $sort  = $term ? $term['sort'] : PHP_INT_MAX; // unknown term → treat as most recent
+
+        $code_key = strtoupper(preg_replace('/\s+/', '', (string)$reg['course_code']));
+        if ($code_key !== '' && isset($published_course_terms[$code_key . '|' . $label])) continue;
+
+        if (!isset($semesters[$label])) {
+            $semesters[$label] = ['label' => $label, 'sort' => $sort, 'exam' => '', 'published_at' => null, 'courses' => []];
+        }
+        // Same course registered twice in the same term (e.g. two offers) → list once.
+        foreach ($semesters[$label]['courses'] as $ex) {
+            if (!empty($ex['pending']) && $code_key !== ''
+                && strtoupper(preg_replace('/\s+/', '', $ex['code'])) === $code_key) {
+                continue 2;
+            }
+        }
+        $semesters[$label]['courses'][] = [
+            'code'     => (string)$reg['course_code'],
+            'title'    => (string)$reg['course_name'],
+            'credits'  => $reg['credit'] !== null && $reg['credit'] !== '' ? (float)$reg['credit'] : null,
+            'grade'    => 'Not published yet',
+            'point'    => null,
+            'is_incom' => false,
+            'remarks'  => '',
+            'pending'  => true,
+            'teachers' => trim((string)($reg['teachers'] ?? '')),
+        ];
+    }
+} catch (Throwable $e) {
+    $pending_error = true;
 }
 
 // Chronological order for GPA / CGPA computation
@@ -194,12 +262,17 @@ $attempts    = [];    // course code => ['credits','point'] currently counted in
 $earned_credits = 0.0;
 $total_courses  = 0;
 $incom_total    = 0;
+$pending_total  = 0;
 
 foreach ($semesters as $key => &$sem) {
-    $sem_points = 0.0; $sem_credits = 0.0; $sem_incom = 0;
-    usort($sem['courses'], static fn($a, $b) => strnatcasecmp($a['code'] . $a['title'], $b['code'] . $b['title']));
+    $sem_points = 0.0; $sem_credits = 0.0; $sem_incom = 0; $sem_pending = 0;
+    // Published courses first, then not-yet-published; natural order by code inside each group.
+    usort($sem['courses'], static fn($a, $b) =>
+        ((int)!empty($a['pending']) <=> (int)!empty($b['pending']))
+        ?: strnatcasecmp($a['code'] . $a['title'], $b['code'] . $b['title']));
 
     foreach ($sem['courses'] as $c) {
+        if (!empty($c['pending'])) { $sem_pending++; $pending_total++; continue; }
         $total_courses++;
         if ($c['is_incom'] || $c['point'] === null) { $sem_incom++; $incom_total++; continue; }
         $cr = $c['credits'] ?? 0.0;
@@ -224,13 +297,16 @@ foreach ($semesters as $key => &$sem) {
     $sem['gpa']         = $sem_credits > 0 ? round($sem_points / $sem_credits, 2) : null;
     $sem['credits']     = $sem_credits;
     $sem['incom']       = $sem_incom;
+    $sem['pending']     = $sem_pending;
+    $sem['published']   = count($sem['courses']) - $sem_pending;
     $sem['cgpa']        = $cum_credits > 0 ? round($cum_points / $cum_credits, 2) : null;
     $sem['cum_credits'] = $cum_credits;
 }
 unset($sem);
 
-$overall_cgpa    = $cum_credits > 0 ? round($cum_points / $cum_credits, 2) : null;
-$semesters_desc  = array_reverse($semesters, true); // newest first for display
+$overall_cgpa        = $cum_credits > 0 ? round($cum_points / $cum_credits, 2) : null;
+$published_sem_count = count(array_filter($semesters, static fn($s) => ($s['published'] ?? 0) > 0));
+$semesters_desc      = array_reverse($semesters, true); // newest first for display
 
 // ── Legacy / imported results (student_results) ────────────────────────────────────
 $legacy_groups = [];
@@ -307,7 +383,11 @@ require_once __DIR__ . '/../includes/header.php';
 .mr-g-f     { background:#fee2e2; color:#991b1b; }
 .mr-g-incom { background:#e5e7eb; color:#374151; font-size:.72rem; }
 .mr-g-none  { background:#f1f5f9; color:#64748b; }
+.mr-g-pending { background:#fff7ed; color:#c2410c; font-size:.7rem; border:1px dashed #fdba74; white-space:nowrap; }
 .mr-point { font-size:.75rem; color:#64748b; }
+.mr-pending-row td { background:#fffbf5 !important; }
+.mr-teacher { font-size:.72rem; color:#64748b; margin-top:2px; }
+.mr-teacher strong { color:#334155; }
 
 .mr-empty { text-align:center; padding:56px 24px; color:#64748b; }
 .mr-empty i { font-size:2.4rem; color:#cbd5e1; margin-bottom:12px; display:block; }
@@ -343,9 +423,15 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="l"><?= $final_cgpa !== null ? 'Final CGPA' : 'Current CGPA' ?></div>
             </div>
             <div class="mr-stat">
-                <div class="v"><?= count($semesters) ?></div>
-                <div class="l">Semester<?= count($semesters) === 1 ? '' : 's' ?> published</div>
+                <div class="v"><?= $published_sem_count ?></div>
+                <div class="l">Semester<?= $published_sem_count === 1 ? '' : 's' ?> published</div>
             </div>
+            <?php if ($pending_total > 0): ?>
+            <div class="mr-stat" style="background:rgba(251,146,60,.22);border-color:rgba(251,146,60,.45);">
+                <div class="v"><?= $pending_total ?></div>
+                <div class="l">Not published yet</div>
+            </div>
+            <?php endif; ?>
             <div class="mr-stat">
                 <div class="v"><?= rtrim(rtrim(number_format($cum_credits, 1), '0'), '.') ?></div>
                 <div class="l">Credits counted</div>
@@ -365,6 +451,14 @@ require_once __DIR__ . '/../includes/header.php';
 
 <?php if ($live_error): ?>
 <div class="alert alert-warning"><i class="fas fa-exclamation-triangle me-1"></i>Results are temporarily unavailable. Please try again later.</div>
+<?php endif; ?>
+
+<?php if ($pending_total > 0): ?>
+<div class="alert py-2 px-3 mb-3 d-flex align-items-center gap-2" style="background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;font-size:.85rem;">
+    <i class="fas fa-hourglass-half"></i>
+    <span><strong><?= $pending_total ?></strong> registered course<?= $pending_total === 1 ? ' has' : 's have' ?> no published result yet.
+          If you have any urgency, please contact your course teacher.</span>
+</div>
 <?php endif; ?>
 
 <?php if ($final_cgpa !== null): ?>
@@ -408,16 +502,17 @@ require_once __DIR__ . '/../includes/header.php';
                 <?php if ($sem['exam'] !== '' && $sem['exam'] !== $sem['label']): ?>&nbsp;·&nbsp; <?= h($sem['exam']) ?><?php endif; ?>
                 <?php if ($sem['published_at']): ?>&nbsp;·&nbsp; Published <?= date('d M Y', strtotime($sem['published_at'])) ?><?php endif; ?>
                 <?php if ($sem['incom'] > 0): ?>&nbsp;·&nbsp; <span class="text-danger"><?= $sem['incom'] ?> incomplete</span><?php endif; ?>
+                <?php if ($sem['pending'] > 0): ?>&nbsp;·&nbsp; <span style="color:#c2410c;"><?= $sem['pending'] ?> not published yet</span><?php endif; ?>
             </div>
         </div>
-        <div class="mr-sem-gpa">
+        <div class="mr-sem-gpa" <?= $sem['pending'] > 0 ? 'title="Provisional: will update when the remaining results are published"' : '' ?>>
             <div class="box">
-                <div class="v"><?= mr_fmt_gpa($sem['gpa']) ?></div>
-                <div class="l">Semester GPA</div>
+                <div class="v"><?= $sem['published'] > 0 ? mr_fmt_gpa($sem['gpa']) : '<span style="font-size:.8rem;color:#c2410c;">Pending</span>' ?></div>
+                <div class="l">Semester GPA<?= $sem['pending'] > 0 && $sem['published'] > 0 ? '*' : '' ?></div>
             </div>
             <div class="box cg">
-                <div class="v"><?= mr_fmt_gpa($sem['cgpa']) ?></div>
-                <div class="l">CGPA</div>
+                <div class="v"><?= $sem['published'] > 0 ? mr_fmt_gpa($sem['cgpa']) : '—' ?></div>
+                <div class="l">CGPA<?= $sem['pending'] > 0 && $sem['published'] > 0 ? '*' : '' ?></div>
             </div>
         </div>
     </div>
@@ -432,17 +527,31 @@ require_once __DIR__ . '/../includes/header.php';
                 </tr>
             </thead>
             <tbody>
-            <?php foreach ($sem['courses'] as $c): ?>
-                <tr>
+            <?php foreach ($sem['courses'] as $c): $is_pending = !empty($c['pending']); ?>
+                <tr class="<?= $is_pending ? 'mr-pending-row' : '' ?>">
                     <td style="padding-left:22px;"><code style="font-size:.8rem;"><?= h($c['code'] !== '' ? $c['code'] : '—') ?></code></td>
                     <td>
                         <?= h($c['title']) ?>
-                        <?php if ($c['remarks'] !== ''): ?><div class="text-muted" style="font-size:.72rem;"><i class="fas fa-comment-dots me-1"></i><?= h($c['remarks']) ?></div><?php endif; ?>
+                        <?php if ($is_pending): ?>
+                        <div class="mr-teacher">
+                            <i class="fas fa-chalkboard-teacher me-1"></i>
+                            <?php if ($c['teachers'] !== ''): ?>
+                                Course teacher: <strong><?= h($c['teachers']) ?></strong> &middot;
+                            <?php endif; ?>
+                            If you have any urgency, please contact your course teacher.
+                        </div>
+                        <?php elseif ($c['remarks'] !== ''): ?>
+                        <div class="text-muted" style="font-size:.72rem;"><i class="fas fa-comment-dots me-1"></i><?= h($c['remarks']) ?></div>
+                        <?php endif; ?>
                     </td>
                     <td class="text-center"><?= $c['credits'] !== null ? rtrim(rtrim(number_format($c['credits'], 2), '0'), '.') : '—' ?></td>
                     <td class="text-center">
-                        <span class="mr-grade <?= mr_grade_class($c['grade']) ?>"><?= h($c['grade']) ?></span>
-                        <?php if ($c['point'] !== null): ?><div class="mr-point"><?= number_format($c['point'], 2) ?></div><?php endif; ?>
+                        <?php if ($is_pending): ?>
+                            <span class="mr-grade mr-g-pending"><i class="fas fa-hourglass-half me-1"></i>Not published yet</span>
+                        <?php else: ?>
+                            <span class="mr-grade <?= mr_grade_class($c['grade']) ?>"><?= h($c['grade']) ?></span>
+                            <?php if ($c['point'] !== null): ?><div class="mr-point"><?= number_format($c['point'], 2) ?></div><?php endif; ?>
+                        <?php endif; ?>
                     </td>
                 </tr>
             <?php endforeach; ?>
@@ -504,6 +613,8 @@ require_once __DIR__ . '/../includes/header.php';
     <strong>How GPA / CGPA is calculated:</strong> Semester GPA = Σ(credit × grade point) ÷ Σ credits of graded courses in that semester.
     CGPA is cumulative across all published semesters<?= MR_CGPA_LATEST_ATTEMPT_ONLY ? '; when a course is retaken, the latest attempt replaces the earlier grade' : '' ?>.
     Courses marked <span class="mr-grade mr-g-incom" style="padding:1px 6px;">Incom</span> are excluded until completed.
+    Courses marked <span class="mr-grade mr-g-pending" style="padding:1px 6px;">Not published yet</span> are registered courses whose results have not been released;
+    they are not counted in GPA / CGPA (values marked * are provisional). If you have any urgency, please contact your course teacher.
     The official transcript issued by the Controller of Examinations prevails in case of any discrepancy.
 </div>
 <?php endif; ?>
