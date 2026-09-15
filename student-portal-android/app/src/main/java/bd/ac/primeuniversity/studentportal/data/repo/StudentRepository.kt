@@ -20,6 +20,7 @@ import bd.ac.primeuniversity.studentportal.data.model.LoginResponse
 import bd.ac.primeuniversity.studentportal.data.model.MeResponse
 import bd.ac.primeuniversity.studentportal.data.model.Notice
 import bd.ac.primeuniversity.studentportal.data.model.NoticesResponse
+import bd.ac.primeuniversity.studentportal.data.model.ResultsResponse
 import bd.ac.primeuniversity.studentportal.data.model.SimpleResponse
 import bd.ac.primeuniversity.studentportal.data.model.StaffAttendanceResponse
 import bd.ac.primeuniversity.studentportal.data.model.StaffLeavesResponse
@@ -230,6 +231,14 @@ class StudentRepository private constructor(context: Context) {
                 AppResult.Error(e.message ?: "Something went wrong. Please try again.")
             }
         }
+
+    // ── Results (students only) ────────────────────────────────────────────────────
+
+    /**
+     * Published semester results with course-wise grades and GPA, computed
+     * server-side with the same rules as the web result page.
+     */
+    suspend fun getResults(): AppResult<ResultsResponse> = call { api.getResults() }
 
     // ── Digital ID card (students only) ─────────────────────────────────────────────
 
