@@ -2,27 +2,38 @@
 /**
  * Student Portal API – GET /api/student/results.php
  * ==================================================
- * Published semester results of the signed-in student. Mirrors the public
- * web result page (spring-result.php): same sr_results / sr_result_entries
- * tables, same ordering and the same GPA rule (credit-weighted average;
- * reported as incomplete when any course is graded F or INCOM).
+ * Published results of the signed-in student – the SAME data and rules as the
+ * web portal page students/my-results.php, so the app never differs from it:
  *
- * Duplicate rule: when the same course appears in more than one published
- * result set of the same term (e.g. a mid-term set that only carries the
- * mid-term marks and, later, the final set), only the highest-priority entry
- * is returned – final > unspecified > mid-term, then the most recently
- * created set. The final result therefore always replaces the mid-term one.
+ *   • result_mark_sheets (workflow_status = 'published') + result_sheet_grades
+ *       live results of the Results workflow; only sheets whose exam is over
+ *   • sr_results / sr_result_entries
+ *       result sets uploaded through the Spring Result module
+ *   • student_results
+ *       archived / imported rows (incl. the Final Result Publish CGPA row)
  *
- * Optional query: ?result_id=<id> to restrict the response to one result set
- * (the duplicate rule is still applied across all of the student's sets first).
+ * Rules (identical to my-results.php)
+ *   • One card per semester (term such as "Spring 2026").
+ *   • Same course published more than once in a term (e.g. a mid-term sheet
+ *     carrying only the mid-term marks and, later, the final sheet): only the
+ *     highest-ranked result is shown – final > unspecified > mid-term, then
+ *     more mark components entered, then the most recently published.
+ *   • F and Incom courses are listed but not counted; the semester GPA is
+ *     withheld (null, gpa_incomplete = true) while the term contains one.
+ *   • CGPA is credit-weighted over completed courses; a retaken course counts
+ *     its latest attempt only. A published Final Result CGPA takes precedence.
+ *   • Marks are never returned.
+ *
+ * Optional query: ?result_id=<id> restricts the response to one card
+ * (use the id from a previous response).
  *
  * Success response:
- *   { "ok": true,
- *     "student_id": "193020101021", "student_name": "...",
- *     "results": [ { id, title, semester, published_at, course_count,
- *                    gpa, gpa_incomplete,
+ *   { "ok": true, "student_id": "...", "student_name": "...",
+ *     "cgpa": 3.45, "cgpa_is_final": false, "credits_counted": 36,
+ *     "results": [ { id, title, semester, exam, published_at, course_count,
+ *                    credits, gpa, gpa_incomplete, gpa_status, cgpa,
  *                    entries: [ { course_code, course_title, credit,
- *                                 letter_grade, grade_point }, ... ] }, ... ] }
+ *                                 letter_grade, grade_point, remarks }, ... ] }, ... ] }
  */
 
 require_once __DIR__ . '/includes/auth_student_api.php';
@@ -31,233 +42,380 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     sp_api_error(405, 'Method Not Allowed. Use GET.');
 }
 
-$ctx     = sp_api_auth();
-$student = $ctx['student'];
-$sid     = trim((string)($student['student_id'] ?? ''));
-$sname   = (string)($student['student_name'] ?? '');
-
-if ($sid === '') {
-    sp_api_ok(['student_id' => '', 'student_name' => $sname, 'results' => []]);
-    exit;
-}
+$ctx        = sp_api_auth();
+$student    = $ctx['student'];
+$student_pk = (int)($student['student_db_id'] ?? 0);
+$sid        = trim((string)($student['student_id'] ?? ''));
+$sname      = (string)($student['student_name'] ?? '');
 
 $filter_result_id = (int)($_GET['result_id'] ?? 0);
+$today            = date('Y-m-d');
 
-// ── Helpers (same rules as spring-result.php) ─────────────────────────────────
+/** Same CGPA policy as my-results.php: a retaken course counts its latest attempt only. */
+const SP_CGPA_LATEST_ATTEMPT_ONLY = true;
 
-function sp_results_has_fail_or_incom(array $entries): bool
+// ── Helpers (ported from students/my-results.php) ───────────────────────────────
+
+/** "Spring-2026" / "spring 2026" / "Fall2025" → ['label' => 'Spring 2026', 'sort' => 20261]. */
+function sp_parse_term(?string $raw): ?array
 {
-    foreach ($entries as $e) {
-        $g = strtoupper(trim((string)$e['letter_grade']));
-        if ($g === 'F' || $g === 'INCOM') {
-            return true;
-        }
-    }
-    return false;
+    $raw = trim((string)$raw);
+    if ($raw === '') return null;
+    if (!preg_match('/\b(spring|summer|fall|autumn|winter)\b\s*[-_\/]?\s*(\d{2,4})/i', $raw, $m)) return null;
+    $season = ucfirst(strtolower($m[1]));
+    if ($season === 'Autumn') $season = 'Fall';
+    $year = (int)$m[2];
+    if ($year < 100) $year += 2000;
+    $order = ['Spring' => 1, 'Summer' => 2, 'Fall' => 3, 'Winter' => 4][$season] ?? 0;
+    return ['label' => $season . ' ' . $year, 'sort' => $year * 10 + $order];
 }
 
-function sp_results_gpa(array $entries): ?float
+/** 2 = final examination, 1 = unspecified, 0 = mid-term (from an exam name / result title). */
+function sp_exam_kind(?string $name): int
 {
-    // Credit-weighted GPA: Σ(grade_point × credit) / Σ(credit)
-    $total_points  = 0.0;
-    $total_credits = 0.0;
-    foreach ($entries as $e) {
-        if ($e['grade_point'] !== null && $e['credit'] !== null && (float)$e['credit'] > 0) {
-            $credit         = (float)$e['credit'];
-            $total_points  += (float)$e['grade_point'] * $credit;
-            $total_credits += $credit;
-        }
-    }
-    if ($total_credits > 0) {
-        return round($total_points / $total_credits, 2);
-    }
-    // Fallback: simple average when no credits are stored
-    $total = 0.0;
-    $count = 0;
-    foreach ($entries as $e) {
-        if ($e['grade_point'] !== null) {
-            $total += (float)$e['grade_point'];
-            $count++;
-        }
-    }
-    return $count > 0 ? round($total / $count, 2) : null;
-}
-
-// ── Helpers (duplicate rule: final result over mid-term) ───────────────────────
-
-/**
- * Mid-term vs final priority of a result set, derived from its title:
- * 2 = final, 1 = unspecified, 0 = mid-term.
- */
-function sp_results_kind(string $title): int
-{
-    $t = strtolower(trim($title));
-    if ($t === '') return 1;
-    if (preg_match('/\bfinal\b/', $t)) return 2;
-    if (preg_match('/\bmid\s*-?\s*term\b|\bmidterm\b|\bmid\b/', $t)) return 0;
+    $n = strtolower(trim((string)$name));
+    if ($n === '') return 1;
+    if (preg_match('/\bfinal\b/', $n)) return 2;
+    if (preg_match('/\bmid\s*-?\s*term\b|\bmidterm\b|\bmid\b/', $n)) return 0;
     return 1;
 }
 
-/**
- * Normalised term label ("Spring 2026") of a result set so that the mid-term
- * and final sets of the same semester can be matched. Falls back to the raw
- * semester / title when no season + year can be recognised.
- */
-function sp_results_term_key(array $res): string
+/** Number of mark components (attendance, class test, mid-term, final …) actually entered. */
+function sp_marks_filled(?string $marks_json): int
 {
-    foreach ([(string)($res['semester'] ?? ''), (string)($res['title'] ?? '')] as $raw) {
-        if (preg_match('/\b(spring|summer|fall|autumn|winter)\b\s*[-_\/]?\s*(\d{2,4})/i', $raw, $m)) {
-            $season = ucfirst(strtolower($m[1]));
-            if ($season === 'Autumn') $season = 'Fall';
-            $year = (int)$m[2];
-            if ($year < 100) $year += 2000;
-            return $season . ' ' . $year;
+    if ($marks_json === null || $marks_json === '') return 0;
+    $m = json_decode($marks_json, true);
+    if (!is_array($m)) return 0;
+    return count(array_filter($m, static fn($v) => $v !== null && $v !== ''));
+}
+
+/** Key identifying a course (code, else title) for duplicate / retake detection. */
+function sp_course_key(string $code, string $title): string
+{
+    $c = strtoupper(preg_replace('/\s+/', '', $code));
+    return $c !== '' ? $c : 'T:' . strtoupper(preg_replace('/\s+/', '', $title));
+}
+
+function sp_is_incom_letter(string $g): bool
+{
+    return in_array(strtoupper(trim($g)), ['INCOM', 'I', 'INC'], true);
+}
+
+/** An F grade (or a zero grade point) means the course is not completed. */
+function sp_is_fail(string $grade, ?float $point): bool
+{
+    return strtoupper(trim($grade)) === 'F' || ($point !== null && $point <= 0.0);
+}
+
+/** Grade point for a letter grade when the source row does not store one. */
+function sp_grade_point(string $letter): ?float
+{
+    return match (strtoupper(trim($letter))) {
+        'A+' => 4.00, 'A' => 3.75, 'A-' => 3.50,
+        'B+' => 3.25, 'B' => 3.00, 'B-' => 2.75,
+        'C+' => 2.50, 'C' => 2.25, 'D'  => 2.00,
+        'F'  => 0.00,
+        default => null,
+    };
+}
+
+/** A sheet is visible only when it is tagged with an exam whose end date has passed. */
+function sp_exam_done(?string $exam_id, ?string $end_date, string $today): bool
+{
+    return !empty($exam_id) && !empty($end_date) && $end_date < $today;
+}
+
+/**
+ * Add one course row to its semester card. When the same course is already
+ * listed in that term, the higher-ranked row replaces the lower one
+ * (rank = [exam kind, mark components entered, published_at, source id]).
+ */
+function sp_add_course(array &$terms, array &$slots, array $term, array $row, array $rank,
+                       string $exam = '', ?string $published_at = null): void
+{
+    $key = $term['label'];
+    if (!isset($terms[$key])) {
+        $terms[$key] = [
+            'label'        => $key,
+            'sort'         => (int)$term['sort'],
+            'exam'         => '',
+            'exam_kind'    => -1,
+            'published_at' => null,
+            'courses'      => [],
+        ];
+    }
+    if ($published_at && ($terms[$key]['published_at'] === null || $published_at > $terms[$key]['published_at'])) {
+        $terms[$key]['published_at'] = $published_at;
+    }
+    if ($exam !== '' && $rank[0] > $terms[$key]['exam_kind']) {
+        $terms[$key]['exam_kind'] = $rank[0];
+        $terms[$key]['exam']      = $exam;
+    }
+
+    $slot = $key . '|' . sp_course_key($row['code'], $row['title']);
+    if (isset($slots[$slot])) {
+        if (($rank <=> $slots[$slot]['rank']) > 0) {
+            $terms[$key]['courses'][$slots[$slot]['idx']] = $row;
+            $slots[$slot]['rank'] = $rank;
+        }
+        return;
+    }
+    $terms[$key]['courses'][] = $row;
+    $slots[$slot] = ['idx' => array_key_last($terms[$key]['courses']), 'rank' => $rank];
+}
+
+$terms = []; // 'Spring 2026' => ['label','sort','exam','exam_kind','published_at','courses' => []]
+$slots = []; // 'Spring 2026|CODE' => ['idx' => position in courses, 'rank' => [...]]
+
+// ── Source 1: published Results-workflow mark sheets ────────────────────────────
+
+$sheet_sql = static function (bool $with_remarks): string {
+    $remarks = $with_remarks ? 'g.remarks' : 'NULL AS remarks';
+    return "SELECT ms.id AS sheet_id, ms.semester, ms.subject_code, ms.subject_title,
+                   COALESCE(ms.credits, cc.credit) AS credits,
+                   ms.exam_id, e.exam_name, e.exam_year, e.end_date AS exam_end_date,
+                   g.letter_grade, g.grade_point, g.is_absent, g.marks_json, $remarks,
+                   (SELECT MAX(h.acted_at) FROM wf_sheet_history h
+                     WHERE h.sheet_id = ms.id AND h.action = 'published') AS published_at
+              FROM result_sheet_grades g
+              JOIN result_mark_sheets ms      ON ms.id = g.sheet_id
+              LEFT JOIN course_curriculum cc  ON cc.id = ms.curriculum_id
+              LEFT JOIN ei_exams e            ON e.id  = ms.exam_id
+             WHERE ms.workflow_status = 'published'
+               AND (g.student_id = ? OR g.student_sid = ?)
+             ORDER BY ms.id ASC";
+};
+
+$sheet_rows = [];
+// The remarks column may not exist on older deployments – retry without it.
+foreach ([true, false] as $with_remarks) {
+    try {
+        $st = db()->prepare($sheet_sql($with_remarks));
+        $st->execute([$student_pk, $sid]);
+        $sheet_rows = $st->fetchAll(PDO::FETCH_ASSOC);
+        break;
+    } catch (Throwable $e) {
+        if (!$with_remarks) {
+            error_log('Student results: mark sheet query failed – ' . $e->getMessage());
         }
     }
-    $raw = trim((string)($res['semester'] ?? ''));
-    return strtolower($raw !== '' ? $raw : (string)($res['title'] ?? ''));
 }
 
-/** Course key used to detect the same course listed twice (code, else title). */
-function sp_results_course_key(array $e): string
-{
-    $code = strtoupper(preg_replace('/\s+/', '', (string)($e['course_code'] ?? '')));
-    if ($code !== '') return $code;
-    return 'T:' . strtoupper(preg_replace('/\s+/', '', (string)($e['course_title'] ?? '')));
+foreach ($sheet_rows as $c) {
+    $letter = trim((string)($c['letter_grade'] ?? ''));
+    $graded = ($c['marks_json'] !== null) || (int)$c['is_absent'] === 1 || $letter !== '';
+    if (!$graded) continue; // roster row with no marks entered
+    if (!sp_exam_done((string)($c['exam_id'] ?? ''), $c['exam_end_date'] ?? null, $today)) continue;
+
+    $is_incom   = ((int)$c['is_absent'] === 1) || sp_is_incom_letter($letter);
+    $exam_label = trim((string)($c['exam_name'] ?? '') . ' ' . (string)($c['exam_year'] ?? ''));
+    $term       = sp_parse_term($c['semester'] ?? null) ?: [
+        'label' => $exam_label !== '' ? $exam_label : (string)$c['semester'],
+        'sort'  => ((int)($c['exam_year'] ?? 0)) * 10 + 5,
+    ];
+
+    $row = [
+        'code'     => (string)($c['subject_code'] ?? ''),
+        'title'    => (string)($c['subject_title'] ?? ''),
+        'credits'  => ($c['credits'] !== null && $c['credits'] !== '') ? (float)$c['credits'] : null,
+        'grade'    => $is_incom ? 'Incom' : $letter,
+        'point'    => $is_incom ? null : ($c['grade_point'] !== null ? (float)$c['grade_point'] : null),
+        'is_incom' => $is_incom,
+        'remarks'  => trim((string)($c['remarks'] ?? '')),
+    ];
+    $rank = [
+        sp_exam_kind($c['exam_name'] ?? null),
+        sp_marks_filled($c['marks_json'] ?? null),
+        (string)($c['published_at'] ?? ''),
+        (int)$c['sheet_id'],
+    ];
+    sp_add_course($terms, $slots, $term, $row, $rank, $exam_label, $c['published_at'] ?? null);
 }
 
-// ── Query ─────────────────────────────────────────────────────────────────────
+// ── Source 2: Spring Result sets (sr_results) ───────────────────────────────────────
 
-try {
-    // All published sets of the student are loaded (even when ?result_id= is
-    // given) so that the duplicate rule can compare mid-term and final sets.
-    $stmt = db()->prepare(
-        "SELECT r.id, r.title, r.semester, r.created_at
-         FROM sr_results r
-         WHERE r.is_published = 1
-           AND EXISTS (
-               SELECT 1 FROM sr_result_entries e
-               WHERE e.result_id = r.id AND e.student_id = ?
-           )
-         ORDER BY r.created_at DESC"
-    );
-    $stmt->execute([$sid]);
-    $result_rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-    $estmt = db()->prepare(
-        'SELECT student_name, course_code, course_title, letter_grade, grade_point, credit
-         FROM sr_result_entries
-         WHERE result_id = ? AND student_id = ?
-         ORDER BY course_code ASC, course_title ASC'
-    );
-} catch (Throwable $e) {
-    error_log('Student results: query failed – ' . $e->getMessage());
-    sp_api_error(500, 'Could not load results. Please try again.');
-}
-
-// ── Load every published set with the student's entries ───────────────────────
-
-$sets = []; // [ ['res' => row, 'entries' => rows], ... ]
-
-foreach ($result_rows as $res) {
+if ($sid !== '') {
     try {
-        $estmt->execute([(int)$res['id'], $sid]);
-        $entries = $estmt->fetchAll(PDO::FETCH_ASSOC);
-    } catch (Throwable $e) {
-        error_log('Student results: entries query failed – ' . $e->getMessage());
-        continue;
-    }
-    if (empty($entries)) {
-        continue;
-    }
+        $st = db()->prepare(
+            "SELECT r.id, r.title, r.semester, r.created_at
+               FROM sr_results r
+              WHERE r.is_published = 1
+                AND EXISTS (SELECT 1 FROM sr_result_entries e
+                             WHERE e.result_id = r.id AND e.student_id = ?)
+              ORDER BY r.created_at ASC, r.id ASC"
+        );
+        $st->execute([$sid]);
+        $sets = $st->fetchAll(PDO::FETCH_ASSOC);
 
-    // Prefer the name stored on the result sheet, as the web page does.
-    if ($sname === '') {
-        foreach ($entries as $e) {
-            if (!empty($e['student_name'])) {
-                $sname = (string)$e['student_name'];
-                break;
+        $est = db()->prepare(
+            'SELECT student_name, course_code, course_title, letter_grade, grade_point, credit
+               FROM sr_result_entries
+              WHERE result_id = ? AND student_id = ?
+              ORDER BY course_code ASC, course_title ASC'
+        );
+        foreach ($sets as $res) {
+            $est->execute([(int)$res['id'], $sid]);
+            $entries = $est->fetchAll(PDO::FETCH_ASSOC);
+            if (empty($entries)) continue;
+
+            $title = trim((string)($res['title'] ?? ''));
+            $term  = sp_parse_term($res['semester'] ?? null)
+                  ?: sp_parse_term($title)
+                  ?: ['label' => $title !== '' ? $title : 'Result set #' . (int)$res['id'], 'sort' => 0];
+            $kind  = sp_exam_kind($title);
+
+            foreach ($entries as $e) {
+                if ($sname === '' && !empty($e['student_name'])) $sname = (string)$e['student_name'];
+
+                $letter   = trim((string)($e['letter_grade'] ?? ''));
+                $is_incom = sp_is_incom_letter($letter);
+                $point    = $is_incom ? null
+                          : ($e['grade_point'] !== null ? (float)$e['grade_point'] : sp_grade_point($letter));
+                $row = [
+                    'code'     => (string)($e['course_code'] ?? ''),
+                    'title'    => (string)($e['course_title'] ?? ''),
+                    'credits'  => ($e['credit'] !== null && $e['credit'] !== '') ? (float)$e['credit'] : null,
+                    'grade'    => $is_incom ? 'Incom' : $letter,
+                    'point'    => $point,
+                    'is_incom' => $is_incom,
+                    'remarks'  => '',
+                ];
+                $rank = [$kind, 0, (string)($res['created_at'] ?? ''), (int)$res['id']];
+                sp_add_course($terms, $slots, $term, $row, $rank, $title, $res['created_at'] ?? null);
             }
         }
-    }
-
-    $sets[] = ['res' => $res, 'entries' => $entries];
-}
-
-// ── Same course published more than once in one term ─────────────────────────
-// Keep only the highest-ranked entry per (term, course): a final result set
-// always wins over a mid-term one; otherwise the most recently created set.
-
-$best = []; // "Term|COURSE" => ['set' => i, 'entry' => j, 'rank' => [...]]
-
-foreach ($sets as $i => $set) {
-    $term = sp_results_term_key($set['res']);
-    $rank = [
-        sp_results_kind((string)($set['res']['title'] ?? '')),
-        (string)($set['res']['created_at'] ?? ''),
-        (int)$set['res']['id'],
-    ];
-    foreach ($set['entries'] as $j => $e) {
-        $k = $term . '|' . sp_results_course_key($e);
-        if (!isset($best[$k])) {
-            $best[$k] = ['set' => $i, 'entry' => $j, 'rank' => $rank];
-            continue;
-        }
-        if (($rank <=> $best[$k]['rank']) > 0) {
-            // This entry outranks the one kept so far – drop the earlier one.
-            unset($sets[$best[$k]['set']]['entries'][$best[$k]['entry']]);
-            $best[$k] = ['set' => $i, 'entry' => $j, 'rank' => $rank];
-        } else {
-            unset($sets[$i]['entries'][$j]);
-        }
+    } catch (Throwable $e) {
+        error_log('Student results: sr_results query failed – ' . $e->getMessage());
     }
 }
 
-// ── Output ────────────────────────────────────────────────────────────────────
+// ── Source 3: archived / imported rows (student_results) ────────────────────────────
+
+$final_cgpa = null;
+if ($student_pk > 0) {
+    try {
+        $st = db()->prepare(
+            'SELECT * FROM student_results WHERE student_id = ? ORDER BY semester_year ASC, semester ASC, id ASC'
+        );
+        $st->execute([$student_pk]);
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            if (strcasecmp(trim((string)($r['subject'] ?? '')), 'Final Result') === 0) {
+                if (is_numeric($r['cgpa'] ?? null)) $final_cgpa = (float)$r['cgpa']; // Final Result Publish row
+                continue;
+            }
+            $raw  = trim((string)($r['semester'] ?? '') . ' ' . (string)($r['semester_year'] ?? ''));
+            $term = sp_parse_term($raw) ?: [
+                'label' => $raw !== '' ? $raw : 'Archived results',
+                'sort'  => ((int)($r['semester_year'] ?? 0)) * 10,
+            ];
+            $letter   = trim((string)($r['grade'] ?? ''));
+            $is_incom = sp_is_incom_letter($letter);
+            $row = [
+                'code'     => (string)($r['subject_code'] ?? ''),
+                'title'    => (string)($r['subject'] ?? ''),
+                'credits'  => is_numeric($r['credits'] ?? null) ? (float)$r['credits'] : null,
+                'grade'    => $is_incom ? 'Incom' : $letter,
+                'point'    => $is_incom ? null : sp_grade_point($letter),
+                'is_incom' => $is_incom,
+                'remarks'  => '',
+            ];
+            $rank = [1, 0, '', (int)($r['id'] ?? 0)];
+            sp_add_course($terms, $slots, $term, $row, $rank, '', $r['created_at'] ?? null);
+        }
+    } catch (Throwable $e) {
+        // legacy table may not exist on every deployment
+    }
+}
+
+// ── Semester GPA + running CGPA (chronological, same rules as the web page) ───────
+
+uasort($terms, static fn($a, $b) => ($a['sort'] <=> $b['sort']) ?: strcmp($a['label'], $b['label']));
+
+$cum_points  = 0.0;
+$cum_credits = 0.0;
+$attempts    = []; // course key => ['credits','point'] currently counted in the CGPA
+
+foreach ($terms as &$t) {
+    usort($t['courses'], static fn($a, $b) => strnatcasecmp($a['code'] . $a['title'], $b['code'] . $b['title']));
+
+    $sem_points = 0.0; $sem_credits = 0.0; $sem_incom = 0; $sem_f = 0;
+    foreach ($t['courses'] as $c) {
+        if ($c['is_incom'] || $c['point'] === null) { $sem_incom++; continue; }
+        if (sp_is_fail($c['grade'], $c['point']))   { $sem_f++;     continue; } // not completed → not counted
+        $cr = $c['credits'] ?? 0.0;
+        if ($cr <= 0) continue; // cannot weight without credits
+
+        $sem_points  += $cr * $c['point'];
+        $sem_credits += $cr;
+
+        $ck = sp_course_key($c['code'], $c['title']);
+        if (SP_CGPA_LATEST_ATTEMPT_ONLY && isset($attempts[$ck])) {
+            $prev = $attempts[$ck];
+            $cum_points  -= $prev['credits'] * $prev['point'];
+            $cum_credits -= $prev['credits'];
+        }
+        $attempts[$ck] = ['credits' => $cr, 'point' => $c['point']];
+        $cum_points  += $cr * $c['point'];
+        $cum_credits += $cr;
+    }
+
+    $t['gpa']     = ($sem_credits > 0 && $sem_f === 0 && $sem_incom === 0) ? round($sem_points / $sem_credits, 2) : null;
+    $t['fails']   = $sem_f;
+    $t['incom']   = $sem_incom;
+    $t['credits'] = $sem_credits;
+    $t['cgpa']    = $cum_credits > 0 ? round($cum_points / $cum_credits, 2) : null;
+}
+unset($t);
+
+$overall_cgpa = $cum_credits > 0 ? round($cum_points / $cum_credits, 2) : null;
+
+// ── Output (newest semester first) ──────────────────────────────────────────────────
 
 $results = [];
+foreach (array_reverse($terms, true) as $t) {
+    $id = (int)(crc32($t['label']) & 0x7fffffff); // stable per semester label
+    if ($filter_result_id > 0 && $id !== $filter_result_id) continue;
 
-foreach ($sets as $set) {
-    $res     = $set['res'];
-    $entries = array_values($set['entries']);
+    $withheld = $t['fails'] > 0 || $t['incom'] > 0;
+    $reason   = [];
+    if ($t['fails'] > 0) $reason[] = 'F grade';
+    if ($t['incom'] > 0) $reason[] = 'Incom';
 
-    // Every course of this set was superseded (e.g. a mid-term set whose
-    // courses are all covered by the final set) – nothing left to show.
-    if (empty($entries)) {
-        continue;
-    }
-    if ($filter_result_id > 0 && (int)$res['id'] !== $filter_result_id) {
-        continue;
-    }
-
-    $incomplete = sp_results_has_fail_or_incom($entries);
-    $gpa        = $incomplete ? null : sp_results_gpa($entries);
-
-    $out_entries = [];
-    foreach ($entries as $e) {
-        $out_entries[] = [
-            'course_code'  => (string)($e['course_code'] ?? ''),
-            'course_title' => (string)($e['course_title'] ?? ''),
-            'credit'       => $e['credit'] !== null ? (float)$e['credit'] : null,
-            'letter_grade' => (string)($e['letter_grade'] ?? ''),
-            'grade_point'  => $e['grade_point'] !== null ? (float)$e['grade_point'] : null,
+    $entries = [];
+    foreach ($t['courses'] as $c) {
+        $entries[] = [
+            'course_code'  => $c['code'],
+            'course_title' => $c['title'],
+            'credit'       => $c['credits'],
+            'letter_grade' => $c['grade'],
+            'grade_point'  => $c['point'],
+            'remarks'      => $c['remarks'],
         ];
     }
 
+    $exam = ($t['exam'] !== '' && $t['exam'] !== $t['label']) ? $t['exam'] : '';
+
     $results[] = [
-        'id'             => (int)$res['id'],
-        'title'          => (string)$res['title'],
-        'semester'       => (string)($res['semester'] ?? ''),
-        'published_at'   => (string)($res['created_at'] ?? ''),
-        'course_count'   => count($out_entries),
-        'gpa'            => $gpa,
-        'gpa_incomplete' => $incomplete,
-        'entries'        => $out_entries,
+        'id'             => $id,
+        'title'          => $t['label'],
+        'semester'       => $exam,          // shown under the title in the app
+        'exam'           => $exam,
+        'published_at'   => (string)($t['published_at'] ?? ''),
+        'course_count'   => count($entries),
+        'credits'        => $t['credits'],
+        'gpa'            => $t['gpa'],
+        'gpa_incomplete' => $withheld,
+        'gpa_status'     => $withheld ? implode(' / ', $reason) : '',
+        'cgpa'           => $t['cgpa'],
+        'entries'        => $entries,
     ];
 }
 
 sp_api_ok([
-    'student_id'   => $sid,
-    'student_name' => $sname,
-    'results'      => $results,
+    'student_id'      => $sid,
+    'student_name'    => $sname,
+    'cgpa'            => $final_cgpa ?? $overall_cgpa,
+    'cgpa_is_final'   => $final_cgpa !== null,
+    'credits_counted' => $cum_credits,
+    'results'         => $results,
 ]);

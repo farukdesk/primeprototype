@@ -12,12 +12,14 @@ import bd.ac.primeuniversity.studentportal.data.model.ResultsResponse
 import bd.ac.primeuniversity.studentportal.databinding.ActivityResultsBinding
 import bd.ac.primeuniversity.studentportal.util.AppResult
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 /**
- * Results screen. Shows the student's published semester results the same
- * way the web result page (spring-result.php) does: a student header, then
- * one card per result set with course-wise letter grades, grade points,
- * credits and the semester GPA. Data comes from admin/api/student/results.php.
+ * Results screen. Shows the student's published results exactly like the
+ * web portal page (students/my-results.php): a student header with the CGPA,
+ * then one card per semester with course-wise letter grades, grade points,
+ * credits, the semester GPA and the running CGPA.
+ * Data comes from admin/api/student/results.php.
  */
 class ResultsActivity : AppCompatActivity() {
 
@@ -81,8 +83,17 @@ class ResultsActivity : AppCompatActivity() {
         binding.headerStudentId.text = id ?: getString(R.string.dash)
         binding.headerStudentName.text = name ?: getString(R.string.student)
         binding.headerStudentName.visibility = if (name == null) View.GONE else View.VISIBLE
-        binding.headerCount.text = resources.getQuantityString(
+
+        // "CGPA 3.45 · 3 semesters published" (Final CGPA once the final result is published)
+        val semesters = resources.getQuantityString(
             R.plurals.results_sets_found, results.size, results.size
         )
+        val cgpa = data.cgpa?.let {
+            getString(
+                if (data.cgpaIsFinal) R.string.results_final_cgpa_value else R.string.results_cgpa_value,
+                String.format(Locale.US, "%.2f", it)
+            )
+        }
+        binding.headerCount.text = listOfNotNull(cgpa, semesters).joinToString(" · ")
     }
 }
