@@ -145,6 +145,7 @@
         android:paddingBottom="12dp">
 
         <ImageView
+            android:id="@+id/footerIcon"
             android:layout_width="16dp"
             android:layout_height="16dp"
             android:contentDescription="@null"
@@ -152,13 +153,15 @@
             app:tint="@color/success" />
 
         <TextView
+            android:id="@+id/footerLabel"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="6dp"
             android:layout_weight="1"
             android:text="@string/results_published"
             android:textColor="@color/text_secondary"
-            android:textSize="12sp" />
+            android:textSize="12sp"
+            tools:text="2 not published yet" />
 
         <TextView
             android:layout_width="wrap_content"

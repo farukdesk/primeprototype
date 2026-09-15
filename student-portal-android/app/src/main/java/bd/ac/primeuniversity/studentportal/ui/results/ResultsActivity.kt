@@ -84,16 +84,20 @@ class ResultsActivity : AppCompatActivity() {
         binding.headerStudentName.text = name ?: getString(R.string.student)
         binding.headerStudentName.visibility = if (name == null) View.GONE else View.VISIBLE
 
-        // "CGPA 3.45 · 3 semesters published" (Final CGPA once the final result is published)
+        // "CGPA 3.45 · 3 semesters published · 2 not published yet"
+        // (Final CGPA once the final result is published) – same figures as the web hero.
+        val publishedSemesters = results.count { it.publishedCount > 0 }
         val semesters = resources.getQuantityString(
-            R.plurals.results_sets_found, results.size, results.size
+            R.plurals.results_sets_found, publishedSemesters, publishedSemesters
         )
+        val pendingTotal = results.sumOf { it.pendingCount }
+        val pending = if (pendingTotal > 0) getString(R.string.results_pending_count, pendingTotal) else null
         val cgpa = data.cgpa?.let {
             getString(
                 if (data.cgpaIsFinal) R.string.results_final_cgpa_value else R.string.results_cgpa_value,
                 String.format(Locale.US, "%.2f", it)
             )
         }
-        binding.headerCount.text = listOfNotNull(cgpa, semesters).joinToString(" · ")
+        binding.headerCount.text = listOfNotNull(cgpa, semesters, pending).joinToString(" · ")
     }
 }

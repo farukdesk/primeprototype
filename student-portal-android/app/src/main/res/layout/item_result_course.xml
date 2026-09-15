@@ -45,6 +45,18 @@
                 android:textSize="14sp"
                 android:textStyle="bold"
                 tools:text="Introduction to Programming" />
+
+            <!-- Remarks, "not counted" hint, or the course teacher of a not-yet-published course -->
+            <TextView
+                android:id="@+id/courseNote"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:textColor="?android:attr/textColorSecondary"
+                android:textSize="11sp"
+                android:visibility="gone"
+                tools:text="Not published yet · Course teacher: Dr. A. Rahman"
+                tools:visibility="visible" />
         </LinearLayout>
 
         <TextView
