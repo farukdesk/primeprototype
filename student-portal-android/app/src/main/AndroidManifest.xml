@@ -86,6 +86,11 @@
             android:parentActivityName=".ui.main.MainActivity" />
 
         <activity
+            android:name=".ui.results.ResultsActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.main.MainActivity" />
+
+        <activity
             android:name=".ui.support.SupportTicketsActivity"
             android:exported="false"
             android:parentActivityName=".ui.main.MainActivity" />

@@ -92,4 +92,27 @@
     <color name="nav_glass_bg">#F2FFFFFF</color>
     <!-- Ultra-thin border for flat list-item cards -->
     <color name="card_border">#EDEDED</color>
+
+    <!-- Result letter-grade badges (same palette as the web result page) -->
+    <color name="grade_a_plus_bg">#DCFCE7</color>
+    <color name="grade_a_plus_fg">#15803D</color>
+    <color name="grade_a_bg">#DBEAFE</color>
+    <color name="grade_a_fg">#1D4ED8</color>
+    <color name="grade_b_bg">#E0F2FE</color>
+    <color name="grade_b_fg">#0369A1</color>
+    <color name="grade_c_bg">#FEF9C3</color>
+    <color name="grade_c_fg">#A16207</color>
+    <color name="grade_d_bg">#FFEDD5</color>
+    <color name="grade_d_fg">#C2410C</color>
+    <color name="grade_f_bg">#FEE2E2</color>
+    <color name="grade_f_fg">#B91C1C</color>
+    <color name="grade_other_bg">#F3F4F6</color>
+    <color name="grade_other_fg">#6B7280</color>
+
+    <!-- Grade point / GPA text colour bands -->
+    <color name="gp_excellent">#16A34A</color>
+    <color name="gp_good">#2563EB</color>
+    <color name="gp_fair">#D97706</color>
+    <color name="gp_low">#EA580C</color>
+    <color name="gp_fail">#DC2626</color>
 </resources>
