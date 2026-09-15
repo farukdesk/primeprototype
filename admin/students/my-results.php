@@ -118,6 +118,45 @@ function mr_withheld_reason(array $sem): string
     return implode(' / ', $r);
 }
 
+/**
+ * Mid-term vs final priority of a published sheet, derived from the exam it is
+ * tagged with: 2 = final examination, 1 = unspecified, 0 = mid-term.
+ */
+function mr_exam_kind(?string $exam_name): int
+{
+    $n = strtolower(trim((string)$exam_name));
+    if ($n === '') return 1;
+    if (preg_match('/\bfinal\b/', $n)) return 2;
+    if (preg_match('/\bmid\s*-?\s*term\b|\bmidterm\b|\bmid\b/', $n)) return 0;
+    return 1;
+}
+
+/** Number of mark components (attendance, class test, mid-term, final …) actually entered. */
+function mr_marks_filled(?string $marks_json): int
+{
+    if ($marks_json === null || $marks_json === '') return 0;
+    $m = json_decode($marks_json, true);
+    if (!is_array($m)) return 0;
+    return count(array_filter($m, static fn($v) => $v !== null && $v !== ''));
+}
+
+/**
+ * Ranking used when the SAME course has more than one published sheet in the
+ * same term, e.g. a mid-term sheet (only mid-term marks entered → F) and,
+ * later, the final sheet. Only the highest-ranked sheet is shown to the
+ * student: final exam > unspecified > mid-term, then the sheet with more mark
+ * components entered, then the most recently published sheet.
+ */
+function mr_sheet_rank(array $c): array
+{
+    return [
+        mr_exam_kind($c['exam_name'] ?? null),
+        mr_marks_filled($c['marks_json'] ?? null),
+        (string)($c['published_at'] ?? ''),
+        (int)($c['sheet_id'] ?? 0),
+    ];
+}
+
 // ── Live published results (Results workflow) ──────────────────────────────────────
 $courses = [];
 $live_error = false;
@@ -207,6 +246,7 @@ $semesters = [];   // key => ['label','sort','courses'=>[], ...]
 $published_offer_subjects = []; // offer_subject_id => true  (already has a published grade)
 $published_course_terms   = []; // "CODE|Term label" => true (same course already published in that term)
 $hidden_upcoming = 0;           // published grades hidden because their exam is not over / not tagged
+$live_slots      = [];          // "Term label|CODE" => ['idx' => position in courses, 'rank' => mr_sheet_rank()]
 foreach ($courses as $c) {
     $letter = trim((string)($c['letter_grade'] ?? ''));
     $graded = ($c['marks_json'] !== null) || (int)$c['is_absent'] === 1 || $letter !== '';
@@ -231,6 +271,7 @@ foreach ($courses as $c) {
             'label'        => $term['label'],
             'sort'         => $term['sort'],
             'exam'         => trim((string)$c['exam_name'] . ' ' . (string)($c['exam_year'] ?? '')),
+            'exam_kind'    => -1,
             'published_at' => null,
             'courses'      => [],
         ];
@@ -238,7 +279,14 @@ foreach ($courses as $c) {
     if ($c['published_at'] && ($semesters[$key]['published_at'] === null || $c['published_at'] > $semesters[$key]['published_at'])) {
         $semesters[$key]['published_at'] = $c['published_at'];
     }
-    $semesters[$key]['courses'][] = [
+    // The semester header names the highest-priority exam seen for the term (final over mid-term).
+    $kind = mr_exam_kind($c['exam_name'] ?? null);
+    if ($kind > $semesters[$key]['exam_kind']) {
+        $semesters[$key]['exam_kind'] = $kind;
+        $semesters[$key]['exam']      = trim((string)$c['exam_name'] . ' ' . (string)($c['exam_year'] ?? ''));
+    }
+
+    $row = [
         'code'        => (string)($c['subject_code'] ?? ''),
         'title'       => (string)($c['subject_title'] ?? ''),
         'credits'     => $c['credits'] !== null && $c['credits'] !== '' ? (float)$c['credits'] : null,
@@ -250,8 +298,23 @@ foreach ($courses as $c) {
         'teachers'    => '',
     ];
 
+    // Same course published more than once in this term (e.g. a mid-term sheet
+    // carrying only the mid-term marks and, later, the final sheet): keep only
+    // the highest-ranked sheet – the final result always replaces the mid-term.
+    $ck   = strtoupper(preg_replace('/\s+/', '', (string)($c['subject_code'] ?? '')));
+    $slot = $key . '|' . ($ck !== '' ? $ck : 'T:' . strtoupper(preg_replace('/\s+/', '', (string)($c['subject_title'] ?? ''))));
+    $rank = mr_sheet_rank($c);
+    if (isset($live_slots[$slot])) {
+        if (($rank <=> $live_slots[$slot]['rank']) > 0) {
+            $semesters[$key]['courses'][$live_slots[$slot]['idx']] = $row;
+            $live_slots[$slot]['rank'] = $rank;
+        }
+    } else {
+        $semesters[$key]['courses'][] = $row;
+        $live_slots[$slot] = ['idx' => array_key_last($semesters[$key]['courses']), 'rank' => $rank];
+    }
+
     if (!empty($c['offer_subject_id'])) $published_offer_subjects[(int)$c['offer_subject_id']] = true;
-    $ck = strtoupper(preg_replace('/\s+/', '', (string)($c['subject_code'] ?? '')));
     if ($ck !== '') $published_course_terms[$ck . '|' . $key] = true;
 }
 
@@ -787,6 +850,7 @@ require_once __DIR__ . '/../includes/header.php';
     CGPA is calculated from completed courses only: courses with an F grade or marked Incom are not counted.
     CGPA is cumulative across all published semesters, so it is shown only in the “All semesters” view<?= MR_CGPA_LATEST_ATTEMPT_ONLY ? '; when a course is retaken, the latest attempt replaces the earlier grade' : '' ?>.
     Results are listed only for exams that are already over.
+    When a course has more than one published result in the same semester (for example a mid-term sheet and the final sheet), only the final result is shown.
     Courses marked <span class="mr-grade mr-g-pending" style="padding:1px 6px;">Not published yet</span> are registered courses of a completed exam whose results have not been released;
     they are not counted in GPA / CGPA (values marked * are provisional). If you have any urgency, please contact your course teacher.
     The official transcript issued by the Controller of Examinations prevails in case of any discrepancy.

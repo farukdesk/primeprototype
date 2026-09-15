@@ -7,7 +7,14 @@
  * tables, same ordering and the same GPA rule (credit-weighted average;
  * reported as incomplete when any course is graded F or INCOM).
  *
- * Optional query: ?result_id=<id> to restrict to one result set.
+ * Duplicate rule: when the same course appears in more than one published
+ * result set of the same term (e.g. a mid-term set that only carries the
+ * mid-term marks and, later, the final set), only the highest-priority entry
+ * is returned – final > unspecified > mid-term, then the most recently
+ * created set. The final result therefore always replaces the mid-term one.
+ *
+ * Optional query: ?result_id=<id> to restrict the response to one result set
+ * (the duplicate rule is still applied across all of the student's sets first).
  *
  * Success response:
  *   { "ok": true,
@@ -76,12 +83,54 @@ function sp_results_gpa(array $entries): ?float
     return $count > 0 ? round($total / $count, 2) : null;
 }
 
+// ── Helpers (duplicate rule: final result over mid-term) ───────────────────────
+
+/**
+ * Mid-term vs final priority of a result set, derived from its title:
+ * 2 = final, 1 = unspecified, 0 = mid-term.
+ */
+function sp_results_kind(string $title): int
+{
+    $t = strtolower(trim($title));
+    if ($t === '') return 1;
+    if (preg_match('/\bfinal\b/', $t)) return 2;
+    if (preg_match('/\bmid\s*-?\s*term\b|\bmidterm\b|\bmid\b/', $t)) return 0;
+    return 1;
+}
+
+/**
+ * Normalised term label ("Spring 2026") of a result set so that the mid-term
+ * and final sets of the same semester can be matched. Falls back to the raw
+ * semester / title when no season + year can be recognised.
+ */
+function sp_results_term_key(array $res): string
+{
+    foreach ([(string)($res['semester'] ?? ''), (string)($res['title'] ?? '')] as $raw) {
+        if (preg_match('/\b(spring|summer|fall|autumn|winter)\b\s*[-_\/]?\s*(\d{2,4})/i', $raw, $m)) {
+            $season = ucfirst(strtolower($m[1]));
+            if ($season === 'Autumn') $season = 'Fall';
+            $year = (int)$m[2];
+            if ($year < 100) $year += 2000;
+            return $season . ' ' . $year;
+        }
+    }
+    $raw = trim((string)($res['semester'] ?? ''));
+    return strtolower($raw !== '' ? $raw : (string)($res['title'] ?? ''));
+}
+
+/** Course key used to detect the same course listed twice (code, else title). */
+function sp_results_course_key(array $e): string
+{
+    $code = strtoupper(preg_replace('/\s+/', '', (string)($e['course_code'] ?? '')));
+    if ($code !== '') return $code;
+    return 'T:' . strtoupper(preg_replace('/\s+/', '', (string)($e['course_title'] ?? '')));
+}
+
 // ── Query ─────────────────────────────────────────────────────────────────────
 
 try {
-    $extra_where = $filter_result_id > 0 ? 'AND r.id = ?' : '';
-    $params      = $filter_result_id > 0 ? [$sid, $filter_result_id] : [$sid];
-
+    // All published sets of the student are loaded (even when ?result_id= is
+    // given) so that the duplicate rule can compare mid-term and final sets.
     $stmt = db()->prepare(
         "SELECT r.id, r.title, r.semester, r.created_at
          FROM sr_results r
@@ -90,10 +139,9 @@ try {
                SELECT 1 FROM sr_result_entries e
                WHERE e.result_id = r.id AND e.student_id = ?
            )
-           $extra_where
          ORDER BY r.created_at DESC"
     );
-    $stmt->execute($params);
+    $stmt->execute([$sid]);
     $result_rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     $estmt = db()->prepare(
@@ -107,7 +155,9 @@ try {
     sp_api_error(500, 'Could not load results. Please try again.');
 }
 
-$results = [];
+// ── Load every published set with the student's entries ───────────────────────
+
+$sets = []; // [ ['res' => row, 'entries' => rows], ... ]
 
 foreach ($result_rows as $res) {
     try {
@@ -129,6 +179,55 @@ foreach ($result_rows as $res) {
                 break;
             }
         }
+    }
+
+    $sets[] = ['res' => $res, 'entries' => $entries];
+}
+
+// ── Same course published more than once in one term ─────────────────────────
+// Keep only the highest-ranked entry per (term, course): a final result set
+// always wins over a mid-term one; otherwise the most recently created set.
+
+$best = []; // "Term|COURSE" => ['set' => i, 'entry' => j, 'rank' => [...]]
+
+foreach ($sets as $i => $set) {
+    $term = sp_results_term_key($set['res']);
+    $rank = [
+        sp_results_kind((string)($set['res']['title'] ?? '')),
+        (string)($set['res']['created_at'] ?? ''),
+        (int)$set['res']['id'],
+    ];
+    foreach ($set['entries'] as $j => $e) {
+        $k = $term . '|' . sp_results_course_key($e);
+        if (!isset($best[$k])) {
+            $best[$k] = ['set' => $i, 'entry' => $j, 'rank' => $rank];
+            continue;
+        }
+        if (($rank <=> $best[$k]['rank']) > 0) {
+            // This entry outranks the one kept so far – drop the earlier one.
+            unset($sets[$best[$k]['set']]['entries'][$best[$k]['entry']]);
+            $best[$k] = ['set' => $i, 'entry' => $j, 'rank' => $rank];
+        } else {
+            unset($sets[$i]['entries'][$j]);
+        }
+    }
+}
+
+// ── Output ────────────────────────────────────────────────────────────────────
+
+$results = [];
+
+foreach ($sets as $set) {
+    $res     = $set['res'];
+    $entries = array_values($set['entries']);
+
+    // Every course of this set was superseded (e.g. a mid-term set whose
+    // courses are all covered by the final set) – nothing left to show.
+    if (empty($entries)) {
+        continue;
+    }
+    if ($filter_result_id > 0 && (int)$res['id'] !== $filter_result_id) {
+        continue;
     }
 
     $incomplete = sp_results_has_fail_or_incom($entries);
