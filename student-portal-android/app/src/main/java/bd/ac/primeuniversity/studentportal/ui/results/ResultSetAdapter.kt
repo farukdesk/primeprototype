@@ -16,9 +16,9 @@ import bd.ac.primeuniversity.studentportal.databinding.ItemResultSetBinding
 import java.util.Locale
 
 /**
- * One card per published result set. Course rows are inflated straight into
+ * One card per published semester. Course rows are inflated straight into
  * the card (a semester has only a handful) so each card scrolls as a unit,
- * matching the table-per-result layout of the web result page.
+ * matching the table-per-semester layout of the web My Results page.
  */
 class ResultSetAdapter : ListAdapter<SemesterResult, ResultSetAdapter.Holder>(DIFF) {
 
@@ -43,6 +43,9 @@ class ResultSetAdapter : ListAdapter<SemesterResult, ResultSetAdapter.Holder>(DI
             binding.resultMeta.text = listOfNotNull(
                 result.semester?.takeIf { it.isNotBlank() },
                 ctx.resources.getQuantityString(R.plurals.results_courses, count, count),
+                result.cgpa?.let {
+                    ctx.getString(R.string.results_cgpa_value, String.format(Locale.US, "%.2f", it))
+                },
             ).joinToString(" · ")
 
             // Course rows
@@ -56,12 +59,13 @@ class ResultSetAdapter : ListAdapter<SemesterResult, ResultSetAdapter.Holder>(DI
                 binding.courseRows.addView(row.root)
             }
 
-            // GPA footer – "Incom" when any course is F / INCOM, like the web page.
+            // GPA footer – withheld (with the reason) when the semester has an F / Incom, like the web page.
             val gpa = result.gpa
             when {
                 result.gpaIncomplete -> {
-                    binding.gpaValue.setText(R.string.results_incomplete)
-                    binding.gpaValue.setTextColor(color(ctx, R.color.grade_other_fg))
+                    binding.gpaValue.text = result.gpaStatus?.takeIf { it.isNotBlank() }
+                        ?: ctx.getString(R.string.results_incomplete)
+                    binding.gpaValue.setTextColor(color(ctx, R.color.grade_f_fg))
                 }
                 gpa != null -> {
                     binding.gpaValue.text = String.format(Locale.US, "%.2f", gpa)

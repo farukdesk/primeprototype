@@ -140,9 +140,11 @@
     <string name="results_title">Semester Results</string>
     <string name="results_empty">No published result was found for your Student ID yet. Results appear here as soon as the Controller of Examinations publishes them.</string>
     <plurals name="results_sets_found">
-        <item quantity="one">%1$d result set found</item>
-        <item quantity="other">%1$d result sets found</item>
+        <item quantity="one">%1$d semester published</item>
+        <item quantity="other">%1$d semesters published</item>
     </plurals>
+    <string name="results_cgpa_value">CGPA %1$s</string>
+    <string name="results_final_cgpa_value">Final CGPA %1$s</string>
     <plurals name="results_courses">
         <item quantity="one">%1$d Course</item>
         <item quantity="other">%1$d Courses</item>
