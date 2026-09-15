@@ -20,6 +20,7 @@ import bd.ac.primeuniversity.studentportal.ui.feature.FeatureActivity
 import bd.ac.primeuniversity.studentportal.ui.idcard.IdCardActivity
 import bd.ac.primeuniversity.studentportal.ui.main.MainActivity
 import bd.ac.primeuniversity.studentportal.ui.notifications.NotificationsActivity
+import bd.ac.primeuniversity.studentportal.ui.results.ResultsActivity
 import bd.ac.primeuniversity.studentportal.ui.settings.SettingsActivity
 import bd.ac.primeuniversity.studentportal.util.AppResult
 import bd.ac.primeuniversity.studentportal.util.Formatters
@@ -101,6 +102,7 @@ class DashboardFragment : Fragment() {
                     bd.ac.primeuniversity.studentportal.ui.courses.CourseRegistrationActivity::class.java,
                 )
             )
+            Feature.RESULTS -> startActivity(Intent(requireContext(), ResultsActivity::class.java))
             Feature.NOTICES -> activity?.selectTab(R.id.nav_notices)
             Feature.ANNOUNCEMENTS ->
                 startActivity(Intent(requireContext(), NotificationsActivity::class.java))

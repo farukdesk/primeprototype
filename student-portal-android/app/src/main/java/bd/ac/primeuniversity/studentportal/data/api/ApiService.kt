@@ -9,6 +9,7 @@ import bd.ac.primeuniversity.studentportal.data.model.LoginResponse
 import bd.ac.primeuniversity.studentportal.data.model.MeResponse
 import bd.ac.primeuniversity.studentportal.data.model.NoticeDetailResponse
 import bd.ac.primeuniversity.studentportal.data.model.NoticesResponse
+import bd.ac.primeuniversity.studentportal.data.model.ResultsResponse
 import bd.ac.primeuniversity.studentportal.data.model.SimpleResponse
 import bd.ac.primeuniversity.studentportal.data.model.SupportTicketCommentResponse
 import bd.ac.primeuniversity.studentportal.data.model.SupportTicketCreateResponse
@@ -76,6 +77,10 @@ interface ApiService {
 
     @GET("admit-cards.php")
     suspend fun getAdmitCards(): Response<AdmitCardsResponse>
+
+    /** Published semester results – the same data as the web result page. */
+    @GET("results.php")
+    suspend fun getResults(): Response<ResultsResponse>
 
     /** Streams the admit card PDF; save the body to a file and open it. */
     @Streaming
