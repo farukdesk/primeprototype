@@ -108,6 +108,10 @@
     <color name="grade_f_fg">#B91C1C</color>
     <color name="grade_other_bg">#F3F4F6</color>
     <color name="grade_other_fg">#6B7280</color>
+    <!-- "Not published yet" badge / row highlight (same orange as the web page) -->
+    <color name="grade_pending_bg">#FFF7ED</color>
+    <color name="grade_pending_fg">#C2410C</color>
+    <color name="pending_row_bg">#14F97316</color>
 
     <!-- Grade point / GPA text colour bands -->
     <color name="gp_excellent">#16A34A</color>

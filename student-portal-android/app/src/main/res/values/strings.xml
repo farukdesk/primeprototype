@@ -156,7 +156,13 @@
     <string name="results_published">Published</string>
     <string name="results_gpa">GPA</string>
     <string name="results_incomplete">Incom</string>
-    <string name="results_footer_note">For result-related queries, contact the Controller of Examinations office.</string>
+    <string name="results_gpa_pending">Pending</string>
+    <string name="results_pending_badge">Pending</string>
+    <string name="results_pending_count">%1$d not published yet</string>
+    <string name="results_pending_teacher">Not published yet · Course teacher: %1$s. If you have any urgency, please contact your course teacher.</string>
+    <string name="results_pending_no_teacher">Not published yet. If you have any urgency, please contact your course teacher.</string>
+    <string name="results_not_counted">Not completed · not counted in GPA / CGPA</string>
+    <string name="results_footer_note">Only results of completed exams, published by the Controller of Examinations, appear here. Courses marked Pending are registered courses of a completed exam whose results have not been released; they are not counted in GPA / CGPA. For result-related queries, contact the Controller of Examinations office.</string>
 
     <!-- Campus -->
     <string name="feat_notices">Notices</string>
