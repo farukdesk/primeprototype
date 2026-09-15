@@ -1,5 +1,6 @@
 package bd.ac.primeuniversity.studentportal.ui.results
 
+import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -16,9 +17,11 @@ import bd.ac.primeuniversity.studentportal.databinding.ItemResultSetBinding
 import java.util.Locale
 
 /**
- * One card per published semester. Course rows are inflated straight into
- * the card (a semester has only a handful) so each card scrolls as a unit,
- * matching the table-per-semester layout of the web My Results page.
+ * One card per semester. Course rows are inflated straight into the card (a
+ * semester has only a handful) so each card scrolls as a unit, matching the
+ * table-per-semester layout of the web My Results page. Registered courses
+ * whose result is not released yet are listed as "Not published yet" rows
+ * with the course teacher, exactly like the web page.
  */
 class ResultSetAdapter : ListAdapter<SemesterResult, ResultSetAdapter.Holder>(DIFF) {
 
@@ -40,15 +43,17 @@ class ResultSetAdapter : ListAdapter<SemesterResult, ResultSetAdapter.Holder>(DI
             binding.resultTitle.text = result.title
 
             val count = result.entries.size
+            val pending = result.pendingCount
             binding.resultMeta.text = listOfNotNull(
                 result.semester?.takeIf { it.isNotBlank() },
                 ctx.resources.getQuantityString(R.plurals.results_courses, count, count),
+                if (pending > 0) ctx.getString(R.string.results_pending_count, pending) else null,
                 result.cgpa?.let {
                     ctx.getString(R.string.results_cgpa_value, String.format(Locale.US, "%.2f", it))
                 },
             ).joinToString(" · ")
 
-            // Course rows
+            // Course rows (published first, then not published yet – already ordered by the API)
             val inflater = LayoutInflater.from(ctx)
             binding.courseRows.removeAllViews()
             result.entries.forEachIndexed { index, entry ->
@@ -59,9 +64,27 @@ class ResultSetAdapter : ListAdapter<SemesterResult, ResultSetAdapter.Holder>(DI
                 binding.courseRows.addView(row.root)
             }
 
-            // GPA footer – withheld (with the reason) when the semester has an F / Incom, like the web page.
+            // Footer status: everything published, or how many results are still awaited.
+            if (pending > 0) {
+                binding.footerIcon.imageTintList =
+                    ContextCompat.getColorStateList(ctx, R.color.grade_pending_fg)
+                binding.footerLabel.text = ctx.getString(R.string.results_pending_count, pending)
+                binding.footerLabel.setTextColor(color(ctx, R.color.grade_pending_fg))
+            } else {
+                binding.footerIcon.imageTintList =
+                    ContextCompat.getColorStateList(ctx, R.color.success)
+                binding.footerLabel.setText(R.string.results_published)
+                binding.footerLabel.setTextColor(color(ctx, R.color.text_secondary))
+            }
+
+            // GPA footer – "Pending" while nothing is published in the term, withheld
+            // (with the reason) when the semester has an F / Incom, like the web page.
             val gpa = result.gpa
             when {
+                result.publishedCount == 0 -> {
+                    binding.gpaValue.setText(R.string.results_gpa_pending)
+                    binding.gpaValue.setTextColor(color(ctx, R.color.grade_pending_fg))
+                }
                 result.gpaIncomplete -> {
                     binding.gpaValue.text = result.gpaStatus?.takeIf { it.isNotBlank() }
                         ?: ctx.getString(R.string.results_incomplete)
@@ -90,6 +113,14 @@ class ResultSetAdapter : ListAdapter<SemesterResult, ResultSetAdapter.Holder>(DI
             row.credit.text = entry.credit?.let { String.format(Locale.US, "%.2f", it) }
                 ?: ctx.getString(R.string.dash)
 
+            if (entry.isPending) {
+                bindPendingCourse(row, entry)
+                return
+            }
+
+            row.root.setBackgroundColor(color(ctx, android.R.color.transparent))
+            row.grade.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+
             val grade = entry.letterGrade?.trim().orEmpty()
             val (bg, fg) = gradeColors(grade)
             row.grade.text = when {
@@ -115,6 +146,44 @@ class ResultSetAdapter : ListAdapter<SemesterResult, ResultSetAdapter.Holder>(DI
                     row.gradePoint.setTextColor(color(ctx, R.color.text_secondary))
                 }
             }
+
+            // Secondary line: the "not counted" hint for an F / Incom, else the remarks (as on the web page).
+            val note: Pair<String, Int>? = when {
+                entry.isIncomplete || entry.isFail ->
+                    ctx.getString(R.string.results_not_counted) to R.color.grade_f_fg
+                else -> entry.remarks?.takeIf { it.isNotBlank() }?.let { it to R.color.text_secondary }
+            }
+            if (note != null) {
+                row.courseNote.text = note.first
+                row.courseNote.setTextColor(color(ctx, note.second))
+                row.courseNote.visibility = View.VISIBLE
+            } else {
+                row.courseNote.visibility = View.GONE
+            }
+        }
+
+        /** Registered course of a completed exam whose result is not released yet. */
+        private fun bindPendingCourse(row: ItemResultCourseBinding, entry: ResultEntry) {
+            val ctx = row.root.context
+            row.root.setBackgroundColor(color(ctx, R.color.pending_row_bg))
+
+            row.grade.text = ctx.getString(R.string.results_pending_badge)
+            row.grade.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
+            row.grade.setTextColor(color(ctx, R.color.grade_pending_fg))
+            row.grade.backgroundTintList =
+                ContextCompat.getColorStateList(ctx, R.color.grade_pending_bg)
+
+            row.gradePoint.setText(R.string.dash)
+            row.gradePoint.setTextColor(color(ctx, R.color.text_secondary))
+
+            val teachers = entry.teachers?.takeIf { it.isNotBlank() }
+            row.courseNote.text = if (teachers != null) {
+                ctx.getString(R.string.results_pending_teacher, teachers)
+            } else {
+                ctx.getString(R.string.results_pending_no_teacher)
+            }
+            row.courseNote.setTextColor(color(ctx, R.color.grade_pending_fg))
+            row.courseNote.visibility = View.VISIBLE
         }
     }
 

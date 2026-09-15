@@ -11,6 +11,10 @@
  *       result sets uploaded through the Spring Result module
  *   • student_results
  *       archived / imported rows (incl. the Final Result Publish CGPA row)
+ *   • co_registrations
+ *       registered courses of a completed exam that have no published grade
+ *       yet → listed as "Not published yet" (is_pending = true) with the
+ *       course teacher, exactly like the web page
  *
  * Rules (identical to my-results.php)
  *   • One card per semester (term such as "Spring 2026").
@@ -30,10 +34,13 @@
  * Success response:
  *   { "ok": true, "student_id": "...", "student_name": "...",
  *     "cgpa": 3.45, "cgpa_is_final": false, "credits_counted": 36,
+ *     "semesters_published": 3, "pending_count": 2,
  *     "results": [ { id, title, semester, exam, published_at, course_count,
+ *                    published_count, pending_count,
  *                    credits, gpa, gpa_incomplete, gpa_status, cgpa,
  *                    entries: [ { course_code, course_title, credit,
- *                                 letter_grade, grade_point, remarks }, ... ] }, ... ] }
+ *                                 letter_grade, grade_point, remarks,
+ *                                 is_pending, teachers }, ... ] }, ... ] }
  */
 
 require_once __DIR__ . '/includes/auth_student_api.php';
@@ -166,12 +173,13 @@ function sp_add_course(array &$terms, array &$slots, array $term, array $row, ar
 
 $terms = []; // 'Spring 2026' => ['label','sort','exam','exam_kind','published_at','courses' => []]
 $slots = []; // 'Spring 2026|CODE' => ['idx' => position in courses, 'rank' => [...]]
+$published_offer_subjects = []; // offer_subject_id => true (already has a visible published grade)
 
 // ── Source 1: published Results-workflow mark sheets ────────────────────────────
 
 $sheet_sql = static function (bool $with_remarks): string {
     $remarks = $with_remarks ? 'g.remarks' : 'NULL AS remarks';
-    return "SELECT ms.id AS sheet_id, ms.semester, ms.subject_code, ms.subject_title,
+    return "SELECT ms.id AS sheet_id, ms.offer_subject_id, ms.semester, ms.subject_code, ms.subject_title,
                    COALESCE(ms.credits, cc.credit) AS credits,
                    ms.exam_id, e.exam_name, e.exam_year, e.end_date AS exam_end_date,
                    g.letter_grade, g.grade_point, g.is_absent, g.marks_json, $remarks,
@@ -230,6 +238,7 @@ foreach ($sheet_rows as $c) {
         (int)$c['sheet_id'],
     ];
     sp_add_course($terms, $slots, $term, $row, $rank, $exam_label, $c['published_at'] ?? null);
+    if (!empty($c['offer_subject_id'])) $published_offer_subjects[(int)$c['offer_subject_id']] = true;
 }
 
 // ── Source 2: Spring Result sets (sr_results) ───────────────────────────────────────
@@ -327,19 +336,101 @@ if ($student_pk > 0) {
     }
 }
 
+// ── Source 4: registered courses whose result is NOT published yet ──────────────
+// Same rule as my-results.php: every course the student registered for (Course
+// Offers) that has no published grade is listed in its semester as
+// "Not published yet" with the course teacher's name – but only for terms whose
+// exam is already over. Workflow state (draft / pending) is never revealed.
+
+$done_terms = []; // 'Spring 2026' => true  (term has at least one completed exam)
+try {
+    // (a) the exam name / year itself carries the term, e.g. "Final Examination Spring 2026"
+    $st = db()->query("SELECT exam_name, exam_year FROM ei_exams WHERE end_date IS NOT NULL AND end_date < CURDATE()");
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $e) {
+        $t = sp_parse_term(trim((string)$e['exam_name'] . ' ' . (string)($e['exam_year'] ?? '')));
+        if ($t) $done_terms[$t['label']] = true;
+    }
+    // (b) any mark sheet linked to a completed exam reveals that exam's term
+    $st = db()->query(
+        "SELECT DISTINCT o.semester
+           FROM result_mark_sheets ms
+           JOIN ei_exams e            ON e.id  = ms.exam_id
+           JOIN co_offer_subjects cos ON cos.id = ms.offer_subject_id
+           JOIN co_offers o           ON o.id  = cos.offer_id
+          WHERE e.end_date IS NOT NULL AND e.end_date < CURDATE()
+            AND o.semester IS NOT NULL AND o.semester <> ''"
+    );
+    foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $s) {
+        $t = sp_parse_term((string)$s);
+        if ($t) $done_terms[$t['label']] = true;
+    }
+} catch (Throwable $e) {
+    error_log('Student results: completed-terms query failed – ' . $e->getMessage());
+}
+
+if ($student_pk > 0 && !empty($done_terms)) {
+    try {
+        $st = db()->prepare(
+            "SELECT cos.id AS offer_subject_id, o.semester,
+                    c.course_code, c.course_name, c.credit,
+                    (SELECT GROUP_CONCAT(f.name ORDER BY t.sort_order SEPARATOR ', ')
+                       FROM co_offer_subject_teachers t
+                       JOIN dept_faculty f ON f.id = t.faculty_id
+                      WHERE t.offer_subject_id = cos.id) AS teachers
+               FROM co_registrations r
+               JOIN co_offer_subjects cos ON cos.id = r.offer_subject_id
+               JOIN co_offers o           ON o.id  = cos.offer_id
+               JOIN course_curriculum c   ON c.id  = cos.curriculum_id
+              WHERE r.student_id = ?
+              ORDER BY o.id DESC, cos.sort_order ASC, cos.id ASC"
+        );
+        $st->execute([$student_pk]);
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $reg) {
+            if (isset($published_offer_subjects[(int)$reg['offer_subject_id']])) continue;
+
+            $term = sp_parse_term($reg['semester'] ?? null);
+            // Only terms whose exam is already over are listed; a course of a term
+            // with no completed exam (or an unparseable term) is not "due" yet.
+            if (!$term || !isset($done_terms[$term['label']])) continue;
+
+            $row = [
+                'code'     => (string)($reg['course_code'] ?? ''),
+                'title'    => (string)($reg['course_name'] ?? ''),
+                'credits'  => ($reg['credit'] !== null && $reg['credit'] !== '') ? (float)$reg['credit'] : null,
+                'grade'    => 'Not published yet',
+                'point'    => null,
+                'is_incom' => false,
+                'remarks'  => '',
+                'pending'  => true,
+                'teachers' => trim((string)($reg['teachers'] ?? '')),
+            ];
+            // Lowest possible rank: a published result of the same course in the
+            // term always wins, and a course registered twice is listed only once.
+            sp_add_course($terms, $slots, $term, $row, [-1, 0, '', 0]);
+        }
+    } catch (Throwable $e) {
+        error_log('Student results: registrations query failed – ' . $e->getMessage());
+    }
+}
+
 // ── Semester GPA + running CGPA (chronological, same rules as the web page) ───────
 
 uasort($terms, static fn($a, $b) => ($a['sort'] <=> $b['sort']) ?: strcmp($a['label'], $b['label']));
 
-$cum_points  = 0.0;
-$cum_credits = 0.0;
-$attempts    = []; // course key => ['credits','point'] currently counted in the CGPA
+$cum_points    = 0.0;
+$cum_credits   = 0.0;
+$attempts      = []; // course key => ['credits','point'] currently counted in the CGPA
+$pending_total = 0;  // registered courses with no published result yet
 
 foreach ($terms as &$t) {
-    usort($t['courses'], static fn($a, $b) => strnatcasecmp($a['code'] . $a['title'], $b['code'] . $b['title']));
+    // Published courses first, then not-yet-published; natural order by code inside each group.
+    usort($t['courses'], static fn($a, $b) =>
+        ((int)!empty($a['pending']) <=> (int)!empty($b['pending']))
+        ?: strnatcasecmp($a['code'] . $a['title'], $b['code'] . $b['title']));
 
-    $sem_points = 0.0; $sem_credits = 0.0; $sem_incom = 0; $sem_f = 0;
+    $sem_points = 0.0; $sem_credits = 0.0; $sem_incom = 0; $sem_f = 0; $sem_pending = 0;
     foreach ($t['courses'] as $c) {
+        if (!empty($c['pending'])) { $sem_pending++; $pending_total++; continue; } // never counted
         if ($c['is_incom'] || $c['point'] === null) { $sem_incom++; continue; }
         if (sp_is_fail($c['grade'], $c['point']))   { $sem_f++;     continue; } // not completed → not counted
         $cr = $c['credits'] ?? 0.0;
@@ -359,15 +450,19 @@ foreach ($terms as &$t) {
         $cum_credits += $cr;
     }
 
-    $t['gpa']     = ($sem_credits > 0 && $sem_f === 0 && $sem_incom === 0) ? round($sem_points / $sem_credits, 2) : null;
-    $t['fails']   = $sem_f;
-    $t['incom']   = $sem_incom;
-    $t['credits'] = $sem_credits;
-    $t['cgpa']    = $cum_credits > 0 ? round($cum_points / $cum_credits, 2) : null;
+    $t['gpa']       = ($sem_credits > 0 && $sem_f === 0 && $sem_incom === 0) ? round($sem_points / $sem_credits, 2) : null;
+    $t['fails']     = $sem_f;
+    $t['incom']     = $sem_incom;
+    $t['pending']   = $sem_pending;
+    $t['published'] = count($t['courses']) - $sem_pending;
+    $t['credits']   = $sem_credits;
+    // The running CGPA is shown only once the term has a published course (the web page shows "—").
+    $t['cgpa']      = ($t['published'] > 0 && $cum_credits > 0) ? round($cum_points / $cum_credits, 2) : null;
 }
 unset($t);
 
-$overall_cgpa = $cum_credits > 0 ? round($cum_points / $cum_credits, 2) : null;
+$overall_cgpa        = $cum_credits > 0 ? round($cum_points / $cum_credits, 2) : null;
+$published_sem_count = count(array_filter($terms, static fn($s) => ($s['published'] ?? 0) > 0));
 
 // ── Output (newest semester first) ──────────────────────────────────────────────────
 
@@ -390,6 +485,8 @@ foreach (array_reverse($terms, true) as $t) {
             'letter_grade' => $c['grade'],
             'grade_point'  => $c['point'],
             'remarks'      => $c['remarks'],
+            'is_pending'   => !empty($c['pending']),
+            'teachers'     => (string)($c['teachers'] ?? ''),
         ];
     }
 
@@ -400,9 +497,11 @@ foreach (array_reverse($terms, true) as $t) {
         'title'          => $t['label'],
         'semester'       => $exam,          // shown under the title in the app
         'exam'           => $exam,
-        'published_at'   => (string)($t['published_at'] ?? ''),
-        'course_count'   => count($entries),
-        'credits'        => $t['credits'],
+        'published_at'    => (string)($t['published_at'] ?? ''),
+        'course_count'    => count($entries),
+        'published_count' => (int)$t['published'],
+        'pending_count'   => (int)$t['pending'],
+        'credits'         => $t['credits'],
         'gpa'            => $t['gpa'],
         'gpa_incomplete' => $withheld,
         'gpa_status'     => $withheld ? implode(' / ', $reason) : '',
@@ -417,5 +516,7 @@ sp_api_ok([
     'cgpa'            => $final_cgpa ?? $overall_cgpa,
     'cgpa_is_final'   => $final_cgpa !== null,
     'credits_counted' => $cum_credits,
+    'semesters_published' => $published_sem_count,
+    'pending_count'   => $pending_total,
     'results'         => $results,
 ]);
