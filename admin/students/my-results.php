@@ -103,6 +103,21 @@ function mr_is_fail(string $grade, ?float $point): bool
     return strtoupper(trim($grade)) === 'F' || ($point !== null && $point <= 0.0);
 }
 
+/** Semester GPA is withheld while the semester contains an F grade or an Incom. */
+function mr_gpa_withheld(array $sem): bool
+{
+    return ($sem['fails'] ?? 0) > 0 || ($sem['incom'] ?? 0) > 0;
+}
+
+/** Short reason label for a withheld semester GPA, e.g. "F grade", "Incom", "F grade / Incom". */
+function mr_withheld_reason(array $sem): string
+{
+    $r = [];
+    if (($sem['fails'] ?? 0) > 0) $r[] = 'F grade';
+    if (($sem['incom'] ?? 0) > 0) $r[] = 'Incom';
+    return implode(' / ', $r);
+}
+
 // ── Live published results (Results workflow) ──────────────────────────────────────
 $courses = [];
 $live_error = false;
@@ -349,8 +364,8 @@ foreach ($semesters as $key => &$sem) {
         $cum_credits += $cr;
     }
 
-    // Semester GPA is withheld (null) when the semester contains an F grade.
-    $sem['gpa']         = ($sem_credits > 0 && $sem_f === 0) ? round($sem_points / $sem_credits, 2) : null;
+    // Semester GPA is withheld (null) when the semester contains an F grade or an Incom.
+    $sem['gpa']         = ($sem_credits > 0 && $sem_f === 0 && $sem_incom === 0) ? round($sem_points / $sem_credits, 2) : null;
     $sem['fails']       = $sem_f;
     $sem['credits']     = $sem_credits;
     $sem['incom']       = $sem_incom;
@@ -514,10 +529,10 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="l">Credits counted</div>
             </div>
             <?php else: ?>
-            <div class="mr-stat"<?= $sel['fails'] > 0 ? ' style="background:rgba(239,68,68,.22);border-color:rgba(239,68,68,.45);"' : '' ?>>
-                <?php if ($sel['fails'] > 0): ?>
+            <div class="mr-stat"<?= mr_gpa_withheld($sel) ? ' style="background:rgba(239,68,68,.22);border-color:rgba(239,68,68,.45);"' : '' ?>>
+                <?php if (mr_gpa_withheld($sel)): $wh = (int)$sel['fails'] + (int)$sel['incom']; ?>
                 <div class="v"><span style="font-size:1rem;">Not shown</span></div>
-                <div class="l">Semester GPA · F grade in <?= (int)$sel['fails'] ?> course<?= (int)$sel['fails'] === 1 ? '' : 's' ?></div>
+                <div class="l">Semester GPA · <?= h(mr_withheld_reason($sel)) ?> in <?= $wh ?> course<?= $wh === 1 ? '' : 's' ?></div>
                 <?php else: ?>
                 <div class="v"><?= $sel['published'] > 0 ? mr_fmt_gpa($sel['gpa']) : '<span style="font-size:1rem;">Pending</span>' ?></div>
                 <div class="l">Semester GPA · <?= h($sel['label']) ?></div>
@@ -596,9 +611,11 @@ require_once __DIR__ . '/../includes/header.php';
     <i class="fas fa-info-circle mt-1"></i>
     <span>
         <strong>Note:</strong> CGPA is calculated from <strong>completed courses only</strong>. Courses with an
-        <span class="mr-grade mr-g-f" style="padding:0 8px;font-size:.78rem;">F</span> grade are not counted in the CGPA<?php if ($f_total > 0): ?>
-        (currently <strong><?= $f_total ?></strong> course<?= $f_total === 1 ? '' : 's' ?> with F)<?php endif; ?>,
-        and the semester GPA is not shown for a semester that contains an F grade until the course is cleared.
+        <span class="mr-grade mr-g-f" style="padding:0 8px;font-size:.78rem;">F</span> grade<?php if ($f_total > 0): ?>
+        (currently <strong><?= $f_total ?></strong>)<?php endif; ?> or marked
+        <span class="mr-grade mr-g-incom" style="padding:0 8px;font-size:.78rem;">Incom</span><?php if ($incom_total > 0): ?>
+        (currently <strong><?= $incom_total ?></strong>)<?php endif; ?> are not counted in the CGPA,
+        and the semester GPA is not shown for a semester that contains an F grade or an Incom until the course is cleared.
     </span>
 </div>
 <?php endif; ?>
@@ -649,10 +666,10 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
         </div>
         <div class="mr-sem-gpa" <?= $sem['pending'] > 0 ? 'title="Provisional: will update when the remaining results are published"' : '' ?>>
-            <?php if ($sem['fails'] > 0): ?>
-            <div class="box" style="background:#fef2f2;border-color:#fecaca;" title="Semester GPA is not shown while the semester contains an F grade">
+            <?php if (mr_gpa_withheld($sem)): ?>
+            <div class="box" style="background:#fef2f2;border-color:#fecaca;" title="Semester GPA is not shown while the semester contains an F grade or an Incom">
                 <div class="v"><span style="font-size:.78rem;color:#991b1b;">Not shown</span></div>
-                <div class="l">Semester GPA · F grade</div>
+                <div class="l">Semester GPA · <?= h(mr_withheld_reason($sem)) ?></div>
             </div>
             <?php else: ?>
             <div class="box">
@@ -695,7 +712,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <?php elseif ($c['remarks'] !== ''): ?>
                         <div class="text-muted" style="font-size:.72rem;"><i class="fas fa-comment-dots me-1"></i><?= h($c['remarks']) ?></div>
                         <?php endif; ?>
-                        <?php if (!$is_pending && !$c['is_incom'] && mr_is_fail($c['grade'], $c['point'])): ?>
+                        <?php if (!$is_pending && ($c['is_incom'] || mr_is_fail($c['grade'], $c['point']))): ?>
                         <div class="mr-teacher" style="color:#991b1b;"><i class="fas fa-exclamation-circle me-1"></i>Not completed · not counted in GPA / CGPA</div>
                         <?php endif; ?>
                     </td>
@@ -766,10 +783,9 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="text-muted" style="font-size:.74rem;">
     <i class="fas fa-info-circle me-1"></i>
     <strong>How GPA / CGPA is calculated:</strong> Semester GPA = Σ(credit × grade point) ÷ Σ credits of completed courses in that semester;
-    a semester that contains an F grade has no GPA shown until the course is cleared.
-    CGPA is calculated from completed courses only: courses with an F grade are not counted.
+    a semester that contains an F grade or an <span class="mr-grade mr-g-incom" style="padding:1px 6px;">Incom</span> has no GPA shown until the course is cleared.
+    CGPA is calculated from completed courses only: courses with an F grade or marked Incom are not counted.
     CGPA is cumulative across all published semesters, so it is shown only in the “All semesters” view<?= MR_CGPA_LATEST_ATTEMPT_ONLY ? '; when a course is retaken, the latest attempt replaces the earlier grade' : '' ?>.
-    Courses marked <span class="mr-grade mr-g-incom" style="padding:1px 6px;">Incom</span> are excluded until completed.
     Results are listed only for exams that are already over.
     Courses marked <span class="mr-grade mr-g-pending" style="padding:1px 6px;">Not published yet</span> are registered courses of a completed exam whose results have not been released;
     they are not counted in GPA / CGPA (values marked * are provisional). If you have any urgency, please contact your course teacher.
