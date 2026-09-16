@@ -424,7 +424,7 @@ function opm_post_approved_payment(array $p): array
         }
         $bank_name = $bank_name !== '' ? mb_substr($bank_name, 0, 190) : null;
     }
-    acc_ensure_bank_name_columns();
+    $has_bank_col = acc_bank_name_supported('sfp_payments');
 
     // ── bKash charge: 1.5% of the paid amount is the operator's fee — it is
     // NOT adjusted against the student's dues, but it is shown as a separate
@@ -509,8 +509,8 @@ function opm_post_approved_payment(array $p): array
     // ── Record sfp_payments rows so dues, statements and history update ──
     $pay_stmt = db()->prepare(
         'INSERT INTO sfp_payments
-            (student_id, package_id, semester_fee_id, fee_type, semester_number, month_number, payment_method, mobile_banking_provider, bank_name, transaction_number, amount, voucher_id, note, collected_by)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+            (student_id, package_id, semester_fee_id, fee_type, semester_number, month_number, payment_method, mobile_banking_provider, ' . ($has_bank_col ? 'bank_name, ' : '') . 'transaction_number, amount, voucher_id, note, collected_by)
+         VALUES (?,?,?,?,?,?,?,?,' . ($has_bank_col ? '?,' : '') . '?,?,?,?,?)'
     );
     $user = auth_user();
     $txn_used_for_fee_type = [];
@@ -526,7 +526,7 @@ function opm_post_approved_payment(array $p): array
         $item_note = $it['fee_type'] === 'other'
             ? 'Advance from online payment #' . $submission_id . ' (amount above current dues)'
             : $narration;
-        $pay_stmt->execute([
+        $pay_values = [
             $student_pk,
             $package_id,
             $it['semester_fee_id'],
@@ -535,13 +535,16 @@ function opm_post_approved_payment(array $p): array
             $it['month_number'],
             $method,
             $provider,
-            $bank_name,
+        ];
+        if ($has_bank_col) { $pay_values[] = $bank_name; }
+        array_push($pay_values,
             $item_txn,
             round((float)$it['amount'], 2),
             $voucher_id,
             $item_note,
-            $user['id'] ?? null,
-        ]);
+            $user['id'] ?? null
+        );
+        $pay_stmt->execute($pay_values);
         $invoice_items[] = [
             'voucher_id'     => $voucher_id,
             'voucher_number' => $voucher_number,
