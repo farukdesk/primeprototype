@@ -2016,7 +2016,7 @@ function acc_collect_student_fee(
     $bank_name = $payment_method === 'bank' && $bank_name !== null && trim($bank_name) !== ''
         ? mb_substr(trim($bank_name), 0, 190)
         : null;
-    acc_ensure_bank_name_columns();
+    $has_bank_col = acc_bank_name_supported('sfp_payments');
 
     if (!$allow_duplicate_transaction_number && $transaction_number !== null && acc_transaction_number_exists($transaction_number)) {
         throw new RuntimeException(
@@ -2036,26 +2036,30 @@ function acc_collect_student_fee(
 
     // Record the payment in sfp_payments
     $user = auth_user();
+    $data = [
+        'student_id'              => $student_id,
+        'package_id'              => $package_id,
+        'semester_fee_id'         => $semester_fee_id,
+        'fee_type'                => $fee_type,
+        'semester_number'         => $semester_number,
+        'month_number'            => $month_number,
+        'payment_method'          => $payment_method,
+        'mobile_banking_provider' => $mobile_banking_provider,
+    ];
+    if ($has_bank_col) {
+        $data['bank_name'] = $bank_name;
+    }
+    $data += [
+        'transaction_number' => $transaction_number,
+        'amount'             => round($amount, 2),
+        'voucher_id'         => $voucher_id,
+        'note'               => $narration ?: null,
+        'collected_by'       => $user['id'] ?? null,
+    ];
     $db->prepare(
-        'INSERT INTO sfp_payments
-            (student_id, package_id, semester_fee_id, fee_type, semester_number, month_number, payment_method, mobile_banking_provider, bank_name, transaction_number, amount, voucher_id, note, collected_by)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
-    )->execute([
-        $student_id,
-        $package_id,
-        $semester_fee_id,
-        $fee_type,
-        $semester_number,
-        $month_number,
-        $payment_method,
-        $mobile_banking_provider,
-        $bank_name,
-        $transaction_number,
-        round($amount, 2),
-        $voucher_id,
-        $narration ?: null,
-        $user['id'] ?? null,
-    ]);
+        'INSERT INTO sfp_payments (' . implode(', ', array_keys($data)) . ')
+         VALUES (' . implode(',', array_fill(0, count($data), '?')) . ')'
+    )->execute(array_values($data));
 
     return $voucher_id;
 }
@@ -2095,10 +2099,11 @@ function acc_get_voucher_payment_info(int $voucher_id): ?array
         return null;
     }
     $db = db();
-    acc_ensure_bank_name_columns();
+    $bank_sfp = acc_bank_name_supported('sfp_payments') ? 'bank_name' : 'NULL AS bank_name';
+    $bank_adm = acc_bank_name_supported('adm_admission_fee_payments') ? 'bank_name' : 'NULL AS bank_name';
 
     $stmt = $db->prepare(
-        'SELECT payment_method, mobile_banking_provider, bank_name, transaction_number
+        'SELECT payment_method, mobile_banking_provider, ' . $bank_sfp . ', transaction_number
          FROM sfp_payments
          WHERE voucher_id = ?
          -- Prefer rows with non-empty txn/receipt numbers (false sorts before true),
@@ -2111,7 +2116,7 @@ function acc_get_voucher_payment_info(int $voucher_id): ?array
 
     if (!$row) {
         $stmt = $db->prepare(
-            'SELECT payment_method, mobile_banking_provider, bank_name, transaction_number
+            'SELECT payment_method, mobile_banking_provider, ' . $bank_adm . ', transaction_number
              FROM adm_admission_fee_payments WHERE voucher_id = ? ORDER BY id DESC LIMIT 1'
         );
         $stmt->execute([$voucher_id]);
@@ -2818,7 +2823,7 @@ function acc_collect_applicant_admission_fee(
     $bank_name = $payment_method === 'bank' && $bank_name !== null && trim($bank_name) !== ''
         ? mb_substr(trim($bank_name), 0, 190)
         : null;
-    acc_ensure_bank_name_columns();
+    $has_bank_col = acc_bank_name_supported('adm_admission_fee_payments');
 
     if ($transaction_number !== null && acc_transaction_number_exists($transaction_number)) {
         throw new RuntimeException(
@@ -2835,11 +2840,24 @@ function acc_collect_applicant_admission_fee(
     ], $narration, $reference, null, $voucher_status);
 
     $user = auth_user();
+    $data = [
+        'application_id'          => $app_id,
+        'voucher_id'              => $voucher_id,
+        'amount'                  => $amount,
+        'payment_method'          => $payment_method,
+        'mobile_banking_provider' => $mobile_banking_provider,
+    ];
+    if ($has_bank_col) {
+        $data['bank_name'] = $bank_name;
+    }
+    $data += [
+        'transaction_number' => $transaction_number,
+        'collected_by'       => $user['id'] ?? null,
+    ];
     db()->prepare(
-        'INSERT INTO adm_admission_fee_payments
-            (application_id, voucher_id, amount, payment_method, mobile_banking_provider, bank_name, transaction_number, collected_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-    )->execute([$app_id, $voucher_id, $amount, $payment_method, $mobile_banking_provider, $bank_name, $transaction_number, $user['id'] ?? null]);
+        'INSERT INTO adm_admission_fee_payments (' . implode(', ', array_keys($data)) . ')
+         VALUES (' . implode(',', array_fill(0, count($data), '?')) . ')'
+    )->execute(array_values($data));
 
     return $voucher_id;
 }
@@ -3106,17 +3124,51 @@ function acc_ensure_bank_name_columns(): void
     if ($done) {
         return;
     }
-    foreach (['sfp_payments', 'adm_admission_fee_payments'] as $table) {
-        try {
-            $cols = db()->query('SHOW COLUMNS FROM ' . $table)->fetchAll(PDO::FETCH_COLUMN);
-            if (!in_array('bank_name', $cols, true)) {
-                db()->exec('ALTER TABLE ' . $table . ' ADD COLUMN bank_name VARCHAR(190) NULL DEFAULT NULL AFTER mobile_banking_provider');
-            }
-        } catch (\Throwable $e) {
-            error_log('acc_ensure_bank_name_columns(' . $table . '): ' . $e->getMessage());
-        }
-    }
     $done = true;
+    foreach (['sfp_payments', 'adm_admission_fee_payments'] as $table) {
+        if (acc_table_has_column($table, 'bank_name')) {
+            continue;
+        }
+        try {
+            db()->exec('ALTER TABLE ' . $table . ' ADD COLUMN bank_name VARCHAR(190) NULL DEFAULT NULL AFTER mobile_banking_provider');
+        } catch (\Throwable $e) {
+            try {
+                db()->exec('ALTER TABLE ' . $table . ' ADD COLUMN bank_name VARCHAR(190) NULL DEFAULT NULL');
+            } catch (\Throwable $e2) {
+                error_log('acc_ensure_bank_name_columns(' . $table . '): ' . $e2->getMessage());
+            }
+        }
+        acc_table_has_column($table, 'bank_name', true);   // refresh cache
+    }
+}
+
+/**
+ * Whether a table has a column (cached per request).
+ */
+function acc_table_has_column(string $table, string $column, bool $refresh = false): bool
+{
+    static $cache = [];
+    $key = $table . '.' . $column;
+    if (!$refresh && isset($cache[$key])) {
+        return $cache[$key];
+    }
+    try {
+        $cols = db()->query('SHOW COLUMNS FROM ' . $table)->fetchAll(PDO::FETCH_COLUMN);
+        return $cache[$key] = in_array($column, $cols, true);
+    } catch (\Throwable $e) {
+        return $cache[$key] = false;
+    }
+}
+
+/**
+ * True when bank_name can be read/written on the given payment table.
+ * Tries to add the column first, then reports whether it exists, so callers
+ * can degrade gracefully when the DB user cannot ALTER.
+ */
+function acc_bank_name_supported(string $table = 'sfp_payments'): bool
+{
+    acc_ensure_bank_name_columns();
+    return acc_table_has_column($table, 'bank_name');
 }
 
 /**

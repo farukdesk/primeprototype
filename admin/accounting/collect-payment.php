@@ -19,7 +19,7 @@ $errors          = [];
 $sms_enabled     = acc_setting('sms_enabled', '0') === '1';
 // Banks a bank payment can be deposited to (Accounting → Payment Methods).
 $bank_options    = acc_bank_options();
-acc_ensure_bank_name_columns();
+$bank_col_ok     = acc_bank_name_supported('sfp_payments');
 
 // ── One-time payment nonce helpers (prevent duplicate payment on browser refresh / POST replay) ──
 function payment_nonce_generate(): void {
@@ -261,8 +261,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
 
                 $pay_stmt = db()->prepare(
                     'INSERT INTO sfp_payments
-                        (student_id, package_id, semester_fee_id, fee_type, semester_number, month_number, payment_method, mobile_banking_provider, bank_name, transaction_number, amount, voucher_id, note, collected_by)
-                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+                        (student_id, package_id, semester_fee_id, fee_type, semester_number, month_number, payment_method, mobile_banking_provider, ' . ($bank_col_ok ? 'bank_name, ' : '') . 'transaction_number, amount, voucher_id, note, collected_by)
+                     VALUES (?,?,?,?,?,?,?,?,' . ($bank_col_ok ? '?,' : '') . '?,?,?,?,?)'
                 );
                 $txn_used_for_fee_type = [];
                 foreach ($fee_items as $item) {
@@ -280,7 +280,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
                         $txn_used_for_fee_type[$item['fee_type']] = true;
                     }
 
-                    $pay_stmt->execute([
+                    $pay_values = [
                         $student_id,
                         $package_id,
                         $item['semester_fee_id'],
@@ -289,13 +289,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
                         $item['month_number'],
                         $payment_method,
                         $provider,
-                        $bank_name,
+                    ];
+                    if ($bank_col_ok) { $pay_values[] = $bank_name; }
+                    array_push($pay_values,
                         $item_txn,
                         round((float)$item['amount'], 2),
                         $last_voucher_id,
                         $item_narration ?: null,
-                        $user['id'] ?? null,
-                    ]);
+                        $user['id'] ?? null
+                    );
+                    $pay_stmt->execute($pay_values);
 
                     $sem_label = $resolveSemesterLabel($item['semester_fee_id']);
 
