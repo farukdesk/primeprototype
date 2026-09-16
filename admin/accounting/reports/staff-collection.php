@@ -306,42 +306,59 @@ require_once __DIR__ . '/../../includes/header.php';
 </div>
 
 <?php if (!empty($rows)): ?>
-<!-- ── Print-only summary: staff × payment-method collection ── -->
+<!-- ── Print-only summary: staff × collection channel (Cash / bKash / Nagad / Rocket / each Bank) ── -->
 <div class="d-none d-print-block mb-3">
-    <div style="font-size:10pt;font-weight:700;color:#0d6efd;margin-bottom:5px">Collection Summary — by Staff &amp; Payment Method</div>
-    <table class="sc-summary" style="width:100%;border-collapse:collapse;font-size:8pt">
+    <div style="font-size:10pt;font-weight:700;color:#0d6efd;margin-bottom:5px">Collection Summary — by Staff &amp; Payment Channel</div>
+    <table class="sc-summary">
         <thead>
-            <tr style="background:#dce8ff">
-                <th style="text-align:left;padding:4px 6px;border:1px solid #b9c9ef">#</th>
-                <th style="text-align:left;padding:4px 6px;border:1px solid #b9c9ef">Staff</th>
-                <?php foreach ($method_keys as $mk => $lbl): ?>
-                <th style="text-align:right;padding:4px 6px;border:1px solid #b9c9ef"><?= h($lbl) ?></th>
+            <tr>
+                <th rowspan="<?= $has_sub_header ? 2 : 1 ?>" class="sc-l">#</th>
+                <th rowspan="<?= $has_sub_header ? 2 : 1 ?>" class="sc-l">Staff</th>
+                <th rowspan="<?= $has_sub_header ? 2 : 1 ?>" class="sc-r">Txns</th>
+                <?php foreach ($summary_groups as $g => $grp): $ncols = count($grp['cols']); ?>
+                    <?php if ($ncols === 1): ?>
+                    <th rowspan="<?= $has_sub_header ? 2 : 1 ?>" class="sc-r"><?= h(($g === 'bank' ? 'Bank – ' : '') . $grp['cols'][0]['label']) ?></th>
+                    <?php else: ?>
+                    <th colspan="<?= $ncols ?>" class="sc-c sc-grp"><?= h($grp['label']) ?></th>
+                    <?php endif; ?>
                 <?php endforeach; ?>
-                <th style="text-align:right;padding:4px 6px;border:1px solid #b9c9ef">Total (<?= h($currency) ?>)</th>
+                <th rowspan="<?= $has_sub_header ? 2 : 1 ?>" class="sc-r">Total (<?= h($currency) ?>)</th>
             </tr>
+            <?php if ($has_sub_header): ?>
+            <tr>
+                <?php foreach ($summary_groups as $grp): if (count($grp['cols']) === 1) continue; ?>
+                    <?php foreach ($grp['cols'] as $col): ?>
+                    <th class="sc-r<?= $col['subtotal'] ? ' sc-sub' : '' ?>"><?= h($col['label']) ?></th>
+                    <?php endforeach; ?>
+                <?php endforeach; ?>
+            </tr>
+            <?php endif; ?>
         </thead>
         <tbody>
-            <?php $sidx = 0; foreach ($staff_matrix as $sname => $mrow): $sidx++; ?>
+            <?php $sidx = 0; foreach ($staff_matrix as $sname => $amounts): $sidx++; ?>
             <tr>
-                <td style="padding:3px 6px;border:1px solid #ccc;color:#666"><?= $sidx ?></td>
-                <td style="padding:3px 6px;border:1px solid #ccc;font-weight:600"><?= h($sname) ?></td>
-                <?php foreach ($method_keys as $mk => $lbl): ?>
-                <td style="text-align:right;padding:3px 6px;border:1px solid #ccc"><?= isset($mrow[$mk]) ? number_format($mrow[$mk], 2) : '—' ?></td>
-                <?php endforeach; ?>
-                <td style="text-align:right;padding:3px 6px;border:1px solid #ccc;font-weight:700"><?= number_format($staff_totals[$sname] ?? 0, 2) ?></td>
+                <td class="sc-muted"><?= $sidx ?></td>
+                <td class="sc-name"><?= h($sname) ?></td>
+                <td class="sc-r sc-muted"><?= (int)($staff_txns[$sname] ?? 0) ?></td>
+                <?php foreach ($summary_groups as $grp): foreach ($grp['cols'] as $col): $v = $summary_cell($amounts, $col); ?>
+                <td class="sc-r<?= $col['subtotal'] ? ' sc-sub' : '' ?>"><?= $v !== null ? number_format($v, 2) : '—' ?></td>
+                <?php endforeach; endforeach; ?>
+                <td class="sc-r sc-total"><?= number_format($staff_totals[$sname] ?? 0, 2) ?></td>
             </tr>
             <?php endforeach; ?>
         </tbody>
         <tfoot>
-            <tr style="background:#e0eaff;font-weight:700">
-                <td colspan="2" style="text-align:right;padding:4px 6px;border:1px solid #b9c9ef">Total Collection</td>
-                <?php foreach ($method_keys as $mk => $lbl): ?>
-                <td style="text-align:right;padding:4px 6px;border:1px solid #b9c9ef"><?= number_format($method_totals[$mk] ?? 0, 2) ?></td>
-                <?php endforeach; ?>
-                <td style="text-align:right;padding:4px 6px;border:1px solid #b9c9ef;color:#0d6efd"><?= number_format($grand_total, 2) ?></td>
+            <tr>
+                <td colspan="2" class="sc-r">Total Collection</td>
+                <td class="sc-r"><?= count($rows) ?></td>
+                <?php foreach ($summary_groups as $grp): foreach ($grp['cols'] as $col): $v = $summary_cell($channel_totals, $col); ?>
+                <td class="sc-r"><?= $v !== null ? number_format($v, 2) : '—' ?></td>
+                <?php endforeach; endforeach; ?>
+                <td class="sc-r sc-grand"><?= number_format($grand_total, 2) ?></td>
             </tr>
         </tfoot>
     </table>
+    <div style="font-size:7pt;color:#777;margin-top:3px">Mobile Banking is split by wallet provider. Bank columns show the bank account the payment was received into (per the receipt voucher).</div>
 </div>
 
 <!-- ── Summary stat cards (screen) ── -->
